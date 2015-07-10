@@ -4,13 +4,344 @@
  */
 
 #include <errno.h>
+#include <getopt.h>
+#include <limits.h>
 #include <ncurses.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
+#include "libpq-fe.h"
 #include "pgcenter.h"
+
+/*
+ ******************************************************** startup function **
+ * Print usage.
+ ****************************************************************************
+ */
+void print_usage(void)
+{
+    printf("%s is the top-like interactive console for Pgbouncer.\n\n", PROGRAM_NAME);
+    printf("Usage:\n \
+  %s [OPTION]... [DBNAME [USERNAME]]\n\n", PROGRAM_NAME);
+    printf("General options:\n \
+  -?, --help                show this help, then exit.\n \
+  -V, --version             print version, then exit.\n\n");
+    printf("Options:\n \
+  -h, --host=HOSTNAME       pgbouncer server host or socket directory (default: \"/tmp\")\n \
+  -p, --port=PORT           pgbouncer server port (default: \"6432\")\n \
+  -U, --username=USERNAME   pgbouncer admin user name (default: \"current user\")\n \
+  -d, --dbname=DBNAME       pgbouncer admin database name (default: \"current user\")\n \
+  -w, --no-password         never prompt for password\n \
+  -W, --password            force password prompt (should happen automatically)\n\n");
+    printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
+}
+
+/*
+ *********************************************************** init function **
+ * Allocate memory for connections options struct array
+ *
+ * OUT:
+ * @conn_opts   Initialized array of connection options
+ ****************************************************************************
+ */
+void init_conn_opts(struct conn_opts_struct *conn_opts[])
+{
+    int i;
+    for (i = 0; i < MAX_CONSOLE; i++) {
+        if ((conn_opts[i] = (struct conn_opts_struct *) malloc(CONN_OPTS_SIZE)) == NULL) {
+                perror("malloc");
+                exit(EXIT_FAILURE);
+        }
+        memset(conn_opts[i], 0, CONN_OPTS_SIZE);
+        conn_opts[i]->terminal = i;
+        conn_opts[i]->conn_used = false;
+        strcpy(conn_opts[i]->host, "");
+        strcpy(conn_opts[i]->port, "");
+        strcpy(conn_opts[i]->user, "");
+        strcpy(conn_opts[i]->dbname, "");
+        strcpy(conn_opts[i]->password, "");
+        strcpy(conn_opts[i]->conninfo, "");
+        conn_opts[i]->log_opened = false;
+    }
+}
+
+/*
+ ******************************************************** startup function **
+ * Password prompt.
+ *
+ * IN:
+ * @prompt          Text of prompt.
+ * @maxlen          Length of input string.
+ * @echo            Echo input string.
+ *
+ * RETURNS:
+ * @password        Password.
+ ****************************************************************************
+ */
+char * password_prompt(const char *prompt, int maxlen, bool echo)
+{
+    struct termios t_orig, t;
+    char *password;
+    password = (char *) malloc(maxlen + 1);
+
+    if (!echo) {
+        tcgetattr(fileno(stdin), &t);
+        t_orig = t;
+        t.c_lflag &= ~ECHO;
+        tcsetattr(fileno(stdin), TCSAFLUSH, &t);
+    }
+
+    fputs(prompt, stdout);
+    if (fgets(password, maxlen + 1, stdin) == NULL)
+        password[0] = '\0';
+
+    if (!echo) {
+        tcsetattr(fileno(stdin), TCSAFLUSH, &t_orig);
+        fputs("\n", stdout);
+        fflush(stdout);
+    }
+
+    return password;
+}
+
+/*
+ ******************************************************** startup function **
+ * Take input parameters and add them into connections options.
+ *
+ * IN:
+ * @argc            Input arguments count.
+ * @argv[]          Input arguments array.
+ *
+ * OUT:
+ * @conn_opts[]     Array where connections options will be saved.
+ ****************************************************************************
+ */
+void create_initial_conn(int argc, char *argv[],
+                struct conn_opts_struct * conn_opts[])
+{
+    struct passwd *pw = getpwuid(getuid());
+
+    /* short options */
+    const char * short_options = "h:p:U:d:wW?";
+
+    /* long options */
+    const struct option long_options[] = {
+        {"help", no_argument, NULL, '?'},
+        {"host", required_argument, NULL, 'h'},
+        {"port", required_argument, NULL, 'p'},
+        {"dbname", required_argument, NULL, 'd'},
+        {"no-password", no_argument, NULL, 'w'},
+        {"password", no_argument, NULL, 'W'},
+        {"user", required_argument, NULL, 'U'},
+        {NULL, 0, NULL, 0}
+    };
+
+    int param, option_index;
+    enum trivalue prompt_password = TRI_DEFAULT;
+
+    if (argc > 1) {
+        if ((strcmp(argv[1], "-?") == 0)
+                || (argc == 2 && (strcmp(argv[1], "--help") == 0)))
+        {
+            print_usage();
+            exit(EXIT_SUCCESS);
+        }
+        if (strcmp(argv[1], "--version") == 0
+                || strcmp(argv[1], "-V") == 0)
+        {
+            printf("%s %.1f.%d\n", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
+            exit(EXIT_SUCCESS);
+        }
+    }
+
+    while ( (param = getopt_long(argc, argv,
+                short_options, long_options, &option_index)) != -1 ) {
+        switch (param) {
+            case 'h':
+                strcpy(conn_opts[0]->host, optarg);
+                break;
+            case 'p':
+                strcpy(conn_opts[0]->port, optarg);
+                break;
+            case 'U':
+                strcpy(conn_opts[0]->user, optarg);
+                break;
+            case 'd':
+                strcpy(conn_opts[0]->dbname, optarg);
+                break;
+            case 'w':
+                prompt_password = TRI_NO;
+                break;
+            case 'W':
+                prompt_password = TRI_YES;
+                break;
+            case '?': default:
+                fprintf(stderr,"Try \"%s --help\" for more information.\n", argv[0]);
+                exit(EXIT_SUCCESS);
+                break;
+        }
+    }
+    while (argc - optind >= 1) {
+        if ( (argc - optind > 1)
+                && strlen(conn_opts[0]->user) == 0
+                && strlen(conn_opts[0]->dbname) == 0 )
+            strcpy(conn_opts[0]->user, argv[optind]);
+        else if ( (argc - optind >= 1) && strlen(conn_opts[0]->dbname) == 0 )
+            strcpy(conn_opts[0]->dbname, argv[optind]);
+        else
+            fprintf(stderr,
+                    "%s: warning: extra command-line argument \"%s\" ignored\n",
+                    argv[0], argv[optind]);
+        optind++;
+    }
+    if ( strlen(conn_opts[0]->host) == 0 )
+        strcpy(conn_opts[0]->host, DEFAULT_HOST);
+
+    if ( strlen(conn_opts[0]->port) == 0 )
+        strcpy(conn_opts[0]->port, DEFAULT_PORT);
+
+    if ( strlen(conn_opts[0]->user) == 0 )
+        strcpy(conn_opts[0]->user, pw->pw_name);
+
+    if ( prompt_password == TRI_YES )
+        strcpy(conn_opts[0]->password, password_prompt("Password: ", 100, false));
+
+    if ( strlen(conn_opts[0]->user) != 0 && strlen(conn_opts[0]->dbname) == 0 )
+        strcpy(conn_opts[0]->dbname, conn_opts[0]->user);
+
+    conn_opts[0]->conn_used = true;
+}
+
+/*
+ ******************************************************** startup function **
+ * Read ~/.pgcenterrc cfile and fill up conrections options array.
+ *
+ * IN:
+ * @argc            Input arguments count.
+ * @argv[]          Input arguments array.
+ * @pos             Start position inside array.
+ *
+ * OUT:
+ * @conn_opts       Connections options array.
+ *
+ * RETURNS:
+ * Success or failure.
+ ****************************************************************************
+ */
+int create_pgcenterrc_conn(int argc, char *argv[],
+                struct conn_opts_struct * conn_opts[], const int pos)
+{
+    FILE *fp;
+    static char pgcenterrc_path[PATH_MAX];
+    struct stat statbuf;
+    char strbuf[BUFFERSIZE];
+    int i = pos;
+    struct passwd *pw = getpwuid(getuid());
+
+    strcpy(pgcenterrc_path, pw->pw_dir);
+    strcat(pgcenterrc_path, "/");
+    strcat(pgcenterrc_path, PGCENTERRC_FILE);
+
+    if (access(pgcenterrc_path, F_OK) == -1)
+        return PGCENTERRC_READ_ERR;
+
+    stat(pgcenterrc_path, &statbuf);
+    if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) ) {
+        fprintf(stderr,
+                    "WARNING: %s has wrong permissions.\n", pgcenterrc_path);
+        return PGCENTERRC_READ_ERR;
+    }
+
+    /* read connections settings from .pgcenterrc */
+    if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
+        while (fgets(strbuf, 4096, fp) != 0) {
+            sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
+                        conn_opts[i]->host, conn_opts[i]->port,
+                        conn_opts[i]->dbname,   conn_opts[i]->user,
+                        conn_opts[i]->password);
+                        conn_opts[i]->terminal = i;
+                        conn_opts[i]->conn_used = true;
+                        i++;
+        }
+        fclose(fp);
+        return PGCENTERRC_READ_OK;
+    } else {
+        fprintf(stdout,
+                    "WARNING: failed to open %s. Try use defaults.\n", pgcenterrc_path);
+        return PGCENTERRC_READ_ERR;
+    }
+}
+
+/*
+ ******************************************************** startup function **
+ * Prepare conninfo string for PQconnectdb.
+ *
+ * IN:
+ * @conn_opts       Connections options array without filled conninfo.
+ *
+ * OUT:
+ * @conn_opts       Connections options array with conninfo.
+ ****************************************************************************
+ */
+void prepare_conninfo(struct conn_opts_struct * conn_opts[])
+{
+    int i;
+    for ( i = 0; i < MAX_CONSOLE; i++ )
+        if (conn_opts[i]->conn_used) {
+            strcat(conn_opts[i]->conninfo, "host=");
+            strcat(conn_opts[i]->conninfo, conn_opts[i]->host);
+            strcat(conn_opts[i]->conninfo, " port=");
+            strcat(conn_opts[i]->conninfo, conn_opts[i]->port);
+            strcat(conn_opts[i]->conninfo, " user=");
+            strcat(conn_opts[i]->conninfo, conn_opts[i]->user);
+            strcat(conn_opts[i]->conninfo, " dbname=");
+            strcat(conn_opts[i]->conninfo, conn_opts[i]->dbname);
+            if ((strlen(conn_opts[i]->password)) != 0) {
+                strcat(conn_opts[i]->conninfo, " password=");
+                strcat(conn_opts[i]->conninfo, conn_opts[i]->password);
+            }
+        }
+}
+
+/*
+ ******************************************************** startup function **
+ * Open connections to pgbouncer using conninfo string from conn_opts.
+ *
+ * IN:
+ * @conn_opts       Connections options array.
+ *
+ * OUT:
+ * @conns           Array of connections.
+ ****************************************************************************
+ */
+void open_connections(struct conn_opts_struct * conn_opts[], PGconn * conns[])
+{
+    int i;
+    for ( i = 0; i < MAX_CONSOLE; i++ ) {
+        if (conn_opts[i]->conn_used) {
+            conns[i] = PQconnectdb(conn_opts[i]->conninfo);
+            if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
+                printf("%s:%s %s@%s require ", 
+                                conn_opts[i]->host, conn_opts[i]->port,
+                                conn_opts[i]->user, conn_opts[i]->dbname);
+                strcpy(conn_opts[i]->password, password_prompt("password: ", 100, false));
+                strcat(conn_opts[i]->conninfo, " password=");
+                strcat(conn_opts[i]->conninfo, conn_opts[i]->password);
+                conns[i] = PQconnectdb(conn_opts[i]->conninfo);
+            } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
+                printf("Unable to connect to %s:%s %s@%s",
+                conn_opts[i]->host, conn_opts[i]->port,
+                conn_opts[i]->user, conn_opts[i]->dbname);
+            }
+        }
+    }
+}
 
 /*
  ************************************************* summary window function **
@@ -57,10 +388,10 @@ void print_title(WINDOW * window, char * progname)
  * Load average for 1, 5 or 15 minutes.
  ****************************************************************************
  */
-float get_loadavg(const int m)
+float get_loadavg(int m)
 {
     if ( m != 1 && m != 5 && m != 15 )
-        fprintf(stderr, "invalid value for load average\n");
+        m = 1;
 
     float avg = 0, avg1, avg5, avg15;
     FILE *loadavg_fd;
@@ -334,13 +665,28 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
 
 int main(int argc, char *argv[])
 {
+    struct conn_opts_struct *conn_opts[MAX_CONSOLE];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
-    int a = 0;
+    PGconn *conns[8];
+//    PGresult    * res;
+
+    /* Process args... */
+    init_conn_opts(conn_opts);
+    if ( argc > 1 ) {
+        create_initial_conn(argc, argv, conn_opts);
+        create_pgcenterrc_conn(argc, argv, conn_opts, 1);
+    } else
+        if (create_pgcenterrc_conn(argc, argv, conn_opts, 0) == PGCENTERRC_READ_ERR)
+            create_initial_conn(argc, argv, conn_opts);
 
     /* CPU stats related actions */
     init_stats(st_cpu);
     get_HZ();
+
+    /* open connections to postgres */
+    prepare_conninfo(conn_opts);
+    open_connections(conn_opts, conns);
 
     /* init screens */
     initscr();
@@ -360,8 +706,8 @@ int main(int argc, char *argv[])
         print_title(w_sys, argv[0]);
         print_loadavg(w_sys);
         print_cpu_usage(w_sys, st_cpu);
-        wprintw(w_cmd, "w_cmd: %i", a++);
-        wprintw(w_dba, "w_dba: %i", a++);
+        wprintw(w_cmd, "w_cmd: %i", 1111);
+        wprintw(w_dba, "w_dba: %i", 2222);
         wrefresh(w_sys);
         wrefresh(w_cmd);
         wrefresh(w_dba);
