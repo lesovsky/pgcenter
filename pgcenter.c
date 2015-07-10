@@ -26,20 +26,38 @@
  */
 void print_usage(void)
 {
-    printf("%s is the top-like interactive console for Pgbouncer.\n\n", PROGRAM_NAME);
+    printf("%s is the adminitrative console for PostgreSQL.\n\n", PROGRAM_NAME);
     printf("Usage:\n \
   %s [OPTION]... [DBNAME [USERNAME]]\n\n", PROGRAM_NAME);
     printf("General options:\n \
   -?, --help                show this help, then exit.\n \
   -V, --version             print version, then exit.\n\n");
     printf("Options:\n \
-  -h, --host=HOSTNAME       pgbouncer server host or socket directory (default: \"/tmp\")\n \
-  -p, --port=PORT           pgbouncer server port (default: \"6432\")\n \
-  -U, --username=USERNAME   pgbouncer admin user name (default: \"current user\")\n \
-  -d, --dbname=DBNAME       pgbouncer admin database name (default: \"current user\")\n \
+  -h, --host=HOSTNAME       database server host or socket directory (default: \"/tmp\")\n \
+  -p, --port=PORT           database server port (default: \"5432\")\n \
+  -U, --username=USERNAME   database user name (default: \"current user\")\n \
+  -d, --dbname=DBNAME       database name (default: \"current user\")\n \
   -w, --no-password         never prompt for password\n \
   -W, --password            force password prompt (should happen automatically)\n\n");
     printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
+}
+
+/*
+ ******************************************************** routine function **
+ * Trap keys in program main mode
+ *
+ * RETURNS:
+ * 1 if key is pressed or 0 if not.
+ ****************************************************************************
+ */
+int key_is_pressed(void)
+{
+    int ch = getch();
+    if (ch != ERR) {
+        ungetch(ch);
+        return 1;
+    } else
+        return 0;
 }
 
 /*
@@ -663,13 +681,123 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
     curr ^= 1;
 }
 
+/*
+ ********************************************************* routine function **
+ * Send query to pgbouncer.
+ *
+ * IN:
+ * @conn            Pgbouncer connection.
+ * @query_context   Type of query.
+ *
+ * RETURNS:
+ * Answer from pgbouncer.
+ ****************************************************************************
+ */
+PGresult * do_query(PGconn *conn, enum context query_context)
+{
+    PGresult    *res;
+    char query[1024];
+    switch (query_context) {
+        case pg_stat_database: default:
+            strcpy(query, PG_STAT_DATABASE_QUERY);
+            break;
+        case pg_stat_replication:
+            strcpy(query, PG_STAT_REPLICATION_QUERY);
+            break;
+    }
+    res = PQexec(conn, query);
+    if ( PQresultStatus(res) != PG_TUP_OK ) {
+        puts("We didn't get any data.");
+        PQclear(res);
+        return NULL;
+    } else
+        return res;
+}
+
+/*
+ ******************************************************** routine function **
+ * Calculate column width for output data.
+ *
+ * IN:
+ * @row_count       Number of rows in query result.
+ * @col_count       Number of columns in query result.
+ * @res             Query result.
+ *
+ * OUT:
+ * @columns         Struct with column names and their max width.
+ ****************************************************************************
+ */
+struct colAttrs * calculate_width(struct colAttrs *columns, int row_count, int col_count, PGresult *res)
+{
+    int i, col, row;
+
+    for ( col = 0, i = 0; col < col_count; col++, i++) {
+        strcpy(columns[i].name, PQfname(res, col));
+        int colname_len = strlen(PQfname(res, col));
+        int width = colname_len;
+        for (row = 0; row < row_count; row++ ) {
+            int val_len = strlen(PQgetvalue(res, row, col));
+            if ( val_len >= width )
+                width = val_len;
+        }
+        columns[i].width = width + 3;
+    }
+    return columns;
+}
+
+/*
+ ******************************************************** routine function **
+ * Print answer from pgbouncer to the program main window.
+ *
+ * IN:
+ * @window              Window which is used for print.
+ * @query_context       Type of query.
+ * @res                 Answer from pgbouncer.
+ ****************************************************************************
+ */
+void print_data(WINDOW * window, enum context query_context, PGresult *res)
+{
+    int    row_count, col_count, row, col, i;
+    row_count = PQntuples(res);
+    col_count = PQnfields(res);
+    struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
+
+    columns = calculate_width(columns, row_count, col_count, res);
+    wclear(window);
+    /* print column names */
+    wattron(window, A_BOLD);
+    for ( col = 0, i = 0; col < col_count; col++, i++ )
+        wprintw(window, "%-*s", columns[i].width, PQfname(res,col));
+    wprintw(window, "\n");
+    wattroff(window, A_BOLD);
+    /* print rows */
+    for ( row = 0; row < row_count; row++ ) {
+        for ( col = 0, i = 0; col < col_count; col++, i++ ) {
+            wprintw(window,
+                "%-*s", columns[i].width, PQgetvalue(res, row, col));
+        }
+        wprintw(window, "\n");
+    }
+    wprintw(window, "\n");
+    wrefresh(window);
+
+    PQclear(res);
+    free(columns);
+}
+
 int main(int argc, char *argv[])
 {
     struct conn_opts_struct *conn_opts[MAX_CONSOLE];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
+    int ch;                             /* key press */
+//    static int console_no = 1;
+    static int console_index = 0;
+
     PGconn *conns[8];
-//    PGresult    * res;
+    PGresult    * res;
+
+    enum context query_context = pg_stat_database;
 
     /* Process args... */
     init_conn_opts(conn_opts);
@@ -698,21 +826,33 @@ int main(int argc, char *argv[])
     w_cmd = newwin(1, 0, 4, 0);
     w_dba = newwin(0, 0, 5, 0);
 
+    curs_set(0);
+
     /* main loop */
     while (1) {
-        wclear(w_sys);
-        wclear(w_cmd);
-        wclear(w_dba);
-        print_title(w_sys, argv[0]);
-        print_loadavg(w_sys);
-        print_cpu_usage(w_sys, st_cpu);
-        wprintw(w_cmd, "w_cmd: %i", 1111);
-        wprintw(w_dba, "w_dba: %i", 2222);
-        wrefresh(w_sys);
-        wrefresh(w_cmd);
-        wrefresh(w_dba);
+        if (key_is_pressed()) {
+            curs_set(1);
+//            wattron(w_cmdline, COLOR_PAIR(*wc_color));
+            ch = getch();
+            switch (ch) {
+                case '1':
+                    break;
+            }
+            curs_set(0);
+        } else {
+            wclear(w_sys);
+            print_title(w_sys, argv[0]);
+            print_loadavg(w_sys);
+            print_cpu_usage(w_sys, st_cpu);
+            wrefresh(w_sys);
 
-        /* refresh interval */
-        sleep(1);
+            res = do_query(conns[console_index], query_context);
+            print_data(w_dba, query_context, res);
+            wrefresh(w_cmd);
+            wclear(w_cmd);
+
+            /* refresh interval */
+            sleep(1);
+        }
     }
 }

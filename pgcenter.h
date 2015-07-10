@@ -72,10 +72,30 @@ enum trivalue
     TRI_YES
 };
 
+/* enum for query context */
+enum context
+{
+    pg_stat_database,
+    pg_stat_replication
+};
+
+/* struct for column widths */
+struct colAttrs {
+    char name[40];
+    int width;
+};
+
 /*
  * Macros used to display statistics values.
  * NB: Define SP_VALUE() to normalize to %;
  */
 #define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
+
+/* PostgreSQL answers */
+#define PG_CMD_OK PGRES_COMMAND_OK
+#define PG_TUP_OK PGRES_TUPLES_OK
+
+#define PG_STAT_DATABASE_QUERY "select datname, numbackends as conns, xact_commit as commit, xact_rollback as rollback, blks_read as reads, blks_hit as hits, tup_returned as returned, tup_fetched as fetched, tup_inserted as ins, tup_updated as upd, tup_deleted as del, conflicts, temp_files as tmp_files, temp_bytes as tmp_bytes, blk_read_time as read_t, blk_write_time as write_t from pg_stat_database;"
+#define PG_STAT_REPLICATION_QUERY ""
 
 #endif
