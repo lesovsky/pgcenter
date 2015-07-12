@@ -785,13 +785,41 @@ void print_data(WINDOW * window, enum context query_context, PGresult *res)
     free(columns);
 }
 
+/*
+ ****************************************************** key press function **
+ * Switch console using specified number.
+ *
+ * IN:
+ * @window          Window where cmd status will be written.
+ * @conn_opts[]     Struct with connections options.
+ * @ch              Intercepted key (number from 1 to 8).
+ * @console_no      Active console number.
+ * @console_index   Index of active console.
+ *
+ * RETURNS:
+ * Index console on which performed switching.
+ ****************************************************************************
+ */
+int switch_conn(WINDOW * window, struct conn_opts_struct * conn_opts[],
+                int ch, int console_index, int console_no)
+{
+    if ( conn_opts[ch - '0' - 1]->conn_used ) {
+        console_no = ch - '0', console_index = console_no - 1;
+        wprintw(window, "Switch to another pgbouncer connection (console %i)",
+                console_no);
+    } else
+        wprintw(window, "Do not switch because no connection associated (stay on console %i)",
+                console_no);
+    return console_index;
+}
+
 int main(int argc, char *argv[])
 {
     struct conn_opts_struct *conn_opts[MAX_CONSOLE];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
     int ch;                             /* key press */
-//    static int console_no = 1;
+    static int console_no = 1;
     static int console_index = 0;
 
     PGconn *conns[8];
@@ -832,11 +860,12 @@ int main(int argc, char *argv[])
     while (1) {
         if (key_is_pressed()) {
             curs_set(1);
-//            wattron(w_cmdline, COLOR_PAIR(*wc_color));
             ch = getch();
             switch (ch) {
-                case '1':
-                    break;
+                case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
+                console_index = switch_conn(w_cmd, conn_opts, ch, console_index, console_no);
+                console_no = console_index + 1;
+                break;
             }
             curs_set(0);
         } else {
