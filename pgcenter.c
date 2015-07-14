@@ -719,70 +719,29 @@ PGresult * do_query(PGconn *conn, enum context query_context)
  * Calculate column width for output data.
  *
  * IN:
- * @row_count       Number of rows in query result.
- * @col_count       Number of columns in query result.
+ * @n_rows          Number of rows in query result.
+ * @n_cols          Number of columns in query result.
  * @res             Query result.
  *
  * OUT:
  * @columns         Struct with column names and their max width.
  ****************************************************************************
  */
-struct colAttrs * calculate_width(struct colAttrs *columns, int row_count, int col_count, PGresult *res)
+void calculate_width(struct colAttrs *columns, PGresult *res, int n_rows, int n_cols)
 {
     int i, col, row;
 
-    for ( col = 0, i = 0; col < col_count; col++, i++) {
+    for (col = 0, i = 0; col < n_cols; col++, i++) {
         strcpy(columns[i].name, PQfname(res, col));
         int colname_len = strlen(PQfname(res, col));
         int width = colname_len;
-        for (row = 0; row < row_count; row++ ) {
+        for (row = 0; row < n_rows; row++ ) {
             int val_len = strlen(PQgetvalue(res, row, col));
             if ( val_len >= width )
                 width = val_len;
         }
-        columns[i].width = width + 3;
+        columns[i].width = width + 2;
     }
-    return columns;
-}
-
-/*
- ******************************************************** routine function **
- * Print answer from pgbouncer to the program main window.
- *
- * IN:
- * @window              Window which is used for print.
- * @query_context       Type of query.
- * @res                 Answer from pgbouncer.
- ****************************************************************************
- */
-void print_data(WINDOW * window, enum context query_context, PGresult *res)
-{
-    int    row_count, col_count, row, col, i;
-    row_count = PQntuples(res);
-    col_count = PQnfields(res);
-    struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
-
-    columns = calculate_width(columns, row_count, col_count, res);
-    wclear(window);
-    /* print column names */
-    wattron(window, A_BOLD);
-    for ( col = 0, i = 0; col < col_count; col++, i++ )
-        wprintw(window, "%-*s", columns[i].width, PQfname(res,col));
-    wprintw(window, "\n");
-    wattroff(window, A_BOLD);
-    /* print rows */
-    for ( row = 0; row < row_count; row++ ) {
-        for ( col = 0, i = 0; col < col_count; col++, i++ ) {
-            wprintw(window,
-                "%-*s", columns[i].width, PQgetvalue(res, row, col));
-        }
-        wprintw(window, "\n");
-    }
-    wprintw(window, "\n");
-    wrefresh(window);
-
-    PQclear(res);
-    free(columns);
 }
 
 /*
@@ -813,17 +772,161 @@ int switch_conn(WINDOW * window, struct conn_opts_struct * conn_opts[],
     return console_index;
 }
 
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+char *** init_array(char ***arr, int n_rows, int n_cols)
+{
+    int i, j;
+
+    arr = malloc(sizeof(char **) * n_rows);
+    for (i = 0; i < n_rows; i++) {
+        arr[i] = malloc(sizeof(char *) * n_cols);
+            for (j = 0; j < n_cols; j++)
+                arr[i][j] = malloc(sizeof(char) * 255);
+    }
+    return arr;
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+char *** free_array(char ***arr, int n_rows, int n_cols)
+{
+    int i, j;
+
+    for (i = 0; i < n_rows; i++) {
+        for (j = 0; j < n_cols; j++)
+            free(arr[i][j]);
+        free(arr[i]);
+    }
+    free(arr);
+    return arr;
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
+{
+    int i, j;
+
+    for (i = 0; i < n_rows; i++)
+        for (j = 0; j < n_cols; j++)
+            strcpy(arr[i][j], PQgetvalue(res, i, j));
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, int n_rows, int n_cols)
+{
+    int i, j;
+            
+    for (i = 0; i < n_rows; i++) {
+        for (j = 0; j < n_cols; j++)
+            if (j == 0)
+                strcpy(res_arr[i][j], c_arr[i][j]);     // copy first column (dbname, tablename, etc)
+            else {
+                int n = snprintf(NULL, 0, "%li", atol(c_arr[i][j]) - atol(p_arr[i][j]));
+                char buf[n+1];
+                snprintf(buf, n+1, "%li", atol(c_arr[i][j]) - atol(p_arr[i][j]));
+                strcpy(res_arr[i][j], buf);
+            }
+    }
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+void sort_array(char ***res_arr, int n_rows, int n_cols, int key, bool desc)
+{
+    int i, j, x;
+    char *temp = malloc(sizeof(char) * 255);
+
+    for (i = 0; i < n_rows; i++) {
+        for (j = i + 1; j < n_rows; j++) {
+            if (desc)
+                if (atol(res_arr[j][key]) > atol(res_arr[i][key])) {        // desc: j > i
+                    for (x = 0; x < n_cols; x++) {
+                        strcpy(temp, res_arr[i][x]);
+                        strcpy(res_arr[i][x], res_arr[j][x]);
+                        strcpy(res_arr[j][x], temp);
+                    }
+                }
+            if (!desc)
+                if (atol(res_arr[i][key]) > atol(res_arr[j][key])) {        // asc: i > j
+                    for (x = 0; x < n_cols; x++) {
+                        strcpy(temp, res_arr[i][x]);
+                        strcpy(res_arr[i][x], res_arr[j][x]);
+                        strcpy(res_arr[j][x], temp);
+                    }
+                }
+        }
+    }
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols)
+{
+    int i, j, x;
+    struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
+
+    calculate_width(columns, res, n_rows, n_cols);
+    wclear(window);
+
+    /* print header */
+    wattron(window, A_BOLD);
+    for (j = 0, x = 0; j < n_cols; j++, x++)
+        wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
+    wprintw(window, "\n");
+    wattroff(window, A_BOLD);
+
+    /* print data from array */
+    for (i = 0; i < n_rows; i++) {
+        for (j = 0, x = 0; j < n_cols; j++, x++)
+            wprintw(window, "%-*s", columns[x].width, arr[i][j]);
+        wprintw(window, "\n");
+    }
+    wrefresh(window);
+    free(columns);
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
 int main(int argc, char *argv[])
 {
     struct conn_opts_struct *conn_opts[MAX_CONSOLE];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
     int ch;                             /* key press */
+    bool first_iter = true;
     static int console_no = 1;
     static int console_index = 0;
 
-    PGconn *conns[8];
-    PGresult    * res;
+    PGconn      *conns[8];
+    PGresult    *p_res, *c_res;
+    int n_rows, n_cols, n_prev_rows;
+
+    /* arrays for PGresults */
+    char ***p_arr, ***c_arr, ***r_arr;
 
     enum context query_context = pg_stat_database;
 
@@ -875,8 +978,50 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             wrefresh(w_sys);
 
-            res = do_query(conns[console_index], query_context);
-            print_data(w_dba, query_context, res);
+            c_res = do_query(conns[console_index], query_context);
+            n_rows = PQntuples(c_res);
+            n_cols = PQnfields(c_res);
+
+            if (first_iter) {
+                p_res = c_res;
+                usleep(10000);
+                first_iter = false;
+                continue;
+            }
+            if (n_prev_rows < n_rows) {
+                p_res = c_res;
+                n_prev_rows = n_rows;
+                usleep(10000);
+                continue;
+            }
+
+            /* create storages for data from PQgetvalue */
+            p_arr = init_array(p_arr, n_rows, n_cols);
+            c_arr = init_array(c_arr, n_rows, n_cols);
+            r_arr = init_array(r_arr, n_rows, n_cols);
+
+            /* copy query results (cur,prev) into arrays */
+            pgrescpy(p_arr, p_res, n_rows, n_cols);
+            pgrescpy(c_arr, c_res, n_rows, n_cols);
+
+            /* diff current and previous arrays and build result array */
+            diff_arrays(p_arr, c_arr, r_arr, n_rows, n_cols);
+
+            /* sort result array */
+            sort_array(r_arr, n_rows, n_cols, 1, true);
+
+            /* print column names */
+            print_data(w_dba, c_res, r_arr, n_rows, n_cols);
+
+            /* assign current PGresult as previous */
+            p_res = c_res;
+            n_prev_rows = n_rows;
+
+            /* free memory allocated for arrays */
+            free_array(p_arr, n_rows, n_cols);
+            free_array(c_arr, n_rows, n_cols);
+            free_array(r_arr, n_rows, n_cols);
+
             wrefresh(w_cmd);
             wclear(w_cmd);
 

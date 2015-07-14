@@ -1,0 +1,11 @@
+pgbconsole (current development) unstable; urgency=low
+
+  * Add ncurses, libpq.
+  * Add title (progname, current time), cpu usage, load average output.
+  * Add console switching ability.
+  * Add pg_stat_database simple output.
+  * Add arrays sorting comparing functions.
+  * Change pg_stat_database to normal output (changes per sec).
+ 
+ -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 24 May 2015 22:37:07 +0500
+
