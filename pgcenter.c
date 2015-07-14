@@ -65,27 +65,27 @@ int key_is_pressed(void)
  * Allocate memory for connections options struct array
  *
  * OUT:
- * @conn_opts   Initialized array of connection options
+ * @screen_s   Initialized array of connection options
  ****************************************************************************
  */
-void init_conn_opts(struct conn_opts_struct *conn_opts[])
+void init_screens(struct screen_s *screens[])
 {
     int i;
     for (i = 0; i < MAX_CONSOLE; i++) {
-        if ((conn_opts[i] = (struct conn_opts_struct *) malloc(CONN_OPTS_SIZE)) == NULL) {
+        if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
                 perror("malloc");
                 exit(EXIT_FAILURE);
         }
-        memset(conn_opts[i], 0, CONN_OPTS_SIZE);
-        conn_opts[i]->terminal = i;
-        conn_opts[i]->conn_used = false;
-        strcpy(conn_opts[i]->host, "");
-        strcpy(conn_opts[i]->port, "");
-        strcpy(conn_opts[i]->user, "");
-        strcpy(conn_opts[i]->dbname, "");
-        strcpy(conn_opts[i]->password, "");
-        strcpy(conn_opts[i]->conninfo, "");
-        conn_opts[i]->log_opened = false;
+        memset(screens[i], 0, SCREEN_SIZE);
+        screens[i]->screen = i;
+        screens[i]->conn_used = false;
+        strcpy(screens[i]->host, "");
+        strcpy(screens[i]->port, "");
+        strcpy(screens[i]->user, "");
+        strcpy(screens[i]->dbname, "");
+        strcpy(screens[i]->password, "");
+        strcpy(screens[i]->conninfo, "");
+        screens[i]->log_opened = false;
     }
 }
 
@@ -137,11 +137,11 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
  * @argv[]          Input arguments array.
  *
  * OUT:
- * @conn_opts[]     Array where connections options will be saved.
+ * @screens[]     Array where connections options will be saved.
  ****************************************************************************
  */
 void create_initial_conn(int argc, char *argv[],
-                struct conn_opts_struct * conn_opts[])
+                struct screen_s * screens[])
 {
     struct passwd *pw = getpwuid(getuid());
 
@@ -182,16 +182,16 @@ void create_initial_conn(int argc, char *argv[],
                 short_options, long_options, &option_index)) != -1 ) {
         switch (param) {
             case 'h':
-                strcpy(conn_opts[0]->host, optarg);
+                strcpy(screens[0]->host, optarg);
                 break;
             case 'p':
-                strcpy(conn_opts[0]->port, optarg);
+                strcpy(screens[0]->port, optarg);
                 break;
             case 'U':
-                strcpy(conn_opts[0]->user, optarg);
+                strcpy(screens[0]->user, optarg);
                 break;
             case 'd':
-                strcpy(conn_opts[0]->dbname, optarg);
+                strcpy(screens[0]->dbname, optarg);
                 break;
             case 'w':
                 prompt_password = TRI_NO;
@@ -207,33 +207,33 @@ void create_initial_conn(int argc, char *argv[],
     }
     while (argc - optind >= 1) {
         if ( (argc - optind > 1)
-                && strlen(conn_opts[0]->user) == 0
-                && strlen(conn_opts[0]->dbname) == 0 )
-            strcpy(conn_opts[0]->user, argv[optind]);
-        else if ( (argc - optind >= 1) && strlen(conn_opts[0]->dbname) == 0 )
-            strcpy(conn_opts[0]->dbname, argv[optind]);
+                && strlen(screens[0]->user) == 0
+                && strlen(screens[0]->dbname) == 0 )
+            strcpy(screens[0]->user, argv[optind]);
+        else if ( (argc - optind >= 1) && strlen(screens[0]->dbname) == 0 )
+            strcpy(screens[0]->dbname, argv[optind]);
         else
             fprintf(stderr,
                     "%s: warning: extra command-line argument \"%s\" ignored\n",
                     argv[0], argv[optind]);
         optind++;
     }
-    if ( strlen(conn_opts[0]->host) == 0 )
-        strcpy(conn_opts[0]->host, DEFAULT_HOST);
+    if ( strlen(screens[0]->host) == 0 )
+        strcpy(screens[0]->host, DEFAULT_HOST);
 
-    if ( strlen(conn_opts[0]->port) == 0 )
-        strcpy(conn_opts[0]->port, DEFAULT_PORT);
+    if ( strlen(screens[0]->port) == 0 )
+        strcpy(screens[0]->port, DEFAULT_PORT);
 
-    if ( strlen(conn_opts[0]->user) == 0 )
-        strcpy(conn_opts[0]->user, pw->pw_name);
+    if ( strlen(screens[0]->user) == 0 )
+        strcpy(screens[0]->user, pw->pw_name);
 
     if ( prompt_password == TRI_YES )
-        strcpy(conn_opts[0]->password, password_prompt("Password: ", 100, false));
+        strcpy(screens[0]->password, password_prompt("Password: ", 100, false));
 
-    if ( strlen(conn_opts[0]->user) != 0 && strlen(conn_opts[0]->dbname) == 0 )
-        strcpy(conn_opts[0]->dbname, conn_opts[0]->user);
+    if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
+        strcpy(screens[0]->dbname, screens[0]->user);
 
-    conn_opts[0]->conn_used = true;
+    screens[0]->conn_used = true;
 }
 
 /*
@@ -246,14 +246,14 @@ void create_initial_conn(int argc, char *argv[],
  * @pos             Start position inside array.
  *
  * OUT:
- * @conn_opts       Connections options array.
+ * @screens       Connections options array.
  *
  * RETURNS:
  * Success or failure.
  ****************************************************************************
  */
 int create_pgcenterrc_conn(int argc, char *argv[],
-                struct conn_opts_struct * conn_opts[], const int pos)
+                struct screen_s * screens[], const int pos)
 {
     FILE *fp;
     static char pgcenterrc_path[PATH_MAX];
@@ -280,11 +280,11 @@ int create_pgcenterrc_conn(int argc, char *argv[],
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
         while (fgets(strbuf, 4096, fp) != 0) {
             sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
-                        conn_opts[i]->host, conn_opts[i]->port,
-                        conn_opts[i]->dbname,   conn_opts[i]->user,
-                        conn_opts[i]->password);
-                        conn_opts[i]->terminal = i;
-                        conn_opts[i]->conn_used = true;
+                        screens[i]->host, screens[i]->port,
+                        screens[i]->dbname,   screens[i]->user,
+                        screens[i]->password);
+                        screens[i]->screen = i;
+                        screens[i]->conn_used = true;
                         i++;
         }
         fclose(fp);
@@ -301,61 +301,61 @@ int create_pgcenterrc_conn(int argc, char *argv[],
  * Prepare conninfo string for PQconnectdb.
  *
  * IN:
- * @conn_opts       Connections options array without filled conninfo.
+ * @screens       Connections options array without filled conninfo.
  *
  * OUT:
- * @conn_opts       Connections options array with conninfo.
+ * @screens       Connections options array with conninfo.
  ****************************************************************************
  */
-void prepare_conninfo(struct conn_opts_struct * conn_opts[])
+void prepare_conninfo(struct screen_s * screens[])
 {
     int i;
     for ( i = 0; i < MAX_CONSOLE; i++ )
-        if (conn_opts[i]->conn_used) {
-            strcat(conn_opts[i]->conninfo, "host=");
-            strcat(conn_opts[i]->conninfo, conn_opts[i]->host);
-            strcat(conn_opts[i]->conninfo, " port=");
-            strcat(conn_opts[i]->conninfo, conn_opts[i]->port);
-            strcat(conn_opts[i]->conninfo, " user=");
-            strcat(conn_opts[i]->conninfo, conn_opts[i]->user);
-            strcat(conn_opts[i]->conninfo, " dbname=");
-            strcat(conn_opts[i]->conninfo, conn_opts[i]->dbname);
-            if ((strlen(conn_opts[i]->password)) != 0) {
-                strcat(conn_opts[i]->conninfo, " password=");
-                strcat(conn_opts[i]->conninfo, conn_opts[i]->password);
+        if (screens[i]->conn_used) {
+            strcat(screens[i]->conninfo, "host=");
+            strcat(screens[i]->conninfo, screens[i]->host);
+            strcat(screens[i]->conninfo, " port=");
+            strcat(screens[i]->conninfo, screens[i]->port);
+            strcat(screens[i]->conninfo, " user=");
+            strcat(screens[i]->conninfo, screens[i]->user);
+            strcat(screens[i]->conninfo, " dbname=");
+            strcat(screens[i]->conninfo, screens[i]->dbname);
+            if ((strlen(screens[i]->password)) != 0) {
+                strcat(screens[i]->conninfo, " password=");
+                strcat(screens[i]->conninfo, screens[i]->password);
             }
         }
 }
 
 /*
  ******************************************************** startup function **
- * Open connections to pgbouncer using conninfo string from conn_opts.
+ * Open connections to pgbouncer using conninfo string from screen struct.
  *
  * IN:
- * @conn_opts       Connections options array.
+ * @screens       Connections options array.
  *
  * OUT:
  * @conns           Array of connections.
  ****************************************************************************
  */
-void open_connections(struct conn_opts_struct * conn_opts[], PGconn * conns[])
+void open_connections(struct screen_s * screens[], PGconn * conns[])
 {
     int i;
     for ( i = 0; i < MAX_CONSOLE; i++ ) {
-        if (conn_opts[i]->conn_used) {
-            conns[i] = PQconnectdb(conn_opts[i]->conninfo);
+        if (screens[i]->conn_used) {
+            conns[i] = PQconnectdb(screens[i]->conninfo);
             if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
                 printf("%s:%s %s@%s require ", 
-                                conn_opts[i]->host, conn_opts[i]->port,
-                                conn_opts[i]->user, conn_opts[i]->dbname);
-                strcpy(conn_opts[i]->password, password_prompt("password: ", 100, false));
-                strcat(conn_opts[i]->conninfo, " password=");
-                strcat(conn_opts[i]->conninfo, conn_opts[i]->password);
-                conns[i] = PQconnectdb(conn_opts[i]->conninfo);
+                                screens[i]->host, screens[i]->port,
+                                screens[i]->user, screens[i]->dbname);
+                strcpy(screens[i]->password, password_prompt("password: ", 100, false));
+                strcat(screens[i]->conninfo, " password=");
+                strcat(screens[i]->conninfo, screens[i]->password);
+                conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                 printf("Unable to connect to %s:%s %s@%s",
-                conn_opts[i]->host, conn_opts[i]->port,
-                conn_opts[i]->user, conn_opts[i]->dbname);
+                screens[i]->host, screens[i]->port,
+                screens[i]->user, screens[i]->dbname);
             }
         }
     }
@@ -750,7 +750,7 @@ void calculate_width(struct colAttrs *columns, PGresult *res, int n_rows, int n_
  *
  * IN:
  * @window          Window where cmd status will be written.
- * @conn_opts[]     Struct with connections options.
+ * @screens[]     Struct with connections options.
  * @ch              Intercepted key (number from 1 to 8).
  * @console_no      Active console number.
  * @console_index   Index of active console.
@@ -759,10 +759,10 @@ void calculate_width(struct colAttrs *columns, PGresult *res, int n_rows, int n_
  * Index console on which performed switching.
  ****************************************************************************
  */
-int switch_conn(WINDOW * window, struct conn_opts_struct * conn_opts[],
+int switch_conn(WINDOW * window, struct screen_s * screens[],
                 int ch, int console_index, int console_no)
 {
-    if ( conn_opts[ch - '0' - 1]->conn_used ) {
+    if ( screens[ch - '0' - 1]->conn_used ) {
         console_no = ch - '0', console_index = console_no - 1;
         wprintw(window, "Switch to another pgbouncer connection (console %i)",
                 console_no);
@@ -913,7 +913,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
  */
 int main(int argc, char *argv[])
 {
-    struct conn_opts_struct *conn_opts[MAX_CONSOLE];
+    struct screen_s *screens[MAX_CONSOLE];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
     int ch;                             /* key press */
@@ -931,21 +931,21 @@ int main(int argc, char *argv[])
     enum context query_context = pg_stat_database;
 
     /* Process args... */
-    init_conn_opts(conn_opts);
+    init_screens(screens);
     if ( argc > 1 ) {
-        create_initial_conn(argc, argv, conn_opts);
-        create_pgcenterrc_conn(argc, argv, conn_opts, 1);
+        create_initial_conn(argc, argv, screens);
+        create_pgcenterrc_conn(argc, argv, screens, 1);
     } else
-        if (create_pgcenterrc_conn(argc, argv, conn_opts, 0) == PGCENTERRC_READ_ERR)
-            create_initial_conn(argc, argv, conn_opts);
+        if (create_pgcenterrc_conn(argc, argv, screens, 0) == PGCENTERRC_READ_ERR)
+            create_initial_conn(argc, argv, screens);
 
     /* CPU stats related actions */
     init_stats(st_cpu);
     get_HZ();
 
     /* open connections to postgres */
-    prepare_conninfo(conn_opts);
-    open_connections(conn_opts, conns);
+    prepare_conninfo(screens);
+    open_connections(screens, conns);
 
     /* init screens */
     initscr();
@@ -966,7 +966,7 @@ int main(int argc, char *argv[])
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                console_index = switch_conn(w_cmd, conn_opts, ch, console_index, console_no);
+                console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
                 console_no = console_index + 1;
                 break;
             }

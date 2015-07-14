@@ -1,11 +1,13 @@
 pgbconsole (current development) unstable; urgency=low
 
-  * Add ncurses, libpq.
-  * Add title (progname, current time), cpu usage, load average output.
-  * Add console switching ability.
-  * Add pg_stat_database simple output.
-  * Add arrays sorting comparing functions.
+  * Rename conn_opts_struct struct to screen_s, because struct used not only for
+    connections.
   * Change pg_stat_database to normal output (changes per sec).
+  * Add arrays sorting comparing functions.
+  * Add pg_stat_database simple output.
+  * Add console switching ability.
+  * Add title (progname, current time), cpu usage, load average output.
+  * Add ncurses, libpq.
  
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 24 May 2015 22:37:07 +0500
 

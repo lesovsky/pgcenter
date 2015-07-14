@@ -32,9 +32,9 @@
 unsigned int hz;
 
 /* Struct which define connection options */
-struct conn_opts_struct
+struct screen_s
 {
-    int terminal;
+    int screen;
     bool conn_used;
     char host[BUFFERSIZE];
     char port[BUFFERSIZE];
@@ -46,7 +46,7 @@ struct conn_opts_struct
     FILE *log;
 };
 
-#define CONN_OPTS_SIZE (sizeof(struct conn_opts_struct))
+#define SCREEN_SIZE (sizeof(struct screen_s))
 
 /* struct which used for cpu statistic */
 struct stats_cpu_struct {
