@@ -86,6 +86,9 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->password, "");
         strcpy(screens[i]->conninfo, "");
         screens[i]->log_opened = false;
+        screens[i]->query_context = pg_stat_database;
+        screens[i]->order_key = 2;
+        screens[i]->order_desc = true;
     }
 }
 
@@ -683,14 +686,14 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
 
 /*
  ********************************************************* routine function **
- * Send query to pgbouncer.
+ * Send query to PostgreSQL.
  *
  * IN:
- * @conn            Pgbouncer connection.
+ * @conn            PostgreSQL connection.
  * @query_context   Type of query.
  *
  * RETURNS:
- * Answer from pgbouncer.
+ * Answer from PostgreSQL.
  ****************************************************************************
  */
 PGresult * do_query(PGconn *conn, enum context query_context)
@@ -928,8 +931,6 @@ int main(int argc, char *argv[])
     /* arrays for PGresults */
     char ***p_arr, ***c_arr, ***r_arr;
 
-    enum context query_context = pg_stat_database;
-
     /* Process args... */
     init_screens(screens);
     if ( argc > 1 ) {
@@ -978,7 +979,7 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             wrefresh(w_sys);
 
-            c_res = do_query(conns[console_index], query_context);
+            c_res = do_query(conns[console_index], screens[console_index]->query_context);
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 

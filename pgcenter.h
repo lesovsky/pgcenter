@@ -31,6 +31,13 @@
 #define HZ                  hz
 unsigned int hz;
 
+/* enum for query context */
+enum context
+{
+    pg_stat_database,
+    pg_stat_replication
+};
+
 /* Struct which define connection options */
 struct screen_s
 {
@@ -44,6 +51,9 @@ struct screen_s
     char conninfo[BUFFERSIZE];
     bool log_opened;
     FILE *log;
+    enum context query_context;
+    int order_key;
+    bool order_desc;
 };
 
 #define SCREEN_SIZE (sizeof(struct screen_s))
@@ -70,13 +80,6 @@ enum trivalue
     TRI_DEFAULT,
     TRI_NO,
     TRI_YES
-};
-
-/* enum for query context */
-enum context
-{
-    pg_stat_database,
-    pg_stat_replication
 };
 
 /* struct for column widths */
