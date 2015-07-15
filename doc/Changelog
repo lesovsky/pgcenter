@@ -1,5 +1,8 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add column sort reordering with arrow keys.
+  * Move query_context to screen_s struct, add order_key, order_desc params
+    into screen_s. It allows store sort order info per screen.
   * Rename conn_opts_struct struct to screen_s, because struct used not only for
     connections.
   * Change pg_stat_database to normal output (changes per sec).

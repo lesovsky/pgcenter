@@ -87,7 +87,7 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->conninfo, "");
         screens[i]->log_opened = false;
         screens[i]->query_context = pg_stat_database;
-        screens[i]->order_key = 2;
+        screens[i]->order_key = 1;
         screens[i]->order_desc = true;
     }
 }
@@ -884,7 +884,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, int key, bool desc)
  *
  ****************************************************************************
  */
-void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols)
+void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, int order_key)
 {
     int i, j, x;
     struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
@@ -895,7 +895,12 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
     /* print header */
     wattron(window, A_BOLD);
     for (j = 0, x = 0; j < n_cols; j++, x++)
-        wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
+        if (j == order_key) {
+            wattron(window, A_REVERSE);
+            wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
+            wattroff(window, A_REVERSE);
+        } else
+            wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
     wprintw(window, "\n");
     wattroff(window, A_BOLD);
 
@@ -907,6 +912,39 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
     }
     wrefresh(window);
     free(columns);
+}
+
+/*
+ ****************************************************************************
+ *
+ ****************************************************************************
+ */
+void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment)
+{
+    int min, max, save;
+    switch (screens->query_context) {
+        case pg_stat_database:
+            min = PG_STAT_DATABASE_QUERY_ORDER_MIN;
+            max = PG_STAT_DATABASE_QUERY_ORDER_MAX;
+            break;
+        case pg_stat_replication:
+            break;
+        default:
+            break;
+    }
+    save = screens->order_key;
+    if (increment) {
+        if (screens->order_key + 1 > max)
+            screens->order_key = min;
+        else 
+            screens->order_key++;
+    }
+
+    if (!increment)
+        if (screens->order_key - 1 < min)
+            screens->order_key = max;
+        else
+            screens->order_key--;
 }
 
 /*
@@ -931,7 +969,7 @@ int main(int argc, char *argv[])
     /* arrays for PGresults */
     char ***p_arr, ***c_arr, ***r_arr;
 
-    /* Process args... */
+    /* process cmd args */
     init_screens(screens);
     if ( argc > 1 ) {
         create_initial_conn(argc, argv, screens);
@@ -967,9 +1005,29 @@ int main(int argc, char *argv[])
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
-                console_no = console_index + 1;
-                break;
+                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
+                    console_no = console_index + 1;
+                    break;
+                case '\033':            // catching arrows: if the first value is esc
+                    getch();            // skip the [
+                    switch (getch()) {
+                        case 'A':       // arrow up
+                            /* reserved */
+                            break;
+                        case 'B':       // arrow down
+                            /* reserved */
+                            break;
+                        case 'C':       // arrow right
+                            change_sort_order(w_cmd, screens[console_index], true);
+                            break;
+                        case 'D':       // arrow left
+                            change_sort_order(w_cmd, screens[console_index], false);
+                            break;
+                    }
+                    break; 
+                default:
+                    wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
+                    break;
             }
             curs_set(0);
         } else {
@@ -1009,10 +1067,10 @@ int main(int argc, char *argv[])
             diff_arrays(p_arr, c_arr, r_arr, n_rows, n_cols);
 
             /* sort result array */
-            sort_array(r_arr, n_rows, n_cols, 1, true);
+            sort_array(r_arr, n_rows, n_cols, screens[console_no]->order_key, screens[console_index]->order_desc);
 
             /* print column names */
-            print_data(w_dba, c_res, r_arr, n_rows, n_cols);
+            print_data(w_dba, c_res, r_arr, n_rows, n_cols, screens[console_index]->order_key);
 
             /* assign current PGresult as previous */
             p_res = c_res;

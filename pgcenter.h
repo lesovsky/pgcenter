@@ -111,6 +111,9 @@ struct colAttrs {
     FROM pg_stat_database  \
     ORDER BY datname"
 
+#define PG_STAT_DATABASE_QUERY_ORDER_MIN    1
+#define PG_STAT_DATABASE_QUERY_ORDER_MAX    14
+
 #define PG_STAT_REPLICATION_QUERY ""
 
 #endif
