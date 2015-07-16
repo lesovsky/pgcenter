@@ -14,6 +14,7 @@
 /* sizes and limits */
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
+#define TOTAL_CONTEXTS      2
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -38,6 +39,16 @@ enum context
     pg_stat_replication
 };
 
+#define DEFAULT_QUERY_CONTEXT   pg_stat_database
+
+/* struct for context list used in screen */
+struct context_s
+{
+    enum context context;
+    int order_key;
+    bool order_desc;
+};
+
 /* Struct which define connection options */
 struct screen_s
 {
@@ -51,9 +62,8 @@ struct screen_s
     char conninfo[BUFFERSIZE];
     bool log_opened;
     FILE *log;
-    enum context query_context;
-    int order_key;
-    bool order_desc;
+    enum context current_context;
+    struct context_s context_list[TOTAL_CONTEXTS];
 };
 
 #define SCREEN_SIZE (sizeof(struct screen_s))
@@ -74,6 +84,12 @@ struct stats_cpu_struct {
 
 #define STATS_CPU_SIZE (sizeof(struct stats_cpu_struct))
 
+/*
+ * Macros used to display statistics values.
+ * NB: Define SP_VALUE() to normalize to %;
+ */
+#define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
+
 /* enum for password purpose */
 enum trivalue
 {
@@ -87,12 +103,6 @@ struct colAttrs {
     char name[40];
     int width;
 };
-
-/*
- * Macros used to display statistics values.
- * NB: Define SP_VALUE() to normalize to %;
- */
-#define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
 
 /* PostgreSQL answers */
 #define PG_CMD_OK PGRES_COMMAND_OK
@@ -108,12 +118,25 @@ struct colAttrs {
         conflicts, \
         temp_files as tmp_files, temp_bytes as tmp_bytes, \
         blk_read_time as read_t, blk_write_time as write_t \
-    FROM pg_stat_database  \
+    FROM pg_stat_database \
     ORDER BY datname"
 
 #define PG_STAT_DATABASE_QUERY_ORDER_MIN    1
 #define PG_STAT_DATABASE_QUERY_ORDER_MAX    14
 
-#define PG_STAT_REPLICATION_QUERY ""
+#define PG_STAT_REPLICATION_QUERY \
+    "SELECT \
+        client_addr as client, application_name as name, \
+        state, sync_state as mode, \
+        pg_xlog_location_diff(sent_location, '0/0') as \"sent b/s\", \
+        pg_xlog_location_diff(write_location, '0/0') as \"write b/s\", \
+        pg_xlog_location_diff(flush_location, '0/0') as \"flush b/s\", \
+        pg_xlog_location_diff(replay_location, '0/0') as \"replay b/s\", \
+        pg_xlog_location_diff(sent_location,replay_location) as \"lag b/s\" \
+    FROM pg_stat_replication \
+    ORDER BY client_addr"
+
+#define PG_STAT_REPLICATION_QUERY_ORDER_MIN 4
+#define PG_STAT_REPLICATION_QUERY_ORDER_MAX 7
 
 #endif

@@ -1,5 +1,7 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add pg_stat_replication screen, add screens sort order saved between
+    screen switches.
   * Add column sort reordering with arrow keys.
   * Move query_context to screen_s struct, add order_key, order_desc params
     into screen_s. It allows store sort order info per screen.

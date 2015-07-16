@@ -70,7 +70,7 @@ int key_is_pressed(void)
  */
 void init_screens(struct screen_s *screens[])
 {
-    int i;
+    int i, j;
     for (i = 0; i < MAX_CONSOLE; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
                 perror("malloc");
@@ -86,9 +86,14 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->password, "");
         strcpy(screens[i]->conninfo, "");
         screens[i]->log_opened = false;
-        screens[i]->query_context = pg_stat_database;
-        screens[i]->order_key = 1;
-        screens[i]->order_desc = true;
+        screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
+
+        screens[i]->context_list[0].context = pg_stat_database;
+        screens[i]->context_list[0].order_key = PG_STAT_DATABASE_QUERY_ORDER_MIN;
+        screens[i]->context_list[0].order_desc = true;
+        screens[i]->context_list[1].context = pg_stat_replication;
+        screens[i]->context_list[1].order_key = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
+        screens[i]->context_list[1].order_desc = true;
     }
 }
 
@@ -830,18 +835,31 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
  *
  ****************************************************************************
  */
-void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, int n_rows, int n_cols)
+void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols)
 {
-    int i, j;
-            
+    int i, j, min, max;
+ 
+    switch (context) {
+        case pg_stat_database:
+            min = PG_STAT_DATABASE_QUERY_ORDER_MIN;
+            max = PG_STAT_DATABASE_QUERY_ORDER_MAX;
+            break;
+        case pg_stat_replication:
+            min = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
+            max = PG_STAT_REPLICATION_QUERY_ORDER_MAX;
+            break;
+        default:
+            break;
+    }
+
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
-            if (j == 0)
-                strcpy(res_arr[i][j], c_arr[i][j]);     // copy first column (dbname, tablename, etc)
+            if (j < min || j > max)
+                strcpy(res_arr[i][j], c_arr[i][j]);     // copy unsortable values as is
             else {
-                int n = snprintf(NULL, 0, "%li", atol(c_arr[i][j]) - atol(p_arr[i][j]));
+                int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 char buf[n+1];
-                snprintf(buf, n+1, "%li", atol(c_arr[i][j]) - atol(p_arr[i][j]));
+                snprintf(buf, n+1, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 strcpy(res_arr[i][j], buf);
             }
     }
@@ -852,15 +870,22 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, int n_rows, int 
  *
  ****************************************************************************
  */
-void sort_array(char ***res_arr, int n_rows, int n_cols, int key, bool desc)
+void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen)
 {
-    int i, j, x;
+    int i, j, x, order_key;
+    bool desc;
     char *temp = malloc(sizeof(char) * 255);
+
+    for (i = 0; i < TOTAL_CONTEXTS; i++)
+        if (screen->current_context == screen->context_list[i].context) {
+            order_key = screen->context_list[i].order_key;
+            desc = screen->context_list[i].order_desc;
+        }
 
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
             if (desc)
-                if (atol(res_arr[j][key]) > atol(res_arr[i][key])) {        // desc: j > i
+                if (atoll(res_arr[j][order_key]) > atoll(res_arr[i][order_key])) {        // desc: j > i
                     for (x = 0; x < n_cols; x++) {
                         strcpy(temp, res_arr[i][x]);
                         strcpy(res_arr[i][x], res_arr[j][x]);
@@ -868,7 +893,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, int key, bool desc)
                     }
                 }
             if (!desc)
-                if (atol(res_arr[i][key]) > atol(res_arr[j][key])) {        // asc: i > j
+                if (atoll(res_arr[i][order_key]) > atoll(res_arr[j][order_key])) {        // asc: i > j
                     for (x = 0; x < n_cols; x++) {
                         strcpy(temp, res_arr[i][x]);
                         strcpy(res_arr[i][x], res_arr[j][x]);
@@ -884,13 +909,17 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, int key, bool desc)
  *
  ****************************************************************************
  */
-void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, int order_key)
+void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, struct screen_s * screen)
 {
-    int i, j, x;
+    int i, j, x, order_key;
     struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
 
     calculate_width(columns, res, n_rows, n_cols);
     wclear(window);
+
+    for (i = 0; i < TOTAL_CONTEXTS; i++)
+        if (screen->current_context == screen->context_list[i].context)
+            order_key = screen->context_list[i].order_key;
 
     /* print header */
     wattron(window, A_BOLD);
@@ -921,30 +950,37 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
  */
 void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment)
 {
-    int min, max, save;
-    switch (screens->query_context) {
+    int min, max, i;
+    switch (screens->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_QUERY_ORDER_MIN;
             max = PG_STAT_DATABASE_QUERY_ORDER_MAX;
             break;
         case pg_stat_replication:
+            min = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
+            max = PG_STAT_REPLICATION_QUERY_ORDER_MAX;
             break;
         default:
             break;
     }
-    save = screens->order_key;
     if (increment) {
-        if (screens->order_key + 1 > max)
-            screens->order_key = min;
-        else 
-            screens->order_key++;
+        for (i = 0; i < TOTAL_CONTEXTS; i++) {
+            if (screens->current_context == screens->context_list[i].context)
+                if (screens->context_list[i].order_key + 1 > max)
+                    screens->context_list[i].order_key = min;
+                else 
+                    screens->context_list[i].order_key++;
+        }
     }
 
     if (!increment)
-        if (screens->order_key - 1 < min)
-            screens->order_key = max;
-        else
-            screens->order_key--;
+        for (i = 0; i < TOTAL_CONTEXTS; i++) {
+            if (screens->current_context == screens->context_list[i].context)
+                if (screens->context_list[i].order_key - 1 < min)
+                    screens->context_list[i].order_key = max;
+                else
+                    screens->context_list[i].order_key--;
+        }
 }
 
 /*
@@ -1024,7 +1060,15 @@ int main(int argc, char *argv[])
                             change_sort_order(w_cmd, screens[console_index], false);
                             break;
                     }
-                    break; 
+                    break;
+                case 'd':
+                    wprintw(w_cmd, "Show pg_stat_database");
+                    screens[console_index]->current_context = pg_stat_database;
+                    break;
+                case 'r':
+                    wprintw(w_cmd, "Show pg_stat_replication");
+                    screens[console_index]->current_context = pg_stat_replication;
+                    break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
                     break;
@@ -1037,7 +1081,7 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             wrefresh(w_sys);
 
-            c_res = do_query(conns[console_index], screens[console_index]->query_context);
+            c_res = do_query(conns[console_index], screens[console_index]->current_context);
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 
@@ -1064,13 +1108,13 @@ int main(int argc, char *argv[])
             pgrescpy(c_arr, c_res, n_rows, n_cols);
 
             /* diff current and previous arrays and build result array */
-            diff_arrays(p_arr, c_arr, r_arr, n_rows, n_cols);
+            diff_arrays(p_arr, c_arr, r_arr, screens[console_index]->current_context, n_rows, n_cols);
 
             /* sort result array */
-            sort_array(r_arr, n_rows, n_cols, screens[console_no]->order_key, screens[console_index]->order_desc);
+            sort_array(r_arr, n_rows, n_cols, screens[console_index]);
 
             /* print column names */
-            print_data(w_dba, c_res, r_arr, n_rows, n_cols, screens[console_index]->order_key);
+            print_data(w_dba, c_res, r_arr, n_rows, n_cols, screens[console_index]);
 
             /* assign current PGresult as previous */
             p_res = c_res;
