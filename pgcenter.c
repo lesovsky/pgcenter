@@ -97,6 +97,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[2].context = pg_stat_user_tables;
         screens[i]->context_list[2].order_key = PG_STAT_USER_TABLES_ORDER_MIN;
         screens[i]->context_list[2].order_desc = true;
+        screens[i]->context_list[3].context = pg_stat_user_indexes;
+        screens[i]->context_list[3].order_key = PG_STAT_USER_INDEXES_ORDER_MIN;
+        screens[i]->context_list[3].order_desc = true;
     }
 }
 
@@ -718,6 +721,9 @@ PGresult * do_query(PGconn *conn, enum context query_context)
         case pg_stat_user_tables:
             strcpy(query, PG_STAT_USER_TABLES_QUERY);
             break;
+        case pg_stat_user_indexes:
+            strcpy(query, PG_STAT_USER_INDEXES_QUERY);
+            break;
     }
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
@@ -858,6 +864,10 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             min = PG_STAT_USER_TABLES_ORDER_MIN;
             max = PG_STAT_USER_TABLES_ORDER_MAX;
             break;
+        case pg_stat_user_indexes:
+            min = PG_STAT_USER_INDEXES_ORDER_MIN;
+            max = PG_STAT_USER_INDEXES_ORDER_MAX;
+            break;
         default:
             break;
     }
@@ -973,6 +983,10 @@ void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment
         case pg_stat_user_tables:
             min = PG_STAT_USER_TABLES_ORDER_MIN;
             max = PG_STAT_USER_TABLES_ORDER_MAX;
+            break;
+        case pg_stat_user_indexes:
+            min = PG_STAT_USER_INDEXES_ORDER_MIN;
+            max = PG_STAT_USER_INDEXES_ORDER_MAX;
             break;
         default:
             break;
@@ -1090,6 +1104,11 @@ int main(int argc, char *argv[])
                 case 't':
                     wprintw(w_cmd, "Show pg_stat_user_tables");
                     screens[console_index]->current_context = pg_stat_user_tables;
+                    first_iter = true;
+                    break;
+                case 'i':
+                    wprintw(w_cmd, "Show pg_stat_user_indexes");
+                    screens[console_index]->current_context = pg_stat_user_indexes;
                     first_iter = true;
                     break;
                 default:

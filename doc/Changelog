@@ -1,6 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
-  * Add pg_stat_user_tables screen.
+  * Add pg_stat_user_tables, pg_stat_user_indexes screens.
   * Add pg_stat_replication screen, add screens sort order saved between
     screen switches.
   * Add column sort reordering with arrow keys.
