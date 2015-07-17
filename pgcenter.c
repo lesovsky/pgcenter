@@ -70,7 +70,7 @@ int key_is_pressed(void)
  */
 void init_screens(struct screen_s *screens[])
 {
-    int i, j;
+    int i;
     for (i = 0; i < MAX_CONSOLE; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
                 perror("malloc");
@@ -89,11 +89,14 @@ void init_screens(struct screen_s *screens[])
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
 
         screens[i]->context_list[0].context = pg_stat_database;
-        screens[i]->context_list[0].order_key = PG_STAT_DATABASE_QUERY_ORDER_MIN;
+        screens[i]->context_list[0].order_key = PG_STAT_DATABASE_ORDER_MIN;
         screens[i]->context_list[0].order_desc = true;
         screens[i]->context_list[1].context = pg_stat_replication;
-        screens[i]->context_list[1].order_key = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
+        screens[i]->context_list[1].order_key = PG_STAT_REPLICATION_ORDER_MIN;
         screens[i]->context_list[1].order_desc = true;
+        screens[i]->context_list[2].context = pg_stat_user_tables;
+        screens[i]->context_list[2].order_key = PG_STAT_USER_TABLES_ORDER_MIN;
+        screens[i]->context_list[2].order_desc = true;
     }
 }
 
@@ -712,6 +715,9 @@ PGresult * do_query(PGconn *conn, enum context query_context)
         case pg_stat_replication:
             strcpy(query, PG_STAT_REPLICATION_QUERY);
             break;
+        case pg_stat_user_tables:
+            strcpy(query, PG_STAT_USER_TABLES_QUERY);
+            break;
     }
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
@@ -841,12 +847,16 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
  
     switch (context) {
         case pg_stat_database:
-            min = PG_STAT_DATABASE_QUERY_ORDER_MIN;
-            max = PG_STAT_DATABASE_QUERY_ORDER_MAX;
+            min = PG_STAT_DATABASE_ORDER_MIN;
+            max = PG_STAT_DATABASE_ORDER_MAX;
             break;
         case pg_stat_replication:
-            min = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
-            max = PG_STAT_REPLICATION_QUERY_ORDER_MAX;
+            min = PG_STAT_REPLICATION_ORDER_MIN;
+            max = PG_STAT_REPLICATION_ORDER_MAX;
+            break;
+        case pg_stat_user_tables:
+            min = PG_STAT_USER_TABLES_ORDER_MIN;
+            max = PG_STAT_USER_TABLES_ORDER_MAX;
             break;
         default:
             break;
@@ -953,33 +963,39 @@ void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment
     int min, max, i;
     switch (screens->current_context) {
         case pg_stat_database:
-            min = PG_STAT_DATABASE_QUERY_ORDER_MIN;
-            max = PG_STAT_DATABASE_QUERY_ORDER_MAX;
+            min = PG_STAT_DATABASE_ORDER_MIN;
+            max = PG_STAT_DATABASE_ORDER_MAX;
             break;
         case pg_stat_replication:
-            min = PG_STAT_REPLICATION_QUERY_ORDER_MIN;
-            max = PG_STAT_REPLICATION_QUERY_ORDER_MAX;
+            min = PG_STAT_REPLICATION_ORDER_MIN;
+            max = PG_STAT_REPLICATION_ORDER_MAX;
+            break;
+        case pg_stat_user_tables:
+            min = PG_STAT_USER_TABLES_ORDER_MIN;
+            max = PG_STAT_USER_TABLES_ORDER_MAX;
             break;
         default:
             break;
     }
     if (increment) {
         for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screens->current_context == screens->context_list[i].context)
+            if (screens->current_context == screens->context_list[i].context) {
                 if (screens->context_list[i].order_key + 1 > max)
                     screens->context_list[i].order_key = min;
                 else 
                     screens->context_list[i].order_key++;
+            }
         }
     }
 
     if (!increment)
         for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screens->current_context == screens->context_list[i].context)
+            if (screens->current_context == screens->context_list[i].context) {
                 if (screens->context_list[i].order_key - 1 < min)
                     screens->context_list[i].order_key = max;
                 else
                     screens->context_list[i].order_key--;
+            }
         }
 }
 
@@ -1064,10 +1080,17 @@ int main(int argc, char *argv[])
                 case 'd':
                     wprintw(w_cmd, "Show pg_stat_database");
                     screens[console_index]->current_context = pg_stat_database;
+                    first_iter = true;
                     break;
                 case 'r':
                     wprintw(w_cmd, "Show pg_stat_replication");
                     screens[console_index]->current_context = pg_stat_replication;
+                    first_iter = true;
+                    break;
+                case 't':
+                    wprintw(w_cmd, "Show pg_stat_user_tables");
+                    screens[console_index]->current_context = pg_stat_user_tables;
+                    first_iter = true;
                     break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     

@@ -14,7 +14,7 @@
 /* sizes and limits */
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      2
+#define TOTAL_CONTEXTS      3
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -36,7 +36,8 @@ unsigned int hz;
 enum context
 {
     pg_stat_database,
-    pg_stat_replication
+    pg_stat_replication,
+    pg_stat_user_tables
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -121,8 +122,8 @@ struct colAttrs {
     FROM pg_stat_database \
     ORDER BY datname"
 
-#define PG_STAT_DATABASE_QUERY_ORDER_MIN    1
-#define PG_STAT_DATABASE_QUERY_ORDER_MAX    14
+#define PG_STAT_DATABASE_ORDER_MIN    1
+#define PG_STAT_DATABASE_ORDER_MAX    14
 
 #define PG_STAT_REPLICATION_QUERY \
     "SELECT \
@@ -136,7 +137,20 @@ struct colAttrs {
     FROM pg_stat_replication \
     ORDER BY client_addr"
 
-#define PG_STAT_REPLICATION_QUERY_ORDER_MIN 4
-#define PG_STAT_REPLICATION_QUERY_ORDER_MAX 7
+#define PG_STAT_REPLICATION_ORDER_MIN 4
+#define PG_STAT_REPLICATION_ORDER_MAX 7
+
+#define PG_STAT_USER_TABLES_QUERY \
+    "SELECT \
+        schemaname || '.' || relname as relation, \
+        seq_scan, seq_tup_read, idx_scan, idx_tup_fetch, \
+        n_tup_ins as inserts, n_tup_upd as updates, \
+        n_tup_del as deletes, n_tup_hot_upd as hot_updates, \
+        n_live_tup as live, n_dead_tup as dead \
+    FROM pg_stat_user_tables \
+    ORDER BY 1"
+
+#define PG_STAT_USER_TABLES_ORDER_MIN 1
+#define PG_STAT_USER_TABLES_ORDER_MAX 10
 
 #endif
