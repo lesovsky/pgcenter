@@ -14,7 +14,7 @@
 /* sizes and limits */
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      4
+#define TOTAL_CONTEXTS      5
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -38,7 +38,8 @@ enum context
     pg_stat_database,
     pg_stat_replication,
     pg_stat_user_tables,
-    pg_stat_user_indexes
+    pg_stat_user_indexes,
+    pg_statio_user_tables
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -154,14 +155,29 @@ struct colAttrs {
 #define PG_STAT_USER_TABLES_ORDER_MIN 1
 #define PG_STAT_USER_TABLES_ORDER_MAX 10
 
+#define PG_STATIO_USER_TABLES_QUERY \
+        "SELECT \
+            schemaname ||'.'|| relname as relation, \
+            heap_blks_read, heap_blks_hit, idx_blks_read, idx_blks_hit, \
+            toast_blks_read, toast_blks_hit, tidx_blks_read, tidx_blks_hit \
+        FROM pg_statio_user_tables \
+        ORDER BY 1"
+
+#define PG_STATIO_USER_TABLES_ORDER_MIN 1
+#define PG_STATIO_USER_TABLES_ORDER_MAX 8
+
 #define PG_STAT_USER_INDEXES_QUERY \
     "SELECT \
-        schemaname ||'.'|| relname as relation, indexrelname as index, \
-        idx_scan, idx_tup_read, idx_tup_fetch \
-    FROM pg_stat_user_indexes \
+        s.schemaname ||'.'|| s.relname as relation, s.indexrelname as index, \
+        s.idx_scan, s.idx_tup_read, s.idx_tup_fetch, \
+        i.idx_blks_read, i.idx_blks_hit \
+    FROM \
+        pg_stat_user_indexes s, \
+        pg_statio_user_indexes i \
+    WHERE s.relid = i.relid \
     ORDER BY 1"
 
 #define PG_STAT_USER_INDEXES_ORDER_MIN 2
-#define PG_STAT_USER_INDEXES_ORDER_MAX 4
+#define PG_STAT_USER_INDEXES_ORDER_MAX 6
 
 #endif
