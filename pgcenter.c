@@ -44,7 +44,7 @@ void print_usage(void)
 
 /*
  ******************************************************** routine function **
- * Trap keys in program main mode
+ * Trap keys in program main mode.
  *
  * RETURNS:
  * 1 if key is pressed or 0 if not.
@@ -62,10 +62,10 @@ int key_is_pressed(void)
 
 /*
  *********************************************************** init function **
- * Allocate memory for connections options struct array
+ * Allocate memory for screens options struct array.
  *
  * OUT:
- * @screen_s   Initialized array of connection options
+ * @screen_s   Initialized array of screens options.
  ****************************************************************************
  */
 void init_screens(struct screen_s *screens[])
@@ -160,8 +160,7 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
  * @screens[]     Array where connections options will be saved.
  ****************************************************************************
  */
-void create_initial_conn(int argc, char *argv[],
-                struct screen_s * screens[])
+void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
 {
     struct passwd *pw = getpwuid(getuid());
 
@@ -321,10 +320,10 @@ int create_pgcenterrc_conn(int argc, char *argv[],
  * Prepare conninfo string for PQconnectdb.
  *
  * IN:
- * @screens       Connections options array without filled conninfo.
+ * @screens       Screens options array without filled conninfo.
  *
  * OUT:
- * @screens       Connections options array with conninfo.
+ * @screens       Screens options array with conninfo.
  ****************************************************************************
  */
 void prepare_conninfo(struct screen_s * screens[])
@@ -349,10 +348,10 @@ void prepare_conninfo(struct screen_s * screens[])
 
 /*
  ******************************************************** startup function **
- * Open connections to pgbouncer using conninfo string from screen struct.
+ * Open connections to PostgreSQL using conninfo string from screen struct.
  *
  * IN:
- * @screens       Connections options array.
+ * @screens         Screens options array.
  *
  * OUT:
  * @conns           Array of connections.
@@ -385,8 +384,8 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
  ************************************************* summary window function **
  * Print current time.
  *
- * RETURNS:
- * Return current time.
+ * OUT:
+ * @strtime         Current time.
  ****************************************************************************
  */
 void get_time(char * strtime)
@@ -805,8 +804,16 @@ int switch_conn(WINDOW * window, struct screen_s * screens[],
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routine function **
+ * Allocate memory for 3D pointer array.
  *
+ * IN:
+ * @arr             3D pointer array.
+ * @n_rows          Number of rows of current query result.
+ * @n_cols          Number of columns of current query result.
+ *
+ * RETURNS:
+ * Returns allocated space based on rows and column numbers.
  ****************************************************************************
  */
 char *** init_array(char ***arr, int n_rows, int n_cols)
@@ -823,8 +830,16 @@ char *** init_array(char ***arr, int n_rows, int n_cols)
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routine function **
+ * Free space occupied by 3D pointer arrays
  *
+ * IN:      
+ * @arr             3D pointer array.
+ * @n_rows          Number of rows of current query result.
+ * @n_cols          Number of columns of current query result.
+ *
+ * RETURNS:
+ * Returns pointer to empty 3D pointer array.
  ****************************************************************************
  */
 char *** free_array(char ***arr, int n_rows, int n_cols)
@@ -841,8 +856,14 @@ char *** free_array(char ***arr, int n_rows, int n_cols)
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routine function **
+ * Copy database query results into array.
  *
+ * IN:
+ * @arr             3D pointer array where query results will be stored.
+ * @res             Database query result.
+ * @n_rows          Number of rows in query result.
+ * @n_cols          Number of cols in query result.
  ****************************************************************************
  */
 void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
@@ -855,8 +876,18 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routime function **
+ * Diff arrays and build array with deltas.
  *
+ * IN:
+ * @p_arr           Array with results of previous query.
+ * @c_arr           Array with results of current query.
+ * @context         Current used query.
+ * @n_rows          Total number of rows from query result.
+ * @n_cols          Total number of columns from query result.
+ *
+ * OUT:
+ * @res_arr         Array where difference result will be stored.
  ****************************************************************************
  */
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols)
@@ -906,8 +937,17 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routine function **
+ * Sort array using specified order key (column number).
  *
+ * IN:
+ * @res_arr         Array which content will be sorted.
+ * @n_rows          Number of rows in query result.
+ * @n_cols          Number of columns in query result.
+ * @screen          Current screen.
+ *
+ * OUT:
+ * @res_arr         Sorted array.
  ****************************************************************************
  */
 void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen)
@@ -945,8 +985,17 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
 }
 
 /*
- ****************************************************************************
+ ******************************************************** routine function **
+ * Print array content into ncurses screen.
  *
+ * IN:
+ * @window          Ncurses window where result will be printed.
+ * @res             Query result, used for column width calculation.
+ * @arr             Array which content will be printed.
+ * @n_rows          Number of rows in query result.
+ * @n_cols          Number of columns in query result.
+ * @screen          Current screen, used for getting order key and highlight 
+ *                  appropriate column.
  ****************************************************************************
  */
 void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, struct screen_s * screen)
@@ -984,11 +1033,15 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
 }
 
 /*
- ****************************************************************************
+ ****************************************************** key-press function **
+ * Change column-based sort
  *
+ * IN:
+ * @screen              Current screen.
+ * @increment           Direction (left or right column).
  ****************************************************************************
  */
-void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment)
+void change_sort_order(struct screen_s * screens, bool increment)
 {
     int min, max, i;
     switch (screens->current_context) {
@@ -1043,7 +1096,7 @@ void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment
 
 /*
  ****************************************************************************
- *
+ * Main program
  ****************************************************************************
  */
 int main(int argc, char *argv[])
@@ -1112,10 +1165,10 @@ int main(int argc, char *argv[])
                             /* reserved */
                             break;
                         case 'C':       // arrow right
-                            change_sort_order(w_cmd, screens[console_index], true);
+                            change_sort_order(screens[console_index], true);
                             break;
                         case 'D':       // arrow left
-                            change_sort_order(w_cmd, screens[console_index], false);
+                            change_sort_order(screens[console_index], false);
                             break;
                     }
                     break;
@@ -1145,7 +1198,7 @@ int main(int argc, char *argv[])
                     first_iter = true;
                     break;
                 case 's':
-                    wprintw(w_cmd, "Show relation size changes");
+                    wprintw(w_cmd, "Show relations sizes");
                     screens[console_index]->current_context = pg_tables_size;
                     first_iter = true;
                     break;
@@ -1156,21 +1209,38 @@ int main(int argc, char *argv[])
             curs_set(0);
         } else {
             wclear(w_sys);
+
+            /* 
+             * Sysstat screen 
+             */
             print_title(w_sys, argv[0]);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             wrefresh(w_sys);
 
+            /* 
+             * Database screen. 
+             */
             c_res = do_query(conns[console_index], screens[console_index]->current_context);
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 
+            /* 
+             * on startup or when context switched current data snapshot copied 
+             * to previous data snapshot and restart cycle
+             */
             if (first_iter) {
                 p_res = c_res;
                 usleep(10000);
                 first_iter = false;
                 continue;
             }
+
+            /* 
+             * when number of rows changed (when db/table/index created or 
+             * droped), update previous snapshot to current state and start new 
+             * iteration. 
+             */
             if (n_prev_rows < n_rows) {
                 p_res = c_res;
                 n_prev_rows = n_rows;
@@ -1178,25 +1248,25 @@ int main(int argc, char *argv[])
                 continue;
             }
 
-            /* create storages for data from PQgetvalue */
+            /* create storages for values from PQgetvalue */
             p_arr = init_array(p_arr, n_rows, n_cols);
             c_arr = init_array(c_arr, n_rows, n_cols);
             r_arr = init_array(r_arr, n_rows, n_cols);
 
-            /* copy query results (cur,prev) into arrays */
+            /* copy whole query results (current, previous) into arrays */
             pgrescpy(p_arr, p_res, n_rows, n_cols);
             pgrescpy(c_arr, c_res, n_rows, n_cols);
 
             /* diff current and previous arrays and build result array */
             diff_arrays(p_arr, c_arr, r_arr, screens[console_index]->current_context, n_rows, n_cols);
 
-            /* sort result array */
+            /* sort result array using order key */
             sort_array(r_arr, n_rows, n_cols, screens[console_index]);
 
-            /* print column names */
+            /* print sorted result array */
             print_data(w_dba, c_res, r_arr, n_rows, n_cols, screens[console_index]);
 
-            /* assign current PGresult as previous */
+            /* replace previous database query result with current result */
             p_res = c_res;
             n_prev_rows = n_rows;
 
