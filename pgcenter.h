@@ -14,7 +14,7 @@
 /* sizes and limits */
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      5
+#define TOTAL_CONTEXTS      6
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -39,7 +39,8 @@ enum context
     pg_stat_replication,
     pg_stat_user_tables,
     pg_stat_user_indexes,
-    pg_statio_user_tables
+    pg_statio_user_tables,
+    pg_tables_size
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -131,11 +132,11 @@ struct colAttrs {
     "SELECT \
         client_addr as client, application_name as name, \
         state, sync_state as mode, \
-        pg_xlog_location_diff(sent_location, '0/0') as \"sent b/s\", \
-        pg_xlog_location_diff(write_location, '0/0') as \"write b/s\", \
-        pg_xlog_location_diff(flush_location, '0/0') as \"flush b/s\", \
-        pg_xlog_location_diff(replay_location, '0/0') as \"replay b/s\", \
-        pg_xlog_location_diff(sent_location,replay_location) as \"lag b/s\" \
+        (pg_xlog_location_diff(sent_location, '0/0') / 1024)::int as \"sent KB/s\", \
+        (pg_xlog_location_diff(write_location, '0/0') / 1024)::int as \"write KB/s\", \
+        (pg_xlog_location_diff(flush_location, '0/0') / 1024)::int as \"flush KB/s\", \
+        (pg_xlog_location_diff(replay_location, '0/0') / 1024)::int as \"replay KB/s\", \
+        (pg_xlog_location_diff(sent_location,replay_location) / 1024)::int as \"lag KB/s\" \
     FROM pg_stat_replication \
     ORDER BY client_addr"
 
@@ -156,12 +157,12 @@ struct colAttrs {
 #define PG_STAT_USER_TABLES_ORDER_MAX 10
 
 #define PG_STATIO_USER_TABLES_QUERY \
-        "SELECT \
-            schemaname ||'.'|| relname as relation, \
-            heap_blks_read, heap_blks_hit, idx_blks_read, idx_blks_hit, \
-            toast_blks_read, toast_blks_hit, tidx_blks_read, tidx_blks_hit \
-        FROM pg_statio_user_tables \
-        ORDER BY 1"
+    "SELECT \
+        schemaname ||'.'|| relname as relation, \
+        heap_blks_read, heap_blks_hit, idx_blks_read, idx_blks_hit, \
+        toast_blks_read, toast_blks_hit, tidx_blks_read, tidx_blks_hit \
+    FROM pg_statio_user_tables \
+    ORDER BY 1"
 
 #define PG_STATIO_USER_TABLES_ORDER_MIN 1
 #define PG_STATIO_USER_TABLES_ORDER_MAX 8
@@ -179,5 +180,20 @@ struct colAttrs {
 
 #define PG_STAT_USER_INDEXES_ORDER_MIN 2
 #define PG_STAT_USER_INDEXES_ORDER_MAX 6
+
+#define PG_TABLES_SIZE_QUERY \
+    "SELECT \
+        schemaname ||'.'|| relname as relation, \
+        pg_total_relation_size(relname::regclass) / 1024 as \"total size, KB/s\", \
+        pg_relation_size(relname::regclass) / 1024 as \"size w/o indexes, KB/s\", \
+        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"indexes, KB/s\", \
+        pg_total_relation_size(relname::regclass) / 1024 as \"total changes, KB/s\", \
+        pg_relation_size(relname::regclass) / 1024 as \"changes w/o indexes, KB/s\", \
+        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"changes indexes, KB/s\" \
+        FROM pg_stat_user_tables \
+        ORDER BY 1"
+
+#define PG_TABLES_SIZE_ORDER_MIN 4
+#define PG_TABLES_SIZE_ORDER_MAX 6
 
 #endif

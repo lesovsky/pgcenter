@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add relation sizes screen (awesome feature imho).
   * Add pg_statio_user_tables screen, join pg_statio_user_indexes to
     pg_stat_user_indexes screen.
   * Add pg_stat_user_tables, pg_stat_user_indexes screens.

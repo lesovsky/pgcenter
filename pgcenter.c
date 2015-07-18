@@ -103,6 +103,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[4].context = pg_statio_user_tables;
         screens[i]->context_list[4].order_key = PG_STATIO_USER_TABLES_ORDER_MIN;
         screens[i]->context_list[4].order_desc = true;
+        screens[i]->context_list[5].context = pg_tables_size;
+        screens[i]->context_list[5].order_key = PG_TABLES_SIZE_ORDER_MIN;
+        screens[i]->context_list[5].order_desc = true;
     }
 }
 
@@ -730,6 +733,9 @@ PGresult * do_query(PGconn *conn, enum context query_context)
         case pg_statio_user_tables:
             strcpy(query, PG_STATIO_USER_TABLES_QUERY);
             break;
+        case pg_tables_size:
+            strcpy(query, PG_TABLES_SIZE_QUERY);
+            break;
     }
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
@@ -878,6 +884,10 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             min = PG_STATIO_USER_TABLES_ORDER_MIN;
             max = PG_STATIO_USER_TABLES_ORDER_MAX;
             break;
+        case pg_tables_size:
+            min = PG_TABLES_SIZE_ORDER_MIN;
+            max = PG_TABLES_SIZE_ORDER_MAX;
+            break;
         default:
             break;
     }
@@ -1001,6 +1011,10 @@ void change_sort_order(WINDOW *window, struct screen_s * screens, bool increment
         case pg_statio_user_tables:
             min = PG_STATIO_USER_TABLES_ORDER_MIN;
             max = PG_STATIO_USER_TABLES_ORDER_MAX;
+            break;
+        case pg_tables_size:
+            min = PG_TABLES_SIZE_ORDER_MIN - 3;
+            max = PG_TABLES_SIZE_ORDER_MAX;
             break;
         default:
             break;
@@ -1128,6 +1142,11 @@ int main(int argc, char *argv[])
                 case 'y':
                     wprintw(w_cmd, "Show pg_statio_user_tables");
                     screens[console_index]->current_context = pg_statio_user_tables;
+                    first_iter = true;
+                    break;
+                case 's':
+                    wprintw(w_cmd, "Show relation size changes");
+                    screens[console_index]->current_context = pg_tables_size;
                     first_iter = true;
                     break;
                 default:
