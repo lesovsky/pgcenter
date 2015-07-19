@@ -106,6 +106,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[5].context = pg_tables_size;
         screens[i]->context_list[5].order_key = PG_TABLES_SIZE_ORDER_MIN;
         screens[i]->context_list[5].order_desc = true;
+        screens[i]->context_list[6].context = pg_stat_activity_long;
+        screens[i]->context_list[6].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+        screens[i]->context_list[6].order_desc = true;
     }
 }
 
@@ -735,6 +738,9 @@ PGresult * do_query(PGconn *conn, enum context query_context)
         case pg_tables_size:
             strcpy(query, PG_TABLES_SIZE_QUERY);
             break;
+        case pg_stat_activity_long:
+            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY);
+            break;
     }
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
@@ -919,6 +925,10 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             min = PG_TABLES_SIZE_ORDER_MIN;
             max = PG_TABLES_SIZE_ORDER_MAX;
             break;
+        case pg_stat_activity_long:
+            min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+            max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
+            break;
         default:
             break;
     }
@@ -961,6 +971,9 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
             order_key = screen->context_list[i].order_key;
             desc = screen->context_list[i].order_desc;
         }
+
+    if (order_key == INVALID_ORDER_KEY)
+        return;
 
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
@@ -1068,6 +1081,10 @@ void change_sort_order(struct screen_s * screens, bool increment)
         case pg_tables_size:
             min = PG_TABLES_SIZE_ORDER_MIN - 3;
             max = PG_TABLES_SIZE_ORDER_MAX;
+            break;
+        case pg_stat_activity_long:
+            min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+            max = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             break;
         default:
             break;
@@ -1200,6 +1217,11 @@ int main(int argc, char *argv[])
                 case 's':
                     wprintw(w_cmd, "Show relations sizes");
                     screens[console_index]->current_context = pg_tables_size;
+                    first_iter = true;
+                    break;
+                case 'l':
+                    wprintw(w_cmd, "Show long transactions (transactions and queries threshold: 00:00:10)");
+                    screens[console_index]->current_context = pg_stat_activity_long;
                     first_iter = true;
                     break;
                 default:

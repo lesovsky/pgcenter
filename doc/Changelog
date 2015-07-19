@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add pg_stat_activity long queries screen (based on db_activity).
   * Add relation sizes screen (awesome feature imho).
   * Add pg_statio_user_tables screen, join pg_statio_user_indexes to
     pg_stat_user_indexes screen.

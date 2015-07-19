@@ -14,7 +14,8 @@
 /* sizes and limits */
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      6
+#define TOTAL_CONTEXTS      7
+#define INVALID_ORDER_KEY   99
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -40,7 +41,8 @@ enum context
     pg_stat_user_tables,
     pg_stat_user_indexes,
     pg_statio_user_tables,
-    pg_tables_size
+    pg_tables_size,
+    pg_stat_activity_long
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -195,5 +197,22 @@ struct colAttrs {
 
 #define PG_TABLES_SIZE_ORDER_MIN 4
 #define PG_TABLES_SIZE_ORDER_MAX 6
+
+#define PG_STAT_ACTIVITY_LONG_QUERY \
+    "SELECT \
+        pid, client_addr as cl_addr, client_port as cl_port, \
+        datname, usename, state, waiting, \
+        date_trunc('seconds', clock_timestamp() - xact_start) AS txn_age, \
+        date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
+        date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
+        query \
+    FROM pg_stat_activity \
+    WHERE ((clock_timestamp() - xact_start) > '00:00:10.1'::interval \
+            OR (clock_timestamp() - query_start) > '00:00:10.1'::interval) \
+            AND state <> 'idle' AND pid <> pg_backend_pid() \
+    ORDER BY COALESCE(xact_start, query_start)"
+
+#define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
+#define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
 
 #endif
