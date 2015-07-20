@@ -87,6 +87,7 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->conninfo, "");
         screens[i]->log_opened = false;
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
+        strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
 
         screens[i]->context_list[0].context = pg_stat_database;
         screens[i]->context_list[0].order_key = PG_STAT_DATABASE_ORDER_MIN;
@@ -715,11 +716,11 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
  * Answer from PostgreSQL.
  ****************************************************************************
  */
-PGresult * do_query(PGconn *conn, enum context query_context)
+PGresult * do_query(PGconn *conn, struct screen_s * screen)
 {
     PGresult    *res;
     char query[1024];
-    switch (query_context) {
+    switch (screen->current_context) {
         case pg_stat_database: default:
             strcpy(query, PG_STAT_DATABASE_QUERY);
             break;
@@ -739,7 +740,11 @@ PGresult * do_query(PGconn *conn, enum context query_context)
             strcpy(query, PG_TABLES_SIZE_QUERY);
             break;
         case pg_stat_activity_long:
-            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY);
+            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
+            strcat(query, screen->pg_stat_activity_min_age);
+            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
+            strcat(query, screen->pg_stat_activity_min_age);
+            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
             break;
     }
     res = PQexec(conn, query);
@@ -1112,6 +1117,95 @@ void change_sort_order(struct screen_s * screens, bool increment)
 }
 
 /*
+ ***************************************************** cmd window function **
+ * Read input from cmd window.
+ *
+ * IN:
+ * @window          Window where pause status will be printed.
+ * @pos             When you delete wrong input, cursor do not moving beyond.
+ *
+ * OUT:
+ * @with_esc        Flag which determines when function finish with ESC.
+ *
+ * RETURNS:
+ * Pointer to the input string.
+ ****************************************************************************
+ */
+void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str)
+{
+    int ch;
+    int i = 0;
+
+    while ((ch = wgetch(window)) != ERR ) {
+        if (ch == 27) {
+            wclear(window);
+            wprintw(window, "Do nothing. Operation canceled. ");
+            nodelay(window, TRUE);
+            *with_esc = true;              // Finish with ESC.
+            strcpy(str, "");
+            return;
+        } else if (ch == 10) {
+            str[i] = '\0';
+            nodelay(window, TRUE);
+            *with_esc = false;              // Normal finish with Newline.
+            return;
+        } else if (ch == KEY_BACKSPACE || ch == KEY_DC || ch == 127) {
+            if (i > 0) {
+                i--;
+                wdelch(window);
+            } else {
+                wmove(window, 0, pos);
+                continue;
+            }
+        } else {
+            str[i] = ch;
+            i++;
+        }
+    }
+}
+
+/*
+ ****************************************************** key-press function **
+ * Change pg_stat_activity long queries min age
+ *
+ * IN:
+ * @window              Ncurses window where msg will be printed.
+ * @screen              Current screen.
+ ****************************************************************************
+ */
+void change_min_age(WINDOW * window, struct screen_s * screen)
+{
+    unsigned int hour, min, sec;
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+    char min_age[BUFFERSIZE_S];
+
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    wprintw(window, "Enter new min age, format: HH:MM:SS[.NN]: ");
+    wrefresh(window);
+
+    cmd_readline(window, 42, with_esc, min_age);
+    if (strlen(min_age) != 0 && *with_esc == false) {
+        if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
+            wprintw(window, "Nothing to do. Failed read or invalid value.");
+        } else {
+            strncpy(screen->pg_stat_activity_min_age, min_age, sizeof(screen->pg_stat_activity_min_age) - 1);
+            screen->pg_stat_activity_min_age[sizeof(screen->pg_stat_activity_min_age) - 1] = '\0';
+        }
+    } else if (strlen(min_age) == 0 && *with_esc == false ) {
+        wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
+    }
+    
+    free(with_esc);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+}
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -1224,6 +1318,10 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_stat_activity_long;
                     first_iter = true;
                     break;
+                case 'm':
+                    if (screens[console_index]->current_context == pg_stat_activity_long)
+                        change_min_age(w_cmd, screens[console_index]);
+                    break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
                     break;
@@ -1243,7 +1341,7 @@ int main(int argc, char *argv[])
             /* 
              * Database screen. 
              */
-            c_res = do_query(conns[console_index], screens[console_index]->current_context);
+            c_res = do_query(conns[console_index], screens[console_index]);
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 

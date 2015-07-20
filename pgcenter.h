@@ -12,10 +12,12 @@
 #define PROGRAM_AUTHORS_CONTACTS    "<lesovsky@gmail.com>"
 
 /* sizes and limits */
+#define BUFFERSIZE_S        16
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
 #define TOTAL_CONTEXTS      7
 #define INVALID_ORDER_KEY   99
+#define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
 #define LOADAVG_FILE        "/proc/loadavg"
 #define STAT_FILE           "/proc/stat"
@@ -69,6 +71,7 @@ struct screen_s
     bool log_opened;
     FILE *log;
     enum context current_context;
+    char pg_stat_activity_min_age[BUFFERSIZE_S];
     struct context_s context_list[TOTAL_CONTEXTS];
 };
 
@@ -198,7 +201,7 @@ struct colAttrs {
 #define PG_TABLES_SIZE_ORDER_MIN 4
 #define PG_TABLES_SIZE_ORDER_MAX 6
 
-#define PG_STAT_ACTIVITY_LONG_QUERY \
+#define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
     "SELECT \
         pid, client_addr as cl_addr, client_port as cl_port, \
         datname, usename, state, waiting, \
@@ -207,9 +210,11 @@ struct colAttrs {
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
         query \
     FROM pg_stat_activity \
-    WHERE ((clock_timestamp() - xact_start) > '00:00:10.1'::interval \
-            OR (clock_timestamp() - query_start) > '00:00:10.1'::interval) \
-            AND state <> 'idle' AND pid <> pg_backend_pid() \
+    WHERE ((clock_timestamp() - xact_start) > '"
+#define PG_STAT_ACTIVITY_LONG_QUERY_P2 \
+    "'::interval OR (clock_timestamp() - query_start) > '"
+#define PG_STAT_ACTIVITY_LONG_QUERY_P3 \
+    "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
     ORDER BY COALESCE(xact_start, query_start)"
 
 #define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
