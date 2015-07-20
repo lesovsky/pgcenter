@@ -952,12 +952,10 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             break;
         case pg_stat_user_functions:
             /* 
-             * здесь мы выставляем INVALID_ORDER_KEY т.к. нам ненужен diff 
-             * массивов (показываем всегда последние значения) и мы копируем 
-             * в res_arr все содержимое текущего c_arr.
+             * здесь мы делаем diff только по одному полю calls/s
              */
-            min = INVALID_ORDER_KEY;
-            max = INVALID_ORDER_KEY;
+            min = PG_STAT_USER_FUNCTIONS_DIFF_COL;
+            max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
         default:
             break;

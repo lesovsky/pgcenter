@@ -224,15 +224,18 @@ struct colAttrs {
 
 #define PG_STAT_USER_FUNCTIONS_QUERY \
     "SELECT \
-        funcid, schemaname ||'.'||funcname as function, calls, \
+        funcid, schemaname ||'.'||funcname as function, \
+        calls as total_calls, calls as \"calls/s\", \
         date_trunc('seconds', total_time / 1000 * '1 second'::interval) as total_time, \
         date_trunc('seconds', self_time / 1000 * '1 second'::interval) as self_time, \
-        round((total_time / calls)::numeric, 2) as \"avg_time (ms)\", \
-        round((self_time / calls)::numeric, 2) as \"avg_self_time (ms)\" \
+        round((total_time / calls)::numeric, 4) as \"avg_time (ms)\", \
+        round((self_time / calls)::numeric, 4) as \"avg_self_time (ms)\" \
     FROM pg_stat_user_functions \
     ORDER BY 1"
 
-#define PG_STAT_USER_FUNCTIONS_ORDER_MIN 2
-#define PG_STAT_USER_FUNCTIONS_ORDER_MAX 6
+/* это единственная колонка на основе которой мы будем делать дифф массивов */
+#define PG_STAT_USER_FUNCTIONS_DIFF_COL     3
+#define PG_STAT_USER_FUNCTIONS_ORDER_MIN    2
+#define PG_STAT_USER_FUNCTIONS_ORDER_MAX    7
 
 #endif
