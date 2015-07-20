@@ -110,6 +110,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[6].context = pg_stat_activity_long;
         screens[i]->context_list[6].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
         screens[i]->context_list[6].order_desc = true;
+        screens[i]->context_list[7].context = pg_stat_user_functions;
+        screens[i]->context_list[7].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
+        screens[i]->context_list[7].order_desc = true;
     }
 }
 
@@ -740,11 +743,18 @@ PGresult * do_query(PGconn *conn, struct screen_s * screen)
             strcpy(query, PG_TABLES_SIZE_QUERY);
             break;
         case pg_stat_activity_long:
+            /* 
+             * здесь мы собираем запрос из нескольких частей, т.о. даем пользователю
+             * менять значения min_age которое используется в условии запроса 
+             */
             strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
             strcat(query, screen->pg_stat_activity_min_age);
             strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
             strcat(query, screen->pg_stat_activity_min_age);
             strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
+            break;
+        case pg_stat_user_functions:
+            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY);
             break;
     }
     res = PQexec(conn, query);
@@ -931,8 +941,23 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             max = PG_TABLES_SIZE_ORDER_MAX;
             break;
         case pg_stat_activity_long:
+            /* 
+             * здесь выставлен INVALID_ORDER_KEY на уровне pgcenter.h т.к. 
+             * нам ненужен ни diff массивов (показываем всегда последние значения),
+             * ни сортировка массива в дальнешем и мы просто копируем в res_arr 
+             * все содержимое текущего c_arr.
+             */
             min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
+            break;
+        case pg_stat_user_functions:
+            /* 
+             * здесь мы выставляем INVALID_ORDER_KEY т.к. нам ненужен diff 
+             * массивов (показываем всегда последние значения) и мы копируем 
+             * в res_arr все содержимое текущего c_arr.
+             */
+            min = INVALID_ORDER_KEY;
+            max = INVALID_ORDER_KEY;
             break;
         default:
             break;
@@ -963,7 +988,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
  *
  * OUT:
  * @res_arr         Sorted array.
- ****************************************************************************
+ **********************************************е******************************
  */
 void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen)
 {
@@ -1090,6 +1115,10 @@ void change_sort_order(struct screen_s * screens, bool increment)
         case pg_stat_activity_long:
             min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             max = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+            break;
+        case pg_stat_user_functions:
+            min = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
+            max = PG_STAT_USER_FUNCTIONS_ORDER_MAX;
             break;
         default:
             break;
@@ -1314,13 +1343,22 @@ int main(int argc, char *argv[])
                     first_iter = true;
                     break;
                 case 'l':
-                    wprintw(w_cmd, "Show long transactions (transactions and queries threshold: 00:00:10)");
+                    wprintw(w_cmd, "Show long transactions (transactions and queries threshold: %s)",
+                                    screens[console_index]->pg_stat_activity_min_age);
                     screens[console_index]->current_context = pg_stat_activity_long;
                     first_iter = true;
                     break;
                 case 'm':
-                    if (screens[console_index]->current_context == pg_stat_activity_long)
+                    if (screens[console_index]->current_context == pg_stat_activity_long) {
                         change_min_age(w_cmd, screens[console_index]);
+                        first_iter = true;
+                    } else
+                        wprintw(w_cmd, "Not allowed here.");                // temporary
+                    break;
+                case 'f':
+                    wprintw(w_cmd, "Show pg_stat_user_functions");
+                    screens[console_index]->current_context = pg_stat_user_functions;
+                    first_iter = true;
                     break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     

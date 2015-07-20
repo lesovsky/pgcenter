@@ -11,11 +11,11 @@
 #define PROGRAM_RELEASE     1
 #define PROGRAM_AUTHORS_CONTACTS    "<lesovsky@gmail.com>"
 
-/* sizes and limits */
+/* sizes, limits and defaults */
 #define BUFFERSIZE_S        16
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      7
+#define TOTAL_CONTEXTS      8
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
@@ -27,7 +27,7 @@
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
 
-/* connectins defaults */
+/* connections defaults */
 #define DEFAULT_HOST        "/tmp"
 #define DEFAULT_PORT        "5432"
 #define DEFAULT_USER        "postgres"
@@ -44,7 +44,8 @@ enum context
     pg_stat_user_indexes,
     pg_statio_user_tables,
     pg_tables_size,
-    pg_stat_activity_long
+    pg_stat_activity_long,
+    pg_stat_user_functions
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -217,7 +218,21 @@ struct colAttrs {
     "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
     ORDER BY COALESCE(xact_start, query_start)"
 
+/* при выводе долгих транзакций мы не использем сортировку массивов, сортировка задана на уровне запроса */
 #define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
 #define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
+
+#define PG_STAT_USER_FUNCTIONS_QUERY \
+    "SELECT \
+        funcid, schemaname ||'.'||funcname as function, calls, \
+        date_trunc('seconds', total_time / 1000 * '1 second'::interval) as total_time, \
+        date_trunc('seconds', self_time / 1000 * '1 second'::interval) as self_time, \
+        round((total_time / calls)::numeric, 2) as \"avg_time (ms)\", \
+        round((self_time / calls)::numeric, 2) as \"avg_self_time (ms)\" \
+    FROM pg_stat_user_functions \
+    ORDER BY 1"
+
+#define PG_STAT_USER_FUNCTIONS_ORDER_MIN 2
+#define PG_STAT_USER_FUNCTIONS_ORDER_MAX 6
 
 #endif
