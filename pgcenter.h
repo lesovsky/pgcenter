@@ -35,6 +35,15 @@
 #define HZ                  hz
 unsigned int hz;
 
+#define PG_STAT_DATABASE_NUM        0
+#define PG_STAT_REPLICATION_NUM     1
+#define PG_STAT_USER_TABLES_NUM     2
+#define PG_STAT_USER_INDEXES_NUM    3
+#define PG_STATIO_USER_TABLES_NUM   4
+#define PG_TABLES_SIZE_NUM          5
+#define PG_STAT_ACTIVITY_LONG_NUM   6
+#define PG_STAT_USER_FUNCTIONS_NUM  7
+
 /* enum for query context */
 enum context
 {
@@ -222,7 +231,7 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
 #define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
 
-#define PG_STAT_USER_FUNCTIONS_QUERY \
+#define PG_STAT_USER_FUNCTIONS_QUERY_P1 \
     "SELECT \
         funcid, schemaname ||'.'||funcname as function, \
         calls as total_calls, calls as \"calls/s\", \
@@ -231,7 +240,8 @@ struct colAttrs {
         round((total_time / calls)::numeric, 4) as \"avg_time (ms)\", \
         round((self_time / calls)::numeric, 4) as \"avg_self_time (ms)\" \
     FROM pg_stat_user_functions \
-    ORDER BY 1"
+    ORDER BY "
+#define PG_STAT_USER_FUNCTIONS_QUERY_P2 " DESC"
 
 /* это единственная колонка на основе которой мы будем делать дифф массивов */
 #define PG_STAT_USER_FUNCTIONS_DIFF_COL     3

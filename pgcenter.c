@@ -89,30 +89,30 @@ void init_screens(struct screen_s *screens[])
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
         strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
 
-        screens[i]->context_list[0].context = pg_stat_database;
-        screens[i]->context_list[0].order_key = PG_STAT_DATABASE_ORDER_MIN;
-        screens[i]->context_list[0].order_desc = true;
-        screens[i]->context_list[1].context = pg_stat_replication;
-        screens[i]->context_list[1].order_key = PG_STAT_REPLICATION_ORDER_MIN;
-        screens[i]->context_list[1].order_desc = true;
-        screens[i]->context_list[2].context = pg_stat_user_tables;
-        screens[i]->context_list[2].order_key = PG_STAT_USER_TABLES_ORDER_MIN;
-        screens[i]->context_list[2].order_desc = true;
-        screens[i]->context_list[3].context = pg_stat_user_indexes;
-        screens[i]->context_list[3].order_key = PG_STAT_USER_INDEXES_ORDER_MIN;
-        screens[i]->context_list[3].order_desc = true;
-        screens[i]->context_list[4].context = pg_statio_user_tables;
-        screens[i]->context_list[4].order_key = PG_STATIO_USER_TABLES_ORDER_MIN;
-        screens[i]->context_list[4].order_desc = true;
-        screens[i]->context_list[5].context = pg_tables_size;
-        screens[i]->context_list[5].order_key = PG_TABLES_SIZE_ORDER_MIN;
-        screens[i]->context_list[5].order_desc = true;
-        screens[i]->context_list[6].context = pg_stat_activity_long;
-        screens[i]->context_list[6].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
-        screens[i]->context_list[6].order_desc = true;
-        screens[i]->context_list[7].context = pg_stat_user_functions;
-        screens[i]->context_list[7].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
-        screens[i]->context_list[7].order_desc = true;
+        screens[i]->context_list[PG_STAT_DATABASE_NUM].context = pg_stat_database;
+        screens[i]->context_list[PG_STAT_DATABASE_NUM].order_key = PG_STAT_DATABASE_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_DATABASE_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_REPLICATION_NUM].context = pg_stat_replication;
+        screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_key = PG_STAT_REPLICATION_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].context = pg_stat_user_tables;
+        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].order_key = PG_STAT_USER_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].context = pg_stat_user_indexes;
+        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].order_key = PG_STAT_USER_INDEXES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].context = pg_statio_user_tables;
+        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].order_key = PG_STATIO_USER_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_TABLES_SIZE_NUM].context = pg_tables_size;
+        screens[i]->context_list[PG_TABLES_SIZE_NUM].order_key = PG_TABLES_SIZE_ORDER_MIN;
+        screens[i]->context_list[PG_TABLES_SIZE_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].context = pg_stat_activity_long;
+        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].context = pg_stat_user_functions;
+        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_desc = true;
     }
 }
 
@@ -722,7 +722,7 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
 PGresult * do_query(PGconn *conn, struct screen_s * screen)
 {
     PGresult    *res;
-    char query[1024];
+    char query[1024], tmp[2];
     switch (screen->current_context) {
         case pg_stat_database: default:
             strcpy(query, PG_STAT_DATABASE_QUERY);
@@ -754,7 +754,11 @@ PGresult * do_query(PGconn *conn, struct screen_s * screen)
             strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
             break;
         case pg_stat_user_functions:
-            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY);
+            /* here we use query ORDER BY, thus we should incrementig order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key + 1);
+            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+            strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
             break;
     }
     res = PQexec(conn, query);
@@ -951,11 +955,9 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
             break;
         case pg_stat_user_functions:
-            /* 
-             * здесь мы делаем diff только по одному полю calls/s
-             */
-            min = PG_STAT_USER_FUNCTIONS_DIFF_COL;
-            max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
+            /* здесь мы делаем diff только по одному полю calls/s */
+            min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
+//            max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
         default:
             break;
@@ -986,7 +988,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
  *
  * OUT:
  * @res_arr         Sorted array.
- **********************************************е******************************
+ ****************************************************************************
  */
 void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen)
 {
@@ -999,6 +1001,9 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
             order_key = screen->context_list[i].order_key;
             desc = screen->context_list[i].order_desc;
         }
+
+    if (screen->current_context == pg_stat_user_functions)
+        return;
 
     if (order_key == INVALID_ORDER_KEY)
         return;
@@ -1082,7 +1087,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
  * @increment           Direction (left or right column).
  ****************************************************************************
  */
-void change_sort_order(struct screen_s * screens, bool increment)
+void change_sort_order(struct screen_s * screens, bool increment, bool * first_iter)
 {
     int min, max, i;
     switch (screens->current_context) {
@@ -1117,6 +1122,7 @@ void change_sort_order(struct screen_s * screens, bool increment)
         case pg_stat_user_functions:
             min = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
             max = PG_STAT_USER_FUNCTIONS_ORDER_MAX;
+            *first_iter = true;
             break;
         default:
             break;
@@ -1243,7 +1249,8 @@ int main(int argc, char *argv[])
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
     int ch;                             /* key press */
-    bool first_iter = true;
+    bool *first_iter = (bool *) malloc(sizeof(bool));
+    *first_iter = true;
     static int console_no = 1;
     static int console_index = 0;
 
@@ -1303,60 +1310,60 @@ int main(int argc, char *argv[])
                             /* reserved */
                             break;
                         case 'C':       // arrow right
-                            change_sort_order(screens[console_index], true);
+                            change_sort_order(screens[console_index], true, first_iter);
                             break;
                         case 'D':       // arrow left
-                            change_sort_order(screens[console_index], false);
+                            change_sort_order(screens[console_index], false, first_iter);
                             break;
                     }
                     break;
                 case 'd':
                     wprintw(w_cmd, "Show pg_stat_database");
                     screens[console_index]->current_context = pg_stat_database;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 'r':
                     wprintw(w_cmd, "Show pg_stat_replication");
                     screens[console_index]->current_context = pg_stat_replication;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 't':
                     wprintw(w_cmd, "Show pg_stat_user_tables");
                     screens[console_index]->current_context = pg_stat_user_tables;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 'i':
                     wprintw(w_cmd, "Show pg_stat_user_indexes");
                     screens[console_index]->current_context = pg_stat_user_indexes;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 'y':
                     wprintw(w_cmd, "Show pg_statio_user_tables");
                     screens[console_index]->current_context = pg_statio_user_tables;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 's':
                     wprintw(w_cmd, "Show relations sizes");
                     screens[console_index]->current_context = pg_tables_size;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 'l':
                     wprintw(w_cmd, "Show long transactions (transactions and queries threshold: %s)",
                                     screens[console_index]->pg_stat_activity_min_age);
                     screens[console_index]->current_context = pg_stat_activity_long;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 case 'm':
                     if (screens[console_index]->current_context == pg_stat_activity_long) {
                         change_min_age(w_cmd, screens[console_index]);
-                        first_iter = true;
+                        *first_iter = true;
                     } else
                         wprintw(w_cmd, "Not allowed here.");                // temporary
                     break;
                 case 'f':
                     wprintw(w_cmd, "Show pg_stat_user_functions");
                     screens[console_index]->current_context = pg_stat_user_functions;
-                    first_iter = true;
+                    *first_iter = true;
                     break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
@@ -1385,10 +1392,10 @@ int main(int argc, char *argv[])
              * on startup or when context switched current data snapshot copied 
              * to previous data snapshot and restart cycle
              */
-            if (first_iter) {
+            if (*first_iter) {
                 p_res = c_res;
                 usleep(10000);
-                first_iter = false;
+                *first_iter = false;
                 continue;
             }
 

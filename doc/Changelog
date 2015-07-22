@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Fix pg_stat_user_functions sort order.
   * Add pg_stat_user_functions screen.
   * Add ability to change min age interval for pg_stat_activity long queries.
   * Add cmd_readline from pgbconsole.
@@ -23,4 +24,3 @@ pgbconsole (current development) unstable; urgency=low
   * Add ncurses, libpq.
  
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 24 May 2015 22:37:07 +0500
-
