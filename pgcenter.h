@@ -43,12 +43,6 @@ unsigned int hz;
 #define PG_TABLES_SIZE_NUM                      5
 #define PG_STAT_ACTIVITY_LONG_NUM               6
 #define PG_STAT_USER_FUNCTIONS_NUM              7
-#define PG_STAT_ACTIVITY_COUNT_TOTAL_NUM        8
-#define PG_STAT_ACTIVITY_COUNT_IDLE_NUM         9
-#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_NUM    10
-#define PG_STAT_ACTIVITY_COUNT_ACTIVE_NUM       11
-#define PG_STAT_ACTIVITY_COUNT_WAITING_NUM      12
-#define PG_STAT_ACTIVITY_COUNT_OTHERS_NUM       13
 
 /* enum for query context */
 enum context
@@ -60,13 +54,7 @@ enum context
     pg_statio_user_tables,
     pg_tables_size,
     pg_stat_activity_long,
-    pg_stat_user_functions,
-    pg_stat_activity_count_total,
-    pg_stat_activity_count_idle,
-    pg_stat_activity_count_idle_in_t,
-    pg_stat_activity_count_active,
-    pg_stat_activity_count_waiting,
-    pg_stat_activity_count_others
+    pg_stat_user_functions
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
