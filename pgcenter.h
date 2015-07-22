@@ -35,14 +35,20 @@
 #define HZ                  hz
 unsigned int hz;
 
-#define PG_STAT_DATABASE_NUM        0
-#define PG_STAT_REPLICATION_NUM     1
-#define PG_STAT_USER_TABLES_NUM     2
-#define PG_STAT_USER_INDEXES_NUM    3
-#define PG_STATIO_USER_TABLES_NUM   4
-#define PG_TABLES_SIZE_NUM          5
-#define PG_STAT_ACTIVITY_LONG_NUM   6
-#define PG_STAT_USER_FUNCTIONS_NUM  7
+#define PG_STAT_DATABASE_NUM                    0
+#define PG_STAT_REPLICATION_NUM                 1
+#define PG_STAT_USER_TABLES_NUM                 2
+#define PG_STAT_USER_INDEXES_NUM                3
+#define PG_STATIO_USER_TABLES_NUM               4
+#define PG_TABLES_SIZE_NUM                      5
+#define PG_STAT_ACTIVITY_LONG_NUM               6
+#define PG_STAT_USER_FUNCTIONS_NUM              7
+#define PG_STAT_ACTIVITY_COUNT_TOTAL_NUM        8
+#define PG_STAT_ACTIVITY_COUNT_IDLE_NUM         9
+#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_NUM    10
+#define PG_STAT_ACTIVITY_COUNT_ACTIVE_NUM       11
+#define PG_STAT_ACTIVITY_COUNT_WAITING_NUM      12
+#define PG_STAT_ACTIVITY_COUNT_OTHERS_NUM       13
 
 /* enum for query context */
 enum context
@@ -54,7 +60,13 @@ enum context
     pg_statio_user_tables,
     pg_tables_size,
     pg_stat_activity_long,
-    pg_stat_user_functions
+    pg_stat_user_functions,
+    pg_stat_activity_count_total,
+    pg_stat_activity_count_idle,
+    pg_stat_activity_count_idle_in_t,
+    pg_stat_activity_count_active,
+    pg_stat_activity_count_waiting,
+    pg_stat_activity_count_others
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -247,5 +259,18 @@ struct colAttrs {
 #define PG_STAT_USER_FUNCTIONS_DIFF_COL     3
 #define PG_STAT_USER_FUNCTIONS_ORDER_MIN    2
 #define PG_STAT_USER_FUNCTIONS_ORDER_MAX    7
+
+#define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
+        "SELECT count(*) FROM pg_stat_activity"
+#define PG_STAT_ACTIVITY_COUNT_IDLE_QUERY \
+        "SELECT count(*) FROM pg_stat_activity where state = 'idle'"
+#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY \
+        "SELECT count(*) FROM pg_stat_activity where state = 'idle in transaction'"
+#define PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY \
+        "SELECT count(*) FROM pg_stat_activity where state = 'active'"
+#define PG_STAT_ACTIVITY_COUNT_WAITING_QUERY \
+        "SELECT count(*) FROM pg_stat_activity where waiting"
+#define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
+        "SELECT count(*) FROM pg_stat_activity where state not in ('active','idle','idle in transaction')"
 
 #endif

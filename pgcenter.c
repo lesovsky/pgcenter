@@ -388,6 +388,77 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
 }
 
 /*
+ * prepare query
+ *
+ */
+void prepare_query(struct screen_s * screen, char * query)
+{
+    char tmp[2];
+    switch (screen->current_context) {
+        case pg_stat_database: default:
+            strcpy(query, PG_STAT_DATABASE_QUERY);
+            break;
+        case pg_stat_replication:
+            strcpy(query, PG_STAT_REPLICATION_QUERY);
+            break;
+        case pg_stat_user_tables:
+            strcpy(query, PG_STAT_USER_TABLES_QUERY);
+            break;
+        case pg_stat_user_indexes:
+            strcpy(query, PG_STAT_USER_INDEXES_QUERY);
+            break;
+        case pg_statio_user_tables:
+            strcpy(query, PG_STATIO_USER_TABLES_QUERY);
+            break;
+        case pg_tables_size:
+            strcpy(query, PG_TABLES_SIZE_QUERY);
+            break;
+        case pg_stat_activity_long:
+            /* 
+             * здесь мы собираем запрос из нескольких частей, т.о. даем пользователю
+             * менять значения min_age которое используется в условии запроса 
+             */
+            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
+            strcat(query, screen->pg_stat_activity_min_age);
+            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
+            strcat(query, screen->pg_stat_activity_min_age);
+            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
+            break;
+        case pg_stat_user_functions:
+            /* here we use query ORDER BY, thus we should incrementig order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key + 1);
+            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+            strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
+            break;
+    }
+}
+
+/*
+ ********************************************************* routine function **
+ * Send query to PostgreSQL.
+ *
+ * IN:
+ * @conn            PostgreSQL connection.
+ * @query_context   Type of query.
+ *
+ * RETURNS:
+ * Answer from PostgreSQL.
+ ****************************************************************************
+ */
+PGresult * do_query(PGconn * conn, char * query)
+{
+    PGresult    *res;
+    res = PQexec(conn, query);
+    if ( PQresultStatus(res) != PG_TUP_OK ) {
+        puts("We didn't get any data.");
+        PQclear(res);
+        return NULL;
+    } else
+        return res;
+}
+
+/*
  ************************************************* summary window function **
  * Print current time.
  *
@@ -468,6 +539,81 @@ void print_loadavg(WINDOW * window)
 {
     wprintw(window, "load average: %.2f, %.2f, %.2f\n",
                     get_loadavg(1), get_loadavg(5), get_loadavg(15));
+}
+
+/*
+ ************************************************* summary window function **
+ * Print current connection info.
+ *
+ * IN:
+ * @window          Window where info will be printed.
+ * @conn_opts       Struct with connections options.
+ * @conn            Current connection.
+ * @console_no      Current console number.
+ ****************************************************************************
+ */
+void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int console_no)
+{
+    static char state[8];
+    switch (PQstatus(conn)) {
+        case CONNECTION_OK:
+            strcpy(state, "ok");
+            break;
+        case CONNECTION_BAD:
+            strcpy(state, "failed");
+            break;
+        default:
+            strcpy(state, "unknown");
+            break;
+    }
+    wprintw(window, " console %i: %s:%s %s@%s\t connection state: %s\n",
+                console_no,
+                screen->host, screen->port,
+                screen->user, screen->dbname,
+                state);
+}
+
+/*
+ ************************************************* sumamry window function **
+ * Print current pgbouncer summary info: total clients, servers, etc.
+ *
+ * IN:
+ * @window          Window where info will be printed.
+ * @conn            Current pgbouncer connection.
+ ****************************************************************************
+ */
+void print_postgres_activity(WINDOW * window, PGconn * conn)
+{
+    int t_count, i_count, it_count, a_count, w_count, o_count;
+    PGresult *res;
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY);
+    t_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY);
+    i_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY);
+    it_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY);
+    a_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY);
+    w_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY);
+    o_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    wprintw(window,
+            "  activity: %4i total, %4i idle, %4i idle_in_tnx, %4i active, %4i waiting, %4i others",
+            t_count, i_count, it_count, a_count, w_count, o_count);
 }
 
 /*
@@ -705,69 +851,6 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
     write_cpu_stat_raw(window, st_cpu, curr, itv);
     itv = get_interval(uptime0[!curr], uptime0[curr]);
     curr ^= 1;
-}
-
-/*
- ********************************************************* routine function **
- * Send query to PostgreSQL.
- *
- * IN:
- * @conn            PostgreSQL connection.
- * @query_context   Type of query.
- *
- * RETURNS:
- * Answer from PostgreSQL.
- ****************************************************************************
- */
-PGresult * do_query(PGconn *conn, struct screen_s * screen)
-{
-    PGresult    *res;
-    char query[1024], tmp[2];
-    switch (screen->current_context) {
-        case pg_stat_database: default:
-            strcpy(query, PG_STAT_DATABASE_QUERY);
-            break;
-        case pg_stat_replication:
-            strcpy(query, PG_STAT_REPLICATION_QUERY);
-            break;
-        case pg_stat_user_tables:
-            strcpy(query, PG_STAT_USER_TABLES_QUERY);
-            break;
-        case pg_stat_user_indexes:
-            strcpy(query, PG_STAT_USER_INDEXES_QUERY);
-            break;
-        case pg_statio_user_tables:
-            strcpy(query, PG_STATIO_USER_TABLES_QUERY);
-            break;
-        case pg_tables_size:
-            strcpy(query, PG_TABLES_SIZE_QUERY);
-            break;
-        case pg_stat_activity_long:
-            /* 
-             * здесь мы собираем запрос из нескольких частей, т.о. даем пользователю
-             * менять значения min_age которое используется в условии запроса 
-             */
-            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
-            strcat(query, screen->pg_stat_activity_min_age);
-            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
-            strcat(query, screen->pg_stat_activity_min_age);
-            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
-            break;
-        case pg_stat_user_functions:
-            /* here we use query ORDER BY, thus we should incrementig order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key + 1);
-            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
-            break;
-    }
-    res = PQexec(conn, query);
-    if ( PQresultStatus(res) != PG_TUP_OK ) {
-        puts("We didn't get any data.");
-        PQclear(res);
-        return NULL;
-    } else
-        return res;
 }
 
 /*
@@ -1256,6 +1339,7 @@ int main(int argc, char *argv[])
 
     PGconn      *conns[8];
     PGresult    *p_res, *c_res;
+    char query[1024];
     int n_rows, n_cols, n_prev_rows;
 
     /* arrays for PGresults */
@@ -1379,12 +1463,15 @@ int main(int argc, char *argv[])
             print_title(w_sys, argv[0]);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
+            print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
+            print_postgres_activity(w_sys, conns[console_index]);
             wrefresh(w_sys);
 
             /* 
              * Database screen. 
              */
-            c_res = do_query(conns[console_index], screens[console_index]);
+            prepare_query(screens[console_index], query);
+            c_res = do_query(conns[console_index], query);
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 
