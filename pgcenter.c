@@ -861,21 +861,24 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
  * @n_rows          Number of rows in query result.
  * @n_cols          Number of columns in query result.
  * @res             Query result.
+ * @arr             Array with sorted result.
  *
  * OUT:
  * @columns         Struct with column names and their max width.
  ****************************************************************************
  */
-void calculate_width(struct colAttrs *columns, PGresult *res, int n_rows, int n_cols)
+void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n_rows, int n_cols)
 {
     int i, col, row;
 
     for (col = 0, i = 0; col < n_cols; col++, i++) {
+        /* determine length of column names */
         strcpy(columns[i].name, PQfname(res, col));
         int colname_len = strlen(PQfname(res, col));
         int width = colname_len;
+        /* determine length of values from result array */
         for (row = 0; row < n_rows; row++ ) {
-            int val_len = strlen(PQgetvalue(res, row, col));
+            int val_len = strlen(arr[row][col]);
             if ( val_len >= width )
                 width = val_len;
         }
@@ -1132,7 +1135,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
     int i, j, x, order_key;
     struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
 
-    calculate_width(columns, res, n_rows, n_cols);
+    calculate_width(columns, res, arr, n_rows, n_cols);
     wclear(window);
 
     for (i = 0; i < TOTAL_CONTEXTS; i++)
