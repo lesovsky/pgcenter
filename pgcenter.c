@@ -1089,8 +1089,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements:
-            /* ничего не сраваниваем */
-            min = max = INVALID_ORDER_KEY;
+            min = max = PG_STAT_STATEMENTS_DIFF_COL;
         default:
             break;
     }
@@ -1134,9 +1133,9 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
             desc = screen->context_list[i].order_desc;
         }
 
-    if (screen->current_context == pg_stat_user_functions)
+    if (screen->current_context == pg_stat_user_functions && order_key != PG_STAT_USER_FUNCTIONS_DIFF_COL)
         return;
-    if (screen->current_context == pg_stat_statements)
+    if (screen->current_context == pg_stat_statements && order_key != PG_STAT_STATEMENTS_DIFF_COL)
         return;
 
     if (order_key == INVALID_ORDER_KEY)

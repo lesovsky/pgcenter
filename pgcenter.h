@@ -274,6 +274,7 @@ struct colAttrs {
     "SELECT \
         a.rolname as user, d.datname as database, \
         sum(p.calls) as calls, \
+        sum(p.calls) as \"calls/s\", \
         round(sum(p.total_time)::numeric, 2) as total_time, \
         round(sum(p.blk_read_time)::numeric, 2) as disk_read_time, \
         round(sum(p.blk_write_time)::numeric, 2) as disk_write_time, \
@@ -286,7 +287,8 @@ struct colAttrs {
     WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_QUERY_P2 " DESC"
-#define PG_STAT_STATEMENTS_ORDER_MIN 2
-#define PG_STAT_STATEMENTS_ORDER_MAX 7
+#define PG_STAT_STATEMENTS_DIFF_COL     3
+#define PG_STAT_STATEMENTS_ORDER_MIN    2
+#define PG_STAT_STATEMENTS_ORDER_MAX    8
 
 #endif
