@@ -13,6 +13,7 @@
 
 /* sizes, limits and defaults */
 #define BUFFERSIZE_S        16
+#define BUFFERSIZE_M        256
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
 #define TOTAL_CONTEXTS      9
@@ -280,13 +281,14 @@ struct colAttrs {
         round(sum(p.blk_write_time)::numeric, 2) as disk_write_time, \
         round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) as cpu_time, \
         sum(p.rows) as rows, \
-        left(p.query, 32) as query \
+        p.query as query \
     FROM pg_stat_statements p \
     JOIN pg_authid a on a.oid=p.userid \
     JOIN pg_database d on d.oid=p.dbid \
     WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_QUERY_P2 " DESC"
+
 #define PG_STAT_STATEMENTS_DIFF_COL     3
 #define PG_STAT_STATEMENTS_ORDER_MIN    2
 #define PG_STAT_STATEMENTS_ORDER_MAX    8

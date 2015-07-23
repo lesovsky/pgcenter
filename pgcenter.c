@@ -990,7 +990,7 @@ char *** init_array(char ***arr, int n_rows, int n_cols)
     for (i = 0; i < n_rows; i++) {
         arr[i] = malloc(sizeof(char *) * n_cols);
             for (j = 0; j < n_cols; j++)
-                arr[i][j] = malloc(sizeof(char) * 255);
+                arr[i][j] = malloc(sizeof(char) * BUFFERSIZE_M);
     }
     return arr;
 }
@@ -1037,8 +1037,10 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
     int i, j;
 
     for (i = 0; i < n_rows; i++)
-        for (j = 0; j < n_cols; j++)
-            strcpy(arr[i][j], PQgetvalue(res, i, j));
+        for (j = 0; j < n_cols; j++) {
+            strncpy(arr[i][j], PQgetvalue(res, i, j), BUFFERSIZE_M);
+            arr[i][j][BUFFERSIZE_M] = '\0';
+        }
 }
 
 /*
@@ -1191,6 +1193,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
 void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, struct screen_s * screen)
 {
     int i, j, x, order_key;
+    int winsz_x, winsz_y;
     struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
 
     calculate_width(columns, res, arr, n_rows, n_cols);
@@ -1202,21 +1205,36 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
 
     /* print header */
     wattron(window, A_BOLD);
-    for (j = 0, x = 0; j < n_cols; j++, x++)
+    for (j = 0, x = 0; j < n_cols; j++, x++) {
+        /* truncate last field length to end of screen */
+        if (j == n_cols - 1) {
+            getyx(window, winsz_y, winsz_x);
+            columns[x].width = COLS - winsz_x - 1;
+        } 
+        /* mark sort column */
         if (j == order_key) {
             wattron(window, A_REVERSE);
-            wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
+            wprintw(window, "%-*s", columns[x].width, columns[x].name);
             wattroff(window, A_REVERSE);
         } else
-            wprintw(window, "%-*s", columns[x].width, PQfname(res, j));
+            wprintw(window, "%-*s", columns[x].width, columns[x].name);
+    }
     wprintw(window, "\n");
     wattroff(window, A_BOLD);
 
     /* print data from array */
     for (i = 0; i < n_rows; i++) {
-        for (j = 0, x = 0; j < n_cols; j++, x++)
+        for (j = 0, x = 0; j < n_cols; j++, x++) {
+            /* truncate last field length to end of screen */
+            if (j == n_cols - 1) {
+                getyx(window, winsz_y, winsz_x);
+                columns[x].width = COLS - winsz_x;
+                strncpy(arr[i][j], arr[i][j], columns[x].width);
+                arr[i][j][columns[x].width] = '\0';
+            }
             wprintw(window, "%-*s", columns[x].width, arr[i][j]);
-        wprintw(window, "\n");
+        }
+//        wprintw(window, "\n");
     }
     wrefresh(window);
     free(columns);
