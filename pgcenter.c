@@ -388,8 +388,13 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
 }
 
 /*
- * prepare query
+ ****************************************************************************
+ * Prepare query using current screen query context.
  *
+ * IN:
+ * @screen              Current screen where query context is stored.
+ * @query               Text of query.
+ ****************************************************************************
  */
 void prepare_query(struct screen_s * screen, char * query)
 {
@@ -574,12 +579,13 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
 }
 
 /*
- ************************************************* sumamry window function **
- * Print current pgbouncer summary info: total clients, servers, etc.
+ ************************************************** system window function **
+ * Print current postgres process activity: total/idle/idle in transaction/
+ * /active/waiting/others backends.
  *
  * IN:
  * @window          Window where info will be printed.
- * @conn            Current pgbouncer connection.
+ * @conn            Current postgres connection.
  ****************************************************************************
  */
 void print_postgres_activity(WINDOW * window, PGconn * conn)
@@ -828,7 +834,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
 }
 
 /*
- ************************************************* summary window function **
+ ************************************************** system window function **
  * Composite function which read cpu stats and uptime then print out stats 
  * to specified window.
  *
@@ -884,6 +890,34 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
         }
         columns[i].width = width + 2;
     }
+}
+
+/*
+ ************************************************** system window function **
+ *
+ *
+ ****************************************************************************
+ */
+void print_autovac_info(WINDOW * window, PGconn * conn)
+{
+    int av_count, avw_count;
+    char av_max_time[16];
+    PGresult *res;
+    
+    res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY);
+    av_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY);
+    avw_count = atoi(PQgetvalue(res, 0, 0));
+    PQclear(res);
+    
+    res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY);
+    strcpy(av_max_time, PQgetvalue(res, 0, 0));
+    PQclear(res);
+
+    mvwprintw(window, 0, COLS / 2, "av workers: %2i, wraparound: %2i, longest av worker time: %s",
+                    av_count, avw_count, av_max_time);
 }
 
 /*
@@ -1043,7 +1077,6 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
         case pg_stat_user_functions:
             /* здесь мы делаем diff только по одному полю calls/s */
             min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
-//            max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
         default:
             break;
@@ -1468,6 +1501,7 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
             print_postgres_activity(w_sys, conns[console_index]);
+            print_autovac_info(w_sys, conns[console_index]);
             wrefresh(w_sys);
 
             /* 

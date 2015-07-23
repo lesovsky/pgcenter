@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add autovacuum process counters to sysstat.
   * Print pg process activity info in sysstat window.
   * Print conninfo in sysstat window.
   * Fix pg_stat_user_functions sort order.

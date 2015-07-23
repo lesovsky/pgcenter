@@ -260,5 +260,12 @@ struct colAttrs {
         "SELECT count(*) FROM pg_stat_activity where waiting"
 #define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
         "SELECT count(*) FROM pg_stat_activity where state not in ('active','idle','idle in transaction')"
+#define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
+#define PG_STAT_ACTIVITY_AVW_COUNT_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE query ~* 'to prevent wraparound' AND pid <> pg_backend_pid()"
+#define PG_STAT_ACTIVITY_AV_LONGEST_QUERY \
+        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
+        FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
 
 #endif
