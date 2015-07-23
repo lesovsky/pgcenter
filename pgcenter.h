@@ -15,7 +15,7 @@
 #define BUFFERSIZE_S        16
 #define BUFFERSIZE          4096
 #define MAX_CONSOLE         8
-#define TOTAL_CONTEXTS      8
+#define TOTAL_CONTEXTS      9
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
@@ -43,6 +43,7 @@ unsigned int hz;
 #define PG_TABLES_SIZE_NUM                      5
 #define PG_STAT_ACTIVITY_LONG_NUM               6
 #define PG_STAT_USER_FUNCTIONS_NUM              7
+#define PG_STAT_STATEMENTS_NUM                  8
 
 /* enum for query context */
 enum context
@@ -54,7 +55,8 @@ enum context
     pg_statio_user_tables,
     pg_tables_size,
     pg_stat_activity_long,
-    pg_stat_user_functions
+    pg_stat_user_functions,
+    pg_stat_statements
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -267,5 +269,24 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_AV_LONGEST_QUERY \
         "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
         FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
+
+#define PG_STAT_STATEMENTS_QUERY_P1 \
+    "SELECT \
+        a.rolname as user, d.datname as database, \
+        sum(p.calls) as calls, \
+        round(sum(p.total_time)::numeric, 2) as total_time, \
+        round(sum(p.blk_read_time)::numeric, 2) as disk_read_time, \
+        round(sum(p.blk_write_time)::numeric, 2) as disk_write_time, \
+        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) as cpu_time, \
+        sum(p.rows) as rows, \
+        left(p.query, 32) as query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a on a.oid=p.userid \
+    JOIN pg_database d on d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
+#define PG_STAT_STATEMENTS_QUERY_P2 " DESC"
+#define PG_STAT_STATEMENTS_ORDER_MIN 2
+#define PG_STAT_STATEMENTS_ORDER_MAX 7
 
 #endif

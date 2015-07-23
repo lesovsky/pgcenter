@@ -113,6 +113,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].context = pg_stat_user_functions;
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].context = pg_stat_statements;
+        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].order_key = PG_STAT_STATEMENTS_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].order_desc = true;
     }
 }
 
@@ -435,6 +438,13 @@ void prepare_query(struct screen_s * screen, char * query)
             strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
+            break;
+        case pg_stat_statements:
+            /* here we use query ORDER BY, thus we should incrementig order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_NUM].order_key + 1);
+            strcpy(query, PG_STAT_STATEMENTS_QUERY_P1);
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+            strcat(query, PG_STAT_STATEMENTS_QUERY_P2);
             break;
     }
 }
@@ -1078,6 +1088,9 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             /* здесь мы делаем diff только по одному полю calls/s */
             min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
+        case pg_stat_statements:
+            /* ничего не сраваниваем */
+            min = max = INVALID_ORDER_KEY;
         default:
             break;
     }
@@ -1122,6 +1135,8 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
         }
 
     if (screen->current_context == pg_stat_user_functions)
+        return;
+    if (screen->current_context == pg_stat_statements)
         return;
 
     if (order_key == INVALID_ORDER_KEY)
@@ -1241,6 +1256,11 @@ void change_sort_order(struct screen_s * screens, bool increment, bool * first_i
         case pg_stat_user_functions:
             min = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
             max = PG_STAT_USER_FUNCTIONS_ORDER_MAX;
+            *first_iter = true;
+            break;
+        case pg_stat_statements:
+            min = PG_STAT_STATEMENTS_ORDER_MIN;
+            max = PG_STAT_STATEMENTS_ORDER_MAX;
             *first_iter = true;
             break;
         default:
@@ -1483,6 +1503,11 @@ int main(int argc, char *argv[])
                 case 'f':
                     wprintw(w_cmd, "Show pg_stat_user_functions");
                     screens[console_index]->current_context = pg_stat_user_functions;
+                    *first_iter = true;
+                    break;
+                case 'x':
+                    wprintw(w_cmd, "Show pg_stat_statements");
+                    screens[console_index]->current_context = pg_stat_statements;
                     *first_iter = true;
                     break;
                 default:
