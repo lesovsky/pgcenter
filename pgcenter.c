@@ -566,7 +566,7 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
             strcpy(state, "unknown");
             break;
     }
-    wprintw(window, " console %i: %s:%s %s@%s\t connection state: %s\n",
+    wprintw(window, "  conn %i: %s:%s %s@%s\t conn state: %s\n",
                 console_no,
                 screen->host, screen->port,
                 screen->user, screen->dbname,
@@ -612,7 +612,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
     PQclear(res);
 
     wprintw(window,
-            "  activity: %4i total, %4i idle, %4i idle_in_tnx, %4i active, %4i waiting, %4i others",
+            "activity:%3i total,%3i idle,%3i idle_in_tnx,%3i active,%3i waiting,%3i others",
             t_count, i_count, it_count, a_count, w_count, o_count);
 }
 
@@ -812,7 +812,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
                 int curr, unsigned long long itv)
 {
     wprintw(window, 
-            "      %%cpu: %4.1f us, %4.1f sy, %4.1f ni, %4.1f id, %4.1f wa, %4.1f hi, %4.1f si, %4.1f st\n",
+            "    %%cpu: %4.1f us, %4.1f sy, %4.1f ni, %4.1f id, %4.1f wa, %4.1f hi, %4.1f si, %4.1f st\n",
             ll_sp_value(st_cpu[!curr]->cpu_user, st_cpu[curr]->cpu_user, itv),
             ll_sp_value(st_cpu[!curr]->cpu_sys + st_cpu[!curr]->cpu_softirq + st_cpu[!curr]->cpu_hardirq,
             st_cpu[curr]->cpu_sys + st_cpu[curr]->cpu_softirq + st_cpu[curr]->cpu_hardirq, itv),
