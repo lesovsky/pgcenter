@@ -454,6 +454,7 @@ void prepare_query(struct screen_s * screen, char * query)
  * Send query to PostgreSQL.
  *
  * IN:
+ * @window          Window for printing errors if query failed.
  * @conn            PostgreSQL connection.
  * @query_context   Type of query.
  *
@@ -461,12 +462,17 @@ void prepare_query(struct screen_s * screen, char * query)
  * Answer from PostgreSQL.
  ****************************************************************************
  */
-PGresult * do_query(PGconn * conn, char * query)
+PGresult * do_query(WINDOW * window, PGconn * conn, char * query)
 {
     PGresult    *res;
+    char *err = (char *) malloc(sizeof(char) * 1024);
+
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
-        puts("We didn't get any data.");
+        strcpy(err, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+        wclear(window);
+        wprintw(window, "%s\n", err);
+        wrefresh(window);
         PQclear(res);
         return NULL;
     } else
@@ -595,35 +601,36 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
  *
  * IN:
  * @window          Window where info will be printed.
+ * @ewindow         Window for error printing if query failed.
  * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_postgres_activity(WINDOW * window, PGconn * conn)
+void print_postgres_activity(WINDOW * window, WINDOW * ewindow, PGconn * conn)
 {
     int t_count, i_count, it_count, a_count, w_count, o_count;
     PGresult *res;
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY);
     t_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY);
     i_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY);
     it_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY);
     a_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY);
     w_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY);
     o_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
@@ -904,25 +911,29 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
 
 /*
  ************************************************** system window function **
+ * Print autovacuum info.
  *
- *
+ * IN:
+ * @window          Window where resultwill be printing.
+ * @ewindow         Window for error printing if query failed.
+ * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_autovac_info(WINDOW * window, PGconn * conn)
+void print_autovac_info(WINDOW * window, WINDOW * ewindow, PGconn * conn)
 {
     int av_count, avw_count;
     char av_max_time[16];
     PGresult *res;
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY);
     av_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY);
     avw_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY);
+    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY);
     strcpy(av_max_time, PQgetvalue(res, 0, 0));
     PQclear(res);
 
@@ -1524,15 +1535,18 @@ int main(int argc, char *argv[])
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
-            print_postgres_activity(w_sys, conns[console_index]);
-            print_autovac_info(w_sys, conns[console_index]);
+            print_postgres_activity(w_sys, w_dba, conns[console_index]);
+            print_autovac_info(w_sys, w_dba, conns[console_index]);
             wrefresh(w_sys);
 
             /* 
              * Database screen. 
              */
             prepare_query(screens[console_index], query);
-            c_res = do_query(conns[console_index], query);
+            if ((c_res = do_query(w_dba, conns[console_index], query)) == NULL) {
+                sleep(1);
+                continue;
+            }
             n_rows = PQntuples(c_res);
             n_cols = PQnfields(c_res);
 
