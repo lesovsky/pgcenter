@@ -33,6 +33,9 @@
 #define DEFAULT_PORT        "5432"
 #define DEFAULT_USER        "postgres"
 
+/* others defaults */
+#define DEFAULT_PAGER       "less"
+
 #define HZ                  hz
 unsigned int hz;
 
@@ -292,5 +295,7 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_DIFF_COL     3
 #define PG_STAT_STATEMENTS_ORDER_MIN    2
 #define PG_STAT_STATEMENTS_ORDER_MAX    8
+
+#define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 
 #endif

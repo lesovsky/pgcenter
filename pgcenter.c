@@ -915,11 +915,19 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
         strcpy(columns[i].name, PQfname(res, col));
         int colname_len = strlen(PQfname(res, col));
         int width = colname_len;
-        /* determine length of values from result array */
-        for (row = 0; row < n_rows; row++ ) {
-            int val_len = strlen(arr[row][col]);
-            if ( val_len >= width )
-                width = val_len;
+        if (arr == NULL) {
+            for (row = 0; row < n_rows; row++ ) {
+                int val_len = strlen(PQgetvalue(res, row, col));
+                if ( val_len >= width )
+                    width = val_len;
+            }
+        } else {
+            /* determine length of values from result array */
+            for (row = 0; row < n_rows; row++ ) {
+                int val_len = strlen(arr[row][col]);
+                if ( val_len >= width )
+                    width = val_len;
+            }
         }
         columns[i].width = width + 2;
     }
@@ -1690,6 +1698,52 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[])
 }
 
 /*
+ ****************************************************** key press function **
+ * Show the current configuration settings, one per row.
+ *
+ * IN:
+ * @conn        Current postgres connection.
+ ****************************************************************************
+ */
+void show_config(WINDOW * window, PGconn * conn)
+{
+    int  row_count, col_count, row, col, i;
+    FILE *fpout;
+    PGresult * res;
+    struct colAttrs *columns;
+    char * pager = malloc(sizeof(char) * 128);
+
+    res = do_query(window, conn, PG_SETTINGS_QUERY);
+    row_count = PQntuples(res);
+    col_count = PQnfields(res);
+    
+    columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
+    calculate_width(columns, res, NULL, row_count, col_count);
+
+    if ((pager = getenv("PAGER")) == NULL)
+        pager = DEFAULT_PAGER;
+    if ((fpout = popen(pager, "w")) == NULL) {
+        wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
+        return;
+    }
+    fprintf(fpout, " PostgreSQL configuration: %i rows\n", row_count);
+    /* print column names */
+    for (col = 0, i = 0; col < col_count; col++, i++)
+        fprintf(fpout, " %-*s", columns[i].width, PQfname(res, col));
+    fprintf(fpout, "\n\n");
+    /* print rows */
+    for (row = 0; row < row_count; row++) {
+        for (col = 0, i = 0; col < col_count; col++, i++)
+            fprintf(fpout, " %-*s", columns[i].width, PQgetvalue(res, row, col));
+        fprintf(fpout, "\n");
+    }
+
+    PQclear(res);
+    pclose(fpout);
+    free(columns);
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -1762,6 +1816,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'W':
                     write_pgcenterrc(w_cmd, screens);
+                    break;
+                case 'C':
+                    show_config(w_cmd, conns[console_index]);
                     break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [
