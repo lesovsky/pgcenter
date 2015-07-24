@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Save conninfo to .pgcenterrc file.
   * Add new conn establishing, closing existing connections.
   * When query failed, print error to w_dba window.
   * Add pg_stat_statements screen.

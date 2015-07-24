@@ -15,7 +15,7 @@
 #define BUFFERSIZE_S        16
 #define BUFFERSIZE_M        256
 #define BUFFERSIZE          4096
-#define MAX_CONSOLE         8
+#define MAX_SCREEN          8
 #define TOTAL_CONTEXTS      9
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"

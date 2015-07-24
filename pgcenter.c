@@ -71,7 +71,7 @@ int key_is_pressed(void)
 void init_screens(struct screen_s *screens[])
 {
     int i;
-    for (i = 0; i < MAX_CONSOLE; i++) {
+    for (i = 0; i < MAX_SCREEN; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
                 perror("malloc");
                 exit(EXIT_FAILURE);
@@ -339,7 +339,7 @@ int create_pgcenterrc_conn(int argc, char *argv[],
 void prepare_conninfo(struct screen_s * screens[])
 {
     int i;
-    for ( i = 0; i < MAX_CONSOLE; i++ )
+    for ( i = 0; i < MAX_SCREEN; i++ )
         if (screens[i]->conn_used) {
             strcat(screens[i]->conninfo, "host=");
             strcat(screens[i]->conninfo, screens[i]->host);
@@ -370,7 +370,7 @@ void prepare_conninfo(struct screen_s * screens[])
 void open_connections(struct screen_s * screens[], PGconn * conns[])
 {
     int i;
-    for ( i = 0; i < MAX_CONSOLE; i++ ) {
+    for ( i = 0; i < MAX_SCREEN; i++ ) {
         if (screens[i]->conn_used) {
             conns[i] = PQconnectdb(screens[i]->conninfo);
             if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
@@ -1449,7 +1449,7 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
         strcpy(screens[i]->password,    screens[i + 1]->password);
         conns[i] = conns[i + 1];
         i++;
-        if (i == MAX_CONSOLE - 1)
+        if (i == MAX_SCREEN - 1)
             break;
     }
     clear_screen_connopts(screens, i);
@@ -1486,7 +1486,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
     nodelay(window, FALSE);
     keypad(window, TRUE);
     
-    for (i = 0; i < MAX_CONSOLE; i++) {
+    for (i = 0; i < MAX_SCREEN; i++) {
         /* search free screen */
         if (screens[i]->conn_used == false) {
             wprintw(window, "Enter new connection parameters, format \"host port username dbname\": ");
@@ -1567,7 +1567,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
             } else 
                 break;
         /* also finish work if no available screens */
-        } else if (i == MAX_CONSOLE - 1) {
+        } else if (i == MAX_SCREEN - 1) {
             wprintw(window, "No free consoles.");
         }
     }
@@ -1615,7 +1615,7 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
             endwin();
             exit(EXIT_SUCCESS);
         }
-    } else if (i == (MAX_CONSOLE - 1)) {        // last possible console active
+    } else if (i == (MAX_SCREEN - 1)) {        // last possible console active
         clear_screen_connopts(screens, i);
         console_index = console_index - 1;
     } else {                                    // in the middle console active
@@ -1631,13 +1631,56 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
 }
 
 /*
+ ****************************************************** key press function **
+ * Write connection information into ~/.pgcenterrc.
+ *
+ * IN:
+ * @window          Window where result will be printed.
+ * @screens         Array of screens options.
+ ****************************************************************************
+ */
+void write_pgcenterrc(WINDOW * window, struct screen_s * screens[])
+{
+    int i = 0;
+    FILE *fp;
+    static char pgcenterrc_path[PATH_MAX];
+    struct passwd *pw = getpwuid(getuid());
+    struct stat statbuf;
+
+    strcpy(pgcenterrc_path, pw->pw_dir);
+    strcat(pgcenterrc_path, "/");
+    strcat(pgcenterrc_path, PGCENTERRC_FILE);
+
+    if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
+        for (i = 0; i < MAX_SCREEN; i++) {
+            if (screens[i]->conn_used) {
+                fprintf(fp, "%s:%s:%s:%s:%s\n",
+                        screens[i]->host,     screens[i]->port,
+                        screens[i]->dbname,   screens[i]->user,
+                        screens[i]->password);
+            }
+        }
+        wprintw(window, "Wrote configuration to '%s'", pgcenterrc_path);
+
+        fclose(fp);
+
+        stat(pgcenterrc_path, &statbuf);
+        if (statbuf.st_mode & (S_IRWXG | S_IRWXO)) {
+            chmod(pgcenterrc_path, S_IRUSR|S_IWUSR);
+        }
+    } else {
+        wprintw(window, "Failed write configuration to '%s'", pgcenterrc_path);
+    }
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
  */
 int main(int argc, char *argv[])
 {
-    struct screen_s *screens[MAX_CONSOLE];
+    struct screen_s *screens[MAX_SCREEN];
     struct stats_cpu_struct *st_cpu[2];
     WINDOW *w_sys, *w_cmd, *w_dba;
     int ch;                             /* key press */
@@ -1700,6 +1743,9 @@ int main(int argc, char *argv[])
                 case 4:             // Ctrl + D 
                     console_index = close_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
+                    break;
+                case 'W':
+                    write_pgcenterrc(w_cmd, screens);
                     break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [
