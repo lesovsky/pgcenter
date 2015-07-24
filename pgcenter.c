@@ -1427,6 +1427,35 @@ void clear_screen_connopts(struct screen_s * screens[], int i)
 }
 
 /*
+ ******************************************************** routine function **
+ * Shift screens when current screen closes.
+ *
+ * IN:
+ * @screens         Screens array.
+ * @conns           Connections array.
+ * @i               Index of closed console.
+ *
+ * RETURNS:
+ * Array of screens without closed connection.
+ ****************************************************************************
+ */
+void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
+{
+    while (screens[i + 1]->conn_used != false) {
+        strcpy(screens[i]->host,        screens[i + 1]->host);
+        strcpy(screens[i]->port,        screens[i + 1]->port);
+        strcpy(screens[i]->user,        screens[i + 1]->user);
+        strcpy(screens[i]->dbname,      screens[i + 1]->dbname);
+        strcpy(screens[i]->password,    screens[i + 1]->password);
+        conns[i] = conns[i + 1];
+        i++;
+        if (i == MAX_CONSOLE - 1)
+            break;
+    }
+    clear_screen_connopts(screens, i);
+}
+
+/*
  ****************************************************** key press function **
  * Open new one connection.
  *
@@ -1555,6 +1584,53 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
 }
 
 /*
+ ***************************************************** key press functions **
+ * Close current connection.
+ *
+ * IN:
+ * @window          Window where result is printed.
+ * @screens         Screens array.
+ *
+ * OUT:
+ * @conns           Array of connections.
+ * @screens         Modified screens array.
+ *
+ * RETURNS:
+ * Close current connection (remove from conns array) and return prvious
+ * console index.
+ ****************************************************************************
+ */
+int close_connection(WINDOW * window, struct screen_s * screens[],
+                PGconn * conns[], int console_index)
+{
+    int i = console_index;
+    PQfinish(conns[console_index]);
+
+    wprintw(window, "Close current connection.");
+    if (i == 0) {                               // first console active
+        if (screens[i + 1]->conn_used) {
+        shift_screens(screens, conns, i);
+        } else {
+            wrefresh(window);
+            endwin();
+            exit(EXIT_SUCCESS);
+        }
+    } else if (i == (MAX_CONSOLE - 1)) {        // last possible console active
+        clear_screen_connopts(screens, i);
+        console_index = console_index - 1;
+    } else {                                    // in the middle console active
+        if (screens[i + 1]->conn_used) {
+            shift_screens(screens, conns, i);
+        } else {
+            clear_screen_connopts(screens, i);
+            console_index = console_index - 1;
+        }
+    }
+
+    return console_index;
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -1619,6 +1695,10 @@ int main(int argc, char *argv[])
                     break;
                 case 'N':
                     console_index = add_connection(w_cmd, screens, conns, console_index);
+                    console_no = console_index + 1;
+                    break;
+                case 4:             // Ctrl + D 
+                    console_index = close_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
                     break;
                 case '\033':            // catching arrows: if the first value is esc
