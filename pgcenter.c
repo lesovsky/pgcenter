@@ -1405,6 +1405,155 @@ void change_min_age(WINDOW * window, struct screen_s * screen)
     nodelay(window, TRUE);
     keypad(window, FALSE);
 }
+
+/*
+ ******************************************************** routine function **
+ * Clear single connection options.
+ *
+ * IN:
+ * @screens         Screens array.
+ * @i               Index of entry in conn_opts array which should cleared.
+ ****************************************************************************
+ */
+void clear_screen_connopts(struct screen_s * screens[], int i)
+{
+    strcpy(screens[i]->host, "");
+    strcpy(screens[i]->port, "");
+    strcpy(screens[i]->user, "");
+    strcpy(screens[i]->dbname, "");
+    strcpy(screens[i]->password, "");
+    strcpy(screens[i]->conninfo, "");
+    screens[i]->conn_used = false;
+}
+
+/*
+ ****************************************************** key press function **
+ * Open new one connection.
+ *
+ * IN:
+ * @window          Window where result is printed.
+ * @screen          Current screen.
+ *
+ * OUT:
+ * @conns           Array of connections.
+ * @screen          Connections options array.
+ *
+ * RETURNS:
+ * Add connection into conns array and return new console index.
+ ****************************************************************************
+ */
+int add_connection(WINDOW * window, struct screen_s * screens[],
+                PGconn * conns[], int console_index)
+{
+    int i;
+    char params[128];
+    bool * with_esc = (bool *) malloc(sizeof(bool)),
+         * with_esc2 = (bool *) malloc(sizeof(bool));
+    char * str = (char *) malloc(sizeof(char) * 128),
+         * str2 = (char *) malloc(sizeof(char) * 128);
+    
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+    
+    for (i = 0; i < MAX_CONSOLE; i++) {
+        /* search free screen */
+        if (screens[i]->conn_used == false) {
+            wprintw(window, "Enter new connection parameters, format \"host port username dbname\": ");
+            wrefresh(window);
+
+            /* read user input */
+            cmd_readline(window, 69, with_esc, str);
+            strcpy(params, str);
+            free(str);
+            if (strlen(params) != 0 && *with_esc == false) {
+                /* parse user input */
+                if ((sscanf(params, "%s %s %s %s",
+                    screens[i]->host,   screens[i]->port,
+                    screens[i]->user,   screens[i]->dbname)) == 0) {
+                        wprintw(window, "Nothing to do. Failed read or invalid value.");
+                        break;
+                }
+                /* setup screen conninfo settings */
+                screens[i]->conn_used = true;
+                strcat(screens[i]->conninfo, "host=");
+                strcat(screens[i]->conninfo, screens[i]->host);
+                strcat(screens[i]->conninfo, " port=");
+                strcat(screens[i]->conninfo, screens[i]->port);
+                strcat(screens[i]->conninfo, " user=");
+                strcat(screens[i]->conninfo, screens[i]->user);
+                strcat(screens[i]->conninfo, " dbname=");
+                strcat(screens[i]->conninfo, screens[i]->dbname);
+
+                /* establish new connection */
+                conns[i] = PQconnectdb(screens[i]->conninfo);
+                /* if password required, ask user for password */
+                if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
+                    PQfinish(conns[i]);
+                    noecho();
+                    nodelay(window, FALSE);
+                    wclear(window);
+                    wprintw(window, "Required password: ");
+                    wrefresh(window);
+
+                    /* read password and add to conn options */
+                    cmd_readline(window, 19, with_esc2, str2);
+                    if (strlen(str2) != 0 && *with_esc2 == false) {
+                        strcpy(screens[i]->password, str2);
+                        strcat(screens[i]->conninfo, " password=");
+                        strcat(screens[i]->conninfo, screens[i]->password);
+                        /* try establish connection and finish work */
+                        conns[i] = PQconnectdb(screens[i]->conninfo);
+                        if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
+                            wclear(window);
+                            wprintw(window, "Unable to connect to the postgres.");
+                            PQfinish(conns[i]);
+                            clear_screen_connopts(screens, i);
+                        } else {
+                            wclear(window);
+                            wprintw(window, "Successfully connected.");
+                            console_index = screens[i]->screen;
+                        }
+                    } else if (with_esc) {
+                        clear_screen_connopts(screens, i);
+                    }
+                    free(str2);
+                /* finish work if connection establish failed */
+                } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
+                    wprintw(window, "Nothing to do. Connection failed.");
+                    PQfinish(conns[i]);
+                    clear_screen_connopts(screens, i);
+                /* if no error occured, print about success and finish work */
+                } else {
+                    wclear(window);
+                    wprintw(window, "Successfully connected.");
+                    console_index = screens[i]->screen;
+                }
+                break;
+            /* finish work if user input empty or cancelled */
+            } else if (strlen(params) == 0 && *with_esc == false) {
+                wprintw(window, "Nothing to do.");
+                break;
+            } else 
+                break;
+        /* also finish work if no available screens */
+        } else if (i == MAX_CONSOLE - 1) {
+            wprintw(window, "No free consoles.");
+        }
+    }
+    
+    /* finish work */
+    free(with_esc);
+    free(with_esc2);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+
+    return console_index;
+}
+
 /*
  ****************************************************************************
  * Main program
@@ -1466,6 +1615,10 @@ int main(int argc, char *argv[])
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
                     console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
+                    console_no = console_index + 1;
+                    break;
+                case 'N':
+                    console_index = add_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
                     break;
                 case '\033':            // catching arrows: if the first value is esc
