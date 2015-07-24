@@ -391,6 +391,22 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
 }
 
 /*
+ **************************************************** end program function **
+ * Close connections to pgbouncers.
+ *
+ * IN:
+ * @conns       Array of connections.
+ ****************************************************************************
+ */
+void close_connections(struct screen_s * screens[], PGconn * conns[])
+{
+    int i;
+    for (i = 0; i < MAX_SCREEN; i++)
+        if (screens[i]->conn_used)
+            PQfinish(conns[i]);
+}
+
+/*
  ****************************************************************************
  * Prepare query using current screen query context.
  *
@@ -1816,6 +1832,11 @@ int main(int argc, char *argv[])
                     wprintw(w_cmd, "Show pg_stat_statements");
                     screens[console_index]->current_context = pg_stat_statements;
                     *first_iter = true;
+                    break;
+                case 'q':
+                    endwin();
+                    close_connections(screens, conns);
+                    exit(EXIT_SUCCESS);
                     break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
