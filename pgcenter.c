@@ -495,8 +495,9 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
         strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
         PQclear(res);
         return NULL;
-    } else
+    } else {
         return res;
+    }
 }
 
 /*
@@ -1799,8 +1800,8 @@ void reload_conf(WINDOW * window, PGconn * conn)
     cbreak();
     nodelay(window, TRUE);
     keypad(window, FALSE);
-
 }
+
 /*
  ******************************************************** routine function **
  * Get postgres listen_addressed and check is that local address or not.
@@ -1938,6 +1939,80 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
 }
 
 /*
+ ****************************************************** key press function **
+ * Cancel postgres backend.
+ *
+ * IN:
+ * @window          Window where resilt will be printed.
+ * @screen          Current screen info.
+ * @conn            Current postgres connection.
+ * @do_terminate    Do terminate backend if true or cancel if false.
+ ****************************************************************************
+ */
+void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate)
+{
+    if (screen->current_context != pg_stat_activity_long) {
+        wprintw(window, "Terminate or cancel backend allowed in long queries screen.");
+        return;
+    } 
+
+    char query[BUFFERSIZE_M],
+         action[10],
+         pid[6];
+    PGresult * res;
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    if (do_terminate) {
+        wprintw(window, "Terminate single backend, enter pid: ");
+        strcpy(action, "terminate");
+    }
+    else {
+        wprintw(window, "Cancel single backend, enter pid: ");
+        strcpy(action, "cancel");
+    }
+    wrefresh(window);
+
+    cmd_readline(window, 27, with_esc, pid);
+    if (atoi(pid) > 0) {
+        if (do_terminate) {
+            strcpy(query, PG_TERM_BACKEND_P1);
+            strcat(query, pid);
+            strcat(query, PG_TERM_BACKEND_P2);
+        } else {
+            strcpy(query, PG_CANCEL_BACKEND_P1);
+            strcat(query, pid);
+            strcat(query, PG_CANCEL_BACKEND_P2);
+        }
+
+        res = do_query(conn, query, errmsg);
+        if (res != NULL) {
+            wprintw(window, "%s backend with pid %s.", action, pid);
+            PQclear(res);
+        } else {
+            wclear(window);
+            wprintw(window, "%s backend failed. %s", action, errmsg);
+        }
+    } else if (strlen(pid) == 0 && *with_esc == false) {
+        wprintw(window, "Do nothing. Nothing etntered.");
+    } else if (*with_esc == true) {
+        ;
+    } else
+        wprintw(window, "Do nothing. Incorrect input value.");
+
+    free(with_esc);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -2029,6 +2104,12 @@ int main(int argc, char *argv[])
                     break;
                 case 'R':
                     reload_conf(w_cmd, conns[console_index]);
+                    break;
+                case '-':               // do cnacel backend
+                    signal_single_backend(w_cmd, screens[console_index], conns[console_index], false);
+                    break;
+                case '_':               // do terminate backend
+                    signal_single_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [

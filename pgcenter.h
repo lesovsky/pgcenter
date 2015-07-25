@@ -319,4 +319,10 @@ struct colAttrs {
 /* reload postgres */
 #define PG_RELOAD_CONF_QUERY "SELECT pg_reload_conf()"
 
+/* cancel/terminate backend */
+#define PG_CANCEL_BACKEND_P1 "SELECT pg_cancel_backend("
+#define PG_CANCEL_BACKEND_P2 ")"
+#define PG_TERM_BACKEND_P1 "SELECT pg_terminate_backend("
+#define PG_TERM_BACKEND_P2 ")"
+
 #endif
