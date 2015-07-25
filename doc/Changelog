@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add return error message in higher function from do_query.
   * Add reload_conf() function.
   * Allow editing postgresq/pg_hba/pg_ident/recovery config files.
   * Add show config with shift+C

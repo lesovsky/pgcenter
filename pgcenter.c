@@ -15,6 +15,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
@@ -476,21 +477,22 @@ void prepare_query(struct screen_s * screen, char * query)
  * @conn            PostgreSQL connection.
  * @query_context   Type of query.
  *
+ * OUT:
+ * @errmsg          Error message returned by postgres.
+ *
  * RETURNS:
  * Answer from PostgreSQL.
  ****************************************************************************
  */
-PGresult * do_query(WINDOW * window, PGconn * conn, char * query)
+PGresult * do_query(PGconn * conn, char * query, char *errmsg)
 {
     PGresult    *res;
-    char *err = (char *) malloc(sizeof(char) * 1024);
 
     res = PQexec(conn, query);
     if ( PQresultStatus(res) != PG_TUP_OK ) {
-        strcpy(err, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-        wclear(window);
-        wprintw(window, "%s\n", err);
-        wrefresh(window);
+        strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
+        strcat(errmsg, ": ");
+        strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
         PQclear(res);
         return NULL;
     } else
@@ -623,32 +625,33 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
  * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_postgres_activity(WINDOW * window, WINDOW * ewindow, PGconn * conn)
+void print_postgres_activity(WINDOW * window, PGconn * conn)
 {
     int t_count, i_count, it_count, a_count, w_count, o_count;
     PGresult *res;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg);
     t_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY, errmsg);
     i_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY, errmsg);
     it_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY, errmsg);
     a_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY, errmsg);
     w_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY, errmsg);
     o_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
 
@@ -945,21 +948,22 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
  * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_autovac_info(WINDOW * window, WINDOW * ewindow, PGconn * conn)
+void print_autovac_info(WINDOW * window, PGconn * conn)
 {
     int av_count, avw_count;
     char av_max_time[16];
     PGresult *res;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
     
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg);
     av_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
     
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY, errmsg);
     avw_count = atoi(PQgetvalue(res, 0, 0));
     PQclear(res);
     
-    res = do_query(ewindow, conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY);
+    res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg);
     strcpy(av_max_time, PQgetvalue(res, 0, 0));
     PQclear(res);
 
@@ -1713,10 +1717,11 @@ void show_config(WINDOW * window, PGconn * conn)
     int  row_count, col_count, row, col, i;
     FILE *fpout;
     PGresult * res;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
     struct colAttrs *columns;
     char * pager = malloc(sizeof(char) * 128);
 
-    res = do_query(window, conn, PG_SETTINGS_QUERY);
+    res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
     row_count = PQntuples(res);
     col_count = PQnfields(res);
     
@@ -1758,13 +1763,43 @@ void show_config(WINDOW * window, PGconn * conn)
 void reload_conf(WINDOW * window, PGconn * conn)
 {
     PGresult * res;
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    char confirmation[1];
 
-    res = do_query(window, conn, PG_RELOAD_CONF_QUERY);
-    if (res != NULL) {
-        wprintw(window, "Reload issued.");
-        PQclear(res);
-    } else
-        wprintw(window, "Reload failed.");
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    wprintw(window, "Reload configuration files (y/n): ");
+    wrefresh(window);
+
+    cmd_readline(window, 34, with_esc, confirmation);
+    if (!strcmp(confirmation, "n") || !strcmp(confirmation, "N"))
+        wprintw(window, "Do nothing. Canceled.");
+    else if (!strcmp(confirmation, "y") || !strcmp(confirmation, "Y")) {
+        res = do_query(conn, PG_RELOAD_CONF_QUERY, errmsg);
+        if (res != NULL) {
+            wprintw(window, "Reload issued.");
+            PQclear(res);
+        } else {
+            wclear(window);
+            wprintw(window, "Reload failed. %s", errmsg);
+        }
+    } else if (strlen(confirmation) == 0 && *with_esc == false) {
+        wprintw(window, "Do nothing. Nothing etntered.");
+    } else if (*with_esc == true) {
+        ;
+    } else 
+        wprintw(window, "Do nothing. Not confirmed.");
+
+    free(with_esc);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+
 }
 /*
  ******************************************************** routine function **
@@ -1832,14 +1867,14 @@ bool check_pg_listen_addr(struct screen_s * screen)
 void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, char * config_option_value)
 {
     PGresult * res;
-    int row, n_row;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
     char query[BUFFERSIZE_M];
 
     strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
     strcat(query, config_option_name);
     strcat(query, PG_SETTINGS_SINGLE_OPT_P2);
 
-    res = do_query(window, conn, query);
+    res = do_query(conn, query, errmsg);
     
     if (PQntuples(res) != 0) {
         if (!strcmp(PQgetvalue(res, 0, 0), config_option_name))
@@ -1922,6 +1957,7 @@ int main(int argc, char *argv[])
     PGresult    *p_res, *c_res;
     char query[1024];
     int n_rows, n_cols, n_prev_rows;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
 
     /* arrays for PGresults */
     char ***p_arr, ***c_arr, ***r_arr;
@@ -2012,36 +2048,43 @@ int main(int argc, char *argv[])
                     }
                     break;
                 case 'd':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_database");
                     screens[console_index]->current_context = pg_stat_database;
                     *first_iter = true;
                     break;
                 case 'r':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_replication");
                     screens[console_index]->current_context = pg_stat_replication;
                     *first_iter = true;
                     break;
                 case 't':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_tables");
                     screens[console_index]->current_context = pg_stat_user_tables;
                     *first_iter = true;
                     break;
                 case 'i':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_indexes");
                     screens[console_index]->current_context = pg_stat_user_indexes;
                     *first_iter = true;
                     break;
                 case 'y':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_statio_user_tables");
                     screens[console_index]->current_context = pg_statio_user_tables;
                     *first_iter = true;
                     break;
                 case 's':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show relations sizes");
                     screens[console_index]->current_context = pg_tables_size;
                     *first_iter = true;
                     break;
                 case 'l':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show long transactions (transactions and queries threshold: %s)",
                                     screens[console_index]->pg_stat_activity_min_age);
                     screens[console_index]->current_context = pg_stat_activity_long;
@@ -2052,14 +2095,17 @@ int main(int argc, char *argv[])
                         change_min_age(w_cmd, screens[console_index]);
                         *first_iter = true;
                     } else
+                        wclear(w_cmd);
                         wprintw(w_cmd, "Not allowed here.");                // temporary
                     break;
                 case 'f':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_functions");
                     screens[console_index]->current_context = pg_stat_user_functions;
                     *first_iter = true;
                     break;
                 case 'x':
+                    wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_statements");
                     screens[console_index]->current_context = pg_stat_statements;
                     *first_iter = true;
@@ -2084,15 +2130,19 @@ int main(int argc, char *argv[])
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
-            print_postgres_activity(w_sys, w_dba, conns[console_index]);
-            print_autovac_info(w_sys, w_dba, conns[console_index]);
+            print_postgres_activity(w_sys, conns[console_index]);
+            print_autovac_info(w_sys, conns[console_index]);
             wrefresh(w_sys);
 
             /* 
              * Database screen. 
              */
             prepare_query(screens[console_index], query);
-            if ((c_res = do_query(w_dba, conns[console_index], query)) == NULL) {
+            if ((c_res = do_query(conns[console_index], query, errmsg)) == NULL) {
+                /* if error occured print SQL error message into cmd */
+                wclear(w_dba);
+                wprintw(w_dba, "%s", errmsg);
+                wrefresh(w_dba);
                 sleep(1);
                 continue;
             }
