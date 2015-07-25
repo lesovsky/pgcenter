@@ -63,6 +63,12 @@ unsigned int hz;
 #define PG_STAT_USER_FUNCTIONS_NUM              7
 #define PG_STAT_STATEMENTS_NUM                  8
 
+#define GROUP_ACTIVE        1 << 0
+#define GROUP_IDLE          1 << 1
+#define GROUP_IDLE_IN_XACT  1 << 2
+#define GROUP_WAITING       1 << 3
+#define GROUP_OTHER         1 << 4
+
 /* enum for query context */
 enum context
 {
@@ -103,6 +109,7 @@ struct screen_s
     enum context current_context;
     char pg_stat_activity_min_age[BUFFERSIZE_S];
     struct context_s context_list[TOTAL_CONTEXTS];
+    int signal_options;
 };
 
 #define SCREEN_SIZE (sizeof(struct screen_s))

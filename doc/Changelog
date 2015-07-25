@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add infrastructure for cancel/terminate group of backends.
   * Add single backend cancel or terminate.
   * Add return error message in higher function from do_query.
   * Add reload_conf() function.

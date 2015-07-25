@@ -91,6 +91,7 @@ void init_screens(struct screen_s *screens[])
         screens[i]->log_opened = false;
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
         strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
+        screens[i]->signal_options = 0;
 
         screens[i]->context_list[PG_STAT_DATABASE_NUM].context = pg_stat_database;
         screens[i]->context_list[PG_STAT_DATABASE_NUM].order_key = PG_STAT_DATABASE_ORDER_MIN;
@@ -1940,7 +1941,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
 
 /*
  ****************************************************** key press function **
- * Cancel postgres backend.
+ * Cancel or terminate postgres backend.
  *
  * IN:
  * @window          Window where resilt will be printed.
@@ -2004,6 +2005,124 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         ;
     } else
         wprintw(window, "Do nothing. Incorrect input value.");
+
+    free(with_esc);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+}
+
+/*
+ ****************************************************** key press function **
+ * Print current mask for group cancel/terminate
+ *
+ * IN:
+ * @window          Window where resilt will be printed.
+ * @screen          Current screen info.
+ ****************************************************************************
+ */
+void get_statemask(WINDOW * window, struct screen_s * screen)
+{
+    if (screen->current_context != pg_stat_activity_long) {
+        wprintw(window, "Get current mask can viewed in long queries screen.");
+        return;
+    }
+
+    wprintw(window, "Mask: ");
+    if (screen->signal_options == 0)
+        wprintw(window, "empty");
+    if (screen->signal_options & GROUP_ACTIVE)
+        wprintw(window, "active ");
+    if (screen->signal_options & GROUP_IDLE)
+        wprintw(window, "idle ");
+    if (screen->signal_options & GROUP_IDLE_IN_XACT)
+        wprintw(window, "idle in xact ");
+    if (screen->signal_options & GROUP_WAITING)
+        wprintw(window, "waiting ");
+    if (screen->signal_options & GROUP_OTHER)
+        wprintw(window, "other ");
+}
+
+
+/*
+ ****************************************************** key press function **
+ * Set state mask for group cancel/terminate
+ *
+ * IN:
+ * @window          Window where resilt will be printed.
+ * @screen          Current screen info.
+ ****************************************************************************
+ */
+void set_statemask(WINDOW * window, struct screen_s * screen)
+{
+    if (screen->current_context != pg_stat_activity_long) {
+        wprintw(window, "State mask setup allowed in long queries screen.");
+        return;
+    } 
+
+    int i;
+    char mask[5];
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    wprintw(window, "Set action mask for group backends [");
+    wattron(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "a");
+    wattroff(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "ctive/");
+    wattron(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "i");
+    wattroff(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "dle/idle_in_");
+    wattron(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "x");
+    wattroff(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "act/");
+    wattron(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "w");
+    wattroff(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "aiting/");
+    wattron(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "o");
+    wattroff(window, A_BOLD | A_UNDERLINE);
+    wprintw(window, "ther]: ");
+
+    cmd_readline(window, 77, with_esc, mask);
+    if (strlen(mask) > 5) {                                 /* entered mask too long */
+        wprintw(window, "Do nothing. Mask too long.");
+    } else if (strlen(mask) == 0 && *with_esc == false) {   /* mask not entered */
+        wprintw(window, "Do nothing. Mask not entered.");
+    } else if (*with_esc == true) {                         /* user escaped */
+        ;
+    } else {                                                /* user enter string with valid length */
+        /* reset previous mask */
+        screen->signal_options = 0;
+        for (i = 0; i < strlen(mask); i++) {
+            switch (mask[i]) {
+                case 'a':
+                    screen->signal_options |= GROUP_ACTIVE;
+                    break;
+                case 'i':
+                    screen->signal_options |= GROUP_IDLE;
+                    break;
+                case 'x':
+                    screen->signal_options |= GROUP_IDLE_IN_XACT;
+                    break;
+                case 'w':
+                    screen->signal_options |= GROUP_WAITING;
+                    break;
+                case 'o':
+                    screen->signal_options |= GROUP_OTHER;
+                    break;
+            }
+        }
+        get_statemask(window, screen);
+    }
 
     free(with_esc);
     noecho();
@@ -2111,6 +2230,12 @@ int main(int argc, char *argv[])
                 case '_':               // do terminate backend
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
+                case 'm':
+                    get_statemask(w_cmd, screens[console_index]);
+                    break;
+                case 'n':
+                    set_statemask(w_cmd, screens[console_index]);
+                    break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [
                     switch (getch()) {
@@ -2171,7 +2296,7 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_stat_activity_long;
                     *first_iter = true;
                     break;
-                case 'm':
+                case 'a':
                     if (screens[console_index]->current_context == pg_stat_activity_long) {
                         change_min_age(w_cmd, screens[console_index]);
                         *first_iter = true;
