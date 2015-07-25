@@ -7,6 +7,8 @@
 #include <getopt.h>
 #include <limits.h>
 #include <ncurses.h>
+#include <netdb.h>
+#include <ifaddrs.h>
 #include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1744,6 +1746,142 @@ void show_config(WINDOW * window, PGconn * conn)
 }
 
 /*
+ ******************************************************** routine function **
+ * Get postgres listen_addressed and check is that local address or not.
+ *
+ * IN:
+ * @screen       Connections options.
+ *
+ * RETURNS:
+ * Return true if listen_addresses is local and false if not.
+ ****************************************************************************
+ */
+bool check_pg_listen_addr(struct screen_s * screen)
+{
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s;
+    char host[NI_MAXHOST];
+
+    if (getifaddrs(&ifaddr) == -1) {
+        freeifaddrs(ifaddr);
+        return false;
+    }
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        /* Check AF_INET* interface addresses */
+        if (family == AF_INET || family == AF_INET6) {
+            s = getnameinfo(ifa->ifa_addr,
+                            (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                                                  sizeof(struct sockaddr_in6),
+                            host, NI_MAXHOST,
+                            NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                return false;
+            }
+            if (!strcmp(host, screen->host) || !strncmp(screen->host, "/", 1)) {
+                freeifaddrs(ifaddr);
+                return true;
+                break;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    return false;
+}
+
+/*
+ ******************************************************** routine function **
+ * Get GUC value from postgres config.
+ *
+ * IN:
+ * @window                  Window for printing errors if occurs.
+ * @conn                    Current connection.
+ * @config_option_name      Option name.
+ *
+ * OUT:
+ * @config_option_value     Config option value or empty string.
+ ****************************************************************************
+ */
+void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, char * config_option_value)
+{
+    PGresult * res;
+    int row, n_row;
+    char query[BUFFERSIZE_M];
+
+    strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
+    strcat(query, config_option_name);
+    strcat(query, PG_SETTINGS_SINGLE_OPT_P2);
+
+    res = do_query(window, conn, query);
+    
+    if (PQntuples(res) != 0) {
+        if (!strcmp(PQgetvalue(res, 0, 0), config_option_name))
+            strcpy(config_option_value, PQgetvalue(res, 0, 1));
+        /* if we want edit recovery.conf, attach config name to data_directory path */
+        if (!strcmp(config_option_name, GUC_DATA_DIRECTORY)) {
+            strcat(config_option_value, "/");
+            strcat(config_option_value, PG_RECOVERY_CONF_FILE);
+        }
+    } else
+        strcpy(config_option_value, "");
+    
+    PQclear(res);
+}
+
+/*
+ ****************************************************** key press function **
+ * Edit the current configuration settings.
+ *
+ * IN:
+ * @window          Window where errors will be displayed.
+ * @screen          Screen options.
+ * @conn            Current connection.
+ * @guc             GUC option associated with postgresql/pg_hba/pg_ident
+ *
+ * RETURNS:
+ * Open configuration file in $EDITOR.
+ ****************************************************************************
+ */
+void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * guc)
+{
+    char * conffile = (char *) malloc(sizeof(char) * 128);
+    pid_t pid;
+
+    if (check_pg_listen_addr(screen)) {
+        get_conf_value(window, conn, guc, conffile);
+        if (strlen(conffile) != 0) {
+            pid = fork();                   /* start child */
+            if (pid == 0) {
+                char * editor = (char *) malloc(sizeof(char) * 128);
+                if ((editor = getenv("EDITOR")) == NULL)
+                    editor = DEFAULT_EDITOR;
+                execlp(editor, editor, conffile, NULL);
+                free(editor);
+                exit(EXIT_FAILURE);
+            } else if (pid < 0) {
+                wprintw(window, "Can't open %s: fork failed.", conffile);
+                return;
+            } else if (waitpid(pid, NULL, 0) != pid) {
+                wprintw(window, "Unknown error: waitpid failed.");
+                return;
+            }
+        } else {
+            wprintw(window, "Do nothing. Config option not found (not SUPERUSER?).");
+        }
+    } else {
+        wprintw(window, "Do nothing. Edit config not supported for remote hosts.");
+    }
+    free(conffile);
+    return;
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -1819,6 +1957,18 @@ int main(int argc, char *argv[])
                     break;
                 case 'C':
                     show_config(w_cmd, conns[console_index]);
+                    break;
+                case 'P':               // edit postgresql.conf
+                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_CONFIG_FILE);
+                    break;
+                case 'H':               // edit pg_hba.conf
+                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_HBA_FILE);
+                    break;
+                case 'I':               // edit pg_ident.conf
+                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_IDENT_FILE);
+                    break;
+                case 'O':               // edit recovery.conf
+                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_DATA_DIRECTORY);
                     break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [

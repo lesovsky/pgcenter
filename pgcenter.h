@@ -20,10 +20,23 @@
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
-#define LOADAVG_FILE        "/proc/loadavg"
-#define STAT_FILE           "/proc/stat"
-#define UPTIME_FILE         "/proc/uptime"
-#define PGCENTERRC_FILE     ".pgcenterrc"
+#define LOADAVG_FILE            "/proc/loadavg"
+#define STAT_FILE               "/proc/stat"
+#define UPTIME_FILE             "/proc/uptime"
+#define PGCENTERRC_FILE         ".pgcenterrc"
+#define PG_RECOVERY_CONF_FILE   "recovery.conf"
+
+/* 
+ * GUC 
+ * This definitions used in edit_config() for edititing postgres config files. 
+ * But here we have one issue - we want edit recovery.conf, but GUC for 
+ * recovery.conf doesn't exists. For this reason we use data_directory GUC.
+ * Details see in get_conf_value() function.
+ */
+#define GUC_CONFIG_FILE         "config_file"
+#define GUC_HBA_FILE            "hba_file"
+#define GUC_IDENT_FILE          "ident_file"
+#define GUC_DATA_DIRECTORY       "data_directory"
 
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
@@ -35,6 +48,7 @@
 
 /* others defaults */
 #define DEFAULT_PAGER       "less"
+#define DEFAULT_EDITOR      "vi"
 
 #define HZ                  hz
 unsigned int hz;
@@ -297,5 +311,9 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_ORDER_MAX    8
 
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
+
+/* used in get_conf_value() */
+#define PG_SETTINGS_SINGLE_OPT_P1 "SELECT name, setting FROM pg_settings WHERE name = '"
+#define PG_SETTINGS_SINGLE_OPT_P2 "'"
 
 #endif
