@@ -316,4 +316,7 @@ struct colAttrs {
 #define PG_SETTINGS_SINGLE_OPT_P1 "SELECT name, setting FROM pg_settings WHERE name = '"
 #define PG_SETTINGS_SINGLE_OPT_P2 "'"
 
+/* reload postgres */
+#define PG_RELOAD_CONF_QUERY "SELECT pg_reload_conf()"
+
 #endif

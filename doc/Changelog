@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add reload_conf() function.
   * Allow editing postgresq/pg_hba/pg_ident/recovery config files.
   * Add show config with shift+C
   * Save conninfo to .pgcenterrc file.

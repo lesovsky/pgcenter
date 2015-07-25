@@ -1704,6 +1704,7 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[])
  * Show the current configuration settings, one per row.
  *
  * IN:
+ * @window      Window where result will be printed.
  * @conn        Current postgres connection.
  ****************************************************************************
  */
@@ -1745,6 +1746,26 @@ void show_config(WINDOW * window, PGconn * conn)
     free(columns);
 }
 
+/*
+ ****************************************************** key press function **
+ * Reload postgres
+ *
+ * IN:
+ * @window      Window where resilt will be printed.
+ * @conn        Current postgres connection.
+ ****************************************************************************
+ */
+void reload_conf(WINDOW * window, PGconn * conn)
+{
+    PGresult * res;
+
+    res = do_query(window, conn, PG_RELOAD_CONF_QUERY);
+    if (res != NULL) {
+        wprintw(window, "Reload issued.");
+        PQclear(res);
+    } else
+        wprintw(window, "Reload failed.");
+}
 /*
  ******************************************************** routine function **
  * Get postgres listen_addressed and check is that local address or not.
@@ -1969,6 +1990,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'O':               // edit recovery.conf
                     edit_config(w_cmd, screens[console_index], conns[console_index], GUC_DATA_DIRECTORY);
+                    break;
+                case 'R':
+                    reload_conf(w_cmd, conns[console_index]);
                     break;
                 case '\033':            // catching arrows: if the first value is esc
                     getch();            // skip the [
