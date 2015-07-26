@@ -2132,6 +2132,93 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
 }
 
 /*
+ ****************************************************** key press function **
+ * Cancel or terminate postgres backends using state mask.
+ *
+ * IN:
+ * @window          Window where resilt will be printed.
+ * @screen          Current screen info.
+ * @conn            Current postgres connection.
+ * @do_terminate    Do terminate backend if true or cancel if false.
+ ****************************************************************************
+ */
+void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate)
+{
+    if (screen->current_context != pg_stat_activity_long) {
+        wprintw(window, "Terminate or cancel backend allowed in long queries screen.");
+        return;
+    } 
+    if (screen->signal_options == 0) {
+        wprintw(window, "Do nothing. Mask not set.");
+        return;
+    }
+
+    char query[BUFFERSIZE_M],
+         mask[5] = "",
+         action[10],
+         state[80];
+    PGresult * res;
+    int i, signaled = 0;
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+
+    if (do_terminate) {
+        strcpy(action, "terminate");
+    }
+    else {
+        strcpy(action, "cancel");
+    }
+    
+    if (screen->signal_options & GROUP_ACTIVE)
+        strcat(mask, "a");
+    if (screen->signal_options & GROUP_IDLE)
+        strcat(mask, "i");
+    if (screen->signal_options & GROUP_IDLE_IN_XACT)
+        strcat(mask, "x");
+    if (screen->signal_options & GROUP_WAITING)
+        strcat(mask, "w");
+    if (screen->signal_options & GROUP_OTHER)
+        strcat(mask, "o");
+
+    for (i = 0; i < strlen(mask); i++) {
+        switch (mask[i]) {
+            case 'a':
+                strcpy(state, "state = 'active'");
+                break;
+            case 'i':
+                strcpy(state, "state = 'idle'");
+                break;
+            case 'x':
+                strcpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')");
+//                strcpy(state, "state = 'idle in transaction'");
+                break;
+            case 'w':
+                strcpy(state, "waiting");
+                break;
+            case 'o':
+                strcpy(state, "state IN ('fastpath function call', 'disabled')");
+                break;
+        }
+        strcpy(query, PG_SIG_GROUP_BACKEND_P1);
+        strcat(query, action);
+        strcat(query, PG_SIG_GROUP_BACKEND_P2);
+        strcat(query, state);
+        strcat(query, PG_SIG_GROUP_BACKEND_P3);
+        strcat(query, screen->pg_stat_activity_min_age);
+        strcat(query, PG_SIG_GROUP_BACKEND_P4);
+        strcat(query, screen->pg_stat_activity_min_age);
+        strcat(query, PG_SIG_GROUP_BACKEND_P5);
+
+        res = do_query(conn, query, errmsg);
+        signaled = signaled + PQntuples(res);
+        PQclear(res);
+    }
+
+    if (do_terminate)
+        wprintw(window, "Terminated %i processes.", signaled);
+    else
+        wprintw(window, "Canceled %i processes.", signaled);
+}
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -2178,6 +2265,7 @@ int main(int argc, char *argv[])
     cbreak();
     noecho();
     nodelay(stdscr, TRUE);
+    keypad(stdscr,TRUE);
 
     w_sys = newwin(5, 0, 0, 0);
     w_cmd = newwin(1, 0, 4, 0);
@@ -2224,7 +2312,7 @@ int main(int argc, char *argv[])
                 case 'R':
                     reload_conf(w_cmd, conns[console_index]);
                     break;
-                case '-':               // do cnacel backend
+                case '-':               // do cancel backend
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], false);
                     break;
                 case '_':               // do terminate backend
@@ -2236,23 +2324,35 @@ int main(int argc, char *argv[])
                 case 'n':
                     set_statemask(w_cmd, screens[console_index]);
                     break;
-                case '\033':            // catching arrows: if the first value is esc
-                    getch();            // skip the [
-                    switch (getch()) {
-                        case 'A':       // arrow up
-                            /* reserved */
-                            break;
-                        case 'B':       // arrow down
-                            /* reserved */
-                            break;
-                        case 'C':       // arrow right
-                            change_sort_order(screens[console_index], true, first_iter);
-                            break;
-                        case 'D':       // arrow left
-                            change_sort_order(screens[console_index], false, first_iter);
-                            break;
-                    }
+                case 330:               // do cancel (Del)
+                    signal_group_backend(w_cmd, screens[console_index], conns[console_index], false);
                     break;
+                case 383:               // do terminate (Shift+Del)
+                    signal_group_backend(w_cmd, screens[console_index], conns[console_index], true);
+                    break;
+                case 260:               // left arrow
+                    change_sort_order(screens[console_index], false, first_iter);
+                    break;
+                case 261:               // right arrow
+                    change_sort_order(screens[console_index], true, first_iter);
+                    break;
+//                case '\033':            // catching arrows: if the first value is esc
+//                    getch();            // skip the [
+//                    switch (getch()) {
+//                        case 'A':       // arrow up
+//                            /* reserved */
+//                            break;
+//                        case 'B':       // arrow down
+//                            /* reserved */
+//                            break;
+//                        case 'C':       // arrow right
+//                            change_sort_order(screens[console_index], true, first_iter);
+//                            break;
+//                        case 'D':       // arrow left
+//                            change_sort_order(screens[console_index], false, first_iter);
+//                            break;
+//                    }
+//                    break;
                 case 'd':
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_database");

@@ -332,4 +332,11 @@ struct colAttrs {
 #define PG_TERM_BACKEND_P1 "SELECT pg_terminate_backend("
 #define PG_TERM_BACKEND_P2 ")"
 
+/* cancel/terminate group of backends */
+#define PG_SIG_GROUP_BACKEND_P1 "SELECT pg_"
+#define PG_SIG_GROUP_BACKEND_P2 "_backend(pid) FROM pg_stat_activity WHERE "
+#define PG_SIG_GROUP_BACKEND_P3 " AND ((clock_timestamp() - xact_start) > '"
+#define PG_SIG_GROUP_BACKEND_P4 "'::interval OR (clock_timestamp() - query_start) > '"
+#define PG_SIG_GROUP_BACKEND_P5 "'::interval) AND pid <> pg_backend_pid()"
+
 #endif
