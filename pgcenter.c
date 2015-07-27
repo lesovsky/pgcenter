@@ -1967,6 +1967,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
          pid[6];
     PGresult * res;
     bool * with_esc = (bool *) malloc(sizeof(bool));
+    int msg_offset;
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
 
     echo();
@@ -1976,15 +1977,17 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
     if (do_terminate) {
         wprintw(window, "Terminate single backend, enter pid: ");
+        msg_offset = 37;
         strcpy(action, "terminate");
     }
     else {
         wprintw(window, "Cancel single backend, enter pid: ");
+        msg_offset = 34;
         strcpy(action, "cancel");
     }
     wrefresh(window);
 
-    cmd_readline(window, 27, with_esc, pid);
+    cmd_readline(window, msg_offset, with_esc, pid);
     if (atoi(pid) > 0) {
         if (do_terminate) {
             strcpy(query, PG_TERM_BACKEND_P1);
