@@ -1407,6 +1407,11 @@ void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str)
  */
 void change_min_age(WINDOW * window, struct screen_s * screen)
 {
+    if (screen->current_context != pg_stat_activity_long) {
+        wprintw(window, "Long query min age not allowed here.");
+        return;
+    }
+
     unsigned int hour, min, sec;
     bool * with_esc = (bool *) malloc(sizeof(bool));
     char min_age[BUFFERSIZE_S];
@@ -2397,12 +2402,8 @@ int main(int argc, char *argv[])
                     *first_iter = true;
                     break;
                 case 'a':
-                    if (screens[console_index]->current_context == pg_stat_activity_long) {
-                        change_min_age(w_cmd, screens[console_index]);
-                        *first_iter = true;
-                    } else
-                        wclear(w_cmd);
-                        wprintw(w_cmd, "Not allowed here.");                // temporary
+                    change_min_age(w_cmd, screens[console_index]);
+                    *first_iter = true;
                     break;
                 case 'f':
                     wclear(w_cmd);
