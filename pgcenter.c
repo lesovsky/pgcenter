@@ -1011,17 +1011,26 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     PGresult *res;
     char *errmsg = (char *) malloc(sizeof(char) * 1024);
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg);
-    av_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
+        av_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        av_count = 0;
+    }
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY, errmsg);
-    avw_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY, errmsg)) != NULL) {
+        avw_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        avw_count = 0;
+    }
     
-    res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg);
-    strcpy(av_max_time, PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg)) != NULL) {
+        strcpy(av_max_time, PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        strcpy(av_max_time, "--:--:--");
+    }
 
     mvwprintw(window, 0, COLS / 2, "av workers: %2i, wraparound: %2i, longest av worker time: %s",
                     av_count, avw_count, av_max_time);
@@ -2496,7 +2505,7 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
             print_postgres_activity(w_sys, conns[console_index]);
-//            print_autovac_info(w_sys, conns[console_index]);
+            print_autovac_info(w_sys, conns[console_index]);
             wrefresh(w_sys);
 
             /* 
