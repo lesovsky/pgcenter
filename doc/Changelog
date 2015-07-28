@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add reconnect if conn failed (eg pg restart).
   * Add cancel/terminate for process group.
   * Add infrastructure for cancel/terminate group of backends.
   * Add single backend cancel or terminate.

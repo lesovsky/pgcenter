@@ -150,9 +150,10 @@ struct colAttrs {
     int width;
 };
 
-/* PostgreSQL answers */
-#define PG_CMD_OK PGRES_COMMAND_OK
-#define PG_TUP_OK PGRES_TUPLES_OK
+/* PostgreSQL answers, see PQresultStatus() at http://www.postgresql.org/docs/9.4/static/libpq-exec.html */
+#define PG_CMD_OK       PGRES_COMMAND_OK
+#define PG_TUP_OK       PGRES_TUPLES_OK
+#define PG_FATAL_ERR    PGRES_FATAL_ERROR
 
 #define PG_STAT_DATABASE_QUERY \
     "SELECT \

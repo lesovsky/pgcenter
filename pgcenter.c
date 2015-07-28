@@ -270,6 +270,29 @@ void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
 }
 
 /*
+ ******************************************************** routine function **
+ * Chech connection state, try reconnect if failed.
+ *
+ * IN:
+ * @window          Window where status will be printed.
+ * @conn            Connection associated with current screen.
+ * @reconnected     True if conn failed and reconnect performed.
+ ****************************************************************************
+ */
+void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
+{
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        wclear(window);
+        PQreset(conn);
+        wprintw(window,
+                "The connection to the server was lost. Attempting reconnect.");
+        wrefresh(window);
+        /* reset previous query results after reconnect */
+        *reconnected = true;
+        sleep(1);
+    } 
+}
+/*
  ******************************************************** startup function **
  * Read ~/.pgcenterrc cfile and fill up conrections options array.
  *
@@ -490,7 +513,11 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
     PGresult    *res;
 
     res = PQexec(conn, query);
-    if ( PQresultStatus(res) != PG_TUP_OK ) {
+    if (PQresultStatus(res) == PG_FATAL_ERR) {
+        strcpy(errmsg, "FATAL: ");
+        strcat(errmsg, PQerrorMessage(conn));
+        return NULL;
+    } else if ( PQresultStatus(res) != PG_TUP_OK ) {
         strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
         strcat(errmsg, ": ");
         strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
@@ -629,37 +656,64 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
  */
 void print_postgres_activity(WINDOW * window, PGconn * conn)
 {
-    int t_count, i_count, it_count, a_count, w_count, o_count;
+    int t_count, i_count, x_count, a_count, w_count, o_count;
     PGresult *res;
     char *errmsg = (char *) malloc(sizeof(char) * 1024);
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg);
-    t_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        t_count = 0;
+        i_count = 0;
+        x_count = 0;
+        a_count = 0;
+        w_count = 0;
+        o_count = 0;
+        return;
+    } 
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg)) != NULL) {
+        t_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        t_count = 0;
+    }
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY, errmsg);
-    i_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY, errmsg)) != NULL) {
+        i_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        i_count = 0;
+    }
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY, errmsg);
-    it_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY, errmsg)) != NULL) {
+        x_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        x_count = 0;
+    }
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY, errmsg);
-    a_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY, errmsg)) != NULL) {
+        a_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        a_count = 0;
+    }
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY, errmsg);
-    w_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY, errmsg)) != NULL) {
+        w_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        w_count = 0;
+    }
 
-    res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY, errmsg);
-    o_count = atoi(PQgetvalue(res, 0, 0));
-    PQclear(res);
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY, errmsg)) != NULL) {
+        o_count = atoi(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        o_count = 0;
+    }
 
     wprintw(window,
-            "activity:%3i total,%3i idle,%3i idle_in_tnx,%3i active,%3i waiting,%3i others",
-            t_count, i_count, it_count, a_count, w_count, o_count);
+            "activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
+            t_count, i_count, x_count, a_count, w_count, o_count);
 }
 
 /*
@@ -2431,6 +2485,7 @@ int main(int argc, char *argv[])
             }
             curs_set(0);
         } else {
+            reconnect_if_failed(w_cmd, conns[console_index], first_iter);
             wclear(w_sys);
 
             /* 
@@ -2441,7 +2496,7 @@ int main(int argc, char *argv[])
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
             print_postgres_activity(w_sys, conns[console_index]);
-            print_autovac_info(w_sys, conns[console_index]);
+//            print_autovac_info(w_sys, conns[console_index]);
             wrefresh(w_sys);
 
             /* 
