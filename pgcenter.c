@@ -2296,23 +2296,25 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
  */
 int main(int argc, char *argv[])
 {
-    struct screen_s *screens[MAX_SCREEN];
-    struct stats_cpu_struct *st_cpu[2];
-    WINDOW *w_sys, *w_cmd, *w_dba;
-    int ch;                             /* key press */
-    bool *first_iter = (bool *) malloc(sizeof(bool));
+    struct screen_s *screens[MAX_SCREEN];               /* array of screens */
+    struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
+    WINDOW *w_sys, *w_cmd, *w_dba;                      /* ncurses windows  */
+    int ch;                                             /* store key press  */
+    bool *first_iter = (bool *) malloc(sizeof(bool));   /* first-run flag   */
     *first_iter = true;
-    static int console_no = 1;
-    static int console_index = 0;
+    static int console_no = 1;                          /* console number   */
+    static int console_index = 0;                       /* console index in screen array   */
 
-    PGconn      *conns[8];
-    PGresult    *p_res, *c_res;
-    char query[1024];
-    int n_rows, n_cols, n_prev_rows;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    PGconn      *conns[8];                              /* connections array    */
+    PGresult    *p_res, *c_res;                         /* query results        */
+    char query[1024];                                   /* query text           */
+    int n_rows, n_cols, n_prev_rows;                    /* query results opts   */
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
 
-    /* arrays for PGresults */
-    char ***p_arr, ***c_arr, ***r_arr;
+    float interval = DEFAULT_INTERVAL,                  /* sleep interval       */
+          sleep_usec = 0;                               /* time spent in sleep  */
+
+    char ***p_arr, ***c_arr, ***r_arr;                  /* 3d arrays for query results  */
 
     /* process cmd args */
     init_screens(screens);
@@ -2407,23 +2409,6 @@ int main(int argc, char *argv[])
                 case 261:               // right arrow
                     change_sort_order(screens[console_index], true, first_iter);
                     break;
-//                case '\033':            // catching arrows: if the first value is esc
-//                    getch();            // skip the [
-//                    switch (getch()) {
-//                        case 'A':       // arrow up
-//                            /* reserved */
-//                            break;
-//                        case 'B':       // arrow down
-//                            /* reserved */
-//                            break;
-//                        case 'C':       // arrow right
-//                            change_sort_order(screens[console_index], true, first_iter);
-//                            break;
-//                        case 'D':       // arrow left
-//                            change_sort_order(screens[console_index], false, first_iter);
-//                            break;
-//                    }
-//                    break;
                 case 'd':
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_database");
@@ -2576,8 +2561,18 @@ int main(int argc, char *argv[])
             wrefresh(w_cmd);
             wclear(w_cmd);
 
-            /* refresh interval */
-            sleep(1);
+            /* sleep loop */
+            for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {
+                if (key_is_pressed())
+                    break;
+                else {
+                    usleep(INTERVAL_STEP);
+                    if (interval > DEFAULT_INTERVAL && sleep_usec == DEFAULT_INTERVAL) {
+                        wrefresh(w_cmd);
+                        wclear(w_cmd);
+                    }
+                }
+            }   // end sleep loop
         }
     }
 }
