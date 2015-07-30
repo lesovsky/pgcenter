@@ -1185,9 +1185,10 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
  * @res_arr         Array where difference result will be stored.
  ****************************************************************************
  */
-void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols)
+void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols, long int interval)
 {
     int i, j, min, max;
+    int divisor;
  
     switch (context) {
         case pg_stat_database:
@@ -1234,6 +1235,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             break;
     }
 
+    divisor = interval / 1000000;
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
@@ -1241,7 +1243,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             else {
                 int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 char buf[n+1];
-                snprintf(buf, n+1, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
+                snprintf(buf, n+1, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
                 strcpy(res_arr[i][j], buf);
             }
     }
@@ -2367,6 +2369,57 @@ void start_psql(WINDOW * window, struct screen_s * screen)
 }
 
 /*
+ ****************************************************** key press function **
+ * Change refresh interval.
+ *
+ * IN:
+ * @window              Window where prompt will be printed.
+ * 
+ * OUT:
+ * @interval            Interval.
+ ****************************************************************************
+ */
+long int change_refresh(WINDOW * window, long int interval)
+{
+    long int interval_save = interval;
+    char value[8];
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+    char * str = (char *) malloc(sizeof(char) * 128);
+
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
+    wrefresh(window);
+
+    cmd_readline(window, 36, with_esc, str);
+    strcpy(value, str);
+    free(str);
+
+    if (strlen(value) != 0 && *with_esc == false) {
+        if (strlen(value) != 0) {
+            interval = atol(value);
+            if (interval < 1) {
+                wprintw(window, "Should not be less than 1 second.");
+                interval = interval_save;
+            } else {
+                interval = interval * 1000000;
+            }
+        }
+    } else if (strlen(value) == 0 && *with_esc == false ) {
+        interval = interval_save;
+    }
+
+    free(with_esc);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+    return interval;
+}
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -2388,8 +2441,8 @@ int main(int argc, char *argv[])
     int n_rows, n_cols, n_prev_rows;                    /* query results opts   */
     char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
 
-    float interval = DEFAULT_INTERVAL,                  /* sleep interval       */
-          sleep_usec = 0;                               /* time spent in sleep  */
+    long int interval = DEFAULT_INTERVAL,               /* sleep interval       */
+             sleep_usec = 0;                            /* time spent in sleep  */
 
     char ***p_arr, ***c_arr, ***r_arr;                  /* 3d arrays for query results  */
 
@@ -2551,6 +2604,9 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_stat_statements;
                     *first_iter = true;
                     break;
+                case 'z':
+                    interval = change_refresh(w_cmd, interval);
+                    break;
                 case 'q':
                     endwin();
                     close_connections(screens, conns);
@@ -2624,7 +2680,7 @@ int main(int argc, char *argv[])
             pgrescpy(c_arr, c_res, n_rows, n_cols);
 
             /* diff current and previous arrays and build result array */
-            diff_arrays(p_arr, c_arr, r_arr, screens[console_index]->current_context, n_rows, n_cols);
+            diff_arrays(p_arr, c_arr, r_arr, screens[console_index]->current_context, n_rows, n_cols, interval);
 
             /* sort result array using order key */
             sort_array(r_arr, n_rows, n_cols, screens[console_index]);

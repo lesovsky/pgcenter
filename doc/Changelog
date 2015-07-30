@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Allow change refresh interval.
   * Add psql hotkey.
   * Add reconnect if conn failed (eg pg restart).
   * Add cancel/terminate for process group.
