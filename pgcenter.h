@@ -49,6 +49,7 @@
 /* others defaults */
 #define DEFAULT_PAGER       "less"
 #define DEFAULT_EDITOR      "vi"
+#define DEFAULT_PSQL        "psql"
 #define DEFAULT_INTERVAL    1000000                                                                                                                                 
 #define INTERVAL_STEP       200000
 

@@ -10,6 +10,7 @@
 #include <netdb.h>
 #include <ifaddrs.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +44,37 @@ void print_usage(void)
   -w, --no-password         never prompt for password\n \
   -W, --password            force password prompt (should happen automatically)\n\n");
     printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
+}
+
+/*
+ *********************************************************** init function **
+ * Signal handler
+ *
+ * IN:
+ * @signo           Signal number.
+ ****************************************************************************
+ */
+void sig_handler(int signo)
+{
+    switch (signo) {
+        default: case SIGINT:
+            endwin();
+            exit(EXIT_SUCCESS);
+            break;
+    }
+}
+
+/*
+ *********************************************************** init function **
+ * Assign signal handlers to signals.
+ ****************************************************************************
+ */
+void init_signal_handlers(void)
+{
+    if (signal(SIGINT, sig_handler) == SIG_ERR) {
+        fprintf(stderr, "ERROR, can't establish SIGINT handler\n");
+        exit(EXIT_FAILURE);
+    }
 }
 
 /*
@@ -2260,7 +2292,6 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
                 break;
             case 'x':
                 strcpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')");
-//                strcpy(state, "state = 'idle in transaction'");
                 break;
             case 'w':
                 strcpy(state, "waiting");
@@ -2289,6 +2320,52 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
     else
         wprintw(window, "Canceled %i processes.", signaled);
 }
+
+/*
+ ****************************************************** key press function **
+ * Start psql using screen connection options.
+ *
+ * IN:
+ * @window          Window where errors will be displayed if occurs.
+ * @screen          Screen options.
+ ****************************************************************************
+ */
+void start_psql(WINDOW * window, struct screen_s * screen)
+{
+    pid_t pid;
+    char psql[16] = DEFAULT_PSQL;
+
+    /* escape from ncurses mode */
+    refresh();
+    endwin();
+    /* ignore Ctrl+C in child when psql running */
+    signal(SIGINT, SIG_IGN);
+    pid = fork();                   /* start child */
+    if (pid == 0) {
+        execlp(psql, psql,
+                "-h", screen->host,
+                "-p", screen->port,
+                "-U", screen->user,
+                "-d", screen->dbname,
+                NULL);
+        exit(EXIT_SUCCESS);         /* finish child */
+    } else if (pid < 0) {
+        wprintw(window, "Can't exec %s: fork failed.", psql);
+    } else if (waitpid(pid, NULL, 0) != pid) {
+        wprintw(window, "Unknown error: waitpid failed.");
+    }
+
+    /* 
+     * Reinit signals handling. When psql session ends, if user hit Ctrl+C in 
+     * main mode, program not reset terminal.
+     */
+    signal(SIGINT, SIG_DFL);
+    init_signal_handlers();
+
+    /* return to ncurses mode */
+    refresh();
+}
+
 /*
  ****************************************************************************
  * Main program
@@ -2315,6 +2392,9 @@ int main(int argc, char *argv[])
           sleep_usec = 0;                               /* time spent in sleep  */
 
     char ***p_arr, ***c_arr, ***r_arr;                  /* 3d arrays for query results  */
+
+    /* determine actions on receiving signals */
+    init_signal_handlers();
 
     /* process cmd args */
     init_screens(screens);
@@ -2408,6 +2488,9 @@ int main(int argc, char *argv[])
                     break;
                 case 261:               // right arrow
                     change_sort_order(screens[console_index], true, first_iter);
+                    break;
+                case 'p':
+                    start_psql(w_cmd, screens[console_index]);
                     break;
                 case 'd':
                     wclear(w_cmd);
