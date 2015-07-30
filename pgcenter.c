@@ -2419,6 +2419,42 @@ long int change_refresh(WINDOW * window, long int interval)
     keypad(window, FALSE);
     return interval;
 }
+
+/*
+ ****************************************************** key press function **
+ * Pause pgcenter execution.
+ *
+ * IN:
+ * @window              Window where diag message will be printed.
+ * @interval            Sleep interval.
+ ****************************************************************************
+ */
+void do_noop(WINDOW * window, long int interval)
+{
+    bool paused = true;
+    int sleep_usec,
+        ch;
+
+    while (paused != false) {
+        wprintw(window, "pgCenter suspended, press any key to resume.");
+        wrefresh(window);
+        /* sleep */
+        for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {
+            if ((ch = getch()) != ERR) {
+                paused = false;
+                break;
+            } else {
+                usleep(INTERVAL_STEP);
+                if (interval > DEFAULT_INTERVAL && sleep_usec == DEFAULT_INTERVAL) {
+                    wrefresh(window);
+                    wclear(window);
+                }
+            }
+        }
+        wclear(window);
+    }
+}
+
 /*
  ****************************************************************************
  * Main program
@@ -2606,6 +2642,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'z':
                     interval = change_refresh(w_cmd, interval);
+                    break;
+                case 32:
+                    do_noop(w_cmd, interval);
                     break;
                 case 'q':
                     endwin();
