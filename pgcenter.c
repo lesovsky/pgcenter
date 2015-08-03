@@ -3,7 +3,9 @@
  * (C) 2015 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
  */
 
+#define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
 #include <ncurses.h>
@@ -93,6 +95,36 @@ int key_is_pressed(void)
         return 1;
     } else
         return 0;
+}
+
+/*
+ ******************************************************** routine function **
+ * Replace substring in string.
+ *
+ * IN:
+ * @o_string                Original string.
+ * @s_string                String to search for.
+ * @r_string                Replace string.
+ *
+ * RETURNS:
+ * @o_string                Modified string.
+ ****************************************************************************
+ */
+void strrpl(char * o_string, char * s_string, char * r_string)
+{
+    char buffer[1024];
+    char * ch;
+             
+    if(!(ch = strstr(o_string, s_string)))
+        return;
+                 
+    strncpy(buffer, o_string, ch-o_string);
+    buffer[ch-o_string] = 0;
+    sprintf(buffer+(ch - o_string), "%s%s", r_string, ch + strlen(s_string));
+    o_string[0] = 0;
+    strcpy(o_string, buffer);
+    
+    return strrpl(o_string, s_string, r_string);
 }
 
 /*
@@ -2456,6 +2488,241 @@ void do_noop(WINDOW * window, long int interval)
 }
 
 /*
+ ***************************************************** log process routine **
+ * Get current postgresql logfile path
+ *
+ * IN:
+ * @conn                Current postgresql connection.
+ ****************************************************************************
+ */
+char * get_logfile_path(PGconn * conn)
+{
+    PGresult *res;
+    char q1[] = "show data_directory";
+    char q2[] = "show log_directory";
+    char q3[] = "show log_filename";
+    char q4[] = "select to_char(pg_postmaster_start_time(), 'HH24MISS')";
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char ld[64], lf[64], dd[64];
+    char path_tpl[64 * 3], path_log[64 * 3], path_log_fallback[64 * 3] = "";
+
+    if ((res = do_query(conn, q2, errmsg)) == NULL)
+        return "";
+
+    strcpy(ld, PQgetvalue(res, 0, 0));
+    if ( ld[0] != '/' ) {
+        if ((res = do_query(conn, q1, errmsg)) == NULL)
+            return "";
+        strcpy(dd, PQgetvalue(res, 0, 0));
+        strcpy(path_tpl, dd);
+        strcat(path_tpl, "/");
+        strcat(path_tpl, ld);
+        strcat(path_tpl, "/");
+    } else {
+        strcpy(path_tpl, ld);
+        strcat(path_tpl, "/");
+    }
+    if ((res = do_query(conn, q3, errmsg)) == NULL)
+        return "";
+    strcpy(lf, PQgetvalue(res, 0, 0));
+    strcat(path_tpl, lf);
+    
+    /*
+     * PostgreSQL defaults for log_filename is postgresql-%Y-%m-%d_%H%M%S.log. 
+     * It can be issue, because log file named by this template on postamster startup.
+     * Therefore we must know postmaster startup time for determining real log name.
+     * But, on log rotation, new log name get _000000.log suffix. Thus log can have two names:
+     * _123456.log (example) or _000000.log. If first log doesn't exist we try to use _000000.log.
+     */
+    /* check that the log_filename have %H%M%S pattern */
+    if (strstr(path_tpl, "%H%M%S") != NULL) {
+        strcpy(path_log, path_tpl);
+        strcpy(path_log_fallback, path_tpl);
+        if((res = do_query(conn, q4, errmsg)) == NULL)
+            return "";
+        strrpl(path_log, "%H%M%S", PQgetvalue(res, 0, 0));
+        strrpl(path_log_fallback, "%H%M%S", "000000");
+    } else {
+        strcpy(path_log, path_tpl);
+    }
+
+    PQclear(res);
+
+    /* translate log_filename pattern string in real path */
+    time_t rawtime;
+    struct tm *info;
+    char *buffer = (char *) malloc(sizeof(char) * 192);
+
+    time( &rawtime );
+    info = localtime( &rawtime );
+    strftime(buffer,192, path_log, info);
+
+    /* if file exists, return path */
+    if (access(buffer, F_OK ) != -1 ) {
+        return buffer;
+    } 
+    
+    /* if previous condition failed, try use _000000.log name */
+    if (strlen(path_log_fallback) != 0) {
+        strftime(buffer,192, path_log_fallback, info);
+        return buffer;
+    } else {
+        return NULL;
+    }
+}
+
+/*
+ ****************************************************** key press function **
+ * Log processing, open log in separate window or close if already opened.
+ *
+ * IN:
+ * @window              Window where cmd status will be printed.
+ * @w_log               Pointer to window where log will be shown.
+ * @screen              Array of connections options.
+ * @conn                Current postgresql connection.
+ ****************************************************************************
+ */
+void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn)
+{
+    char * logfile;
+    if (!screen->log_opened) {
+    logfile = (char *) malloc(sizeof(char) * PATH_MAX);
+    
+        if (check_pg_listen_addr(screen)) {
+            *w_log = newwin(0, 0, ((LINES * 2) / 3), 0);
+            wrefresh(window);
+            /* get logfile path  */
+            strcpy(logfile,get_logfile_path(conn));
+
+            if (strlen(logfile) == 0) {
+                wprintw(window, "Do nothing. Log file not determined.");
+                free(logfile);
+                return;
+            }
+            if ((screen->log = open(logfile, O_RDONLY)) == -1 ) {
+                wprintw(window, "Do nothing. Failed to open %s", logfile);
+                free(logfile);
+                return;
+            }
+            screen->log_opened = true;
+            wprintw(window, "Open postgresql log: %s", logfile);
+            free(logfile);
+            return;
+        } else {
+            wprintw(window, "Do nothing. Current postgresql not local.");
+            free(logfile);
+            return;
+        }
+    } else {
+        close(screen->log);
+        screen->log_opened = false;
+        return;
+    }
+}
+
+/*
+ ******************************************************** routine function **
+ * Tail postgresql log. 
+ *
+ * IN:
+ * @window          Window where log will be printed.
+ * @w_cmd           Window where diag messages will be printed.
+ * @screen          Current screen.
+ * @conn            Current postgresql connection.
+ ****************************************************************************
+ */
+void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn * conn)
+{
+    int x, y;                                                   /* window coordinates */
+    int n_lines = 1, n_cols = 1;                                /* number of rows and columns for printing */
+    struct stat stats;                                          /* file stat struct */
+    off_t end_pos;                                              /* end of file position */
+    off_t pos;                                                  /* from this position start read of file */
+    size_t bytes_read;                                          /* bytes readen from file to buffer */
+    char buffer[BUFSIZ] = "";                                   /* init empty buffer */
+    int i, nl_count = 0, len, scan_pos;                         /* iterator, newline counter, buffer length, in-buffer scan position */
+    char *p;                                                    /* in-buffer newline pointer */
+
+    getbegyx(window, y, x);                                     /* get window coordinates */
+    n_lines = LINES - y;                                        /* calculate number of rows for log tailing */
+    n_cols = COLS - x - 1;                                      /* calculate number of chars in row for cutting multiline log entries */
+    wclear(window);                                             /* clear log window */
+
+    fstat(screen->log, &stats);                                     /* handle error here ? */
+    if (S_ISREG (stats.st_mode) && stats.st_size != 0) {            /* log should be regular file and not be empty */
+        end_pos = lseek(screen->log, 0, SEEK_END);                  /* get end of file position */   
+        pos = end_pos;                                              /* set position to the end of file */
+        bytes_read = BUFSIZ;                                        /* read with 8KB block */
+        if (end_pos < BUFSIZ)                                       /* if end file pos less than buffer */
+            pos = 0;                                                /* than set read position ti the begin of file */
+        else                                                        /* if end file pos more than buffer */
+            pos = pos - bytes_read;                                 /* than set read position into end of file minus buffer size */
+        lseek(screen->log, pos, SEEK_SET);                          /* set determined position in file */
+        bytes_read = read(screen->log, buffer, bytes_read);         /* read file to buffer */
+
+        len = strlen(buffer);                                       /* determine buffer length */
+        scan_pos = len;                                             /* set in-buffer scan position equal buffer length, */
+
+        for (i = 0; i < len; i++)                                   /* get number of newlines in buffer */
+            if (buffer[i] == '\n')
+                nl_count++;
+        if (n_lines > nl_count) {                                   /* if number of newlines less than required */
+            wprintw(window, "%s", buffer);                          /* than print out buffer content */
+            wrefresh(window);
+            return;                                                 /* and finish work */
+        }
+
+        /*
+         * at this place, we have log more than buffersize, we fill buffer 
+         * and we need find \n position from which we start print log.
+         */
+        int n_lines_save = n_lines;                                 /* save number of lines need for tail. */
+        do {
+            p = memrchr(buffer, '\n', scan_pos);                    /* find \n from scan_pos */
+            if (p != NULL) {                                        /* if found */
+                scan_pos = (p - buffer);                            /* remember this place */
+            } else {                                                /* if not found */
+                break;                                              /* finish work */
+            }
+            n_lines--;                                              /* after each iteration decrement line counter */
+        } while (n_lines != 0);                                     /* stop cycle when line counter equal zero - we found need amount of lines */
+
+        /* now we should cut multiline log entries to screen length */
+        char str[n_cols];                                           /* use var for one line */
+        char tmp[BUFSIZ];                                           /* tmp var for line from buffer */
+        do {                                                        /* scan buffer from begin */
+            p = strstr(buffer, "\n");                               /* find \n in buffer */
+            if (p != NULL) {                                        /* if found */
+                if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
+                    strcpy(buffer, p + 1);                          /* decrease buffer, cut skipped line */
+                    nl_count--;                                     /* decrease newline counter */
+                    continue;                                       /* start next iteration */
+                }                                                   /* at this place we have sufficient number of lines for tail */
+                strncpy(tmp, buffer, p - buffer);                   /* copy log line into temp buffer */
+                tmp[p - buffer] = '\0';                                     
+                if (strlen(tmp) > n_cols) {                         /* if line longer than screen size (multiline) than truncate line to screen size */
+                    strncpy(str, buffer, n_cols);
+                    str[n_cols] = '\0';
+                } else {                                            /* if line have normal size, copy line as is */
+                    strncpy(str, buffer, strlen(tmp));
+                    str[strlen(tmp)] = '\0';
+                }
+                wprintw(window, "%s\n", str);                        /* print line to log screen */
+                strcpy(buffer, p + 1);                              /* decrease buffer, cut printed line */
+            } else {
+                break;                                              /* if \n not found, finish work */
+            }
+            n_lines++;                                              /* after each iteration, increase newline counter */
+        } while (n_lines != n_lines_save);                          /* print lines until newline counter not equal saved newline counter */
+    } else {
+        wprintw(w_cmd, "Do nothing. Log not a regular file or empty.");         /* if file not regular or empty */
+        log_process(w_cmd, &window, screen, conn);                              /* close log file and log screen */
+    }
+    
+    wrefresh(window);
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -2464,7 +2731,7 @@ int main(int argc, char *argv[])
 {
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
     struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
-    WINDOW *w_sys, *w_cmd, *w_dba;                      /* ncurses windows  */
+    WINDOW *w_sys, *w_cmd, *w_dba, *w_log;              /* ncurses windows  */
     int ch;                                             /* store key press  */
     bool *first_iter = (bool *) malloc(sizeof(bool));   /* first-run flag   */
     *first_iter = true;
@@ -2553,6 +2820,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'R':
                     reload_conf(w_cmd, conns[console_index]);
+                    break;
+                case 'L':
+                    log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                     break;
                 case '-':               // do cancel backend
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], false);
@@ -2738,6 +3008,12 @@ int main(int argc, char *argv[])
 
             wrefresh(w_cmd);
             wclear(w_cmd);
+
+            if (screens[console_index]->log_opened) {
+//                wattron(w_log, COLOR_PAIR(*wl_color));
+                print_log(w_log, w_cmd, screens[console_index], conns[console_index]);
+//                wattroff(w_log, COLOR_PAIR(*wl_color));
+            }
 
             /* sleep loop */
             for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {

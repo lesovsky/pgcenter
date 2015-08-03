@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add log tail screen.
   * Add suspend/resume pgcenter execution.
   * Allow change refresh interval.
   * Add psql hotkey.
