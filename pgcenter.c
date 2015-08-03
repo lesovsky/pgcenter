@@ -398,7 +398,7 @@ int create_pgcenterrc_conn(int argc, char *argv[],
 
     /* read connections settings from .pgcenterrc */
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
-        while (fgets(strbuf, 4096, fp) != 0) {
+        while ((fgets(strbuf, 4096, fp) != 0) && (i < MAX_SCREEN)) {
             sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
                         screens[i]->host, screens[i]->port,
                         screens[i]->dbname,   screens[i]->user,
