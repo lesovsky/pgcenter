@@ -2723,6 +2723,53 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 }
 
 /*
+ ****************************************************** key press function **
+ * Open log in $PAGER.
+ *
+ * IN:
+ * @window          Window where errors will be displayed.
+ * @screen          Screen options.
+ * @conn            Current connection.
+ *
+ * RETURNS:
+ * Open log file in $PAGER.
+ ****************************************************************************
+ */
+void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
+{
+    char * logfile = (char *) malloc(sizeof(char) * 128);
+    pid_t pid;
+
+    if (check_pg_listen_addr(screen)) {
+        /* get logfile path  */
+        strcpy(logfile,get_logfile_path(conn));
+        if (strlen(logfile) != 0) {
+            pid = fork();                   /* start child */
+            if (pid == 0) {
+                char * pager = (char *) malloc(sizeof(char) * 128);
+                if ((pager = getenv("PAGER")) == NULL)
+                    pager = DEFAULT_PAGER;
+                execlp(pager, pager, logfile, NULL);
+                free(pager);
+                exit(EXIT_SUCCESS);
+            } else if (pid < 0) {
+                wprintw(window, "Can't open %s: fork failed.", logfile);
+                return;
+            } else if (waitpid(pid, NULL, 0) != pid) {
+                wprintw(window, "Unknown error: waitpid failed.");
+                return;
+            }
+        } else {
+            wprintw(window, "Do nothing. Log filename option not found (not SUPERUSER?).");
+        }
+    } else {
+        wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
+    }
+    free(logfile);
+    return;
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -2824,6 +2871,9 @@ int main(int argc, char *argv[])
                 case 'L':
                     log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                     break;
+                case 'l':
+                    show_full_log(w_cmd, screens[console_index], conns[console_index]);
+                    break;
                 case '-':               // do cancel backend
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], false);
                     break;
@@ -2887,14 +2937,14 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_tables_size;
                     *first_iter = true;
                     break;
-                case 'l':
+                case 'a':
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show long transactions (transactions and queries threshold: %s)",
+                    wprintw(w_cmd, "Show activity (transactions and queries threshold: %s)",
                                     screens[console_index]->pg_stat_activity_min_age);
                     screens[console_index]->current_context = pg_stat_activity_long;
                     *first_iter = true;
                     break;
-                case 'a':
+                case 'A':
                     change_min_age(w_cmd, screens[console_index]);
                     *first_iter = true;
                     break;

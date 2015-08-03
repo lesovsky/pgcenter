@@ -1,6 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
-  * Add log tail screen.
+  * Add log tail screen, full log view with PAGER.
   * Add suspend/resume pgcenter execution.
   * Allow change refresh interval.
   * Add psql hotkey.
