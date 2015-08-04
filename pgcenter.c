@@ -714,7 +714,6 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
  *
  * IN:
  * @window          Window where info will be printed.
- * @ewindow         Window for error printing if query failed.
  * @conn            Current postgres connection.
  ****************************************************************************
  */
@@ -775,9 +774,58 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
         o_count = 0;
     }
 
-    wprintw(window,
-            "activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
+    mvwprintw(window, 0, COLS / 2,
+            "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
             t_count, i_count, x_count, a_count, w_count, o_count);
+}
+
+/*
+ ************************************************** system window function **
+ * Print pg_stat_statements related info.
+ *
+ * IN:
+ * @window          Window where info will be printed.
+ * @conn            Current postgres connection.
+ * @interval        Screen refresh interval.
+ ****************************************************************************
+ */
+void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
+{
+    float avgtime;
+    static int qps, prev_queries = 0;
+    int divisor;
+    char maxtime[16] = "";
+    PGresult *res;
+    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        avgtime = 0;
+        qps = 0;
+        strcpy(maxtime, "--:--:--");
+        return;
+    } 
+
+    divisor = interval / 1000000;
+    if ((res = do_query(conn, PG_STAT_STATEMENTS_SYS_QUERY, errmsg)) != NULL) {
+        avgtime = atof(PQgetvalue(res, 0, 0));
+        qps = (atoi(PQgetvalue(res, 0, 1)) - prev_queries) / divisor;
+        prev_queries = atoi(PQgetvalue(res, 0, 1));
+        PQclear(res);
+    } else {
+        avgtime = 0;
+        qps = 0;
+    }
+
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_SYS_QUERY, errmsg)) != NULL) {
+        strcpy(maxtime, PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else {
+        strcpy(maxtime, "--:--:--");
+    }
+
+    mvwprintw(window, 2, COLS / 2,
+            "statements: %6i qps,  %3.3f avg_ms, %s xact_maxtime",
+            qps, avgtime, maxtime);
 }
 
 /*
@@ -1096,7 +1144,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
         strcpy(av_max_time, "--:--:--");
     }
 
-    mvwprintw(window, 0, COLS / 2, "av workers: %2i, wraparound: %2i, longest av worker time: %s",
+    mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s maxtime",
                     av_count, avw_count, av_max_time);
 }
 
@@ -3157,6 +3205,7 @@ int main(int argc, char *argv[])
             print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
             print_postgres_activity(w_sys, conns[console_index]);
             print_autovac_info(w_sys, conns[console_index]);
+            print_pgstatstmt_info(w_sys, conns[console_index], interval);
             wrefresh(w_sys);
 
             /* 

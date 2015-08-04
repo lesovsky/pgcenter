@@ -230,9 +230,9 @@ struct colAttrs {
 #define PG_TABLES_SIZE_QUERY \
     "SELECT \
         schemaname ||'.'|| relname as relation, \
-        pg_total_relation_size(relname::regclass) / 1024 as \"total size, KB/s\", \
-        pg_relation_size(relname::regclass) / 1024 as \"size w/o indexes, KB/s\", \
-        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"indexes, KB/s\", \
+        pg_total_relation_size(relname::regclass) / 1024 as \"total size, KB\", \
+        pg_relation_size(relname::regclass) / 1024 as \"size w/o indexes, KB\", \
+        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"indexes, KB\", \
         pg_total_relation_size(relname::regclass) / 1024 as \"total changes, KB/s\", \
         pg_relation_size(relname::regclass) / 1024 as \"changes w/o indexes, KB/s\", \
         (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"changes indexes, KB/s\" \
@@ -246,7 +246,7 @@ struct colAttrs {
     "SELECT \
         pid, client_addr as cl_addr, client_port as cl_port, \
         datname, usename, state, waiting, \
-        date_trunc('seconds', clock_timestamp() - xact_start) AS txn_age, \
+        date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
         query \
@@ -266,10 +266,10 @@ struct colAttrs {
     "SELECT \
         funcid, schemaname ||'.'||funcname as function, \
         calls as total_calls, calls as \"calls/s\", \
-        date_trunc('seconds', total_time / 1000 * '1 second'::interval) as total_time, \
-        date_trunc('seconds', self_time / 1000 * '1 second'::interval) as self_time, \
-        round((total_time / calls)::numeric, 4) as \"avg_time (ms)\", \
-        round((self_time / calls)::numeric, 4) as \"avg_self_time (ms)\" \
+        date_trunc('seconds', total_time / 1000 * '1 second'::interval) as total_t, \
+        date_trunc('seconds', self_time / 1000 * '1 second'::interval) as self_t, \
+        round((total_time / calls)::numeric, 4) as \"avg_t (ms)\", \
+        round((self_time / calls)::numeric, 4) as \"avg_self_t (ms)\" \
     FROM pg_stat_user_functions \
     ORDER BY "
 #define PG_STAT_USER_FUNCTIONS_QUERY_P2 " DESC"
@@ -299,15 +299,21 @@ struct colAttrs {
         "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
         FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
 
+#define PG_STAT_STATEMENTS_SYS_QUERY \
+        "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+#define PG_STAT_ACTIVITY_SYS_QUERY \
+        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
+        FROM pg_stat_activity"
+
 #define PG_STAT_STATEMENTS_QUERY_P1 \
     "SELECT \
         a.rolname as user, d.datname as database, \
         sum(p.calls) as calls, \
         sum(p.calls) as \"calls/s\", \
-        round(sum(p.total_time)::numeric, 2) as total_time, \
-        round(sum(p.blk_read_time)::numeric, 2) as disk_read_time, \
-        round(sum(p.blk_write_time)::numeric, 2) as disk_write_time, \
-        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) as cpu_time, \
+        round(sum(p.total_time)::numeric, 2) as total_t, \
+        round(sum(p.blk_read_time)::numeric, 2) as read_t, \
+        round(sum(p.blk_write_time)::numeric, 2) as write_t, \
+        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) as cpu_t, \
         sum(p.rows) as rows, \
         p.query as query \
     FROM pg_stat_statements p \
