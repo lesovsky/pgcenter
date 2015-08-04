@@ -483,7 +483,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
 
 /*
  **************************************************** end program function **
- * Close connections to pgbouncers.
+ * Close connections to postgresql.
  *
  * IN:
  * @conns       Array of connections.
@@ -495,6 +495,21 @@ void close_connections(struct screen_s * screens[], PGconn * conns[])
     for (i = 0; i < MAX_SCREEN; i++)
         if (screens[i]->conn_used)
             PQfinish(conns[i]);
+}
+
+/*
+ **************************************************** end program function **
+ * Graceful quit.
+ *
+ * IN:
+ * @conns       Array of connections.
+ ****************************************************************************
+ */
+void exit_prog(struct screen_s * screens[], PGconn * conns[])
+{
+    close_connections(screens, conns);
+    endwin();
+    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -2615,7 +2630,7 @@ char * get_logfile_path(PGconn * conn)
         strftime(buffer,192, path_log_fallback, info);
         return buffer;
     } else {
-        return NULL;
+        return "";
     }
 }
 
@@ -2643,7 +2658,7 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
             strcpy(logfile,get_logfile_path(conn));
 
             if (strlen(logfile) == 0) {
-                wprintw(window, "Do nothing. Log file not determined.");
+                wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
                 free(logfile);
                 return;
             }
@@ -2808,7 +2823,7 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 return;
             }
         } else {
-            wprintw(window, "Do nothing. Log filename option not found (not SUPERUSER?).");
+            wprintw(window, "Do nothing. Log filename not determined (not SUPERUSER?) or no access permissions.");
         }
     } else {
         wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
@@ -3179,9 +3194,7 @@ int main(int argc, char *argv[])
                     do_noop(w_cmd, interval);
                     break;
                 case 'q':
-                    endwin();
-                    close_connections(screens, conns);
-                    exit(EXIT_SUCCESS);
+                    exit_prog(screens, conns);
                     break;
                 default:
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
