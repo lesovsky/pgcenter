@@ -3063,140 +3063,146 @@ int main(int argc, char *argv[])
                     console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
                     console_no = console_index + 1;
                     break;
-                case 'N':
+                case 'N':               /* open new screen with new connection */
                     console_index = add_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
                     break;
-                case 4:             // Ctrl + D 
+                case 4:                 /* close current screen with Ctrl + D */
                     console_index = close_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
                     break;
-                case 'W':
+                case 'W':               /* write connections info into .pgcenterrc */
                     write_pgcenterrc(w_cmd, screens);
                     break;
-                case 'C':
+                case 'C':               /* open current postgresql config in pager */
                     show_config(w_cmd, conns[console_index]);
                     break;
-                case 'P':               // edit postgresql.conf
+                case 'P':               /* edit postgresql.conf */
                     edit_config(w_cmd, screens[console_index], conns[console_index], GUC_CONFIG_FILE);
                     break;
-                case 'H':               // edit pg_hba.conf
+                case 'H':               /* edit pg_hba.conf */
                     edit_config(w_cmd, screens[console_index], conns[console_index], GUC_HBA_FILE);
                     break;
-                case 'I':               // edit pg_ident.conf
+                case 'I':               /* edit pg_ident.conf */
                     edit_config(w_cmd, screens[console_index], conns[console_index], GUC_IDENT_FILE);
                     break;
-                case 'O':               // edit recovery.conf
+                case 'O':               /* edit recovery.conf */
                     edit_config(w_cmd, screens[console_index], conns[console_index], GUC_DATA_DIRECTORY);
                     break;
-                case 'R':
+                case 'R':               /* reload postgresql */
                     reload_conf(w_cmd, conns[console_index]);
                     break;
-                case 'L':
+                case 'L':               /* log tail screen on/off */
                     log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                     break;
-                case 'l':
+                case 410:               /* when logtail enabled and window resized, repaint logtail window */
+                    if (screens[console_index]->log_opened) {
+                        log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
+                        log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
+                    }
+                    break;
+                case 'l':               /* open postgresql log in pager */
                     show_full_log(w_cmd, screens[console_index], conns[console_index]);
                     break;
-                case '-':               // do cancel backend
+                case '-':               /* do cancel postgres backend */
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], false);
                     break;
-                case '_':               // do terminate backend
+                case '_':               /* do terminate postgres backend */
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
-                case 'm':
+                case 'm':               /* get current cancel/terminate mask */
                     get_statemask(w_cmd, screens[console_index]);
                     break;
-                case 'n':
+                case 'n':               /* set new cancel/terminate mask */
                     set_statemask(w_cmd, screens[console_index]);
                     break;
-                case 330:               // do cancel (Del)
+                case 330:               /* do cancel of backend group using mask with Del */
                     signal_group_backend(w_cmd, screens[console_index], conns[console_index], false);
                     break;
-                case 383:               // do terminate (Shift+Del)
+                case 383:               /* do terminate of backends group using mask with Shift+Del */
                     signal_group_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
-                case 260:               // left arrow
+                case 260:               /* shift sort order with left arrow */
                     change_sort_order(screens[console_index], false, first_iter);
                     break;
-                case 261:               // right arrow
+                case 261:               /* shift sort order with right arrow */
                     change_sort_order(screens[console_index], true, first_iter);
                     break;
-                case 'p':
+                case 'p':               /* start psql session to current postgres */
                     start_psql(w_cmd, screens[console_index]);
                     break;
-                case 'd':
+                case 'd':               /* open pg_stat_database screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_database");
                     screens[console_index]->current_context = pg_stat_database;
                     *first_iter = true;
                     break;
-                case 'r':
+                case 'r':               /* open pg_stat_replication screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_replication");
                     screens[console_index]->current_context = pg_stat_replication;
                     *first_iter = true;
                     break;
-                case 't':
+                case 't':               /* open pg_stat_user_tables screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_tables");
                     screens[console_index]->current_context = pg_stat_user_tables;
                     *first_iter = true;
                     break;
-                case 'i':
+                case 'i':               /* open pg_stat(io)_user_indexes screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_indexes");
                     screens[console_index]->current_context = pg_stat_user_indexes;
                     *first_iter = true;
                     break;
-                case 'y':
+                case 'y':               /* open pg_statio_user_tables screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_statio_user_tables");
                     screens[console_index]->current_context = pg_statio_user_tables;
                     *first_iter = true;
                     break;
-                case 's':
+                case 's':               /* open database object sizes screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show relations sizes");
                     screens[console_index]->current_context = pg_tables_size;
                     *first_iter = true;
                     break;
-                case 'a':
+                case 'a':               /* show pg_stat_activity screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show activity (transactions and queries threshold: %s)",
                                     screens[console_index]->pg_stat_activity_min_age);
                     screens[console_index]->current_context = pg_stat_activity_long;
                     *first_iter = true;
                     break;
-                case 'A':
+                case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index]);
                     *first_iter = true;
                     break;
-                case 'f':
+                case 'f':               /* open pg_stat_user_functions screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_user_functions");
                     screens[console_index]->current_context = pg_stat_user_functions;
                     *first_iter = true;
                     break;
-                case 'x':
+                case 'x':               /* open pg_stat_statements screen */
                     wclear(w_cmd);
                     wprintw(w_cmd, "Show pg_stat_statements");
                     screens[console_index]->current_context = pg_stat_statements;
                     *first_iter = true;
                     break;
-                case 'z':
+                case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
                     break;
-                case 'Z':
+                case 'Z':               /* change screens colors */
                     change_colors(ws_color, wc_color, wa_color, wl_color);
                     break;
-                case 32:
+                case 32:                /* pause program execution with space */
                     do_noop(w_cmd, interval);
                     break;
-                case 'q':
+                case 'q':               /* exit program */
                     exit_prog(screens, conns);
                     break;
-                default:
+                default:                /* show default msg on wrong input */
                     wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
                     break;
             }
