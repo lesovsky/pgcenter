@@ -226,28 +226,40 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
     return password;
 }
 
+void init_args_struct(struct args_s * args)
+{
+    strcpy(args->connfile, "");
+    strcpy(args->host, "");
+    strcpy(args->port, "");
+    strcpy(args->user, "");
+    strcpy(args->dbname, "");
+    args->need_passwd = false;                      /* by default password not need */
+}
+
 /*
  ******************************************************** startup function **
- * Take input parameters and add them into connections options.
+ * Parse input arguments
  *
  * IN:
  * @argc            Input arguments count.
  * @argv[]          Input arguments array.
  *
  * OUT:
- * @screens[]     Array where connections options will be saved.
+ * @args            Struct with input args.
  ****************************************************************************
  */
-void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
+void arg_parse(int argc, char *argv[], struct args_s *args)
 {
     struct passwd *pw = getpwuid(getuid());
+    int param, option_index;
 
     /* short options */
-    const char * short_options = "h:p:U:d:wW?";
+    const char * short_options = "f:h:p:U:d:wW?";
 
     /* long options */
     const struct option long_options[] = {
         {"help", no_argument, NULL, '?'},
+        {"file", required_argument, NULL, 'f'},
         {"host", required_argument, NULL, 'h'},
         {"port", required_argument, NULL, 'p'},
         {"dbname", required_argument, NULL, 'd'},
@@ -256,9 +268,6 @@ void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
         {"user", required_argument, NULL, 'U'},
         {NULL, 0, NULL, 0}
     };
-
-    int param, option_index;
-    enum trivalue prompt_password = TRI_DEFAULT;
 
     if (argc > 1) {
         if ((strcmp(argv[1], "-?") == 0)
@@ -274,27 +283,30 @@ void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
             exit(EXIT_SUCCESS);
         }
     }
-
+    
     while ( (param = getopt_long(argc, argv,
                 short_options, long_options, &option_index)) != -1 ) {
         switch (param) {
             case 'h':
-                strcpy(screens[0]->host, optarg);
+                strcpy(args->host, optarg);
+                break;
+            case 'f':
+                strcpy(args->connfile, optarg);
                 break;
             case 'p':
-                strcpy(screens[0]->port, optarg);
+                strcpy(args->port, optarg);
                 break;
             case 'U':
-                strcpy(screens[0]->user, optarg);
+                strcpy(args->user, optarg);
                 break;
             case 'd':
-                strcpy(screens[0]->dbname, optarg);
+                strcpy(args->dbname, optarg);
                 break;
             case 'w':
-                prompt_password = TRI_NO;
+                args->need_passwd = false;
                 break;
             case 'W':
-                prompt_password = TRI_YES;
+                args->need_passwd = true;
                 break;
             case '?': default:
                 fprintf(stderr,"Try \"%s --help\" for more information.\n", argv[0]);
@@ -304,27 +316,60 @@ void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
     }
     while (argc - optind >= 1) {
         if ( (argc - optind > 1)
-                && strlen(screens[0]->user) == 0
-                && strlen(screens[0]->dbname) == 0 )
-            strcpy(screens[0]->user, argv[optind]);
-        else if ( (argc - optind >= 1) && strlen(screens[0]->dbname) == 0 )
-            strcpy(screens[0]->dbname, argv[optind]);
+                && strlen(args->user) == 0
+                && strlen(args->dbname) == 0 )
+            strcpy(args->user, argv[optind]);
+        else if ( (argc - optind >= 1) && strlen(args->dbname) == 0 )
+            strcpy(args->dbname, argv[optind]);
         else
             fprintf(stderr,
                     "%s: warning: extra command-line argument \"%s\" ignored\n",
                     argv[0], argv[optind]);
         optind++;
     }
-    if ( strlen(screens[0]->host) == 0 )
+}
+
+/*
+ ******************************************************** startup function **
+ * Take input parameters and add them into connections options.
+ *
+ * IN:
+ * @args            Struct with input arguments.
+ *
+ * OUT:
+ * @screens[]       Array with connections options.
+ ****************************************************************************
+ */
+void create_initial_conn(struct args_s * args, struct screen_s * screens[])
+{
+    struct passwd *pw = getpwuid(getuid());
+
+    if ( strlen(args->host) == 0 )
         strcpy(screens[0]->host, DEFAULT_HOST);
+    else
+        strcpy(screens[0]->host, args->host);
 
-    if ( strlen(screens[0]->port) == 0 )
+    if ( strlen(args->port) == 0 )
         strcpy(screens[0]->port, DEFAULT_PORT);
+    else
+        strcpy(screens[0]->port, args->port);
 
-    if ( strlen(screens[0]->user) == 0 )
+    if ( strlen(args->user) == 0 )
         strcpy(screens[0]->user, pw->pw_name);
+    else
+        strcpy(screens[0]->user, args->user);
 
-    if ( prompt_password == TRI_YES )
+    if ( strlen(args->dbname) == 0 && strlen(args->user) == 0)
+        strcpy(screens[0]->dbname, pw->pw_name);
+    else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0)
+        strcpy(screens[0]->dbname, args->user);
+    else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
+        strcpy(screens[0]->dbname, args->dbname);
+        strcpy(screens[0]->user, args->dbname);
+    } else
+        strcpy(screens[0]->dbname, args->dbname);
+
+    if ( args->need_passwd )
         strcpy(screens[0]->password, password_prompt("Password: ", 100, false));
 
     if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
@@ -334,46 +379,21 @@ void create_initial_conn(int argc, char *argv[], struct screen_s * screens[])
 }
 
 /*
- ******************************************************** routine function **
- * Chech connection state, try reconnect if failed.
- *
- * IN:
- * @window          Window where status will be printed.
- * @conn            Connection associated with current screen.
- * @reconnected     True if conn failed and reconnect performed.
- ****************************************************************************
- */
-void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
-{
-    if (PQstatus(conn) == CONNECTION_BAD) {
-        wclear(window);
-        PQreset(conn);
-        wprintw(window,
-                "The connection to the server was lost. Attempting reconnect.");
-        wrefresh(window);
-        /* reset previous query results after reconnect */
-        *reconnected = true;
-        sleep(1);
-    } 
-}
-/*
  ******************************************************** startup function **
- * Read ~/.pgcenterrc cfile and fill up conrections options array.
+ * Read ~/.pgcenterrc file and fill up conrections options array.
  *
  * IN:
- * @argc            Input arguments count.
- * @argv[]          Input arguments array.
+ * @args            Struct with input arguments.
  * @pos             Start position inside array.
  *
  * OUT:
- * @screens       Connections options array.
+ * @screens         Connections options array.
  *
  * RETURNS:
  * Success or failure.
  ****************************************************************************
  */
-int create_pgcenterrc_conn(int argc, char *argv[],
-                struct screen_s * screens[], const int pos)
+int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const int pos)
 {
     FILE *fp;
     static char pgcenterrc_path[PATH_MAX];
@@ -382,12 +402,19 @@ int create_pgcenterrc_conn(int argc, char *argv[],
     int i = pos;
     struct passwd *pw = getpwuid(getuid());
 
-    strcpy(pgcenterrc_path, pw->pw_dir);
-    strcat(pgcenterrc_path, "/");
-    strcat(pgcenterrc_path, PGCENTERRC_FILE);
+    if (strlen(args->connfile) == 0) {
+        strcpy(pgcenterrc_path, pw->pw_dir);
+        strcat(pgcenterrc_path, "/");
+        strcat(pgcenterrc_path, PGCENTERRC_FILE);
+    } else {
+        strcpy(pgcenterrc_path, args->connfile);
+    }
 
-    if (access(pgcenterrc_path, F_OK) == -1)
+    if (access(pgcenterrc_path, F_OK) == -1) {
+        fprintf(stderr,
+                    "WARNING: no access %s.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
+    }
 
     stat(pgcenterrc_path, &statbuf);
     if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) ) {
@@ -414,6 +441,30 @@ int create_pgcenterrc_conn(int argc, char *argv[],
                     "WARNING: failed to open %s. Try use defaults.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
+}
+
+/*
+ ******************************************************** routine function **
+ * Check connection state, try reconnect if failed.
+ *
+ * IN:
+ * @window          Window where status will be printed.
+ * @conn            Connection associated with current screen.
+ * @reconnected     True if conn failed and reconnect performed.
+ ****************************************************************************
+ */
+void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
+{
+    if (PQstatus(conn) == CONNECTION_BAD) {
+        wclear(window);
+        PQreset(conn);
+        wprintw(window,
+                "The connection to the server was lost. Attempting reconnect.");
+        wrefresh(window);
+        /* reset previous query results after reconnect */
+        *reconnected = true;
+        sleep(1);
+    } 
 }
 
 /*
@@ -2993,6 +3044,7 @@ void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_colo
  */
 int main(int argc, char *argv[])
 {
+    struct args_s *args;                                /* struct for input args */
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
     struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
     WINDOW *w_sys, *w_cmd, *w_dba, *w_log;              /* ncurses windows  */
@@ -3017,18 +3069,28 @@ int main(int argc, char *argv[])
         * wc_color = (int *) malloc(sizeof(int)),
         * wa_color = (int *) malloc(sizeof(int)),
         * wl_color = (int *) malloc(sizeof(int));
+    args = (struct args_s *) malloc(sizeof(struct args_s));
 
-    /* determine actions on receiving signals */
+    /* init various stuff */
     init_signal_handlers();
+    init_args_struct(args);
+    init_screens(screens);
 
     /* process cmd args */
-    init_screens(screens);
-    if ( argc > 1 ) {
-        create_initial_conn(argc, argv, screens);
-        create_pgcenterrc_conn(argc, argv, screens, 1);
-    } else
-        if (create_pgcenterrc_conn(argc, argv, screens, 0) == PGCENTERRC_READ_ERR)
-            create_initial_conn(argc, argv, screens);
+    if (argc > 1) {
+        arg_parse(argc, argv, args);
+        if (strlen(args->connfile) != 0 && strlen(args->dbname) == 0) {
+            if (create_pgcenterrc_conn(args, screens, 0) == PGCENTERRC_READ_ERR) {
+                create_initial_conn(args, screens);
+            }
+        } else {
+            create_initial_conn(args, screens);
+            create_pgcenterrc_conn(args, screens, 1);
+        }
+    } else {
+        if (create_pgcenterrc_conn(args, screens, 0) == PGCENTERRC_READ_ERR)
+            create_initial_conn(args, screens);
+    }
 
     /* CPU stats related actions */
     init_stats(st_cpu);

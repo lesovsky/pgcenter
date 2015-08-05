@@ -96,7 +96,20 @@ struct context_s
     bool order_desc;
 };
 
-/* Struct which define connection options */
+/* struct for input args */
+struct args_s
+{
+    char connfile[BUFFERSIZE];
+    char host[BUFFERSIZE];
+    char port[BUFFERSIZE];
+    char user[BUFFERSIZE];
+    char dbname[BUFFERSIZE];
+    bool need_passwd;
+};
+
+#define ARGS_SIZE (sizeof(struct args_s))
+
+/* struct which define connection options */
 struct screen_s
 {
     int screen;
@@ -138,14 +151,6 @@ struct stats_cpu_struct {
  * NB: Define SP_VALUE() to normalize to %;
  */
 #define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
-
-/* enum for password purpose */
-enum trivalue
-{
-    TRI_DEFAULT,
-    TRI_NO,
-    TRI_YES
-};
 
 /* struct for column widths */
 struct colAttrs {
