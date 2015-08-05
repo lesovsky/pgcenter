@@ -3038,6 +3038,55 @@ void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_colo
 }
 
 /*
+ ****************************************************** key press function **
+ * Print on-program help.
+ ****************************************************************************
+ */
+void print_help_screen(void)
+{
+    WINDOW * w;
+    int ch;
+
+    w = subwin(stdscr, 0, 0, 0, 0);
+    cbreak();
+    nodelay(w, FALSE);
+    keypad(w, TRUE);
+
+    wclear(w);
+    wprintw(w, "Help for interactive commands - %s version %.1f.%d\n\n",
+                PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
+    wprintw(w, "general actions:\n \
+  1..8          switch between consoles.\n \
+  a,d,i,f,r     mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n \
+  s,t,x,y             's' sizes, 't' tables, 'x' statements, 'y' tables-io.\n \
+  P,H,O,I       confif: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n \
+  C,R,p                  'C' show config, 'R' reload config, 'p' start psql session.\n \
+  L,l           logs: 'L' log tail, 'l' open log file with pager.\n \
+  N,Ctrl+D,W    'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n \
+  Left,Right    change column sort.\n \
+activity actions:\n \
+  -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n \
+  n,m             'n' set new mask, 'm' show current mask.\n \
+  Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n \
+  A               change activity age threshold.\n\n \
+other actions:\n \
+  z,Z           'z' set refresh interval, 'Z' change color scheme.\n \
+  space         pause program execution.\n \
+  F1            show help screen.\n \
+  q             quit.\n\n");
+    wprintw(w, "Type 'Esc' to continue.\n");
+
+    do {
+        ch = wgetch(w);
+    } while (ch != 27);
+
+    cbreak();
+    nodelay(w, TRUE);
+    keypad(w, FALSE);
+    delwin(w);
+}
+
+/*
  ****************************************************************************
  * Main program
  ****************************************************************************
@@ -3260,6 +3309,9 @@ int main(int argc, char *argv[])
                     break;
                 case 32:                /* pause program execution with space */
                     do_noop(w_cmd, interval);
+                    break;
+                case 265:               /* print help with F1 */
+                    print_help_screen();
                     break;
                 case 'q':               /* exit program */
                     exit_prog(screens, conns);
