@@ -318,9 +318,9 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
                 && strlen(args->dbname) == 0 )
-            strcpy(args->user, argv[optind]);
-        else if ( (argc - optind >= 1) && strlen(args->dbname) == 0 )
             strcpy(args->dbname, argv[optind]);
+        else if ( (argc - optind >= 1) && strlen(args->user) == 0 )
+            strcpy(args->user, argv[optind]);
         else
             fprintf(stderr,
                     "%s: warning: extra command-line argument \"%s\" ignored\n",
