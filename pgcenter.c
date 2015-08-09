@@ -1951,9 +1951,10 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
  * IN:
  * @window          Window where result will be printed.
  * @screens         Array of screens options.
+ * @args            Struct where stored input args.
  ****************************************************************************
  */
-void write_pgcenterrc(WINDOW * window, struct screen_s * screens[])
+void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_s * args)
 {
     int i = 0;
     FILE *fp;
@@ -1961,9 +1962,17 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[])
     struct passwd *pw = getpwuid(getuid());
     struct stat statbuf;
 
-    strcpy(pgcenterrc_path, pw->pw_dir);
-    strcat(pgcenterrc_path, "/");
-    strcat(pgcenterrc_path, PGCENTERRC_FILE);
+    /* 
+     * write conninfo into file which specified in --file=FILENAME,
+     * or use default ~/.pgcenterrc
+     */
+    if (strlen(args->connfile) != 0)
+        strcpy(pgcenterrc_path, args->connfile);
+    else {
+        strcpy(pgcenterrc_path, pw->pw_dir);
+        strcat(pgcenterrc_path, "/");
+        strcat(pgcenterrc_path, PGCENTERRC_FILE);
+    }
 
     if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
         for (i = 0; i < MAX_SCREEN; i++) {
@@ -3215,7 +3224,7 @@ int main(int argc, char *argv[])
                     console_no = console_index + 1;
                     break;
                 case 'W':               /* write connections info into .pgcenterrc */
-                    write_pgcenterrc(w_cmd, screens);
+                    write_pgcenterrc(w_cmd, screens, args);
                     break;
                 case 'C':               /* open current postgresql config in pager */
                     show_config(w_cmd, conns[console_index]);
