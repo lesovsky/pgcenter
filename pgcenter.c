@@ -43,6 +43,7 @@ void print_usage(void)
   -p, --port=PORT           database server port (default: \"5432\")\n \
   -U, --username=USERNAME   database user name (default: \"current user\")\n \
   -d, --dbname=DBNAME       database name (default: \"current user\")\n \
+  -f, --file=FILENAME       conninfo file (default: \"~/.pgcenterrc\")\n \
   -w, --no-password         never prompt for password\n \
   -W, --password            force password prompt (should happen automatically)\n\n");
     printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
@@ -163,15 +164,15 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].context = pg_stat_replication;
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_key = PG_STAT_REPLICATION_ORDER_MIN;
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].context = pg_stat_user_tables;
-        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].order_key = PG_STAT_USER_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_USER_TABLES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].context = pg_stat_user_indexes;
-        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].order_key = PG_STAT_USER_INDEXES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_USER_INDEXES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].context = pg_statio_user_tables;
-        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].order_key = PG_STATIO_USER_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STATIO_USER_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].context = pg_stat_user_tables;
+        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].order_key = PG_STAT_ALL_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].context = pg_stat_user_indexes;
+        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].order_key = PG_STAT_ALL_INDEXES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].context = pg_statio_user_tables;
+        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].order_key = PG_STATIO_ALL_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].order_desc = true;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].context = pg_tables_size;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].order_key = PG_TABLES_SIZE_ORDER_MIN;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].order_desc = true;
@@ -583,13 +584,13 @@ void prepare_query(struct screen_s * screen, char * query)
             strcpy(query, PG_STAT_REPLICATION_QUERY);
             break;
         case pg_stat_user_tables:
-            strcpy(query, PG_STAT_USER_TABLES_QUERY);
+            strcpy(query, PG_STAT_ALL_TABLES_QUERY);
             break;
         case pg_stat_user_indexes:
-            strcpy(query, PG_STAT_USER_INDEXES_QUERY);
+            strcpy(query, PG_STAT_ALL_INDEXES_QUERY);
             break;
         case pg_statio_user_tables:
-            strcpy(query, PG_STATIO_USER_TABLES_QUERY);
+            strcpy(query, PG_STATIO_ALL_TABLES_QUERY);
             break;
         case pg_tables_size:
             strcpy(query, PG_TABLES_SIZE_QUERY);
@@ -890,7 +891,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     }
 
     mvwprintw(window, 2, COLS / 2,
-            "statements: %6i qps,  %3.3f avg_ms, %s xact_maxtime",
+            "statements: %6i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
 }
 
@@ -1210,7 +1211,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
         strcpy(av_max_time, "--:--:--");
     }
 
-    mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s maxtime",
+    mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
 }
 
@@ -1343,19 +1344,20 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             break;
         case pg_stat_replication:
             min = PG_STAT_REPLICATION_ORDER_MIN;
-            max = PG_STAT_REPLICATION_ORDER_MAX;
+            /* don't diff last column */
+            max = PG_STAT_REPLICATION_ORDER_MAX - 1;
             break;
         case pg_stat_user_tables:
-            min = PG_STAT_USER_TABLES_ORDER_MIN;
-            max = PG_STAT_USER_TABLES_ORDER_MAX;
+            min = PG_STAT_ALL_TABLES_ORDER_MIN;
+            max = PG_STAT_ALL_TABLES_ORDER_MAX;
             break;
         case pg_stat_user_indexes:
-            min = PG_STAT_USER_INDEXES_ORDER_MIN;
-            max = PG_STAT_USER_INDEXES_ORDER_MAX;
+            min = PG_STAT_ALL_INDEXES_ORDER_MIN;
+            max = PG_STAT_ALL_INDEXES_ORDER_MAX;
             break;
         case pg_statio_user_tables:
-            min = PG_STATIO_USER_TABLES_ORDER_MIN;
-            max = PG_STATIO_USER_TABLES_ORDER_MAX;
+            min = PG_STATIO_ALL_TABLES_ORDER_MIN;
+            max = PG_STATIO_ALL_TABLES_ORDER_MAX;
             break;
         case pg_tables_size:
             min = PG_TABLES_SIZE_ORDER_MIN;
@@ -1385,7 +1387,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
-                strcpy(res_arr[i][j], c_arr[i][j]);     // copy unsortable values as is
+                strcpy(res_arr[i][j], c_arr[i][j]);     /* copy unsortable values as is */
             else {
                 int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 char buf[n+1];
@@ -1421,6 +1423,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
             desc = screen->context_list[i].order_desc;
         }
 
+    /* some context show absolute values, and sorting perform only for one column */
     if (screen->current_context == pg_stat_user_functions && order_key != PG_STAT_USER_FUNCTIONS_DIFF_COL)
         return;
     if (screen->current_context == pg_stat_statements && order_key != PG_STAT_STATEMENTS_DIFF_COL)
@@ -1537,16 +1540,16 @@ void change_sort_order(struct screen_s * screens, bool increment, bool * first_i
             max = PG_STAT_REPLICATION_ORDER_MAX;
             break;
         case pg_stat_user_tables:
-            min = PG_STAT_USER_TABLES_ORDER_MIN;
-            max = PG_STAT_USER_TABLES_ORDER_MAX;
+            min = PG_STAT_ALL_TABLES_ORDER_MIN;
+            max = PG_STAT_ALL_TABLES_ORDER_MAX;
             break;
         case pg_stat_user_indexes:
-            min = PG_STAT_USER_INDEXES_ORDER_MIN;
-            max = PG_STAT_USER_INDEXES_ORDER_MAX;
+            min = PG_STAT_ALL_INDEXES_ORDER_MIN;
+            max = PG_STAT_ALL_INDEXES_ORDER_MAX;
             break;
         case pg_statio_user_tables:
-            min = PG_STATIO_USER_TABLES_ORDER_MIN;
-            max = PG_STATIO_USER_TABLES_ORDER_MAX;
+            min = PG_STATIO_ALL_TABLES_ORDER_MIN;
+            max = PG_STATIO_ALL_TABLES_ORDER_MAX;
             break;
         case pg_tables_size:
             min = PG_TABLES_SIZE_ORDER_MIN - 3;

@@ -58,9 +58,9 @@ unsigned int hz;
 
 #define PG_STAT_DATABASE_NUM                    0
 #define PG_STAT_REPLICATION_NUM                 1
-#define PG_STAT_USER_TABLES_NUM                 2
-#define PG_STAT_USER_INDEXES_NUM                3
-#define PG_STATIO_USER_TABLES_NUM               4
+#define PG_STAT_ALL_TABLES_NUM                  2
+#define PG_STAT_ALL_INDEXES_NUM                 3
+#define PG_STATIO_ALL_TABLES_NUM                4
 #define PG_TABLES_SIZE_NUM                      5
 #define PG_STAT_ACTIVITY_LONG_NUM               6
 #define PG_STAT_USER_FUNCTIONS_NUM              7
@@ -166,81 +166,89 @@ struct colAttrs {
 #define PG_STAT_DATABASE_QUERY \
     "SELECT \
         datname, \
-        xact_commit as commit, xact_rollback as rollback, \
-        blks_read as reads, blks_hit as hits, \
-        tup_returned as returned, tup_fetched as fetched, \
-        tup_inserted as inserts, tup_updated as updates, tup_deleted as deletes, \
-        conflicts, \
-        temp_files as tmp_files, temp_bytes as tmp_bytes, \
-        blk_read_time as read_t, blk_write_time as write_t \
+        xact_commit AS commit, xact_rollback AS rollback, \
+        blks_read AS reads, blks_hit AS hits, \
+        tup_returned AS returned, tup_fetched AS fetched, \
+        tup_inserted AS inserts, tup_updated AS updates, tup_deleted AS deletes, \
+        conflicts, deadlocks, \
+        temp_files AS tmp_files, temp_bytes AS tmp_bytes, \
+        blk_read_time AS read_t, blk_write_time AS write_t \
     FROM pg_stat_database \
     ORDER BY datname"
 
 #define PG_STAT_DATABASE_ORDER_MIN    1
-#define PG_STAT_DATABASE_ORDER_MAX    14
+#define PG_STAT_DATABASE_ORDER_MAX    15
 
 #define PG_STAT_REPLICATION_QUERY \
     "SELECT \
-        client_addr as client, application_name as name, \
+        client_addr as client, usename as user, application_name as name, \
         state, sync_state as mode, \
-        (pg_xlog_location_diff(sent_location, '0/0') / 1024)::int as \"sent KB/s\", \
-        (pg_xlog_location_diff(write_location, '0/0') / 1024)::int as \"write KB/s\", \
-        (pg_xlog_location_diff(flush_location, '0/0') / 1024)::int as \"flush KB/s\", \
-        (pg_xlog_location_diff(replay_location, '0/0') / 1024)::int as \"replay KB/s\", \
-        (pg_xlog_location_diff(sent_location,replay_location) / 1024)::int as \"lag KB/s\" \
+        (pg_xlog_location_diff(sent_location, '0/0') / 1024)::int as sent, \
+        (pg_xlog_location_diff(write_location, '0/0') / 1024)::int as write, \
+        (pg_xlog_location_diff(flush_location, '0/0') / 1024)::int as flush, \
+        (pg_xlog_location_diff(replay_location, '0/0') / 1024)::int as replay, \
+        (pg_xlog_location_diff(sent_location,replay_location) / 1024)::int as lag \
     FROM pg_stat_replication \
     ORDER BY client_addr"
 
-#define PG_STAT_REPLICATION_ORDER_MIN 4
-#define PG_STAT_REPLICATION_ORDER_MAX 7
+#define PG_STAT_REPLICATION_ORDER_MIN 5
+#define PG_STAT_REPLICATION_ORDER_MAX 9
 
-#define PG_STAT_USER_TABLES_QUERY \
+#define PG_STAT_ALL_TABLES_QUERY \
     "SELECT \
         schemaname || '.' || relname as relation, \
-        seq_scan, seq_tup_read, idx_scan, idx_tup_fetch, \
+        seq_scan, seq_tup_read as seq_read, \
+        idx_scan, idx_tup_fetch as idx_fetch, \
         n_tup_ins as inserts, n_tup_upd as updates, \
         n_tup_del as deletes, n_tup_hot_upd as hot_updates, \
         n_live_tup as live, n_dead_tup as dead \
-    FROM pg_stat_user_tables \
+    FROM pg_stat_all_tables \
     ORDER BY 1"
 
-#define PG_STAT_USER_TABLES_ORDER_MIN 1
-#define PG_STAT_USER_TABLES_ORDER_MAX 10
+#define PG_STAT_ALL_TABLES_ORDER_MIN 1
+#define PG_STAT_ALL_TABLES_ORDER_MAX 10
 
-#define PG_STATIO_USER_TABLES_QUERY \
+#define PG_STATIO_ALL_TABLES_QUERY \
     "SELECT \
         schemaname ||'.'|| relname as relation, \
-        heap_blks_read, heap_blks_hit, idx_blks_read, idx_blks_hit, \
-        toast_blks_read, toast_blks_hit, tidx_blks_read, tidx_blks_hit \
-    FROM pg_statio_user_tables \
+        heap_blks_read * (SELECT current_setting('block_size')::int / 1024) AS heap_read, \
+        heap_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS heap_hit, \
+        idx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS idx_read, \
+        idx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS idx_hit, \
+        toast_blks_read * (SELECT current_setting('block_size')::int / 1024) AS toast_read, \
+        toast_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS toast_hit, \
+        tidx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tidx_read, \
+        tidx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS tidx_hit \
+    FROM pg_statio_all_tables \
     ORDER BY 1"
 
-#define PG_STATIO_USER_TABLES_ORDER_MIN 1
-#define PG_STATIO_USER_TABLES_ORDER_MAX 8
+#define PG_STATIO_ALL_TABLES_ORDER_MIN 1
+#define PG_STATIO_ALL_TABLES_ORDER_MAX 8
 
-#define PG_STAT_USER_INDEXES_QUERY \
+#define PG_STAT_ALL_INDEXES_QUERY \
     "SELECT \
-        s.schemaname ||'.'|| s.relname as relation, s.indexrelname as index, \
+        s.schemaname ||'.'|| s.relname as relation, s.indexrelname AS index, \
         s.idx_scan, s.idx_tup_read, s.idx_tup_fetch, \
-        i.idx_blks_read, i.idx_blks_hit \
+        i.idx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS idx_read, \
+        i.idx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS idx_hit \
     FROM \
-        pg_stat_user_indexes s, \
-        pg_statio_user_indexes i \
-    WHERE s.relid = i.relid \
+        pg_stat_all_indexes s, \
+        pg_statio_all_indexes i \
+    WHERE s.indexrelid = i.indexrelid \
     ORDER BY 1"
 
-#define PG_STAT_USER_INDEXES_ORDER_MIN 2
-#define PG_STAT_USER_INDEXES_ORDER_MAX 6
+#define PG_STAT_ALL_INDEXES_ORDER_MIN 2
+#define PG_STAT_ALL_INDEXES_ORDER_MAX 6
 
 #define PG_TABLES_SIZE_QUERY \
     "SELECT \
-        schemaname ||'.'|| relname as relation, \
-        pg_total_relation_size(relname::regclass) / 1024 as \"total size, KB\", \
-        pg_relation_size(relname::regclass) / 1024 as \"size w/o indexes, KB\", \
-        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"indexes, KB\", \
-        pg_total_relation_size(relname::regclass) / 1024 as \"total changes, KB/s\", \
-        pg_relation_size(relname::regclass) / 1024 as \"changes w/o indexes, KB/s\", \
-        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) as \"changes indexes, KB/s\" \
+        schemaname ||'.'|| relname AS relation, \
+        pg_total_relation_size(relname::regclass) / 1024 AS total_size, \
+        pg_relation_size(relname::regclass) / 1024 AS rel_size, \
+        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) AS idx_size, \
+        pg_total_relation_size(relname::regclass) / 1024 AS total_change, \
+        pg_relation_size(relname::regclass) / 1024 AS rel_change, \
+        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) AS idx_change \
         FROM pg_stat_user_tables \
         ORDER BY 1"
 
@@ -249,7 +257,7 @@ struct colAttrs {
 
 #define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
     "SELECT \
-        pid, client_addr as cl_addr, client_port as cl_port, \
+        pid, client_addr AS cl_addr, client_port AS cl_port, \
         datname, usename, state, waiting, \
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
@@ -269,12 +277,12 @@ struct colAttrs {
 
 #define PG_STAT_USER_FUNCTIONS_QUERY_P1 \
     "SELECT \
-        funcid, schemaname ||'.'||funcname as function, \
-        calls as total_calls, calls as \"calls/s\", \
-        date_trunc('seconds', total_time / 1000 * '1 second'::interval) as total_t, \
-        date_trunc('seconds', self_time / 1000 * '1 second'::interval) as self_t, \
-        round((total_time / calls)::numeric, 4) as \"avg_t (ms)\", \
-        round((self_time / calls)::numeric, 4) as \"avg_self_t (ms)\" \
+        funcid, schemaname ||'.'||funcname AS function, \
+        calls AS total_calls, calls AS calls, \
+        date_trunc('seconds', total_time / 1000 * '1 second'::interval) AS total_t, \
+        date_trunc('seconds', self_time / 1000 * '1 second'::interval) AS self_t, \
+        round((total_time / calls)::numeric, 4) AS avg_t, \
+        round((self_time / calls)::numeric, 4) AS avg_self_t \
     FROM pg_stat_user_functions \
     ORDER BY "
 #define PG_STAT_USER_FUNCTIONS_QUERY_P2 " DESC"
@@ -287,15 +295,15 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
         "SELECT count(*) FROM pg_stat_activity"
 #define PG_STAT_ACTIVITY_COUNT_IDLE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity where state = 'idle'"
+        "SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'"
 #define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY \
-        "SELECT count(*) FROM pg_stat_activity where state = 'idle in transaction'"
+        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')"
 #define PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity where state = 'active'"
+        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
 #define PG_STAT_ACTIVITY_COUNT_WAITING_QUERY \
-        "SELECT count(*) FROM pg_stat_activity where waiting"
+        "SELECT count(*) FROM pg_stat_activity WHERE waiting"
 #define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
-        "SELECT count(*) FROM pg_stat_activity where state not in ('active','idle','idle in transaction')"
+        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('fastpath function call','disabled')"
 #define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
         "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
 #define PG_STAT_ACTIVITY_AVW_COUNT_QUERY \
@@ -307,23 +315,22 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_SYS_QUERY \
         "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 #define PG_STAT_ACTIVITY_SYS_QUERY \
-        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
-        FROM pg_stat_activity"
+        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity"
 
 #define PG_STAT_STATEMENTS_QUERY_P1 \
     "SELECT \
-        a.rolname as user, d.datname as database, \
-        sum(p.calls) as calls, \
-        sum(p.calls) as \"calls/s\", \
-        round(sum(p.total_time)::numeric, 2) as total_t, \
-        round(sum(p.blk_read_time)::numeric, 2) as read_t, \
-        round(sum(p.blk_write_time)::numeric, 2) as write_t, \
-        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) as cpu_t, \
-        sum(p.rows) as rows, \
-        p.query as query \
+        a.rolname AS user, d.datname AS database, \
+        sum(p.calls) AS total_calls, \
+        sum(p.calls) AS calls, \
+        round(sum(p.total_time)::numeric, 2) AS total_t, \
+        round(sum(p.blk_read_time)::numeric, 2) AS read_t, \
+        round(sum(p.blk_write_time)::numeric, 2) AS write_t, \
+        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) AS cpu_t, \
+        sum(p.rows) AS rows, \
+        p.query AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a on a.oid=p.userid \
-    JOIN pg_database d on d.oid=p.dbid \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
     WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_QUERY_P2 " DESC"
