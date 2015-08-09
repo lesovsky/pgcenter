@@ -1533,12 +1533,13 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
  * IN:
  * @screen              Current screen.
  * @increment           Direction (left or right column).
+ * @first_iter          Flag for resetting previous query results.
  ****************************************************************************
  */
-void change_sort_order(struct screen_s * screens, bool increment, bool * first_iter)
+void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter)
 {
     int min, max, i;
-    switch (screens->current_context) {
+    switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
             max = PG_STAT_DATABASE_ORDER_MAX;
@@ -1582,24 +1583,46 @@ void change_sort_order(struct screen_s * screens, bool increment, bool * first_i
     }
     if (increment) {
         for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screens->current_context == screens->context_list[i].context) {
-                if (screens->context_list[i].order_key + 1 > max)
-                    screens->context_list[i].order_key = min;
+            if (screen->current_context == screen->context_list[i].context) {
+                if (screen->context_list[i].order_key + 1 > max)
+                    screen->context_list[i].order_key = min;
                 else 
-                    screens->context_list[i].order_key++;
+                    screen->context_list[i].order_key++;
             }
         }
     }
 
     if (!increment)
         for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screens->current_context == screens->context_list[i].context) {
-                if (screens->context_list[i].order_key - 1 < min)
-                    screens->context_list[i].order_key = max;
+            if (screen->current_context == screen->context_list[i].context) {
+                if (screen->context_list[i].order_key - 1 < min)
+                    screen->context_list[i].order_key = max;
                 else
-                    screens->context_list[i].order_key--;
+                    screen->context_list[i].order_key--;
             }
         }
+}
+
+/*
+ ****************************************************** key-press function **
+ * Change column-based sort
+ *
+ * IN:
+ * @screen              Current screen.
+ ****************************************************************************
+ */
+void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
+{
+    int i;
+    for (i = 0; i < TOTAL_CONTEXTS; i++) {
+        if (screen->current_context == screen->context_list[i].context) {
+            if (screen->context_list[i].order_desc)
+                screen->context_list[i].order_desc = false;
+            else
+                screen->context_list[i].order_desc = true;
+        }
+        *first_iter = true;
+    }
 }
 
 /*
@@ -3066,25 +3089,25 @@ void print_help_screen(void)
     wclear(w);
     wprintw(w, "Help for interactive commands - %s version %.1f.%d\n\n",
                 PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
-    wprintw(w, "general actions:\n \
-  1..8          switch between consoles.\n \
-  a,d,i,f,r     mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n \
-  s,t,x,y             's' sizes, 't' tables, 'x' statements, 'y' tables-io.\n \
-  P,H,O,I       confif: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n \
-  C,R,p                  'C' show config, 'R' reload config, 'p' start psql session.\n \
-  L,l           logs: 'L' log tail, 'l' open log file with pager.\n \
-  N,Ctrl+D,W    'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n \
-  Left,Right    change column sort.\n \
-activity actions:\n \
-  -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n \
-  n,m             'n' set new mask, 'm' show current mask.\n \
-  Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n \
-  A               change activity age threshold.\n\n \
-other actions:\n \
-  z,Z           'z' set refresh interval, 'Z' change color scheme.\n \
-  space         pause program execution.\n \
-  F1            show help screen.\n \
-  q             quit.\n\n");
+    wprintw(w, "general actions:\n\
+  1..8            switch between consoles.\n\
+  a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
+  s,t,x,y               's' sizes, 't' tables, 'x' statements, 'y' tables-io.\n\
+  P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
+  C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
+  L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
+  N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
+  Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
+activity actions:\n\
+  -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
+  n,m             'n' set new mask, 'm' show current mask.\n\
+  Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n\
+  A               change activity age threshold.\n\n\
+other actions:\n\
+  z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
+  space           pause program execution.\n\
+  F1              show help screen.\n\
+  q               quit.\n\n");
     wprintw(w, "Type 'Esc' to continue.\n");
 
     do {
@@ -3247,6 +3270,9 @@ int main(int argc, char *argv[])
                     break;
                 case 261:               /* shift sort order with right arrow */
                     change_sort_order(screens[console_index], true, first_iter);
+                    break;
+                case 47:                /* switch order desc/asc */
+                    change_sort_order_direction(screens[console_index], first_iter);
                     break;
                 case 'p':               /* start psql session to current postgres */
                     start_psql(w_cmd, screens[console_index]);

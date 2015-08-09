@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add desc/asc sort order changing.
   * Allow specify connections file with --file option.
   * Rewrite arg parse and init_conn funcs.
   * Add pg_stat_statements to sys screen.
