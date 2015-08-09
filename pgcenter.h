@@ -271,7 +271,7 @@ struct colAttrs {
     "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
     ORDER BY COALESCE(xact_start, query_start)"
 
-/* при выводе долгих транзакций мы не использем сортировку массивов, сортировка задана на уровне запроса */
+/* don't use array sorting when showing long activity, row order defined in query */
 #define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
 #define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
 
@@ -287,7 +287,7 @@ struct colAttrs {
     ORDER BY "
 #define PG_STAT_USER_FUNCTIONS_QUERY_P2 " DESC"
 
-/* это единственная колонка на основе которой мы будем делать дифф массивов */
+/* diff array using only one column */
 #define PG_STAT_USER_FUNCTIONS_DIFF_COL     3
 #define PG_STAT_USER_FUNCTIONS_ORDER_MIN    2
 #define PG_STAT_USER_FUNCTIONS_ORDER_MAX    7
@@ -360,7 +360,6 @@ struct colAttrs {
 #define PG_SIG_GROUP_BACKEND_P3 " AND ((clock_timestamp() - xact_start) > '"
 #define PG_SIG_GROUP_BACKEND_P4 "'::interval OR (clock_timestamp() - query_start) > '"
 #define PG_SIG_GROUP_BACKEND_P5 "'::interval) AND pid <> pg_backend_pid()"
-
 
 void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 void close_connections(struct screen_s * screens[], PGconn * conns[]);

@@ -227,6 +227,14 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
     return password;
 }
 
+/*
+ ******************************************************** startup function **
+ * Initialize empty struct for input arguments.
+ *
+ * OUT:
+ * @args        Empty struct.
+ ****************************************************************************
+ */
 void init_args_struct(struct args_s * args)
 {
     strcpy(args->connfile, "");
@@ -315,6 +323,8 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 break;
         }
     }
+
+    /* handle extra parameters if exists, first - dbname, second - user, others - ignore */
     while (argc - optind >= 1) {
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
@@ -597,8 +607,8 @@ void prepare_query(struct screen_s * screen, char * query)
             break;
         case pg_stat_activity_long:
             /* 
-             * здесь мы собираем запрос из нескольких частей, т.о. даем пользователю
-             * менять значения min_age которое используется в условии запроса 
+             * build query from several parts, 
+             * thus user can change duration which is used in WHERE clause.
              */
             strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
             strcat(query, screen->pg_stat_activity_min_age);
@@ -607,14 +617,14 @@ void prepare_query(struct screen_s * screen, char * query)
             strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
             break;
         case pg_stat_user_functions:
-            /* here we use query ORDER BY, thus we should incrementig order key */
+            /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key + 1);
             strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
             break;
         case pg_stat_statements:
-            /* here we use query ORDER BY, thus we should incrementig order key */
+            /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_NUM].order_key + 1);
             strcpy(query, PG_STAT_STATEMENTS_QUERY_P1);
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
@@ -1365,19 +1375,18 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             break;
         case pg_stat_activity_long:
             /* 
-             * здесь выставлен INVALID_ORDER_KEY на уровне pgcenter.h т.к. 
-             * нам ненужен ни diff массивов (показываем всегда последние значения),
-             * ни сортировка массива в дальнешем и мы просто копируем в res_arr 
-             * все содержимое текущего c_arr.
+             * use INVALID_ORDER_KEY because here we no need array or sort diff.
+             * copy current array content in result array as is.
              */
             min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
             break;
         case pg_stat_user_functions:
-            /* здесь мы делаем diff только по одному полю calls/s */
+            /* only one column for diff */
             min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements:
+            /* only one column for diff */
             min = max = PG_STAT_STATEMENTS_DIFF_COL;
         default:
             break;
@@ -1512,7 +1521,6 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
             }
             wprintw(window, "%-*s", columns[x].width, arr[i][j]);
         }
-//        wprintw(window, "\n");
     }
     wrefresh(window);
     free(columns);
@@ -1619,13 +1627,13 @@ void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str)
             wclear(window);
             wprintw(window, "Do nothing. Operation canceled. ");
             nodelay(window, TRUE);
-            *with_esc = true;              // Finish with ESC.
+            *with_esc = true;              /* finish with ESC */
             strcpy(str, "");
             return;
         } else if (ch == 10) {
             str[i] = '\0';
             nodelay(window, TRUE);
-            *with_esc = false;              // Normal finish with Newline.
+            *with_esc = false;              /* normal finish with \n */
             return;
         } else if (ch == KEY_BACKSPACE || ch == KEY_DC || ch == 127) {
             if (i > 0) {
@@ -1890,7 +1898,7 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
     PQfinish(conns[console_index]);
 
     wprintw(window, "Close current connection.");
-    if (i == 0) {                               // first console active
+    if (i == 0) {                               /* first console active */
         if (screens[i + 1]->conn_used) {
         shift_screens(screens, conns, i);
         } else {
@@ -1898,10 +1906,10 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
             endwin();
             exit(EXIT_SUCCESS);
         }
-    } else if (i == (MAX_SCREEN - 1)) {        // last possible console active
+    } else if (i == (MAX_SCREEN - 1)) {        /* last possible console active */
         clear_screen_connopts(screens, i);
         console_index = console_index - 1;
-    } else {                                    // in the middle console active
+    } else {                                    /* in the middle console active */
         if (screens[i + 1]->conn_used) {
             shift_screens(screens, conns, i);
         } else {
@@ -2056,7 +2064,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
 
 /*
  ******************************************************** routine function **
- * Get postgres listen_addressed and check is that local address or not.
+ * Get postgres listen_addresses and check is that local address or not.
  *
  * IN:
  * @screen       Connections options.
@@ -3127,6 +3135,8 @@ int main(int argc, char *argv[])
     init_signal_handlers();
     init_args_struct(args);
     init_screens(screens);
+    init_stats(st_cpu);
+    get_HZ();
 
     /* process cmd args */
     if (argc > 1) {
@@ -3143,10 +3153,6 @@ int main(int argc, char *argv[])
         if (create_pgcenterrc_conn(args, screens, 0) == PGCENTERRC_READ_ERR)
             create_initial_conn(args, screens);
     }
-
-    /* CPU stats related actions */
-    init_stats(st_cpu);
-    get_HZ();
 
     /* open connections to postgres */
     prepare_conninfo(screens);
@@ -3432,7 +3438,8 @@ int main(int argc, char *argv[])
                         wclear(w_cmd);
                     }
                 }
-            }   // end sleep loop
+            }   
+            /* end sleep loop */
         }
     }
 }
