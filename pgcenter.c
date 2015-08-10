@@ -792,6 +792,7 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
                 screen->host, screen->port,
                 screen->user, screen->dbname,
                 state);
+    wrefresh(window);
 }
 
 /*
@@ -864,6 +865,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
     mvwprintw(window, 0, COLS / 2,
             "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
             t_count, i_count, x_count, a_count, w_count, o_count);
+    wrefresh(window);
 }
 
 /*
@@ -913,6 +915,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     mvwprintw(window, 2, COLS / 2,
             "statements: %6i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
+    wrefresh(window);
 }
 
 /*
@@ -1233,6 +1236,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
 
     mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
+    wrefresh(window);
 }
 
 /*
