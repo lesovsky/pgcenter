@@ -52,6 +52,8 @@
 #define DEFAULT_PSQL        "psql"
 #define DEFAULT_INTERVAL    1000000
 #define INTERVAL_STEP       200000
+#define DEFAULT_VIEW_TYPE   "user"
+#define FULL_VIEW_TYPE      "all"
 
 #define HZ                  hz
 unsigned int hz;
@@ -128,6 +130,7 @@ struct screen_s
     char pg_stat_activity_min_age[BUFFERSIZE_S];
     struct context_s context_list[TOTAL_CONTEXTS];
     int signal_options;
+    bool pg_stat_sys;
 };
 
 #define SCREEN_SIZE (sizeof(struct screen_s))
@@ -196,7 +199,7 @@ struct colAttrs {
 #define PG_STAT_REPLICATION_ORDER_MIN 5
 #define PG_STAT_REPLICATION_ORDER_MAX 9
 
-#define PG_STAT_ALL_TABLES_QUERY \
+#define PG_STAT_ALL_TABLES_QUERY_P1 \
     "SELECT \
         schemaname || '.' || relname as relation, \
         seq_scan, seq_tup_read as seq_read, \
@@ -204,13 +207,13 @@ struct colAttrs {
         n_tup_ins as inserts, n_tup_upd as updates, \
         n_tup_del as deletes, n_tup_hot_upd as hot_updates, \
         n_live_tup as live, n_dead_tup as dead \
-    FROM pg_stat_all_tables \
-    ORDER BY 1"
+    FROM pg_stat_"
+#define PG_STAT_ALL_TABLES_QUERY_P2 "_tables ORDER BY 1"
 
 #define PG_STAT_ALL_TABLES_ORDER_MIN 1
 #define PG_STAT_ALL_TABLES_ORDER_MAX 10
 
-#define PG_STATIO_ALL_TABLES_QUERY \
+#define PG_STATIO_ALL_TABLES_QUERY_P1 \
     "SELECT \
         schemaname ||'.'|| relname as relation, \
         heap_blks_read * (SELECT current_setting('block_size')::int / 1024) AS heap_read, \
@@ -221,38 +224,39 @@ struct colAttrs {
         toast_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS toast_hit, \
         tidx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tidx_read, \
         tidx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS tidx_hit \
-    FROM pg_statio_all_tables \
-    ORDER BY 1"
+    FROM pg_statio_"
+#define PG_STATIO_ALL_TABLES_QUERY_P2 "_tables ORDER BY 1"
 
 #define PG_STATIO_ALL_TABLES_ORDER_MIN 1
 #define PG_STATIO_ALL_TABLES_ORDER_MAX 8
 
-#define PG_STAT_ALL_INDEXES_QUERY \
+#define PG_STAT_ALL_INDEXES_QUERY_P1 \
     "SELECT \
         s.schemaname ||'.'|| s.relname as relation, s.indexrelname AS index, \
         s.idx_scan, s.idx_tup_read, s.idx_tup_fetch, \
         i.idx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS idx_read, \
         i.idx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS idx_hit \
     FROM \
-        pg_stat_all_indexes s, \
-        pg_statio_all_indexes i \
-    WHERE s.indexrelid = i.indexrelid \
-    ORDER BY 1"
+        pg_stat_"
+#define PG_STAT_ALL_INDEXES_QUERY_P2 "_indexes s, pg_statio_"
+#define PG_STAT_ALL_INDEXES_QUERY_P3 "_indexes i WHERE s.indexrelid = i.indexrelid ORDER BY 1"
 
 #define PG_STAT_ALL_INDEXES_ORDER_MIN 2
 #define PG_STAT_ALL_INDEXES_ORDER_MAX 6
 
-#define PG_TABLES_SIZE_QUERY \
+#define PG_TABLES_SIZE_QUERY_P1 \
     "SELECT \
-        schemaname ||'.'|| relname AS relation, \
-        pg_total_relation_size(relname::regclass) / 1024 AS total_size, \
-        pg_relation_size(relname::regclass) / 1024 AS rel_size, \
-        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) AS idx_size, \
-        pg_total_relation_size(relname::regclass) / 1024 AS total_change, \
-        pg_relation_size(relname::regclass) / 1024 AS rel_change, \
-        (pg_total_relation_size(relname::regclass) / 1024) - (pg_relation_size(relname::regclass) / 1024) AS idx_change \
-        FROM pg_stat_user_tables \
-        ORDER BY 1"
+        s.schemaname ||'.'|| s.relname AS relation, \
+        pg_total_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024 AS total_size, \
+        pg_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024 AS rel_size, \
+        (pg_total_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) - \
+            (pg_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) AS idx_size, \
+        pg_total_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024 AS total_change, \
+        pg_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024 AS rel_change, \
+        (pg_total_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) - \
+            (pg_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) AS idx_change \
+        FROM pg_stat_"
+#define PG_TABLES_SIZE_QUERY_P2 "_tables s, pg_class c WHERE s.relid = c.oid ORDER BY 1"
 
 #define PG_TABLES_SIZE_ORDER_MIN 4
 #define PG_TABLES_SIZE_ORDER_MAX 6

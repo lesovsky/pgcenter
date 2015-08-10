@@ -157,6 +157,7 @@ void init_screens(struct screen_s *screens[])
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
         strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
         screens[i]->signal_options = 0;
+        screens[i]->pg_stat_sys = false;
 
         screens[i]->context_list[PG_STAT_DATABASE_NUM].context = pg_stat_database;
         screens[i]->context_list[PG_STAT_DATABASE_NUM].order_key = PG_STAT_DATABASE_ORDER_MIN;
@@ -589,6 +590,7 @@ void exit_prog(struct screen_s * screens[], PGconn * conns[])
 void prepare_query(struct screen_s * screen, char * query)
 {
     char tmp[2];
+    char view[] = DEFAULT_VIEW_TYPE;
     switch (screen->current_context) {
         case pg_stat_database: default:
             strcpy(query, PG_STAT_DATABASE_QUERY);
@@ -597,16 +599,34 @@ void prepare_query(struct screen_s * screen, char * query)
             strcpy(query, PG_STAT_REPLICATION_QUERY);
             break;
         case pg_stat_user_tables:
-            strcpy(query, PG_STAT_ALL_TABLES_QUERY);
+            if (screen->pg_stat_sys)
+                strcpy(view, FULL_VIEW_TYPE);
+            strcpy(query, PG_STAT_ALL_TABLES_QUERY_P1);
+            strcat(query, view);
+            strcat(query, PG_STAT_ALL_TABLES_QUERY_P2);
             break;
         case pg_stat_user_indexes:
-            strcpy(query, PG_STAT_ALL_INDEXES_QUERY);
+            if (screen->pg_stat_sys)
+                strcpy(view, FULL_VIEW_TYPE);
+            strcpy(query, PG_STAT_ALL_INDEXES_QUERY_P1);
+            strcat(query, view);
+            strcat(query, PG_STAT_ALL_INDEXES_QUERY_P2);
+            strcat(query, view);
+            strcat(query, PG_STAT_ALL_INDEXES_QUERY_P3);
             break;
         case pg_statio_user_tables:
-            strcpy(query, PG_STATIO_ALL_TABLES_QUERY);
+            if (screen->pg_stat_sys)
+                strcpy(view, FULL_VIEW_TYPE);
+            strcpy(query, PG_STATIO_ALL_TABLES_QUERY_P1);
+            strcat(query, view);
+            strcat(query, PG_STATIO_ALL_TABLES_QUERY_P2);
             break;
         case pg_tables_size:
-            strcpy(query, PG_TABLES_SIZE_QUERY);
+            if (screen->pg_stat_sys)
+                strcpy(view, FULL_VIEW_TYPE);
+            strcpy(query, PG_TABLES_SIZE_QUERY_P1);
+            strcat(query, view);
+            strcat(query, PG_TABLES_SIZE_QUERY_P2);
             break;
         case pg_stat_activity_long:
             /* 
@@ -2673,6 +2693,29 @@ void do_noop(WINDOW * window, long int interval)
 }
 
 /*
+ ****************************************************** key-press function **
+ * Switch on/off displaying content from system view
+ *
+ * IN:
+ * @window              Window where diag messages will be printed.
+ * @screen              Current screen.
+ * @first_iter          Reset counters flag.
+ ****************************************************************************
+ */
+void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter)
+{
+    if (screen->pg_stat_sys) {
+        screen->pg_stat_sys = false;
+        wprintw(window, "System tables show: off");
+    } else {
+        screen->pg_stat_sys = true;
+        wprintw(window, "System tables show: on");
+    }
+    *first_iter = true;
+
+}
+
+/*
  ***************************************************** log process routine **
  * Get current postgresql logfile path
  *
@@ -3141,6 +3184,7 @@ activity actions:\n\
   Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n\
   A               change activity age threshold.\n\n\
 other actions:\n\
+  V               'V' toggle system tables on/off (tables, indexes and sizes).\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
   F1              show help screen.\n\
@@ -3378,6 +3422,9 @@ int main(int argc, char *argv[])
                     wprintw(w_cmd, "Show pg_stat_statements general");
                     screens[console_index]->current_context = pg_stat_statements_general;
                     *first_iter = true;
+                    break;
+                case 'V':               /* show system view on/off toggle */
+                    system_view_toggle(w_cmd, screens[console_index], first_iter);
                     break;
                 case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
