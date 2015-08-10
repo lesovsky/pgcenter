@@ -16,7 +16,7 @@
 #define BUFFERSIZE_M        256
 #define BUFFERSIZE          4096
 #define MAX_SCREEN          8
-#define TOTAL_CONTEXTS      9
+#define TOTAL_CONTEXTS      10
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
@@ -64,7 +64,8 @@ unsigned int hz;
 #define PG_TABLES_SIZE_NUM                      5
 #define PG_STAT_ACTIVITY_LONG_NUM               6
 #define PG_STAT_USER_FUNCTIONS_NUM              7
-#define PG_STAT_STATEMENTS_NUM                  8
+#define PG_STAT_STATEMENTS_TIMING_NUM           8
+#define PG_STAT_STATEMENTS_GENERAL_NUM          9
 
 #define GROUP_ACTIVE        1 << 0
 #define GROUP_IDLE          1 << 1
@@ -83,7 +84,8 @@ enum context
     pg_tables_size,
     pg_stat_activity_long,
     pg_stat_user_functions,
-    pg_stat_statements
+    pg_stat_statements_timing,
+    pg_stat_statements_general
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -317,27 +319,41 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_SYS_QUERY \
         "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity"
 
-#define PG_STAT_STATEMENTS_QUERY_P1 \
+#define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        sum(p.calls) AS total_calls, \
-        sum(p.calls) AS calls, \
-        round(sum(p.total_time)::numeric, 2) AS total_t, \
-        round(sum(p.blk_read_time)::numeric, 2) AS read_t, \
-        round(sum(p.blk_write_time)::numeric, 2) AS write_t, \
-        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))::numeric, 2) AS cpu_t, \
-        sum(p.rows) AS rows, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS total_t, \
+        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS read_t, \
+        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS write_t, \
+        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS cpu_t, \
         p.query AS query \
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_QUERY_P2 " DESC"
+#define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
 
-#define PG_STAT_STATEMENTS_DIFF_COL     3
-#define PG_STAT_STATEMENTS_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_ORDER_MAX    8
+#define PG_STAT_STATEMENTS_TIMING_ORDER_MIN    2
+#define PG_STAT_STATEMENTS_TIMING_ORDER_MAX    5
+
+#define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
+        sum(p.calls) AS calls, sum(p.rows) as rows, \
+        p.query AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
+#define PG_STAT_STATEMENTS_GENERAL_QUERY_P2 " DESC"
+
+#define PG_STAT_STATEMENTS_GENERAL_ORDER_MIN    2
+#define PG_STAT_STATEMENTS_GENERAL_ORDER_MAX    5
+#define PG_STAT_STATEMENTS_GENERAL_DIFF_MIN    4
+#define PG_STAT_STATEMENTS_GENERAL_DIFF_MAX    5
 
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 

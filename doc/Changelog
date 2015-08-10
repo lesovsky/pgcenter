@@ -1,5 +1,7 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Split pg_stat_statements screen to timings and general screens.
+  * Rewrite pg_stat_statements query with human readable timings.
   * Write conninfo into file from --file=... or to default.
   * Add desc/asc sort order changing.
   * Allow specify connections file with --file option.

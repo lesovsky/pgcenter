@@ -182,9 +182,12 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].context = pg_stat_user_functions;
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
         screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].context = pg_stat_statements;
-        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].order_key = PG_STAT_STATEMENTS_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].context = pg_stat_statements_timing;
+        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].context = pg_stat_statements_general;
+        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_desc = true;
     }
 }
 
@@ -623,12 +626,19 @@ void prepare_query(struct screen_s * screen, char * query)
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
             break;
-        case pg_stat_statements:
+        case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_NUM].order_key + 1);
-            strcpy(query, PG_STAT_STATEMENTS_QUERY_P1);
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
+            strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_QUERY_P2);
+            strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+            break;
+        case pg_stat_statements_general:
+            /* here we use query native ORDER BY, and we should incrementing order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
+            strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+            strcat(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;
     }
 }
@@ -1385,9 +1395,14 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             /* only one column for diff */
             min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
             break;
-        case pg_stat_statements:
-            /* only one column for diff */
-            min = max = PG_STAT_STATEMENTS_DIFF_COL;
+        case pg_stat_statements_timing:
+            /* no diff, but use sort with native ORDER BY */
+            min = max = INVALID_ORDER_KEY;
+            break;
+        case pg_stat_statements_general:
+            min = PG_STAT_STATEMENTS_GENERAL_DIFF_MIN;
+            max = PG_STAT_STATEMENTS_GENERAL_DIFF_MAX;
+            break;
         default:
             break;
     }
@@ -1435,7 +1450,11 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     /* some context show absolute values, and sorting perform only for one column */
     if (screen->current_context == pg_stat_user_functions && order_key != PG_STAT_USER_FUNCTIONS_DIFF_COL)
         return;
-    if (screen->current_context == pg_stat_statements && order_key != PG_STAT_STATEMENTS_DIFF_COL)
+    if (screen->current_context == pg_stat_statements_timing)
+        return;
+    if (screen->current_context == pg_stat_statements_general 
+            && order_key != PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
+            && order_key != PG_STAT_STATEMENTS_GENERAL_DIFF_MAX)
         return;
 
     if (order_key == INVALID_ORDER_KEY)
@@ -1573,9 +1592,14 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             max = PG_STAT_USER_FUNCTIONS_ORDER_MAX;
             *first_iter = true;
             break;
-        case pg_stat_statements:
-            min = PG_STAT_STATEMENTS_ORDER_MIN;
-            max = PG_STAT_STATEMENTS_ORDER_MAX;
+        case pg_stat_statements_timing:
+            min = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
+            max = PG_STAT_STATEMENTS_TIMING_ORDER_MAX;
+            *first_iter = true;
+            break;
+        case pg_stat_statements_general:
+            min = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
+            max = PG_STAT_STATEMENTS_GENERAL_ORDER_MAX;
             *first_iter = true;
             break;
         default:
@@ -3101,7 +3125,7 @@ void print_help_screen(void)
     wprintw(w, "general actions:\n\
   1..8            switch between consoles.\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
-  s,t,x,y               's' sizes, 't' tables, 'x' statements, 'y' tables-io.\n\
+  s,t,x,X,y             's' sizes, 't' tables, 'x' stmt timings, 'X' stmt general, 'y' tables-io.\n\
   P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
   C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
   L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
@@ -3339,10 +3363,16 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_stat_user_functions;
                     *first_iter = true;
                     break;
-                case 'x':               /* open pg_stat_statements screen */
+                case 'x':               /* open pg_stat_statements_timing screen */
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_statements");
-                    screens[console_index]->current_context = pg_stat_statements;
+                    wprintw(w_cmd, "Show pg_stat_statements timings");
+                    screens[console_index]->current_context = pg_stat_statements_timing;
+                    *first_iter = true;
+                    break;
+                case 'X':               /* open pg_stat_statements_general screen */
+                    wclear(w_cmd);
+                    wprintw(w_cmd, "Show pg_stat_statements general");
+                    screens[console_index]->current_context = pg_stat_statements_general;
                     *first_iter = true;
                     break;
                 case 'z':               /* change refresh interval */
