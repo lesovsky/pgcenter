@@ -103,6 +103,7 @@ struct context_s
 /* struct for input args */
 struct args_s
 {
+    int count;
     char connfile[BUFFERSIZE];
     char host[BUFFERSIZE];
     char port[BUFFERSIZE];

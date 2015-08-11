@@ -241,6 +241,7 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
  */
 void init_args_struct(struct args_s * args)
 {
+    args->count = 0;
     strcpy(args->connfile, "");
     strcpy(args->host, "");
     strcpy(args->port, "");
@@ -302,17 +303,22 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         switch (param) {
             case 'h':
                 strcpy(args->host, optarg);
+                args->count++;
                 break;
             case 'f':
                 strcpy(args->connfile, optarg);
+                args->count++;
                 break;
             case 'p':
                 strcpy(args->port, optarg);
+                args->count++;
                 break;
             case 'U':
                 strcpy(args->user, optarg);
+                args->count++;
                 break;
             case 'd':
+                args->count++;
                 strcpy(args->dbname, optarg);
                 break;
             case 'w':
@@ -332,11 +338,22 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
     while (argc - optind >= 1) {
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
-                && strlen(args->dbname) == 0 )
+                && strlen(args->dbname) == 0 ) {
             strcpy(args->dbname, argv[optind]);
-        else if ( (argc - optind >= 1) && strlen(args->user) == 0 )
+            strcpy(args->user, argv[optind + 1]);
+            optind++;
+            args->count++;
+        }
+        else if ( (argc - optind >= 1) && strlen(args->user) != 0 && strlen(args->dbname) == 0 ) {
+            strcpy(args->dbname, argv[optind]);
+            args->count++;
+        } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) != 0 ) {
             strcpy(args->user, argv[optind]);
-        else
+            args->count++;
+        } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) == 0 ) {
+            strcpy(args->dbname, argv[optind]);
+            args->count++;
+        } else
             fprintf(stderr,
                     "%s: warning: extra command-line argument \"%s\" ignored\n",
                     argv[0], argv[optind]);
@@ -380,7 +397,7 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
         strcpy(screens[0]->dbname, args->user);
     else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
         strcpy(screens[0]->dbname, args->dbname);
-        strcpy(screens[0]->user, args->dbname);
+        strcpy(screens[0]->user, pw->pw_name);
     } else
         strcpy(screens[0]->dbname, args->dbname);
 
@@ -3269,7 +3286,7 @@ int main(int argc, char *argv[])
     /* process cmd args */
     if (argc > 1) {
         arg_parse(argc, argv, args);
-        if (strlen(args->connfile) != 0 && strlen(args->dbname) == 0) {
+        if (strlen(args->connfile) != 0 && args->count == 1) {
             if (create_pgcenterrc_conn(args, screens, 0) == PGCENTERRC_READ_ERR) {
                 create_initial_conn(args, screens);
             }
