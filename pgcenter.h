@@ -168,6 +168,32 @@ struct colAttrs {
 #define PG_TUP_OK       PGRES_TUPLES_OK
 #define PG_FATAL_ERR    PGRES_FATAL_ERROR
 
+/* sysstat screen queries */
+#define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
+        "SELECT count(*) FROM pg_stat_activity"
+#define PG_STAT_ACTIVITY_COUNT_IDLE_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'"
+#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')"
+#define PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
+#define PG_STAT_ACTIVITY_COUNT_WAITING_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE waiting"
+#define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('fastpath function call','disabled')"
+#define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
+#define PG_STAT_ACTIVITY_AVW_COUNT_QUERY \
+        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()"
+#define PG_STAT_ACTIVITY_AV_LONGEST_QUERY \
+        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
+        FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
+#define PG_STAT_STATEMENTS_SYS_QUERY \
+        "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+#define PG_STAT_ACTIVITY_SYS_QUERY \
+        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity"
+
+/* context queries */
 #define PG_STAT_DATABASE_QUERY \
     "SELECT \
         datname, \
@@ -298,31 +324,6 @@ struct colAttrs {
 #define PG_STAT_FUNCTIONS_ORDER_MIN    2
 #define PG_STAT_FUNCTIONS_ORDER_MAX    7
 
-#define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
-        "SELECT count(*) FROM pg_stat_activity"
-#define PG_STAT_ACTIVITY_COUNT_IDLE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'"
-#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')"
-#define PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
-#define PG_STAT_ACTIVITY_COUNT_WAITING_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE waiting"
-#define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('fastpath function call','disabled')"
-#define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
-#define PG_STAT_ACTIVITY_AVW_COUNT_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()"
-#define PG_STAT_ACTIVITY_AV_LONGEST_QUERY \
-        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
-        FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
-
-#define PG_STAT_STATEMENTS_SYS_QUERY \
-        "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
-#define PG_STAT_ACTIVITY_SYS_QUERY \
-        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity"
-
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
@@ -359,9 +360,11 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_GENERAL_DIFF_MIN    4
 #define PG_STAT_STATEMENTS_GENERAL_DIFF_MAX    5
 
+/* other queries */
+/* get full config query */
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 
-/* used in get_conf_value() */
+/* get one setting query */
 #define PG_SETTINGS_SINGLE_OPT_P1 "SELECT name, setting FROM pg_settings WHERE name = '"
 #define PG_SETTINGS_SINGLE_OPT_P2 "'"
 
