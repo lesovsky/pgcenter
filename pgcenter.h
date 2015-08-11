@@ -384,6 +384,9 @@ struct colAttrs {
 #define PG_SIG_GROUP_BACKEND_P4 "'::interval OR (clock_timestamp() - query_start) > '"
 #define PG_SIG_GROUP_BACKEND_P5 "'::interval) AND pid <> pg_backend_pid()"
 
+/* reset statistics query */
+#define PG_STAT_RESET_QUERY "SELECT pg_stat_reset(), pg_stat_statements_reset()"
+
 void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 void close_connections(struct screen_s * screens[], PGconn * conns[]);
 #endif

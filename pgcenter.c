@@ -2997,6 +2997,30 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
     return;
 }
 
+
+/*
+ ****************************************************** key-press function **
+ * Reset PostgreSQL stat counters
+ *
+ * IN:
+ * @window              Window where result will be printed.
+ * @conn                Current PostgreSQL connection.
+ ****************************************************************************
+ */
+void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
+{
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    PGresult * res;
+
+    if ((res = do_query(conn, PG_STAT_RESET_QUERY, errmsg)) != NULL) {
+        wprintw(window, "Reset statistics");
+        *reseted = true;
+    } else
+        wprintw(window, "Reset statistics failed: %s", errmsg);
+    
+    PQclear(res);
+    free(errmsg);
+}
 /*
  *********************************************************** init function **
  * Init output colors.
@@ -3184,7 +3208,7 @@ activity actions:\n\
   Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n\
   A               change activity age threshold.\n\n\
 other actions:\n\
-  V               'V' toggle system tables on/off (tables, indexes and sizes).\n\
+  V,K             'V' show system tables on/off, 'K' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
   F1              show help screen.\n\
@@ -3425,6 +3449,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'V':               /* show system view on/off toggle */
                     system_view_toggle(w_cmd, screens[console_index], first_iter);
+                    break;
+                case 'K':               /* reset pg stat counters */
+                    pg_stat_reset(w_cmd, conns[console_index], first_iter);
                     break;
                 case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
