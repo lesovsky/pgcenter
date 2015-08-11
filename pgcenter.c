@@ -165,24 +165,24 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].context = pg_stat_replication;
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_key = PG_STAT_REPLICATION_ORDER_MIN;
         screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].context = pg_stat_user_tables;
-        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].order_key = PG_STAT_ALL_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_ALL_TABLES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].context = pg_stat_user_indexes;
-        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].order_key = PG_STAT_ALL_INDEXES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_ALL_INDEXES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].context = pg_statio_user_tables;
-        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].order_key = PG_STATIO_ALL_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STATIO_ALL_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_TABLES_NUM].context = pg_stat_tables;
+        screens[i]->context_list[PG_STAT_TABLES_NUM].order_key = PG_STAT_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_TABLES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_INDEXES_NUM].context = pg_stat_indexes;
+        screens[i]->context_list[PG_STAT_INDEXES_NUM].order_key = PG_STAT_INDEXES_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_INDEXES_NUM].order_desc = true;
+        screens[i]->context_list[PG_STATIO_TABLES_NUM].context = pg_statio_tables;
+        screens[i]->context_list[PG_STATIO_TABLES_NUM].order_key = PG_STATIO_TABLES_ORDER_MIN;
+        screens[i]->context_list[PG_STATIO_TABLES_NUM].order_desc = true;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].context = pg_tables_size;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].order_key = PG_TABLES_SIZE_ORDER_MIN;
         screens[i]->context_list[PG_TABLES_SIZE_NUM].order_desc = true;
         screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].context = pg_stat_activity_long;
         screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
         screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].context = pg_stat_user_functions;
-        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].context = pg_stat_functions;
+        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].order_key = PG_STAT_FUNCTIONS_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].order_desc = true;
         screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].context = pg_stat_statements_timing;
         screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
         screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_desc = true;
@@ -598,28 +598,28 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_replication:
             strcpy(query, PG_STAT_REPLICATION_QUERY);
             break;
-        case pg_stat_user_tables:
+        case pg_stat_tables:
             if (screen->pg_stat_sys)
                 strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STAT_ALL_TABLES_QUERY_P1);
+            strcpy(query, PG_STAT_TABLES_QUERY_P1);
             strcat(query, view);
-            strcat(query, PG_STAT_ALL_TABLES_QUERY_P2);
+            strcat(query, PG_STAT_TABLES_QUERY_P2);
             break;
-        case pg_stat_user_indexes:
+        case pg_stat_indexes:
             if (screen->pg_stat_sys)
                 strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STAT_ALL_INDEXES_QUERY_P1);
+            strcpy(query, PG_STAT_INDEXES_QUERY_P1);
             strcat(query, view);
-            strcat(query, PG_STAT_ALL_INDEXES_QUERY_P2);
+            strcat(query, PG_STAT_INDEXES_QUERY_P2);
             strcat(query, view);
-            strcat(query, PG_STAT_ALL_INDEXES_QUERY_P3);
+            strcat(query, PG_STAT_INDEXES_QUERY_P3);
             break;
-        case pg_statio_user_tables:
+        case pg_statio_tables:
             if (screen->pg_stat_sys)
                 strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STATIO_ALL_TABLES_QUERY_P1);
+            strcpy(query, PG_STATIO_TABLES_QUERY_P1);
             strcat(query, view);
-            strcat(query, PG_STATIO_ALL_TABLES_QUERY_P2);
+            strcat(query, PG_STATIO_TABLES_QUERY_P2);
             break;
         case pg_tables_size:
             if (screen->pg_stat_sys)
@@ -639,12 +639,12 @@ void prepare_query(struct screen_s * screen, char * query)
             strcat(query, screen->pg_stat_activity_min_age);
             strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
             break;
-        case pg_stat_user_functions:
+        case pg_stat_functions:
             /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_USER_FUNCTIONS_NUM].order_key + 1);
-            strcpy(query, PG_STAT_USER_FUNCTIONS_QUERY_P1);
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_FUNCTIONS_NUM].order_key + 1);
+            strcpy(query, PG_STAT_FUNCTIONS_QUERY_P1);
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_USER_FUNCTIONS_QUERY_P2);
+            strcat(query, PG_STAT_FUNCTIONS_QUERY_P2);
             break;
         case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
@@ -1391,17 +1391,17 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             /* don't diff last column */
             max = PG_STAT_REPLICATION_ORDER_MAX - 1;
             break;
-        case pg_stat_user_tables:
-            min = PG_STAT_ALL_TABLES_ORDER_MIN;
-            max = PG_STAT_ALL_TABLES_ORDER_MAX;
+        case pg_stat_tables:
+            min = PG_STAT_TABLES_ORDER_MIN;
+            max = PG_STAT_TABLES_ORDER_MAX;
             break;
-        case pg_stat_user_indexes:
-            min = PG_STAT_ALL_INDEXES_ORDER_MIN;
-            max = PG_STAT_ALL_INDEXES_ORDER_MAX;
+        case pg_stat_indexes:
+            min = PG_STAT_INDEXES_ORDER_MIN;
+            max = PG_STAT_INDEXES_ORDER_MAX;
             break;
-        case pg_statio_user_tables:
-            min = PG_STATIO_ALL_TABLES_ORDER_MIN;
-            max = PG_STATIO_ALL_TABLES_ORDER_MAX;
+        case pg_statio_tables:
+            min = PG_STATIO_TABLES_ORDER_MIN;
+            max = PG_STATIO_TABLES_ORDER_MAX;
             break;
         case pg_tables_size:
             min = PG_TABLES_SIZE_ORDER_MIN;
@@ -1415,9 +1415,9 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
             min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
             break;
-        case pg_stat_user_functions:
+        case pg_stat_functions:
             /* only one column for diff */
-            min = max = PG_STAT_USER_FUNCTIONS_DIFF_COL;
+            min = max = PG_STAT_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements_timing:
             /* no diff, but use sort with native ORDER BY */
@@ -1472,7 +1472,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
         }
 
     /* some context show absolute values, and sorting perform only for one column */
-    if (screen->current_context == pg_stat_user_functions && order_key != PG_STAT_USER_FUNCTIONS_DIFF_COL)
+    if (screen->current_context == pg_stat_functions && order_key != PG_STAT_FUNCTIONS_DIFF_COL)
         return;
     if (screen->current_context == pg_stat_statements_timing)
         return;
@@ -1591,17 +1591,17 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             min = PG_STAT_REPLICATION_ORDER_MIN;
             max = PG_STAT_REPLICATION_ORDER_MAX;
             break;
-        case pg_stat_user_tables:
-            min = PG_STAT_ALL_TABLES_ORDER_MIN;
-            max = PG_STAT_ALL_TABLES_ORDER_MAX;
+        case pg_stat_tables:
+            min = PG_STAT_TABLES_ORDER_MIN;
+            max = PG_STAT_TABLES_ORDER_MAX;
             break;
-        case pg_stat_user_indexes:
-            min = PG_STAT_ALL_INDEXES_ORDER_MIN;
-            max = PG_STAT_ALL_INDEXES_ORDER_MAX;
+        case pg_stat_indexes:
+            min = PG_STAT_INDEXES_ORDER_MIN;
+            max = PG_STAT_INDEXES_ORDER_MAX;
             break;
-        case pg_statio_user_tables:
-            min = PG_STATIO_ALL_TABLES_ORDER_MIN;
-            max = PG_STATIO_ALL_TABLES_ORDER_MAX;
+        case pg_statio_tables:
+            min = PG_STATIO_TABLES_ORDER_MIN;
+            max = PG_STATIO_TABLES_ORDER_MAX;
             break;
         case pg_tables_size:
             min = PG_TABLES_SIZE_ORDER_MIN - 3;
@@ -1611,9 +1611,9 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             max = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
             break;
-        case pg_stat_user_functions:
-            min = PG_STAT_USER_FUNCTIONS_ORDER_MIN;
-            max = PG_STAT_USER_FUNCTIONS_ORDER_MAX;
+        case pg_stat_functions:
+            min = PG_STAT_FUNCTIONS_ORDER_MIN;
+            max = PG_STAT_FUNCTIONS_ORDER_MAX;
             *first_iter = true;
             break;
         case pg_stat_statements_timing:
@@ -3370,22 +3370,22 @@ int main(int argc, char *argv[])
                     screens[console_index]->current_context = pg_stat_replication;
                     *first_iter = true;
                     break;
-                case 't':               /* open pg_stat_user_tables screen */
+                case 't':               /* open pg_stat_tables screen */
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_user_tables");
-                    screens[console_index]->current_context = pg_stat_user_tables;
+                    wprintw(w_cmd, "Show pg_stat_tables");
+                    screens[console_index]->current_context = pg_stat_tables;
                     *first_iter = true;
                     break;
-                case 'i':               /* open pg_stat(io)_user_indexes screen */
+                case 'i':               /* open pg_stat(io)_indexes screen */
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_user_indexes");
-                    screens[console_index]->current_context = pg_stat_user_indexes;
+                    wprintw(w_cmd, "Show pg_stat_indexes");
+                    screens[console_index]->current_context = pg_stat_indexes;
                     *first_iter = true;
                     break;
-                case 'y':               /* open pg_statio_user_tables screen */
+                case 'y':               /* open pg_statio_tables screen */
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_statio_user_tables");
-                    screens[console_index]->current_context = pg_statio_user_tables;
+                    wprintw(w_cmd, "Show pg_statio_tables");
+                    screens[console_index]->current_context = pg_statio_tables;
                     *first_iter = true;
                     break;
                 case 's':               /* open database object sizes screen */
@@ -3405,10 +3405,10 @@ int main(int argc, char *argv[])
                     change_min_age(w_cmd, screens[console_index]);
                     *first_iter = true;
                     break;
-                case 'f':               /* open pg_stat_user_functions screen */
+                case 'f':               /* open pg_stat_functions screen */
                     wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_user_functions");
-                    screens[console_index]->current_context = pg_stat_user_functions;
+                    wprintw(w_cmd, "Show pg_stat_functions");
+                    screens[console_index]->current_context = pg_stat_functions;
                     *first_iter = true;
                     break;
                 case 'x':               /* open pg_stat_statements_timing screen */

@@ -60,12 +60,12 @@ unsigned int hz;
 
 #define PG_STAT_DATABASE_NUM                    0
 #define PG_STAT_REPLICATION_NUM                 1
-#define PG_STAT_ALL_TABLES_NUM                  2
-#define PG_STAT_ALL_INDEXES_NUM                 3
-#define PG_STATIO_ALL_TABLES_NUM                4
+#define PG_STAT_TABLES_NUM                      2
+#define PG_STAT_INDEXES_NUM                     3
+#define PG_STATIO_TABLES_NUM                    4
 #define PG_TABLES_SIZE_NUM                      5
 #define PG_STAT_ACTIVITY_LONG_NUM               6
-#define PG_STAT_USER_FUNCTIONS_NUM              7
+#define PG_STAT_FUNCTIONS_NUM                   7
 #define PG_STAT_STATEMENTS_TIMING_NUM           8
 #define PG_STAT_STATEMENTS_GENERAL_NUM          9
 
@@ -80,12 +80,12 @@ enum context
 {
     pg_stat_database,
     pg_stat_replication,
-    pg_stat_user_tables,
-    pg_stat_user_indexes,
-    pg_statio_user_tables,
+    pg_stat_tables,
+    pg_stat_indexes,
+    pg_statio_tables,
     pg_tables_size,
     pg_stat_activity_long,
-    pg_stat_user_functions,
+    pg_stat_functions,
     pg_stat_statements_timing,
     pg_stat_statements_general
 };
@@ -199,7 +199,7 @@ struct colAttrs {
 #define PG_STAT_REPLICATION_ORDER_MIN 5
 #define PG_STAT_REPLICATION_ORDER_MAX 9
 
-#define PG_STAT_ALL_TABLES_QUERY_P1 \
+#define PG_STAT_TABLES_QUERY_P1 \
     "SELECT \
         schemaname || '.' || relname as relation, \
         seq_scan, seq_tup_read as seq_read, \
@@ -208,12 +208,12 @@ struct colAttrs {
         n_tup_del as deletes, n_tup_hot_upd as hot_updates, \
         n_live_tup as live, n_dead_tup as dead \
     FROM pg_stat_"
-#define PG_STAT_ALL_TABLES_QUERY_P2 "_tables ORDER BY 1"
+#define PG_STAT_TABLES_QUERY_P2 "_tables ORDER BY 1"
 
-#define PG_STAT_ALL_TABLES_ORDER_MIN 1
-#define PG_STAT_ALL_TABLES_ORDER_MAX 10
+#define PG_STAT_TABLES_ORDER_MIN 1
+#define PG_STAT_TABLES_ORDER_MAX 10
 
-#define PG_STATIO_ALL_TABLES_QUERY_P1 \
+#define PG_STATIO_TABLES_QUERY_P1 \
     "SELECT \
         schemaname ||'.'|| relname as relation, \
         heap_blks_read * (SELECT current_setting('block_size')::int / 1024) AS heap_read, \
@@ -225,12 +225,12 @@ struct colAttrs {
         tidx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tidx_read, \
         tidx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS tidx_hit \
     FROM pg_statio_"
-#define PG_STATIO_ALL_TABLES_QUERY_P2 "_tables ORDER BY 1"
+#define PG_STATIO_TABLES_QUERY_P2 "_tables ORDER BY 1"
 
-#define PG_STATIO_ALL_TABLES_ORDER_MIN 1
-#define PG_STATIO_ALL_TABLES_ORDER_MAX 8
+#define PG_STATIO_TABLES_ORDER_MIN 1
+#define PG_STATIO_TABLES_ORDER_MAX 8
 
-#define PG_STAT_ALL_INDEXES_QUERY_P1 \
+#define PG_STAT_INDEXES_QUERY_P1 \
     "SELECT \
         s.schemaname ||'.'|| s.relname as relation, s.indexrelname AS index, \
         s.idx_scan, s.idx_tup_read, s.idx_tup_fetch, \
@@ -238,11 +238,11 @@ struct colAttrs {
         i.idx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS idx_hit \
     FROM \
         pg_stat_"
-#define PG_STAT_ALL_INDEXES_QUERY_P2 "_indexes s, pg_statio_"
-#define PG_STAT_ALL_INDEXES_QUERY_P3 "_indexes i WHERE s.indexrelid = i.indexrelid ORDER BY 1"
+#define PG_STAT_INDEXES_QUERY_P2 "_indexes s, pg_statio_"
+#define PG_STAT_INDEXES_QUERY_P3 "_indexes i WHERE s.indexrelid = i.indexrelid ORDER BY 1"
 
-#define PG_STAT_ALL_INDEXES_ORDER_MIN 2
-#define PG_STAT_ALL_INDEXES_ORDER_MAX 6
+#define PG_STAT_INDEXES_ORDER_MIN 2
+#define PG_STAT_INDEXES_ORDER_MAX 6
 
 #define PG_TABLES_SIZE_QUERY_P1 \
     "SELECT \
@@ -281,7 +281,7 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
 #define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
 
-#define PG_STAT_USER_FUNCTIONS_QUERY_P1 \
+#define PG_STAT_FUNCTIONS_QUERY_P1 \
     "SELECT \
         funcid, schemaname ||'.'||funcname AS function, \
         calls AS total_calls, calls AS calls, \
@@ -291,12 +291,12 @@ struct colAttrs {
         round((self_time / calls)::numeric, 4) AS avg_self_t \
     FROM pg_stat_user_functions \
     ORDER BY "
-#define PG_STAT_USER_FUNCTIONS_QUERY_P2 " DESC"
+#define PG_STAT_FUNCTIONS_QUERY_P2 " DESC"
 
 /* diff array using only one column */
-#define PG_STAT_USER_FUNCTIONS_DIFF_COL     3
-#define PG_STAT_USER_FUNCTIONS_ORDER_MIN    2
-#define PG_STAT_USER_FUNCTIONS_ORDER_MAX    7
+#define PG_STAT_FUNCTIONS_DIFF_COL     3
+#define PG_STAT_FUNCTIONS_ORDER_MIN    2
+#define PG_STAT_FUNCTIONS_ORDER_MAX    7
 
 #define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
         "SELECT count(*) FROM pg_stat_activity"
