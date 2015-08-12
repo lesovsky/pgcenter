@@ -508,7 +508,6 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
  *
  * OUT:
  * @screens       Screens options array with conninfo.
- ****************************************************************************
  */
 void prepare_conninfo(struct screen_s * screens[])
 {
@@ -950,7 +949,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     }
 
     mvwprintw(window, 2, COLS / 2,
-            "statements: %6i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
+            "statements: %3i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
     wrefresh(window);
 }
@@ -1294,6 +1293,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
 int switch_conn(WINDOW * window, struct screen_s * screens[],
                 int ch, int console_index, int console_no)
 {
+    wclear(window);
     if ( screens[ch - '0' - 1]->conn_used ) {
         console_no = ch - '0', console_index = console_no - 1;
         wprintw(window, "Switch to another pgbouncer connection (console %i)",
@@ -3496,11 +3496,11 @@ int main(int argc, char *argv[])
             wattron(w_dba, COLOR_PAIR(*wa_color));
 
             reconnect_if_failed(w_cmd, conns[console_index], first_iter);
-            wclear(w_sys);
 
             /* 
              * Sysstat screen 
              */
+            wclear(w_sys);
             print_title(w_sys, argv[0]);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
