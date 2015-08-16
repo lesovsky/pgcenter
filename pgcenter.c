@@ -703,6 +703,7 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
     if (PQresultStatus(res) == PG_FATAL_ERR) {
         strcpy(errmsg, "FATAL: ");
         strcat(errmsg, PQerrorMessage(conn));
+        PQclear(res);
         return NULL;
     } else if ( PQresultStatus(res) != PG_TUP_OK ) {
         strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
@@ -902,6 +903,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
             "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
             t_count, i_count, x_count, a_count, w_count, o_count);
     wrefresh(window);
+    free(errmsg);
 }
 
 /*
@@ -952,6 +954,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
             "statements: %3i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
     wrefresh(window);
+    free(errmsg);
 }
 
 /*
@@ -1273,6 +1276,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
     wrefresh(window);
+    free(errmsg);
 }
 
 /*
@@ -1480,7 +1484,6 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
 {
     int i, j, x, order_key;
     bool desc;
-    char *temp = malloc(sizeof(char) * 255);
 
     for (i = 0; i < TOTAL_CONTEXTS; i++)
         if (screen->current_context == screen->context_list[i].context) {
@@ -1501,6 +1504,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (order_key == INVALID_ORDER_KEY)
         return;
 
+    char *temp = malloc(sizeof(char) * 255);
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
             if (desc)
@@ -1521,6 +1525,8 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
                 }
         }
     }
+
+    free(temp);
 }
 
 /*
@@ -1857,8 +1863,8 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
     char params[128];
     bool * with_esc = (bool *) malloc(sizeof(bool)),
          * with_esc2 = (bool *) malloc(sizeof(bool));
-    char * str = (char *) malloc(sizeof(char) * 128),
-         * str2 = (char *) malloc(sizeof(char) * 128);
+    char * str = (char *) malloc(sizeof(char) * 128);
+//         * str2 = (char *) malloc(sizeof(char) * 128);
     
     echo();
     cbreak();
@@ -1906,11 +1912,13 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     wrefresh(window);
 
                     /* read password and add to conn options */
-                    cmd_readline(window, 19, with_esc2, str2);
-                    if (strlen(str2) != 0 && *with_esc2 == false) {
-                        strcpy(screens[i]->password, str2);
+                    str = (char *) malloc(sizeof(char) * 128);
+                    cmd_readline(window, 19, with_esc2, str);
+                    if (strlen(str) != 0 && *with_esc2 == false) {
+                        strcpy(screens[i]->password, str);
                         strcat(screens[i]->conninfo, " password=");
                         strcat(screens[i]->conninfo, screens[i]->password);
+                        free(str);
                         /* try establish connection and finish work */
                         conns[i] = PQconnectdb(screens[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
@@ -1926,7 +1934,6 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     } else if (with_esc) {
                         clear_screen_connopts(screens, i);
                     }
-                    free(str2);
                 /* finish work if connection establish failed */
                 } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                     wprintw(window, "Nothing to do. Connection failed.");
@@ -2073,25 +2080,27 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_
 void show_config(WINDOW * window, PGconn * conn)
 {
     int  row_count, col_count, row, col, i;
-    FILE *fpout;
+    FILE * fpout;
     PGresult * res;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
-    struct colAttrs *columns;
-    char * pager = malloc(sizeof(char) * 128);
+    char * errmsg;
+    char pager[32] = "";
+    struct colAttrs * columns;
 
-    res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
-    row_count = PQntuples(res);
-    col_count = PQnfields(res);
-    
-    columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
-    calculate_width(columns, res, NULL, row_count, col_count);
-
-    if ((pager = getenv("PAGER")) == NULL)
-        pager = DEFAULT_PAGER;
+    if (getenv("PAGER") != NULL)
+        strcpy(pager, getenv("PAGER"));
+    else
+        strcpy(pager, DEFAULT_PAGER);
     if ((fpout = popen(pager, "w")) == NULL) {
         wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
         return;
     }
+    errmsg = (char *) malloc(sizeof(char) * 1024);
+    res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
+    row_count = PQntuples(res);
+    col_count = PQnfields(res);
+    columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
+    calculate_width(columns, res, NULL, row_count, col_count);
+    
     fprintf(fpout, " PostgreSQL configuration: %i rows\n", row_count);
     /* print column names */
     for (col = 0, i = 0; col < col_count; col++, i++)
@@ -2107,6 +2116,7 @@ void show_config(WINDOW * window, PGconn * conn)
     PQclear(res);
     pclose(fpout);
     free(columns);
+    free(errmsg);
 }
 
 /*
@@ -2153,6 +2163,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
         wprintw(window, "Do nothing. Not confirmed.");
 
     free(with_esc);
+    free(errmsg);
     noecho();
     cbreak();
     nodelay(window, TRUE);
@@ -2245,6 +2256,7 @@ void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, c
     } else
         strcpy(config_option_value, "");
     
+    free(errmsg);
     PQclear(res);
 }
 
@@ -2366,6 +2378,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         wprintw(window, "Do nothing. Incorrect input value.");
 
     free(with_esc);
+    free(errmsg);
     noecho();
     cbreak();
     nodelay(window, TRUE);
@@ -2512,20 +2525,19 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         return;
     }
 
-    char query[BUFFERSIZE_M],
+    /* TODO: check superuser privs here, exit if yes */
+
+    char query[512],
          mask[5] = "",
          action[10],
          state[80];
     PGresult * res;
     int i, signaled = 0;
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
 
-    if (do_terminate) {
+    if (do_terminate)
         strcpy(action, "terminate");
-    }
-    else {
+    else
         strcpy(action, "cancel");
-    }
     
     if (screen->signal_options & GROUP_ACTIVE)
         strcat(mask, "a");
@@ -2555,6 +2567,8 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
             case 'o':
                 strcpy(state, "state IN ('fastpath function call', 'disabled')");
                 break;
+            default:
+                break;
         }
         strcpy(query, PG_SIG_GROUP_BACKEND_P1);
         strcat(query, action);
@@ -2565,10 +2579,12 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         strcat(query, PG_SIG_GROUP_BACKEND_P4);
         strcat(query, screen->pg_stat_activity_min_age);
         strcat(query, PG_SIG_GROUP_BACKEND_P5);
-
+        
+        char * errmsg = (char *) malloc(sizeof(char) * 1024);
         res = do_query(conn, query, errmsg);
         signaled = signaled + PQntuples(res);
         PQclear(res);
+        free(errmsg);
     }
 
     if (do_terminate)
@@ -2737,10 +2753,11 @@ void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_
  * Get current postgresql logfile path
  *
  * IN:
+ * @path                Log file location.
  * @conn                Current postgresql connection.
  ****************************************************************************
  */
-char * get_logfile_path(PGconn * conn)
+void get_logfile_path(char * path, PGconn * conn)
 {
     PGresult *res;
     char q1[] = "show data_directory";
@@ -2751,13 +2768,21 @@ char * get_logfile_path(PGconn * conn)
     char ld[64], lf[64], dd[64];
     char path_tpl[64 * 3], path_log[64 * 3], path_log_fallback[64 * 3] = "";
 
-    if ((res = do_query(conn, q2, errmsg)) == NULL)
-        return "";
-
+    strcpy(path, "\0");
+    if ((res = do_query(conn, q2, errmsg)) == NULL) {
+        PQclear(res);
+        free(errmsg);
+        return;
+    }
     strcpy(ld, PQgetvalue(res, 0, 0));
+    PQclear(res);
+
     if ( ld[0] != '/' ) {
-        if ((res = do_query(conn, q1, errmsg)) == NULL)
-            return "";
+        if ((res = do_query(conn, q1, errmsg)) == NULL) {
+            PQclear(res);
+            free(errmsg);
+            return;
+        }
         strcpy(dd, PQgetvalue(res, 0, 0));
         strcpy(path_tpl, dd);
         strcat(path_tpl, "/");
@@ -2767,10 +2792,16 @@ char * get_logfile_path(PGconn * conn)
         strcpy(path_tpl, ld);
         strcat(path_tpl, "/");
     }
-    if ((res = do_query(conn, q3, errmsg)) == NULL)
-        return "";
+    PQclear(res);
+
+    if ((res = do_query(conn, q3, errmsg)) == NULL) {
+        PQclear(res);
+        free(errmsg);
+        return;
+    }
     strcpy(lf, PQgetvalue(res, 0, 0));
     strcat(path_tpl, lf);
+    PQclear(res);
     
     /*
      * PostgreSQL defaults for log_filename is postgresql-%Y-%m-%d_%H%M%S.log. 
@@ -2783,36 +2814,40 @@ char * get_logfile_path(PGconn * conn)
     if (strstr(path_tpl, "%H%M%S") != NULL) {
         strcpy(path_log, path_tpl);
         strcpy(path_log_fallback, path_tpl);
-        if((res = do_query(conn, q4, errmsg)) == NULL)
-            return "";
+        if((res = do_query(conn, q4, errmsg)) == NULL) {
+            PQclear(res);
+            free(errmsg);
+            return;
+        }
         strrpl(path_log, "%H%M%S", PQgetvalue(res, 0, 0));
         strrpl(path_log_fallback, "%H%M%S", "000000");
+        PQclear(res);
     } else {
         strcpy(path_log, path_tpl);
     }
 
-    PQclear(res);
+    free(errmsg);
 
     /* translate log_filename pattern string in real path */
     time_t rawtime;
     struct tm *info;
-    char *buffer = (char *) malloc(sizeof(char) * 192);
 
     time( &rawtime );
     info = localtime( &rawtime );
-    strftime(buffer,192, path_log, info);
+    strftime(path, PATH_MAX, path_log, info);
 
     /* if file exists, return path */
-    if (access(buffer, F_OK ) != -1 ) {
-        return buffer;
+    if (access(path, F_OK ) != -1 ) {
+        return;
     } 
     
     /* if previous condition failed, try use _000000.log name */
     if (strlen(path_log_fallback) != 0) {
-        strftime(buffer,192, path_log_fallback, info);
-        return buffer;
+        strftime(path, PATH_MAX, path_log_fallback, info);
+        return;
     } else {
-        return "";
+        strcpy(path, "\0");
+        return;
     }
 }
 
@@ -2837,7 +2872,7 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
             *w_log = newwin(0, 0, ((LINES * 2) / 3), 0);
             wrefresh(window);
             /* get logfile path  */
-            strcpy(logfile,get_logfile_path(conn));
+            get_logfile_path(logfile, conn);
 
             if (strlen(logfile) == 0) {
                 wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
@@ -2987,7 +3022,7 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
 
     if (check_pg_listen_addr(screen)) {
         /* get logfile path  */
-        strcpy(logfile,get_logfile_path(conn));
+        get_logfile_path(logfile, conn);
         if (strlen(logfile) != 0) {
             pid = fork();                   /* start child */
             if (pid == 0) {
@@ -3262,7 +3297,7 @@ int main(int argc, char *argv[])
     PGconn      *conns[8];                              /* connections array    */
     PGresult    *p_res, *c_res;                         /* query results        */
     char query[1024];                                   /* query text           */
-    int n_rows, n_cols, n_prev_rows;                    /* query results opts   */
+    int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
     char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
 
     long int interval = DEFAULT_INTERVAL,               /* sleep interval       */
@@ -3516,6 +3551,7 @@ int main(int argc, char *argv[])
             prepare_query(screens[console_index], query);
             if ((c_res = do_query(conns[console_index], query, errmsg)) == NULL) {
                 /* if error occured print SQL error message into cmd */
+                PQclear(c_res);
                 wclear(w_dba);
                 wprintw(w_dba, "%s", errmsg);
                 wrefresh(w_dba);
@@ -3530,7 +3566,9 @@ int main(int argc, char *argv[])
              * to previous data snapshot and restart cycle
              */
             if (*first_iter) {
-                p_res = c_res;
+                PQclear(p_res);
+                p_res = PQcopyResult(c_res, PG_COPYRES_ATTRS | PG_COPYRES_TUPLES);
+                PQclear(c_res);
                 usleep(10000);
                 *first_iter = false;
                 continue;
@@ -3542,7 +3580,9 @@ int main(int argc, char *argv[])
              * iteration. 
              */
             if (n_prev_rows < n_rows) {
-                p_res = c_res;
+                PQclear(p_res);
+                p_res = PQcopyResult(c_res, PG_COPYRES_ATTRS | PG_COPYRES_TUPLES);
+                PQclear(c_res);
                 n_prev_rows = n_rows;
                 usleep(10000);
                 continue;
@@ -3567,8 +3607,10 @@ int main(int argc, char *argv[])
             print_data(w_dba, c_res, r_arr, n_rows, n_cols, screens[console_index]);
 
             /* replace previous database query result with current result */
-            p_res = c_res;
+            PQclear(p_res);
+            p_res = PQcopyResult(c_res, PG_COPYRES_ATTRS | PG_COPYRES_TUPLES);
             n_prev_rows = n_rows;
+            PQclear(c_res);
 
             /* free memory allocated for arrays */
             free_array(p_arr, n_rows, n_cols);
