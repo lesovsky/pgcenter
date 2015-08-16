@@ -2525,8 +2525,6 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         return;
     }
 
-    /* TODO: check superuser privs here, exit if yes */
-
     char query[512],
          mask[5] = "",
          action[10],
