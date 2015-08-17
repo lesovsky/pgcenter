@@ -2094,6 +2094,11 @@ void show_config(WINDOW * window, PGconn * conn)
         wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
         return;
     }
+
+    /* escape from ncurses mode */
+    refresh();
+    endwin();
+
     errmsg = (char *) malloc(sizeof(char) * 1024);
     res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
     row_count = PQntuples(res);
@@ -2117,6 +2122,9 @@ void show_config(WINDOW * window, PGconn * conn)
     pclose(fpout);
     free(columns);
     free(errmsg);
+    
+    /* return to ncurses mode */
+    refresh();
 }
 
 /*
@@ -2282,6 +2290,9 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     if (check_pg_listen_addr(screen)) {
         get_conf_value(window, conn, guc, conffile);
         if (strlen(conffile) != 0) {
+            /* escape from ncurses mode */
+            refresh();
+            endwin();
             pid = fork();                   /* start child */
             if (pid == 0) {
                 char * editor = (char *) malloc(sizeof(char) * 128);
@@ -2304,6 +2315,9 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
         wprintw(window, "Do nothing. Edit config not supported for remote hosts.");
     }
     free(conffile);
+
+    /* return to ncurses mode */
+    refresh();
     return;
 }
 
@@ -3022,6 +3036,9 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
         /* get logfile path  */
         get_logfile_path(logfile, conn);
         if (strlen(logfile) != 0) {
+            /* escape from ncurses mode */
+            refresh();
+            endwin();
             pid = fork();                   /* start child */
             if (pid == 0) {
                 char * pager = (char *) malloc(sizeof(char) * 128);
@@ -3044,6 +3061,9 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
         wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
     }
     free(logfile);
+
+    /* return to ncurses mode */
+    refresh();
     return;
 }
 

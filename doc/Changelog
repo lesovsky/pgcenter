@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Fix ncurses mode break after edit/show config or log.
   * Add reset statistics hotkey.
   * Show tables/indexes from system view on/off toggle.
   * Split pg_stat_statements screen to timings and general screens.
