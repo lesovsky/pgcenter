@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Add manpage.
   * Add Makefile.
   * Fix ncurses mode break after edit/show config or log.
   * Add reset statistics hotkey.
