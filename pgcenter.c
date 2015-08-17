@@ -124,8 +124,9 @@ void strrpl(char * o_string, char * s_string, char * r_string)
     sprintf(buffer+(ch - o_string), "%s%s", r_string, ch + strlen(s_string));
     o_string[0] = 0;
     strcpy(o_string, buffer);
-    
-    return strrpl(o_string, s_string, r_string);
+    strrpl(o_string, s_string, r_string);
+
+    return;
 }
 
 /*
@@ -264,7 +265,6 @@ void init_args_struct(struct args_s * args)
  */
 void arg_parse(int argc, char *argv[], struct args_s *args)
 {
-    struct passwd *pw = getpwuid(getuid());
     int param, option_index;
 
     /* short options */
@@ -1399,7 +1399,7 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
  */
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols, long int interval)
 {
-    int i, j, min, max;
+    int i, j, min = 0, max = 0;
     int divisor;
  
     switch (context) {
@@ -1482,8 +1482,8 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context con
  */
 void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen)
 {
-    int i, j, x, order_key;
-    bool desc;
+    int i, j, x, order_key = 0;
+    bool desc = false;
 
     for (i = 0; i < TOTAL_CONTEXTS; i++)
         if (screen->current_context == screen->context_list[i].context) {
@@ -1545,7 +1545,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
  */
 void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_cols, struct screen_s * screen)
 {
-    int i, j, x, order_key;
+    int i, j, x, order_key = 0;
     int winsz_x, winsz_y;
     struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
 
@@ -1563,6 +1563,8 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
         if (j == n_cols - 1) {
             getyx(window, winsz_y, winsz_x);
             columns[x].width = COLS - winsz_x - 1;
+            /* dirty hack for supress gcc warning about "variable set but not used" */
+            winsz_y--;
         } 
         /* mark sort column */
         if (j == order_key) {
@@ -1604,7 +1606,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
  */
 void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter)
 {
-    int min, max, i;
+    int min = 0, max = 0, i;
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
@@ -3313,7 +3315,8 @@ int main(int argc, char *argv[])
     static int console_index = 0;                       /* console index in screen array   */
 
     PGconn      *conns[8];                              /* connections array    */
-    PGresult    *p_res, *c_res;                         /* query results        */
+    PGresult    *p_res = NULL,
+                *c_res = NULL;                          /* query results        */
     char query[1024];                                   /* query text           */
     int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
     char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
@@ -3321,7 +3324,9 @@ int main(int argc, char *argv[])
     long int interval = DEFAULT_INTERVAL,               /* sleep interval       */
              sleep_usec = 0;                            /* time spent in sleep  */
 
-    char ***p_arr, ***c_arr, ***r_arr;                  /* 3d arrays for query results  */
+    char ***p_arr = NULL,
+         ***c_arr = NULL,
+         ***r_arr = NULL;                  /* 3d arrays for query results  */
 
     int * ws_color = (int *) malloc(sizeof(int)),
         * wc_color = (int *) malloc(sizeof(int)),
@@ -3584,7 +3589,6 @@ int main(int argc, char *argv[])
              * to previous data snapshot and restart cycle
              */
             if (*first_iter) {
-                PQclear(p_res);
                 p_res = PQcopyResult(c_res, PG_COPYRES_ATTRS | PG_COPYRES_TUPLES);
                 PQclear(c_res);
                 usleep(10000);
