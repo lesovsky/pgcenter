@@ -442,9 +442,9 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
         strcpy(pgcenterrc_path, args->connfile);
     }
 
-    if (access(pgcenterrc_path, F_OK) == -1) {
+    if (access(pgcenterrc_path, F_OK) == -1 && strlen(args->connfile) != 0) {
         fprintf(stderr,
-                    "WARNING: no access %s.\n", pgcenterrc_path);
+                    "WARNING: no access to %s.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 
@@ -469,8 +469,6 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
         fclose(fp);
         return PGCENTERRC_READ_OK;
     } else {
-        fprintf(stdout,
-                    "WARNING: failed to open %s. Try use defaults.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 }
