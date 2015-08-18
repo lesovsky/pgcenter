@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Remove -O2 from Makefile, because unknown garbage appeared with log tail.
   * Fix: clear taillog screen before closing.
   * Add Makefile, manpage, license.
   * Fix ncurses mode break after edit/show config or log.
