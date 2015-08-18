@@ -553,7 +553,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 strcat(screens[i]->conninfo, screens[i]->password);
                 conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
-                printf("Unable to connect to %s:%s %s@%s",
+                fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.",
                 screens[i]->host, screens[i]->port,
                 screens[i]->user, screens[i]->dbname);
             }
@@ -1923,7 +1923,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                         conns[i] = PQconnectdb(screens[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                             wclear(window);
-                            wprintw(window, "Unable to connect to the postgres.");
+                            wprintw(window, "Nothing to fo. Connection failed.");
                             PQfinish(conns[i]);
                             clear_screen_connopts(screens, i);
                         } else {
