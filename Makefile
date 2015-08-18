@@ -6,7 +6,9 @@ PREFIX ?= /usr
 PGCONFIG ?= pg_config
 PGLIBDIR = $(shell $(PGCONFIG) --libdir)
 PGINCLUDEDIR = $(shell $(PGCONFIG) --includedir)
-LIBS = -lncurses -lpq
+NCONFIG ?= ncurses5-config
+NLIBS = $(shell $(NCONFIG) --libs)
+LIBS = $(NLIBS) -lpq
 DESTDIR ?=
 
 .PHONY: all clean install
