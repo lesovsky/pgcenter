@@ -1,5 +1,6 @@
 pgbconsole (current development) unstable; urgency=low
 
+  * Fix: clear taillog screen before closing.
   * Add Makefile, manpage, license.
   * Fix ncurses mode break after edit/show config or log.
   * Add reset statistics hotkey.

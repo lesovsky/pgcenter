@@ -2906,6 +2906,8 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
             return;
         }
     } else {
+        wclear(*w_log);
+        wrefresh(*w_log);
         close(screen->log);
         screen->log_opened = false;
         return;
