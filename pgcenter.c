@@ -3327,7 +3327,7 @@ void print_help_screen(void)
     wprintw(w, "general actions:\n\
   1..8            switch between consoles.\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
-  s,t,x,X,y             's' sizes, 't' tables, 'x' stmt timings, 'X' stmt general, 'y' tables-io.\n\
+  s,t,T,x,X             's' sizes, 't' tables, 'T' tables-IO, 'x' stmt timings, 'X' stmt general.\n\
   P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
   C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
   L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
@@ -3529,7 +3529,7 @@ int main(int argc, char *argv[])
                 case 'i':               /* open pg_stat(io)_indexes screen */
                     switch_context(w_cmd, screens[console_index], pg_stat_indexes, p_res, first_iter);
                     break;
-                case 'y':               /* open pg_statio_tables screen */
+                case 'T':               /* open pg_statio_tables screen */
                     switch_context(w_cmd, screens[console_index], pg_statio_tables, p_res, first_iter);
                     break;
                 case 's':               /* open database object sizes screen */
