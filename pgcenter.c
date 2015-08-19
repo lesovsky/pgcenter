@@ -3248,6 +3248,62 @@ void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_colo
 }
 
 /*
+ ****************************************************** key-press function **
+ * Switch statistics context.
+ *
+ * IN:
+ * @window              Window for printing diag messages.
+ * @screen              Current screen.
+ * @context             New statistics context.
+ * @res                 Array with previous query results.
+ * @first_iter          Flag for resetting previous query results.
+ ****************************************************************************
+ */
+void switch_context(WINDOW * window, struct screen_s * screen, 
+                    enum context context, PGresult * res, bool * first_iter)
+{
+    wclear(window);
+    switch (context) {
+        case pg_stat_database:
+            wprintw(window, "Show database wide statistics");
+            break;
+        case pg_stat_replication:
+            wprintw(window, "Show replication statistics");
+            break;
+        case pg_stat_tables:
+            wprintw(window, "Show tables statistics");
+            break;
+        case pg_stat_indexes:
+            wprintw(window, "Show indexes statistics");
+            break;
+        case pg_statio_tables:
+            wprintw(window, "Show table IO statistics");
+            break;
+        case pg_tables_size:
+            wprintw(window, "Show tables sizes");
+            break;
+        case pg_stat_activity_long:
+            wprintw(window, "Show activity (age threshold: %s)", screen->pg_stat_activity_min_age);
+            break;
+        case pg_stat_functions:
+            wprintw(window, "Show functions statistics");
+            break;
+        case pg_stat_statements_timing:
+            wprintw(window, "Show pg_stat_statements timings");
+            break;
+        case pg_stat_statements_general:
+            wprintw(window, "Show pg_stat_statements general");
+            break;
+        default:
+            break;
+    }
+
+    screen->current_context = context;
+    PQclear(res);
+    *first_iter = true;
+}
+
+/*
  ****************************************************** key press function **
  * Print on-program help.
  ****************************************************************************
@@ -3459,78 +3515,37 @@ int main(int argc, char *argv[])
                     start_psql(w_cmd, screens[console_index]);
                     break;
                 case 'd':               /* open pg_stat_database screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_database");
-                    screens[console_index]->current_context = pg_stat_database;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_stat_database, p_res, first_iter);
                     break;
                 case 'r':               /* open pg_stat_replication screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_replication");
-                    screens[console_index]->current_context = pg_stat_replication;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_stat_replication, p_res, first_iter);
                     break;
                 case 't':               /* open pg_stat_tables screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_tables");
-                    screens[console_index]->current_context = pg_stat_tables;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_stat_tables, p_res, first_iter);
                     break;
                 case 'i':               /* open pg_stat(io)_indexes screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_indexes");
-                    screens[console_index]->current_context = pg_stat_indexes;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_stat_indexes, p_res, first_iter);
                     break;
                 case 'y':               /* open pg_statio_tables screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_statio_tables");
-                    screens[console_index]->current_context = pg_statio_tables;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_statio_tables, p_res, first_iter);
                     break;
                 case 's':               /* open database object sizes screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show relations sizes");
-                    screens[console_index]->current_context = pg_tables_size;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_tables_size, p_res, first_iter);
                     break;
                 case 'a':               /* show pg_stat_activity screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show activity (transactions and queries threshold: %s)",
-                                    screens[console_index]->pg_stat_activity_min_age);
-                    screens[console_index]->current_context = pg_stat_activity_long;
-                    PQclear(p_res);
-                    *first_iter = true;
+                    switch_context(w_cmd, screens[console_index], pg_stat_activity_long, p_res, first_iter);
+                    break;
+                case 'f':               /* open pg_stat_functions screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_functions, p_res, first_iter);
+                    break;
+                case 'x':               /* open pg_stat_statements_timing screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_timing, p_res, first_iter);
+                    break;
+                case 'X':               /* open pg_stat_statements_general screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index]);
-                    PQclear(p_res);
-                    *first_iter = true;
-                    break;
-                case 'f':               /* open pg_stat_functions screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_functions");
-                    screens[console_index]->current_context = pg_stat_functions;
-                    PQclear(p_res);
-                    *first_iter = true;
-                    break;
-                case 'x':               /* open pg_stat_statements_timing screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_statements timings");
-                    screens[console_index]->current_context = pg_stat_statements_timing;
-                    PQclear(p_res);
-                    *first_iter = true;
-                    break;
-                case 'X':               /* open pg_stat_statements_general screen */
-                    wclear(w_cmd);
-                    wprintw(w_cmd, "Show pg_stat_statements general");
-                    screens[console_index]->current_context = pg_stat_statements_general;
                     PQclear(p_res);
                     *first_iter = true;
                     break;
