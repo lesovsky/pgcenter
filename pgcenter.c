@@ -1753,7 +1753,7 @@ void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str)
  * @screen              Current screen.
  ****************************************************************************
  */
-void change_min_age(WINDOW * window, struct screen_s * screen)
+void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter)
 {
     if (screen->current_context != pg_stat_activity_long) {
         wprintw(window, "Long query min age not allowed here.");
@@ -1783,7 +1783,10 @@ void change_min_age(WINDOW * window, struct screen_s * screen)
     } else if (strlen(min_age) == 0 && *with_esc == false ) {
         wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
     }
-    
+   
+    PQclear(res);
+    *first_iter = true;
+
     free(with_esc);
     noecho();
     cbreak();
@@ -3545,9 +3548,7 @@ int main(int argc, char *argv[])
                     switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
-                    change_min_age(w_cmd, screens[console_index]);
-                    PQclear(p_res);
-                    *first_iter = true;
+                    change_min_age(w_cmd, screens[console_index], p_res, first_iter);
                     break;
                 case 'V':               /* show system view on/off toggle */
                     system_view_toggle(w_cmd, screens[console_index], first_iter);
