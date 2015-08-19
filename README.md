@@ -58,3 +58,8 @@ $ make
 $ sudo make install
 $ pgcenter
 ```
+
+#### Known issues
+- developed and tested under PostgreSQL 9.4.
+- PostgreSQL 9.1 and older not supported (different column names in stat views).
+- this is beta software, in some circumstances segfaults occurs.
