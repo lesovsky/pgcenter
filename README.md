@@ -37,7 +37,13 @@ PostgreSQL provides various statistics which includes information about tables, 
 #### Install notes:
 
 ##### Install from Ubuntu
-- not available yet.
+- install PPA and update
+```
+$ sudo add-apt-repository ppa:lesovsky/pgcenter
+$ sudo apt-get update
+$ sudo apt-get install pgcenter
+```
+Debian users can create package using this [link](https://wiki.debian.org/CreatePackageFromPPA).
 
 ##### Install from RHEL/CentOS
 - not available yet.
