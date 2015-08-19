@@ -1,4 +1,4 @@
-pgbconsole (current development) unstable; urgency=low
+pgcenter (current development) unstable; urgency=low
 
   * Wrap rouuties into switch_context() function.
   * Remove -O2 from Makefile, because unknown garbage appeared with log tail.
