@@ -1,7 +1,7 @@
 PROGRAM_NAME = pgcenter
 SOURCE = pgcenter.c
 CC ?= gcc
-CFLAGS = -std=gnu99 -Wall -pedantic
+CFLAGS = -g -std=gnu99 -Wall -pedantic
 PREFIX ?= /usr
 PGCONFIG ?= pg_config
 PGLIBDIR = $(shell $(PGCONFIG) --libdir)
