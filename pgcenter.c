@@ -1327,7 +1327,7 @@ char *** init_array(char ***arr, int n_rows, int n_cols)
     for (i = 0; i < n_rows; i++) {
         arr[i] = malloc(sizeof(char *) * n_cols);
             for (j = 0; j < n_cols; j++)
-                arr[i][j] = malloc(sizeof(char) * BUFFERSIZE_M);
+                arr[i][j] = malloc(sizeof(char) * BUFSIZ);
     }
     return arr;
 }
