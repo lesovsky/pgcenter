@@ -126,7 +126,8 @@ struct screen_s
     char password[BUFFERSIZE];
     char conninfo[BUFFERSIZE];
     bool log_opened;
-    int log;
+    char log_path[PATH_MAX];
+    int log_fd;
     enum context current_context;
     char pg_stat_activity_min_age[BUFFERSIZE_S];
     struct context_s context_list[TOTAL_CONTEXTS];

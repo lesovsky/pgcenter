@@ -155,6 +155,7 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->password, "");
         strcpy(screens[i]->conninfo, "");
         screens[i]->log_opened = false;
+        strcpy(screens[i]->log_path, "");
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
         strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
         screens[i]->signal_options = 0;
@@ -2879,39 +2880,33 @@ void get_logfile_path(char * path, PGconn * conn)
  */
 void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn)
 {
-    char * logfile;
     if (!screen->log_opened) {
-    logfile = (char *) malloc(sizeof(char) * PATH_MAX);
     
         if (check_pg_listen_addr(screen)) {
             *w_log = newwin(0, 0, ((LINES * 2) / 3), 0);
             wrefresh(window);
             /* get logfile path  */
-            get_logfile_path(logfile, conn);
+            get_logfile_path(screen->log_path, conn);
 
-            if (strlen(logfile) == 0) {
+            if (strlen(screen->log_path) == 0) {
                 wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
-                free(logfile);
                 return;
             }
-            if ((screen->log = open(logfile, O_RDONLY)) == -1 ) {
-                wprintw(window, "Do nothing. Failed to open %s", logfile);
-                free(logfile);
+            if ((screen->log_fd = open(screen->log_path, O_RDONLY)) == -1 ) {
+                wprintw(window, "Do nothing. Failed to open %s", screen->log_path);
                 return;
             }
             screen->log_opened = true;
-            wprintw(window, "Open postgresql log: %s", logfile);
-            free(logfile);
+            wprintw(window, "Open postgresql log: %s", screen->log_path);
             return;
         } else {
             wprintw(window, "Do nothing. Current postgresql not local.");
-            free(logfile);
             return;
         }
     } else {
         wclear(*w_log);
         wrefresh(*w_log);
-        close(screen->log);
+        close(screen->log_fd);
         screen->log_opened = false;
         return;
     }
@@ -2938,24 +2933,25 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     size_t bytes_read;                                          /* bytes readen from file to buffer */
     char buffer[BUFSIZ] = "";                                   /* init empty buffer */
     int i, nl_count = 0, len, scan_pos;                         /* iterator, newline counter, buffer length, in-buffer scan position */
-    char *p;                                                    /* in-buffer newline pointer */
+    char *nl_ptr;                                               /* in-buffer newline pointer */
 
     getbegyx(window, y, x);                                     /* get window coordinates */
-    n_lines = LINES - y;                                        /* calculate number of rows for log tailing */
+    /* calculate number of rows for log tailing, 2 is the number of lines for screen header */
+    n_lines = LINES - y - 2;                                    /* calculate number of rows for log tailing */
     n_cols = COLS - x - 1;                                      /* calculate number of chars in row for cutting multiline log entries */
     wclear(window);                                             /* clear log window */
 
-    fstat(screen->log, &stats);                                     /* handle error here ? */
+    fstat(screen->log_fd, &stats);                                     /* handle error here ? */
     if (S_ISREG (stats.st_mode) && stats.st_size != 0) {            /* log should be regular file and not be empty */
-        end_pos = lseek(screen->log, 0, SEEK_END);                  /* get end of file position */   
+        end_pos = lseek(screen->log_fd, 0, SEEK_END);                  /* get end of file position */   
         pos = end_pos;                                              /* set position to the end of file */
         bytes_read = BUFSIZ;                                        /* read with 8KB block */
         if (end_pos < BUFSIZ)                                       /* if end file pos less than buffer */
             pos = 0;                                                /* than set read position ti the begin of file */
         else                                                        /* if end file pos more than buffer */
             pos = pos - bytes_read;                                 /* than set read position into end of file minus buffer size */
-        lseek(screen->log, pos, SEEK_SET);                          /* set determined position in file */
-        bytes_read = read(screen->log, buffer, bytes_read);         /* read file to buffer */
+        lseek(screen->log_fd, pos, SEEK_SET);                          /* set determined position in file */
+        bytes_read = read(screen->log_fd, buffer, bytes_read);         /* read file to buffer */
 
         len = strlen(buffer);                                       /* determine buffer length */
         scan_pos = len;                                             /* set in-buffer scan position equal buffer length, */
@@ -2969,15 +2965,20 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
             return;                                                 /* and finish work */
         }
 
+        /* print header */
+        wattron(window, A_BOLD);
+        wprintw(window, "\ntail %s\n", screen->log_path);
+        wattroff(window, A_BOLD);
+
         /*
          * at this place, we have log more than buffersize, we fill buffer 
          * and we need find \n position from which we start print log.
          */
         int n_lines_save = n_lines;                                 /* save number of lines need for tail. */
         do {
-            p = memrchr(buffer, '\n', scan_pos);                    /* find \n from scan_pos */
-            if (p != NULL) {                                        /* if found */
-                scan_pos = (p - buffer);                            /* remember this place */
+            nl_ptr = memrchr(buffer, '\n', scan_pos);               /* find \n from scan_pos */
+            if (nl_ptr != NULL) {                                   /* if found */
+                scan_pos = (nl_ptr - buffer);                       /* remember this place */
             } else {                                                /* if not found */
                 break;                                              /* finish work */
             }
@@ -2988,15 +2989,15 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
         char str[n_cols];                                           /* use var for one line */
         char tmp[BUFSIZ];                                           /* tmp var for line from buffer */
         do {                                                        /* scan buffer from begin */
-            p = strstr(buffer, "\n");                               /* find \n in buffer */
-            if (p != NULL) {                                        /* if found */
+            nl_ptr = strstr(buffer, "\n");                          /* find \n in buffer */
+            if (nl_ptr != NULL) {                                   /* if found */
                 if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
-                    strcpy(buffer, p + 1);                          /* decrease buffer, cut skipped line */
+                    strcpy(buffer, nl_ptr + 1);                     /* decrease buffer, cut skipped line */
                     nl_count--;                                     /* decrease newline counter */
                     continue;                                       /* start next iteration */
                 }                                                   /* at this place we have sufficient number of lines for tail */
-                strncpy(tmp, buffer, p - buffer);                   /* copy log line into temp buffer */
-                tmp[p - buffer] = '\0';                                     
+                strncpy(tmp, buffer, nl_ptr - buffer);              /* copy log line into temp buffer */
+                tmp[nl_ptr - buffer] = '\0';                                     
                 if (strlen(tmp) > n_cols) {                         /* if line longer than screen size (multiline) than truncate line to screen size */
                     strncpy(str, buffer, n_cols);
                     str[n_cols] = '\0';
@@ -3004,8 +3005,8 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
                     strncpy(str, buffer, strlen(tmp));
                     str[strlen(tmp)] = '\0';
                 }
-                wprintw(window, "%s\n", str);                        /* print line to log screen */
-                strcpy(buffer, p + 1);                              /* decrease buffer, cut printed line */
+                wprintw(window, "%s\n", str);                       /* print line to log screen */
+                strcpy(buffer, nl_ptr + 1);                         /* decrease buffer, cut printed line */
             } else {
                 break;                                              /* if \n not found, finish work */
             }
@@ -3034,13 +3035,12 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
  */
 void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
-    char * logfile = (char *) malloc(sizeof(char) * 128);
     pid_t pid;
 
     if (check_pg_listen_addr(screen)) {
         /* get logfile path  */
-        get_logfile_path(logfile, conn);
-        if (strlen(logfile) != 0) {
+        get_logfile_path(screen->log_path, conn);
+        if (strlen(screen->log_path) != 0) {
             /* escape from ncurses mode */
             refresh();
             endwin();
@@ -3049,11 +3049,11 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 char * pager = (char *) malloc(sizeof(char) * 128);
                 if ((pager = getenv("PAGER")) == NULL)
                     pager = DEFAULT_PAGER;
-                execlp(pager, pager, logfile, NULL);
+                execlp(pager, pager, screen->log_path, NULL);
                 free(pager);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
-                wprintw(window, "Can't open %s: fork failed.", logfile);
+                wprintw(window, "Can't open %s: fork failed.", screen->log_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
                 wprintw(window, "Unknown error: waitpid failed.");
@@ -3065,13 +3065,11 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
     } else {
         wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
     }
-    free(logfile);
 
     /* return to ncurses mode */
     refresh();
     return;
 }
-
 
 /*
  ****************************************************** key-press function **
