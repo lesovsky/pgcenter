@@ -3376,7 +3376,7 @@ int main(int argc, char *argv[])
     PGconn      *conns[8];                              /* connections array    */
     PGresult    *p_res = NULL,
                 *c_res = NULL;                          /* query results        */
-    char query[1024];                                   /* query text           */
+    char query[4096];                                   /* query text           */
     int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
     char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
 

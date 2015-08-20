@@ -325,6 +325,7 @@ struct colAttrs {
 #define PG_STAT_FUNCTIONS_ORDER_MIN    2
 #define PG_STAT_FUNCTIONS_ORDER_MAX    7
 
+
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
@@ -332,7 +333,14 @@ struct colAttrs {
         date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS read_t, \
         date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS write_t, \
         date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS cpu_t, \
-        p.query AS query \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g') AS query \
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
@@ -348,7 +356,14 @@ struct colAttrs {
         a.rolname AS user, d.datname AS database, \
         sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
         sum(p.calls) AS calls, sum(p.rows) as rows, \
-        p.query AS query \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g') AS query \
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
