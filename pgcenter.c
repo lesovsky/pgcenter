@@ -2803,11 +2803,11 @@ void get_logfile_path(char * path, PGconn * conn)
         strcat(path_tpl, "/");
         strcat(path_tpl, ld);
         strcat(path_tpl, "/");
+        PQclear(res);
     } else {
         strcpy(path_tpl, ld);
         strcat(path_tpl, "/");
     }
-    PQclear(res);
 
     if ((res = do_query(conn, q3, errmsg)) == NULL) {
         PQclear(res);
