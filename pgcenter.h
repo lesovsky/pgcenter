@@ -215,11 +215,11 @@ struct colAttrs {
     "SELECT \
         client_addr as client, usename as user, application_name as name, \
         state, sync_state as mode, \
-        (pg_xlog_location_diff(sent_location, '0/0') / 1024)::int as sent, \
-        (pg_xlog_location_diff(write_location, '0/0') / 1024)::int as write, \
-        (pg_xlog_location_diff(flush_location, '0/0') / 1024)::int as flush, \
-        (pg_xlog_location_diff(replay_location, '0/0') / 1024)::int as replay, \
-        (pg_xlog_location_diff(sent_location,replay_location) / 1024)::int as lag \
+        (pg_xlog_location_diff(sent_location, '0/0') / 1024)::bigint as sent, \
+        (pg_xlog_location_diff(write_location, '0/0') / 1024)::bigint as write, \
+        (pg_xlog_location_diff(flush_location, '0/0') / 1024)::bigint as flush, \
+        (pg_xlog_location_diff(replay_location, '0/0') / 1024)::bigint as replay, \
+        (pg_xlog_location_diff(sent_location,replay_location) / 1024)::bigint as lag \
     FROM pg_stat_replication \
     ORDER BY client_addr"
 
