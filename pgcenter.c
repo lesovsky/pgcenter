@@ -1376,8 +1376,8 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
 
     for (i = 0; i < n_rows; i++)
         for (j = 0; j < n_cols; j++) {
-            strncpy(arr[i][j], PQgetvalue(res, i, j), BUFFERSIZE_M);
-            arr[i][j][BUFFERSIZE_M] = '\0';
+            strncpy(arr[i][j], PQgetvalue(res, i, j), BUFSIZ);
+            arr[i][j][BUFSIZ] = '\0';
         }
 }
 
@@ -2249,7 +2249,7 @@ void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, c
 {
     PGresult * res;
     char *errmsg = (char *) malloc(sizeof(char) * 1024);
-    char query[BUFFERSIZE_M];
+    char query[BUFSIZ];
 
     strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
     strcat(query, config_option_name);
@@ -2343,7 +2343,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         return;
     } 
 
-    char query[BUFFERSIZE_M],
+    char query[BUFSIZ],
          action[10],
          pid[6];
     PGresult * res;

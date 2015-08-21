@@ -13,7 +13,6 @@
 
 /* sizes, limits and defaults */
 #define BUFFERSIZE_S        16
-#define BUFFERSIZE_M        256
 #define BUFFERSIZE          4096
 #define MAX_SCREEN          8
 #define TOTAL_CONTEXTS      10
