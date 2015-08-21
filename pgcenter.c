@@ -541,6 +541,8 @@ void prepare_conninfo(struct screen_s * screens[])
  */
 void open_connections(struct screen_s * screens[], PGconn * conns[])
 {
+    PGresult * res;
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
     int i;
     for ( i = 0; i < MAX_SCREEN; i++ ) {
         if (screens[i]->conn_used) {
@@ -557,6 +559,11 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.",
                 screens[i]->host, screens[i]->port,
                 screens[i]->user, screens[i]->dbname);
+                continue;
+            }
+            if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) == NULL) {
+               PQclear(res);
+               free(errmsg);
             }
         }
     }
@@ -704,7 +711,7 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
         strcat(errmsg, PQerrorMessage(conn));
         PQclear(res);
         return NULL;
-    } else if ( PQresultStatus(res) != PG_TUP_OK ) {
+    } else if ( PQresultStatus(res) != PG_TUP_OK && PQresultStatus(res) != PG_CMD_OK ) {
         strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
         strcat(errmsg, ": ");
         strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));

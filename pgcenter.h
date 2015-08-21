@@ -377,6 +377,9 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_GENERAL_DIFF_MAX    5
 
 /* other queries */
+/* don't log our queries */
+#define PG_SUPPRESS_LOG_QUERY "SET log_min_duration_statement TO 10000"
+
 /* get full config query */
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 
