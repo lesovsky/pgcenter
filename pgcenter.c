@@ -450,7 +450,7 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
     }
 
     stat(pgcenterrc_path, &statbuf);
-    if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) ) {
+    if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) && access(pgcenterrc_path, F_OK) != -1) {
         fprintf(stderr,
                     "WARNING: %s has wrong permissions.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
