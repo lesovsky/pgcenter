@@ -1,5 +1,6 @@
 pgcenter (current development) unstable; urgency=low
 
+  * Improve do_query() func.
   * Set log_min_duration_statement = 10000 for used connections.
   * Improve log tail, add header, store log location in screen struct.
   * Wrap routines into switch_context() function.

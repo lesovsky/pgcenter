@@ -706,19 +706,23 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
     PGresult    *res;
 
     res = PQexec(conn, query);
-    if (PQresultStatus(res) == PG_FATAL_ERR) {
-        strcpy(errmsg, "FATAL: ");
-        strcat(errmsg, PQerrorMessage(conn));
-        PQclear(res);
-        return NULL;
-    } else if ( PQresultStatus(res) != PG_TUP_OK && PQresultStatus(res) != PG_CMD_OK ) {
-        strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
-        strcat(errmsg, ": ");
-        strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
-        PQclear(res);
-        return NULL;
-    } else {
-        return res;
+    switch (PQresultStatus(res)) {
+        case PG_FATAL_ERR:
+            strcpy(errmsg, "FATAL: ");
+            strcat(errmsg, PQerrorMessage(conn));
+            PQclear(res);
+            return NULL;
+            break;
+        case PG_CMD_OK: case PG_TUP_OK:
+            return res;
+            break;
+        default:
+            strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
+            strcat(errmsg, ": ");
+            strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+            PQclear(res);
+            return NULL;
+            break;
     }
 }
 
