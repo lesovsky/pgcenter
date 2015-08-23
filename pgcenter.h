@@ -336,11 +336,13 @@ struct colAttrs {
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
+        regexp_replace( \
         regexp_replace(p.query, \
             E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
             E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
             E'--.*$', '', 'ng'), \
-            E'/\\\\*.*?\\\\*\\/', '', 'g') AS query \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
@@ -359,11 +361,13 @@ struct colAttrs {
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
+        regexp_replace( \
         regexp_replace(p.query, \
             E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
             E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
             E'--.*$', '', 'ng'), \
-            E'/\\\\*.*?\\\\*\\/', '', 'g') AS query \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
