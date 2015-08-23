@@ -1514,7 +1514,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (order_key == INVALID_ORDER_KEY)
         return;
 
-    char *temp = malloc(sizeof(char) * 255);
+    char *temp = malloc(sizeof(char) * BUFSIZ);
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
             if (desc)
