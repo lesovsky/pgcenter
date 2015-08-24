@@ -1,11 +1,12 @@
 #### README: pgCenter
 
-PostgreSQL provides various statistics which includes information about tables, indexes, functions and other database objects and their usage. Moreover, statistics has detailed information about connections, current queries and database operations (INSERT/DELETE/UPDATE). But most of this statistics are  provided as permanently incremented counters. The pgcenter provides convenient interface to this statistics and allow viewing statistics changes in time interval, eg. per second. The pgcenter provides fast access for database management task, such as editing configuration files, reloading services, viewing log files and canceling or terminating database backends (by pid or using state mask). However if need execute some specific operations, pgcenter can start psql session for this purposes.
+PostgreSQL provides various statistics which includes information about tables, indexes, functions and other database objects and their usage. Moreover, statistics has detailed information about connections, current queries and database operations (INSERT/DELETE/UPDATE). But most of this statistics are  provided as permanently incremented counters. The pgcenter provides convenient interface to this statistics and allow viewing statistics changes in time interval, eg. per second. The pgcenter provides fast access for database management task, such as editing configuration files, reloading services, viewing log files and canceling or terminating database backends (by pid or using state mask). However if need execute some specific operations, pgcenter can start psql session for this purposes. 
+Recommended to use pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions.
 
 #### Features:
 - top-like interface;
 - use same connection options as with psql;
-- show current system load;
+- show current system load and cpu usage on localhost;
 - show current postgres state (connections state, longest transaction, autovacuum)
 - show statistics about tables, indexes, functions, activity, replication;
 - show pg_stat_statements statistics (calls, rows, cpu usage, io usage);
@@ -60,6 +61,6 @@ $ pgcenter
 ```
 
 #### Known issues
-- developed and tested under PostgreSQL 9.4.
+- developed and tested under PostgreSQL 9.4 (minimal testing with 9.3).
 - PostgreSQL 9.1 and older not supported (different column names in stat views).
 - this is beta software, in some circumstances segfaults occurs.
