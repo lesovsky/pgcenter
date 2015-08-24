@@ -1866,6 +1866,7 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
  * OUT:
  * @conns           Array of connections.
  * @screen          Connections options array.
+ * @console_index   Index of screen (for internal usage).
  *
  * RETURNS:
  * Add connection into conns array and return new console index.
@@ -1878,8 +1879,6 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
     char params[128];
     bool * with_esc = (bool *) malloc(sizeof(bool)),
          * with_esc2 = (bool *) malloc(sizeof(bool));
-    char * str = (char *) malloc(sizeof(char) * 128);
-//         * str2 = (char *) malloc(sizeof(char) * 128);
     
     echo();
     cbreak();
@@ -1893,9 +1892,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
             wrefresh(window);
 
             /* read user input */
-            cmd_readline(window, 69, with_esc, str);
-            strcpy(params, str);
-            free(str);
+            cmd_readline(window, 69, with_esc, params);
             if (strlen(params) != 0 && *with_esc == false) {
                 /* parse user input */
                 if ((sscanf(params, "%s %s %s %s",
@@ -1927,13 +1924,11 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     wrefresh(window);
 
                     /* read password and add to conn options */
-                    str = (char *) malloc(sizeof(char) * 128);
-                    cmd_readline(window, 19, with_esc2, str);
-                    if (strlen(str) != 0 && *with_esc2 == false) {
-                        strcpy(screens[i]->password, str);
+                    cmd_readline(window, 19, with_esc2, params);
+                    if (strlen(params) != 0 && *with_esc2 == false) {
+                        strcpy(screens[i]->password, params);
                         strcat(screens[i]->conninfo, " password=");
                         strcat(screens[i]->conninfo, screens[i]->password);
-                        free(str);
                         /* try establish connection and finish work */
                         conns[i] = PQconnectdb(screens[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
@@ -3461,6 +3456,7 @@ int main(int argc, char *argv[])
                 case 'N':               /* open new screen with new connection */
                     console_index = add_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
+                    *first_iter = true;
                     break;
                 case 4:                 /* close current screen with Ctrl + D */
                     console_index = close_connection(w_cmd, screens, conns, console_index);
