@@ -6,7 +6,13 @@ PREFIX ?= /usr
 PGCONFIG ?= pg_config
 PGLIBDIR = $(shell $(PGCONFIG) --libdir)
 PGINCLUDEDIR = $(shell $(PGCONFIG) --includedir)
-NCONFIG ?= ncurses5-config
+ifndef NCONFIG
+	ifeq ($(shell sh -c 'which ncurses5-config>/dev/null 2>/dev/null && echo y'), y)
+		NCONFIG = ncurses5-config
+	else ifeq ($(shell sh -c 'which ncursesw5-config>/dev/null 2>/dev/null && echo y'), y)
+		NCONFIG = ncursesw5-config
+	endif
+endif
 NLIBS = $(shell $(NCONFIG) --libs)
 LIBS = $(NLIBS) -lpq
 DESTDIR ?=
