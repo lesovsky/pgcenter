@@ -41,8 +41,6 @@
 #define PGCENTERRC_READ_ERR 1
 
 /* connections defaults */
-#define DEFAULT_HOST        "/tmp"
-#define DEFAULT_PORT        "5432"
 #define DEFAULT_USER        "postgres"
 
 /* others defaults */
@@ -448,7 +446,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
 /* print screen functions */
 void print_title(WINDOW * window, char * progname);
 void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[]);
-void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int console_no);
+void print_conninfo(WINDOW * window, PGconn *conn, int console_no);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
 void print_autovac_info(WINDOW * window, PGconn * conn);
 void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval);

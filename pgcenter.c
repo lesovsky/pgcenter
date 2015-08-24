@@ -377,14 +377,10 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
 {
     struct passwd *pw = getpwuid(getuid());
 
-    if ( strlen(args->host) == 0 )
-        strcpy(screens[0]->host, DEFAULT_HOST);
-    else
+    if ( strlen(args->host) != 0 )
         strcpy(screens[0]->host, args->host);
 
-    if ( strlen(args->port) == 0 )
-        strcpy(screens[0]->port, DEFAULT_PORT);
-    else
+    if ( strlen(args->port) != 0 )
         strcpy(screens[0]->port, args->port);
 
     if ( strlen(args->user) == 0 )
@@ -513,10 +509,14 @@ void prepare_conninfo(struct screen_s * screens[])
     int i;
     for ( i = 0; i < MAX_SCREEN; i++ )
         if (screens[i]->conn_used) {
-            strcat(screens[i]->conninfo, "host=");
-            strcat(screens[i]->conninfo, screens[i]->host);
-            strcat(screens[i]->conninfo, " port=");
-            strcat(screens[i]->conninfo, screens[i]->port);
+            if (strlen(screens[i]->host) != 0) {
+                strcat(screens[i]->conninfo, "host=");
+                strcat(screens[i]->conninfo, screens[i]->host);
+            }
+            if (strlen(screens[i]->port) != 0) {
+                strcat(screens[i]->conninfo, " port=");
+                strcat(screens[i]->conninfo, screens[i]->port);
+            }
             strcat(screens[i]->conninfo, " user=");
             strcat(screens[i]->conninfo, screens[i]->user);
             strcat(screens[i]->conninfo, " dbname=");
@@ -815,12 +815,11 @@ void print_loadavg(WINDOW * window)
  *
  * IN:
  * @window          Window where info will be printed.
- * @conn_opts       Struct with connections options.
  * @conn            Current connection.
  * @console_no      Current console number.
  ****************************************************************************
  */
-void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int console_no)
+void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
 {
     static char state[8];
     switch (PQstatus(conn)) {
@@ -836,8 +835,8 @@ void print_conninfo(WINDOW * window, struct screen_s * screen, PGconn *conn, int
     }
     wprintw(window, "  conn %i: %s:%s %s@%s\t conn state: %s\n",
                 console_no,
-                screen->host, screen->port,
-                screen->user, screen->dbname,
+                PQhost(conn), PQport(conn),
+                PQuser(conn), PQdb(conn),
                 state);
     wrefresh(window);
 }
@@ -3601,7 +3600,7 @@ int main(int argc, char *argv[])
             print_title(w_sys, argv[0]);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
-            print_conninfo(w_sys, screens[console_index], conns[console_index], console_no);
+            print_conninfo(w_sys, conns[console_index], console_no);
             print_postgres_activity(w_sys, conns[console_index]);
             print_autovac_info(w_sys, conns[console_index]);
             print_pgstatstmt_info(w_sys, conns[console_index], interval);
