@@ -39,7 +39,7 @@ void print_usage(void)
   -?, --help                show this help, then exit.\n \
   -V, --version             print version, then exit.\n\n");
     printf("Options:\n \
-  -h, --host=HOSTNAME       database server host or socket directory (default: \"/tmp\")\n \
+  -h, --host=HOSTNAME       database server host or socket directory\n \
   -p, --port=PORT           database server port (default: \"5432\")\n \
   -U, --username=USERNAME   database user name (default: \"current user\")\n \
   -d, --dbname=DBNAME       database name (default: \"current user\")\n \
