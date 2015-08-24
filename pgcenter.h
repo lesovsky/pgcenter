@@ -511,6 +511,6 @@ void draw_color_help(WINDOW * w, int * ws_color, int * wc_color,
 void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
 
 /* help functions */
-void print_help_screen(void);
+void print_help_screen(bool * first_iter);
 void print_usage(void);
 #endif

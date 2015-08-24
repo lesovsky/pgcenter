@@ -3318,9 +3318,12 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 /*
  ****************************************************** key press function **
  * Print on-program help.
+ *
+ * IN:
+ * @first_iter              Reset stats counter after help.
  ****************************************************************************
  */
-void print_help_screen(void)
+void print_help_screen(bool * first_iter)
 {
     WINDOW * w;
     int ch;
@@ -3359,6 +3362,7 @@ other actions:\n\
         ch = wgetch(w);
     } while (ch != 27);
 
+    *first_iter = true;
     cbreak();
     nodelay(w, TRUE);
     keypad(w, FALSE);
@@ -3576,8 +3580,8 @@ int main(int argc, char *argv[])
                 case 32:                /* pause program execution with space */
                     do_noop(w_cmd, interval);
                     break;
-                case 265:               /* print help with F1 */
-                    print_help_screen();
+                case 265: case 'h':     /* print help with F1 */
+                    print_help_screen(first_iter);
                     break;
                 case 'q':               /* exit program */
                     exit_prog(screens, conns);
