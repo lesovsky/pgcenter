@@ -595,8 +595,8 @@ void close_connections(struct screen_s * screens[], PGconn * conns[])
  */
 void exit_prog(struct screen_s * screens[], PGconn * conns[])
 {
-    close_connections(screens, conns);
     endwin();
+    close_connections(screens, conns);
     exit(EXIT_SUCCESS);
 }
 
@@ -2262,15 +2262,9 @@ void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, c
 
     res = do_query(conn, query, errmsg);
     
-    if (PQntuples(res) != 0) {
-        if (!strcmp(PQgetvalue(res, 0, 0), config_option_name))
-            strcpy(config_option_value, PQgetvalue(res, 0, 1));
-        /* if we want edit recovery.conf, attach config name to data_directory path */
-        if (!strcmp(config_option_name, GUC_DATA_DIRECTORY)) {
-            strcat(config_option_value, "/");
-            strcat(config_option_value, PG_RECOVERY_CONF_FILE);
-        }
-    } else
+    if (PQntuples(res) != 0 && !strcmp(PQgetvalue(res, 0, 0), config_option_name))
+        strcpy(config_option_value, PQgetvalue(res, 0, 1));
+    else
         strcpy(config_option_value, "");
     
     free(errmsg);
@@ -2285,20 +2279,25 @@ void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, c
  * @window          Window where errors will be displayed.
  * @screen          Screen options.
  * @conn            Current connection.
- * @guc             GUC option associated with postgresql/pg_hba/pg_ident
+ * @config_file_guc GUC option associated with postgresql/pg_hba/pg_ident
  *
  * RETURNS:
  * Open configuration file in $EDITOR.
  ****************************************************************************
  */
-void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * guc)
+void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc)
 {
-    char * conffile = (char *) malloc(sizeof(char) * 128);
+    char * config_path = (char *) malloc(sizeof(char) * 128);
     pid_t pid;
 
     if (check_pg_listen_addr(screen)) {
-        get_conf_value(window, conn, guc, conffile);
-        if (strlen(conffile) != 0) {
+        get_conf_value(window, conn, config_file_guc, config_path);
+        if (strlen(config_path) != 0) {
+            /* if we want edit recovery.conf, attach config name to data_directory path */
+            if (!strcmp(config_file_guc, GUC_DATA_DIRECTORY)) {
+                strcat(config_path, "/");
+                strcat(config_path, PG_RECOVERY_CONF_FILE);
+            }
             /* escape from ncurses mode */
             refresh();
             endwin();
@@ -2307,11 +2306,11 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
                 char * editor = (char *) malloc(sizeof(char) * 128);
                 if ((editor = getenv("EDITOR")) == NULL)
                     editor = DEFAULT_EDITOR;
-                execlp(editor, editor, conffile, NULL);
+                execlp(editor, editor, config_path, NULL);
                 free(editor);
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
-                wprintw(window, "Can't open %s: fork failed.", conffile);
+                wprintw(window, "Can't open %s: fork failed.", config_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
                 wprintw(window, "Unknown error: waitpid failed.");
@@ -2323,7 +2322,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     } else {
         wprintw(window, "Do nothing. Edit config not supported for remote hosts.");
     }
-    free(conffile);
+    free(config_path);
 
     /* return to ncurses mode */
     refresh();
