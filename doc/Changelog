@@ -1,5 +1,6 @@
 pgcenter (current development) unstable; urgency=low
 
+  * fix broken multiple connections when log_min_duration_statement issued.
   * remove DEFAULT_HOST, DEFAULT_PORT; use libpq default behaviour.
   * improve add_connection(): reset counters, remove unnecessary vars.
   * Improve do_query() func.

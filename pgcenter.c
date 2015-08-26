@@ -541,8 +541,6 @@ void prepare_conninfo(struct screen_s * screens[])
  */
 void open_connections(struct screen_s * screens[], PGconn * conns[])
 {
-    PGresult * res;
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
     int i;
     for ( i = 0; i < MAX_SCREEN; i++ ) {
         if (screens[i]->conn_used) {
@@ -561,10 +559,14 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 screens[i]->user, screens[i]->dbname);
                 continue;
             }
-            if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) == NULL) {
+
+            PGresult * res;
+            char * errmsg = (char *) malloc(sizeof(char) * 1024);
+            /* suppress log messages with log_min_duration_statement */
+            if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) != NULL)
                PQclear(res);
-               free(errmsg);
-            }
+            if (errmsg)
+                free(errmsg);
         }
     }
 }
