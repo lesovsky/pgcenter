@@ -560,6 +560,10 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 continue;
             }
 
+            /* get PostgreSQL version */
+            get_conf_value(conns[i], GUC_SERVER_VERSION_NUM, screens[i]->pg_version_num);
+            get_conf_value(conns[i], GUC_SERVER_VERSION, screens[i]->pg_version);
+
             PGresult * res;
             char * errmsg = (char *) malloc(sizeof(char) * 1024);
             /* suppress log messages with log_min_duration_statement */
@@ -910,7 +914,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
         o_count = 0;
     }
 
-    mvwprintw(window, 0, COLS / 2,
+    mvwprintw(window, 1, COLS / 2,
             "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
             t_count, i_count, x_count, a_count, w_count, o_count);
     wrefresh(window);
@@ -961,7 +965,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
         strcpy(maxtime, "--:--:--");
     }
 
-    mvwprintw(window, 2, COLS / 2,
+    mvwprintw(window, 3, COLS / 2,
             "statements: %3i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
     wrefresh(window);
@@ -1248,6 +1252,19 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
 
 /*
  ************************************************** system window function **
+ * Print PostgreSQL general info
+ *
+ * IN:
+ * @window          Window where resultwill be printing.
+ ****************************************************************************
+ */
+void print_pg_general(WINDOW * window, struct screen_s * screen)
+{
+    mvwprintw(window, 0, COLS / 2, "pg version: %6s", screen->pg_version);
+}
+
+/*
+ ************************************************** system window function **
  * Print autovacuum info.
  *
  * IN:
@@ -1284,7 +1301,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
         strcpy(av_max_time, "--:--:--");
     }
 
-    mvwprintw(window, 1, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
+    mvwprintw(window, 2, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
     wrefresh(window);
     free(errmsg);
@@ -1848,6 +1865,16 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
         strcpy(screens[i]->user,        screens[i + 1]->user);
         strcpy(screens[i]->dbname,      screens[i + 1]->dbname);
         strcpy(screens[i]->password,    screens[i + 1]->password);
+        strcpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num);
+        strcpy(screens[i]->pg_version,  screens[i + 1]->pg_version);
+        screens[i]->log_opened =        screens[i + 1]->log_opened;
+        strcpy(screens[i]->log_path,    screens[i + 1]->log_path);
+        screens[i]->log_fd =            screens[i + 1]->log_fd;
+        screens[i]->current_context =   screens[i + 1]->current_context;
+        strcpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age);
+        screens[i]->signal_options =    screens[i + 1]->signal_options;
+        screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
+
         conns[i] = conns[i + 1];
         i++;
         if (i == MAX_SCREEN - 1)
@@ -1967,6 +1994,12 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
         } else if (i == MAX_SCREEN - 1) {
             wprintw(window, "No free consoles.");
         }
+    }
+
+    /* get PostgreSQL version */
+    if (PQstatus(conns[i]) == CONNECTION_OK) {
+        get_conf_value(conns[i], GUC_SERVER_VERSION_NUM, screens[i]->pg_version_num);
+        get_conf_value(conns[i], GUC_SERVER_VERSION, screens[i]->pg_version);
     }
     
     /* finish work */
@@ -2252,7 +2285,7 @@ bool check_pg_listen_addr(struct screen_s * screen)
  * @config_option_value     Config option value or empty string.
  ****************************************************************************
  */
-void get_conf_value(WINDOW * window, PGconn * conn, char * config_option_name, char * config_option_value)
+void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value)
 {
     PGresult * res;
     char *errmsg = (char *) malloc(sizeof(char) * 1024);
@@ -2293,7 +2326,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     pid_t pid;
 
     if (check_pg_listen_addr(screen)) {
-        get_conf_value(window, conn, config_file_guc, config_path);
+        get_conf_value(conn, config_file_guc, config_path);
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
             if (!strcmp(config_file_guc, GUC_DATA_DIRECTORY)) {
@@ -3602,6 +3635,7 @@ int main(int argc, char *argv[])
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, conns[console_index], console_no);
+            print_pg_general(w_sys, screens[console_index]);
             print_postgres_activity(w_sys, conns[console_index]);
             print_autovac_info(w_sys, conns[console_index]);
             print_pgstatstmt_info(w_sys, conns[console_index], interval);

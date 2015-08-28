@@ -35,7 +35,9 @@
 #define GUC_CONFIG_FILE         "config_file"
 #define GUC_HBA_FILE            "hba_file"
 #define GUC_IDENT_FILE          "ident_file"
-#define GUC_DATA_DIRECTORY       "data_directory"
+#define GUC_DATA_DIRECTORY      "data_directory"
+#define GUC_SERVER_VERSION      "server_version"
+#define GUC_SERVER_VERSION_NUM  "server_version_num"
 
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
@@ -122,6 +124,8 @@ struct screen_s
     char dbname[BUFFERSIZE];
     char password[BUFFERSIZE];
     char conninfo[BUFFERSIZE];
+    char pg_version_num[10];
+    char pg_version[10];
     bool log_opened;
     char log_path[PATH_MAX];
     int log_fd;
@@ -498,8 +502,7 @@ void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str);
 void clear_screen_connopts(struct screen_s * screens[], int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], int i);
 bool check_pg_listen_addr(struct screen_s * screen);
-void get_conf_value(WINDOW * window, PGconn * conn,
-        char * config_option_name, char * config_option_value);
+void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
 void get_logfile_path(char * path, PGconn * conn);
 
 /* color functions */

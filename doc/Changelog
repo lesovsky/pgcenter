@@ -1,8 +1,14 @@
-pgcenter (current development) unstable; urgency=low
+pgcenter (development) unstable; urgency=low
 
+  * fix parameters moving when console closed.
+  * add pg version output in sysstat section.
   * fix broken multiple connections when log_min_duration_statement issued.
   * remove DEFAULT_HOST, DEFAULT_PORT; use libpq default behaviour.
   * improve add_connection(): reset counters, remove unnecessary vars.
+ 
+ -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 28 Aug 2015 14:27:07 +0500
+
+pgcenter (0.1.2) unstable; urgency=low
   * Improve do_query() func.
   * Set log_min_duration_statement = 10000 for used connections.
   * Improve log tail, add header, store log location in screen struct.
