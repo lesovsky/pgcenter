@@ -1252,15 +1252,44 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
 
 /*
  ************************************************** system window function **
+ * Get PostgreSQL uptime
+ *
+ * IN:
+ * @conn
+ ****************************************************************************
+ */
+void get_pg_uptime(PGconn * conn, char * uptime)
+{
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    PGresult * res;
+
+    if ((res = do_query(conn, PG_UPTIME_QUERY, errmsg)) != NULL) {
+        strcpy(uptime, PQgetvalue(res, 0, 0));
+        PQclear(res);
+        free(errmsg);
+    } else {
+        strcpy(uptime, "--:--:--");
+    }
+}
+
+/*
+ ************************************************** system window function **
  * Print PostgreSQL general info
  *
  * IN:
  * @window          Window where resultwill be printing.
+ * @screen          Screen with postgres version info.
+ * @conn            Current connection.
  ****************************************************************************
  */
-void print_pg_general(WINDOW * window, struct screen_s * screen)
+void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
-    mvwprintw(window, 0, COLS / 2, "pg version: %6s", screen->pg_version);
+    static char uptime[32];
+    get_pg_uptime(conn, uptime);
+
+    mvwprintw(window, 0, COLS / 2, "   version: %6s, up %s",
+                screen->pg_version, uptime);
+
 }
 
 /*
@@ -3635,7 +3664,7 @@ int main(int argc, char *argv[])
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             print_conninfo(w_sys, conns[console_index], console_no);
-            print_pg_general(w_sys, screens[console_index]);
+            print_pg_general(w_sys, screens[console_index], conns[console_index]);
             print_postgres_activity(w_sys, conns[console_index]);
             print_autovac_info(w_sys, conns[console_index]);
             print_pgstatstmt_info(w_sys, conns[console_index], interval);

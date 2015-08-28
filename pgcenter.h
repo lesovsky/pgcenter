@@ -412,6 +412,9 @@ struct colAttrs {
 /* reset statistics query */
 #define PG_STAT_RESET_QUERY "SELECT pg_stat_reset(), pg_stat_statements_reset()"
 
+/* postmaster uptime query */
+#define PG_UPTIME_QUERY "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
+
 /* start end exit functions */
 void sig_handler(int signo);
 void init_signal_handlers(void);
@@ -451,6 +454,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
 void print_title(WINDOW * window, char * progname);
 void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, int console_no);
+void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
 void print_autovac_info(WINDOW * window, PGconn * conn);
 void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval);
@@ -504,6 +508,7 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], int i);
 bool check_pg_listen_addr(struct screen_s * screen);
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
 void get_logfile_path(char * path, PGconn * conn);
+void get_pg_uptime(PGconn * conn, char * uptime);
 
 /* color functions */
 void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);

@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * add postgres uptime.
   * fix parameters moving when console closed.
   * add pg version output in sysstat section.
   * fix broken multiple connections when log_min_duration_statement issued.
