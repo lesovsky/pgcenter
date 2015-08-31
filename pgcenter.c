@@ -3394,7 +3394,8 @@ void switch_context(WINDOW * window, struct screen_s * screen,
     }
 
     screen->current_context = context;
-    PQclear(res);
+    if (PQresultStatus(res) == PG_CMD_OK)
+        PQclear(res);
     *first_iter = true;
 }
 
