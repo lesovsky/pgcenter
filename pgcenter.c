@@ -1359,26 +1359,29 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
  *
  * IN:
  * @window          Window where cmd status will be written.
- * @screens[]     Struct with connections options.
+ * @screens[]       Struct array with screens options.
  * @ch              Intercepted key (number from 1 to 8).
  * @console_no      Active console number.
  * @console_index   Index of active console.
+ * @first_iter      Reset previous results.
  *
  * RETURNS:
  * Index console on which performed switching.
  ****************************************************************************
  */
 int switch_conn(WINDOW * window, struct screen_s * screens[],
-                int ch, int console_index, int console_no)
+                int ch, int console_index, int console_no, bool * first_iter)
 {
     wclear(window);
     if ( screens[ch - '0' - 1]->conn_used ) {
         console_no = ch - '0', console_index = console_no - 1;
         wprintw(window, "Switch to another pgbouncer connection (console %i)",
                 console_no);
+        *first_iter = true;
     } else
         wprintw(window, "Do not switch because no connection associated (stay on console %i)",
                 console_no);
+
     return console_index;
 }
 
@@ -3539,7 +3542,7 @@ int main(int argc, char *argv[])
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no);
+                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no, first_iter);
                     console_no = console_index + 1;
                     break;
                 case 'N':               /* open new screen with new connection */

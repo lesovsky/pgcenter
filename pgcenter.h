@@ -519,7 +519,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
 
 /* key-press functions */
 int switch_conn(WINDOW * window, struct screen_s * screens[],
-        int ch, int console_index, int console_no);
+        int ch, int console_index, int console_no, bool * first_iter);
 void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter);
 void change_sort_order_direction(struct screen_s * screen, bool * first_iter);
 void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter);
