@@ -477,10 +477,11 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
  * IN:
  * @window          Window where status will be printed.
  * @conn            Connection associated with current screen.
+ * @screen          Current screen.
  * @reconnected     True if conn failed and reconnect performed.
  ****************************************************************************
  */
-void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
+void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * screen, bool *reconnected)
 {
     if (PQstatus(conn) == CONNECTION_BAD) {
         wclear(window);
@@ -491,7 +492,13 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected)
         /* reset previous query results after reconnect */
         *reconnected = true;
         sleep(1);
-    } 
+    }
+    
+    /* get PostgreSQL version if reconnect successful */
+    if (reconnected) {
+        get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
+        get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
+    }
 }
 
 /*
@@ -3684,7 +3691,7 @@ int main(int argc, char *argv[])
             wattron(w_sys, COLOR_PAIR(*ws_color));
             wattron(w_dba, COLOR_PAIR(*wa_color));
 
-            reconnect_if_failed(w_cmd, conns[console_index], first_iter);
+            reconnect_if_failed(w_cmd, conns[console_index], screens[console_index], first_iter);
 
             /* 
              * Sysstat screen 

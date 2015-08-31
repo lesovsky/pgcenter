@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * update info about postgres version after suvvessful reconnect.
   * reset previous results when switching between screens.
   * fix crash when switching with empty previous results.
   * add pg_stat_statements for 9.0, 9.1.

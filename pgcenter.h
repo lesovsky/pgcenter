@@ -474,7 +474,7 @@ void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 
 /* connections and queries unctions */
 char * password_prompt(const char *prompt, int maxlen, bool echo);
-void reconnect_if_failed(WINDOW * window, PGconn * conn, bool *reconnected);
+void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * screen, bool *reconnected);
 void prepare_conninfo(struct screen_s * screens[]);
 void open_connections(struct screen_s * screens[], PGconn * conns[]);
 void close_connections(struct screen_s * screens[], PGconn * conns[]);
