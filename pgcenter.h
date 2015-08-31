@@ -197,6 +197,17 @@ struct colAttrs {
         "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity"
 
 /* context queries */
+#define PG_STAT_DATABASE_91_QUERY \
+    "SELECT \
+        datname, \
+        xact_commit AS commit, xact_rollback AS rollback, \
+        blks_read AS reads, blks_hit AS hits, \
+        tup_returned AS returned, tup_fetched AS fetched, \
+        tup_inserted AS inserts, tup_updated AS updates, tup_deleted AS deletes, \
+        conflicts \
+    FROM pg_stat_database \
+    ORDER BY datname"
+
 #define PG_STAT_DATABASE_QUERY \
     "SELECT \
         datname, \
@@ -210,8 +221,9 @@ struct colAttrs {
     FROM pg_stat_database \
     ORDER BY datname"
 
-#define PG_STAT_DATABASE_ORDER_MIN    1
-#define PG_STAT_DATABASE_ORDER_MAX    15
+#define PG_STAT_DATABASE_ORDER_MIN          1
+#define PG_STAT_DATABASE_ORDER_91_MAX       10
+#define PG_STAT_DATABASE_ORDER_LATEST_MAX   15
 
 #define PG_STAT_REPLICATION_QUERY \
     "SELECT \
@@ -289,6 +301,21 @@ struct colAttrs {
 
 #define PG_TABLES_SIZE_ORDER_MIN 4
 #define PG_TABLES_SIZE_ORDER_MAX 6
+
+#define PG_STAT_ACTIVITY_LONG_QUERY_91_P1 \
+    "SELECT \
+        procpid AS pid, client_addr AS cl_addr, client_port AS cl_port, \
+        datname, usename, waiting, \
+        date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
+        date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
+        current_query \
+    FROM pg_stat_activity \
+    WHERE ((clock_timestamp() - xact_start) > '"
+#define PG_STAT_ACTIVITY_LONG_QUERY_91_P2 \
+    "'::interval OR (clock_timestamp() - query_start) > '"
+#define PG_STAT_ACTIVITY_LONG_QUERY_91_P3 \
+    "'::interval) AND current_query <> '<IDLE>' AND procpid <> pg_backend_pid() \
+    ORDER BY COALESCE(xact_start, query_start)"
 
 #define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
     "SELECT \
@@ -466,8 +493,8 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 char *** init_array(char ***arr, int n_rows, int n_cols);
 char *** free_array(char ***arr, int n_rows, int n_cols);
 void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols);
-void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, 
-        enum context context, int n_rows, int n_cols, long int interval);
+void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, 
+        int n_rows, int n_cols, long int interval);
 void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen);
 
 /* key-press functions */

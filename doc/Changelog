@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * add pg_stat_database, pg_stat_activity for 9.0, 9.1.
   * add postgres uptime.
   * fix parameters moving when console closed.
   * add pg version output in sysstat section.

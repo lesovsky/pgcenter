@@ -621,7 +621,10 @@ void prepare_query(struct screen_s * screen, char * query)
     char view[] = DEFAULT_VIEW_TYPE;
     switch (screen->current_context) {
         case pg_stat_database: default:
-            strcpy(query, PG_STAT_DATABASE_QUERY);
+            if (atoi(screen->pg_version_num) < 90200)
+                strcpy(query, PG_STAT_DATABASE_91_QUERY);
+            else
+                strcpy(query, PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
             strcpy(query, PG_STAT_REPLICATION_QUERY);
@@ -661,11 +664,19 @@ void prepare_query(struct screen_s * screen, char * query)
              * build query from several parts, 
              * thus user can change duration which is used in WHERE clause.
              */
-            strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
-            strcat(query, screen->pg_stat_activity_min_age);
-            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
-            strcat(query, screen->pg_stat_activity_min_age);
-            strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
+            if (atoi(screen->pg_version_num) < 90200) {
+                strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P1);
+                strcat(query, screen->pg_stat_activity_min_age);
+                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P2);
+                strcat(query, screen->pg_stat_activity_min_age);
+                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P3);
+            } else {
+                strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
+                strcat(query, screen->pg_stat_activity_min_age);
+                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
+                strcat(query, screen->pg_stat_activity_min_age);
+                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
+            }
             break;
         case pg_stat_functions:
             /* here we use query native ORDER BY, and we should incrementing order key */
@@ -1454,15 +1465,18 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
  * @res_arr         Array where difference result will be stored.
  ****************************************************************************
  */
-void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, enum context context, int n_rows, int n_cols, long int interval)
+void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, int n_rows, int n_cols, long int interval)
 {
     int i, j, min = 0, max = 0;
     int divisor;
  
-    switch (context) {
+    switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            max = PG_STAT_DATABASE_ORDER_MAX;
+            if (atoi(screen->pg_version_num) < 90200)
+                max = PG_STAT_DATABASE_ORDER_91_MAX;
+            else
+                max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
             break;
         case pg_stat_replication:
             min = PG_STAT_REPLICATION_ORDER_MIN;
@@ -1667,7 +1681,10 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            max = PG_STAT_DATABASE_ORDER_MAX;
+            if (atoi(screen->pg_version_num) < 90200)
+                max = PG_STAT_DATABASE_ORDER_91_MAX;
+            else
+                max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
             break;
         case pg_stat_replication:
             min = PG_STAT_REPLICATION_ORDER_MIN;
@@ -3722,7 +3739,7 @@ int main(int argc, char *argv[])
             pgrescpy(c_arr, c_res, n_rows, n_cols);
 
             /* diff current and previous arrays and build result array */
-            diff_arrays(p_arr, c_arr, r_arr, screens[console_index]->current_context, n_rows, n_cols, interval);
+            diff_arrays(p_arr, c_arr, r_arr, screens[console_index], n_rows, n_cols, interval);
 
             /* sort result array using order key */
             sort_array(r_arr, n_rows, n_cols, screens[console_index]);
