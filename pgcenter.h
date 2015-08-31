@@ -302,7 +302,7 @@ struct colAttrs {
 #define PG_TABLES_SIZE_ORDER_MIN 4
 #define PG_TABLES_SIZE_ORDER_MAX 6
 
-#define PG_STAT_ACTIVITY_LONG_QUERY_91_P1 \
+#define PG_STAT_ACTIVITY_LONG_91_QUERY_P1 \
     "SELECT \
         procpid AS pid, client_addr AS cl_addr, client_port AS cl_port, \
         datname, usename, waiting, \
@@ -311,9 +311,9 @@ struct colAttrs {
         current_query \
     FROM pg_stat_activity \
     WHERE ((clock_timestamp() - xact_start) > '"
-#define PG_STAT_ACTIVITY_LONG_QUERY_91_P2 \
+#define PG_STAT_ACTIVITY_LONG_91_QUERY_P2 \
     "'::interval OR (clock_timestamp() - query_start) > '"
-#define PG_STAT_ACTIVITY_LONG_QUERY_91_P3 \
+#define PG_STAT_ACTIVITY_LONG_91_QUERY_P3 \
     "'::interval) AND current_query <> '<IDLE>' AND procpid <> pg_backend_pid() \
     ORDER BY COALESCE(xact_start, query_start)"
 
@@ -354,6 +354,25 @@ struct colAttrs {
 #define PG_STAT_FUNCTIONS_ORDER_MIN    2
 #define PG_STAT_FUNCTIONS_ORDER_MAX    7
 
+#define PG_STAT_STATEMENTS_TIMING_91_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS total_t, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
@@ -379,8 +398,9 @@ struct colAttrs {
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
 
-#define PG_STAT_STATEMENTS_TIMING_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_TIMING_ORDER_MAX    5
+#define PG_STAT_STATEMENTS_TIMING_ORDER_MIN         2
+#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      2
+#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  5
 
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \

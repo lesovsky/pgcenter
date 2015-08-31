@@ -665,11 +665,11 @@ void prepare_query(struct screen_s * screen, char * query)
              * thus user can change duration which is used in WHERE clause.
              */
             if (atoi(screen->pg_version_num) < 90200) {
-                strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P1);
+                strcpy(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P1);
                 strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P2);
+                strcat(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P2);
                 strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_91_P3);
+                strcat(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P3);
             } else {
                 strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
                 strcat(query, screen->pg_stat_activity_min_age);
@@ -688,9 +688,15 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
-            strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+            if (atoi(screen->pg_version_num) < 90200) {
+                strcpy(query, PG_STAT_STATEMENTS_TIMING_91_QUERY_P1);
+                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+                strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+            } else {
+                strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
+                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+                strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+            }
             break;
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
@@ -1717,7 +1723,10 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_timing:
             min = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
-            max = PG_STAT_STATEMENTS_TIMING_ORDER_MAX;
+            if (atoi(screen->pg_version_num) < 90200)
+                max = PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX;
+            else
+                max = PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX;
             *first_iter = true;
             break;
         case pg_stat_statements_general:
