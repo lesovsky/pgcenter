@@ -3205,6 +3205,97 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
     PQclear(res);
     free(errmsg);
 }
+
+/*
+ ****************************************************** key-press function **
+ * Get query text using pg_stat_statements.queryid (only for 9.4 and never).
+ *
+ * IN:
+ * @window              Window where result will be printed.
+ * @screen              Current screen settings.
+ * @conn                Current PostgreSQL connection.
+ * @first_iter          Reset counters.
+ ****************************************************************************
+ */
+void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn, bool * first_iter)
+{
+    if (screen->current_context != pg_stat_statements_timing
+            && screen->current_context != pg_stat_statements_general) {
+        wprintw(window, "Get query text not allowed here.");
+        return;
+    }
+
+    PGresult * res;
+    bool * with_esc = (bool *) malloc(sizeof(bool));
+    char queryid[BUFFERSIZE_S],
+         query[BUFSIZ],
+         pager[32] = "";
+    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    FILE * fpout;
+
+    echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    wprintw(window, "Enter queryid: ");
+    wrefresh(window);
+
+    cmd_readline(window, 15, with_esc, queryid);
+    if (strlen(queryid) != 0 && *with_esc == false) {
+        /* do query and send result into less */
+        strcpy(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P1);
+        strcat(query, queryid);
+        strcat(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2);
+        if ((res = do_query(conn, query, errmsg)) == NULL) {
+            wprintw(window, "%s", errmsg);
+            free(errmsg);
+            return;
+        }
+        
+        if (getenv("PAGER") != NULL)
+            strcpy(pager, getenv("PAGER"));
+        else
+            strcpy(pager, DEFAULT_PAGER);
+        
+        if ((fpout = popen(pager, "w")) == NULL) {
+            wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
+            return;
+        }
+
+        /* escape from ncurses mode */
+        refresh();
+        endwin();
+
+        /* print result */
+        fprintf(fpout, " Database: %s, User: %s, Total calls: %s, Total rows: %s, Queryid: %s\n\n",
+                PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1), PQgetvalue(res, 0, 2),
+                PQgetvalue(res, 0, 3), queryid);
+        fprintf(fpout, "%s", PQgetvalue(res, 0, 4));
+
+        /* clean */
+        PQclear(res);
+        pclose(fpout);
+
+        /* return to ncurses mode */
+        refresh();
+    } else if (strlen(queryid) == 0 && *with_esc == false) {
+        wprintw(window, "Nothing to do. Nothing entered");
+    } else if (*with_esc == true) {
+        ;
+    } else {
+        wprintw(window, "Nothing to do.");
+    }
+    
+    free(with_esc);
+    free(errmsg);
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
+
+}
+
 /*
  *********************************************************** init function **
  * Init output colors.
@@ -3672,6 +3763,9 @@ int main(int argc, char *argv[])
                 case 'K':               /* reset pg stat counters */
                     pg_stat_reset(w_cmd, conns[console_index], first_iter);
                     PQclear(p_res);
+                    break;
+                case 'G':               /* get query text using pg_stat_statements.queryid */
+                    get_query_by_id(w_cmd, screens[console_index], conns[console_index], first_iter);
                     break;
                 case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
