@@ -1384,7 +1384,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
  ****************************************************************************
  */
 int switch_conn(WINDOW * window, struct screen_s * screens[],
-                int ch, int console_index, int console_no, bool * first_iter)
+                int ch, int console_index, int console_no, PGresult * res, bool * first_iter)
 {
     wclear(window);
     if ( screens[ch - '0' - 1]->conn_used ) {
@@ -1396,6 +1396,8 @@ int switch_conn(WINDOW * window, struct screen_s * screens[],
         wprintw(window, "Do not switch because no connection associated (stay on console %i)",
                 console_no);
 
+    if (res)
+        PQclear(res);
     return console_index;
 }
 
@@ -3214,10 +3216,9 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
  * @window              Window where result will be printed.
  * @screen              Current screen settings.
  * @conn                Current PostgreSQL connection.
- * @first_iter          Reset counters.
  ****************************************************************************
  */
-void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn, bool * first_iter)
+void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
     if (screen->current_context != pg_stat_statements_timing
             && screen->current_context != pg_stat_statements_general) {
@@ -3250,6 +3251,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn, b
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
             free(errmsg);
+            free(with_esc);
             return;
         }
         
@@ -3502,7 +3504,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
     }
 
     screen->current_context = context;
-    if (PQresultStatus(res) == PG_CMD_OK)
+    if (res)
         PQclear(res);
     *first_iter = true;
 }
@@ -3647,7 +3649,7 @@ int main(int argc, char *argv[])
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no, first_iter);
+                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no, p_res, first_iter);
                     console_no = console_index + 1;
                     break;
                 case 'N':               /* open new screen with new connection */
@@ -3765,7 +3767,7 @@ int main(int argc, char *argv[])
                     PQclear(p_res);
                     break;
                 case 'G':               /* get query text using pg_stat_statements.queryid */
-                    get_query_by_id(w_cmd, screens[console_index], conns[console_index], first_iter);
+                    get_query_by_id(w_cmd, screens[console_index], conns[console_index]);
                     break;
                 case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
