@@ -374,29 +374,6 @@ struct colAttrs {
     WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 
-#define PG_STAT_STATEMENTS_TIMING_93_QUERY_P1 \
-    "SELECT \
-        a.rolname AS user, d.datname AS database, \
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS total_t, \
-        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS read_t, \
-        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS write_t, \
-        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS cpu_t, \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace(p.query, \
-            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
-            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
-            E'--.*$', '', 'ng'), \
-            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
-            E'\\\\s+', ' ', 'g') AS query \
-    FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
-    JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
@@ -404,7 +381,7 @@ struct colAttrs {
         date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS read_t, \
         date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS write_t, \
         date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS cpu_t, \
-        p.queryid, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
@@ -426,33 +403,12 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      2
 #define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  5
 
-#define PG_STAT_STATEMENTS_GENERAL_93_QUERY_P1 \
-    "SELECT \
-        a.rolname AS user, d.datname AS database, \
-        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
-        sum(p.calls) AS calls, sum(p.rows) as rows, \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace( \
-        regexp_replace(p.query, \
-            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
-            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
-            E'--.*$', '', 'ng'), \
-            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
-            E'\\\\s+', ' ', 'g') AS query \
-    FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
-    JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
         sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
         sum(p.calls) AS calls, sum(p.rows) as rows, \
-        p.queryid, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
@@ -514,7 +470,7 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND p.queryid = '"
+    WHERE d.datname != 'postgres' AND left(md5(d.datname || a.rolname || p.query ), 10) = '"
 #define PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2 "' GROUP BY a.rolname, d.datname, query"
 
 /* postmaster uptime query */

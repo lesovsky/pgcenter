@@ -698,9 +698,6 @@ void prepare_query(struct screen_s * screen, char * query)
             if (atoi(screen->pg_version_num) < 90200) {
                 strcpy(query, PG_STAT_STATEMENTS_TIMING_91_QUERY_P1);
                 strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            } else if (atoi(screen->pg_version_num) < 90199 && atoi(screen->pg_version_num) < 90400) {
-                strcpy(query, PG_STAT_STATEMENTS_TIMING_93_QUERY_P1);
-                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             } else {
                 strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
                 strcat(query, tmp);             /* insert number of field into ORDER BY .. */
@@ -710,13 +707,8 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
-            if (atoi(screen->pg_version_num) < 90400) {
-                strcpy(query, PG_STAT_STATEMENTS_GENERAL_93_QUERY_P1);
-                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            } else {
-                strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
-                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            }
+            strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;
     }

@@ -1,8 +1,9 @@
 pgcenter (development) unstable; urgency=low
 
+  * get query text uses md5 hash instead of queryid.
   * get query text using pg_stat_statements.queryid (9.4 only).
   * add queryid output into pg_stat_statements (9.4 only).
-  * update info about postgres version after suvvessful reconnect.
+  * update info about postgres version after successful reconnect.
   * reset previous results when switching between screens.
   * fix crash when switching with empty previous results.
   * add pg_stat_statements for 9.0, 9.1.
