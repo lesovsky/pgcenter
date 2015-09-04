@@ -3558,7 +3558,8 @@ activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
   n,m             'n' set new mask, 'm' show current mask.\n\
   Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n\
-  A               change activity age threshold.\n\n\
+  A               change activity age threshold.\n\
+  G               get report about query using hash.\n\n\
 other actions:\n\
   V,K             'V' show system tables on/off, 'K' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
