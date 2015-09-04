@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * add verbose query report based on query_stat_total.sql.
   * get query text uses md5 hash instead of queryid.
   * get query text using pg_stat_statements.queryid (9.4 only).
   * add queryid output into pg_stat_statements (9.4 only).

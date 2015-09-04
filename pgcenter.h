@@ -461,18 +461,6 @@ struct colAttrs {
 /* reset statistics query */
 #define PG_STAT_RESET_QUERY "SELECT pg_stat_reset(), pg_stat_statements_reset()"
 
-/* get query text by pg_stat_statements.queryid */
-#define PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P1 \
-    "SELECT \
-        d.datname AS database, a.rolname AS user, \
-        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
-        p.query \
-    FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
-    JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND left(md5(d.datname || a.rolname || p.query ), 10) = '"
-#define PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2 "' GROUP BY a.rolname, d.datname, query"
-
 /* postmaster uptime query */
 #define PG_UPTIME_QUERY "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
 

@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include "libpq-fe.h"
 #include "pgcenter.h"
+#include "qstats.h"
 
 /*
  ******************************************************** startup function **
@@ -3262,10 +3263,32 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         endwin();
 
         /* print result */
-        fprintf(fpout, " Database: %s, User: %s, Total calls: %s, Total rows: %s, Queryid: %s\n\n",
-                PQgetvalue(res, 0, 0), PQgetvalue(res, 0, 1), PQgetvalue(res, 0, 2),
-                PQgetvalue(res, 0, 3), queryid);
-        fprintf(fpout, "%s", PQgetvalue(res, 0, 4));
+
+        fprintf(fpout, "summary:\n\ttotal_time: %s, cpu_time: %s, io_time: %s (ALL: %s%%, CPU: %s%%, IO: %s%%),\ttotal queries: %s\n\
+query info:\n\
+\tusename:\t\t\t\t%s,\n\
+\tdatname:\t\t\t\t%s,\n\
+\tcalls (relative to all queries):\t%s (%s%%),\n\
+\trows (relative to all queries):\t\t%s (%s%%),\n\
+\ttotal time (relative to all queries):\t%s (ALL: %s%%, CPU: %s%%, IO: %s%%),\n\
+\taverage time (only for this query):\t%sms, cpu_time: %sms, io_time: %sms, (ALL: %s%%, CPU: %s%%, IO: %s%%),\n\n\
+query text:\n%s",
+        /* summary */
+        PQgetvalue(res, 0, REP_ALL_TOTAL_TIME), PQgetvalue(res, 0, REP_ALL_CPU_TIME), PQgetvalue(res, 0, REP_ALL_IO_TIME),
+        PQgetvalue(res, 0, REP_ALL_TOTAL_TIME_PCT), PQgetvalue(res, 0, REP_ALL_CPU_TIME_PCT), PQgetvalue(res, 0, REP_ALL_IO_TIME_PCT), 
+        PQgetvalue(res, 0, REP_ALL_TOTAL_QUERIES),
+        /* user, dbname */
+        PQgetvalue(res, 0, REP_USER), PQgetvalue(res, 0, REP_DBNAME),
+        /* calls and rows */
+        PQgetvalue(res, 0, REP_CALLS), PQgetvalue(res, 0, REP_CALLS_PCT),
+        PQgetvalue(res, 0, REP_ROWS), PQgetvalue(res, 0, REP_ROWS_PCT),
+        /* timings */
+        PQgetvalue(res, 0, REP_TOTAL_TIME), PQgetvalue(res, 0, REP_TOTAL_TIME_PCT), PQgetvalue(res, 0, REP_CPU_TIME_PCT), PQgetvalue(res, 0, REP_IO_TIME_PCT),
+        /* averages */
+        PQgetvalue(res, 0, REP_AVG_TIME), PQgetvalue(res, 0, REP_AVG_CPU_TIME), PQgetvalue(res, 0, REP_AVG_IO_TIME), 
+        PQgetvalue(res, 0, REP_AVG_TIME_PCT), PQgetvalue(res, 0, REP_AVG_CPU_TIME_PCT), PQgetvalue(res, 0, REP_AVG_IO_TIME_PCT),
+        /* query */
+        PQgetvalue(res, 0, REP_QUERY));
 
         /* clean */
         PQclear(res);
