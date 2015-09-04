@@ -42,9 +42,6 @@
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
 
-/* connections defaults */
-#define DEFAULT_USER        "postgres"
-
 /* others defaults */
 #define DEFAULT_PAGER       "less"
 #define DEFAULT_EDITOR      "vi"
