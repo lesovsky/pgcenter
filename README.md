@@ -12,7 +12,8 @@ PostgreSQL provides various statistics which includes information about tables, 
 - show relations sizes info;
 - configuration files editor and postgres reload;
 - log files viewing (full log or tail);
-- cancel/terminate queries or processes by pid or whole group.
+- cancel/terminate queries or processes by pid or whole group;
+- query reporting;
 
 #### Statistics:
 - pg_stat_activity - long running queries and abnormal activity, i.e. idle in transaction, aborted or waiting processes;
@@ -32,6 +33,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 - Cancel queries or terminate group of backends using state of backends;
 - Toggle displaying system tables and indexes for tables and indexes statistics;
 - Reset PostgreSQL statistics counters;
+- Show detailed report about query;
 - Start psql session.
 
 #### Recommendations:
