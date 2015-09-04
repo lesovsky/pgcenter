@@ -64,6 +64,5 @@ $ pgcenter
 ```
 
 #### Known issues
-- developed and tested under PostgreSQL 9.4 (minimal testing with 9.3).
-- PostgreSQL 9.1 and older not supported (different column names in stat views).
+- mainly developed and tested under PostgreSQL 9.4 (but tested with others 9.x releases).
 - this is beta software, in some circumstances segfaults occurs.
