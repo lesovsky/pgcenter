@@ -3546,14 +3546,14 @@ void print_help_screen(bool * first_iter)
     wprintw(w, "Help for interactive commands - %s version %.1f.%d\n\n",
                 PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
     wprintw(w, "general actions:\n\
-  1..8            switch between consoles.\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
   s,t,T,x,X             's' sizes, 't' tables, 'T' tables-IO, 'x' stmt timings, 'X' stmt general.\n\
+  Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
   C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
   L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
   N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
-  Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
+  1..8            switch between consoles.\n\
 activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
   n,m             'n' set new mask, 'm' show current mask.\n\
