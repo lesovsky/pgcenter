@@ -4,6 +4,7 @@
  */
 
 #define _GNU_SOURCE
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
@@ -128,6 +129,35 @@ void strrpl(char * o_string, char * s_string, char * r_string)
     strrpl(o_string, s_string, r_string);
 
     return;
+}
+
+/*
+ ******************************************************** routine function **
+ * Check string validity.
+ *
+ * IN:
+ * @string              String which should be checked.
+ *
+ * RETURNS:
+ * 0 if string is valid, -1 otherwise.
+ *
+ * NOTE:
+ * In future, this function can be extended in case when string must be checked
+ * with different conditions (numeric, alfa, alfanumeric, etc.).
+ ****************************************************************************
+ */
+int check_string(char * string)
+{
+    int i;
+    for (i = 0; string[i] != '\0'; i++) {
+        if (!isalnum(string[i])) {
+            /* non-alfanumeric char found */
+            return -1;
+        }
+    }
+
+    /* string ok */
+    return 0;
 }
 
 /*
@@ -3236,6 +3266,11 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     wrefresh(window);
 
     cmd_readline(window, 15, with_esc, queryid);
+    if (check_string(queryid) == -1) {
+        wprintw(window, "Entered value not valid");
+        return;
+    }
+
     if (strlen(queryid) != 0 && *with_esc == false) {
         /* do query and send result into less */
         strcpy(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P1);

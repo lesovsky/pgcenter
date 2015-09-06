@@ -548,6 +548,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 /* functions routines */
 int key_is_pressed(void);
 void strrpl(char * o_string, char * s_string, char * r_string);
+int check_string(char * string);
 void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n_rows, int n_cols);
 void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str);
 void clear_screen_connopts(struct screen_s * screens[], int i);
