@@ -1829,46 +1829,88 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
  *
  * IN:
  * @window          Window where pause status will be printed.
+ * @msg             Message prompt.
  * @pos             When you delete wrong input, cursor do not moving beyond.
+ * @len             Max allowed length of string.
+ * @echoing         Show characters typed by the user.
  *
  * OUT:
  * @with_esc        Flag which determines when function finish with ESC.
+ * @str             Entered string.             
  *
  * RETURNS:
  * Pointer to the input string.
  ****************************************************************************
  */
-void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str)
+void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * str, int len, bool echoing)
 {
     int ch;
     int i = 0;
+    bool done = false;
 
-    while ((ch = wgetch(window)) != ERR ) {
-        if (ch == 27) {
-            wclear(window);
-            wprintw(window, "Do nothing. Operation canceled. ");
-            nodelay(window, TRUE);
-            *with_esc = true;              /* finish with ESC */
-            strcpy(str, "");
-            return;
-        } else if (ch == 10) {
-            str[i] = '\0';
-            nodelay(window, TRUE);
-            *with_esc = false;              /* normal finish with \n */
-            return;
-        } else if (ch == KEY_BACKSPACE || ch == KEY_DC || ch == 127) {
-            if (i > 0) {
-                i--;
-                wdelch(window);
-            } else {
-                wmove(window, 0, pos);
-                continue;
-            }
-        } else {
-            str[i] = ch;
-            i++;
+    if (echoing)
+        echo();
+    cbreak();
+    nodelay(window, FALSE);
+    keypad(window, TRUE);
+
+    /* show prompt if msg not empty */
+    if (strlen(msg) != 0) {
+        wprintw(window, "%s", msg);
+        wrefresh(window);
+    }
+
+    memset(str, 0, len);
+    while (1) {
+        if (done)
+            break;
+        ch = wgetch(window);
+        switch (ch) {
+            case ERR:
+                strcpy(str, "\0");
+                flushinp();
+                done = true;
+                break;
+            case 27:                            /* Esc */
+                wclear(window);
+                wprintw(window, "Do nothing. Operation canceled. ");
+                nodelay(window, TRUE);
+                *with_esc = true;
+                strcpy(str, "\0");
+                flushinp();
+                done = true;
+                break;
+            case 10:                            /* Enter */
+                strncpy(str, str, len);
+                str[len] = '\0';
+                flushinp();
+                nodelay(window, TRUE);
+                *with_esc = false;              /* normal finish with \n */
+                done = true;
+                break;
+            case 263: case 330: case 127:       /* Backspace, Delete, */
+                if (i > 0) {
+                    i--;
+                    wdelch(window);
+                    continue;
+                } else {
+                    wmove(window, 0, pos);
+                    continue;
+                }
+                break;
+            default:
+                if (strlen(str) < len + 1) {
+                    str[i] = ch;
+                    i++;
+                }
+                break;
         }
     }
+
+    noecho();
+    cbreak();
+    nodelay(window, TRUE);
+    keypad(window, FALSE);
 }
 
 /*
@@ -1889,17 +1931,10 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
 
     unsigned int hour, min, sec;
     bool * with_esc = (bool *) malloc(sizeof(bool));
-    char min_age[BUFFERSIZE_S];
+    char min_age[BUFFERSIZE_S],
+         msg[] = "Enter new min age, format: HH:MM:SS[.NN]: ";
 
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
-
-    wprintw(window, "Enter new min age, format: HH:MM:SS[.NN]: ");
-    wrefresh(window);
-
-    cmd_readline(window, 42, with_esc, min_age);
+    cmd_readline(window, msg, 42, with_esc, min_age, 16, true);
     if (strlen(min_age) != 0 && *with_esc == false) {
         if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
             wprintw(window, "Nothing to do. Failed read or invalid value.");
@@ -1915,10 +1950,6 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
     *first_iter = true;
 
     free(with_esc);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
 }
 
 /*
@@ -2001,23 +2032,18 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 PGconn * conns[], int console_index)
 {
     int i;
-    char params[128];
+    char params[128],
+         msg[] = "Enter new connection parameters, format \"host port username dbname\": ",
+         msg2[] = "Required password: ";
     bool * with_esc = (bool *) malloc(sizeof(bool)),
          * with_esc2 = (bool *) malloc(sizeof(bool));
-    
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
     
     for (i = 0; i < MAX_SCREEN; i++) {
         /* search free screen */
         if (screens[i]->conn_used == false) {
-            wprintw(window, "Enter new connection parameters, format \"host port username dbname\": ");
-            wrefresh(window);
 
             /* read user input */
-            cmd_readline(window, 69, with_esc, params);
+            cmd_readline(window, msg, 69, with_esc, params, 128, true);
             if (strlen(params) != 0 && *with_esc == false) {
                 /* parse user input */
                 if ((sscanf(params, "%s %s %s %s",
@@ -2042,14 +2068,10 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 /* if password required, ask user for password */
                 if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
                     PQfinish(conns[i]);
-                    noecho();
-                    nodelay(window, FALSE);
                     wclear(window);
-                    wprintw(window, "Required password: ");
-                    wrefresh(window);
 
                     /* read password and add to conn options */
-                    cmd_readline(window, 19, with_esc2, params);
+                    cmd_readline(window, msg2, 19, with_esc2, params, 128, false);
                     if (strlen(params) != 0 && *with_esc2 == false) {
                         strcpy(screens[i]->password, params);
                         strcat(screens[i]->conninfo, " password=");
@@ -2102,10 +2124,10 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
     /* finish work */
     free(with_esc);
     free(with_esc2);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
+//    noecho();
+//    cbreak();
+//    nodelay(window, TRUE);
+//    keypad(window, FALSE);
 
     return console_index;
 }
@@ -2282,17 +2304,10 @@ void reload_conf(WINDOW * window, PGconn * conn)
     PGresult * res;
     bool * with_esc = (bool *) malloc(sizeof(bool));
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
-    char confirmation[1];
+    char confirmation[1],
+         msg[] = "Reload configuration files (y/n): ";
 
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
-
-    wprintw(window, "Reload configuration files (y/n): ");
-    wrefresh(window);
-
-    cmd_readline(window, 34, with_esc, confirmation);
+    cmd_readline(window, msg, 34, with_esc, confirmation, 1, true);
     if (!strcmp(confirmation, "n") || !strcmp(confirmation, "N"))
         wprintw(window, "Do nothing. Canceled.");
     else if (!strcmp(confirmation, "y") || !strcmp(confirmation, "Y")) {
@@ -2313,10 +2328,6 @@ void reload_conf(WINDOW * window, PGconn * conn)
 
     free(with_esc);
     free(errmsg);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
 }
 
 /*
@@ -2481,30 +2492,24 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
     char query[BUFSIZ],
          action[10],
+         msg[64],
          pid[6];
     PGresult * res;
     bool * with_esc = (bool *) malloc(sizeof(bool));
     int msg_offset;
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
 
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
-
     if (do_terminate) {
-        wprintw(window, "Terminate single backend, enter pid: ");
+        strcpy(action, "Terminate");
+        strcpy(msg, "Terminate single backend, enter pid: ");
         msg_offset = 37;
-        strcpy(action, "terminate");
-    }
-    else {
-        wprintw(window, "Cancel single backend, enter pid: ");
+    } else {
+        strcpy(action, "Cancel");
+        strcpy(msg, "Cancel single backend, enter pid: ");
         msg_offset = 34;
-        strcpy(action, "cancel");
     }
-    wrefresh(window);
 
-    cmd_readline(window, msg_offset, with_esc, pid);
+    cmd_readline(window, msg, msg_offset, with_esc, pid, 64, true);
     if (atoi(pid) > 0) {
         if (do_terminate) {
             strcpy(query, PG_TERM_BACKEND_P1);
@@ -2521,7 +2526,6 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
             wprintw(window, "%s backend with pid %s.", action, pid);
             PQclear(res);
         } else {
-            wclear(window);
             wprintw(window, "%s backend failed. %s", action, errmsg);
         }
     } else if (strlen(pid) == 0 && *with_esc == false) {
@@ -2533,10 +2537,6 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
     free(with_esc);
     free(errmsg);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
 }
 
 /*
@@ -2588,13 +2588,9 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     } 
 
     int i;
-    char mask[5];
+    char mask[5],
+         msg[] = "";        /* set empty message, we don't want show msg from cmd_readline */
     bool * with_esc = (bool *) malloc(sizeof(bool));
-
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
 
     wprintw(window, "Set action mask for group backends [");
     wattron(window, A_BOLD | A_UNDERLINE);
@@ -2618,7 +2614,7 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     wattroff(window, A_BOLD | A_UNDERLINE);
     wprintw(window, "ther]: ");
 
-    cmd_readline(window, 77, with_esc, mask);
+    cmd_readline(window, msg, 77, with_esc, mask, 5, true);
     if (strlen(mask) > 5) {                                 /* entered mask too long */
         wprintw(window, "Do nothing. Mask too long.");
     } else if (strlen(mask) == 0 && *with_esc == false) {   /* mask not entered */
@@ -2651,10 +2647,6 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     }
 
     free(with_esc);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
 }
 
 /*
@@ -2804,19 +2796,15 @@ void start_psql(WINDOW * window, struct screen_s * screen)
 long int change_refresh(WINDOW * window, long int interval)
 {
     long int interval_save = interval;
-    char value[8];
+    char value[8],
+         msg[64];
     bool * with_esc = (bool *) malloc(sizeof(bool));
     char * str = (char *) malloc(sizeof(char) * 128);
-
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
 
     wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
     wrefresh(window);
 
-    cmd_readline(window, 36, with_esc, str);
+    cmd_readline(window, msg, 36, with_esc, str, 8, true);
     strcpy(value, str);
     free(str);
 
@@ -2835,10 +2823,6 @@ long int change_refresh(WINDOW * window, long int interval)
     }
 
     free(with_esc);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
     return interval;
 }
 
@@ -3248,26 +3232,19 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         wprintw(window, "Get query text not allowed here.");
         return;
     }
-
+    
     PGresult * res;
     bool * with_esc = (bool *) malloc(sizeof(bool));
-    char queryid[BUFFERSIZE_S],
+    char msg[] = "Enter queryid: ",
          query[BUFSIZ],
          pager[32] = "";
+    char * queryid = (char *) malloc(sizeof(char) * 16);
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
     FILE * fpout;
 
-    echo();
-    cbreak();
-    nodelay(window, FALSE);
-    keypad(window, TRUE);
-
-    wprintw(window, "Enter queryid: ");
-    wrefresh(window);
-
-    cmd_readline(window, 15, with_esc, queryid);
+    cmd_readline(window, msg, 15, with_esc, queryid, 16, true);
     if (check_string(queryid) == -1) {
-        wprintw(window, "Entered value not valid");
+        wprintw(window, "Do nothing. Value not valid.");
         return;
     }
 
@@ -3282,7 +3259,15 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
             free(with_esc);
             return;
         }
-        
+
+        /* finish work if empty answer */
+        if (PQntuples(res) == 0) {
+            wprintw(window, "Do nothing. Empty answer for %s", queryid);
+            free(with_esc);
+            PQclear(res);
+            return;
+        }
+
         if (getenv("PAGER") != NULL)
             strcpy(pager, getenv("PAGER"));
         else
@@ -3298,7 +3283,6 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         endwin();
 
         /* print result */
-
         fprintf(fpout, "summary:\n\ttotal_time: %s, cpu_time: %s, io_time: %s (ALL: %s%%, CPU: %s%%, IO: %s%%),\ttotal queries: %s\n\
 query info:\n\
 \tusename:\t\t\t\t%s,\n\
@@ -3307,7 +3291,7 @@ query info:\n\
 \trows (relative to all queries):\t\t%s (%s%%),\n\
 \ttotal time (relative to all queries):\t%s (ALL: %s%%, CPU: %s%%, IO: %s%%),\n\
 \taverage time (only for this query):\t%sms, cpu_time: %sms, io_time: %sms, (ALL: %s%%, CPU: %s%%, IO: %s%%),\n\n\
-query text:\n%s",
+query text (id: %s):\n%s",
         /* summary */
         PQgetvalue(res, 0, REP_ALL_TOTAL_TIME), PQgetvalue(res, 0, REP_ALL_CPU_TIME), PQgetvalue(res, 0, REP_ALL_IO_TIME),
         PQgetvalue(res, 0, REP_ALL_TOTAL_TIME_PCT), PQgetvalue(res, 0, REP_ALL_CPU_TIME_PCT), PQgetvalue(res, 0, REP_ALL_IO_TIME_PCT), 
@@ -3323,7 +3307,7 @@ query text:\n%s",
         PQgetvalue(res, 0, REP_AVG_TIME), PQgetvalue(res, 0, REP_AVG_CPU_TIME), PQgetvalue(res, 0, REP_AVG_IO_TIME), 
         PQgetvalue(res, 0, REP_AVG_TIME_PCT), PQgetvalue(res, 0, REP_AVG_CPU_TIME_PCT), PQgetvalue(res, 0, REP_AVG_IO_TIME_PCT),
         /* query */
-        PQgetvalue(res, 0, REP_QUERY));
+        queryid, PQgetvalue(res, 0, REP_QUERY));
 
         /* clean */
         PQclear(res);
@@ -3341,11 +3325,6 @@ query text:\n%s",
     
     free(with_esc);
     free(errmsg);
-    noecho();
-    cbreak();
-    nodelay(window, TRUE);
-    keypad(window, FALSE);
-
 }
 
 /*
@@ -3836,7 +3815,8 @@ int main(int argc, char *argv[])
                     exit_prog(screens, conns);
                     break;
                 default:                /* show default msg on wrong input */
-                    wprintw(w_cmd, "Unknown command - try 'h' for help.");                                                                                     
+                    wprintw(w_cmd, "Unknown command - try 'h' for help.");
+                    flushinp();
                     break;
             }
             wattroff(w_cmd, COLOR_PAIR(*wc_color));

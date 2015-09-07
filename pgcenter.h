@@ -550,7 +550,7 @@ int key_is_pressed(void);
 void strrpl(char * o_string, char * s_string, char * r_string);
 int check_string(char * string);
 void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n_rows, int n_cols);
-void cmd_readline(WINDOW *window, int pos, bool * with_esc, char * str);
+void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * str, int len, bool echoing);
 void clear_screen_connopts(struct screen_s * screens[], int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], int i);
 bool check_pg_listen_addr(struct screen_s * screen);
