@@ -51,8 +51,12 @@ $ sudo apt-get install pgcenter
 ```
 Debian users can create package using this [link](https://wiki.debian.org/CreatePackageFromPPA).
 
-##### Install from RHEL/CentOS
-- not available yet.
+##### Install from RHEL6/CentOS6
+- install pgCenter from Essential Kaos testing repo.
+```
+$ sudo yum install http://release.yum.kaos.io/i386/kaos-repo-6.8-0.el6.noarch.rpm
+$ sudo yum --enablerepo=kaos-testing install pgcenter
+```
 
 ##### Install from sources
 - install git, make, gcc, postgresql devel and ncurses devel packages.
