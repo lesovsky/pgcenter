@@ -16,7 +16,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') \
             AS query_normalized \
-        FROM pg_stat_statements WHERE dbid IN (SELECT oid FROM pg_database WHERE current_database() = 'postgres' OR datname=current_database()) \
+        FROM pg_stat_statements \
     ), \
     totals AS ( \
         SELECT  \
@@ -25,7 +25,6 @@
             sum(total_time-blk_read_time-blk_write_time) AS cpu_time, \
             sum(calls) AS ncalls, sum(rows) AS total_rows \
         FROM pg_stat_statements \
-        WHERE dbid IN (SELECT oid FROM pg_database WHERE current_database() = 'postgres' OR datname=current_database()) \
     ), \
     _pg_stat_statements AS ( \
         SELECT \

@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * remove unnecessary WHERE from qstats query.
   * fix segfault on screen switching when screen not exists.
   * fix pg general info display.
   * cmd_readline() rewritten.
