@@ -1411,12 +1411,11 @@ int switch_conn(WINDOW * window, struct screen_s * screens[],
         wprintw(window, "Switch to another pgbouncer connection (console %i)",
                 console_no);
         *first_iter = true;
+        PQclear(res);
     } else
         wprintw(window, "Do not switch because no connection associated (stay on console %i)",
                 console_no);
 
-    if (res)
-        PQclear(res);
     return console_index;
 }
 
