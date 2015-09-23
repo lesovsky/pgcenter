@@ -555,6 +555,7 @@ void clear_screen_connopts(struct screen_s * screens[], int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], int i);
 bool check_pg_listen_addr(struct screen_s * screen);
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
+void get_pg_version(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
 

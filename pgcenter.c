@@ -527,8 +527,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
     
     /* get PostgreSQL version if reconnect successful */
     if (reconnected) {
-        get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
-        get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
+        get_pg_version(conn, screen);
     }
 }
 
@@ -599,8 +598,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
             }
 
             /* get PostgreSQL version */
-            get_conf_value(conns[i], GUC_SERVER_VERSION_NUM, screens[i]->pg_version_num);
-            get_conf_value(conns[i], GUC_SERVER_VERSION, screens[i]->pg_version);
+            get_pg_version(conns[i], screens[i]);
 
             PGresult * res;
             char * errmsg = (char *) malloc(sizeof(char) * 1024);
@@ -924,7 +922,6 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
         a_count = 0;
         w_count = 0;
         o_count = 0;
-        return;
     } 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg)) != NULL) {
         t_count = atoi(PQgetvalue(res, 0, 0));
@@ -998,7 +995,6 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
         avgtime = 0;
         qps = 0;
         strcpy(maxtime, "--:--:--");
-        return;
     } 
 
     divisor = interval / 1000000;
@@ -2117,17 +2113,12 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
 
     /* get PostgreSQL version */
     if (PQstatus(conns[i]) == CONNECTION_OK) {
-        get_conf_value(conns[i], GUC_SERVER_VERSION_NUM, screens[i]->pg_version_num);
-        get_conf_value(conns[i], GUC_SERVER_VERSION, screens[i]->pg_version);
+        get_pg_version(conns[i], screens[i]);
     }
     
     /* finish work */
     free(with_esc);
     free(with_esc2);
-//    noecho();
-//    cbreak();
-//    nodelay(window, TRUE);
-//    keypad(window, FALSE);
 
     return console_index;
 }
@@ -2412,6 +2403,25 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
     
     free(errmsg);
     PQclear(res);
+}
+
+/*
+ ******************************************************** routine function **
+ * Get postgres version and save into screen opts.
+ *
+ * IN:
+ * @conn                    Current connection.
+ * @screen                  Current screen.
+ ****************************************************************************
+ */
+void get_pg_version(PGconn * conn, struct screen_s * screen)
+{
+    get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
+    get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
+    if (strlen(screen->pg_version_num) == 0)
+        strcpy(screen->pg_version_num, "-.-.-");
+    if (strlen(screen->pg_version) == 0)
+        strcpy(screen->pg_version, "-.-.-");
 }
 
 /*

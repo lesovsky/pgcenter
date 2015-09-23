@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * fix pg general info display.
   * cmd_readline() rewritten.
   * add verbose query report based on query_stat_total.sql.
   * get query text uses md5 hash instead of queryid.
