@@ -525,7 +525,7 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
 int add_connection(WINDOW * window, struct screen_s * screens[],
         PGconn * conns[], int console_index);
 int close_connection(WINDOW * window, struct screen_s * screens[],
-        PGconn * conns[], int console_index);
+        PGconn * conns[], int console_index, bool *first_iter);
 void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_s * args);
 void show_config(WINDOW * window, PGconn * conn);
 void reload_conf(WINDOW * window, PGconn * conn);

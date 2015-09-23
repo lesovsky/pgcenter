@@ -2133,6 +2133,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
  * OUT:
  * @conns           Array of connections.
  * @screens         Modified screens array.
+ * @first_iter      Reset stats counters.
  *
  * RETURNS:
  * Close current connection (remove from conns array) and return prvious
@@ -2140,7 +2141,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
  ****************************************************************************
  */
 int close_connection(WINDOW * window, struct screen_s * screens[],
-                PGconn * conns[], int console_index)
+                PGconn * conns[], int console_index, bool * first_iter)
 {
     int i = console_index;
     PQfinish(conns[console_index]);
@@ -2166,6 +2167,7 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
         }
     }
 
+    *first_iter = true;
     return console_index;
 }
 
@@ -3697,7 +3699,7 @@ int main(int argc, char *argv[])
                     *first_iter = true;
                     break;
                 case 4:                 /* close current screen with Ctrl + D */
-                    console_index = close_connection(w_cmd, screens, conns, console_index);
+                    console_index = close_connection(w_cmd, screens, conns, console_index, first_iter);
                     console_no = console_index + 1;
                     break;
                 case 'W':               /* write connections info into .pgcenterrc */
