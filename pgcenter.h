@@ -22,6 +22,7 @@
 #define LOADAVG_FILE            "/proc/loadavg"
 #define STAT_FILE               "/proc/stat"
 #define UPTIME_FILE             "/proc/uptime"
+#define MEMINFO_FILE            "/proc/meminfo"
 #define PGCENTERRC_FILE         ".pgcenterrc"
 #define PG_RECOVERY_CONF_FILE   "recovery.conf"
 
@@ -150,6 +151,21 @@ struct stats_cpu_struct {
 };
 
 #define STATS_CPU_SIZE (sizeof(struct stats_cpu_struct))
+
+/* struct which used for memory statistics */
+struct stats_mem_short_struct {
+    unsigned long long mem_total;
+    unsigned long long mem_free;
+    unsigned long long mem_used;
+    unsigned long long swap_total;
+    unsigned long long swap_free;
+    unsigned long long swap_used;
+    unsigned long long cached;
+    unsigned long long buffers;
+    unsigned long long slab;
+};
+
+#define STATS_MEM_SHORT_SIZE (sizeof(struct stats_mem_short_struct))
 
 /*
  * Macros used to display statistics values.
@@ -484,7 +500,7 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg);
 void get_time(char * strtime);
 float get_loadavg(int m);
 void print_loadavg(WINDOW * window);
-void init_stats(struct stats_cpu_struct *st_cpu[]);
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
 void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,

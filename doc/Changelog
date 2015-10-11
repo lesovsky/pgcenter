@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * add memory stat.
   * reset stats counters when close screen.
   * remove unnecessary WHERE from qstats query.
   * fix segfault on screen switching when screen not exists.

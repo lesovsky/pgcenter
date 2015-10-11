@@ -1023,25 +1023,32 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
 }
 
 /*
- **************************************************** get cpu stat function **
- * Allocate memory for cpu statistics struct.
+ ******************************************************* get stat function **
+ * Allocate memory for statistics structs.
  *
  * OUT:
- * @st_cpu      Struct for cpu statistics.
+ * @st_cpu          Struct for cpu statistics.
+ * @st_mem_short    Struct for mem statistics.
  ****************************************************************************
  */
-void init_stats(struct stats_cpu_struct *st_cpu[])
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short)
 {
     int i;
     /* Allocate structures for CPUs "all" and 0 */
     for (i = 0; i < 2; i++) {
-        if ((st_cpu[i] = (struct stats_cpu_struct *) 
-            malloc(STATS_CPU_SIZE * 2)) == NULL) {
-            perror("malloc");
+        if ((st_cpu[i] = (struct stats_cpu_struct *) malloc(STATS_CPU_SIZE * 2)) == NULL) {
+            perror("malloc for cpu stats failed");
             exit(EXIT_FAILURE);
         }
         memset(st_cpu[i], 0, STATS_CPU_SIZE * 2);
     }
+
+    /* Allocate structures for memory */
+    if ((*st_mem_short = (struct stats_mem_short_struct *) malloc(STATS_MEM_SHORT_SIZE)) == NULL) {
+            perror("malloc for mem stats failed");
+            exit(EXIT_FAILURE);
+    }
+    memset(*st_mem_short, 0, STATS_MEM_SHORT_SIZE);
 }
 
 /*
@@ -1257,6 +1264,57 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
     write_cpu_stat_raw(window, st_cpu, curr, itv);
     itv = get_interval(uptime0[!curr], uptime0[curr]);
     curr ^= 1;
+}
+
+/*
+ ************************************************** system window function **
+ * Print memory usage statistics
+ *
+ * IN:
+ * @window          Window where mem statistics will be printed.
+ * @st_mem_short    Struct with mem statistics.
+ ****************************************************************************
+ */
+void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_short)
+{
+    FILE *mem_fp;
+    char buffer[121];
+    char key[80];
+    unsigned long long value;
+    
+    if ((mem_fp = fopen(MEMINFO_FILE, "r")) == NULL) {
+        fprintf(stderr, "Cannot open %s: %s\n", MEMINFO_FILE, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    while (fgets(buffer, 120, mem_fp) != NULL) {
+        sscanf(buffer, "%s %llu", key, &value);
+        if (!strcmp(key,"MemTotal:"))
+            st_mem_short->mem_total = value / 1024;
+        else if (!strcmp(key,"MemFree:"))
+            st_mem_short->mem_free = value / 1024;
+        else if (!strcmp(key,"SwapTotal:"))
+            st_mem_short->swap_total = value / 1024;
+        else if (!strcmp(key,"SwapFree:"))
+            st_mem_short->swap_total = value / 1024;
+        else if (!strcmp(key,"Cached:"))
+            st_mem_short->cached = value / 1024;
+        else if (!strcmp(key,"Buffers:"))
+            st_mem_short->buffers = value / 1024;
+        else if (!strcmp(key,"Slab:"))
+            st_mem_short->slab = value / 1024;
+    }
+    st_mem_short->mem_used = st_mem_short->mem_total - st_mem_short->mem_free
+            - st_mem_short->cached - st_mem_short->buffers - st_mem_short->slab;
+    st_mem_short->swap_used = st_mem_short->swap_total - st_mem_short->swap_free;
+
+    fclose(mem_fp);
+
+    wprintw(window, " MiB mem: %llu total, %llu free, %llu used, %llu buff/cached\n",
+            st_mem_short->mem_total,
+            st_mem_short->mem_free,
+            st_mem_short->mem_used,
+            st_mem_short->cached + st_mem_short->buffers + st_mem_short->slab);
 }
 
 /*
@@ -3614,6 +3672,7 @@ int main(int argc, char *argv[])
     struct args_s *args;                                /* struct for input args */
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
     struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
+    struct stats_mem_short_struct *st_mem_short; /* mem usage struct */
     WINDOW *w_sys, *w_cmd, *w_dba, *w_log;              /* ncurses windows  */
     int ch;                                             /* store key press  */
     bool *first_iter = (bool *) malloc(sizeof(bool));   /* first-run flag   */
@@ -3645,7 +3704,7 @@ int main(int argc, char *argv[])
     init_signal_handlers();
     init_args_struct(args);
     init_screens(screens);
-    init_stats(st_cpu);
+    init_stats(st_cpu, &st_mem_short);
     get_HZ();
 
     /* process cmd args */
@@ -3845,6 +3904,7 @@ int main(int argc, char *argv[])
             print_title(w_sys, argv[0]);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
+            print_mem_usage(w_sys, st_mem_short);
             print_conninfo(w_sys, conns[console_index], console_no);
             print_pg_general(w_sys, screens[console_index], conns[console_index]);
             print_postgres_activity(w_sys, conns[console_index]);
