@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * add swap,dirty,writeback stats.
   * connection info moved from left to right side.
   * add memory stat.
   * reset stats counters when close screen.

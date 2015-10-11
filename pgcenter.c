@@ -1298,6 +1298,10 @@ void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_shor
             st_mem_short->swap_total = value / 1024;
         else if (!strcmp(key,"Cached:"))
             st_mem_short->cached = value / 1024;
+        else if (!strcmp(key,"Dirty:"))
+            st_mem_short->dirty = value / 1024;
+        else if (!strcmp(key,"Writeback:"))
+            st_mem_short->writeback = value / 1024;
         else if (!strcmp(key,"Buffers:"))
             st_mem_short->buffers = value / 1024;
         else if (!strcmp(key,"Slab:"))
@@ -1309,11 +1313,17 @@ void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_shor
 
     fclose(mem_fp);
 
-    wprintw(window, " MiB mem: %llu total, %llu free, %llu used, %llu buff/cached\n",
+    wprintw(window, " MiB mem: %6llu total, %6llu free, %6llu used, %8llu buff/cached\n",
             st_mem_short->mem_total,
             st_mem_short->mem_free,
             st_mem_short->mem_used,
             st_mem_short->cached + st_mem_short->buffers + st_mem_short->slab);
+    wprintw(window, "MiB swap: %6llu total, %6llu free, %6llu used, %6llu/%llu dirty/writeback\n",
+            st_mem_short->swap_total,
+            st_mem_short->swap_free,
+            st_mem_short->swap_used,
+            st_mem_short->dirty,
+            st_mem_short->writeback);
 }
 
 /*

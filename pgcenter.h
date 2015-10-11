@@ -162,6 +162,8 @@ struct stats_mem_short_struct {
     unsigned long long swap_used;
     unsigned long long cached;
     unsigned long long buffers;
+    unsigned long long dirty;
+    unsigned long long writeback;
     unsigned long long slab;
 };
 
