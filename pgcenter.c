@@ -891,11 +891,10 @@ void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
             strcpy(state, "unknown");
             break;
     }
-    wprintw(window, "  conn %i: %s:%s %s@%s\t conn state: %s\n",
-                console_no,
+    mvwprintw(window, 0, COLS / 2, "conn%i [%s]: %s:%s %s@%s\t",
+                console_no, state,
                 PQhost(conn), PQport(conn),
-                PQuser(conn), PQdb(conn),
-                state);
+                PQuser(conn), PQdb(conn));
     wrefresh(window);
 }
 
@@ -1395,7 +1394,7 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
     static char uptime[32];
     get_pg_uptime(conn, uptime);
 
-    mvwprintw(window, 0, COLS / 2, "   version: %6s, up %s",
+    wprintw(window, "(ver: %s, up %s)",
                 screen->pg_version, uptime);
 
 }

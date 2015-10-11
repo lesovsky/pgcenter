@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * connection info moved from left to right side.
   * add memory stat.
   * reset stats counters when close screen.
   * remove unnecessary WHERE from qstats query.
