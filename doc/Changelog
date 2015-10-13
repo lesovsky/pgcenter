@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * truncate conninfo string if it too long.
   * add swap,dirty,writeback stats.
   * connection info moved from left to right side.
   * add memory stat.

@@ -880,6 +880,7 @@ void print_loadavg(WINDOW * window)
 void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
 {
     static char state[8];
+    char buffer[128];
     switch (PQstatus(conn)) {
         case CONNECTION_OK:
             strcpy(state, "ok");
@@ -891,10 +892,19 @@ void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
             strcpy(state, "unknown");
             break;
     }
-    mvwprintw(window, 0, COLS / 2, "conn%i [%s]: %s:%s %s@%s\t",
+
+    sprintf(buffer, "conn%i [%s]: %s:%s %s@%s",
                 console_no, state,
                 PQhost(conn), PQport(conn),
                 PQuser(conn), PQdb(conn));
+
+    if (strlen(buffer) > 48) {
+        buffer[48] = '~';
+        buffer[49] = '\0';
+    }
+
+    mvwprintw(window, 0, COLS / 2, "%s", buffer);
+
     wrefresh(window);
 }
 
@@ -1404,7 +1414,7 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
     static char uptime[32];
     get_pg_uptime(conn, uptime);
 
-    wprintw(window, "(ver: %s, up %s)",
+    wprintw(window, " (ver: %s, up %s)",
                 screen->pg_version, uptime);
 
 }
