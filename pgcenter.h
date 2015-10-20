@@ -427,6 +427,26 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN  6
 #define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX  9
 
+#define PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
+        sum(p.calls) AS calls, sum(p.rows) as rows, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \

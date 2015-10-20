@@ -726,17 +726,20 @@ void prepare_query(struct screen_s * screen, char * query)
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
             if (atoi(screen->pg_version_num) < 90200) {
                 strcpy(query, PG_STAT_STATEMENTS_TIMING_91_QUERY_P1);
-                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             } else {
                 strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
-                strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             }
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
             break;
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
-            strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
+            if (atoi(screen->pg_version_num) < 90200) {
+                strcpy(query, PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1);
+            } else {
+                strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
+            }
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;

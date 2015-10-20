@@ -1,5 +1,6 @@
 pgcenter (development) unstable; urgency=low
 
+  * fix pg_stat_statements general for 9.1.
   * pg_stat_statements timing improvements.
   * truncate conninfo string if it too long.
   * add swap,dirty,writeback stats.
