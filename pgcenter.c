@@ -591,7 +591,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 strcat(screens[i]->conninfo, screens[i]->password);
                 conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
-                fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.",
+                fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.\n",
                 screens[i]->host, screens[i]->port,
                 screens[i]->user, screens[i]->dbname);
                 continue;
