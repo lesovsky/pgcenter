@@ -372,7 +372,8 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_91_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS total_t, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
+        round(sum(p.total_time)) AS all_t, \
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
@@ -392,10 +393,14 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS total_t, \
-        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS read_t, \
-        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS write_t, \
-        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS cpu_t, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
+        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS tot_read_t, \
+        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS tot_write_t, \
+        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS tot_cpu_t, \
+        round(sum(p.total_time)) AS all_t, \
+        round(sum(p.blk_read_time)) AS read_t, \
+        round(sum(p.blk_write_time)) AS write_t, \
+        round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) AS cpu_t, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
@@ -415,8 +420,13 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
 
 #define PG_STAT_STATEMENTS_TIMING_ORDER_MIN         2
-#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      2
-#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  5
+#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      3
+#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  9
+#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN  3
+#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX  3
+#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN  6
+#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX  9
+
 
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \

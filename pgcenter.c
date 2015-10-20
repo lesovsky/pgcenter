@@ -1632,8 +1632,13 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             min = max = PG_STAT_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements_timing:
-            /* no diff, but use sort with native ORDER BY */
-            min = max = INVALID_ORDER_KEY;
+            if (atoi(screen->pg_version_num) < 90200) {
+                min = PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN;
+                max = PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX;
+            } else {
+                min = PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN;
+                max = PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX;
+            }
             break;
         case pg_stat_statements_general:
             min = PG_STAT_STATEMENTS_GENERAL_DIFF_MIN;
@@ -1685,7 +1690,9 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     /* some context show absolute values, and sorting perform only for one column */
     if (screen->current_context == pg_stat_functions && order_key != PG_STAT_FUNCTIONS_DIFF_COL)
         return;
-    if (screen->current_context == pg_stat_statements_timing)
+    if (screen->current_context == pg_stat_statements_timing
+            && order_key != PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN
+            && order_key != PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX)
         return;
     if (screen->current_context == pg_stat_statements_general 
             && order_key != PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
