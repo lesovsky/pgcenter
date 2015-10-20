@@ -8,7 +8,7 @@
 
 #define PROGRAM_NAME        "pgcenter"
 #define PROGRAM_VERSION     0.1
-#define PROGRAM_RELEASE     2
+#define PROGRAM_RELEASE     3
 #define PROGRAM_AUTHORS_CONTACTS    "<lesovsky@gmail.com>"
 
 /* sizes, limits and defaults */
