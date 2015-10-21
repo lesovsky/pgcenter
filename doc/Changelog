@@ -1,5 +1,11 @@
 pgcenter (0.1.3) unstable; urgency=low
 
+  * fix broken pg_stat_statements before 9.4.
+
+ -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 28 Aug 2015 14:27:07 +0500
+
+pgcenter (0.1.3) unstable; urgency=low
+
   * fix pg_stat_statements general for 9.1.
   * pg_stat_statements timing improvements.
   * truncate conninfo string if it too long.
