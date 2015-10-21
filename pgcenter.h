@@ -374,6 +374,7 @@ struct colAttrs {
         a.rolname AS user, d.datname AS database, \
         date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
         round(sum(p.total_time)) AS all_t, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
@@ -432,6 +433,7 @@ struct colAttrs {
         a.rolname AS user, d.datname AS database, \
         sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
         sum(p.calls) AS calls, sum(p.rows) as rows, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
         regexp_replace( \
