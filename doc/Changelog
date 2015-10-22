@@ -1,5 +1,6 @@
 pgcenter (0.1.3) unstable; urgency=low
 
+  * fix log viewing/config editing when connected through unix socket.
   * implement pg_stat_statements.queryid for non-9.4 pg.
   * fix broken pg_stat_statements before 9.4.
 

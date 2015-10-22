@@ -2531,7 +2531,8 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     char * config_path = (char *) malloc(sizeof(char) * 128);
     pid_t pid;
 
-    if (check_pg_listen_addr(screen)) {
+    if (check_pg_listen_addr(screen)
+                || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
         get_conf_value(conn, config_file_guc, config_path);
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
@@ -3100,7 +3101,8 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
 {
     if (!screen->log_opened) {
     
-        if (check_pg_listen_addr(screen)) {
+        if (check_pg_listen_addr(screen) 
+                || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
             *w_log = newwin(0, 0, ((LINES * 2) / 3), 0);
             wrefresh(window);
             /* get logfile path  */
@@ -3118,7 +3120,7 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
             wprintw(window, "Open postgresql log: %s", screen->log_path);
             return;
         } else {
-            wprintw(window, "Do nothing. Current postgresql not local.");
+            wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
             return;
         }
     } else {
@@ -3255,7 +3257,8 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
     pid_t pid;
 
-    if (check_pg_listen_addr(screen)) {
+    if (check_pg_listen_addr(screen)
+            || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
         /* get logfile path  */
         get_logfile_path(screen->log_path, conn);
         if (strlen(screen->log_path) != 0) {
