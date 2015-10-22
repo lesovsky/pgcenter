@@ -3634,7 +3634,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
     }
 
     screen->current_context = context;
-    if (res)
+    if (res && *first_iter == false)
         PQclear(res);
     *first_iter = true;
 }
