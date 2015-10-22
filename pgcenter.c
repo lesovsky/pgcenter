@@ -3951,6 +3951,9 @@ int main(int argc, char *argv[])
             if ((c_res = do_query(conns[console_index], query, errmsg)) == NULL) {
                 /* if error occured print SQL error message into cmd */
                 PQclear(c_res);
+                c_res = NULL;
+                p_res = NULL;
+                *first_iter = true;
                 wclear(w_dba);
                 wprintw(w_dba, "%s", errmsg);
                 wrefresh(w_dba);
