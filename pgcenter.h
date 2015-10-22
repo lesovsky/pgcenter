@@ -323,7 +323,16 @@ struct colAttrs {
         datname, usename, waiting, \
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
-        current_query \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(current_query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_activity \
     WHERE ((clock_timestamp() - xact_start) > '"
 #define PG_STAT_ACTIVITY_LONG_91_QUERY_P2 \
@@ -339,7 +348,16 @@ struct colAttrs {
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
-        query \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_activity \
     WHERE ((clock_timestamp() - xact_start) > '"
 #define PG_STAT_ACTIVITY_LONG_QUERY_P2 \
