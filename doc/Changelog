@@ -1,5 +1,6 @@
 pgcenter (0.1.3) unstable; urgency=low
 
+  * add pg_stat_statements io screen (9.1 and never).
   * set work_mem to 32MB (reduce disk spill in pg_stat_statements).
   * fix wrong array sort for pg_stat_statements.
   * pg_stat_activity.query formatting.

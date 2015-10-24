@@ -8,7 +8,9 @@ PostgreSQL provides various statistics which includes information about tables, 
 - show current system load and cpu usage on localhost;
 - show current postgres state (connections state, longest transaction, autovacuum)
 - show statistics about tables, indexes, functions, activity, replication;
-- show pg_stat_statements statistics (calls, rows, cpu usage, io usage);
+- show pg_stat_statements statistics: calls, rows;
+- show pg_stat_statements statistics: cpu timings, io timings;
+- show pg_stat_statements statistics: blks i/o (hits, reads, dirtied, written);
 - show relations sizes info;
 - configuration files editor and postgres reload;
 - log files viewing (full log or tail);

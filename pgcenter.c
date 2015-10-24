@@ -222,6 +222,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].context = pg_stat_statements_general;
         screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
         screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].context = pg_stat_statements_io;
+        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key = PG_STAT_STATEMENTS_IO_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].order_desc = true;
     }
 }
 
@@ -745,6 +748,17 @@ void prepare_query(struct screen_s * screen, char * query)
             }
             strcat(query, tmp);             /* insert number of field into ORDER BY .. */
             strcat(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
+            break;
+        case pg_stat_statements_io:
+            /* here we use query native ORDER BY, and we should incrementing order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key + 1);
+            if (atoi(screen->pg_version_num) < 90200) {
+                strcpy(query, PG_STAT_STATEMENTS_IO_91_QUERY_P1);
+            } else {
+                strcpy(query, PG_STAT_STATEMENTS_IO_QUERY_P1);
+            }
+            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
+            strcat(query, PG_STAT_STATEMENTS_IO_QUERY_P2);
             break;
     }
 }
@@ -1650,6 +1664,15 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             min = PG_STAT_STATEMENTS_GENERAL_DIFF_MIN;
             max = PG_STAT_STATEMENTS_GENERAL_DIFF_MAX;
             break;
+        case pg_stat_statements_io:
+            if (atoi(screen->pg_version_num) < 90200) {
+                min = PG_STAT_STATEMENTS_IO_DIFF_91_MIN;
+                max = PG_STAT_STATEMENTS_IO_DIFF_91_MAX;
+            } else {
+                min = PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN;
+                max = PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX;
+            }
+            break;
         default:
             break;
     }
@@ -1696,6 +1719,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     /* some context show absolute values, and sorting perform only for one column */
     if (screen->current_context == pg_stat_functions && order_key != PG_STAT_FUNCTIONS_DIFF_COL)
         return;
+    /* todo: here we not check pg_version_num and in old pg versions may have unexpected bahaviour */
     if (screen->current_context == pg_stat_statements_timing
             && order_key < PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN
             && order_key > PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX)
@@ -1703,6 +1727,10 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (screen->current_context == pg_stat_statements_general 
             && order_key < PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
             && order_key > PG_STAT_STATEMENTS_GENERAL_DIFF_MAX)
+    /* todo: here we not check pg_version_num and in old pg versions may have unexpected bahaviour */
+    if (screen->current_context == pg_stat_statements_io 
+            && order_key < PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN 
+            && order_key > PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX)
         return;
 
     if (order_key == INVALID_ORDER_KEY)
@@ -1859,6 +1887,14 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
         case pg_stat_statements_general:
             min = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
             max = PG_STAT_STATEMENTS_GENERAL_ORDER_MAX;
+            *first_iter = true;
+            break;
+        case pg_stat_statements_io:
+            min = PG_STAT_STATEMENTS_IO_ORDER_MIN;
+            if (atoi(screen->pg_version_num) < 90200)
+                max = PG_STAT_STATEMENTS_IO_ORDER_91_MAX;
+            else
+                max = PG_STAT_STATEMENTS_IO_ORDER_LATEST_MAX;
             *first_iter = true;
             break;
         default:
@@ -3332,7 +3368,8 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
 void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
     if (screen->current_context != pg_stat_statements_timing
-            && screen->current_context != pg_stat_statements_general) {
+            && screen->current_context != pg_stat_statements_general
+            && screen->current_context != pg_stat_statements_io) {
         wprintw(window, "Get query text not allowed here.");
         return;
     }
@@ -3632,6 +3669,9 @@ void switch_context(WINDOW * window, struct screen_s * screen,
         case pg_stat_statements_general:
             wprintw(window, "Show pg_stat_statements general");
             break;
+        case pg_stat_statements_io:
+            wprintw(window, "Show pg_stat_statements io");
+            break;
         default:
             break;
     }
@@ -3665,7 +3705,8 @@ void print_help_screen(bool * first_iter)
                 PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
     wprintw(w, "general actions:\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
-  s,t,T,x,X             's' sizes, 't' tables, 'T' tables-IO, 'x' stmt timings, 'X' stmt general.\n\
+  s,t,T           's' sizes, 't' tables, 'T' tables IO,\n\
+  x,X,c           'x' stmt timings, 'X' stmt general, 'c' stmt IO.\n\
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
   C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
@@ -3889,6 +3930,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'X':               /* open pg_stat_statements_general screen */
                     switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, first_iter);
+                    break;
+                case 'c':               /* open pg_stat_statements_io screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_io, p_res, first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index], p_res, first_iter);
