@@ -394,6 +394,7 @@ struct colAttrs {
         a.rolname AS user, d.datname AS database, \
         date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
         round(sum(p.total_time)) AS all_t, \
+        sum(p.calls) AS calls, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
@@ -422,6 +423,7 @@ struct colAttrs {
         round(sum(p.blk_read_time)) AS read_t, \
         round(sum(p.blk_write_time)) AS write_t, \
         round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) AS cpu_t, \
+        sum(p.calls) AS calls, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
         regexp_replace( \
@@ -441,12 +443,12 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
 
 #define PG_STAT_STATEMENTS_TIMING_ORDER_MIN         2
-#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      3
-#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  9
+#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      4
+#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  10
 #define PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN  3
-#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX  3
+#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX  4
 #define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN  6
-#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX  9
+#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX  10
 
 #define PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1 \
     "SELECT \
