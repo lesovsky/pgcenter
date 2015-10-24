@@ -1694,12 +1694,12 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (screen->current_context == pg_stat_functions && order_key != PG_STAT_FUNCTIONS_DIFF_COL)
         return;
     if (screen->current_context == pg_stat_statements_timing
-            && order_key != PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN
-            && order_key != PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX)
+            && order_key < PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN
+            && order_key > PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX)
         return;
     if (screen->current_context == pg_stat_statements_general 
-            && order_key != PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
-            && order_key != PG_STAT_STATEMENTS_GENERAL_DIFF_MAX)
+            && order_key < PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
+            && order_key > PG_STAT_STATEMENTS_GENERAL_DIFF_MAX)
         return;
 
     if (order_key == INVALID_ORDER_KEY)

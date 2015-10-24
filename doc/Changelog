@@ -1,5 +1,6 @@
 pgcenter (0.1.3) unstable; urgency=low
 
+  * fix wrong array sort for pg_stat_statements.
   * pg_stat_activity.query formatting.
   * fix crash on sticking keys.
   * fix crash on switching from erroneous screen.
