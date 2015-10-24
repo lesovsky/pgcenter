@@ -605,6 +605,9 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
             /* suppress log messages with log_min_duration_statement */
             if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) != NULL)
                PQclear(res);
+            /* increase work_mem */
+            if ((res = do_query(conns[i], PG_INCREASE_WORK_MEM_QUERY, errmsg)) != NULL)
+                PQclear(res);
             if (errmsg)
                 free(errmsg);
         }

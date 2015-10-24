@@ -499,6 +499,7 @@ struct colAttrs {
 /* other queries */
 /* don't log our queries */
 #define PG_SUPPRESS_LOG_QUERY "SET log_min_duration_statement TO 10000"
+#define PG_INCREASE_WORK_MEM_QUERY "SET work_mem TO '32MB'"
 
 /* get full config query */
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
