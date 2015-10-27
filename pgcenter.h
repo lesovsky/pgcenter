@@ -678,7 +678,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
         PGconn * conns[], int console_index);
 int close_connection(WINDOW * window, struct screen_s * screens[],
         PGconn * conns[], int console_index, bool *first_iter);
-void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_s * args);
+void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args);
 void show_config(WINDOW * window, PGconn * conn);
 void reload_conf(WINDOW * window, PGconn * conn);
 void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc);

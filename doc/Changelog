@@ -1,5 +1,6 @@
-pgcenter (0.1.3) unstable; urgency=low
+pgcenter (devel) unstable; urgency=low
 
+  * change read/write .pgcenterrc funcs.
   * add calls column into pg_stat_statements timing screen.
   * add pg_stat_statements io screen (9.1 and never).
   * set work_mem to 32MB (reduce disk spill in pg_stat_statements).

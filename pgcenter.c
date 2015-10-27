@@ -495,7 +495,11 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
                         screens[i]->password);
                         screens[i]->screen = i;
                         screens[i]->conn_used = true;
-                        i++;
+            /* if "null" read from file, than we should connecting through unix socket */
+            if (!strcmp(screens[i]->host, "(null)")) {
+                strcpy(screens[i]->host, "\0");
+            }
+            i++;
         }
         fclose(fp);
         return PGCENTERRC_READ_OK;
@@ -2307,7 +2311,7 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
  * @args            Struct where stored input args.
  ****************************************************************************
  */
-void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_s * args)
+void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args)
 {
     int i = 0;
     FILE *fp;
@@ -2331,9 +2335,9 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], struct args_
         for (i = 0; i < MAX_SCREEN; i++) {
             if (screens[i]->conn_used) {
                 fprintf(fp, "%s:%s:%s:%s:%s\n",
-                        screens[i]->host,     screens[i]->port,
-                        screens[i]->dbname,   screens[i]->user,
-                        screens[i]->password);
+                        PQhost(conns[i]), PQport(conns[i]),
+                        PQdb(conns[i]), PQuser(conns[i]),
+                        PQpass(conns[i]));
             }
         }
         wprintw(window, "Wrote configuration to '%s'", pgcenterrc_path);
@@ -3838,7 +3842,7 @@ int main(int argc, char *argv[])
                     console_no = console_index + 1;
                     break;
                 case 'W':               /* write connections info into .pgcenterrc */
-                    write_pgcenterrc(w_cmd, screens, args);
+                    write_pgcenterrc(w_cmd, screens, conns, args);
                     break;
                 case 'C':               /* open current postgresql config in pager */
                     show_config(w_cmd, conns[console_index]);
