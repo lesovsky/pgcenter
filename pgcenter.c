@@ -1164,8 +1164,8 @@ void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
             sscanf(line + 5, "%llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
                             &st_cpu->cpu_user,      &st_cpu->cpu_nice,
                             &st_cpu->cpu_sys,       &st_cpu->cpu_idle,
-                            &st_cpu->cpu_iowait,    &st_cpu->cpu_steal,
-                            &st_cpu->cpu_hardirq,   &st_cpu->cpu_softirq,
+                            &st_cpu->cpu_iowait,    &st_cpu->cpu_hardirq,
+                            &st_cpu->cpu_softirq,   &st_cpu->cpu_steal,
                             &st_cpu->cpu_guest,     &st_cpu->cpu_guest_nice);
                             *uptime = st_cpu->cpu_user + st_cpu->cpu_nice +
                                 st_cpu->cpu_sys + st_cpu->cpu_idle +
@@ -1179,8 +1179,8 @@ void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
                                 &proc_nb,           &sc.cpu_user,
                                 &sc.cpu_nice,       &sc.cpu_sys,
                                 &sc.cpu_idle,       &sc.cpu_iowait,
-                                &sc.cpu_steal,      &sc.cpu_hardirq,
-                                &sc.cpu_softirq,    &sc.cpu_guest,
+                                &sc.cpu_hardirq,    &sc.cpu_softirq,
+                                &sc.cpu_steal,      &sc.cpu_guest,
                                 &sc.cpu_guest_nice);
 
                                 if (proc_nb < (nbr - 1)) {

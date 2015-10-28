@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix hardirq/softirq/steal wrong placement.
   * change read/write .pgcenterrc funcs.
   * add calls column into pg_stat_statements timing screen.
   * add pg_stat_statements io screen (9.1 and never).
