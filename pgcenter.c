@@ -3719,12 +3719,12 @@ void print_help_screen(bool * first_iter)
   1..8            switch between consoles.\n\
 activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
-  n,m             'n' set new mask, 'm' show current mask.\n\
+  >,.             '>' set new mask, '.' show current mask.\n\
   Del,Shift+Del   'Del' cancel backend group using mask, 'Shift+Del' terminate backend group using mask.\n\
   A               change activity age threshold.\n\
   G               get report about query using hash.\n\n\
 other actions:\n\
-  V,K             'V' show system tables on/off, 'K' reset postgresql statistics counters.\n\
+  ,Q             ',' show system tables on/off, 'Q' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
   F1              show help screen.\n\
@@ -3880,10 +3880,10 @@ int main(int argc, char *argv[])
                 case '_':               /* do terminate postgres backend */
                     signal_single_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
-                case 'm':               /* get current cancel/terminate mask */
+                case '.':               /* get current cancel/terminate mask */
                     get_statemask(w_cmd, screens[console_index]);
                     break;
-                case 'n':               /* set new cancel/terminate mask */
+                case '>':               /* set new cancel/terminate mask */
                     set_statemask(w_cmd, screens[console_index]);
                     break;
                 case 330:               /* do cancel of backend group using mask with Del */
@@ -3941,11 +3941,11 @@ int main(int argc, char *argv[])
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index], p_res, first_iter);
                     break;
-                case 'V':               /* show system view on/off toggle */
+                case ',':               /* show system view on/off toggle */
                     system_view_toggle(w_cmd, screens[console_index], first_iter);
                     PQclear(p_res);
                     break;
-                case 'K':               /* reset pg stat counters */
+                case 'Q':               /* reset pg stat counters */
                     pg_stat_reset(w_cmd, conns[console_index], first_iter);
                     PQclear(p_res);
                     break;
