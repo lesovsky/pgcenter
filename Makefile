@@ -14,7 +14,7 @@ ifndef NCONFIG
 	endif
 endif
 NLIBS = $(shell $(NCONFIG) --libs)
-LIBS = $(NLIBS) -lpq
+LIBS = $(NLIBS) -lmenu -lpq
 DESTDIR ?=
 
 .PHONY: all clean install

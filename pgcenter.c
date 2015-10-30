@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
+#include <menu.h>
 #include <ncurses.h>
 #include <netdb.h>
 #include <ifaddrs.h>
@@ -2581,7 +2582,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
             /* if we want edit recovery.conf, attach config name to data_directory path */
             if (!strcmp(config_file_guc, GUC_DATA_DIRECTORY)) {
                 strcat(config_path, "/");
-                strcat(config_path, PG_RECOVERY_CONF_FILE);
+                strcat(config_path, PG_RECOVERY_FILE);
             }
             /* escape from ncurses mode */
             refresh();
@@ -2612,6 +2613,98 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     /* return to ncurses mode */
     refresh();
     return;
+}
+
+/*
+ ****************************************************** key press function **
+ * Invoke menu for config editing.
+ *
+ * IN:
+ * @w_cmd           Window where errors will be displayed.
+ * @w_dba           Window where db answers printed.
+ * @screen          Current screen settings.
+ * @conn            Current connection.
+ * @first_iter      Reset counters when function ends.
+ ****************************************************************************
+ */
+void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter)
+{
+    char *choices[] = { "postgresql.conf", "pg_hba.conf", "pg_ident.conf", "recovery.conf" };
+    WINDOW *my_menu_win;
+    MENU *my_menu;
+    ITEM **my_items;
+    int n_choices, c, i;
+    bool done = false;
+
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+
+    /* allocate stuff */
+    n_choices = ARRAY_SIZE(choices);
+    my_items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices + 1));
+    for (i = 0; i < n_choices; i++)
+        my_items[i] = new_item(choices[i], NULL);
+    my_items[n_choices] = (ITEM *)NULL;
+    my_menu = new_menu((ITEM **)my_items);
+
+    /* construct menu, outer window for header and inner window for menu */
+    my_menu_win = newwin(10,54,5,0);
+    keypad(my_menu_win, TRUE);
+    set_menu_win(my_menu, my_menu_win);
+    set_menu_sub(my_menu, derwin(my_menu_win, 4,20,1,0));
+
+    /* clear stuff from db answer window */
+    wclear(w_dba);
+    wrefresh(w_dba);
+    /* print menu header */
+    mvwprintw(my_menu_win, 0, 0, "Edit configuration file (Enter to edit, Esc to exit):");
+    post_menu(my_menu);
+    wrefresh(my_menu_win);
+    
+    ESCDELAY = 100;
+    while (1) {
+        if (done)
+            break;
+        c = wgetch(my_menu_win);
+        switch (c) {
+            case KEY_DOWN:
+                menu_driver(my_menu, REQ_DOWN_ITEM);
+                break;
+            case KEY_UP:
+                menu_driver(my_menu, REQ_UP_ITEM);
+                break;
+            case 10:
+                if (!strcmp(item_name(current_item(my_menu)), PG_CONF_FILE))
+                    edit_config(w_cmd, screen, conn, GUC_CONFIG_FILE);
+                else if (!strcmp(item_name(current_item(my_menu)), PG_HBA_FILE))
+                    edit_config(w_cmd, screen, conn, GUC_HBA_FILE);
+                else if (!strcmp(item_name(current_item(my_menu)), PG_IDENT_FILE))
+                    edit_config(w_cmd, screen, conn, GUC_IDENT_FILE);
+                else if (!strcmp(item_name(current_item(my_menu)), PG_RECOVERY_FILE))
+                    edit_config(w_cmd, screen, conn, GUC_DATA_DIRECTORY);
+                else
+                    wprintw(w_cmd, "Do nothing. Unknown file.");     /* never should be here. */
+                done = true;
+                break;
+            case 27:
+                done = true;
+                break;
+        }       
+    }
+ 
+    /* clear menu items from screen */
+    clear();
+    refresh();
+
+    /* free stuff */
+    unpost_menu(my_menu);
+    for (i = 0; i < n_choices; i++)
+        free_item(my_items[i]);
+    free_menu(my_menu);
+    free(my_items);
+    delwin(my_menu_win);
+    *first_iter = true;
 }
 
 /*
@@ -3712,8 +3805,8 @@ void print_help_screen(bool * first_iter)
   s,t,T           's' sizes, 't' tables, 'T' tables IO,\n\
   x,X,c           'x' stmt timings, 'X' stmt general, 'c' stmt IO.\n\
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
-  P,H,O,I         config: 'P' postgresql.conf, 'H' pg_hba.conf, 'O' recovery.conf, 'I' pg_ident.conf\n\
-  C,R,p                   'C' show config, 'R' reload config, 'p' start psql session.\n\
+  C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
+  p                       'p' start psql session.\n\
   L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
   N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
   1..8            switch between consoles.\n\
@@ -3724,7 +3817,7 @@ activity actions:\n\
   A               change activity age threshold.\n\
   G               get report about query using hash.\n\n\
 other actions:\n\
-  ,Q             ',' show system tables on/off, 'Q' reset postgresql statistics counters.\n\
+  , Q             ',' show system tables on/off, 'Q' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
   F1              show help screen.\n\
@@ -3847,17 +3940,8 @@ int main(int argc, char *argv[])
                 case 'C':               /* open current postgresql config in pager */
                     show_config(w_cmd, conns[console_index]);
                     break;
-                case 'P':               /* edit postgresql.conf */
-                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_CONFIG_FILE);
-                    break;
-                case 'H':               /* edit pg_hba.conf */
-                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_HBA_FILE);
-                    break;
-                case 'I':               /* edit pg_ident.conf */
-                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_IDENT_FILE);
-                    break;
-                case 'O':               /* edit recovery.conf */
-                    edit_config(w_cmd, screens[console_index], conns[console_index], GUC_DATA_DIRECTORY);
+                case 'E':               /* edit configuration files */
+                    edit_config_menu(w_cmd, w_dba, screens[console_index], conns[console_index], first_iter);
                     break;
                 case 'R':               /* reload postgresql */
                     reload_conf(w_cmd, conns[console_index]);
