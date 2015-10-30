@@ -10,7 +10,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 - show statistics about tables, indexes, functions, activity, replication;
 - show pg_stat_statements statistics: calls, rows;
 - show pg_stat_statements statistics: cpu timings, io timings;
-- show pg_stat_statements statistics: blks i/o (hits, reads, dirtied, written);
+- show pg_stat_statements statistics: blks i/o (hits, reads, dirtied, written, temp);
 - show relations sizes info;
 - configuration files editor and postgres reload;
 - log files viewing (full log or tail);
@@ -73,4 +73,4 @@ $ pgcenter
 
 #### Known issues
 - mainly developed and tested under PostgreSQL 9.4 (but tested with others 9.x releases).
-- this is beta software, in some circumstances segfaults occurs.
+- this is beta software, in some circumstances may occurs segfaults.

@@ -1,6 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
-  * use 100ms for escdelay;
+  * add pg_stat_statements temp.
+  * use 100ms for escdelay.
   * config edit buttons replaced with menu.
   * change key mappings (rare actions moved from letters).
   * fix hardirq/softirq/steal wrong placement.

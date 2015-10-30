@@ -15,7 +15,7 @@
 #define BUFFERSIZE_S        16
 #define BUFFERSIZE          4096
 #define MAX_SCREEN          8
-#define TOTAL_CONTEXTS      11
+#define TOTAL_CONTEXTS      12
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
 
@@ -69,6 +69,7 @@ unsigned int hz;
 #define PG_STAT_STATEMENTS_TIMING_NUM           8
 #define PG_STAT_STATEMENTS_GENERAL_NUM          9
 #define PG_STAT_STATEMENTS_IO_NUM               10
+#define PG_STAT_STATEMENTS_TEMP_NUM             11
 
 #define GROUP_ACTIVE        1 << 0
 #define GROUP_IDLE          1 << 1
@@ -89,7 +90,8 @@ enum context
     pg_stat_functions,
     pg_stat_statements_timing,
     pg_stat_statements_general,
-    pg_stat_statements_io
+    pg_stat_statements_io,
+    pg_stat_statements_temp
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -584,6 +586,41 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_IO_DIFF_91_MAX    8
 #define PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN    6
 #define PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX    10
+
+#define PG_STAT_STATEMENTS_TEMP_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        sum(p.temp_blks_read) \
+            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_read, \
+        sum(p.temp_blks_written) \
+            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_write, \
+        sum(p.temp_blks_read) \
+            * (SELECT current_setting('block_size')::int / 1024) as temp_read, \
+        sum(p.temp_blks_written) \
+            * (SELECT current_setting('block_size')::int / 1024) as temp_write, \
+        sum(p.calls) AS calls, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
+#define PG_STAT_STATEMENTS_TEMP_QUERY_P2 " DESC"
+
+#define PG_STAT_STATEMENTS_TEMP_ORDER_MIN    2
+#define PG_STAT_STATEMENTS_TEMP_ORDER_MAX    6
+#define PG_STAT_STATEMENTS_TEMP_DIFF_MIN    4
+#define PG_STAT_STATEMENTS_TEMP_DIFF_MAX    6
 
 /* other queries */
 /* don't log our queries */
