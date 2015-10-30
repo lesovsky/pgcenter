@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * use 100ms for escdelay;
   * config edit buttons replaced with menu.
   * change key mappings (rare actions moved from letters).
   * fix hardirq/softirq/steal wrong placement.

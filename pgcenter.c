@@ -85,7 +85,7 @@ void init_signal_handlers(void)
 
 /*
  ******************************************************** routine function **
- * Trap keys in program main mode.
+ * Trap keys in program.
  *
  * RETURNS:
  * 1 if key is pressed or 0 if not.
@@ -2662,7 +2662,6 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
     post_menu(my_menu);
     wrefresh(my_menu_win);
     
-    ESCDELAY = 100;
     while (1) {
         if (done)
             break;
@@ -3007,8 +3006,7 @@ void start_psql(WINDOW * window, struct screen_s * screen)
     }
 
     /* 
-     * Reinit signals handling. When psql session ends, if user hit Ctrl+C in 
-     * main mode, program not reset terminal.
+     * Reinit signals handling. After psql session, pgcenter may not reset terminal properly.
      */
     signal(SIGINT, SIG_DFL);
     init_signal_handlers();
@@ -3906,6 +3904,7 @@ int main(int argc, char *argv[])
     noecho();
     nodelay(stdscr, TRUE);
     keypad(stdscr,TRUE);
+    ESCDELAY = 100;                 /* milliseconds to wait after escape */
 
     w_sys = newwin(5, 0, 0, 0);
     w_cmd = newwin(1, 0, 4, 0);
