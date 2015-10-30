@@ -2630,9 +2630,9 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
 void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter)
 {
     char *choices[] = { "postgresql.conf", "pg_hba.conf", "pg_ident.conf", "recovery.conf" };
-    WINDOW *my_menu_win;
-    MENU *my_menu;
-    ITEM **my_items;
+    WINDOW *menu_win;
+    MENU *menu;
+    ITEM **items;
     int n_choices, c, i;
     bool done = false;
 
@@ -2642,45 +2642,45 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
 
     /* allocate stuff */
     n_choices = ARRAY_SIZE(choices);
-    my_items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices + 1));
+    items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices + 1));
     for (i = 0; i < n_choices; i++)
-        my_items[i] = new_item(choices[i], NULL);
-    my_items[n_choices] = (ITEM *)NULL;
-    my_menu = new_menu((ITEM **)my_items);
+        items[i] = new_item(choices[i], NULL);
+    items[n_choices] = (ITEM *)NULL;
+    menu = new_menu((ITEM **)items);
 
     /* construct menu, outer window for header and inner window for menu */
-    my_menu_win = newwin(10,54,5,0);
-    keypad(my_menu_win, TRUE);
-    set_menu_win(my_menu, my_menu_win);
-    set_menu_sub(my_menu, derwin(my_menu_win, 4,20,1,0));
+    menu_win = newwin(10,54,5,0);
+    keypad(menu_win, TRUE);
+    set_menu_win(menu, menu_win);
+    set_menu_sub(menu, derwin(menu_win, 4,20,1,0));
 
     /* clear stuff from db answer window */
     wclear(w_dba);
     wrefresh(w_dba);
     /* print menu header */
-    mvwprintw(my_menu_win, 0, 0, "Edit configuration file (Enter to edit, Esc to exit):");
-    post_menu(my_menu);
-    wrefresh(my_menu_win);
+    mvwprintw(menu_win, 0, 0, "Edit configuration file (Enter to edit, Esc to exit):");
+    post_menu(menu);
+    wrefresh(menu_win);
     
     while (1) {
         if (done)
             break;
-        c = wgetch(my_menu_win);
+        c = wgetch(menu_win);
         switch (c) {
             case KEY_DOWN:
-                menu_driver(my_menu, REQ_DOWN_ITEM);
+                menu_driver(menu, REQ_DOWN_ITEM);
                 break;
             case KEY_UP:
-                menu_driver(my_menu, REQ_UP_ITEM);
+                menu_driver(menu, REQ_UP_ITEM);
                 break;
             case 10:
-                if (!strcmp(item_name(current_item(my_menu)), PG_CONF_FILE))
+                if (!strcmp(item_name(current_item(menu)), PG_CONF_FILE))
                     edit_config(w_cmd, screen, conn, GUC_CONFIG_FILE);
-                else if (!strcmp(item_name(current_item(my_menu)), PG_HBA_FILE))
+                else if (!strcmp(item_name(current_item(menu)), PG_HBA_FILE))
                     edit_config(w_cmd, screen, conn, GUC_HBA_FILE);
-                else if (!strcmp(item_name(current_item(my_menu)), PG_IDENT_FILE))
+                else if (!strcmp(item_name(current_item(menu)), PG_IDENT_FILE))
                     edit_config(w_cmd, screen, conn, GUC_IDENT_FILE);
-                else if (!strcmp(item_name(current_item(my_menu)), PG_RECOVERY_FILE))
+                else if (!strcmp(item_name(current_item(menu)), PG_RECOVERY_FILE))
                     edit_config(w_cmd, screen, conn, GUC_DATA_DIRECTORY);
                 else
                     wprintw(w_cmd, "Do nothing. Unknown file.");     /* never should be here. */
@@ -2697,12 +2697,12 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
     refresh();
 
     /* free stuff */
-    unpost_menu(my_menu);
+    unpost_menu(menu);
     for (i = 0; i < n_choices; i++)
-        free_item(my_items[i]);
-    free_menu(my_menu);
-    free(my_items);
-    delwin(my_menu_win);
+        free_item(items[i]);
+    free_menu(menu);
+    free(items);
+    delwin(menu_win);
     *first_iter = true;
 }
 
