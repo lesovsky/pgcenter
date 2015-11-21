@@ -77,6 +77,10 @@ unsigned int hz;
 #define GROUP_WAITING       1 << 3
 #define GROUP_OTHER         1 << 4
 
+#define SUBSCREEN_NONE      0
+#define SUBSCREEN_LOGTAIL   1
+#define SUBSCREEN_IOSTAT    2
+
 /* enum for query context */
 enum context
 {
@@ -131,9 +135,9 @@ struct screen_s
     char conninfo[BUFFERSIZE];
     char pg_version_num[10];
     char pg_version[10];
-    bool log_opened;
-    char log_path[PATH_MAX];
-    int log_fd;
+    int subscreen;                              /* subscreen type: logtail, iostat, etc. */
+    char log_path[PATH_MAX];                    /* logfile path for logtail subscreen */
+    int log_fd;                                 /* logfile fd for log viewing */
     enum context current_context;
     char pg_stat_activity_min_age[BUFFERSIZE_S];
     struct context_s context_list[TOTAL_CONTEXTS];

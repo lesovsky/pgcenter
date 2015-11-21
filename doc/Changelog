@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * expand log_opened into subscreen entity, which allows add new subscreens
+    with new functions (iostat, nicstat, etc).
   * add pg_stat_statements temp.
   * use 100ms for escdelay.
   * config edit buttons replaced with menu.

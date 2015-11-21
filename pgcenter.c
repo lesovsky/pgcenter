@@ -186,7 +186,7 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->dbname, "");
         strcpy(screens[i]->password, "");
         strcpy(screens[i]->conninfo, "");
-        screens[i]->log_opened = false;
+        screens[i]->subscreen = SUBSCREEN_NONE;
         strcpy(screens[i]->log_path, "");
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
         strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
@@ -2143,7 +2143,7 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
         strcpy(screens[i]->password,    screens[i + 1]->password);
         strcpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num);
         strcpy(screens[i]->pg_version,  screens[i + 1]->pg_version);
-        screens[i]->log_opened =        screens[i + 1]->log_opened;
+        screens[i]->subscreen =        screens[i + 1]->subscreen;
         strcpy(screens[i]->log_path,    screens[i + 1]->log_path);
         screens[i]->log_fd =            screens[i + 1]->log_fd;
         screens[i]->current_context =   screens[i + 1]->current_context;
@@ -3255,7 +3255,7 @@ void get_logfile_path(char * path, PGconn * conn)
  */
 void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn)
 {
-    if (!screen->log_opened) {
+    if (screen->subscreen != SUBSCREEN_LOGTAIL) {
     
         if (check_pg_listen_addr(screen) 
                 || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
@@ -3272,7 +3272,7 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
                 wprintw(window, "Do nothing. Failed to open %s", screen->log_path);
                 return;
             }
-            screen->log_opened = true;
+            screen->subscreen = SUBSCREEN_LOGTAIL;
             wprintw(window, "Open postgresql log: %s", screen->log_path);
             return;
         } else {
@@ -3283,7 +3283,7 @@ void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGc
         wclear(*w_log);
         wrefresh(*w_log);
         close(screen->log_fd);
-        screen->log_opened = false;
+        screen->subscreen = SUBSCREEN_NONE;
         return;
     }
 }
@@ -3972,7 +3972,7 @@ int main(int argc, char *argv[])
                     log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                     break;
                 case 410:               /* when logtail enabled and window resized, repaint logtail window */
-                    if (screens[console_index]->log_opened) {
+                    if (screens[console_index]->subscreen == SUBSCREEN_LOGTAIL) {
                         log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                         log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
                     }
@@ -4180,11 +4180,15 @@ int main(int argc, char *argv[])
 
             wrefresh(w_cmd);
             wclear(w_cmd);
-
-            if (screens[console_index]->log_opened) {
-                wattron(w_log, COLOR_PAIR(*wl_color));
-                print_log(w_log, w_cmd, screens[console_index], conns[console_index]);
-                wattroff(w_log, COLOR_PAIR(*wl_color));
+            
+            switch (screens[console_index]->subscreen) {
+                case SUBSCREEN_LOGTAIL:
+                    wattron(w_log, COLOR_PAIR(*wl_color));
+                    print_log(w_log, w_cmd, screens[console_index], conns[console_index]);
+                    wattroff(w_log, COLOR_PAIR(*wl_color));
+                    break;
+                case SUBSCREEN_NONE: default:
+                    break;
             }
 
             wattroff(w_sys, COLOR_PAIR(*ws_color));
