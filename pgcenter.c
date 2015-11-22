@@ -186,6 +186,7 @@ void init_screens(struct screen_s *screens[])
         strcpy(screens[i]->dbname, "");
         strcpy(screens[i]->password, "");
         strcpy(screens[i]->conninfo, "");
+        screens[i]->subscreen_enabled = false;
         screens[i]->subscreen = SUBSCREEN_NONE;
         strcpy(screens[i]->log_path, "");
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
@@ -1075,7 +1076,8 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
  * @st_mem_short    Struct for mem statistics.
  ****************************************************************************
  */
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short)
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short,
+        struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
 {
     int i;
     /* Allocate structures for CPUs "all" and 0 */
@@ -1093,6 +1095,22 @@ void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct
             exit(EXIT_FAILURE);
     }
     memset(*st_mem_short, 0, STATS_MEM_SHORT_SIZE);
+
+    /* Allocate structures for iostat */
+    for (i = 0; i < ndev; i++) {
+        if ((c_ios[i] = (struct dstats *) malloc(STATS_IOSTAT_SIZE)) == NULL) {
+            perror("malloc for iostat stats failed");
+            exit(EXIT_FAILURE);
+        }
+        if ((p_ios[i] = (struct dstats *) malloc(STATS_IOSTAT_SIZE)) == NULL) {
+            perror("malloc for iostat stats failed");
+            exit(EXIT_FAILURE);
+        }
+        if ((x_ios[i] = (struct ext_dstats *) malloc(STATS_EXT_IOSTAT_SIZE)) == NULL) {
+            perror("malloc for extended iostat stats failed");
+            exit(EXIT_FAILURE);
+        }
+    }
 }
 
 /*
@@ -1369,6 +1387,155 @@ void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_shor
             st_mem_short->swap_used,
             st_mem_short->dirty,
             st_mem_short->writeback);
+}
+
+/*
+ ************************************************** system window function **
+ * Save current io statistics snapshot.
+ *
+ * IN:
+ * @curr        Current statistics snapshot which must be saved.
+ * @prev        Struct for saving stat snapshot.
+ * @n_dev       Number of block devices.
+ ****************************************************************************
+ */
+void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev)
+{
+    int i;
+    for (i = 0; i < n_dev; i++) {
+        prev[i]->r_completed = curr[i]->r_completed;
+        prev[i]->r_merged = curr[i]->r_merged;
+        prev[i]->r_sectors = curr[i]->r_sectors;
+        prev[i]->r_spent = curr[i]->r_spent;
+        prev[i]->w_completed = curr[i]->w_completed;
+        prev[i]->w_merged = curr[i]->w_merged;
+        prev[i]->w_sectors = curr[i]->w_sectors;
+        prev[i]->w_spent = curr[i]->w_spent;
+        prev[i]->io_in_progress = curr[i]->io_in_progress;
+        prev[i]->t_spent = curr[i]->t_spent;
+        prev[i]->t_weighted = curr[i]->t_weighted;
+    }
+}
+
+/*
+ ****************************************************** subscreen function **
+ * Print IO statistics from /proc/diskstats.
+ *
+ * IN:
+ * @window          Window where stat will be printed.
+ * @w_cmd           Window for errors and messaged.
+ * @c_ios           Snapshot for current stat.
+ * @p_ios           Snapshot for previous stat.
+ * @x_ios           Struct for extended stat.
+ * @ndev            Number of devices.
+ * @repaint         Repaint subscreen flag.
+ ****************************************************************************
+ */
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
+        struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev, bool * repaint)
+{
+    /* if number of devices is changed, we should realloc structs and repaint subscreen */
+    if (ndev != count_block_devices()) {
+        *repaint = true;
+        return;
+    }
+
+    FILE *fp;
+    static unsigned long long uptime0[2] = {0, 0};
+    static unsigned long long itv;
+    static int curr = 1;
+    int i = 0;
+    char line[128];
+
+    int major, minor;
+    char devname[64];
+    unsigned long r_completed, r_merged, r_sectors, r_spent,
+                  w_completed, w_merged, w_sectors, w_spent,
+                  io_in_progress, t_spent, t_weighted;
+    double r_await[ndev], w_await[ndev];
+    
+    uptime0[curr] = 0;
+    read_uptime(&(uptime0[curr]));
+    
+    /* todo: эту штуку надо сделать в subscreen_process */
+    if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
+        wclear(window);
+        wprintw(window, "Nothing to do. Can't open %s", DISKSTATS_FILE);
+        wrefresh(window);
+        return;
+    }
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        sscanf(line, "%i %i %s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+                    &major, &minor, devname,
+                    &r_completed, &r_merged, &r_sectors, &r_spent,
+                    &w_completed, &w_merged, &w_sectors, &w_spent,
+                    &io_in_progress, &t_spent, &t_weighted);
+        c_ios[i]->major = major;
+        c_ios[i]->minor = minor;
+        strcpy(c_ios[i]->devname, devname);
+        c_ios[i]->r_completed = r_completed;
+        c_ios[i]->r_merged = r_merged;
+        c_ios[i]->r_sectors = r_sectors;
+        c_ios[i]->r_spent = r_spent;
+        c_ios[i]->w_completed = w_completed;
+        c_ios[i]->w_merged = w_merged;
+        c_ios[i]->w_sectors = w_sectors;
+        c_ios[i]->w_spent = w_spent;
+        c_ios[i]->io_in_progress = io_in_progress;
+        c_ios[i]->t_spent = t_spent;
+        c_ios[i]->t_weighted = t_weighted;
+        i++;
+    }
+    fclose(fp);
+
+    itv = get_interval(uptime0[!curr], uptime0[curr]);
+                    
+    for (i = 0; i < ndev; i++) {
+        x_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv);
+        x_ios[i]->await = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
+            ((c_ios[i]->r_spent - p_ios[i]->r_spent) + (c_ios[i]->w_spent - p_ios[i]->w_spent)) /
+            ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
+        x_ios[i]->arqsz = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
+            ((c_ios[i]->r_sectors - p_ios[i]->r_sectors) + (c_ios[i]->w_sectors - p_ios[i]->w_sectors)) /
+            ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
+
+        r_await[i] = (c_ios[i]->r_completed - p_ios[i]->r_completed) ?
+            (c_ios[i]->r_spent - p_ios[i]->r_spent) /
+            ((double) (c_ios[i]->r_completed - p_ios[i]->r_completed)) : 0.0;
+        w_await[i] = (c_ios[i]->w_completed - p_ios[i]->w_completed) ?
+            (c_ios[i]->w_spent - p_ios[i]->w_spent) /
+            ((double) (c_ios[i]->w_completed - p_ios[i]->w_completed)) : 0.0;
+    }
+
+    /* print headers */
+    wclear(window);
+    wattron(window, A_BOLD);
+    wprintw(window, "\nDevice:           rrqm/s  wrqm/s      r/s      w/s    rMB/s    wMB/s avgrq-sz avgqu-sz     await   r_await   w_await   %%util\n");
+    wattroff(window, A_BOLD);
+
+    /* print statistics */
+    for (i = 0; i < ndev; i++) {
+        wprintw(window, "%s\t\t", c_ios[i]->devname);
+        wprintw(window, "%8.2f%8.2f",
+                S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv),
+                S_VALUE(p_ios[i]->w_merged, c_ios[i]->w_merged, itv));
+        wprintw(window, "%9.2f%9.2f",
+                S_VALUE(p_ios[i]->r_completed, c_ios[i]->r_completed, itv),
+                S_VALUE(p_ios[i]->w_completed, c_ios[i]->w_completed, itv));
+        wprintw(window, "%9.2f%9.2f%9.2f%9.2f",
+                S_VALUE(p_ios[i]->r_sectors, c_ios[i]->r_sectors, itv) / 2048,
+                S_VALUE(p_ios[i]->w_sectors, c_ios[i]->w_sectors, itv) / 2048,
+                x_ios[i]->arqsz,
+                S_VALUE(p_ios[i]->t_weighted, c_ios[i]->t_weighted, itv) / 1000.0);
+        wprintw(window, "%10.2f%10.2f%10.2f", x_ios[i]->await, r_await[i], w_await[i]);
+        wprintw(window, "%8.2f", x_ios[i]->util / 10.0);
+        wprintw(window, "\n");
+    }
+    wrefresh(window);
+
+    /* save current stats snapshot and */
+    replace_dstats(c_ios, p_ios, ndev);
+    curr ^= 1;
 }
 
 /*
@@ -3243,47 +3410,92 @@ void get_logfile_path(char * path, PGconn * conn)
 }
 
 /*
+ *************************************************** iostat stuff function **
+ * Count block devices in /proc/diskstat.
+ *
+ * RETURNS:
+ * Return number of block devices.
+ ****************************************************************************
+ */
+int count_block_devices(void)
+{
+    FILE * fp;
+    int ndev = 0;
+    char ch;
+
+    if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
+        return -1;
+    }
+
+    while (!feof(fp)) {
+        ch = fgetc(fp);
+        if (ch == '\n')
+            ndev++;
+    }
+
+    fclose(fp);
+    return ndev;
+}
+
+/*
  ****************************************************** key press function **
  * Log processing, open log in separate window or close if already opened.
  *
  * IN:
  * @window              Window where cmd status will be printed.
- * @w_log               Pointer to window where log will be shown.
+ * @w_sub               Pointer to window where log will be shown.
  * @screen              Array of connections options.
  * @conn                Current postgresql connection.
  ****************************************************************************
  */
-void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn)
+void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * screen, PGconn * conn, int subscreen)
 {
-    if (screen->subscreen != SUBSCREEN_LOGTAIL) {
+    if (!screen->subscreen_enabled) {
+        /* open subscreen */
+        switch (subscreen) {
+            case SUBSCREEN_LOGTAIL:
+                if (check_pg_listen_addr(screen) 
+                        || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+                    *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
+                    wrefresh(window);
+                    /* get logfile path  */
+                    get_logfile_path(screen->log_path, conn);
     
-        if (check_pg_listen_addr(screen) 
-                || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
-            *w_log = newwin(0, 0, ((LINES * 2) / 3), 0);
-            wrefresh(window);
-            /* get logfile path  */
-            get_logfile_path(screen->log_path, conn);
-
-            if (strlen(screen->log_path) == 0) {
-                wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
-                return;
-            }
-            if ((screen->log_fd = open(screen->log_path, O_RDONLY)) == -1 ) {
-                wprintw(window, "Do nothing. Failed to open %s", screen->log_path);
-                return;
-            }
-            screen->subscreen = SUBSCREEN_LOGTAIL;
-            wprintw(window, "Open postgresql log: %s", screen->log_path);
-            return;
-        } else {
-            wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
-            return;
+                    if (strlen(screen->log_path) == 0) {
+                        wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
+                        return;
+                    }
+                    if ((screen->log_fd = open(screen->log_path, O_RDONLY)) == -1 ) {
+                        wprintw(window, "Do nothing. Failed to open %s", screen->log_path);
+                        return;
+                    }
+                    screen->subscreen = SUBSCREEN_LOGTAIL;
+                    screen->subscreen_enabled = true;
+                    wprintw(window, "Open postgresql log: %s", screen->log_path);
+                    return;
+                } else {
+                    wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
+                    return;
+                }
+                break;
+            case SUBSCREEN_IOSTAT:
+                *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
+                wrefresh(window);
+                screen->subscreen = SUBSCREEN_IOSTAT;
+                screen->subscreen_enabled = true;
+                break;
+            case SUBSCREEN_NONE:
+                screen->subscreen = SUBSCREEN_NONE;
+                screen->subscreen_enabled = false;
         }
     } else {
-        wclear(*w_log);
-        wrefresh(*w_log);
-        close(screen->log_fd);
+        /* close subscreen */
+        wclear(*w_sub);
+        wrefresh(*w_sub);
+        if (screen->log_fd > 0)
+            close(screen->log_fd);
         screen->subscreen = SUBSCREEN_NONE;
+        screen->subscreen_enabled = false;
         return;
     }
 }
@@ -3390,7 +3602,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
         } while (n_lines != n_lines_save);                          /* print lines until newline counter not equal saved newline counter */
     } else {
         wprintw(w_cmd, "Do nothing. Log not a regular file or empty.");         /* if file not regular or empty */
-        log_process(w_cmd, &window, screen, conn);                              /* close log file and log screen */
+        subscreen_process(w_cmd, &window, screen, conn, SUBSCREEN_NONE);              /* close log file and log screen */
     }
     
     wrefresh(window);
@@ -3594,7 +3806,7 @@ query text (id: %s):\n%s",
  * @ws_color            Sysstat window current color.
  * @wc_color            Cmdline window current color.
  * @wa_color            Database answer window current color.
- * @wl_color            PostgreSQL log file window current color.
+ * @wl_color            Subscreen window current color.
  ****************************************************************************
  */
 void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color)
@@ -3623,7 +3835,7 @@ void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color)
  * @ws_color            Sysstat window current color.
  * @wc_color            Cmdline window current color.
  * @wa_color            Database answer window current color.
- * @wl_color            PostgreSQL log file window current color.
+ * @wl_color            Subscreen window current color.
  * @target              Short name of the area which color will be changed.
  * @target_color        Next color of the area.
  ****************************************************************************
@@ -3658,7 +3870,7 @@ void draw_color_help(WINDOW * w, int * ws_color, int * wc_color, int * wa_color,
     wattroff(w, COLOR_PAIR(*wl_color));
 
     wprintw(w, "1) Select a target as an upper case letter, current target is  %c :\n\
-\tS = Summary Data, M = Messages/Prompt, P = PostgreSQL Information, L = PostgreSQL Log\n", target);
+\tS = Summary Data, M = Messages/Prompt, P = PostgreSQL Information, L = Additional screen\n", target);
     wprintw(w, "2) Select a color as a number, current color is  %i :\n\
 \t0 = black,  1 = red,      2 = green,  3 = yellow,\n\
 \t4 = blue,   5 = magenta,  6 = cyan,   7 = white\n", *target_color);
@@ -3676,7 +3888,7 @@ void draw_color_help(WINDOW * w, int * ws_color, int * wc_color, int * wa_color,
  * @ws_color            Sysstat window current color.
  * @wc_color            Cmdline window current color.
  * @wa_color            Database answer window current color.
- * @wl_color            PostgreSQL log file window current color.
+ * @wl_color            Subscreen window current color.
  ****************************************************************************
  */
 void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color)
@@ -3866,8 +4078,9 @@ int main(int argc, char *argv[])
     struct args_s *args;                                /* struct for input args */
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
     struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
-    struct stats_mem_short_struct *st_mem_short; /* mem usage struct */
-    WINDOW *w_sys, *w_cmd, *w_dba, *w_log;              /* ncurses windows  */
+    struct stats_mem_short_struct *st_mem_short;        /* mem usage struct */
+
+    WINDOW *w_sys, *w_cmd, *w_dba, *w_sub;              /* ncurses windows  */
     int ch;                                             /* store key press  */
     bool *first_iter = (bool *) malloc(sizeof(bool));   /* first-run flag   */
     *first_iter = true;
@@ -3894,11 +4107,19 @@ int main(int argc, char *argv[])
         * wl_color = (int *) malloc(sizeof(int));
     args = (struct args_s *) malloc(sizeof(struct args_s));
 
+    /* init iostat stuff */
+    int ndev = count_block_devices();
+    struct dstats *c_ios[ndev];
+    struct dstats *p_ios[ndev];
+    struct ext_dstats *x_ios[ndev];
+    bool *repaint = (bool *) malloc(sizeof(bool));      /* repaint iostat if number of devices changed */
+    *repaint = false;
+
     /* init various stuff */
     init_signal_handlers();
     init_args_struct(args);
     init_screens(screens);
-    init_stats(st_cpu, &st_mem_short);
+    init_stats(st_cpu, &st_mem_short, c_ios, p_ios, x_ios, ndev);
     get_HZ();
 
     /* process cmd args */
@@ -3968,13 +4189,16 @@ int main(int argc, char *argv[])
                 case 'R':               /* reload postgresql */
                     reload_conf(w_cmd, conns[console_index]);
                     break;
-                case 'L':               /* log tail screen on/off */
-                    log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
+                case 'L':               /* logtail subscreen on/off */
+                    subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_LOGTAIL);
+                    break;
+                case 'B':               /* iostat subscreen on/off */
+                    subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
                     break;
                 case 410:               /* when logtail enabled and window resized, repaint logtail window */
                     if (screens[console_index]->subscreen == SUBSCREEN_LOGTAIL) {
-                        log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
-                        log_process(w_cmd, &w_log, screens[console_index], conns[console_index]);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_LOGTAIL);
                     }
                     break;
                 case 'l':               /* open postgresql log in pager */
@@ -4090,7 +4314,7 @@ int main(int argc, char *argv[])
             reconnect_if_failed(w_cmd, conns[console_index], screens[console_index], first_iter);
 
             /* 
-             * Sysstat screen 
+             * Sysstat screen.
              */
             wclear(w_sys);
             print_title(w_sys, argv[0]);
@@ -4181,15 +4405,27 @@ int main(int argc, char *argv[])
             wrefresh(w_cmd);
             wclear(w_cmd);
             
+            /*
+             * Additional subscreen.
+             */
+            wattron(w_sub, COLOR_PAIR(*wl_color));
             switch (screens[console_index]->subscreen) {
                 case SUBSCREEN_LOGTAIL:
-                    wattron(w_log, COLOR_PAIR(*wl_color));
-                    print_log(w_log, w_cmd, screens[console_index], conns[console_index]);
-                    wattroff(w_log, COLOR_PAIR(*wl_color));
+                    print_log(w_sub, w_cmd, screens[console_index], conns[console_index]);
+                    break;
+                case SUBSCREEN_IOSTAT:
+                    print_iostat(w_sub, w_cmd, c_ios, p_ios, x_ios, ndev, repaint);
+                    if (*repaint) {
+                        ndev = count_block_devices();
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
+                        *repaint = false;
+                    }
                     break;
                 case SUBSCREEN_NONE: default:
                     break;
             }
+            wattroff(w_sub, COLOR_PAIR(*wl_color));
 
             wattroff(w_sys, COLOR_PAIR(*ws_color));
             wattroff(w_dba, COLOR_PAIR(*wa_color));

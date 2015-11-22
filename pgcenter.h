@@ -23,6 +23,7 @@
 #define STAT_FILE               "/proc/stat"
 #define UPTIME_FILE             "/proc/uptime"
 #define MEMINFO_FILE            "/proc/meminfo"
+#define DISKSTATS_FILE          "/proc/diskstats"
 #define PGCENTERRC_FILE         ".pgcenterrc"
 #define PG_CONF_FILE            "postgresql.conf"
 #define PG_HBA_FILE             "pg_hba.conf"
@@ -135,6 +136,7 @@ struct screen_s
     char conninfo[BUFFERSIZE];
     char pg_version_num[10];
     char pg_version[10];
+    bool subscreen_enabled;                     /* subscreen status: on/off */
     int subscreen;                              /* subscreen type: logtail, iostat, etc. */
     char log_path[PATH_MAX];                    /* logfile path for logtail subscreen */
     int log_fd;                                 /* logfile fd for log viewing */
@@ -180,11 +182,42 @@ struct stats_mem_short_struct {
 
 #define STATS_MEM_SHORT_SIZE (sizeof(struct stats_mem_short_struct))
 
+/* struct which used for io statistics */
+struct dstats 
+{
+    int major;
+    int minor;
+    char devname[64];
+    unsigned long r_completed;         /* reads completed successfully */
+    unsigned long r_merged;            /* reads merged */
+    unsigned long r_sectors;           /* sectors read */
+    unsigned long r_spent;             /* time spent reading (ms) */
+    unsigned long w_completed;         /* writes completed */
+    unsigned long w_merged;            /* writes merged */
+    unsigned long w_sectors;           /* sectors written */
+    unsigned long w_spent;             /* time spent writing (ms) */
+    unsigned long io_in_progress;      /* I/Os currently in progress */
+    unsigned long t_spent;             /* time spent doing I/Os (ms) */
+    unsigned long t_weighted;          /* weighted time spent doing I/Os (ms) */
+};
+
+#define STATS_IOSTAT_SIZE (sizeof(struct dstats))
+
+/* struct which used for extended io statistics */
+struct ext_dstats {
+    double util;
+    double await;
+    double arqsz;
+};
+
+#define STATS_EXT_IOSTAT_SIZE (sizeof(struct ext_dstats))
+
 /*
  * Macros used to display statistics values.
  * NB: Define SP_VALUE() to normalize to %;
  */
 #define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
+#define S_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * HZ)
 
 /* Macros used to determine array size */
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
@@ -683,7 +716,8 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg);
 void get_time(char * strtime);
 float get_loadavg(int m);
 void print_loadavg(WINDOW * window);
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short);
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short,
+        struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
 void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
@@ -694,6 +728,8 @@ double ll_sp_value(unsigned long long value1, unsigned long long value2,
         unsigned long long itv);
 void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
         int curr, unsigned long long itv);
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
+        struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev, bool * repaint);
 
 /* print screen functions */
 void print_title(WINDOW * window, char * progname);
@@ -738,7 +774,7 @@ void start_psql(WINDOW * window, struct screen_s * screen);
 long int change_refresh(WINDOW * window, long int interval);
 void do_noop(WINDOW * window, long int interval);
 void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter);
-void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn);
+void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn, int subscreen);
 void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted);
@@ -758,6 +794,7 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
 void get_pg_version(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
+int count_block_devices(void);
 
 /* color functions */
 void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
