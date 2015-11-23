@@ -716,8 +716,9 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg);
 void get_time(char * strtime);
 float get_loadavg(int m);
 void print_loadavg(WINDOW * window);
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short,
-        struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short);
+void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
+void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
 void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,

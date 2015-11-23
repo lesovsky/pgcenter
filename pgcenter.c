@@ -1076,8 +1076,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
  * @st_mem_short    Struct for mem statistics.
  ****************************************************************************
  */
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short,
-        struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
+void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short)
 {
     int i;
     /* Allocate structures for CPUs "all" and 0 */
@@ -1095,8 +1094,22 @@ void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct
             exit(EXIT_FAILURE);
     }
     memset(*st_mem_short, 0, STATS_MEM_SHORT_SIZE);
+}
 
-    /* Allocate structures for iostat */
+/*
+ ******************************************************* get stat function **
+ * Allocate memory for IO statistics structs.
+ *
+ * OUT:
+ * @c_ios       Struct for current stats snapshot.
+ * @p_ios       Struct for previous stats snapshot.
+ * @x_ios       Struct for extended stats.
+ * @ndev        Number of block devices.
+ ****************************************************************************
+ */
+void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
+{
+    int i;
     for (i = 0; i < ndev; i++) {
         if ((c_ios[i] = (struct dstats *) malloc(STATS_IOSTAT_SIZE)) == NULL) {
             perror("malloc for iostat stats failed");
@@ -1110,6 +1123,27 @@ void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct
             perror("malloc for extended iostat stats failed");
             exit(EXIT_FAILURE);
         }
+    }
+}
+
+/*
+ ******************************************************* get stat function **
+ * Free memory consumed by IO statistics structs.
+ *
+ * OUT:
+ * @c_ios       Struct for current stats snapshot.
+ * @p_ios       Struct for previous stats snapshot.
+ * @x_ios       Struct for extended stats.
+ * @ndev        Number of block devices.
+ ****************************************************************************
+ */
+void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
+{
+    int i;
+    for (i = 0; i < ndev; i++) {
+        free(c_ios[i]);
+        free(p_ios[i]);
+        free(x_ios[i]);
     }
 }
 
@@ -4119,7 +4153,8 @@ int main(int argc, char *argv[])
     init_signal_handlers();
     init_args_struct(args);
     init_screens(screens);
-    init_stats(st_cpu, &st_mem_short, c_ios, p_ios, x_ios, ndev);
+    init_stats(st_cpu, &st_mem_short);
+    init_iostats(c_ios, p_ios, x_ios, ndev);
     get_HZ();
 
     /* process cmd args */
@@ -4416,7 +4451,9 @@ int main(int argc, char *argv[])
                 case SUBSCREEN_IOSTAT:
                     print_iostat(w_sub, w_cmd, c_ios, p_ios, x_ios, ndev, repaint);
                     if (*repaint) {
+                        free_iostats(c_ios, p_ios, x_ios, ndev);
                         ndev = count_block_devices();
+                        init_iostats(c_ios, p_ios, x_ios, ndev);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
                         *repaint = false;
