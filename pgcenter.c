@@ -1491,13 +1491,18 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
     uptime0[curr] = 0;
     read_uptime(&(uptime0[curr]));
     
-    /* todo: эту штуку надо сделать в subscreen_process */
+    /*
+     * If read /proc/diskstats failed, fire up repaint flag.
+     * Next when subscreen repainting fails, subscreen will be closed.
+     */
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
         wclear(window);
-        wprintw(window, "Nothing to do. Can't open %s", DISKSTATS_FILE);
+        wprintw(window, "Do nothing. Can't open %s", DISKSTATS_FILE);
         wrefresh(window);
+        *repaint = true;
         return;
     }
+
     while (fgets(line, sizeof(line), fp) != NULL) {
         sscanf(line, "%i %i %s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
                     &major, &minor, devname,
@@ -3513,8 +3518,12 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
                 }
                 break;
             case SUBSCREEN_IOSTAT:
+                if (access(DISKSTATS_FILE, R_OK) == -1) {
+                    wprintw(window, "Do nothing. No access to %s.", DISKSTATS_FILE);
+                    return;
+                }
+                wprintw(window, "Enable iostat from %s.", DISKSTATS_FILE);
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
-                wrefresh(window);
                 screen->subscreen = SUBSCREEN_IOSTAT;
                 screen->subscreen_enabled = true;
                 break;
@@ -4074,9 +4083,11 @@ void print_help_screen(bool * first_iter)
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
   p                       'p' start psql session.\n\
-  L,l             logs: 'L' log tail, 'l' open log file with pager.\n\
+  l               'l' open log file with pager.\n\
   N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
   1..8            switch between consoles.\n\
+subscreen actions:\n\
+  B,L             'B' iostat, 'L' logtail.\n\
 activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
   >,.             '>' set new mask, '.' show current mask.\n\
@@ -4225,9 +4236,13 @@ int main(int argc, char *argv[])
                     reload_conf(w_cmd, conns[console_index]);
                     break;
                 case 'L':               /* logtail subscreen on/off */
+                    if (screens[console_index]->subscreen != SUBSCREEN_LOGTAIL)
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                     subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_LOGTAIL);
                     break;
                 case 'B':               /* iostat subscreen on/off */
+                    if (screens[console_index]->subscreen != SUBSCREEN_IOSTAT)
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                     subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
                     break;
                 case 410:               /* when logtail enabled and window resized, repaint logtail window */
@@ -4451,6 +4466,7 @@ int main(int argc, char *argv[])
                 case SUBSCREEN_IOSTAT:
                     print_iostat(w_sub, w_cmd, c_ios, p_ios, x_ios, ndev, repaint);
                     if (*repaint) {
+//                        wprintw(w_cmd, "Block devices list is changed.");
                         free_iostats(c_ios, p_ios, x_ios, ndev);
                         ndev = count_block_devices();
                         init_iostats(c_ios, p_ios, x_ios, ndev);
