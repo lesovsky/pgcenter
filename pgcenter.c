@@ -1470,6 +1470,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
 {
     /* if number of devices is changed, we should realloc structs and repaint subscreen */
     if (ndev != count_block_devices()) {
+        wprintw(w_cmd, "The number of devices has changed. ");
         *repaint = true;
         return;
     }
@@ -1490,7 +1491,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
     
     uptime0[curr] = 0;
     read_uptime(&(uptime0[curr]));
-    
+
     /*
      * If read /proc/diskstats failed, fire up repaint flag.
      * Next when subscreen repainting fails, subscreen will be closed.
@@ -1655,9 +1656,7 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
     static char uptime[32];
     get_pg_uptime(conn, uptime);
 
-    wprintw(window, " (ver: %s, up %s)",
-                screen->pg_version, uptime);
-
+    wprintw(window, " (ver: %s, up %s)", screen->pg_version, uptime);
 }
 
 /*
@@ -3522,7 +3521,7 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
                     wprintw(window, "Do nothing. No access to %s.", DISKSTATS_FILE);
                     return;
                 }
-                wprintw(window, "Enable iostat from %s.", DISKSTATS_FILE);
+                wprintw(window, "Show iostat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                 screen->subscreen = SUBSCREEN_IOSTAT;
                 screen->subscreen_enabled = true;
@@ -4205,6 +4204,13 @@ int main(int argc, char *argv[])
 
     /* main loop */
     while (1) {
+        /* colors on */
+        wattron(w_sys, COLOR_PAIR(*ws_color));
+        wattron(w_dba, COLOR_PAIR(*wa_color));
+        wattron(w_cmd, COLOR_PAIR(*wc_color));
+        wattron(w_sub, COLOR_PAIR(*wl_color));
+
+        /* trap keys */
         if (key_is_pressed()) {
             curs_set(1);
             wattron(w_cmd, COLOR_PAIR(*wc_color));
@@ -4245,10 +4251,12 @@ int main(int argc, char *argv[])
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                     subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
                     break;
-                case 410:               /* when logtail enabled and window resized, repaint logtail window */
-                    if (screens[console_index]->subscreen == SUBSCREEN_LOGTAIL) {
+                case 410:               /* when subscreen enabled and window has resized, repaint subscreen */
+                    if (screens[console_index]->subscreen != SUBSCREEN_NONE) {
+                        /* save current subscreen, for restore it later */
+                        int save = screens[console_index]->subscreen;
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
-                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_LOGTAIL);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], save);
                     }
                     break;
                 case 'l':               /* open postgresql log in pager */
@@ -4358,9 +4366,6 @@ int main(int argc, char *argv[])
             wattroff(w_cmd, COLOR_PAIR(*wc_color));
             curs_set(0);
         } else {
-            wattron(w_sys, COLOR_PAIR(*ws_color));
-            wattron(w_dba, COLOR_PAIR(*wa_color));
-
             reconnect_if_failed(w_cmd, conns[console_index], screens[console_index], first_iter);
 
             /* 
@@ -4458,7 +4463,6 @@ int main(int argc, char *argv[])
             /*
              * Additional subscreen.
              */
-            wattron(w_sub, COLOR_PAIR(*wl_color));
             switch (screens[console_index]->subscreen) {
                 case SUBSCREEN_LOGTAIL:
                     print_log(w_sub, w_cmd, screens[console_index], conns[console_index]);
@@ -4466,7 +4470,6 @@ int main(int argc, char *argv[])
                 case SUBSCREEN_IOSTAT:
                     print_iostat(w_sub, w_cmd, c_ios, p_ios, x_ios, ndev, repaint);
                     if (*repaint) {
-//                        wprintw(w_cmd, "Block devices list is changed.");
                         free_iostats(c_ios, p_ios, x_ios, ndev);
                         ndev = count_block_devices();
                         init_iostats(c_ios, p_ios, x_ios, ndev);
@@ -4478,10 +4481,6 @@ int main(int argc, char *argv[])
                 case SUBSCREEN_NONE: default:
                     break;
             }
-            wattroff(w_sub, COLOR_PAIR(*wl_color));
-
-            wattroff(w_sys, COLOR_PAIR(*ws_color));
-            wattroff(w_dba, COLOR_PAIR(*wa_color));
 
             /* sleep loop */
             for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {
@@ -4498,4 +4497,9 @@ int main(int argc, char *argv[])
             /* end sleep loop */
         }
     }
+    /* colors off */
+    wattroff(w_sub, COLOR_PAIR(*wl_color));
+    wattroff(w_sys, COLOR_PAIR(*ws_color));
+    wattroff(w_dba, COLOR_PAIR(*wa_color));
+    wattroff(w_cmd, COLOR_PAIR(*wc_color));
 }

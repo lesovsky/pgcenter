@@ -6,6 +6,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 - top-like interface;
 - use same connection options as with psql;
 - show current system load and cpu usage on localhost;
+- show iostat from /proc/diskstats;
 - show current postgres state (connections state, longest transaction, autovacuum)
 - show statistics about tables, indexes, functions, activity, replication;
 - show pg_stat_statements statistics: calls, rows;
@@ -39,7 +40,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 - Start psql session.
 
 #### Recommendations:
-- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions.
+- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions or iostat.
 - run pgCenter under database SUPERUSER account, eg. postgres. Some internal PostgreSQL information, system functions or data from views available only for privileged accounts.
 
 #### Install notes:
