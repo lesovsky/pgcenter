@@ -8,16 +8,22 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <ifaddrs.h>
 #include <limits.h>
+#include <linux/ethtool.h>
+#include <linux/sockios.h>
 #include <menu.h>
 #include <ncurses.h>
+#include <net/if.h>
 #include <netdb.h>
-#include <ifaddrs.h>
+#include <netinet/in.h>
 #include <pwd.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -81,6 +87,30 @@ void init_signal_handlers(void)
         fprintf(stderr, "ERROR, can't establish SIGINT handler\n");
         exit(EXIT_FAILURE);
     }
+}
+
+/*
+ ******************************************************** routine function **
+ * Get minimal value from two doubles.
+ ****************************************************************************
+ */
+double min(double d1, double d2)
+{
+    if (d1 < d2)
+        return (d1);
+    return (d2);
+}
+
+/*
+ ******************************************************** routine function **
+ * Get maximal value from two doubles.
+ ****************************************************************************
+ */
+double max(double d1, double d2)
+{
+    if (d1 > d2)
+        return (d1);
+    return (d2);
 }
 
 /*
@@ -1148,6 +1178,50 @@ void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dst
 }
 
 /*
+ ******************************************************* get stat function **
+ * Allocate memory for NIC data structs.
+ *
+ * OUT:
+ * @c_nicdata       Struct for current stats snapshot.
+ * @p_nicdata       Struct for previous stats snapshot.
+ * @idev            Number of interfaces.
+ ****************************************************************************
+ */
+void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev)
+{
+    int i;
+    for (i = 0; i < idev; i++) {
+        if ((c_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
+            perror("malloc for nicdata stats failed");
+            exit(EXIT_FAILURE);
+        }
+        if ((p_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
+            perror("malloc for nicdata stats failed");
+            exit(EXIT_FAILURE);
+        }
+    }
+}
+
+/*
+ ******************************************************* get stat function **
+ * Free memory consumed by NIC data structs.
+ *
+ * OUT:
+ * @c_nicdata      Struct for current stats snapshot.
+ * @p_nicdata      Struct for previous stats snapshot.
+ * @idev           Number of block devices.
+ ****************************************************************************
+ */
+void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev)
+{
+    int i;
+    for (i = 0; i < idev; i++) {
+        free(c_nicdata[i]);
+        free(p_nicdata[i]);
+    }
+}
+
+/*
  *************************************************** get cpu stat function **
  * Get system clock resolution.
  *
@@ -1452,6 +1526,31 @@ void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev)
 }
 
 /*
+ ************************************************** system window function **
+ * Save current nicstat snapshot.
+ *
+ * IN:
+ * @curr        Current statistics snapshot which must be saved.
+ * @prev        Struct for saving stat snapshot.
+ * @idev        Number of interfaces.
+ ****************************************************************************
+ */
+void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int idev)
+{
+    int i;
+    for (i = 0; i < idev; i++) {
+        prev[i]->rbytes = curr[i]->rbytes;
+        prev[i]->rpackets = curr[i]->rpackets;
+        prev[i]->wbytes = curr[i]->wbytes;
+        prev[i]->wpackets = curr[i]->wpackets;
+        prev[i]->ierr = curr[i]->ierr;
+        prev[i]->oerr = curr[i]->oerr;
+        prev[i]->coll = curr[i]->coll;
+        prev[i]->sat = curr[i]->sat;
+    }
+}
+
+/*
  ****************************************************** subscreen function **
  * Print IO statistics from /proc/diskstats.
  *
@@ -1555,7 +1654,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
 
     /* print statistics */
     for (i = 0; i < ndev; i++) {
-        wprintw(window, "%s\t\t", c_ios[i]->devname);
+        wprintw(window, "%6s:\t\t", c_ios[i]->devname);
         wprintw(window, "%8.2f%8.2f",
                 S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv),
                 S_VALUE(p_ios[i]->w_merged, c_ios[i]->w_merged, itv));
@@ -1573,8 +1672,200 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
     }
     wrefresh(window);
 
-    /* save current stats snapshot and */
+    /* save current stats snapshot */
     replace_dstats(c_ios, p_ios, ndev);
+    curr ^= 1;
+}
+
+/*
+ ******************************************************** routine function **
+ * Get interface speed and duplex settings.
+ *
+ * IN:
+ * @nicdata         Struct with NIC opts where speed and duplex will be saved.
+ ****************************************************************************
+ */
+void get_speed_duplex(struct nicdata_s * nicdata)
+{
+    struct ifreq ifr;
+    struct ethtool_cmd edata;
+    int status, sock;
+
+    sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (sock < 0) {
+        perror("socket");               /* todo: здесь нужно сделать завершение функции вывода nicstat вместо завершения проги */
+        exit(1);
+    }
+
+    strncpy(ifr.ifr_name, nicdata->ifname, sizeof (ifr.ifr_name));
+    ifr.ifr_data = (void *) &edata;
+    edata.cmd = ETHTOOL_GSET;
+    status = ioctl(sock, SIOCETHTOOL, &ifr);
+    if (status < 0) {
+        nicdata->speed = -1;
+        nicdata->duplex = DUPLEX_UNKNOWN;
+        return;
+    }
+    nicdata->speed = edata.speed * 1000000;
+    nicdata->duplex = edata.duplex;
+
+    close(sock);
+}
+
+/*
+ ****************************************************** subscreen function **
+ * Print NIC statistics from /proc/net/dev.
+ *
+ * IN:
+ * @window          Window where stat will be printed.
+ * @w_cmd           Window for errors and messaged.
+ * @c_nicd          Snapshot for current stat.
+ * @p_nicd          Snapshot for previous stat.
+ * @idev            Number of devices.
+ * @repaint         Repaint subscreen flag.
+ ****************************************************************************
+ */
+void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
+        struct nicdata_s *p_nicd[], int idev, bool * repaint)
+{
+    /* if number of devices is changed, we should realloc structs and repaint subscreen */
+    if (idev != count_nic_devices()) {
+        wprintw(w_cmd, "The number of devices has changed. ");
+        *repaint = true;
+        return;
+    }
+
+    FILE *fp;
+    static unsigned long long uptime0[2] = {0, 0};
+    static unsigned long long itv;
+    static int curr = 1;
+    int i = 0,
+        j = 0;
+    char line[1024];
+    char ifname[IF_NAMESIZE + 1];
+    unsigned long lu[16];
+    static bool first = true;
+
+    uptime0[curr] = 0;
+    read_uptime(&(uptime0[curr]));
+
+    /*
+     * If read /proc/net/dev failed, fire up repaint flag.
+     * Next when subscreen repainting fails, subscreen will be closed.
+     */
+    if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
+        wclear(window);
+        wprintw(window, "Do nothing. Can't open %s", NETDEV_FILE);
+        wrefresh(window);
+        *repaint = true;
+        return;
+    }
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        if (j < 2) {
+            j++;
+            continue;       /* skip headers */
+        }
+        sscanf(line, "%s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
+                ifname,
+             /* rbps    rpps    rerrs   rdrop   rfifo   rframe  rcomp   rmcast */
+                &lu[0], &lu[1], &lu[2], &lu[3], &lu[4], &lu[5], &lu[6], &lu[7],
+             /* wbps    wpps    werrs    wdrop    wfifo    wcoll    wcarrier wcomp */
+                &lu[8], &lu[9], &lu[10], &lu[11], &lu[12], &lu[13], &lu[14], &lu[15]);
+        strcpy(c_nicd[i]->ifname, ifname);
+        c_nicd[i]->rbytes = lu[0];
+        c_nicd[i]->rpackets = lu[1];
+        c_nicd[i]->wbytes = lu[8];
+        c_nicd[i]->wpackets = lu[9];
+        c_nicd[i]->ierr = lu[2];
+        c_nicd[i]->oerr = lu[10];
+        c_nicd[i]->coll = lu[13];
+        c_nicd[i]->sat = lu[2];
+        c_nicd[i]->sat += lu[3];
+        c_nicd[i]->sat += lu[11];
+        c_nicd[i]->sat += lu[12];
+        c_nicd[i]->sat += lu[13];
+        c_nicd[i]->sat += lu[14];
+        i++;
+    }
+    fclose(fp);
+
+    if (first) {
+        for (i = 0; i < idev; i++)
+            get_speed_duplex(c_nicd[i]);
+        first = false;
+    }
+
+    itv = get_interval(uptime0[!curr], uptime0[curr]);
+
+    /* print headers */
+    wclear(window);
+    wattron(window, A_BOLD);
+    wprintw(window, "\nInterface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\n");
+    wattroff(window, A_BOLD);
+
+    double rbps, rpps, wbps, wpps, ravs, wavs, ierr, oerr, coll, sat, rutil, wutil, util;
+
+    for (i = 0; i < idev; i++) {
+        /* skip interfaces which never seen packets */
+        if (c_nicd[i]->rpackets == 0 && c_nicd[i]->wpackets == 0) {
+           continue;
+        }
+
+        rbps = S_VALUE(p_nicd[i]->rbytes, c_nicd[i]->rbytes, itv);
+        wbps = S_VALUE(p_nicd[i]->wbytes, c_nicd[i]->wbytes, itv);
+        rpps = S_VALUE(p_nicd[i]->rpackets, c_nicd[i]->rpackets, itv);
+        wpps = S_VALUE(p_nicd[i]->wpackets, c_nicd[i]->wpackets, itv);
+        ierr = S_VALUE(p_nicd[i]->ierr, c_nicd[i]->ierr, itv);
+        oerr = S_VALUE(p_nicd[i]->oerr, c_nicd[i]->oerr, itv);
+        coll = S_VALUE(p_nicd[i]->coll, c_nicd[i]->coll, itv);
+        sat = S_VALUE(p_nicd[i]->sat, c_nicd[i]->sat, itv);
+
+        if (rpps > 0)
+            ravs = rbps / rpps;
+        else
+            ravs = 0;
+
+        if (wpps > 0)
+            wavs = wbps / wpps;
+        else
+            wavs = 0;
+
+        /* Calculate utilisation */
+        if (c_nicd[i]->speed > 0) {
+            /*
+             * The following have a mysterious "800",
+             * it is 100 for the % conversion, and 8 for bytes2bits.
+             */
+            rutil = min(rbps * 800 / c_nicd[i]->speed, 100);
+            wutil = min(wbps * 800 / c_nicd[i]->speed, 100);
+            if (c_nicd[i]->duplex == 2) {
+                /* Full duplex */
+                util = max(rutil, wutil);
+            } else {
+                /* Half Duplex */
+                util = min((rbps + wbps) * 800 / c_nicd[i]->speed, 100);
+            }
+        } else {
+            util = 0;
+            rutil = 0;
+            wutil = 0;
+        }
+
+        /* print statistics */
+        wprintw(window, "%10s", c_nicd[i]->ifname);
+        wprintw(window, "%8.2f%8.2f", rbps / 1024 / 128, wbps / 1024 / 128);
+        wprintw(window, "%9.2f%9.2f", rpps, wpps);
+        wprintw(window, "%9.2f%9.2f", ravs, wavs);
+        wprintw(window, "%9.2f%9.2f%9.2f%9.2f", ierr, oerr, coll, sat);
+        wprintw(window, "%9.2f%9.2f%9.2f", rutil, wutil, util);
+        wprintw(window, "\n");
+    }
+
+    wrefresh(window);
+
+    /* save current stats snapshot */
+    replace_nicdata(c_nicd, p_nicd, idev);
     curr ^= 1;
 }
 
@@ -3476,6 +3767,36 @@ int count_block_devices(void)
 }
 
 /*
+ *************************************************** iostat stuff function **
+ * Count NIC devices in /proc/net/dev.
+ *
+ * RETURNS:
+ * Return number of interfaces.
+ ****************************************************************************
+ */
+int count_nic_devices(void)
+{
+    FILE * fp;
+    int idev = 0;
+    char ch;
+
+    if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
+        return -1;
+    }
+
+    while (!feof(fp)) {
+        ch = fgetc(fp);
+        if (ch == '\n')
+            idev++;
+    }
+
+    /* header have two lines */
+    idev = idev - 2;
+
+    fclose(fp);
+    return idev;
+}
+/*
  ****************************************************** key press function **
  * Log processing, open log in separate window or close if already opened.
  *
@@ -3524,6 +3845,16 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
                 wprintw(window, "Show iostat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                 screen->subscreen = SUBSCREEN_IOSTAT;
+                screen->subscreen_enabled = true;
+                break;
+            case SUBSCREEN_NICSTAT:
+                if (access(NETDEV_FILE, R_OK) == -1) {
+                    wprintw(window, "Do nothing. No access to %s.", NETDEV_FILE);
+                    return;
+                }
+                wprintw(window, "Show nicstat");
+                *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
+                screen->subscreen = SUBSCREEN_NICSTAT;
                 screen->subscreen_enabled = true;
                 break;
             case SUBSCREEN_NONE:
@@ -4086,7 +4417,7 @@ void print_help_screen(bool * first_iter)
   N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
   1..8            switch between consoles.\n\
 subscreen actions:\n\
-  B,L             'B' iostat, 'L' logtail.\n\
+  B,I,L           'B' iostat, 'I' nicstat, 'L' logtail.\n\
 activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
   >,.             '>' set new mask, '.' show current mask.\n\
@@ -4156,7 +4487,14 @@ int main(int argc, char *argv[])
     struct dstats *c_ios[ndev];
     struct dstats *p_ios[ndev];
     struct ext_dstats *x_ios[ndev];
-    bool *repaint = (bool *) malloc(sizeof(bool));      /* repaint iostat if number of devices changed */
+
+    /* init nicstat stuff */
+    int idev = count_nic_devices();
+    struct nicdata_s *c_nicdata[idev];
+    struct nicdata_s *p_nicdata[idev];
+
+    /* repaint iostat/nicstat if number of devices changed */
+    bool *repaint = (bool *) malloc(sizeof(bool));
     *repaint = false;
 
     /* init various stuff */
@@ -4165,6 +4503,7 @@ int main(int argc, char *argv[])
     init_screens(screens);
     init_stats(st_cpu, &st_mem_short);
     init_iostats(c_ios, p_ios, x_ios, ndev);
+    init_nicdata(c_nicdata, p_nicdata, idev);
     get_HZ();
 
     /* process cmd args */
@@ -4198,6 +4537,7 @@ int main(int argc, char *argv[])
     w_sys = newwin(5, 0, 0, 0);
     w_cmd = newwin(1, 0, 4, 0);
     w_dba = newwin(0, 0, 5, 0);
+    w_sub = NULL;
 
     init_colors(ws_color, wc_color, wa_color, wl_color);
     curs_set(0);
@@ -4250,6 +4590,11 @@ int main(int argc, char *argv[])
                     if (screens[console_index]->subscreen != SUBSCREEN_IOSTAT)
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                     subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
+                    break;
+                case 'I':               /* nicstat subscreen on/off */
+                    if (screens[console_index]->subscreen != SUBSCREEN_NICSTAT)
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
+                    subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NICSTAT);
                     break;
                 case 410:               /* when subscreen enabled and window has resized, repaint subscreen */
                     if (screens[console_index]->subscreen != SUBSCREEN_NONE) {
@@ -4475,6 +4820,17 @@ int main(int argc, char *argv[])
                         init_iostats(c_ios, p_ios, x_ios, ndev);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
+                        *repaint = false;
+                    }
+                    break;
+                case SUBSCREEN_NICSTAT:
+                    print_nicstat(w_sub, w_cmd, c_nicdata, p_nicdata, idev, repaint);
+                    if (*repaint) {
+                        free_nicdata(c_nicdata, p_nicdata, idev);
+                        idev = count_nic_devices();
+                        init_nicdata(c_nicdata, p_nicdata, idev);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
+                        subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NICSTAT);
                         *repaint = false;
                     }
                     break;

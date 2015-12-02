@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add nicstat subscreen.
   * divide init_stats() into init_stats() and init_iostats(), add free_iostats().
   * add iostat subscreen prototype.
   * expand log_opened into subscreen entity, which allows add new subscreens

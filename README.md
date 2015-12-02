@@ -6,7 +6,8 @@ PostgreSQL provides various statistics which includes information about tables, 
 - top-like interface;
 - use same connection options as with psql;
 - show current system load and cpu usage on localhost;
-- show iostat from /proc/diskstats;
+- show input/output statistics for devices and partitions like iostat;
+- show network traffic statistics for network interfaces like nicstat;
 - show current postgres state (connections state, longest transaction, autovacuum)
 - show statistics about tables, indexes, functions, activity, replication;
 - show pg_stat_statements statistics: calls, rows;
@@ -75,3 +76,7 @@ $ pgcenter
 #### Known issues
 - mainly developed and tested under PostgreSQL 9.4 (but tested with others 9.x releases).
 - this is beta software, in some circumstances may occurs segfaults.
+
+#### Thanks
+- Sebastien Godard for [sysstat](https://github.com/sysstat/sysstat).
+- Brendan Gregg and Tim Cook for [nicstat](http://sourceforge.net/projects/nicstat/).

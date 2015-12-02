@@ -24,6 +24,7 @@
 #define UPTIME_FILE             "/proc/uptime"
 #define MEMINFO_FILE            "/proc/meminfo"
 #define DISKSTATS_FILE          "/proc/diskstats"
+#define NETDEV_FILE             "/proc/net/dev"
 #define PGCENTERRC_FILE         ".pgcenterrc"
 #define PG_CONF_FILE            "postgresql.conf"
 #define PG_HBA_FILE             "pg_hba.conf"
@@ -81,6 +82,7 @@ unsigned int hz;
 #define SUBSCREEN_NONE      0
 #define SUBSCREEN_LOGTAIL   1
 #define SUBSCREEN_IOSTAT    2
+#define SUBSCREEN_NICSTAT   3
 
 /* enum for query context */
 enum context
@@ -211,6 +213,24 @@ struct ext_dstats {
 };
 
 #define STATS_EXT_IOSTAT_SIZE (sizeof(struct ext_dstats))
+
+/* struct for NIC data (settings and stats) */
+struct nicdata_s
+{
+    char ifname[IF_NAMESIZE + 1];
+    long speed;
+    int duplex;
+    unsigned long rbytes;
+    unsigned long rpackets;
+    unsigned long ierr;
+    unsigned long wbytes;
+    unsigned long wpackets;
+    unsigned long oerr;
+    unsigned long coll;
+    unsigned long sat;
+};
+
+#define STATS_NICDATA_SIZE (sizeof(struct nicdata_s))
 
 /*
  * Macros used to display statistics values.
@@ -719,6 +739,8 @@ void print_loadavg(WINDOW * window);
 void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short);
 void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
 void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
+void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
+void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
 void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
@@ -731,6 +753,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
         int curr, unsigned long long itv);
 void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
         struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev, bool * repaint);
+void get_speed_duplex(struct nicdata_s * nicdata);
 
 /* print screen functions */
 void print_title(WINDOW * window, char * progname);
@@ -783,6 +806,8 @@ void switch_context(WINDOW * window, struct screen_s * screen,
         enum context context, PGresult * res, bool * first_iter);
 
 /* functions routines */
+double min(double d1, double d2);
+double max(double d1, double d2);
 int key_is_pressed(void);
 void strrpl(char * o_string, char * s_string, char * r_string);
 int check_string(char * string);
@@ -796,6 +821,9 @@ void get_pg_version(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
 int count_block_devices(void);
+int count_nic_devices(void);
+void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev);
+void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int idev);
 
 /* color functions */
 void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
