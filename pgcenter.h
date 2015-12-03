@@ -152,7 +152,7 @@ struct screen_s
 #define SCREEN_SIZE (sizeof(struct screen_s))
 
 /* struct which used for cpu statistic */
-struct stats_cpu_struct {
+struct cpu_s {
     unsigned long long cpu_user;
     unsigned long long cpu_nice;
     unsigned long long cpu_sys;
@@ -165,10 +165,10 @@ struct stats_cpu_struct {
     unsigned long long cpu_guest_nice;
 };
 
-#define STATS_CPU_SIZE (sizeof(struct stats_cpu_struct))
+#define STATS_CPU_SIZE (sizeof(struct cpu_s))
 
 /* struct which used for memory statistics */
-struct stats_mem_short_struct {
+struct mem_s {
     unsigned long long mem_total;
     unsigned long long mem_free;
     unsigned long long mem_used;
@@ -182,37 +182,31 @@ struct stats_mem_short_struct {
     unsigned long long slab;
 };
 
-#define STATS_MEM_SHORT_SIZE (sizeof(struct stats_mem_short_struct))
+#define STATS_MEM_SIZE (sizeof(struct mem_s))
 
 /* struct which used for io statistics */
-struct dstats 
+struct iodata_s
 {
     int major;
     int minor;
     char devname[64];
-    unsigned long r_completed;         /* reads completed successfully */
-    unsigned long r_merged;            /* reads merged */
-    unsigned long r_sectors;           /* sectors read */
-    unsigned long r_spent;             /* time spent reading (ms) */
-    unsigned long w_completed;         /* writes completed */
-    unsigned long w_merged;            /* writes merged */
-    unsigned long w_sectors;           /* sectors written */
-    unsigned long w_spent;             /* time spent writing (ms) */
-    unsigned long io_in_progress;      /* I/Os currently in progress */
-    unsigned long t_spent;             /* time spent doing I/Os (ms) */
-    unsigned long t_weighted;          /* weighted time spent doing I/Os (ms) */
+    unsigned long r_completed;          /* reads completed successfully */
+    unsigned long r_merged;             /* reads merged */
+    unsigned long r_sectors;            /* sectors read */
+    unsigned long r_spent;              /* time spent reading (ms) */
+    unsigned long w_completed;          /* writes completed */
+    unsigned long w_merged;             /* writes merged */
+    unsigned long w_sectors;            /* sectors written */
+    unsigned long w_spent;              /* time spent writing (ms) */
+    unsigned long io_in_progress;       /* I/Os currently in progress */
+    unsigned long t_spent;              /* time spent doing I/Os (ms) */
+    unsigned long t_weighted;           /* weighted time spent doing I/Os (ms) */
+    double arqsz;                       /* average request size */
+    double await;                       /* latency */
+    double util;                        /* device utilization */
 };
 
-#define STATS_IOSTAT_SIZE (sizeof(struct dstats))
-
-/* struct which used for extended io statistics */
-struct ext_dstats {
-    double util;
-    double await;
-    double arqsz;
-};
-
-#define STATS_EXT_IOSTAT_SIZE (sizeof(struct ext_dstats))
+#define STATS_IODATA_SIZE (sizeof(struct iodata_s))
 
 /* struct for NIC data (settings and stats) */
 struct nicdata_s
@@ -736,28 +730,28 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg);
 void get_time(char * strtime);
 float get_loadavg(int m);
 void print_loadavg(WINDOW * window);
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short);
-void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
-void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev);
+void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short);
+void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev);
+void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev);
 void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
 void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
-void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
+void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
         unsigned long long *uptime, unsigned long long *uptime0);
 unsigned long long get_interval(unsigned long long prev_uptime,
         unsigned long long curr_uptime);
 double ll_sp_value(unsigned long long value1, unsigned long long value2,
         unsigned long long itv);
-void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
+void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
         int curr, unsigned long long itv);
-void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
-        struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev, bool * repaint);
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
+        struct iodata_s *p_ios[], int bdev, bool * repaint);
 void get_speed_duplex(struct nicdata_s * nicdata);
 
 /* print screen functions */
 void print_title(WINDOW * window, char * progname);
-void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[]);
+void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
@@ -822,7 +816,7 @@ void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
 int count_block_devices(void);
 int count_nic_devices(void);
-void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev);
+void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], int bdev);
 void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int idev);
 
 /* color functions */

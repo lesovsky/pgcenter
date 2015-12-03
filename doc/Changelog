@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * clean out code after iostat/nicstat stuff.
   * add nicstat subscreen.
   * divide init_stats() into init_stats() and init_iostats(), add free_iostats().
   * add iostat subscreen prototype.

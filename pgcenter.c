@@ -1106,12 +1106,12 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
  * @st_mem_short    Struct for mem statistics.
  ****************************************************************************
  */
-void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct **st_mem_short)
+void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short)
 {
     int i;
     /* Allocate structures for CPUs "all" and 0 */
     for (i = 0; i < 2; i++) {
-        if ((st_cpu[i] = (struct stats_cpu_struct *) malloc(STATS_CPU_SIZE * 2)) == NULL) {
+        if ((st_cpu[i] = (struct cpu_s *) malloc(STATS_CPU_SIZE * 2)) == NULL) {
             perror("malloc for cpu stats failed");
             exit(EXIT_FAILURE);
         }
@@ -1119,11 +1119,11 @@ void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct
     }
 
     /* Allocate structures for memory */
-    if ((*st_mem_short = (struct stats_mem_short_struct *) malloc(STATS_MEM_SHORT_SIZE)) == NULL) {
+    if ((*st_mem_short = (struct mem_s *) malloc(STATS_MEM_SIZE)) == NULL) {
             perror("malloc for mem stats failed");
             exit(EXIT_FAILURE);
     }
-    memset(*st_mem_short, 0, STATS_MEM_SHORT_SIZE);
+    memset(*st_mem_short, 0, STATS_MEM_SIZE);
 }
 
 /*
@@ -1133,24 +1133,19 @@ void init_stats(struct stats_cpu_struct *st_cpu[], struct stats_mem_short_struct
  * OUT:
  * @c_ios       Struct for current stats snapshot.
  * @p_ios       Struct for previous stats snapshot.
- * @x_ios       Struct for extended stats.
- * @ndev        Number of block devices.
+ * @bdev        Number of block devices.
  ****************************************************************************
  */
-void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
+void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev)
 {
     int i;
-    for (i = 0; i < ndev; i++) {
-        if ((c_ios[i] = (struct dstats *) malloc(STATS_IOSTAT_SIZE)) == NULL) {
+    for (i = 0; i < bdev; i++) {
+        if ((c_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
             perror("malloc for iostat stats failed");
             exit(EXIT_FAILURE);
         }
-        if ((p_ios[i] = (struct dstats *) malloc(STATS_IOSTAT_SIZE)) == NULL) {
+        if ((p_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
             perror("malloc for iostat stats failed");
-            exit(EXIT_FAILURE);
-        }
-        if ((x_ios[i] = (struct ext_dstats *) malloc(STATS_EXT_IOSTAT_SIZE)) == NULL) {
-            perror("malloc for extended iostat stats failed");
             exit(EXIT_FAILURE);
         }
     }
@@ -1163,17 +1158,15 @@ void init_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dst
  * OUT:
  * @c_ios       Struct for current stats snapshot.
  * @p_ios       Struct for previous stats snapshot.
- * @x_ios       Struct for extended stats.
- * @ndev        Number of block devices.
+ * @bdev        Number of block devices.
  ****************************************************************************
  */
-void free_iostats(struct dstats *c_ios[], struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev)
+void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev)
 {
     int i;
-    for (i = 0; i < ndev; i++) {
+    for (i = 0; i < bdev; i++) {
         free(c_ios[i]);
         free(p_ios[i]);
-        free(x_ios[i]);
     }
 }
 
@@ -1281,12 +1274,12 @@ void read_uptime(unsigned long long *uptime)
  * @uptime0         Machine uptime. Filled only if previously set to zero.
  ****************************************************************************
  */
-void read_cpu_stat(struct stats_cpu_struct *st_cpu, int nbr,
+void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
                             unsigned long long *uptime, unsigned long long *uptime0)
 {
     FILE *stat_fp;
-    struct stats_cpu_struct *st_cpu_i;
-    struct stats_cpu_struct sc;
+    struct cpu_s *st_cpu_i;
+    struct cpu_s sc;
     char line[8192];
     int proc_nb;
 
@@ -1391,7 +1384,7 @@ double ll_sp_value(unsigned long long value1, unsigned long long value2,
  * @itv         Interval of time.
  ****************************************************************************
  */
-void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
+void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
                 int curr, unsigned long long itv)
 {
     wprintw(window, 
@@ -1420,7 +1413,7 @@ void write_cpu_stat_raw(WINDOW * window, struct stats_cpu_struct *st_cpu[],
  * @st_cpu      Struct with cpu statistics.
  ****************************************************************************
  */
-void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
+void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[])
 {
     static unsigned long long uptime[2]  = {0, 0};
     static unsigned long long uptime0[2] = {0, 0};
@@ -1445,7 +1438,7 @@ void print_cpu_usage(WINDOW * window, struct stats_cpu_struct *st_cpu[])
  * @st_mem_short    Struct with mem statistics.
  ****************************************************************************
  */
-void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_short)
+void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short)
 {
     FILE *mem_fp;
     char buffer[121];
@@ -1504,13 +1497,13 @@ void print_mem_usage(WINDOW * window, struct stats_mem_short_struct *st_mem_shor
  * IN:
  * @curr        Current statistics snapshot which must be saved.
  * @prev        Struct for saving stat snapshot.
- * @n_dev       Number of block devices.
+ * @bdev       Number of block devices.
  ****************************************************************************
  */
-void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev)
+void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], int bdev)
 {
     int i;
-    for (i = 0; i < n_dev; i++) {
+    for (i = 0; i < bdev; i++) {
         prev[i]->r_completed = curr[i]->r_completed;
         prev[i]->r_merged = curr[i]->r_merged;
         prev[i]->r_sectors = curr[i]->r_sectors;
@@ -1522,6 +1515,9 @@ void replace_dstats(struct dstats *curr[], struct dstats *prev[], int n_dev)
         prev[i]->io_in_progress = curr[i]->io_in_progress;
         prev[i]->t_spent = curr[i]->t_spent;
         prev[i]->t_weighted = curr[i]->t_weighted;
+        prev[i]->arqsz = curr[i]->arqsz;
+        prev[i]->await = curr[i]->await;
+        prev[i]->util = curr[i]->util;
     }
 }
 
@@ -1559,16 +1555,15 @@ void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int ide
  * @w_cmd           Window for errors and messaged.
  * @c_ios           Snapshot for current stat.
  * @p_ios           Snapshot for previous stat.
- * @x_ios           Struct for extended stat.
- * @ndev            Number of devices.
+ * @bdev            Number of devices.
  * @repaint         Repaint subscreen flag.
  ****************************************************************************
  */
-void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
-        struct dstats *p_ios[], struct ext_dstats *x_ios[], int ndev, bool * repaint)
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
+        struct iodata_s *p_ios[], int bdev, bool * repaint)
 {
     /* if number of devices is changed, we should realloc structs and repaint subscreen */
-    if (ndev != count_block_devices()) {
+    if (bdev != count_block_devices()) {
         wprintw(w_cmd, "The number of devices has changed. ");
         *repaint = true;
         return;
@@ -1586,7 +1581,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
     unsigned long r_completed, r_merged, r_sectors, r_spent,
                   w_completed, w_merged, w_sectors, w_spent,
                   io_in_progress, t_spent, t_weighted;
-    double r_await[ndev], w_await[ndev];
+    double r_await[bdev], w_await[bdev];
     
     uptime0[curr] = 0;
     read_uptime(&(uptime0[curr]));
@@ -1629,12 +1624,12 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
 
     itv = get_interval(uptime0[!curr], uptime0[curr]);
                     
-    for (i = 0; i < ndev; i++) {
-        x_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv);
-        x_ios[i]->await = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
+    for (i = 0; i < bdev; i++) {
+        c_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv);
+        c_ios[i]->await = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
             ((c_ios[i]->r_spent - p_ios[i]->r_spent) + (c_ios[i]->w_spent - p_ios[i]->w_spent)) /
             ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
-        x_ios[i]->arqsz = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
+        c_ios[i]->arqsz = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
             ((c_ios[i]->r_sectors - p_ios[i]->r_sectors) + (c_ios[i]->w_sectors - p_ios[i]->w_sectors)) /
             ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
 
@@ -1653,7 +1648,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
     wattroff(window, A_BOLD);
 
     /* print statistics */
-    for (i = 0; i < ndev; i++) {
+    for (i = 0; i < bdev; i++) {
         wprintw(window, "%6s:\t\t", c_ios[i]->devname);
         wprintw(window, "%8.2f%8.2f",
                 S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv),
@@ -1664,16 +1659,16 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct dstats *c_ios[],
         wprintw(window, "%9.2f%9.2f%9.2f%9.2f",
                 S_VALUE(p_ios[i]->r_sectors, c_ios[i]->r_sectors, itv) / 2048,
                 S_VALUE(p_ios[i]->w_sectors, c_ios[i]->w_sectors, itv) / 2048,
-                x_ios[i]->arqsz,
+                c_ios[i]->arqsz,
                 S_VALUE(p_ios[i]->t_weighted, c_ios[i]->t_weighted, itv) / 1000.0);
-        wprintw(window, "%10.2f%10.2f%10.2f", x_ios[i]->await, r_await[i], w_await[i]);
-        wprintw(window, "%8.2f", x_ios[i]->util / 10.0);
+        wprintw(window, "%10.2f%10.2f%10.2f", c_ios[i]->await, r_await[i], w_await[i]);
+        wprintw(window, "%8.2f", c_ios[i]->util / 10.0);
         wprintw(window, "\n");
     }
     wrefresh(window);
 
     /* save current stats snapshot */
-    replace_dstats(c_ios, p_ios, ndev);
+    replace_iodata(c_ios, p_ios, bdev);
     curr ^= 1;
 }
 
@@ -3749,7 +3744,7 @@ void get_logfile_path(char * path, PGconn * conn)
 int count_block_devices(void)
 {
     FILE * fp;
-    int ndev = 0;
+    int bdev = 0;
     char ch;
 
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
@@ -3759,11 +3754,11 @@ int count_block_devices(void)
     while (!feof(fp)) {
         ch = fgetc(fp);
         if (ch == '\n')
-            ndev++;
+            bdev++;
     }
 
     fclose(fp);
-    return ndev;
+    return bdev;
 }
 
 /*
@@ -4452,8 +4447,8 @@ int main(int argc, char *argv[])
 {
     struct args_s *args;                                /* struct for input args */
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
-    struct stats_cpu_struct *st_cpu[2];                 /* cpu usage struct */
-    struct stats_mem_short_struct *st_mem_short;        /* mem usage struct */
+    struct cpu_s *st_cpu[2];                 /* cpu usage struct */
+    struct mem_s *st_mem_short;        /* mem usage struct */
 
     WINDOW *w_sys, *w_cmd, *w_dba, *w_sub;              /* ncurses windows  */
     int ch;                                             /* store key press  */
@@ -4483,10 +4478,9 @@ int main(int argc, char *argv[])
     args = (struct args_s *) malloc(sizeof(struct args_s));
 
     /* init iostat stuff */
-    int ndev = count_block_devices();
-    struct dstats *c_ios[ndev];
-    struct dstats *p_ios[ndev];
-    struct ext_dstats *x_ios[ndev];
+    int bdev = count_block_devices();
+    struct iodata_s *c_ios[bdev];
+    struct iodata_s *p_ios[bdev];
 
     /* init nicstat stuff */
     int idev = count_nic_devices();
@@ -4502,7 +4496,7 @@ int main(int argc, char *argv[])
     init_args_struct(args);
     init_screens(screens);
     init_stats(st_cpu, &st_mem_short);
-    init_iostats(c_ios, p_ios, x_ios, ndev);
+    init_iostats(c_ios, p_ios, bdev);
     init_nicdata(c_nicdata, p_nicdata, idev);
     get_HZ();
 
@@ -4813,11 +4807,11 @@ int main(int argc, char *argv[])
                     print_log(w_sub, w_cmd, screens[console_index], conns[console_index]);
                     break;
                 case SUBSCREEN_IOSTAT:
-                    print_iostat(w_sub, w_cmd, c_ios, p_ios, x_ios, ndev, repaint);
+                    print_iostat(w_sub, w_cmd, c_ios, p_ios, bdev, repaint);
                     if (*repaint) {
-                        free_iostats(c_ios, p_ios, x_ios, ndev);
-                        ndev = count_block_devices();
-                        init_iostats(c_ios, p_ios, x_ios, ndev);
+                        free_iostats(c_ios, p_ios, bdev);
+                        bdev = count_block_devices();
+                        init_iostats(c_ios, p_ios, bdev);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
                         *repaint = false;
