@@ -1,0 +1,16 @@
+language: c
+
+sudo: false
+
+compiler:
+  - clang
+  - gcc
+
+addons:
+  apt:
+    packages:
+      - libpq-dev
+      - libncurses5-dev
+
+script:
+  - make
