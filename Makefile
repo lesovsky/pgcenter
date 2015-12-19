@@ -22,7 +22,7 @@ DESTDIR ?=
 all: pgcenter
 
 pgcenter: pgcenter.c
-	gcc $(CFLAGS) -I$(PGINCLUDEDIR) -L$(PGLIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
+	$(CC) $(CFLAGS) -I$(PGINCLUDEDIR) -L$(PGLIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
 
 clean:
 	rm -f $(PROGRAM_NAME)
