@@ -1924,6 +1924,7 @@ void get_pg_uptime(PGconn * conn, char * uptime)
         free(errmsg);
     } else {
         strcpy(uptime, "--:--:--");
+        free(errmsg);
     }
 }
 
@@ -3107,9 +3108,11 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
                 wprintw(window, "Can't open %s: fork failed.", config_path);
+                free(config_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
                 wprintw(window, "Unknown error: waitpid failed.");
+                free(config_path);
                 return;
             }
         } else {
@@ -4081,6 +4084,8 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     cmd_readline(window, msg, 15, with_esc, queryid, 16, true);
     if (check_string(queryid) == -1) {
         wprintw(window, "Do nothing. Value not valid.");
+        free(with_esc);
+        free(errmsg);
         return;
     }
 
@@ -4091,8 +4096,8 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         strcat(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
-            free(errmsg);
             free(with_esc);
+            free(errmsg);
             return;
         }
 
@@ -4100,6 +4105,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         if (PQntuples(res) == 0) {
             wprintw(window, "Do nothing. Empty answer for %s", queryid);
             free(with_esc);
+            free(errmsg);
             PQclear(res);
             return;
         }
@@ -4111,6 +4117,8 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
+            free(with_esc);
+            free(errmsg);
             return;
         }
 
