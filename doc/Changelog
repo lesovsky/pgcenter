@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * change default long query age to 00:00:00.5
   * fix segfault when adding new connection cancelled.
   * clean out code after iostat/nicstat stuff.
   * add nicstat subscreen.

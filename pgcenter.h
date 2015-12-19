@@ -17,7 +17,7 @@
 #define MAX_SCREEN          8
 #define TOTAL_CONTEXTS      12
 #define INVALID_ORDER_KEY   99
-#define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:10.0"
+#define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:00.5"
 
 #define LOADAVG_FILE            "/proc/loadavg"
 #define STAT_FILE               "/proc/stat"
