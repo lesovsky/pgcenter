@@ -5,7 +5,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 #### Features:
 - top-like interface;
 - use same connection options as with psql;
-- show current system load and cpu usage on localhost;
+- show current system load and cpu/memory/swap usage;
 - show input/output statistics for devices and partitions like iostat;
 - show network traffic statistics for network interfaces like nicstat;
 - show current postgres state (connections state, longest transaction, autovacuum)
@@ -27,12 +27,13 @@ PostgreSQL provides various statistics which includes information about tables, 
 - pg_statio_user_tables - statistics for each table in the current database, showing info about I/O on that specific table;
 - pg_stat_user_indexes, pg_statio_user_indexes - statistics for each index in the current database, showing info about accesses and I/O to that specific index;
 - pg_stat_user_functions -  statistics for each tracked function, showing info about executions of that function;
-- pg_stat_statements - query executions statistics for each distinct database ID, user ID and query ID;
+- pg_stat_statements - query executions and resource usage statistics for each distinct database ID, user ID and query ID;
 - statistics about tables sizes based on pg_relation_size() and pg_total_relation_size().
 
 #### Actions:
 - Show current configuration, edit configuration files and reloading PostgreSQL service;
 - Tail and viewing log files;
+- Show iostat/nicstat statistics;
 - Cancel queries or terminate backends using backend pid;
 - Cancel queries or terminate group of backends using state of backends;
 - Toggle displaying system tables and indexes for tables and indexes statistics;
@@ -41,8 +42,8 @@ PostgreSQL provides various statistics which includes information about tables, 
 - Start psql session.
 
 #### Recommendations:
-- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions or iostat.
-- run pgCenter under database SUPERUSER account, eg. postgres. Some internal PostgreSQL information, system functions or data from views available only for privileged accounts.
+- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions or iostat/nicstat.
+- run pgCenter under database SUPERUSER account, eg. postgres. Some internal PostgreSQL information, system functions or data from views is available only for privileged accounts.
 
 #### Install notes:
 
