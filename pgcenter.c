@@ -2726,6 +2726,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                             wclear(window);
                             wprintw(window, "Successfully connected.");
                             console_index = screens[i]->screen;
+                            get_pg_version(conns[i], screens[i]);
                         }
                     } else if (with_esc) {
                         clear_screen_connopts(screens, i);
@@ -2740,6 +2741,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     wclear(window);
                     wprintw(window, "Successfully connected.");
                     console_index = screens[i]->screen;
+                    get_pg_version(conns[i], screens[i]);
                 }
                 break;
             /* finish work if user input empty or cancelled */
@@ -2754,11 +2756,6 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
         }
     }
 
-    /* get PostgreSQL version */
-    if (PQstatus(conns[i]) == CONNECTION_OK) {
-        get_pg_version(conns[i], screens[i]);
-    }
-    
     /* finish work */
     free(with_esc);
     free(with_esc2);
