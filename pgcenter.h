@@ -226,6 +226,11 @@ struct nicdata_s
 
 #define STATS_NICDATA_SIZE (sizeof(struct nicdata_s))
 
+/* This may be defined by <linux/ethtool.h> */                                                                                                                    
+#ifndef DUPLEX_UNKNOWN
+#define DUPLEX_UNKNOWN          0xff
+#endif /* DUPLEX_UNKNOWN */
+
 /*
  * Macros used to display statistics values.
  * NB: Define SP_VALUE() to normalize to %;
