@@ -3,8 +3,8 @@
  * (C) 2015 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
  */
 
-#ifndef __PGCENTER_H__
-#define __PGCENTER_H__
+#ifndef PGCENTER_H
+#define PGCENTER_H
 
 #define PROGRAM_NAME        "pgcenter"
 #define PROGRAM_VERSION     0.2
@@ -833,4 +833,4 @@ void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_colo
 /* help functions */
 void print_help_screen(bool * first_iter);
 void print_usage(void);
-#endif
+#endif /* PGCENTER_H */

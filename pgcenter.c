@@ -280,7 +280,10 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
 {
     struct termios t_orig, t;
     char *password;
-    password = (char *) malloc(maxlen + 1);
+    if ((password = (char *) malloc(maxlen + 1)) == NULL) {
+            perror("malloc for password prompt failed");
+            exit(EXIT_FAILURE);
+    }
 
     if (!echo) {
         tcgetattr(fileno(stdin), &t);
@@ -907,7 +910,8 @@ float get_loadavg(int m)
         fprintf(stderr, "can't open %s\n", LOADAVG_FILE);
         exit(EXIT_FAILURE);
     } else {
-        fscanf(loadavg_fd, "%f %f %f", &avg1, &avg5, &avg15);
+        if ((fscanf(loadavg_fd, "%f %f %f", &avg1, &avg5, &avg15)) != 3)
+            avg1 = avg5 = avg15 = -1;           /* something goes wrong */
         fclose(loadavg_fd);
     }
 
@@ -4091,9 +4095,9 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
 
     if (strlen(queryid) != 0 && *with_esc == false) {
         /* do query and send result into less */
-        strcpy(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P1);
+        strcpy(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P1);
         strcat(query, queryid);
-        strcat(query, PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2);
+        strcat(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
             free(with_esc);

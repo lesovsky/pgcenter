@@ -2,7 +2,7 @@
  * based on https://github.com/PostgreSQL-Consulting/pg-utils/blob/master/sql/global_reports/query_stat_total.sql
  */
 
-#define PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P1 \
+#define PG_GET_QUERYREP_BY_QUERYID_QUERY_P1 \
     "WITH pg_stat_statements_normalized AS ( \
         SELECT *, \
             regexp_replace( \
@@ -40,7 +40,7 @@
         JOIN pg_database d ON d.oid=p.dbid \
         WHERE TRUE AND left(md5(d.datname || a.rolname || p.query ), 10) = '"
 
-#define PG_GET_QUERYTEXT_BY_QUERYID_QUERY_P2 \
+#define PG_GET_QUERYREP_BY_QUERYID_QUERY_P2 \
     "' \
         GROUP BY d.datname, a.rolname, query_normalized \
     ), \
@@ -86,27 +86,29 @@
     ) \
     SELECT * FROM totals_readable CROSS JOIN statements_readable" 
 
-#define REP_ALL_TOTAL_TIME          0
-#define REP_ALL_IO_TIME             1
-#define REP_ALL_CPU_TIME            2
-#define REP_ALL_TOTAL_TIME_PCT      3
-#define REP_ALL_IO_TIME_PCT         4
-#define REP_ALL_CPU_TIME_PCT        5
-#define REP_ALL_TOTAL_QUERIES       6
-#define REP_TOTAL_TIME_PCT          7
-#define REP_IO_TIME_PCT             8
-#define REP_CPU_TIME_PCT            9
-#define REP_AVG_TIME_PCT            10
-#define REP_AVG_IO_TIME_PCT         11
-#define REP_AVG_CPU_TIME_PCT        12
-#define REP_TOTAL_TIME              13
-#define REP_AVG_TIME                14
-#define REP_AVG_CPU_TIME            15
-#define REP_AVG_IO_TIME             16
-#define REP_CALLS                   17
-#define REP_CALLS_PCT               18
-#define REP_ROWS                    19
-#define REP_ROWS_PCT                20
-#define REP_DBNAME                  21
-#define REP_USER                    22
-#define REP_QUERY                   23
+enum qstats_attr {
+    REP_ALL_TOTAL_TIME          = 0,
+    REP_ALL_IO_TIME             = 1,
+    REP_ALL_CPU_TIME            = 2,
+    REP_ALL_TOTAL_TIME_PCT      = 3,
+    REP_ALL_IO_TIME_PCT         = 4,
+    REP_ALL_CPU_TIME_PCT        = 5,
+    REP_ALL_TOTAL_QUERIES       = 6,
+    REP_TOTAL_TIME_PCT          = 7,
+    REP_IO_TIME_PCT             = 8,
+    REP_CPU_TIME_PCT            = 9,
+    REP_AVG_TIME_PCT            = 10,
+    REP_AVG_IO_TIME_PCT         = 11,
+    REP_AVG_CPU_TIME_PCT        = 12,
+    REP_TOTAL_TIME              = 13,
+    REP_AVG_TIME                = 14,
+    REP_AVG_CPU_TIME            = 15,
+    REP_AVG_IO_TIME             = 16,
+    REP_CALLS                   = 17,
+    REP_CALLS_PCT               = 18,
+    REP_ROWS                    = 19,
+    REP_ROWS_PCT                = 20,
+    REP_DBNAME                  = 21,
+    REP_USER                    = 22,
+    REP_QUERY                   = 23
+};  /* qstats_attr */

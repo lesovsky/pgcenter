@@ -1,5 +1,8 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix program identifier violation.
+  * add error handling fo get_loadavg()-fscanf(), password_prompt()-malloc().
+  * rewrite query stats defines to enum.
   * rewrite Makefile, add workaround for wrong path from OpenSUSE
     ncurses-config.
   * define DUPLEX_UNKNOWN explicitly.
