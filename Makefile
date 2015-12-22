@@ -3,9 +3,22 @@ SOURCE = pgcenter.c
 CC ?= gcc
 CFLAGS = -g -std=gnu99 -Wall -pedantic
 PREFIX ?= /usr
+INCLUDEDIR =
+LIBDIR =
+
+# PostgreSQL stuff
 PGCONFIG ?= pg_config
 PGLIBDIR = $(shell $(PGCONFIG) --libdir)
 PGINCLUDEDIR = $(shell $(PGCONFIG) --includedir)
+PGLIBS = -lpq
+ifneq ($(PGLIBDIR),)
+	LIBDIR += -L$(PGLIBDIR)
+endif
+ifneq ($(PGINCLUDEDIR),)
+	INCLUDEDIR += -I$(PGINCLUDEDIR)
+endif
+
+# Ncurses stuff
 ifndef NCONFIG
 	ifeq ($(shell sh -c 'which ncurses5-config>/dev/null 2>/dev/null && echo y'), y)
 		NCONFIG = ncurses5-config
@@ -13,8 +26,22 @@ ifndef NCONFIG
 		NCONFIG = ncursesw5-config
 	endif
 endif
-NLIBS = $(shell $(NCONFIG) --libs)
-LIBS = $(NLIBS) -lmenu -lpq
+NLIBDIR = $(shell $(NCONFIG) --libdir)
+NINCLUDEDIR = $(shell $(NCONFIG) --includedir)
+NLIBS = $(shell $(NCONFIG) --libs) -lmenu
+ifneq ($(NLIBDIR),)
+	LIBDIR += -L$(NLIBDIR)
+endif
+ifneq ($(NINCLUDEDIR),)
+	ifeq "$(wildcard $(NINCLUDEDIR)/menu.h )" ""
+		ifneq "$(wildcard $(NINCLUDEDIR)/ncurses )" ""
+			INCLUDEDIR += -I$(NINCLUDEDIR)/ncurses
+		endif
+	endif
+endif
+
+# General stuff
+LIBS = $(PGLIBS) $(NLIBS)
 DESTDIR ?=
 
 .PHONY: all clean install
@@ -22,7 +49,7 @@ DESTDIR ?=
 all: pgcenter
 
 pgcenter: pgcenter.c
-	$(CC) $(CFLAGS) -I$(PGINCLUDEDIR) -L$(PGLIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
 
 clean:
 	rm -f $(PROGRAM_NAME)

@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * rewrite Makefile, add workaround for wrong path from OpenSUSE
+    ncurses-config.
   * define DUPLEX_UNKNOWN explicitly.
 
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sat, 19 Dec 2015 22:45:29 +0500
