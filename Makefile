@@ -14,6 +14,14 @@ ifndef NCONFIG
 	endif
 endif
 NLIBS = $(shell $(NCONFIG) --libs)
+NLIBDIR = $(shell $(NCONFIG) --libdir)
+NINCLUDEDIR = $(shell $(NCONFIG) --includedir)
+# For some distributions (at least openSUSE 13.1) ncurses5-config gives a wrong path
+ifeq "$(wildcard $(NINCLUDEDIR)/menu.h )" ""
+	ifneq "$(wildcard /usr/include/ncurses )" ""
+		NINCLUDEDIR = /usr/include/ncurses
+	endif
+endif
 LIBS = $(NLIBS) -lmenu -lpq
 DESTDIR ?=
 
@@ -22,7 +30,7 @@ DESTDIR ?=
 all: pgcenter
 
 pgcenter: pgcenter.c
-	$(CC) $(CFLAGS) -I$(PGINCLUDEDIR) -L$(PGLIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
+	$(CC) $(CFLAGS) -I$(PGINCLUDEDIR) -L$(PGLIBDIR) -I$(NINCLUDEDIR) -L$(NLIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
 
 clean:
 	rm -f $(PROGRAM_NAME)
