@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix bogus if conditions in sort_array().
   * fix program identifier violation.
   * add error handling fo get_loadavg()-fscanf(), password_prompt()-malloc().
   * rewrite query stats defines to enum.
