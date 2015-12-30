@@ -990,7 +990,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
 {
     int t_count, i_count, x_count, a_count, w_count, o_count;
     PGresult *res;
-    char errmsg[ERRSIZE];
+    static char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         t_count = 0;
@@ -1065,7 +1065,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     int divisor;
     char maxtime[16] = "";
     PGresult *res;
-    char errmsg[ERRSIZE];
+    static char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = 0;
@@ -1959,7 +1959,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     int av_count, avw_count;
     char av_max_time[16];
     PGresult *res;
-    char errmsg[ERRSIZE];
+    static char errmsg[ERRSIZE];
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
         av_count = atoi(PQgetvalue(res, 0, 0));
@@ -2871,8 +2871,8 @@ void show_config(WINDOW * window, PGconn * conn)
     int  row_count, col_count, row, col, i;
     FILE * fpout;
     PGresult * res;
-    char errmsg[ERRSIZE];
-    char pager[32] = "";
+    char errmsg[ERRSIZE],
+         pager[32] = "";
     struct colAttrs * columns;
 
     if (getenv("PAGER") != NULL)
@@ -2927,8 +2927,8 @@ void reload_conf(WINDOW * window, PGconn * conn)
 {
     PGresult * res;
     bool with_esc;
-    char errmsg[ERRSIZE];
-    char confirmation[1],
+    char errmsg[ERRSIZE],
+         confirmation[1],
          msg[] = "Reload configuration files (y/n): ";
 
     cmd_readline(window, msg, 34, &with_esc, confirmation, 1, true);
@@ -3017,8 +3017,8 @@ bool check_pg_listen_addr(struct screen_s * screen)
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value)
 {
     PGresult * res;
-    char errmsg[ERRSIZE];
-    char query[BUFSIZ];
+    char errmsg[ERRSIZE],
+         query[BUFSIZ];
 
     strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
     strcat(query, config_option_name);
@@ -3223,14 +3223,14 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         return;
     } 
 
-    char query[BUFSIZ],
+    char errmsg[ERRSIZE],
+         query[BUFSIZ],
          action[10],
          msg[64],
          pid[6];
     PGresult * res;
     bool with_esc;
     int msg_offset;
-    char errmsg[ERRSIZE];
 
     if (do_terminate) {
         strcpy(action, "Terminate");
@@ -3622,13 +3622,15 @@ void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_
 void get_logfile_path(char * path, PGconn * conn)
 {
     PGresult *res;
-    char q1[] = "show data_directory";
-    char q2[] = "show log_directory";
-    char q3[] = "show log_filename";
-    char q4[] = "select to_char(pg_postmaster_start_time(), 'HH24MISS')";
-    char errmsg[ERRSIZE];
-    char ld[64], lf[64], dd[64];
-    char path_tpl[64 * 3], path_log[64 * 3], path_log_fallback[64 * 3] = "";
+    char errmsg[ERRSIZE],
+         q1[] = "show data_directory",
+         q2[] = "show log_directory",
+         q3[] = "show log_filename",
+         q4[] = "select to_char(pg_postmaster_start_time(), 'HH24MISS')",
+         ld[64], lf[64], dd[64],
+         path_tpl[64 * 3],
+         path_log[64 * 3],
+         path_log_fallback[64 * 3] = "";
 
     strcpy(path, "\0");
     if ((res = do_query(conn, q2, errmsg)) == NULL) {
@@ -4050,7 +4052,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     char msg[] = "Enter queryid: ",
          query[BUFSIZ],
          pager[32] = "";
-    char * queryid = (char *) malloc(sizeof(char) * 16);
+    char queryid[16];
     char errmsg[ERRSIZE];
     FILE * fpout;
 
