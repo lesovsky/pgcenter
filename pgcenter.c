@@ -2576,26 +2576,24 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
     }
 
     unsigned int hour, min, sec;
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
     char min_age[BUFFERSIZE_S],
          msg[] = "Enter new min age, format: HH:MM:SS[.NN]: ";
 
-    cmd_readline(window, msg, 42, with_esc, min_age, 16, true);
-    if (strlen(min_age) != 0 && *with_esc == false) {
+    cmd_readline(window, msg, 42, &with_esc, min_age, 16, true);
+    if (strlen(min_age) != 0 && with_esc == false) {
         if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
             wprintw(window, "Nothing to do. Failed read or invalid value.");
         } else {
             strncpy(screen->pg_stat_activity_min_age, min_age, sizeof(screen->pg_stat_activity_min_age) - 1);
             screen->pg_stat_activity_min_age[sizeof(screen->pg_stat_activity_min_age) - 1] = '\0';
         }
-    } else if (strlen(min_age) == 0 && *with_esc == false ) {
+    } else if (strlen(min_age) == 0 && with_esc == false ) {
         wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
     }
    
     PQclear(res);
     *first_iter = true;
-
-    free(with_esc);
 }
 
 /*
@@ -2681,16 +2679,15 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
     char params[128],
          msg[] = "Enter new connection parameters, format \"host port username dbname\": ",
          msg2[] = "Required password: ";
-    bool * with_esc = (bool *) malloc(sizeof(bool)),
-         * with_esc2 = (bool *) malloc(sizeof(bool));
+    bool with_esc, with_esc2;
     
     for (i = 0; i < MAX_SCREEN; i++) {
         /* search free screen */
         if (screens[i]->conn_used == false) {
 
             /* read user input */
-            cmd_readline(window, msg, 69, with_esc, params, 128, true);
-            if (strlen(params) != 0 && *with_esc == false) {
+            cmd_readline(window, msg, 69, &with_esc, params, 128, true);
+            if (strlen(params) != 0 && with_esc == false) {
                 /* parse user input */
                 if ((sscanf(params, "%s %s %s %s",
                     screens[i]->host,   screens[i]->port,
@@ -2717,8 +2714,8 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     wclear(window);
 
                     /* read password and add to conn options */
-                    cmd_readline(window, msg2, 19, with_esc2, params, 128, false);
-                    if (strlen(params) != 0 && *with_esc2 == false) {
+                    cmd_readline(window, msg2, 19, &with_esc2, params, 128, false);
+                    if (strlen(params) != 0 && with_esc2 == false) {
                         strcpy(screens[i]->password, params);
                         strcat(screens[i]->conninfo, " password=");
                         strcat(screens[i]->conninfo, screens[i]->password);
@@ -2752,7 +2749,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 }
                 break;
             /* finish work if user input empty or cancelled */
-            } else if (strlen(params) == 0 && *with_esc == false) {
+            } else if (strlen(params) == 0 && with_esc == false) {
                 wprintw(window, "Nothing to do.");
                 break;
             } else 
@@ -2762,10 +2759,6 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
             wprintw(window, "No free consoles.");
         }
     }
-
-    /* finish work */
-    free(with_esc);
-    free(with_esc2);
 
     return console_index;
 }
@@ -2942,12 +2935,12 @@ void show_config(WINDOW * window, PGconn * conn)
 void reload_conf(WINDOW * window, PGconn * conn)
 {
     PGresult * res;
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
     char confirmation[1],
          msg[] = "Reload configuration files (y/n): ";
 
-    cmd_readline(window, msg, 34, with_esc, confirmation, 1, true);
+    cmd_readline(window, msg, 34, &with_esc, confirmation, 1, true);
     if (!strcmp(confirmation, "n") || !strcmp(confirmation, "N"))
         wprintw(window, "Do nothing. Canceled.");
     else if (!strcmp(confirmation, "y") || !strcmp(confirmation, "Y")) {
@@ -2959,14 +2952,13 @@ void reload_conf(WINDOW * window, PGconn * conn)
             wclear(window);
             wprintw(window, "Reload failed. %s", errmsg);
         }
-    } else if (strlen(confirmation) == 0 && *with_esc == false) {
+    } else if (strlen(confirmation) == 0 && with_esc == false) {
         wprintw(window, "Do nothing. Nothing etntered.");
-    } else if (*with_esc == true) {
+    } else if (with_esc) {
         ;
     } else 
         wprintw(window, "Do nothing. Not confirmed.");
 
-    free(with_esc);
     free(errmsg);
 }
 
@@ -3248,7 +3240,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
          msg[64],
          pid[6];
     PGresult * res;
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
     int msg_offset;
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
 
@@ -3262,7 +3254,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         msg_offset = 34;
     }
 
-    cmd_readline(window, msg, msg_offset, with_esc, pid, 64, true);
+    cmd_readline(window, msg, msg_offset, &with_esc, pid, 64, true);
     if (atoi(pid) > 0) {
         if (do_terminate) {
             strcpy(query, PG_TERM_BACKEND_P1);
@@ -3281,14 +3273,13 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         } else {
             wprintw(window, "%s backend failed. %s", action, errmsg);
         }
-    } else if (strlen(pid) == 0 && *with_esc == false) {
+    } else if (strlen(pid) == 0 && with_esc == false) {
         wprintw(window, "Do nothing. Nothing etntered.");
-    } else if (*with_esc == true) {
+    } else if (with_esc) {
         ;
     } else
         wprintw(window, "Do nothing. Incorrect input value.");
 
-    free(with_esc);
     free(errmsg);
 }
 
@@ -3343,7 +3334,7 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     int i;
     char mask[5],
          msg[] = "";        /* set empty message, we don't want show msg from cmd_readline */
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
 
     wprintw(window, "Set action mask for group backends [");
     wattron(window, A_BOLD | A_UNDERLINE);
@@ -3367,12 +3358,12 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     wattroff(window, A_BOLD | A_UNDERLINE);
     wprintw(window, "ther]: ");
 
-    cmd_readline(window, msg, 77, with_esc, mask, 5, true);
+    cmd_readline(window, msg, 77, &with_esc, mask, 5, true);
     if (strlen(mask) > 5) {                                 /* entered mask too long */
         wprintw(window, "Do nothing. Mask too long.");
-    } else if (strlen(mask) == 0 && *with_esc == false) {   /* mask not entered */
+    } else if (strlen(mask) == 0 && with_esc == false) {    /* mask not entered */
         wprintw(window, "Do nothing. Mask not entered.");
-    } else if (*with_esc == true) {                         /* user escaped */
+    } else if (with_esc) {                                  /* user escaped */
         ;
     } else {                                                /* user enter string with valid length */
         /* reset previous mask */
@@ -3398,8 +3389,6 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
         }
         get_statemask(window, screen);
     }
-
-    free(with_esc);
 }
 
 /*
@@ -3550,17 +3539,17 @@ long int change_refresh(WINDOW * window, long int interval)
     long int interval_save = interval;
     char value[8],
          msg[64];
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
     char * str = (char *) malloc(sizeof(char) * 128);
 
     wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
     wrefresh(window);
 
-    cmd_readline(window, msg, 36, with_esc, str, 8, true);
+    cmd_readline(window, msg, 36, &with_esc, str, 8, true);
     strcpy(value, str);
     free(str);
 
-    if (strlen(value) != 0 && *with_esc == false) {
+    if (strlen(value) != 0 && with_esc == false) {
         if (strlen(value) != 0) {
             interval = atol(value);
             if (interval < 1) {
@@ -3570,11 +3559,11 @@ long int change_refresh(WINDOW * window, long int interval)
                 interval = interval * 1000000;
             }
         }
-    } else if (strlen(value) == 0 && *with_esc == false ) {
+    } else if (strlen(value) == 0 && with_esc == false ) {
+        wprintw(window, "Leave old value: %i seconds.", interval_save / 1000000);
         interval = interval_save;
     }
 
-    free(with_esc);
     return interval;
 }
 
@@ -4079,7 +4068,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     }
     
     PGresult * res;
-    bool * with_esc = (bool *) malloc(sizeof(bool));
+    bool with_esc;
     char msg[] = "Enter queryid: ",
          query[BUFSIZ],
          pager[32] = "";
@@ -4087,22 +4076,20 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     char * errmsg = (char *) malloc(sizeof(char) * 1024);
     FILE * fpout;
 
-    cmd_readline(window, msg, 15, with_esc, queryid, 16, true);
+    cmd_readline(window, msg, 15, &with_esc, queryid, 16, true);
     if (check_string(queryid) == -1) {
         wprintw(window, "Do nothing. Value not valid.");
-        free(with_esc);
         free(errmsg);
         return;
     }
 
-    if (strlen(queryid) != 0 && *with_esc == false) {
+    if (strlen(queryid) != 0 && with_esc == false) {
         /* do query and send result into less */
         strcpy(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P1);
         strcat(query, queryid);
         strcat(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
-            free(with_esc);
             free(errmsg);
             return;
         }
@@ -4110,7 +4097,6 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         /* finish work if empty answer */
         if (PQntuples(res) == 0) {
             wprintw(window, "Do nothing. Empty answer for %s", queryid);
-            free(with_esc);
             free(errmsg);
             PQclear(res);
             return;
@@ -4123,7 +4109,6 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
-            free(with_esc);
             free(errmsg);
             return;
         }
@@ -4165,15 +4150,14 @@ query text (id: %s):\n%s",
 
         /* return to ncurses mode */
         refresh();
-    } else if (strlen(queryid) == 0 && *with_esc == false) {
+    } else if (strlen(queryid) == 0 && with_esc == false) {
         wprintw(window, "Nothing to do. Nothing entered");
-    } else if (*with_esc == true) {
+    } else if (with_esc) {
         ;
     } else {
         wprintw(window, "Nothing to do.");
     }
     
-    free(with_esc);
     free(errmsg);
 }
 
