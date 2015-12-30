@@ -1,6 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
-  * replace with_esc pointer to variable.
+  * replace with_esc/errmsg pointers to variables.
   * fix bogus if conditions in sort_array().
   * fix program identifier violation.
   * add error handling fo get_loadavg()-fscanf(), password_prompt()-malloc().

@@ -646,15 +646,13 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
             get_pg_version(conns[i], screens[i]);
 
             PGresult * res;
-            char * errmsg = (char *) malloc(sizeof(char) * 1024);
+            char errmsg[ERRSIZE];
             /* suppress log messages with log_min_duration_statement */
             if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) != NULL)
                PQclear(res);
             /* increase work_mem */
             if ((res = do_query(conns[i], PG_INCREASE_WORK_MEM_QUERY, errmsg)) != NULL)
                 PQclear(res);
-            if (errmsg)
-                free(errmsg);
         }
     }
 }
@@ -828,7 +826,7 @@ void prepare_query(struct screen_s * screen, char * query)
  * Answer from PostgreSQL.
  ****************************************************************************
  */
-PGresult * do_query(PGconn * conn, char * query, char *errmsg)
+PGresult * do_query(PGconn * conn, char * query, char errmsg[])
 {
     PGresult    *res;
 
@@ -836,7 +834,7 @@ PGresult * do_query(PGconn * conn, char * query, char *errmsg)
     switch (PQresultStatus(res)) {
         case PG_FATAL_ERR:
             strcpy(errmsg, "FATAL: ");
-            strcat(errmsg, PQerrorMessage(conn));
+            strncat(errmsg, PQerrorMessage(conn), ERRSIZE - 7);
             PQclear(res);
             return NULL;
             break;
@@ -992,7 +990,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
 {
     int t_count, i_count, x_count, a_count, w_count, o_count;
     PGresult *res;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         t_count = 0;
@@ -1048,7 +1046,6 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
             "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
             t_count, i_count, x_count, a_count, w_count, o_count);
     wrefresh(window);
-    free(errmsg);
 }
 
 /*
@@ -1068,7 +1065,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     int divisor;
     char maxtime[16] = "";
     PGresult *res;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = 0;
@@ -1098,7 +1095,6 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
             "statements: %3i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
             qps, avgtime, maxtime);
     wrefresh(window);
-    free(errmsg);
 }
 
 /*
@@ -1919,16 +1915,14 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
  */
 void get_pg_uptime(PGconn * conn, char * uptime)
 {
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    static char errmsg[ERRSIZE];
     PGresult * res;
 
     if ((res = do_query(conn, PG_UPTIME_QUERY, errmsg)) != NULL) {
         strcpy(uptime, PQgetvalue(res, 0, 0));
         PQclear(res);
-        free(errmsg);
     } else {
         strcpy(uptime, "--:--:--");
-        free(errmsg);
     }
 }
 
@@ -1965,7 +1959,7 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     int av_count, avw_count;
     char av_max_time[16];
     PGresult *res;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
         av_count = atoi(PQgetvalue(res, 0, 0));
@@ -1991,7 +1985,6 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     mvwprintw(window, 2, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
     wrefresh(window);
-    free(errmsg);
 }
 
 /*
@@ -2878,7 +2871,7 @@ void show_config(WINDOW * window, PGconn * conn)
     int  row_count, col_count, row, col, i;
     FILE * fpout;
     PGresult * res;
-    char * errmsg;
+    char errmsg[ERRSIZE];
     char pager[32] = "";
     struct colAttrs * columns;
 
@@ -2895,7 +2888,6 @@ void show_config(WINDOW * window, PGconn * conn)
     refresh();
     endwin();
 
-    errmsg = (char *) malloc(sizeof(char) * 1024);
     res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
     row_count = PQntuples(res);
     col_count = PQnfields(res);
@@ -2917,7 +2909,6 @@ void show_config(WINDOW * window, PGconn * conn)
     PQclear(res);
     pclose(fpout);
     free(columns);
-    free(errmsg);
     
     /* return to ncurses mode */
     refresh();
@@ -2936,7 +2927,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
 {
     PGresult * res;
     bool with_esc;
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     char confirmation[1],
          msg[] = "Reload configuration files (y/n): ";
 
@@ -2958,8 +2949,6 @@ void reload_conf(WINDOW * window, PGconn * conn)
         ;
     } else 
         wprintw(window, "Do nothing. Not confirmed.");
-
-    free(errmsg);
 }
 
 /*
@@ -3028,7 +3017,7 @@ bool check_pg_listen_addr(struct screen_s * screen)
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value)
 {
     PGresult * res;
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     char query[BUFSIZ];
 
     strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
@@ -3042,7 +3031,6 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
     else
         strcpy(config_option_value, "");
     
-    free(errmsg);
     PQclear(res);
 }
 
@@ -3242,7 +3230,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
     PGresult * res;
     bool with_esc;
     int msg_offset;
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
 
     if (do_terminate) {
         strcpy(action, "Terminate");
@@ -3279,8 +3267,6 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
         ;
     } else
         wprintw(window, "Do nothing. Incorrect input value.");
-
-    free(errmsg);
 }
 
 /*
@@ -3466,11 +3452,10 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         strcat(query, screen->pg_stat_activity_min_age);
         strcat(query, PG_SIG_GROUP_BACKEND_P5);
         
-        char * errmsg = (char *) malloc(sizeof(char) * 1024);
+        char errmsg[ERRSIZE];
         res = do_query(conn, query, errmsg);
         signaled = signaled + PQntuples(res);
         PQclear(res);
-        free(errmsg);
     }
 
     if (do_terminate)
@@ -3641,14 +3626,13 @@ void get_logfile_path(char * path, PGconn * conn)
     char q2[] = "show log_directory";
     char q3[] = "show log_filename";
     char q4[] = "select to_char(pg_postmaster_start_time(), 'HH24MISS')";
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     char ld[64], lf[64], dd[64];
     char path_tpl[64 * 3], path_log[64 * 3], path_log_fallback[64 * 3] = "";
 
     strcpy(path, "\0");
     if ((res = do_query(conn, q2, errmsg)) == NULL) {
         PQclear(res);
-        free(errmsg);
         return;
     }
     strcpy(ld, PQgetvalue(res, 0, 0));
@@ -3657,7 +3641,6 @@ void get_logfile_path(char * path, PGconn * conn)
     if ( ld[0] != '/' ) {
         if ((res = do_query(conn, q1, errmsg)) == NULL) {
             PQclear(res);
-            free(errmsg);
             return;
         }
         strcpy(dd, PQgetvalue(res, 0, 0));
@@ -3673,7 +3656,6 @@ void get_logfile_path(char * path, PGconn * conn)
 
     if ((res = do_query(conn, q3, errmsg)) == NULL) {
         PQclear(res);
-        free(errmsg);
         return;
     }
     strcpy(lf, PQgetvalue(res, 0, 0));
@@ -3693,7 +3675,6 @@ void get_logfile_path(char * path, PGconn * conn)
         strcpy(path_log_fallback, path_tpl);
         if((res = do_query(conn, q4, errmsg)) == NULL) {
             PQclear(res);
-            free(errmsg);
             return;
         }
         strrpl(path_log, "%H%M%S", PQgetvalue(res, 0, 0));
@@ -3702,8 +3683,6 @@ void get_logfile_path(char * path, PGconn * conn)
     } else {
         strcpy(path_log, path_tpl);
     }
-
-    free(errmsg);
 
     /* translate log_filename pattern string in real path */
     time_t rawtime;
@@ -4034,7 +4013,7 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
  */
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
 {
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     PGresult * res;
 
     if ((res = do_query(conn, PG_STAT_RESET_QUERY, errmsg)) != NULL) {
@@ -4044,7 +4023,6 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
         wprintw(window, "Reset statistics failed: %s", errmsg);
     
     PQclear(res);
-    free(errmsg);
 }
 
 /*
@@ -4073,13 +4051,12 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
          query[BUFSIZ],
          pager[32] = "";
     char * queryid = (char *) malloc(sizeof(char) * 16);
-    char * errmsg = (char *) malloc(sizeof(char) * 1024);
+    char errmsg[ERRSIZE];
     FILE * fpout;
 
     cmd_readline(window, msg, 15, &with_esc, queryid, 16, true);
     if (check_string(queryid) == -1) {
         wprintw(window, "Do nothing. Value not valid.");
-        free(errmsg);
         return;
     }
 
@@ -4090,14 +4067,12 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         strcat(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
-            free(errmsg);
             return;
         }
 
         /* finish work if empty answer */
         if (PQntuples(res) == 0) {
             wprintw(window, "Do nothing. Empty answer for %s", queryid);
-            free(errmsg);
             PQclear(res);
             return;
         }
@@ -4109,7 +4084,6 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
-            free(errmsg);
             return;
         }
 
@@ -4157,8 +4131,6 @@ query text (id: %s):\n%s",
     } else {
         wprintw(window, "Nothing to do.");
     }
-    
-    free(errmsg);
 }
 
 /*
@@ -4457,7 +4429,7 @@ int main(int argc, char *argv[])
                 *c_res = NULL;                          /* query results        */
     char query[4096];                                   /* query text           */
     int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
-    char *errmsg = (char *) malloc(sizeof(char) * 1024);/* query err message    */
+    char errmsg[ERRSIZE];                                   /* query error message  */
 
     long int interval = DEFAULT_INTERVAL,               /* sleep interval       */
              sleep_usec = 0;                            /* time spent in sleep  */

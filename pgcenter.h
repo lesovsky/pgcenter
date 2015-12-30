@@ -14,6 +14,7 @@
 /* sizes, limits and defaults */
 #define BUFFERSIZE_S        16
 #define BUFFERSIZE          4096
+#define ERRSIZE             128
 #define MAX_SCREEN          8
 #define TOTAL_CONTEXTS      12
 #define INVALID_ORDER_KEY   99
@@ -729,7 +730,7 @@ void prepare_conninfo(struct screen_s * screens[]);
 void open_connections(struct screen_s * screens[], PGconn * conns[]);
 void close_connections(struct screen_s * screens[], PGconn * conns[]);
 void prepare_query(struct screen_s * screen, char * query);
-PGresult * do_query(PGconn * conn, char * query, char *errmsg);
+PGresult * do_query(PGconn * conn, char * query, char errmsg[]);
 
 /* system resources functions */
 void get_time(char * strtime);
