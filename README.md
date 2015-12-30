@@ -76,7 +76,12 @@ $ pgcenter
 
 #### Known issues
 - mainly developed and tested under PostgreSQL 9.4 (but tested with others 9.x releases).
-- this is beta software, in some circumstances may occurs segfaults.
+- this is beta software, in some circumstances may occurs segfaults. When segfaults occur, you may help me to do this software better:
+  - Build pgcenter from latest sources (see above instructions).
+  - Enable coredump with ```ulimit -c unlimited```
+  - Reproduce segafult (after pgcenter crash, coredump file will be created in current directory).
+  - Run pgcenter with gdb ```gdb ./pgcenter <coredump>```
+  - In gdb console, run ```where``` command, get the latest 15 lines and create [issue](https://github.com/lesovsky/pgcenter/issues).
 
 #### Thanks
 - Sebastien Godard for [sysstat](https://github.com/sysstat/sysstat).
