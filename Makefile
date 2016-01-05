@@ -24,6 +24,10 @@ ifndef NCONFIG
 		NCONFIG = ncurses5-config
 	else ifeq ($(shell sh -c 'which ncursesw5-config>/dev/null 2>/dev/null && echo y'), y)
 		NCONFIG = ncursesw5-config
+	else ifeq ($(shell sh -c 'which ncurses6-config>/dev/null 2>/dev/null && echo y'), y)
+		NCONFIG = ncurses6-config
+	else ifeq ($(shell sh -c 'which ncursesw6-config>/dev/null 2>/dev/null && echo y'), y)
+		NCONFIG = ncursesw6-config
 	endif
 endif
 NLIBDIR = $(shell $(NCONFIG) --libdir)
