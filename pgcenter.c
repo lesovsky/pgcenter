@@ -1649,6 +1649,10 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
 
     /* print statistics */
     for (i = 0; i < bdev; i++) {
+        /* skip devices without iops */
+        if (c_ios[i]->r_completed == 0 && c_ios[i]->w_completed == 0) {
+            continue;
+        }
         wprintw(window, "%6s:\t\t", c_ios[i]->devname);
         wprintw(window, "%8.2f%8.2f",
                 S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv),

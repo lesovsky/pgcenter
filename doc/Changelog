@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * don't show iostat for devices without iops.
   * replace with_esc/errmsg pointers to variables.
   * fix bogus if conditions in sort_array().
   * fix program identifier violation.
