@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * print_mem: don't exit if /proc/meminfo read failed.
+  * print_mem: fix free swap.
   * don't show iostat for devices without iops.
   * replace with_esc/errmsg pointers to variables.
   * fix bogus if conditions in sort_array().

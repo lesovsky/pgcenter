@@ -1445,37 +1445,43 @@ void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short)
     char key[80];
     unsigned long long value;
     
-    if ((mem_fp = fopen(MEMINFO_FILE, "r")) == NULL) {
-        fprintf(stderr, "Cannot open %s: %s\n", MEMINFO_FILE, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
+    if ((mem_fp = fopen(MEMINFO_FILE, "r")) != NULL) {
+//        fprintf(stderr, "Cannot open %s: %s\n", MEMINFO_FILE, strerror(errno));
+//        exit(EXIT_FAILURE);
 
-    while (fgets(buffer, 120, mem_fp) != NULL) {
-        sscanf(buffer, "%s %llu", key, &value);
-        if (!strcmp(key,"MemTotal:"))
-            st_mem_short->mem_total = value / 1024;
-        else if (!strcmp(key,"MemFree:"))
-            st_mem_short->mem_free = value / 1024;
-        else if (!strcmp(key,"SwapTotal:"))
-            st_mem_short->swap_total = value / 1024;
-        else if (!strcmp(key,"SwapFree:"))
-            st_mem_short->swap_total = value / 1024;
-        else if (!strcmp(key,"Cached:"))
-            st_mem_short->cached = value / 1024;
-        else if (!strcmp(key,"Dirty:"))
-            st_mem_short->dirty = value / 1024;
-        else if (!strcmp(key,"Writeback:"))
-            st_mem_short->writeback = value / 1024;
-        else if (!strcmp(key,"Buffers:"))
-            st_mem_short->buffers = value / 1024;
-        else if (!strcmp(key,"Slab:"))
-            st_mem_short->slab = value / 1024;
-    }
-    st_mem_short->mem_used = st_mem_short->mem_total - st_mem_short->mem_free
+        while (fgets(buffer, 120, mem_fp) != NULL) {
+            sscanf(buffer, "%s %llu", key, &value);
+            if (!strcmp(key,"MemTotal:"))
+                st_mem_short->mem_total = value / 1024;
+            else if (!strcmp(key,"MemFree:"))
+                st_mem_short->mem_free = value / 1024;
+            else if (!strcmp(key,"SwapTotal:"))
+                st_mem_short->swap_total = value / 1024;
+            else if (!strcmp(key,"SwapFree:"))
+                st_mem_short->swap_free = value / 1024;
+            else if (!strcmp(key,"Cached:"))
+                st_mem_short->cached = value / 1024;
+            else if (!strcmp(key,"Dirty:"))
+                st_mem_short->dirty = value / 1024;
+            else if (!strcmp(key,"Writeback:"))
+                st_mem_short->writeback = value / 1024;
+            else if (!strcmp(key,"Buffers:"))
+                st_mem_short->buffers = value / 1024;
+            else if (!strcmp(key,"Slab:"))
+                st_mem_short->slab = value / 1024;
+        }
+        st_mem_short->mem_used = st_mem_short->mem_total - st_mem_short->mem_free
             - st_mem_short->cached - st_mem_short->buffers - st_mem_short->slab;
-    st_mem_short->swap_used = st_mem_short->swap_total - st_mem_short->swap_free;
+        st_mem_short->swap_used = st_mem_short->swap_total - st_mem_short->swap_free;
 
-    fclose(mem_fp);
+        fclose(mem_fp);
+    } else {
+        /* read /proc/meminfo failed, zeroing stats */
+        st_mem_short->mem_total = st_mem_short->mem_free = st_mem_short->mem_used = 0;
+        st_mem_short->cached = st_mem_short->buffers = st_mem_short->slab = 0;
+        st_mem_short->swap_total = st_mem_short->swap_free = st_mem_short->swap_used = 0;
+        st_mem_short->dirty = st_mem_short->writeback = 0;
+    }
 
     wprintw(window, " MiB mem: %6llu total, %6llu free, %6llu used, %8llu buff/cached\n",
             st_mem_short->mem_total,
