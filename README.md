@@ -55,6 +55,7 @@ $ sudo apt-get update
 $ sudo apt-get install pgcenter
 ```
 Debian users can create package using this [link](https://wiki.debian.org/CreatePackageFromPPA) or download deb package from [Launchpad page](https://launchpad.net/~lesovsky/+archive/ubuntu/pgcenter/+packages) and install pgCenter with *dpkg -i*.
+**Warning**: *Launchpad uses it's own buildfarm for packages creating and pgCenter installed from Launchpad crashes in some circumstances.*
 
 ##### Install from RHEL6/CentOS6
 - install pgCenter from Essential Kaos testing repo.
