@@ -192,6 +192,23 @@ int check_string(char * string)
 }
 
 /*
+ ********************************************************** init functions **
+ * Allocate memory for input arguments struct.
+ *
+ * RETURNS:
+ * Pointer to args memory.
+ ****************************************************************************
+ */
+struct args_s * init_args_mem(void) {
+    struct args_s *args;
+    if ((args = (struct args_s *) malloc(sizeof(struct args_s))) == NULL) {
+        perror("FATAL: malloc for input args failed.");
+        exit(EXIT_FAILURE);
+    }
+    return args;
+}
+
+/*
  *********************************************************** init function **
  * Allocate memory for screens options struct array.
  *
@@ -204,7 +221,7 @@ void init_screens(struct screen_s *screens[])
     int i;
     for (i = 0; i < MAX_SCREEN; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
-                perror("malloc");
+                perror("FATAL: malloc for screens failed.");
                 exit(EXIT_FAILURE);
         }
         memset(screens[i], 0, SCREEN_SIZE);
@@ -281,7 +298,7 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
     struct termios t_orig, t;
     char *password;
     if ((password = (char *) malloc(maxlen + 1)) == NULL) {
-            perror("malloc for password prompt failed");
+            perror("FATAL: malloc for password prompt failed.");
             exit(EXIT_FAILURE);
     }
 
@@ -313,7 +330,7 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
  * @args        Empty struct.
  ****************************************************************************
  */
-void init_args_struct(struct args_s * args)
+void init_args_struct(struct args_s *args)
 {
     args->count = 0;
     strcpy(args->connfile, "");
@@ -815,9 +832,8 @@ void prepare_query(struct screen_s * screen, char * query)
  * Send query to PostgreSQL.
  *
  * IN:
- * @window          Window for printing errors if query failed.
  * @conn            PostgreSQL connection.
- * @query_context   Type of query.
+ * @query           Query text.
  *
  * OUT:
  * @errmsg          Error message returned by postgres.
@@ -879,10 +895,9 @@ void get_time(char * strtime)
  */
 void print_title(WINDOW * window, char * progname)
 {
-    char *strtime = (char *) malloc(sizeof(char) * 20);
+    static char strtime[20];
     get_time(strtime);
     wprintw(window, "%s: %s, ", progname, strtime);
-    free(strtime);
 }
 
 /*
@@ -902,15 +917,14 @@ float get_loadavg(int m)
         m = 1;
 
     float avg = 0, avg1, avg5, avg15;
-    FILE *loadavg_fd;
+    FILE *fp;
 
-    if ((loadavg_fd = fopen(LOADAVG_FILE, "r")) == NULL) {
-        fprintf(stderr, "can't open %s\n", LOADAVG_FILE);
-        exit(EXIT_FAILURE);
+    if ((fp = fopen(LOADAVG_FILE, "r")) != NULL) {
+        if ((fscanf(fp, "%f %f %f", &avg1, &avg5, &avg15)) != 3)
+            avg1 = avg5 = avg15 = 0;            /* something goes wrong */
+        fclose(fp);
     } else {
-        if ((fscanf(loadavg_fd, "%f %f %f", &avg1, &avg5, &avg15)) != 3)
-            avg1 = avg5 = avg15 = -1;           /* something goes wrong */
-        fclose(loadavg_fd);
+        avg1 = avg5 = avg15 = 0;                /* can't read statfile */
     }
 
     switch (m) {
@@ -1112,7 +1126,7 @@ void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short)
     /* Allocate structures for CPUs "all" and 0 */
     for (i = 0; i < 2; i++) {
         if ((st_cpu[i] = (struct cpu_s *) malloc(STATS_CPU_SIZE * 2)) == NULL) {
-            perror("malloc for cpu stats failed");
+            perror("FATAL: malloc for cpu stats failed.");
             exit(EXIT_FAILURE);
         }
         memset(st_cpu[i], 0, STATS_CPU_SIZE * 2);
@@ -1120,7 +1134,7 @@ void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short)
 
     /* Allocate structures for memory */
     if ((*st_mem_short = (struct mem_s *) malloc(STATS_MEM_SIZE)) == NULL) {
-            perror("malloc for mem stats failed");
+            perror("FATAL: malloc for mem stats failed.");
             exit(EXIT_FAILURE);
     }
     memset(*st_mem_short, 0, STATS_MEM_SIZE);
@@ -1141,11 +1155,11 @@ void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev)
     int i;
     for (i = 0; i < bdev; i++) {
         if ((c_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
-            perror("malloc for iostat stats failed");
+            perror("FATAL: malloc for iostat stats failed.");
             exit(EXIT_FAILURE);
         }
         if ((p_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
-            perror("malloc for iostat stats failed");
+            perror("FATAL: malloc for iostat stats failed.");
             exit(EXIT_FAILURE);
         }
     }
@@ -1185,11 +1199,11 @@ void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], 
     int i;
     for (i = 0; i < idev; i++) {
         if ((c_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
-            perror("malloc for nicdata stats failed");
+            perror("FATAL: malloc for nicdata stats failed.");
             exit(EXIT_FAILURE);
         }
         if ((p_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
-            perror("malloc for nicdata stats failed");
+            perror("FATAL: malloc for nicdata stats failed.");
             exit(EXIT_FAILURE);
         }
     }
@@ -1277,18 +1291,19 @@ void read_uptime(unsigned long long *uptime)
 void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
                             unsigned long long *uptime, unsigned long long *uptime0)
 {
-    FILE *stat_fp;
+    FILE *fp;
     struct cpu_s *st_cpu_i;
     struct cpu_s sc;
     char line[8192];
     int proc_nb;
 
-    if ((stat_fp = fopen(STAT_FILE, "r")) == NULL) {
-        fprintf(stderr, "Cannot open %s: %s\n", STAT_FILE, strerror(errno));
-        exit(EXIT_FAILURE);
+    if ((fp = fopen(STAT_FILE, "r")) == NULL) {
+        /* zeroing stats if stats read failed */
+        memset(st_cpu, 0, STATS_CPU_SIZE);
+        return;
     }
 
-    while ( (fgets(line, sizeof(line), stat_fp)) != NULL ) {
+    while ( (fgets(line, sizeof(line), fp)) != NULL ) {
         if (!strncmp(line, "cpu ", 4)) {
             memset(st_cpu, 0, STATS_CPU_SIZE);
             sscanf(line + 5, "%llu %llu %llu %llu %llu %llu %llu %llu %llu %llu",
@@ -1328,7 +1343,7 @@ void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
             }
         }
     }
-    fclose(stat_fp);
+    fclose(fp);
 }
 
 /*
@@ -1446,9 +1461,6 @@ void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short)
     unsigned long long value;
     
     if ((mem_fp = fopen(MEMINFO_FILE, "r")) != NULL) {
-//        fprintf(stderr, "Cannot open %s: %s\n", MEMINFO_FILE, strerror(errno));
-//        exit(EXIT_FAILURE);
-
         while (fgets(buffer, 120, mem_fp) != NULL) {
             sscanf(buffer, "%s %llu", key, &value);
             if (!strcmp(key,"MemTotal:"))
@@ -2047,11 +2059,20 @@ char *** init_array(char ***arr, int n_rows, int n_cols)
 {
     int i, j;
 
-    arr = malloc(sizeof(char **) * n_rows);
+    if ((arr = malloc(sizeof(char **) * n_rows)) == NULL) {
+        perror("FATAL: malloc for stats array failed.");
+        exit(EXIT_FAILURE);
+    }
     for (i = 0; i < n_rows; i++) {
-        arr[i] = malloc(sizeof(char *) * n_cols);
-            for (j = 0; j < n_cols; j++)
-                arr[i][j] = malloc(sizeof(char) * BUFSIZ);
+        if ((arr[i] = malloc(sizeof(char *) * n_cols)) == NULL) {
+            perror("FATAL: malloc for stats array rows failed.");
+            exit(EXIT_FAILURE);
+        }
+        for (j = 0; j < n_cols; j++)
+            if ((arr[i][j] = malloc(sizeof(char) * BUFSIZ)) == NULL) {
+                perror("FATAL: malloc for stats array cols failed.");
+                exit(EXIT_FAILURE);
+            }
     }
     return arr;
 }
@@ -2259,7 +2280,7 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (order_key == INVALID_ORDER_KEY)
         return;
 
-    char *temp = malloc(sizeof(char) * BUFSIZ);
+    static char temp[BUFSIZ];
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
             if (desc)
@@ -2280,8 +2301,23 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
                 }
         }
     }
+}
 
-    free(temp);
+/*
+ ******************************************************** routine function **
+ * Allocate memory for column attributes struct.
+ *
+ * IN:
+ * n_cols:      Number of columns.
+ ****************************************************************************
+ */
+struct colAttrs * init_colattrs(int n_cols) {
+    struct colAttrs *cols;
+    if ((cols = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols)) == NULL) {
+        perror("FATAL: malloc for column attributes failed.");
+        exit(EXIT_FAILURE);
+    }
+    return cols;
 }
 
 /*
@@ -2302,7 +2338,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, int n_rows, int n_co
 {
     int i, j, x, order_key = 0;
     int winsz_x, winsz_y;
-    struct colAttrs *columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols);
+    struct colAttrs *columns = init_colattrs(n_cols);
 
     calculate_width(columns, res, arr, n_rows, n_cols);
     wclear(window);
@@ -2901,7 +2937,7 @@ void show_config(WINDOW * window, PGconn * conn)
     res = do_query(conn, PG_SETTINGS_QUERY, errmsg);
     row_count = PQntuples(res);
     col_count = PQnfields(res);
-    columns = (struct colAttrs *) malloc(sizeof(struct colAttrs) * col_count);
+    columns = init_colattrs(col_count);
     calculate_width(columns, res, NULL, row_count, col_count);
     
     fprintf(fpout, " PostgreSQL configuration: %i rows\n", row_count);
@@ -3079,7 +3115,7 @@ void get_pg_version(PGconn * conn, struct screen_s * screen)
  */
 void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc)
 {
-    char * config_path = (char *) malloc(sizeof(char) * 128);
+    static char config_path[128];
     pid_t pid;
 
     if (check_pg_listen_addr(screen)
@@ -3096,19 +3132,19 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
             endwin();
             pid = fork();                   /* start child */
             if (pid == 0) {
-                char * editor = (char *) malloc(sizeof(char) * 128);
-                if ((editor = getenv("EDITOR")) == NULL)
-                    editor = DEFAULT_EDITOR;
+                /* use editor from environment variables, otherwise use default editor */
+                static char editor[128];
+                if (getenv("EDITOR") != NULL)
+                    strcpy(editor, getenv("EDITOR"));
+                else
+                    strcpy(editor, DEFAULT_EDITOR);
                 execlp(editor, editor, config_path, NULL);
-                free(editor);
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
                 wprintw(window, "Can't open %s: fork failed.", config_path);
-                free(config_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
                 wprintw(window, "Unknown error: waitpid failed.");
-                free(config_path);
                 return;
             }
         } else {
@@ -3117,11 +3153,30 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     } else {
         wprintw(window, "Do nothing. Edit config not supported for remote hosts.");
     }
-    free(config_path);
 
     /* return to ncurses mode */
     refresh();
     return;
+}
+
+/*
+ ******************************************************** routine function **
+ * Allocate memory for menu items.
+ *
+ * IN:
+ * @n_choices       Number of menu items.
+ *
+ * RETURNS:
+ * Pointer to memory for menu items.
+ ****************************************************************************
+ */
+ITEM ** init_menuitems(int n_choices) {
+    ITEM ** items;
+    if ((items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices))) == NULL) {
+        perror("FATAL: malloc for menu items failed.");
+        exit(EXIT_FAILURE);
+    }
+    return items;
 }
 
 /*
@@ -3151,7 +3206,7 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
 
     /* allocate stuff */
     n_choices = ARRAY_SIZE(choices);
-    items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices + 1));
+    items = init_menuitems(n_choices + 1);
     for (i = 0; i < n_choices; i++)
         items[i] = new_item(choices[i], NULL);
     items[n_choices] = (ITEM *)NULL;
@@ -3210,7 +3265,6 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
     for (i = 0; i < n_choices; i++)
         free_item(items[i]);
     free_menu(menu);
-    free(items);
     delwin(menu_win);
     *first_iter = true;
 }
@@ -3532,17 +3586,16 @@ void start_psql(WINDOW * window, struct screen_s * screen)
 long int change_refresh(WINDOW * window, long int interval)
 {
     long int interval_save = interval;
-    char value[8],
-         msg[64];
+    static char value[8],               /* truncated value for refresh interval */
+                msg[64],                /* prompt */
+                str[128];               /* entered value */
     bool with_esc;
-    char * str = (char *) malloc(sizeof(char) * 128);
 
     wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
     wrefresh(window);
 
     cmd_readline(window, msg, 36, &with_esc, str, 8, true);
-    strcpy(value, str);
-    free(str);
+    strncpy(value, str, 2);
 
     if (strlen(value) != 0 && with_esc == false) {
         if (strlen(value) != 0) {
@@ -3989,11 +4042,13 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
             endwin();
             pid = fork();                   /* start child */
             if (pid == 0) {
-                char * pager = (char *) malloc(sizeof(char) * 128);
-                if ((pager = getenv("PAGER")) == NULL)
-                    pager = DEFAULT_PAGER;
+                /* get pager from environment variables, otherwise use default pager */
+                static char pager[128];
+                if (getenv("PAGER") != NULL)
+                    strcpy(pager, getenv("PAGER"));
+                else
+                    strcpy(pager, DEFAULT_PAGER);
                 execlp(pager, pager, screen->log_path, NULL);
-                free(pager);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
                 wprintw(window, "Can't open %s: fork failed.", screen->log_path);
@@ -4424,37 +4479,32 @@ other actions:\n\
  */
 int main(int argc, char *argv[])
 {
-    struct args_s *args;                                /* struct for input args */
+    struct args_s *args = init_args_mem();              /* struct for input args */
     struct screen_s *screens[MAX_SCREEN];               /* array of screens */
-    struct cpu_s *st_cpu[2];                 /* cpu usage struct */
-    struct mem_s *st_mem_short;        /* mem usage struct */
+    struct cpu_s *st_cpu[2];                            /* cpu usage struct */
+    struct mem_s *st_mem_short;                         /* mem usage struct */
 
     WINDOW *w_sys, *w_cmd, *w_dba, *w_sub;              /* ncurses windows  */
     int ch;                                             /* store key press  */
-    bool *first_iter = (bool *) malloc(sizeof(bool));   /* first-run flag   */
-    *first_iter = true;
+    bool first_iter = true;                             /* first-run flag   */
     static int console_no = 1;                          /* console number   */
-    static int console_index = 0;                       /* console index in screen array   */
+    static int console_index = 0;                       /* console index in screen array */
 
     PGconn      *conns[8];                              /* connections array    */
     PGresult    *p_res = NULL,
                 *c_res = NULL;                          /* query results        */
     char query[4096];                                   /* query text           */
     int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
-    char errmsg[ERRSIZE];                                   /* query error message  */
+    char errmsg[ERRSIZE];                               /* query error message  */
 
     long int interval = DEFAULT_INTERVAL,               /* sleep interval       */
              sleep_usec = 0;                            /* time spent in sleep  */
 
     char ***p_arr = NULL,
          ***c_arr = NULL,
-         ***r_arr = NULL;                  /* 3d arrays for query results  */
+         ***r_arr = NULL;                               /* 3d arrays for query results  */
 
-    int * ws_color = (int *) malloc(sizeof(int)),
-        * wc_color = (int *) malloc(sizeof(int)),
-        * wa_color = (int *) malloc(sizeof(int)),
-        * wl_color = (int *) malloc(sizeof(int));
-    args = (struct args_s *) malloc(sizeof(struct args_s));
+    int ws_color, wc_color, wa_color, wl_color;         /* colors for text zones */
 
     /* init iostat stuff */
     int bdev = count_block_devices();
@@ -4467,8 +4517,7 @@ int main(int argc, char *argv[])
     struct nicdata_s *p_nicdata[idev];
 
     /* repaint iostat/nicstat if number of devices changed */
-    bool *repaint = (bool *) malloc(sizeof(bool));
-    *repaint = false;
+    bool repaint = false;
 
     /* init various stuff */
     init_signal_handlers();
@@ -4512,34 +4561,34 @@ int main(int argc, char *argv[])
     w_dba = newwin(0, 0, 5, 0);
     w_sub = NULL;
 
-    init_colors(ws_color, wc_color, wa_color, wl_color);
+    init_colors(&ws_color, &wc_color, &wa_color, &wl_color);
     curs_set(0);
 
     /* main loop */
     while (1) {
         /* colors on */
-        wattron(w_sys, COLOR_PAIR(*ws_color));
-        wattron(w_dba, COLOR_PAIR(*wa_color));
-        wattron(w_cmd, COLOR_PAIR(*wc_color));
-        wattron(w_sub, COLOR_PAIR(*wl_color));
+        wattron(w_sys, COLOR_PAIR(ws_color));
+        wattron(w_dba, COLOR_PAIR(wa_color));
+        wattron(w_cmd, COLOR_PAIR(wc_color));
+        wattron(w_sub, COLOR_PAIR(wl_color));
 
         /* trap keys */
         if (key_is_pressed()) {
             curs_set(1);
-            wattron(w_cmd, COLOR_PAIR(*wc_color));
+            wattron(w_cmd, COLOR_PAIR(wc_color));
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no, p_res, first_iter);
+                    console_index = switch_conn(w_cmd, screens, ch, console_index, console_no, p_res, &first_iter);
                     console_no = console_index + 1;
                     break;
                 case 'N':               /* open new screen with new connection */
                     console_index = add_connection(w_cmd, screens, conns, console_index);
                     console_no = console_index + 1;
-                    *first_iter = true;
+                    first_iter = true;
                     break;
                 case 4:                 /* close current screen with Ctrl + D */
-                    console_index = close_connection(w_cmd, screens, conns, console_index, first_iter);
+                    console_index = close_connection(w_cmd, screens, conns, console_index, &first_iter);
                     console_no = console_index + 1;
                     break;
                 case 'W':               /* write connections info into .pgcenterrc */
@@ -4549,7 +4598,7 @@ int main(int argc, char *argv[])
                     show_config(w_cmd, conns[console_index]);
                     break;
                 case 'E':               /* edit configuration files */
-                    edit_config_menu(w_cmd, w_dba, screens[console_index], conns[console_index], first_iter);
+                    edit_config_menu(w_cmd, w_dba, screens[console_index], conns[console_index], &first_iter);
                     break;
                 case 'R':               /* reload postgresql */
                     reload_conf(w_cmd, conns[console_index]);
@@ -4599,63 +4648,63 @@ int main(int argc, char *argv[])
                     signal_group_backend(w_cmd, screens[console_index], conns[console_index], true);
                     break;
                 case 260:               /* shift sort order with left arrow */
-                    change_sort_order(screens[console_index], false, first_iter);
+                    change_sort_order(screens[console_index], false, &first_iter);
                     break;
                 case 261:               /* shift sort order with right arrow */
-                    change_sort_order(screens[console_index], true, first_iter);
+                    change_sort_order(screens[console_index], true, &first_iter);
                     break;
                 case 47:                /* switch order desc/asc */
-                    change_sort_order_direction(screens[console_index], first_iter);
+                    change_sort_order_direction(screens[console_index], &first_iter);
                     PQclear(p_res);
                     break;
                 case 'p':               /* start psql session to current postgres */
                     start_psql(w_cmd, screens[console_index]);
                     break;
                 case 'd':               /* open pg_stat_database screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_database, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_database, p_res, &first_iter);
                     break;
                 case 'r':               /* open pg_stat_replication screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_replication, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_replication, p_res, &first_iter);
                     break;
                 case 't':               /* open pg_stat_tables screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_tables, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_tables, p_res, &first_iter);
                     break;
                 case 'i':               /* open pg_stat(io)_indexes screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_indexes, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_indexes, p_res, &first_iter);
                     break;
                 case 'T':               /* open pg_statio_tables screen */
-                    switch_context(w_cmd, screens[console_index], pg_statio_tables, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_statio_tables, p_res, &first_iter);
                     break;
                 case 's':               /* open database object sizes screen */
-                    switch_context(w_cmd, screens[console_index], pg_tables_size, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_tables_size, p_res, &first_iter);
                     break;
                 case 'a':               /* show pg_stat_activity screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_activity_long, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_activity_long, p_res, &first_iter);
                     break;
                 case 'f':               /* open pg_stat_functions screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_functions, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_functions, p_res, &first_iter);
                     break;
                 case 'x':               /* open pg_stat_statements_timing screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_timing, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_timing, p_res, &first_iter);
                     break;
                 case 'X':               /* open pg_stat_statements_general screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, &first_iter);
                     break;
                 case 'c':               /* open pg_stat_statements_io screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_io, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_io, p_res, &first_iter);
                     break;
                 case 'v':               /* open pg_stat_statements_temp screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_temp, p_res, first_iter);
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_temp, p_res, &first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
-                    change_min_age(w_cmd, screens[console_index], p_res, first_iter);
+                    change_min_age(w_cmd, screens[console_index], p_res, &first_iter);
                     break;
                 case ',':               /* show system view on/off toggle */
-                    system_view_toggle(w_cmd, screens[console_index], first_iter);
+                    system_view_toggle(w_cmd, screens[console_index], &first_iter);
                     PQclear(p_res);
                     break;
                 case 'Q':               /* reset pg stat counters */
-                    pg_stat_reset(w_cmd, conns[console_index], first_iter);
+                    pg_stat_reset(w_cmd, conns[console_index], &first_iter);
                     PQclear(p_res);
                     break;
                 case 'G':               /* get query text using pg_stat_statements.queryid */
@@ -4665,13 +4714,13 @@ int main(int argc, char *argv[])
                     interval = change_refresh(w_cmd, interval);
                     break;
                 case 'Z':               /* change screens colors */
-                    change_colors(ws_color, wc_color, wa_color, wl_color);
+                    change_colors(&ws_color, &wc_color, &wa_color, &wl_color);
                     break;
                 case 32:                /* pause program execution with space */
                     do_noop(w_cmd, interval);
                     break;
                 case 265: case 'h':     /* print help with F1 */
-                    print_help_screen(first_iter);
+                    print_help_screen(&first_iter);
                     break;
                 case 'q':               /* exit program */
                     exit_prog(screens, conns);
@@ -4681,10 +4730,10 @@ int main(int argc, char *argv[])
                     flushinp();
                     break;
             }
-            wattroff(w_cmd, COLOR_PAIR(*wc_color));
+            wattroff(w_cmd, COLOR_PAIR(wc_color));
             curs_set(0);
         } else {
-            reconnect_if_failed(w_cmd, conns[console_index], screens[console_index], first_iter);
+            reconnect_if_failed(w_cmd, conns[console_index], screens[console_index], &first_iter);
 
             /* 
              * Sysstat screen.
@@ -4710,7 +4759,7 @@ int main(int argc, char *argv[])
                 PQclear(c_res);
                 c_res = NULL;
                 p_res = NULL;
-                *first_iter = true;
+                first_iter = true;
                 wclear(w_dba);
                 wprintw(w_dba, "%s", errmsg);
                 wrefresh(w_dba);
@@ -4724,11 +4773,11 @@ int main(int argc, char *argv[])
              * on startup or when context switched current data snapshot copied 
              * to previous data snapshot and restart cycle
              */
-            if (*first_iter) {
+            if (first_iter) {
                 p_res = PQcopyResult(c_res, PG_COPYRES_ATTRS | PG_COPYRES_TUPLES);
                 PQclear(c_res);
                 usleep(10000);
-                *first_iter = false;
+                first_iter = false;
                 continue;
             }
 
@@ -4786,25 +4835,25 @@ int main(int argc, char *argv[])
                     print_log(w_sub, w_cmd, screens[console_index], conns[console_index]);
                     break;
                 case SUBSCREEN_IOSTAT:
-                    print_iostat(w_sub, w_cmd, c_ios, p_ios, bdev, repaint);
-                    if (*repaint) {
+                    print_iostat(w_sub, w_cmd, c_ios, p_ios, bdev, &repaint);
+                    if (repaint) {
                         free_iostats(c_ios, p_ios, bdev);
                         bdev = count_block_devices();
                         init_iostats(c_ios, p_ios, bdev);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_IOSTAT);
-                        *repaint = false;
+                        repaint = false;
                     }
                     break;
                 case SUBSCREEN_NICSTAT:
-                    print_nicstat(w_sub, w_cmd, c_nicdata, p_nicdata, idev, repaint);
-                    if (*repaint) {
+                    print_nicstat(w_sub, w_cmd, c_nicdata, p_nicdata, idev, &repaint);
+                    if (repaint) {
                         free_nicdata(c_nicdata, p_nicdata, idev);
                         idev = count_nic_devices();
                         init_nicdata(c_nicdata, p_nicdata, idev);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NONE);
                         subscreen_process(w_cmd, &w_sub, screens[console_index], conns[console_index], SUBSCREEN_NICSTAT);
-                        *repaint = false;
+                        repaint = false;
                     }
                     break;
                 case SUBSCREEN_NONE: default:
@@ -4827,8 +4876,8 @@ int main(int argc, char *argv[])
         }
     }
     /* colors off */
-    wattroff(w_sub, COLOR_PAIR(*wl_color));
-    wattroff(w_sys, COLOR_PAIR(*ws_color));
-    wattroff(w_dba, COLOR_PAIR(*wa_color));
-    wattroff(w_cmd, COLOR_PAIR(*wc_color));
+    wattroff(w_sub, COLOR_PAIR(wl_color));
+    wattroff(w_sys, COLOR_PAIR(ws_color));
+    wattroff(w_dba, COLOR_PAIR(wa_color));
+    wattroff(w_cmd, COLOR_PAIR(wc_color));
 }

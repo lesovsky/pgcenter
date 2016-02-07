@@ -1,6 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
-  * print_mem: don't exit if /proc/meminfo read failed.
+  * sanitize malloc() or replace it with char.
+  * print_*stat*: don't exit if stats read failed.
   * print_mem: fix free swap.
   * don't show iostat for devices without iops.
   * replace with_esc/errmsg pointers to variables.

@@ -717,7 +717,8 @@ struct colAttrs {
 void sig_handler(int signo);
 void init_signal_handlers(void);
 void init_screens(struct screen_s *screens[]);
-void init_args_struct(struct args_s * args);
+struct args_s * init_args_mem(void);
+void init_args_struct(struct args_s *args);
 void arg_parse(int argc, char *argv[], struct args_s *args);
 void create_initial_conn(struct args_s * args, struct screen_s * screens[]);
 int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const int pos);
@@ -811,6 +812,7 @@ double max(double d1, double d2);
 int key_is_pressed(void);
 void strrpl(char * o_string, char * s_string, char * r_string);
 int check_string(char * string);
+struct colAttrs * init_colattrs(int n_cols);
 void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n_rows, int n_cols);
 void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * str, int len, bool echoing);
 void clear_screen_connopts(struct screen_s * screens[], int i);
@@ -824,6 +826,7 @@ int count_block_devices(void);
 int count_nic_devices(void);
 void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], int bdev);
 void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int idev);
+ITEM ** init_menuitems(int n_choices);
 
 /* color functions */
 void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
@@ -834,4 +837,5 @@ void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_colo
 /* help functions */
 void print_help_screen(bool * first_iter);
 void print_usage(void);
+
 #endif /* PGCENTER_H */
