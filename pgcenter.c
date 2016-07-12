@@ -10,6 +10,7 @@
 #include <getopt.h>
 #include <ifaddrs.h>
 #include <limits.h>
+#include <linux/types.h>
 #include <linux/ethtool.h>
 #include <linux/sockios.h>
 #include <menu.h>
