@@ -30,9 +30,15 @@ ifndef NCONFIG
 		NCONFIG = ncursesw6-config
 	endif
 endif
-NLIBDIR = $(shell $(NCONFIG) --libdir)
-NINCLUDEDIR = $(shell $(NCONFIG) --includedir)
-NLIBS = $(shell $(NCONFIG) --libs) -lmenu
+
+ifdef NCONFIG
+    NLIBDIR = $(shell $(NCONFIG) --libdir)
+    NINCLUDEDIR = $(shell $(NCONFIG) --includedir)
+    NLIBS = $(shell $(NCONFIG) --libs) -lmenu
+else
+	NLIBS = -lncurses -lmenu
+endif
+
 ifneq ($(NLIBDIR),)
 	LIBDIR += -L$(NLIBDIR)
 endif
