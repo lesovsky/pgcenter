@@ -156,7 +156,7 @@ void strrpl(char * o_string, char * s_string, char * r_string)
     buffer[ch-o_string] = 0;
     sprintf(buffer+(ch - o_string), "%s%s", r_string, ch + strlen(s_string));
     o_string[0] = 0;
-    strcpy(o_string, buffer);
+    strncpy(o_string, buffer, 1024);
     strrpl(o_string, s_string, r_string);
 
     return;
@@ -182,12 +182,12 @@ int check_string(char * string)
     int i;
     for (i = 0; string[i] != '\0'; i++) {
         if (!isalnum(string[i])) {
-            /* non-alfanumeric char found */
+            /* found non-alfanumeric char */
             return -1;
         }
     }
 
-    /* string ok */
+    /* string is ok */
     return 0;
 }
 
@@ -227,17 +227,17 @@ void init_screens(struct screen_s *screens[])
         memset(screens[i], 0, SCREEN_SIZE);
         screens[i]->screen = i;
         screens[i]->conn_used = false;
-        strcpy(screens[i]->host, "");
-        strcpy(screens[i]->port, "");
-        strcpy(screens[i]->user, "");
-        strcpy(screens[i]->dbname, "");
-        strcpy(screens[i]->password, "");
-        strcpy(screens[i]->conninfo, "");
+        screens[i]->host[0] = '\0';
+        screens[i]->port[0] = '\0';
+        screens[i]->user[0] = '\0';
+        screens[i]->dbname[0] = '\0';
+        screens[i]->password[0] = '\0';
+        screens[i]->conninfo[0] = '\0';
         screens[i]->subscreen_enabled = false;
         screens[i]->subscreen = SUBSCREEN_NONE;
-        strcpy(screens[i]->log_path, "");
+        screens[i]->log_path[0] = '\0';
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
-        strcpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
+        strncpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT, BUFFERSIZE_S);
         screens[i]->signal_options = 0;
         screens[i]->pg_stat_sys = false;
 
@@ -333,11 +333,11 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
 void init_args_struct(struct args_s *args)
 {
     args->count = 0;
-    strcpy(args->connfile, "");
-    strcpy(args->host, "");
-    strcpy(args->port, "");
-    strcpy(args->user, "");
-    strcpy(args->dbname, "");
+    args->connfile[0] = '\0';
+    args->host[0] = '\0';
+    args->port[0] = '\0';
+    args->user[0] = '\0';
+    args->dbname[0] = '\0';
     args->need_passwd = false;                      /* by default password not need */
 }
 
@@ -392,24 +392,24 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 short_options, long_options, &option_index)) != -1 ) {
         switch (param) {
             case 'h':
-                strcpy(args->host, optarg);
+                strncpy(args->host, optarg, BUFFERSIZE_M);
                 args->count++;
                 break;
             case 'f':
-                strcpy(args->connfile, optarg);
+                strncpy(args->connfile, optarg, BUFFERSIZE_M);
                 args->count++;
                 break;
             case 'p':
-                strcpy(args->port, optarg);
+                strncpy(args->port, optarg, BUFFERSIZE_M);
                 args->count++;
                 break;
             case 'U':
-                strcpy(args->user, optarg);
+                strncpy(args->user, optarg, BUFFERSIZE_M);
                 args->count++;
                 break;
             case 'd':
                 args->count++;
-                strcpy(args->dbname, optarg);
+                strncpy(args->dbname, optarg, BUFFERSIZE_M);
                 break;
             case 'w':
                 args->need_passwd = false;
@@ -429,19 +429,19 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
                 && strlen(args->dbname) == 0 ) {
-            strcpy(args->dbname, argv[optind]);
-            strcpy(args->user, argv[optind + 1]);
+            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
+            strncpy(args->user, argv[optind + 1], BUFFERSIZE_M);
             optind++;
             args->count++;
         }
         else if ( (argc - optind >= 1) && strlen(args->user) != 0 && strlen(args->dbname) == 0 ) {
-            strcpy(args->dbname, argv[optind]);
+            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) != 0 ) {
-            strcpy(args->user, argv[optind]);
+            strncpy(args->user, argv[optind], BUFFERSIZE_M);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) == 0 ) {
-            strcpy(args->dbname, argv[optind]);
+            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
             args->count++;
         } else
             fprintf(stderr,
@@ -467,31 +467,31 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
     struct passwd *pw = getpwuid(getuid());
 
     if ( strlen(args->host) != 0 )
-        strcpy(screens[0]->host, args->host);
+        strncpy(screens[0]->host, args->host, BUFFERSIZE_M);
 
     if ( strlen(args->port) != 0 )
-        strcpy(screens[0]->port, args->port);
+        strncpy(screens[0]->port, args->port, BUFFERSIZE_M);
 
     if ( strlen(args->user) == 0 )
-        strcpy(screens[0]->user, pw->pw_name);
+        strncpy(screens[0]->user, pw->pw_name, BUFFERSIZE_M);
     else
-        strcpy(screens[0]->user, args->user);
+        strncpy(screens[0]->user, args->user, BUFFERSIZE_M);
 
     if ( strlen(args->dbname) == 0 && strlen(args->user) == 0)
-        strcpy(screens[0]->dbname, pw->pw_name);
+        strncpy(screens[0]->dbname, pw->pw_name, BUFFERSIZE_M);
     else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0)
-        strcpy(screens[0]->dbname, args->user);
+        strncpy(screens[0]->dbname, args->user, BUFFERSIZE_M);
     else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
-        strcpy(screens[0]->dbname, args->dbname);
-        strcpy(screens[0]->user, pw->pw_name);
+        strncpy(screens[0]->dbname, args->dbname, BUFFERSIZE_M);
+        strncpy(screens[0]->user, pw->pw_name, BUFFERSIZE_M);
     } else
-        strcpy(screens[0]->dbname, args->dbname);
+        strncpy(screens[0]->dbname, args->dbname, BUFFERSIZE_M);
 
     if ( args->need_passwd )
-        strcpy(screens[0]->password, password_prompt("Password: ", 100, false));
+        strncpy(screens[0]->password, password_prompt("Password: ", 100, false), BUFFERSIZE_M);
 
     if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
-        strcpy(screens[0]->dbname, screens[0]->user);
+        strncpy(screens[0]->dbname, screens[0]->user, BUFFERSIZE_M);
 
     screens[0]->conn_used = true;
 }
@@ -521,11 +521,9 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
     struct passwd *pw = getpwuid(getuid());
 
     if (strlen(args->connfile) == 0) {
-        strcpy(pgcenterrc_path, pw->pw_dir);
-        strcat(pgcenterrc_path, "/");
-        strcat(pgcenterrc_path, PGCENTERRC_FILE);
+	snprintf(pgcenterrc_path, PATH_MAX, "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
     } else {
-        strcpy(pgcenterrc_path, args->connfile);
+        strncpy(pgcenterrc_path, args->connfile, PATH_MAX);
     }
 
     if (access(pgcenterrc_path, F_OK) == -1 && strlen(args->connfile) != 0) {
@@ -545,14 +543,14 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
         while ((fgets(strbuf, 4096, fp) != 0) && (i < MAX_SCREEN)) {
             sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
-                        screens[i]->host, screens[i]->port,
-                        screens[i]->dbname,   screens[i]->user,
+                        screens[i]->host,	screens[i]->port,
+                        screens[i]->dbname,	screens[i]->user,
                         screens[i]->password);
                         screens[i]->screen = i;
                         screens[i]->conn_used = true;
             /* if "null" read from file, than we should connecting through unix socket */
             if (!strcmp(screens[i]->host, "(null)")) {
-                strcpy(screens[i]->host, "\0");
+                screens[i]->host[0] = '\0';
             }
             i++;
         }
@@ -606,25 +604,26 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
 void prepare_conninfo(struct screen_s * screens[])
 {
     int i;
-    for ( i = 0; i < MAX_SCREEN; i++ )
+    for ( i = 0; i < MAX_SCREEN; i++ ) {
         if (screens[i]->conn_used) {
             if (strlen(screens[i]->host) != 0) {
-                strcat(screens[i]->conninfo, "host=");
-                strcat(screens[i]->conninfo, screens[i]->host);
+		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+			 "host=%s", screens[i]->host);
             }
             if (strlen(screens[i]->port) != 0) {
-                strcat(screens[i]->conninfo, " port=");
-                strcat(screens[i]->conninfo, screens[i]->port);
+		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+			 " port=%s", screens[i]->port);
             }
-            strcat(screens[i]->conninfo, " user=");
-            strcat(screens[i]->conninfo, screens[i]->user);
-            strcat(screens[i]->conninfo, " dbname=");
-            strcat(screens[i]->conninfo, screens[i]->dbname);
+	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+		     " user=%s", screens[i]->user);
+	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+		     " dbname=%s", screens[i]->dbname);
             if ((strlen(screens[i]->password)) != 0) {
-                strcat(screens[i]->conninfo, " password=");
-                strcat(screens[i]->conninfo, screens[i]->password);
+	    	snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+			 " password=%s", screens[i]->password);
             }
         }
+    }
 }
 
 /*
@@ -648,9 +647,10 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 printf("%s:%s %s@%s require ", 
                                 screens[i]->host, screens[i]->port,
                                 screens[i]->user, screens[i]->dbname);
-                strcpy(screens[i]->password, password_prompt("password: ", 100, false));
-                strcat(screens[i]->conninfo, " password=");
-                strcat(screens[i]->conninfo, screens[i]->password);
+                strncpy(screens[i]->password, password_prompt("password: ", 100, false), BUFFERSIZE_M);
+		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
+			 BUFFERSIZE - strlen(screens[i]->conninfo),
+			 " password=%s", screens[i]->password);
                 conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                 fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.\n",
@@ -717,46 +717,35 @@ void exit_prog(struct screen_s * screens[], PGconn * conns[])
 void prepare_query(struct screen_s * screen, char * query)
 {
     char tmp[2];
-    char view[] = DEFAULT_VIEW_TYPE;
     switch (screen->current_context) {
         case pg_stat_database: default:
             if (atoi(screen->pg_version_num) < 90200)
-                strcpy(query, PG_STAT_DATABASE_91_QUERY);
+                snprintf(query, 8192, "%s", PG_STAT_DATABASE_91_QUERY);
             else
-                strcpy(query, PG_STAT_DATABASE_QUERY);
+                snprintf(query, 8192, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
-            strcpy(query, PG_STAT_REPLICATION_QUERY);
+            snprintf(query, 8192, "%s", PG_STAT_REPLICATION_QUERY);
             break;
         case pg_stat_tables:
-            if (screen->pg_stat_sys)
-                strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STAT_TABLES_QUERY_P1);
-            strcat(query, view);
-            strcat(query, PG_STAT_TABLES_QUERY_P2);
+            snprintf(query, 8192, "%s%s%s", PG_STAT_TABLES_QUERY_P1,
+			screen->pg_stat_sys ? "all" : "user", PG_STAT_TABLES_QUERY_P2);
             break;
         case pg_stat_indexes:
-            if (screen->pg_stat_sys)
-                strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STAT_INDEXES_QUERY_P1);
-            strcat(query, view);
-            strcat(query, PG_STAT_INDEXES_QUERY_P2);
-            strcat(query, view);
-            strcat(query, PG_STAT_INDEXES_QUERY_P3);
+            snprintf(query, 8192, "%s%s%s%s%s", 
+			PG_STAT_INDEXES_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
+                        PG_STAT_INDEXES_QUERY_P2, screen->pg_stat_sys ? "all" : "user",
+                        PG_STAT_INDEXES_QUERY_P3);
             break;
         case pg_statio_tables:
-            if (screen->pg_stat_sys)
-                strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_STATIO_TABLES_QUERY_P1);
-            strcat(query, view);
-            strcat(query, PG_STATIO_TABLES_QUERY_P2);
+            snprintf(query, 8192, "%s%s%s",
+                        PG_STATIO_TABLES_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
+                        PG_STATIO_TABLES_QUERY_P2);
             break;
         case pg_tables_size:
-            if (screen->pg_stat_sys)
-                strcpy(view, FULL_VIEW_TYPE);
-            strcpy(query, PG_TABLES_SIZE_QUERY_P1);
-            strcat(query, view);
-            strcat(query, PG_TABLES_SIZE_QUERY_P2);
+            snprintf(query, 8192, "%s%s%s",
+                        PG_TABLES_SIZE_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
+                        PG_TABLES_SIZE_QUERY_P2);
             break;
         case pg_stat_activity_long:
             /* 
@@ -764,65 +753,47 @@ void prepare_query(struct screen_s * screen, char * query)
              * thus user can change duration which is used in WHERE clause.
              */
             if (atoi(screen->pg_version_num) < 90200) {
-                strcpy(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P1);
-                strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P2);
-                strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_91_QUERY_P3);
+                snprintf(query, 8192, "%s%s%s%s%s",
+                        PG_STAT_ACTIVITY_LONG_91_QUERY_P1, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_91_QUERY_P2, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_91_QUERY_P3);
             } else {
-                strcpy(query, PG_STAT_ACTIVITY_LONG_QUERY_P1);
-                strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P2);
-                strcat(query, screen->pg_stat_activity_min_age);
-                strcat(query, PG_STAT_ACTIVITY_LONG_QUERY_P3);
+                snprintf(query, 8192, "%s%s%s%s%s",
+                        PG_STAT_ACTIVITY_LONG_QUERY_P1, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_QUERY_P2, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_QUERY_P3);
             }
             break;
         case pg_stat_functions:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_FUNCTIONS_NUM].order_key + 1);
-            strcpy(query, PG_STAT_FUNCTIONS_QUERY_P1);
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_FUNCTIONS_QUERY_P2);
+            snprintf(query, 8192, "%s%s%s", PG_STAT_FUNCTIONS_QUERY_P1, tmp, PG_STAT_FUNCTIONS_QUERY_P2);
             break;
         case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
-            if (atoi(screen->pg_version_num) < 90200) {
-                strcpy(query, PG_STAT_STATEMENTS_TIMING_91_QUERY_P1);
-            } else {
-                strcpy(query, PG_STAT_STATEMENTS_TIMING_QUERY_P1);
-            }
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+	    atoi(screen->pg_version_num) < 90200
+                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2)
+                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
             break;
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
-            if (atoi(screen->pg_version_num) < 90200) {
-                strcpy(query, PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1);
-            } else {
-                strcpy(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
-            }
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
+            atoi(screen->pg_version_num) < 90200
+                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2)
+                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;
         case pg_stat_statements_io:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key + 1);
-            if (atoi(screen->pg_version_num) < 90200) {
-                strcpy(query, PG_STAT_STATEMENTS_IO_91_QUERY_P1);
-            } else {
-                strcpy(query, PG_STAT_STATEMENTS_IO_QUERY_P1);
-            }
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_IO_QUERY_P2);
+            atoi(screen->pg_version_num) < 90200
+                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2)
+                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_IO_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2);
             break;
         case pg_stat_statements_temp:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key + 1);
-            strcpy(query, PG_STAT_STATEMENTS_TEMP_QUERY_P1);
-            strcat(query, tmp);             /* insert number of field into ORDER BY .. */
-            strcat(query, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
+            snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1, tmp, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
             break;
     }
 }
@@ -848,19 +819,13 @@ PGresult * do_query(PGconn * conn, char * query, char errmsg[])
 
     res = PQexec(conn, query);
     switch (PQresultStatus(res)) {
-        case PG_FATAL_ERR:
-            strcpy(errmsg, "FATAL: ");
-            strncat(errmsg, PQerrorMessage(conn), ERRSIZE - 7);
-            PQclear(res);
-            return NULL;
-            break;
         case PG_CMD_OK: case PG_TUP_OK:
             return res;
             break;
         default:
-            strcpy(errmsg, PQresultErrorField(res, PG_DIAG_SEVERITY));
-            strcat(errmsg, ": ");
-            strcat(errmsg, PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+	    snprintf(errmsg, ERRSIZE, "%s: %s",
+			PQresultErrorField(res, PG_DIAG_SEVERITY),
+			PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
             PQclear(res);
             return NULL;
             break;
@@ -962,31 +927,25 @@ void print_loadavg(WINDOW * window)
 void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
 {
     static char state[8];
-    char buffer[128];
+    char buffer[48];
     switch (PQstatus(conn)) {
         case CONNECTION_OK:
-            strcpy(state, "ok");
+            strncpy(state, "ok", 8);
             break;
         case CONNECTION_BAD:
-            strcpy(state, "failed");
+            strncpy(state, "failed", 8);
             break;
         default:
-            strcpy(state, "unknown");
+            strncpy(state, "unknown", 8);
             break;
     }
 
-    sprintf(buffer, "conn%i [%s]: %s:%s %s@%s",
+    snprintf(buffer, 48, "conn%i [%s]: %s:%s %s@%s",
                 console_no, state,
                 PQhost(conn), PQport(conn),
                 PQuser(conn), PQdb(conn));
 
-    if (strlen(buffer) > 48) {
-        buffer[48] = '~';
-        buffer[49] = '\0';
-    }
-
     mvwprintw(window, 0, COLS / 2, "%s", buffer);
-
     wrefresh(window);
 }
 
@@ -1084,7 +1043,7 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = 0;
         qps = 0;
-        strcpy(maxtime, "--:--:--");
+        strncpy(maxtime, "--:--:--", 16);
     } 
 
     divisor = interval / 1000000;
@@ -1099,10 +1058,10 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     }
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_SYS_QUERY, errmsg)) != NULL) {
-        strcpy(maxtime, PQgetvalue(res, 0, 0));
+        snprintf(maxtime, 16, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        strcpy(maxtime, "--:--:--");
+        snprintf(maxtime, 16, "%s", "--:--:--");
     }
 
     mvwprintw(window, 3, COLS / 2,
@@ -1595,7 +1554,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
     char line[128];
 
     int major, minor;
-    char devname[64];
+    char devname[BUFFERSIZE_M];
     unsigned long r_completed, r_merged, r_sectors, r_spent,
                   w_completed, w_merged, w_sectors, w_spent,
                   io_in_progress, t_spent, t_weighted;
@@ -1624,7 +1583,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
                     &io_in_progress, &t_spent, &t_weighted);
         c_ios[i]->major = major;
         c_ios[i]->minor = minor;
-        strcpy(c_ios[i]->devname, devname);
+        strncpy(c_ios[i]->devname, devname, BUFFERSIZE_M);
         c_ios[i]->r_completed = r_completed;
         c_ios[i]->r_merged = r_merged;
         c_ios[i]->r_sectors = r_sectors;
@@ -1710,7 +1669,7 @@ void get_speed_duplex(struct nicdata_s * nicdata)
 
     sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
-        perror("socket");               /* todo: здесь нужно сделать завершение функции вывода nicstat вместо завершения проги */
+        perror("socket");               /* todo: should exit from nicstat function instead of program */
         exit(1);
     }
 
@@ -1789,7 +1748,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
                 &lu[0], &lu[1], &lu[2], &lu[3], &lu[4], &lu[5], &lu[6], &lu[7],
              /* wbps    wpps    werrs    wdrop    wfifo    wcoll    wcarrier wcomp */
                 &lu[8], &lu[9], &lu[10], &lu[11], &lu[12], &lu[13], &lu[14], &lu[15]);
-        strcpy(c_nicd[i]->ifname, ifname);
+        strncpy(c_nicd[i]->ifname, ifname, IF_NAMESIZE + 1);
         c_nicd[i]->rbytes = lu[0];
         c_nicd[i]->rpackets = lu[1];
         c_nicd[i]->wbytes = lu[8];
@@ -1906,7 +1865,7 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
 
     for (col = 0, i = 0; col < n_cols; col++, i++) {
         /* determine length of column names */
-        strcpy(columns[i].name, PQfname(res, col));
+        snprintf(columns[i].name, 40, "%s", PQfname(res, col));
         int colname_len = strlen(PQfname(res, col));
         int width = colname_len;
         if (arr == NULL) {
@@ -1941,10 +1900,10 @@ void get_pg_uptime(PGconn * conn, char * uptime)
     PGresult * res;
 
     if ((res = do_query(conn, PG_UPTIME_QUERY, errmsg)) != NULL) {
-        strcpy(uptime, PQgetvalue(res, 0, 0));
+        snprintf(uptime, 32, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        strcpy(uptime, "--:--:--");
+        strncpy(uptime, "--:--:--", 32);
     }
 }
 
@@ -1998,10 +1957,10 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     }
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg)) != NULL) {
-        strcpy(av_max_time, PQgetvalue(res, 0, 0));
+        snprintf(av_max_time, 16, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        strcpy(av_max_time, "--:--:--");
+        snprintf(av_max_time, 16, "%s", "--:--:--");
     }
 
     mvwprintw(window, 2, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
@@ -2220,12 +2179,12 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
-                strcpy(res_arr[i][j], c_arr[i][j]);     /* copy unsortable values as is */
+                strncpy(res_arr[i][j], c_arr[i][j], BUFSIZ);     /* copy unsortable values as is */
             else {
                 int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 char buf[n+1];
                 snprintf(buf, n+1, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
-                strcpy(res_arr[i][j], buf);
+                strncpy(res_arr[i][j], buf, BUFSIZ);
             }
     }
 }
@@ -2286,17 +2245,17 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
             if (desc)
                 if (atoll(res_arr[j][order_key]) > atoll(res_arr[i][order_key])) {        // desc: j > i
                     for (x = 0; x < n_cols; x++) {
-                        strcpy(temp, res_arr[i][x]);
-                        strcpy(res_arr[i][x], res_arr[j][x]);
-                        strcpy(res_arr[j][x], temp);
+                        strncpy(temp, res_arr[i][x], BUFSIZ);
+                        strncpy(res_arr[i][x], res_arr[j][x], BUFSIZ);
+                        strncpy(res_arr[j][x], temp, BUFSIZ);
                     }
                 }
             if (!desc)
                 if (atoll(res_arr[i][order_key]) > atoll(res_arr[j][order_key])) {        // asc: i > j
                     for (x = 0; x < n_cols; x++) {
-                        strcpy(temp, res_arr[i][x]);
-                        strcpy(res_arr[i][x], res_arr[j][x]);
-                        strcpy(res_arr[j][x], temp);
+                        strncpy(temp, res_arr[i][x], BUFSIZ);
+                        strncpy(res_arr[i][x], res_arr[j][x], BUFSIZ);
+                        strncpy(res_arr[j][x], temp, BUFSIZ);
                     }
                 }
         }
@@ -2552,7 +2511,7 @@ void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * s
         ch = wgetch(window);
         switch (ch) {
             case ERR:
-                strcpy(str, "\0");
+                str[0] = '\0';
                 flushinp();
                 done = true;
                 break;
@@ -2561,7 +2520,7 @@ void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * s
                 wprintw(window, "Do nothing. Operation canceled. ");
                 nodelay(window, TRUE);
                 *with_esc = true;
-                strcpy(str, "\0");
+                str[0] = '\0';
                 flushinp();
                 done = true;
                 break;
@@ -2624,8 +2583,7 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
         if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
             wprintw(window, "Nothing to do. Failed read or invalid value.");
         } else {
-            strncpy(screen->pg_stat_activity_min_age, min_age, sizeof(screen->pg_stat_activity_min_age) - 1);
-            screen->pg_stat_activity_min_age[sizeof(screen->pg_stat_activity_min_age) - 1] = '\0';
+	    snprintf(screen->pg_stat_activity_min_age, BUFFERSIZE_S, "%s", min_age);
         }
     } else if (strlen(min_age) == 0 && with_esc == false ) {
         wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
@@ -2646,12 +2604,12 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
  */
 void clear_screen_connopts(struct screen_s * screens[], int i)
 {
-    strcpy(screens[i]->host, "");
-    strcpy(screens[i]->port, "");
-    strcpy(screens[i]->user, "");
-    strcpy(screens[i]->dbname, "");
-    strcpy(screens[i]->password, "");
-    strcpy(screens[i]->conninfo, "");
+    screens[i]->host[0] = '\0';
+    screens[i]->port[0] = '\0';
+    screens[i]->user[0] = '\0';
+    screens[i]->dbname[0] = '\0';
+    screens[i]->password[0] = '\0';
+    screens[i]->conninfo[0] = '\0';
     screens[i]->conn_used = false;
 }
 
@@ -2671,18 +2629,18 @@ void clear_screen_connopts(struct screen_s * screens[], int i)
 void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
 {
     while (screens[i + 1]->conn_used != false) {
-        strcpy(screens[i]->host,        screens[i + 1]->host);
-        strcpy(screens[i]->port,        screens[i + 1]->port);
-        strcpy(screens[i]->user,        screens[i + 1]->user);
-        strcpy(screens[i]->dbname,      screens[i + 1]->dbname);
-        strcpy(screens[i]->password,    screens[i + 1]->password);
-        strcpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num);
-        strcpy(screens[i]->pg_version,  screens[i + 1]->pg_version);
+        strncpy(screens[i]->host,        screens[i + 1]->host, BUFFERSIZE_M);
+        strncpy(screens[i]->port,        screens[i + 1]->port, BUFFERSIZE_M);
+        strncpy(screens[i]->user,        screens[i + 1]->user, BUFFERSIZE_M);
+        strncpy(screens[i]->dbname,      screens[i + 1]->dbname, BUFFERSIZE_M);
+        strncpy(screens[i]->password,    screens[i + 1]->password, BUFFERSIZE_M);
+        strncpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num, 10);
+        strncpy(screens[i]->pg_version,  screens[i + 1]->pg_version, 10);
         screens[i]->subscreen =        screens[i + 1]->subscreen;
-        strcpy(screens[i]->log_path,    screens[i + 1]->log_path);
+        strncpy(screens[i]->log_path,    screens[i + 1]->log_path, PATH_MAX);
         screens[i]->log_fd =            screens[i + 1]->log_fd;
         screens[i]->current_context =   screens[i + 1]->current_context;
-        strcpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age);
+        strncpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age, BUFFERSIZE_S);
         screens[i]->signal_options =    screens[i + 1]->signal_options;
         screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
 
@@ -2736,14 +2694,9 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 }
                 /* setup screen conninfo settings */
                 screens[i]->conn_used = true;
-                strcat(screens[i]->conninfo, "host=");
-                strcat(screens[i]->conninfo, screens[i]->host);
-                strcat(screens[i]->conninfo, " port=");
-                strcat(screens[i]->conninfo, screens[i]->port);
-                strcat(screens[i]->conninfo, " user=");
-                strcat(screens[i]->conninfo, screens[i]->user);
-                strcat(screens[i]->conninfo, " dbname=");
-                strcat(screens[i]->conninfo, screens[i]->dbname);
+		snprintf(screens[i]->conninfo, BUFFERSIZE,
+			 "host=%s port=%s user=%s dbname=%s",
+			 screens[i]->host, screens[i]->port,  screens[i]->user, screens[i]->dbname);
 
                 /* establish new connection */
                 conns[i] = PQconnectdb(screens[i]->conninfo);
@@ -2755,9 +2708,9 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     /* read password and add to conn options */
                     cmd_readline(window, msg2, 19, &with_esc2, params, 128, false);
                     if (strlen(params) != 0 && with_esc2 == false) {
-                        strcpy(screens[i]->password, params);
-                        strcat(screens[i]->conninfo, " password=");
-                        strcat(screens[i]->conninfo, screens[i]->password);
+                        strncpy(screens[i]->password, params, BUFFERSIZE_M);
+			snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
+				 BUFFERSIZE - strlen(screens[i]->conninfo), " password=%s", screens[i]->password);
                         /* try establish connection and finish work */
                         conns[i] = PQconnectdb(screens[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
@@ -2874,11 +2827,9 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * con
      * or use default ~/.pgcenterrc
      */
     if (strlen(args->connfile) != 0)
-        strcpy(pgcenterrc_path, args->connfile);
+        snprintf(pgcenterrc_path, BUFFERSIZE, "%s", args->connfile);
     else {
-        strcpy(pgcenterrc_path, pw->pw_dir);
-        strcat(pgcenterrc_path, "/");
-        strcat(pgcenterrc_path, PGCENTERRC_FILE);
+        snprintf(pgcenterrc_path, BUFFERSIZE, "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
     }
 
     if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
@@ -2922,9 +2873,9 @@ void show_config(WINDOW * window, PGconn * conn)
     struct colAttrs * columns;
 
     if (getenv("PAGER") != NULL)
-        strcpy(pager, getenv("PAGER"));
+        snprintf(pager, 32, "%s", getenv("PAGER"));
     else
-        strcpy(pager, DEFAULT_PAGER);
+        snprintf(pager, 32, "%s", DEFAULT_PAGER);
     if ((fpout = popen(pager, "w")) == NULL) {
         wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
         return;
@@ -3066,16 +3017,14 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
     char errmsg[ERRSIZE],
          query[BUFSIZ];
 
-    strcpy(query, PG_SETTINGS_SINGLE_OPT_P1);
-    strcat(query, config_option_name);
-    strcat(query, PG_SETTINGS_SINGLE_OPT_P2);
+    snprintf(query, BUFSIZ, "%s%s%s", PG_SETTINGS_SINGLE_OPT_P1, config_option_name, PG_SETTINGS_SINGLE_OPT_P2);
 
     res = do_query(conn, query, errmsg);
     
     if (PQntuples(res) != 0 && !strcmp(PQgetvalue(res, 0, 0), config_option_name))
-        strcpy(config_option_value, PQgetvalue(res, 0, 1));
+        snprintf(config_option_value, 128, "%s", PQgetvalue(res, 0, 1));
     else
-        strcpy(config_option_value, "");
+        config_option_value[0] = '\0';
     
     PQclear(res);
 }
@@ -3094,9 +3043,9 @@ void get_pg_version(PGconn * conn, struct screen_s * screen)
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
     get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
     if (strlen(screen->pg_version_num) == 0)
-        strcpy(screen->pg_version_num, "-.-.-");
+        strncpy(screen->pg_version_num, "-.-.-", 10);
     if (strlen(screen->pg_version) == 0)
-        strcpy(screen->pg_version, "-.-.-");
+        strncpy(screen->pg_version, "-.-.-", 10);
 }
 
 /*
@@ -3124,8 +3073,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
             if (!strcmp(config_file_guc, GUC_DATA_DIRECTORY)) {
-                strcat(config_path, "/");
-                strcat(config_path, PG_RECOVERY_FILE);
+		snprintf(config_path + strlen(config_path), 128 - strlen(config_path), "/%s", PG_RECOVERY_FILE);
             }
             /* escape from ncurses mode */
             refresh();
@@ -3135,9 +3083,9 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
                 /* use editor from environment variables, otherwise use default editor */
                 static char editor[128];
                 if (getenv("EDITOR") != NULL)
-                    strcpy(editor, getenv("EDITOR"));
+                    snprintf(editor, 128, "%s", getenv("EDITOR"));
                 else
-                    strcpy(editor, DEFAULT_EDITOR);
+                    snprintf(editor, 128, "%s", DEFAULT_EDITOR);
                 execlp(editor, editor, config_path, NULL);
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
@@ -3290,32 +3238,28 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
     char errmsg[ERRSIZE],
          query[BUFSIZ],
          action[10],
-         msg[64],
+         msg[BUFFERSIZE_M],
          pid[6];
     PGresult * res;
     bool with_esc;
     int msg_offset;
 
     if (do_terminate) {
-        strcpy(action, "Terminate");
-        strcpy(msg, "Terminate single backend, enter pid: ");
+        strncpy(action, "Terminate", 10);
+        strncpy(msg, "Terminate single backend, enter pid: ", BUFFERSIZE_M);
         msg_offset = 37;
     } else {
-        strcpy(action, "Cancel");
-        strcpy(msg, "Cancel single backend, enter pid: ");
+        strncpy(action, "Cancel", 10);
+        strncpy(msg, "Cancel single backend, enter pid: ", BUFFERSIZE_M);
         msg_offset = 34;
     }
 
     cmd_readline(window, msg, msg_offset, &with_esc, pid, 64, true);
     if (atoi(pid) > 0) {
         if (do_terminate) {
-            strcpy(query, PG_TERM_BACKEND_P1);
-            strcat(query, pid);
-            strcat(query, PG_TERM_BACKEND_P2);
+	    snprintf(query, 8192, "%s%s%s", PG_TERM_BACKEND_P1, pid, PG_TERM_BACKEND_P2);
         } else {
-            strcpy(query, PG_CANCEL_BACKEND_P1);
-            strcat(query, pid);
-            strcat(query, PG_CANCEL_BACKEND_P2);
+	    snprintf(query, 8192, "%s%s%s", PG_CANCEL_BACKEND_P1, pid, PG_CANCEL_BACKEND_P2);
         }
 
         res = do_query(conn, query, errmsg);
@@ -3363,7 +3307,6 @@ void get_statemask(WINDOW * window, struct screen_s * screen)
     if (screen->signal_options & GROUP_OTHER)
         wprintw(window, "other ");
 }
-
 
 /*
  ****************************************************** key press function **
@@ -3471,50 +3414,47 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
     int i, signaled = 0;
 
     if (do_terminate)
-        strcpy(action, "terminate");
+        strncpy(action, "terminate", 10);
     else
-        strcpy(action, "cancel");
+        strncpy(action, "cancel", 10);
     
     if (screen->signal_options & GROUP_ACTIVE)
-        strcat(mask, "a");
+        mask[0] = 'a';
     if (screen->signal_options & GROUP_IDLE)
-        strcat(mask, "i");
+        mask[0] = 'i';
     if (screen->signal_options & GROUP_IDLE_IN_XACT)
-        strcat(mask, "x");
+        mask[0] = 'x';
     if (screen->signal_options & GROUP_WAITING)
-        strcat(mask, "w");
+        mask[0] = 'w';
     if (screen->signal_options & GROUP_OTHER)
-        strcat(mask, "o");
+        mask[0] = 'o';
 
     for (i = 0; i < strlen(mask); i++) {
         switch (mask[i]) {
             case 'a':
-                strcpy(state, "state = 'active'");
+                strncpy(state, "state = 'active'", 80);
                 break;
             case 'i':
-                strcpy(state, "state = 'idle'");
+                strncpy(state, "state = 'idle'", 80);
                 break;
             case 'x':
-                strcpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')");
+                strncpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')", 80);
                 break;
             case 'w':
-                strcpy(state, "waiting");
+                strncpy(state, "waiting", 80);
                 break;
             case 'o':
-                strcpy(state, "state IN ('fastpath function call', 'disabled')");
+                strncpy(state, "state IN ('fastpath function call', 'disabled')", 80);
                 break;
             default:
                 break;
         }
-        strcpy(query, PG_SIG_GROUP_BACKEND_P1);
-        strcat(query, action);
-        strcat(query, PG_SIG_GROUP_BACKEND_P2);
-        strcat(query, state);
-        strcat(query, PG_SIG_GROUP_BACKEND_P3);
-        strcat(query, screen->pg_stat_activity_min_age);
-        strcat(query, PG_SIG_GROUP_BACKEND_P4);
-        strcat(query, screen->pg_stat_activity_min_age);
-        strcat(query, PG_SIG_GROUP_BACKEND_P5);
+	snprintf(query, 8192, "%s%s%s%s%s%s%s%s%s",
+		 PG_SIG_GROUP_BACKEND_P1, action,
+		 PG_SIG_GROUP_BACKEND_P2, state,
+		 PG_SIG_GROUP_BACKEND_P3, screen->pg_stat_activity_min_age,
+		 PG_SIG_GROUP_BACKEND_P4, screen->pg_stat_activity_min_age,
+		 PG_SIG_GROUP_BACKEND_P5);
         
         char errmsg[ERRSIZE];
         res = do_query(conn, query, errmsg);
@@ -3664,10 +3604,10 @@ void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_
 {
     if (screen->pg_stat_sys) {
         screen->pg_stat_sys = false;
-        wprintw(window, "System tables show: off");
+        wprintw(window, "Show system tables: off");
     } else {
         screen->pg_stat_sys = true;
-        wprintw(window, "System tables show: on");
+        wprintw(window, "Show system tables: on");
     }
     *first_iter = true;
 
@@ -3695,12 +3635,12 @@ void get_logfile_path(char * path, PGconn * conn)
          path_log[64 * 3],
          path_log_fallback[64 * 3] = "";
 
-    strcpy(path, "\0");
+    path[0] = '\0';
     if ((res = do_query(conn, q2, errmsg)) == NULL) {
         PQclear(res);
         return;
     }
-    strcpy(ld, PQgetvalue(res, 0, 0));
+    snprintf(ld, 64, "%s", PQgetvalue(res, 0, 0));
     PQclear(res);
 
     if ( ld[0] != '/' ) {
@@ -3708,23 +3648,19 @@ void get_logfile_path(char * path, PGconn * conn)
             PQclear(res);
             return;
         }
-        strcpy(dd, PQgetvalue(res, 0, 0));
-        strcpy(path_tpl, dd);
-        strcat(path_tpl, "/");
-        strcat(path_tpl, ld);
-        strcat(path_tpl, "/");
+	snprintf(dd, 64, "%s", PQgetvalue(res, 0, 0));
+	snprintf(path_tpl, 64 * 3, "%s/%s/", dd, ld);
         PQclear(res);
     } else {
-        strcpy(path_tpl, ld);
-        strcat(path_tpl, "/");
+	snprintf(path_tpl, 64 * 3, "%s/", ld);
     }
 
     if ((res = do_query(conn, q3, errmsg)) == NULL) {
         PQclear(res);
         return;
     }
-    strcpy(lf, PQgetvalue(res, 0, 0));
-    strcat(path_tpl, lf);
+    snprintf(lf, 64, "%s", PQgetvalue(res, 0, 0));
+    snprintf(path_tpl + strlen(path_tpl), (64 * 3) - strlen(path_tpl), "%s", lf);
     PQclear(res);
     
     /*
@@ -3736,8 +3672,8 @@ void get_logfile_path(char * path, PGconn * conn)
      */
     /* check that the log_filename have %H%M%S pattern */
     if (strstr(path_tpl, "%H%M%S") != NULL) {
-        strcpy(path_log, path_tpl);
-        strcpy(path_log_fallback, path_tpl);
+        strncpy(path_log, path_tpl, 64 * 3);
+        strncpy(path_log_fallback, path_tpl, 64 * 3);
         if((res = do_query(conn, q4, errmsg)) == NULL) {
             PQclear(res);
             return;
@@ -3746,7 +3682,7 @@ void get_logfile_path(char * path, PGconn * conn)
         strrpl(path_log_fallback, "%H%M%S", "000000");
         PQclear(res);
     } else {
-        strcpy(path_log, path_tpl);
+        strncpy(path_log, path_tpl, 64 * 3);
     }
 
     /* translate log_filename pattern string in real path */
@@ -3767,7 +3703,7 @@ void get_logfile_path(char * path, PGconn * conn)
         strftime(path, PATH_MAX, path_log_fallback, info);
         return;
     } else {
-        strcpy(path, "\0");
+        path[0] = '\0';
         return;
     }
 }
@@ -3824,7 +3760,7 @@ int count_nic_devices(void)
             idev++;
     }
 
-    /* header have two lines */
+    /* header has two lines */
     idev = idev - 2;
 
     fclose(fp);
@@ -3987,7 +3923,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
             nl_ptr = strstr(buffer, "\n");                          /* find \n in buffer */
             if (nl_ptr != NULL) {                                   /* if found */
                 if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
-                    strcpy(buffer, nl_ptr + 1);                     /* decrease buffer, cut skipped line */
+                    strncpy(buffer, nl_ptr + 1, BUFSIZ);                     /* decrease buffer, cut skipped line */
                     nl_count--;                                     /* decrease newline counter */
                     continue;                                       /* start next iteration */
                 }                                                   /* at this place we have sufficient number of lines for tail */
@@ -4001,7 +3937,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
                     str[strlen(tmp)] = '\0';
                 }
                 wprintw(window, "%s\n", str);                       /* print line to log screen */
-                strcpy(buffer, nl_ptr + 1);                         /* decrease buffer, cut printed line */
+                strncpy(buffer, nl_ptr + 1, BUFSIZ);                         /* decrease buffer, cut printed line */
             } else {
                 break;                                              /* if \n not found, finish work */
             }
@@ -4045,9 +3981,9 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 /* get pager from environment variables, otherwise use default pager */
                 static char pager[128];
                 if (getenv("PAGER") != NULL)
-                    strcpy(pager, getenv("PAGER"));
+                    strncpy(pager, getenv("PAGER"), 128);
                 else
-                    strcpy(pager, DEFAULT_PAGER);
+                    strncpy(pager, DEFAULT_PAGER, 128);
                 execlp(pager, pager, screen->log_path, NULL);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
@@ -4116,7 +4052,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     bool with_esc;
     char msg[] = "Enter queryid: ",
          query[BUFSIZ],
-         pager[32] = "";
+         pager[128] = "";
     char queryid[16];
     char errmsg[ERRSIZE];
     FILE * fpout;
@@ -4129,9 +4065,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
 
     if (strlen(queryid) != 0 && with_esc == false) {
         /* do query and send result into less */
-        strcpy(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P1);
-        strcat(query, queryid);
-        strcat(query, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
+	snprintf(query, 8192, "%s%s%s", PG_GET_QUERYREP_BY_QUERYID_QUERY_P1, queryid, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
             return;
@@ -4145,9 +4079,9 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         }
 
         if (getenv("PAGER") != NULL)
-            strcpy(pager, getenv("PAGER"));
+            strncpy(pager, getenv("PAGER"), 128);
         else
-            strcpy(pager, DEFAULT_PAGER);
+            strncpy(pager, DEFAULT_PAGER, 128);
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
@@ -4372,7 +4306,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
     wclear(window);
     switch (context) {
         case pg_stat_database:
-            wprintw(window, "Show database wide statistics");
+            wprintw(window, "Show databases statistics");
             break;
         case pg_stat_replication:
             wprintw(window, "Show replication statistics");
@@ -4384,7 +4318,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
             wprintw(window, "Show indexes statistics");
             break;
         case pg_statio_tables:
-            wprintw(window, "Show table IO statistics");
+            wprintw(window, "Show tables IO statistics");
             break;
         case pg_tables_size:
             wprintw(window, "Show tables sizes");
@@ -4403,6 +4337,9 @@ void switch_context(WINDOW * window, struct screen_s * screen,
             break;
         case pg_stat_statements_io:
             wprintw(window, "Show pg_stat_statements io");
+            break;
+        case pg_stat_statements_temp:
+            wprintw(window, "Show pg_stat_statements temp");
             break;
         default:
             break;
@@ -4770,7 +4707,7 @@ int main(int argc, char *argv[])
             n_cols = PQnfields(c_res);
 
             /* 
-             * on startup or when context switched current data snapshot copied 
+             * on startup or when context is switched, copy current data snapshot 
              * to previous data snapshot and restart cycle
              */
             if (first_iter) {

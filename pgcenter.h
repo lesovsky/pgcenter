@@ -13,6 +13,7 @@
 
 /* sizes, limits and defaults */
 #define BUFFERSIZE_S        16
+#define BUFFERSIZE_M        64
 #define BUFFERSIZE          4096
 #define ERRSIZE             128
 #define MAX_SCREEN          8
@@ -34,10 +35,10 @@
 
 /* 
  * GUC 
- * This definitions used in edit_config() for edititing postgres config files. 
- * But here we have one issue - we want edit recovery.conf, but GUC for 
- * recovery.conf doesn't exists. For this reason we use data_directory GUC.
- * Details see in get_conf_value() function.
+ * These definitions are used in edit_config() for editing postgres config files.
+ * But here we have one issue - if we want to edit the recovery.conf, but GUC for 
+ * the recovery.conf doesn't exists. For this reason we use data_directory GUC.
+ * See details in get_conf_value() function.
  */
 #define GUC_CONFIG_FILE         "config_file"
 #define GUC_HBA_FILE            "hba_file"
@@ -55,8 +56,6 @@
 #define DEFAULT_PSQL        "psql"
 #define DEFAULT_INTERVAL    1000000
 #define INTERVAL_STEP       200000
-#define DEFAULT_VIEW_TYPE   "user"
-#define FULL_VIEW_TYPE      "all"
 
 #define HZ                  hz
 unsigned int hz;
@@ -117,10 +116,10 @@ struct args_s
 {
     int count;
     char connfile[BUFFERSIZE];
-    char host[BUFFERSIZE];
-    char port[BUFFERSIZE];
-    char user[BUFFERSIZE];
-    char dbname[BUFFERSIZE];
+    char host[BUFFERSIZE_M];
+    char port[BUFFERSIZE_M];
+    char user[BUFFERSIZE_M];
+    char dbname[BUFFERSIZE_M];
     bool need_passwd;
 };
 
@@ -131,11 +130,11 @@ struct screen_s
 {
     int screen;
     bool conn_used;
-    char host[BUFFERSIZE];
-    char port[BUFFERSIZE];
-    char user[BUFFERSIZE];
-    char dbname[BUFFERSIZE];
-    char password[BUFFERSIZE];
+    char host[BUFFERSIZE_M];
+    char port[BUFFERSIZE_M];
+    char user[BUFFERSIZE_M];
+    char dbname[BUFFERSIZE_M];
+    char password[BUFFERSIZE_M];
     char conninfo[BUFFERSIZE];
     char pg_version_num[10];
     char pg_version[10];
@@ -190,7 +189,7 @@ struct iodata_s
 {
     int major;
     int minor;
-    char devname[64];
+    char devname[BUFFERSIZE_M];
     unsigned long r_completed;          /* reads completed successfully */
     unsigned long r_merged;             /* reads merged */
     unsigned long r_sectors;            /* sectors read */
@@ -227,7 +226,7 @@ struct nicdata_s
 
 #define STATS_NICDATA_SIZE (sizeof(struct nicdata_s))
 
-/* This may be defined by <linux/ethtool.h> */                                                                                                                    
+/* This may be defined by <linux/ethtool.h> */
 #ifndef DUPLEX_UNKNOWN
 #define DUPLEX_UNKNOWN          0xff
 #endif /* DUPLEX_UNKNOWN */

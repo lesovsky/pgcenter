@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * replace strcpy/strcat with strncpy/snprintf.
   * sanitize malloc() or replace it with char.
   * print_*stat*: don't exit if stats read failed.
   * print_mem: fix free swap.
