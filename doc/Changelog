@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * refresh interval is limited between 1 and 300 seconds.
   * check port number at startup.
   * replace raw numbers to 'define' macroses.
   * replace strcpy/strcat with strncpy/snprintf.

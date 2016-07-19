@@ -3535,13 +3535,11 @@ long int change_refresh(WINDOW * window, long int interval)
                 str[XS_BUF_LEN];               /* entered value */
     bool with_esc;
 
-    wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
+    wprintw(window, "Change refresh (min 1, max 300) to ");
     wrefresh(window);
 
-    /* use offset 36 that equals message constructed above and printed by ncurses */
-    cmd_readline(window, msg, 36, &with_esc, str, sizeof(str), true);
-    /* TODO: print warning msg if interval too big */
-    strncpy(value, str, 2);
+    /* use offset 35 that equals message constructed above and printed by ncurses */
+    cmd_readline(window, msg, 35, &with_esc, str, sizeof(str), true);
 
     if (strlen(value) != 0 && with_esc == false) {
         if (strlen(value) != 0) {
@@ -3549,6 +3547,9 @@ long int change_refresh(WINDOW * window, long int interval)
             if (interval < 1) {
                 wprintw(window, "Should not be less than 1 second.");
                 interval = interval_save;
+            } else if (interval > INTERVAL_MAXLEN) {
+                wprintw(window, "Should not be more than 300 seconds.");
+                interval = INTERVAL_MAXLEN * 1000000;
             } else {
                 interval = interval * 1000000;
             }

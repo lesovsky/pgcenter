@@ -72,6 +72,7 @@
 #define DEFAULT_EDITOR      "vi"
 #define DEFAULT_PSQL        "psql"
 #define DEFAULT_INTERVAL    1000000
+#define INTERVAL_MAXLEN	    300			/* in seconds */
 #define INTERVAL_STEP       200000
 
 #define HZ                  hz
