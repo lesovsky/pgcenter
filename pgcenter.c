@@ -344,6 +344,23 @@ void init_args_struct(struct args_s *args)
 
 /*
  ******************************************************** startup function **
+ * Check port number.
+ *
+ * IN:
+ * @port        Port value.
+ ****************************************************************************
+ */
+void check_portnum(char * portstr)
+{
+    int portnum = atoi(portstr);
+    if ( portnum < 1 || portnum > 65535) {
+	printf("Invalid port number: %s. Check input options or conninfo file.\n", portstr);
+	exit(EXIT_FAILURE);
+    }
+}
+
+/*
+ ******************************************************** startup function **
  * Parse input arguments
  *
  * IN:
@@ -402,6 +419,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 break;
             case 'p':
                 strncpy(args->port, optarg, CONN_ARG_MAXLEN);
+		check_portnum(args->port);
                 args->count++;
                 break;
             case 'U':
@@ -549,6 +567,7 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
                         screens[i]->password);
                         screens[i]->screen = i;
                         screens[i]->conn_used = true;
+            check_portnum(screens[i]->port);
             /* if "null" read from file, than we should connecting through unix socket */
             if (!strcmp(screens[i]->host, "(null)")) {
                 screens[i]->host[0] = '\0';

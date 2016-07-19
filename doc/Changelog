@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * check port number at startup.
   * replace raw numbers to 'define' macroses.
   * replace strcpy/strcat with strncpy/snprintf.
   * sanitize malloc() or replace it with char.

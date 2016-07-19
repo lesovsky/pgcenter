@@ -735,6 +735,7 @@ void init_signal_handlers(void);
 void init_screens(struct screen_s *screens[]);
 struct args_s * init_args_mem(void);
 void init_args_struct(struct args_s *args);
+void check_portnum(char * portnum);
 void arg_parse(int argc, char *argv[], struct args_s *args);
 void create_initial_conn(struct args_s * args, struct screen_s * screens[]);
 int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const int pos);
