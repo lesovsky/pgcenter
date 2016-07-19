@@ -147,17 +147,17 @@ int key_is_pressed(void)
  */
 void strrpl(char * o_string, char * s_string, char * r_string)
 {
-    char buffer[1024];
+    char buffer[L_BUF_LEN];
     char * ch;
              
     if(!(ch = strstr(o_string, s_string)))
         return;
                  
-    strncpy(buffer, o_string, ch-o_string);
-    buffer[ch-o_string] = 0;
-    sprintf(buffer+(ch - o_string), "%s%s", r_string, ch + strlen(s_string));
+    strncpy(buffer, o_string, ch - o_string);
+    buffer[ch - o_string] = 0;
+    sprintf(buffer + (ch - o_string), "%s%s", r_string, ch + strlen(s_string));
     o_string[0] = 0;
-    strncpy(o_string, buffer, 1024);
+    strncpy(o_string, buffer, L_BUF_LEN);
     strrpl(o_string, s_string, r_string);
 
     return;
@@ -238,7 +238,7 @@ void init_screens(struct screen_s *screens[])
         screens[i]->subscreen = SUBSCREEN_NONE;
         screens[i]->log_path[0] = '\0';
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
-        strncpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT, BUFFERSIZE_S);
+        strncpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT, XS_BUF_LEN);
         screens[i]->signal_options = 0;
         screens[i]->pg_stat_sys = false;
 
@@ -294,12 +294,12 @@ void init_screens(struct screen_s *screens[])
  * @password        Password.
  ****************************************************************************
  */
-char * password_prompt(const char *prompt, int maxlen, bool echo)
+char * password_prompt(const char *prompt, int pw_maxlen, bool echo)
 {
     struct termios t_orig, t;
     char *password;
-    if ((password = (char *) malloc(maxlen + 1)) == NULL) {
-            perror("FATAL: malloc for password prompt failed.");
+    if ((password = (char *) malloc(pw_maxlen + 1)) == NULL) {
+            perror("FATAL: malloc for password is failed.");
             exit(EXIT_FAILURE);
     }
 
@@ -311,7 +311,7 @@ char * password_prompt(const char *prompt, int maxlen, bool echo)
     }
 
     fputs(prompt, stdout);
-    if (fgets(password, maxlen + 1, stdin) == NULL)
+    if (fgets(password, pw_maxlen + 1, stdin) == NULL)
         password[0] = '\0';
 
     if (!echo) {
@@ -393,24 +393,24 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 short_options, long_options, &option_index)) != -1 ) {
         switch (param) {
             case 'h':
-                strncpy(args->host, optarg, BUFFERSIZE_M);
+                strncpy(args->host, optarg, CONN_ARG_MAXLEN);
                 args->count++;
                 break;
             case 'f':
-                strncpy(args->connfile, optarg, BUFFERSIZE_M);
+                strncpy(args->connfile, optarg, PATH_MAX);
                 args->count++;
                 break;
             case 'p':
-                strncpy(args->port, optarg, BUFFERSIZE_M);
+                strncpy(args->port, optarg, CONN_ARG_MAXLEN);
                 args->count++;
                 break;
             case 'U':
-                strncpy(args->user, optarg, BUFFERSIZE_M);
+                strncpy(args->user, optarg, CONN_ARG_MAXLEN);
                 args->count++;
                 break;
             case 'd':
                 args->count++;
-                strncpy(args->dbname, optarg, BUFFERSIZE_M);
+                strncpy(args->dbname, optarg, CONN_ARG_MAXLEN);
                 break;
             case 'w':
                 args->need_passwd = false;
@@ -430,19 +430,19 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
                 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
-            strncpy(args->user, argv[optind + 1], BUFFERSIZE_M);
+            strncpy(args->dbname, argv[optind], CONN_ARG_MAXLEN);
+            strncpy(args->user, argv[optind + 1], CONN_ARG_MAXLEN);
             optind++;
             args->count++;
         }
         else if ( (argc - optind >= 1) && strlen(args->user) != 0 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
+            strncpy(args->dbname, argv[optind], CONN_ARG_MAXLEN);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) != 0 ) {
-            strncpy(args->user, argv[optind], BUFFERSIZE_M);
+            strncpy(args->user, argv[optind], CONN_ARG_MAXLEN);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], BUFFERSIZE_M);
+            strncpy(args->dbname, argv[optind], CONN_ARG_MAXLEN);
             args->count++;
         } else
             fprintf(stderr,
@@ -468,31 +468,31 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
     struct passwd *pw = getpwuid(getuid());
 
     if ( strlen(args->host) != 0 )
-        strncpy(screens[0]->host, args->host, BUFFERSIZE_M);
+        strncpy(screens[0]->host, args->host, CONN_ARG_MAXLEN);
 
     if ( strlen(args->port) != 0 )
-        strncpy(screens[0]->port, args->port, BUFFERSIZE_M);
+        strncpy(screens[0]->port, args->port, CONN_ARG_MAXLEN);
 
     if ( strlen(args->user) == 0 )
-        strncpy(screens[0]->user, pw->pw_name, BUFFERSIZE_M);
+        strncpy(screens[0]->user, pw->pw_name, CONN_ARG_MAXLEN);
     else
-        strncpy(screens[0]->user, args->user, BUFFERSIZE_M);
+        strncpy(screens[0]->user, args->user, CONN_ARG_MAXLEN);
 
     if ( strlen(args->dbname) == 0 && strlen(args->user) == 0)
-        strncpy(screens[0]->dbname, pw->pw_name, BUFFERSIZE_M);
+        strncpy(screens[0]->dbname, pw->pw_name, CONN_ARG_MAXLEN);
     else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0)
-        strncpy(screens[0]->dbname, args->user, BUFFERSIZE_M);
+        strncpy(screens[0]->dbname, args->user, CONN_ARG_MAXLEN);
     else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
-        strncpy(screens[0]->dbname, args->dbname, BUFFERSIZE_M);
-        strncpy(screens[0]->user, pw->pw_name, BUFFERSIZE_M);
+        strncpy(screens[0]->dbname, args->dbname, CONN_ARG_MAXLEN);
+        strncpy(screens[0]->user, pw->pw_name, CONN_ARG_MAXLEN);
     } else
-        strncpy(screens[0]->dbname, args->dbname, BUFFERSIZE_M);
+        strncpy(screens[0]->dbname, args->dbname, CONN_ARG_MAXLEN);
 
     if ( args->need_passwd )
-        strncpy(screens[0]->password, password_prompt("Password: ", 100, false), BUFFERSIZE_M);
+        strncpy(screens[0]->password, password_prompt("Password: ", CONN_ARG_MAXLEN, false), CONN_ARG_MAXLEN);
 
     if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
-        strncpy(screens[0]->dbname, screens[0]->user, BUFFERSIZE_M);
+        strncpy(screens[0]->dbname, screens[0]->user, CONN_ARG_MAXLEN);
 
     screens[0]->conn_used = true;
 }
@@ -517,7 +517,7 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
     FILE *fp;
     static char pgcenterrc_path[PATH_MAX];
     struct stat statbuf;
-    char strbuf[BUFFERSIZE];
+    char strbuf[XL_BUF_LEN];
     int i = pos;
     struct passwd *pw = getpwuid(getuid());
 
@@ -542,7 +542,7 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
 
     /* read connections settings from .pgcenterrc */
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
-        while ((fgets(strbuf, 4096, fp) != 0) && (i < MAX_SCREEN)) {
+        while ((fgets(strbuf, XL_BUF_LEN, fp) != 0) && (i < MAX_SCREEN)) {
             sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
                         screens[i]->host,	screens[i]->port,
                         screens[i]->dbname,	screens[i]->user,
@@ -608,19 +608,19 @@ void prepare_conninfo(struct screen_s * screens[])
     for ( i = 0; i < MAX_SCREEN; i++ ) {
         if (screens[i]->conn_used) {
             if (strlen(screens[i]->host) != 0) {
-		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 			 "host=%s", screens[i]->host);
             }
             if (strlen(screens[i]->port) != 0) {
-		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 			 " port=%s", screens[i]->port);
             }
-	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 		     " user=%s", screens[i]->user);
-	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+	    snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 		     " dbname=%s", screens[i]->dbname);
             if ((strlen(screens[i]->password)) != 0) {
-	    	snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), BUFFERSIZE - strlen(screens[i]->conninfo),
+	    	snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo), CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 			 " password=%s", screens[i]->password);
             }
         }
@@ -648,9 +648,9 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 printf("%s:%s %s@%s require ", 
                                 screens[i]->host, screens[i]->port,
                                 screens[i]->user, screens[i]->dbname);
-                strncpy(screens[i]->password, password_prompt("password: ", 100, false), BUFFERSIZE_M);
+                strncpy(screens[i]->password, password_prompt("password: ", CONN_ARG_MAXLEN, false), CONN_ARG_MAXLEN);
 		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
-			 BUFFERSIZE - strlen(screens[i]->conninfo),
+			 CONNINFO_MAXLEN - strlen(screens[i]->conninfo),
 			 " password=%s", screens[i]->password);
                 conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
@@ -720,31 +720,31 @@ void prepare_query(struct screen_s * screen, char * query)
     char tmp[2];
     switch (screen->current_context) {
         case pg_stat_database: default:
-            if (atoi(screen->pg_version_num) < 90200)
-                snprintf(query, 8192, "%s", PG_STAT_DATABASE_91_QUERY);
+            if (atoi(screen->pg_version_num) < PG92)
+                snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_91_QUERY);
             else
-                snprintf(query, 8192, "%s", PG_STAT_DATABASE_QUERY);
+                snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
-            snprintf(query, 8192, "%s", PG_STAT_REPLICATION_QUERY);
+            snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_REPLICATION_QUERY);
             break;
         case pg_stat_tables:
-            snprintf(query, 8192, "%s%s%s", PG_STAT_TABLES_QUERY_P1,
+            snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_TABLES_QUERY_P1,
 			screen->pg_stat_sys ? "all" : "user", PG_STAT_TABLES_QUERY_P2);
             break;
         case pg_stat_indexes:
-            snprintf(query, 8192, "%s%s%s%s%s", 
+            snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s", 
 			PG_STAT_INDEXES_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
                         PG_STAT_INDEXES_QUERY_P2, screen->pg_stat_sys ? "all" : "user",
                         PG_STAT_INDEXES_QUERY_P3);
             break;
         case pg_statio_tables:
-            snprintf(query, 8192, "%s%s%s",
+            snprintf(query, QUERY_MAXLEN, "%s%s%s",
                         PG_STATIO_TABLES_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
                         PG_STATIO_TABLES_QUERY_P2);
             break;
         case pg_tables_size:
-            snprintf(query, 8192, "%s%s%s",
+            snprintf(query, QUERY_MAXLEN, "%s%s%s",
                         PG_TABLES_SIZE_QUERY_P1, screen->pg_stat_sys ? "all" : "user",
                         PG_TABLES_SIZE_QUERY_P2);
             break;
@@ -753,13 +753,13 @@ void prepare_query(struct screen_s * screen, char * query)
              * build query from several parts, 
              * thus user can change duration which is used in WHERE clause.
              */
-            if (atoi(screen->pg_version_num) < 90200) {
-                snprintf(query, 8192, "%s%s%s%s%s",
+            if (atoi(screen->pg_version_num) < PG92) {
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P1, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P2, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P3);
             } else {
-                snprintf(query, 8192, "%s%s%s%s%s",
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
                         PG_STAT_ACTIVITY_LONG_QUERY_P1, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_QUERY_P2, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_QUERY_P3);
@@ -768,33 +768,33 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_functions:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_FUNCTIONS_NUM].order_key + 1);
-            snprintf(query, 8192, "%s%s%s", PG_STAT_FUNCTIONS_QUERY_P1, tmp, PG_STAT_FUNCTIONS_QUERY_P2);
+            snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_FUNCTIONS_QUERY_P1, tmp, PG_STAT_FUNCTIONS_QUERY_P2);
             break;
         case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
-	    atoi(screen->pg_version_num) < 90200
-                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2)
-                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+	    atoi(screen->pg_version_num) < PG92
+                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2)
+                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
             break;
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
-            atoi(screen->pg_version_num) < 90200
-                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2)
-                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
+            atoi(screen->pg_version_num) < PG92
+                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2)
+                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;
         case pg_stat_statements_io:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key + 1);
-            atoi(screen->pg_version_num) < 90200
-                ? snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2)
-                : snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_IO_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2);
+            atoi(screen->pg_version_num) < PG92
+                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2)
+                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2);
             break;
         case pg_stat_statements_temp:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key + 1);
-            snprintf(query, 8192, "%s%s%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1, tmp, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
+            snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1, tmp, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
             break;
     }
 }
@@ -879,6 +879,7 @@ void print_title(WINDOW * window, char * progname)
  */
 float get_loadavg(int m)
 {
+    /* 1, 5, 15 are common load average metrics */
     if ( m != 1 && m != 5 && m != 15 )
         m = 1;
 
@@ -927,21 +928,21 @@ void print_loadavg(WINDOW * window)
  */
 void print_conninfo(WINDOW * window, PGconn *conn, int console_no)
 {
-    static char state[8];
-    char buffer[48];
+    static char state[XS_BUF_LEN];
+    char buffer[CONNINFO_TITLE_LEN];
     switch (PQstatus(conn)) {
         case CONNECTION_OK:
-            strncpy(state, "ok", 8);
+            strncpy(state, "ok", XS_BUF_LEN);
             break;
         case CONNECTION_BAD:
-            strncpy(state, "failed", 8);
+            strncpy(state, "failed", XS_BUF_LEN);
             break;
         default:
-            strncpy(state, "unknown", 8);
+            strncpy(state, "unknown", XS_BUF_LEN);
             break;
     }
 
-    snprintf(buffer, 48, "conn%i [%s]: %s:%s %s@%s",
+    snprintf(buffer, CONNINFO_TITLE_LEN, "conn%i [%s]: %s:%s %s@%s",
                 console_no, state,
                 PQhost(conn), PQport(conn),
                 PQuser(conn), PQdb(conn));
@@ -967,12 +968,12 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
     static char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
-        t_count = 0;
-        i_count = 0;
-        x_count = 0;
-        a_count = 0;
-        w_count = 0;
-        o_count = 0;
+        t_count = 0;			/* total number of connections */
+        i_count = 0;			/* number of idle connections */
+        x_count = 0;			/* number of idle in xact */
+        a_count = 0;			/* number of active connections */
+        w_count = 0;			/* number of waiting connections */
+        o_count = 0;			/* other, unclassiffied */
     } 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg)) != NULL) {
         t_count = atoi(PQgetvalue(res, 0, 0));
@@ -1037,14 +1038,14 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     float avgtime;
     static int qps, prev_queries = 0;
     int divisor;
-    char maxtime[16] = "";
+    char maxtime[XS_BUF_LEN] = "";
     PGresult *res;
     static char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = 0;
         qps = 0;
-        strncpy(maxtime, "--:--:--", 16);
+        strncpy(maxtime, "--:--:--", XS_BUF_LEN);
     } 
 
     divisor = interval / 1000000;
@@ -1059,10 +1060,10 @@ void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval)
     }
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_SYS_QUERY, errmsg)) != NULL) {
-        snprintf(maxtime, 16, "%s", PQgetvalue(res, 0, 0));
+        snprintf(maxtime, XS_BUF_LEN, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        snprintf(maxtime, 16, "%s", "--:--:--");
+        snprintf(maxtime, XS_BUF_LEN, "%s", "--:--:--");
     }
 
     mvwprintw(window, 3, COLS / 2,
@@ -1200,7 +1201,7 @@ void get_HZ(void)
 {
     long ticks;
     if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
-        perror("sysconf");
+        perror("FATAL: sysconf failure.");
     
     hz = (unsigned int) ticks;
 }
@@ -1216,7 +1217,7 @@ void get_HZ(void)
 void read_uptime(unsigned long long *uptime)
 {
     FILE *fp;
-    char line[128];
+    char line[S_BUF_LEN];
     unsigned long up_sec, up_cent;
 
     if ((fp = fopen(UPTIME_FILE, "r")) == NULL)
@@ -1228,8 +1229,7 @@ void read_uptime(unsigned long long *uptime)
     }
 
     sscanf(line, "%lu.%lu", &up_sec, &up_cent);
-    *uptime = (unsigned long long) up_sec * HZ +
-    (unsigned long long) up_cent * HZ / 100;
+    *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
     fclose(fp);
 }
 
@@ -1254,7 +1254,7 @@ void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
     FILE *fp;
     struct cpu_s *st_cpu_i;
     struct cpu_s sc;
-    char line[8192];
+    char line[XL_BUF_LEN];
     int proc_nb;
 
     if ((fp = fopen(STAT_FILE, "r")) == NULL) {
@@ -1416,12 +1416,12 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[])
 void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short)
 {
     FILE *mem_fp;
-    char buffer[121];
-    char key[80];
+    char buffer[XL_BUF_LEN];
+    char key[M_BUF_LEN];
     unsigned long long value;
     
     if ((mem_fp = fopen(MEMINFO_FILE, "r")) != NULL) {
-        while (fgets(buffer, 120, mem_fp) != NULL) {
+        while (fgets(buffer, XL_BUF_LEN, mem_fp) != NULL) {
             sscanf(buffer, "%s %llu", key, &value);
             if (!strcmp(key,"MemTotal:"))
                 st_mem_short->mem_total = value / 1024;
@@ -1542,7 +1542,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
 {
     /* if number of devices is changed, we should realloc structs and repaint subscreen */
     if (bdev != count_block_devices()) {
-        wprintw(w_cmd, "The number of devices has changed. ");
+        wprintw(w_cmd, "The number of devices is changed. ");
         *repaint = true;
         return;
     }
@@ -1552,10 +1552,10 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
     static unsigned long long itv;
     static int curr = 1;
     int i = 0;
-    char line[128];
+    char line[M_BUF_LEN];
 
     int major, minor;
-    char devname[BUFFERSIZE_M];
+    char devname[S_BUF_LEN];
     unsigned long r_completed, r_merged, r_sectors, r_spent,
                   w_completed, w_merged, w_sectors, w_spent,
                   io_in_progress, t_spent, t_weighted;
@@ -1584,7 +1584,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
                     &io_in_progress, &t_spent, &t_weighted);
         c_ios[i]->major = major;
         c_ios[i]->minor = minor;
-        strncpy(c_ios[i]->devname, devname, BUFFERSIZE_M);
+        strncpy(c_ios[i]->devname, devname, S_BUF_LEN);
         c_ios[i]->r_completed = r_completed;
         c_ios[i]->r_merged = r_merged;
         c_ios[i]->r_sectors = r_sectors;
@@ -1670,7 +1670,7 @@ void get_speed_duplex(struct nicdata_s * nicdata)
 
     sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
-        perror("socket");               /* todo: should exit from nicstat function instead of program */
+        perror("FATAL: socket failure.");               /* todo: should exit from nicstat function instead of program */
         exit(1);
     }
 
@@ -1707,7 +1707,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
 {
     /* if number of devices is changed, we should realloc structs and repaint subscreen */
     if (idev != count_nic_devices()) {
-        wprintw(w_cmd, "The number of devices has changed. ");
+        wprintw(w_cmd, "The number of devices is changed.");
         *repaint = true;
         return;
     }
@@ -1718,7 +1718,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
     static int curr = 1;
     int i = 0,
         j = 0;
-    char line[1024];
+    char line[L_BUF_LEN];
     char ifname[IF_NAMESIZE + 1];
     unsigned long lu[16];
     static bool first = true;
@@ -1798,15 +1798,9 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
         coll = S_VALUE(p_nicd[i]->coll, c_nicd[i]->coll, itv);
         sat = S_VALUE(p_nicd[i]->sat, c_nicd[i]->sat, itv);
 
-        if (rpps > 0)
-            ravs = rbps / rpps;
-        else
-            ravs = 0;
-
-        if (wpps > 0)
-            wavs = wbps / wpps;
-        else
-            wavs = 0;
+	/* if no data about pps, zeroing averages */
+        (rpps > 0) ? ( ravs = rbps / rpps ) : ( ravs = 0 );
+        (wpps > 0) ? ( wavs = wbps / wpps ) : ( wavs = 0 );
 
         /* Calculate utilisation */
         if (c_nicd[i]->speed > 0) {
@@ -1824,9 +1818,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
                 util = min((rbps + wbps) * 800 / c_nicd[i]->speed, 100);
             }
         } else {
-            util = 0;
-            rutil = 0;
-            wutil = 0;
+            util = rutil = wutil = 0;
         }
 
         /* print statistics */
@@ -1866,9 +1858,8 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
 
     for (col = 0, i = 0; col < n_cols; col++, i++) {
         /* determine length of column names */
-        snprintf(columns[i].name, 40, "%s", PQfname(res, col));
-        int colname_len = strlen(PQfname(res, col));
-        int width = colname_len;
+        snprintf(columns[i].name, COL_MAXLEN, "%s", PQfname(res, col));
+        int width = strlen(PQfname(res, col));
         if (arr == NULL) {
             for (row = 0; row < n_rows; row++ ) {
                 int val_len = strlen(PQgetvalue(res, row, col));
@@ -1883,7 +1874,7 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n
                     width = val_len;
             }
         }
-        columns[i].width = width + 2;
+        columns[i].width = width + 2;		/* set column width equal to longest value + 2 spaces*/
     }
 }
 
@@ -1901,10 +1892,10 @@ void get_pg_uptime(PGconn * conn, char * uptime)
     PGresult * res;
 
     if ((res = do_query(conn, PG_UPTIME_QUERY, errmsg)) != NULL) {
-        snprintf(uptime, 32, "%s", PQgetvalue(res, 0, 0));
+        snprintf(uptime, S_BUF_LEN, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        strncpy(uptime, "--:--:--", 32);
+        strncpy(uptime, "--:--:--", S_BUF_LEN);
     }
 }
 
@@ -1920,7 +1911,7 @@ void get_pg_uptime(PGconn * conn, char * uptime)
  */
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
-    static char uptime[32];
+    static char uptime[S_BUF_LEN];
     get_pg_uptime(conn, uptime);
 
     wprintw(window, " (ver: %s, up %s)", screen->pg_version, uptime);
@@ -1939,7 +1930,7 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
 void print_autovac_info(WINDOW * window, PGconn * conn)
 {
     int av_count, avw_count;
-    char av_max_time[16];
+    char av_max_time[XS_BUF_LEN];
     PGresult *res;
     static char errmsg[ERRSIZE];
     
@@ -1958,10 +1949,10 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     }
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg)) != NULL) {
-        snprintf(av_max_time, 16, "%s", PQgetvalue(res, 0, 0));
+        snprintf(av_max_time, XS_BUF_LEN, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        snprintf(av_max_time, 16, "%s", "--:--:--");
+        snprintf(av_max_time, XS_BUF_LEN, "%s", "--:--:--");
     }
 
     mvwprintw(window, 2, COLS / 2, "autovacuum: %2i workers, %2i wraparound, %s avw_maxtime",
@@ -2080,8 +2071,8 @@ void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols)
 
     for (i = 0; i < n_rows; i++)
         for (j = 0; j < n_cols; j++) {
-            strncpy(arr[i][j], PQgetvalue(res, i, j), BUFSIZ);
-            arr[i][j][BUFSIZ] = '\0';
+            strncpy(arr[i][j], PQgetvalue(res, i, j), XL_BUF_LEN);
+            arr[i][j][XL_BUF_LEN] = '\0';
         }
 }
 
@@ -2108,7 +2099,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < 90200)
+            if (atoi(screen->pg_version_num) < PG92)
                 max = PG_STAT_DATABASE_ORDER_91_MAX;
             else
                 max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
@@ -2147,7 +2138,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             min = max = PG_STAT_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements_timing:
-            if (atoi(screen->pg_version_num) < 90200) {
+            if (atoi(screen->pg_version_num) < PG92) {
                 min = PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN;
                 max = PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX;
             } else {
@@ -2160,7 +2151,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             max = PG_STAT_STATEMENTS_GENERAL_DIFF_MAX;
             break;
         case pg_stat_statements_io:
-            if (atoi(screen->pg_version_num) < 90200) {
+            if (atoi(screen->pg_version_num) < PG92) {
                 min = PG_STAT_STATEMENTS_IO_DIFF_91_MIN;
                 max = PG_STAT_STATEMENTS_IO_DIFF_91_MAX;
             } else {
@@ -2180,12 +2171,12 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
-                strncpy(res_arr[i][j], c_arr[i][j], BUFSIZ);     /* copy unsortable values as is */
+                strncpy(res_arr[i][j], c_arr[i][j], XL_BUF_LEN);     /* copy unsortable values as is */
             else {
                 int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
                 char buf[n+1];
                 snprintf(buf, n+1, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
-                strncpy(res_arr[i][j], buf, BUFSIZ);
+                strncpy(res_arr[i][j], buf, XL_BUF_LEN);
             }
     }
 }
@@ -2240,23 +2231,23 @@ void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * scree
     if (order_key == INVALID_ORDER_KEY)
         return;
 
-    static char temp[BUFSIZ];
+    static char temp[XL_BUF_LEN];
     for (i = 0; i < n_rows; i++) {
         for (j = i + 1; j < n_rows; j++) {
             if (desc)
                 if (atoll(res_arr[j][order_key]) > atoll(res_arr[i][order_key])) {        // desc: j > i
                     for (x = 0; x < n_cols; x++) {
-                        strncpy(temp, res_arr[i][x], BUFSIZ);
-                        strncpy(res_arr[i][x], res_arr[j][x], BUFSIZ);
-                        strncpy(res_arr[j][x], temp, BUFSIZ);
+                        strncpy(temp, res_arr[i][x], XL_BUF_LEN);
+                        strncpy(res_arr[i][x], res_arr[j][x], XL_BUF_LEN);
+                        strncpy(res_arr[j][x], temp, XL_BUF_LEN);
                     }
                 }
             if (!desc)
                 if (atoll(res_arr[i][order_key]) > atoll(res_arr[j][order_key])) {        // asc: i > j
                     for (x = 0; x < n_cols; x++) {
-                        strncpy(temp, res_arr[i][x], BUFSIZ);
-                        strncpy(res_arr[i][x], res_arr[j][x], BUFSIZ);
-                        strncpy(res_arr[j][x], temp, BUFSIZ);
+                        strncpy(temp, res_arr[i][x], XL_BUF_LEN);
+                        strncpy(res_arr[i][x], res_arr[j][x], XL_BUF_LEN);
+                        strncpy(res_arr[j][x], temp, XL_BUF_LEN);
                     }
                 }
         }
@@ -2361,7 +2352,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < 90200)
+            if (atoi(screen->pg_version_num) < PG92)
                 max = PG_STAT_DATABASE_ORDER_91_MAX;
             else
                 max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
@@ -2383,7 +2374,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             max = PG_STATIO_TABLES_ORDER_MAX;
             break;
         case pg_tables_size:
-            min = PG_TABLES_SIZE_ORDER_MIN - 3;
+            min = PG_TABLES_SIZE_ORDER_MIN - 3;		/* adjust sorting, including other (un-diffable) cols */
             max = PG_TABLES_SIZE_ORDER_MAX;
             break;
         case pg_stat_activity_long:
@@ -2397,7 +2388,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_timing:
             min = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < 90200)
+            if (atoi(screen->pg_version_num) < PG92)
                 max = PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX;
             else
                 max = PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX;
@@ -2410,7 +2401,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_io:
             min = PG_STAT_STATEMENTS_IO_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < 90200)
+            if (atoi(screen->pg_version_num) < PG92)
                 max = PG_STAT_STATEMENTS_IO_ORDER_91_MAX;
             else
                 max = PG_STAT_STATEMENTS_IO_ORDER_LATEST_MAX;
@@ -2459,10 +2450,7 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
     int i;
     for (i = 0; i < TOTAL_CONTEXTS; i++) {
         if (screen->current_context == screen->context_list[i].context) {
-            if (screen->context_list[i].order_desc)
-                screen->context_list[i].order_desc = false;
-            else
-                screen->context_list[i].order_desc = true;
+	    screen->context_list[i].order_desc ^= 1;
         }
         *first_iter = true;
     }
@@ -2576,15 +2564,15 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
 
     unsigned int hour, min, sec;
     bool with_esc;
-    char min_age[BUFFERSIZE_S],
+    char min_age[XS_BUF_LEN],
          msg[] = "Enter new min age, format: HH:MM:SS[.NN]: ";
 
-    cmd_readline(window, msg, 42, &with_esc, min_age, 16, true);
+    cmd_readline(window, msg, strlen(msg), &with_esc, min_age, sizeof(min_age), true);
     if (strlen(min_age) != 0 && with_esc == false) {
         if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
             wprintw(window, "Nothing to do. Failed read or invalid value.");
         } else {
-	    snprintf(screen->pg_stat_activity_min_age, BUFFERSIZE_S, "%s", min_age);
+	    snprintf(screen->pg_stat_activity_min_age, XS_BUF_LEN, "%s", min_age);
         }
     } else if (strlen(min_age) == 0 && with_esc == false ) {
         wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
@@ -2630,18 +2618,18 @@ void clear_screen_connopts(struct screen_s * screens[], int i)
 void shift_screens(struct screen_s * screens[], PGconn * conns[], int i)
 {
     while (screens[i + 1]->conn_used != false) {
-        strncpy(screens[i]->host,        screens[i + 1]->host, BUFFERSIZE_M);
-        strncpy(screens[i]->port,        screens[i + 1]->port, BUFFERSIZE_M);
-        strncpy(screens[i]->user,        screens[i + 1]->user, BUFFERSIZE_M);
-        strncpy(screens[i]->dbname,      screens[i + 1]->dbname, BUFFERSIZE_M);
-        strncpy(screens[i]->password,    screens[i + 1]->password, BUFFERSIZE_M);
-        strncpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num, 10);
-        strncpy(screens[i]->pg_version,  screens[i + 1]->pg_version, 10);
+        strncpy(screens[i]->host,        screens[i + 1]->host, CONN_ARG_MAXLEN);
+        strncpy(screens[i]->port,        screens[i + 1]->port, CONN_ARG_MAXLEN);
+        strncpy(screens[i]->user,        screens[i + 1]->user, CONN_ARG_MAXLEN);
+        strncpy(screens[i]->dbname,      screens[i + 1]->dbname, CONN_ARG_MAXLEN);
+        strncpy(screens[i]->password,    screens[i + 1]->password, CONN_ARG_MAXLEN);
+        strncpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num, XS_BUF_LEN);
+        strncpy(screens[i]->pg_version,  screens[i + 1]->pg_version, XS_BUF_LEN);
         screens[i]->subscreen =        screens[i + 1]->subscreen;
         strncpy(screens[i]->log_path,    screens[i + 1]->log_path, PATH_MAX);
         screens[i]->log_fd =            screens[i + 1]->log_fd;
         screens[i]->current_context =   screens[i + 1]->current_context;
-        strncpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age, BUFFERSIZE_S);
+        strncpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age, XS_BUF_LEN);
         screens[i]->signal_options =    screens[i + 1]->signal_options;
         screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
 
@@ -2674,7 +2662,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 PGconn * conns[], int console_index)
 {
     int i;
-    char params[128],
+    char params[CONNINFO_MAXLEN],
          msg[] = "Enter new connection parameters, format \"host port username dbname\": ",
          msg2[] = "Required password: ";
     bool with_esc, with_esc2;
@@ -2684,7 +2672,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
         if (screens[i]->conn_used == false) {
 
             /* read user input */
-            cmd_readline(window, msg, 69, &with_esc, params, 128, true);
+            cmd_readline(window, msg, strlen(msg), &with_esc, params, sizeof(params), true);
             if (strlen(params) != 0 && with_esc == false) {
                 /* parse user input */
                 if ((sscanf(params, "%s %s %s %s",
@@ -2695,7 +2683,7 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                 }
                 /* setup screen conninfo settings */
                 screens[i]->conn_used = true;
-		snprintf(screens[i]->conninfo, BUFFERSIZE,
+		snprintf(screens[i]->conninfo, CONNINFO_MAXLEN,
 			 "host=%s port=%s user=%s dbname=%s",
 			 screens[i]->host, screens[i]->port,  screens[i]->user, screens[i]->dbname);
 
@@ -2707,11 +2695,11 @@ int add_connection(WINDOW * window, struct screen_s * screens[],
                     wclear(window);
 
                     /* read password and add to conn options */
-                    cmd_readline(window, msg2, 19, &with_esc2, params, 128, false);
+                    cmd_readline(window, msg2, strlen(msg2), &with_esc2, params, sizeof(params), false);
                     if (strlen(params) != 0 && with_esc2 == false) {
-                        strncpy(screens[i]->password, params, BUFFERSIZE_M);
+                        strncpy(screens[i]->password, params, CONN_ARG_MAXLEN);
 			snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
-				 BUFFERSIZE - strlen(screens[i]->conninfo), " password=%s", screens[i]->password);
+				 CONNINFO_MAXLEN - strlen(screens[i]->conninfo), " password=%s", screens[i]->password);
                         /* try establish connection and finish work */
                         conns[i] = PQconnectdb(screens[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
@@ -2781,7 +2769,7 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
     PQfinish(conns[console_index]);
 
     wprintw(window, "Close current connection.");
-    if (i == 0) {                               /* first console active */
+    if (i == 0) {                               /* first active console */
         if (screens[i + 1]->conn_used) {
         shift_screens(screens, conns, i);
         } else {
@@ -2789,10 +2777,10 @@ int close_connection(WINDOW * window, struct screen_s * screens[],
             endwin();
             exit(EXIT_SUCCESS);
         }
-    } else if (i == (MAX_SCREEN - 1)) {        /* last possible console active */
+    } else if (i == (MAX_SCREEN - 1)) {        /* last possible active console */
         clear_screen_connopts(screens, i);
         console_index = console_index - 1;
-    } else {                                    /* in the middle console active */
+    } else {                                    /* middle active console */
         if (screens[i + 1]->conn_used) {
             shift_screens(screens, conns, i);
         } else {
@@ -2828,9 +2816,9 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * con
      * or use default ~/.pgcenterrc
      */
     if (strlen(args->connfile) != 0)
-        snprintf(pgcenterrc_path, BUFFERSIZE, "%s", args->connfile);
+        snprintf(pgcenterrc_path, PATH_MAX, "%s", args->connfile);
     else {
-        snprintf(pgcenterrc_path, BUFFERSIZE, "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
+        snprintf(pgcenterrc_path, PATH_MAX, "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
     }
 
     if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
@@ -2851,7 +2839,7 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * con
             chmod(pgcenterrc_path, S_IRUSR|S_IWUSR);
         }
     } else {
-        wprintw(window, "Failed write configuration to '%s'", pgcenterrc_path);
+        wprintw(window, "Failed to write configuration into '%s'", pgcenterrc_path);
     }
 }
 
@@ -2870,13 +2858,13 @@ void show_config(WINDOW * window, PGconn * conn)
     FILE * fpout;
     PGresult * res;
     char errmsg[ERRSIZE],
-         pager[32] = "";
+         pager[S_BUF_LEN] = "";
     struct colAttrs * columns;
 
     if (getenv("PAGER") != NULL)
-        snprintf(pager, 32, "%s", getenv("PAGER"));
+        snprintf(pager, S_BUF_LEN, "%s", getenv("PAGER"));
     else
-        snprintf(pager, 32, "%s", DEFAULT_PAGER);
+        snprintf(pager, S_BUF_LEN, "%s", DEFAULT_PAGER);
     if ((fpout = popen(pager, "w")) == NULL) {
         wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
         return;
@@ -2929,7 +2917,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
          confirmation[1],
          msg[] = "Reload configuration files (y/n): ";
 
-    cmd_readline(window, msg, 34, &with_esc, confirmation, 1, true);
+    cmd_readline(window, msg, strlen(msg), &with_esc, confirmation, 1, true);
     if (!strcmp(confirmation, "n") || !strcmp(confirmation, "N"))
         wprintw(window, "Do nothing. Canceled.");
     else if (!strcmp(confirmation, "y") || !strcmp(confirmation, "Y")) {
@@ -3016,9 +3004,9 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
 {
     PGresult * res;
     char errmsg[ERRSIZE],
-         query[BUFSIZ];
+         query[QUERY_MAXLEN];
 
-    snprintf(query, BUFSIZ, "%s%s%s", PG_SETTINGS_SINGLE_OPT_P1, config_option_name, PG_SETTINGS_SINGLE_OPT_P2);
+    snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_SETTINGS_SINGLE_OPT_P1, config_option_name, PG_SETTINGS_SINGLE_OPT_P2);
 
     res = do_query(conn, query, errmsg);
     
@@ -3044,9 +3032,9 @@ void get_pg_version(PGconn * conn, struct screen_s * screen)
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
     get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
     if (strlen(screen->pg_version_num) == 0)
-        strncpy(screen->pg_version_num, "-.-.-", 10);
+        strncpy(screen->pg_version_num, "-.-.-", XS_BUF_LEN);
     if (strlen(screen->pg_version) == 0)
-        strncpy(screen->pg_version, "-.-.-", 10);
+        strncpy(screen->pg_version, "-.-.-", XS_BUF_LEN);
 }
 
 /*
@@ -3065,7 +3053,7 @@ void get_pg_version(PGconn * conn, struct screen_s * screen)
  */
 void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc)
 {
-    static char config_path[128];
+    static char config_path[PATH_MAX];
     pid_t pid;
 
     if (check_pg_listen_addr(screen)
@@ -3074,7 +3062,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
             if (!strcmp(config_file_guc, GUC_DATA_DIRECTORY)) {
-		snprintf(config_path + strlen(config_path), 128 - strlen(config_path), "/%s", PG_RECOVERY_FILE);
+		snprintf(config_path + strlen(config_path), PATH_MAX - strlen(config_path), "/%s", PG_RECOVERY_FILE);
             }
             /* escape from ncurses mode */
             refresh();
@@ -3082,11 +3070,11 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
             pid = fork();                   /* start child */
             if (pid == 0) {
                 /* use editor from environment variables, otherwise use default editor */
-                static char editor[128];
+                static char editor[S_BUF_LEN];
                 if (getenv("EDITOR") != NULL)
-                    snprintf(editor, 128, "%s", getenv("EDITOR"));
+                    snprintf(editor, S_BUF_LEN, "%s", getenv("EDITOR"));
                 else
-                    snprintf(editor, 128, "%s", DEFAULT_EDITOR);
+                    snprintf(editor, S_BUF_LEN, "%s", DEFAULT_EDITOR);
                 execlp(editor, editor, config_path, NULL);
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
@@ -3237,30 +3225,27 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
     } 
 
     char errmsg[ERRSIZE],
-         query[BUFSIZ],
-         action[10],
-         msg[BUFFERSIZE_M],
+         query[QUERY_MAXLEN],
+         action[XS_BUF_LEN],
+         msg[S_BUF_LEN],
          pid[6];
     PGresult * res;
     bool with_esc;
-    int msg_offset;
 
     if (do_terminate) {
-        strncpy(action, "Terminate", 10);
-        strncpy(msg, "Terminate single backend, enter pid: ", BUFFERSIZE_M);
-        msg_offset = 37;
+        strncpy(action, "Terminate", XS_BUF_LEN);
+        strncpy(msg, "Terminate single backend, enter pid: ", S_BUF_LEN);
     } else {
-        strncpy(action, "Cancel", 10);
-        strncpy(msg, "Cancel single backend, enter pid: ", BUFFERSIZE_M);
-        msg_offset = 34;
+        strncpy(action, "Cancel", XS_BUF_LEN);
+        strncpy(msg, "Cancel single backend, enter pid: ", S_BUF_LEN);
     }
 
-    cmd_readline(window, msg, msg_offset, &with_esc, pid, 64, true);
+    cmd_readline(window, msg, strlen(msg), &with_esc, pid, sizeof(pid), true);
     if (atoi(pid) > 0) {
         if (do_terminate) {
-	    snprintf(query, 8192, "%s%s%s", PG_TERM_BACKEND_P1, pid, PG_TERM_BACKEND_P2);
+	    snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_TERM_BACKEND_P1, pid, PG_TERM_BACKEND_P2);
         } else {
-	    snprintf(query, 8192, "%s%s%s", PG_CANCEL_BACKEND_P1, pid, PG_CANCEL_BACKEND_P2);
+	    snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_CANCEL_BACKEND_P1, pid, PG_CANCEL_BACKEND_P2);
         }
 
         res = do_query(conn, query, errmsg);
@@ -3352,13 +3337,12 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     wattroff(window, A_BOLD | A_UNDERLINE);
     wprintw(window, "ther]: ");
 
-    cmd_readline(window, msg, 77, &with_esc, mask, 5, true);
-    if (strlen(mask) > 5) {                                 /* entered mask too long */
-        wprintw(window, "Do nothing. Mask too long.");
-    } else if (strlen(mask) == 0 && with_esc == false) {    /* mask not entered */
+    /* use offset 77 that equals message constructed above and printed by ncurses */
+    cmd_readline(window, msg, 77, &with_esc, mask, sizeof(mask), true);
+    if (strlen(mask) == 0 && with_esc == false) {           /* mask not entered */
         wprintw(window, "Do nothing. Mask not entered.");
     } else if (with_esc) {                                  /* user escaped */
-        ;
+        ;			/* do nothing here, info message will be printed by cmd_readline */
     } else {                                                /* user enter string with valid length */
         /* reset previous mask */
         screen->signal_options = 0;
@@ -3407,17 +3391,17 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         return;
     }
 
-    char query[512],
+    char query[QUERY_MAXLEN],
          mask[5] = "",
-         action[10],
-         state[80];
+         action[XS_BUF_LEN],
+         state[M_BUF_LEN];
     PGresult * res;
     int i, signaled = 0;
 
     if (do_terminate)
-        strncpy(action, "terminate", 10);
+        strncpy(action, "terminate", XS_BUF_LEN);
     else
-        strncpy(action, "cancel", 10);
+        strncpy(action, "cancel", XS_BUF_LEN);
     
     if (screen->signal_options & GROUP_ACTIVE)
         mask[0] = 'a';
@@ -3433,24 +3417,24 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
     for (i = 0; i < strlen(mask); i++) {
         switch (mask[i]) {
             case 'a':
-                strncpy(state, "state = 'active'", 80);
+                strncpy(state, "state = 'active'", M_BUF_LEN);
                 break;
             case 'i':
-                strncpy(state, "state = 'idle'", 80);
+                strncpy(state, "state = 'idle'", M_BUF_LEN);
                 break;
             case 'x':
-                strncpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')", 80);
+                strncpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')", M_BUF_LEN);
                 break;
             case 'w':
-                strncpy(state, "waiting", 80);
+                strncpy(state, "waiting", M_BUF_LEN);
                 break;
             case 'o':
-                strncpy(state, "state IN ('fastpath function call', 'disabled')", 80);
+                strncpy(state, "state IN ('fastpath function call', 'disabled')", M_BUF_LEN);
                 break;
             default:
                 break;
         }
-	snprintf(query, 8192, "%s%s%s%s%s%s%s%s%s",
+	snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s%s%s",
 		 PG_SIG_GROUP_BACKEND_P1, action,
 		 PG_SIG_GROUP_BACKEND_P2, state,
 		 PG_SIG_GROUP_BACKEND_P3, screen->pg_stat_activity_min_age,
@@ -3481,7 +3465,7 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
 void start_psql(WINDOW * window, struct screen_s * screen)
 {
     pid_t pid;
-    char psql[16] = DEFAULT_PSQL;
+    char psql[XS_BUF_LEN] = DEFAULT_PSQL;
 
     /* escape from ncurses mode */
     refresh();
@@ -3527,15 +3511,17 @@ void start_psql(WINDOW * window, struct screen_s * screen)
 long int change_refresh(WINDOW * window, long int interval)
 {
     long int interval_save = interval;
-    static char value[8],               /* truncated value for refresh interval */
-                msg[64],                /* prompt */
-                str[128];               /* entered value */
+    static char value[XS_BUF_LEN],               /* truncated value for refresh interval */
+                msg[S_BUF_LEN],                  /* prompt */
+                str[XS_BUF_LEN];               /* entered value */
     bool with_esc;
 
     wprintw(window, "Change refresh interval from %i to ", interval / 1000000);
     wrefresh(window);
 
-    cmd_readline(window, msg, 36, &with_esc, str, 8, true);
+    /* use offset 36 that equals message constructed above and printed by ncurses */
+    cmd_readline(window, msg, 36, &with_esc, str, sizeof(str), true);
+    /* TODO: print warning msg if interval too big */
     strncpy(value, str, 2);
 
     if (strlen(value) != 0 && with_esc == false) {
@@ -3572,7 +3558,7 @@ void do_noop(WINDOW * window, long int interval)
         ch;
 
     while (paused != false) {
-        wprintw(window, "pgCenter suspended, press any key to resume.");
+        wprintw(window, "pgCenter paused, press any key to resume.");
         wrefresh(window);
         /* sleep */
         for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {
@@ -3603,13 +3589,12 @@ void do_noop(WINDOW * window, long int interval)
  */
 void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter)
 {
-    if (screen->pg_stat_sys) {
-        screen->pg_stat_sys = false;
-        wprintw(window, "Show system tables: off");
-    } else {
-        screen->pg_stat_sys = true;
+    screen->pg_stat_sys ^= 1;
+    if (screen->pg_stat_sys)
         wprintw(window, "Show system tables: on");
-    }
+    else
+        wprintw(window, "Show system tables: off");
+
     *first_iter = true;
 
 }
@@ -3631,37 +3616,37 @@ void get_logfile_path(char * path, PGconn * conn)
          q2[] = "show log_directory",
          q3[] = "show log_filename",
          q4[] = "select to_char(pg_postmaster_start_time(), 'HH24MISS')",
-         ld[64], lf[64], dd[64],
-         path_tpl[64 * 3],
-         path_log[64 * 3],
-         path_log_fallback[64 * 3] = "";
+         logdir[PATH_MAX], logfile[NAME_MAX], datadir[PATH_MAX],
+         path_tpl[PATH_MAX + NAME_MAX],
+         path_log[PATH_MAX + NAME_MAX],
+         path_log_fallback[PATH_MAX + NAME_MAX] = "";
 
     path[0] = '\0';
     if ((res = do_query(conn, q2, errmsg)) == NULL) {
         PQclear(res);
         return;
     }
-    snprintf(ld, 64, "%s", PQgetvalue(res, 0, 0));
+    snprintf(logdir, PATH_MAX, "%s", PQgetvalue(res, 0, 0));
     PQclear(res);
 
-    if ( ld[0] != '/' ) {
+    if ( logdir[0] != '/' ) {
         if ((res = do_query(conn, q1, errmsg)) == NULL) {
             PQclear(res);
             return;
         }
-	snprintf(dd, 64, "%s", PQgetvalue(res, 0, 0));
-	snprintf(path_tpl, 64 * 3, "%s/%s/", dd, ld);
+	snprintf(datadir, PATH_MAX, "%s", PQgetvalue(res, 0, 0));
+	snprintf(path_tpl, PATH_MAX + NAME_MAX, "%s/%s/", datadir, logdir);
         PQclear(res);
     } else {
-	snprintf(path_tpl, 64 * 3, "%s/", ld);
+	snprintf(path_tpl, PATH_MAX + NAME_MAX, "%s/", logdir);
     }
 
     if ((res = do_query(conn, q3, errmsg)) == NULL) {
         PQclear(res);
         return;
     }
-    snprintf(lf, 64, "%s", PQgetvalue(res, 0, 0));
-    snprintf(path_tpl + strlen(path_tpl), (64 * 3) - strlen(path_tpl), "%s", lf);
+    snprintf(logfile, NAME_MAX, "%s", PQgetvalue(res, 0, 0));
+    snprintf(path_tpl + strlen(path_tpl), (PATH_MAX + NAME_MAX) - strlen(path_tpl), "%s", logfile);
     PQclear(res);
     
     /*
@@ -3673,8 +3658,8 @@ void get_logfile_path(char * path, PGconn * conn)
      */
     /* check that the log_filename have %H%M%S pattern */
     if (strstr(path_tpl, "%H%M%S") != NULL) {
-        strncpy(path_log, path_tpl, 64 * 3);
-        strncpy(path_log_fallback, path_tpl, 64 * 3);
+        strncpy(path_log, path_tpl, PATH_MAX + NAME_MAX);
+        strncpy(path_log_fallback, path_tpl, PATH_MAX + NAME_MAX);
         if((res = do_query(conn, q4, errmsg)) == NULL) {
             PQclear(res);
             return;
@@ -3683,7 +3668,7 @@ void get_logfile_path(char * path, PGconn * conn)
         strrpl(path_log_fallback, "%H%M%S", "000000");
         PQclear(res);
     } else {
-        strncpy(path_log, path_tpl, 64 * 3);
+        strncpy(path_log, path_tpl, PATH_MAX + NAME_MAX);
     }
 
     /* translate log_filename pattern string in real path */
@@ -3863,7 +3848,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     off_t end_pos;                                              /* end of file position */
     off_t pos;                                                  /* from this position start read of file */
     size_t bytes_read;                                          /* bytes readen from file to buffer */
-    char buffer[BUFSIZ] = "";                                   /* init empty buffer */
+    char buffer[XL_BUF_LEN] = "";                                   /* init empty buffer */
     int i, nl_count = 0, len, scan_pos;                         /* iterator, newline counter, buffer length, in-buffer scan position */
     char *nl_ptr;                                               /* in-buffer newline pointer */
 
@@ -3877,8 +3862,8 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     if (S_ISREG (stats.st_mode) && stats.st_size != 0) {            /* log should be regular file and not be empty */
         end_pos = lseek(screen->log_fd, 0, SEEK_END);                  /* get end of file position */   
         pos = end_pos;                                              /* set position to the end of file */
-        bytes_read = BUFSIZ;                                        /* read with 8KB block */
-        if (end_pos < BUFSIZ)                                       /* if end file pos less than buffer */
+        bytes_read = XL_BUF_LEN;                                        /* read with 8KB block */
+        if (end_pos < XL_BUF_LEN)                                       /* if end file pos less than buffer */
             pos = 0;                                                /* than set read position ti the begin of file */
         else                                                        /* if end file pos more than buffer */
             pos = pos - bytes_read;                                 /* than set read position into end of file minus buffer size */
@@ -3919,12 +3904,12 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 
         /* now we should cut multiline log entries to screen length */
         char str[n_cols];                                           /* use var for one line */
-        char tmp[BUFSIZ];                                           /* tmp var for line from buffer */
+        char tmp[XL_BUF_LEN];                                           /* tmp var for line from buffer */
         do {                                                        /* scan buffer from begin */
             nl_ptr = strstr(buffer, "\n");                          /* find \n in buffer */
             if (nl_ptr != NULL) {                                   /* if found */
                 if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
-                    strncpy(buffer, nl_ptr + 1, BUFSIZ);                     /* decrease buffer, cut skipped line */
+                    strncpy(buffer, nl_ptr + 1, XL_BUF_LEN);                     /* decrease buffer, cut skipped line */
                     nl_count--;                                     /* decrease newline counter */
                     continue;                                       /* start next iteration */
                 }                                                   /* at this place we have sufficient number of lines for tail */
@@ -3938,7 +3923,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
                     str[strlen(tmp)] = '\0';
                 }
                 wprintw(window, "%s\n", str);                       /* print line to log screen */
-                strncpy(buffer, nl_ptr + 1, BUFSIZ);                         /* decrease buffer, cut printed line */
+                strncpy(buffer, nl_ptr + 1, XL_BUF_LEN);                         /* decrease buffer, cut printed line */
             } else {
                 break;                                              /* if \n not found, finish work */
             }
@@ -3980,11 +3965,11 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
             pid = fork();                   /* start child */
             if (pid == 0) {
                 /* get pager from environment variables, otherwise use default pager */
-                static char pager[128];
+                static char pager[S_BUF_LEN];
                 if (getenv("PAGER") != NULL)
-                    strncpy(pager, getenv("PAGER"), 128);
+                    strncpy(pager, getenv("PAGER"), S_BUF_LEN);
                 else
-                    strncpy(pager, DEFAULT_PAGER, 128);
+                    strncpy(pager, DEFAULT_PAGER, S_BUF_LEN);
                 execlp(pager, pager, screen->log_path, NULL);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
@@ -4052,21 +4037,21 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     PGresult * res;
     bool with_esc;
     char msg[] = "Enter queryid: ",
-         query[BUFSIZ],
-         pager[128] = "";
-    char queryid[16];
+         query[QUERY_MAXLEN],
+         pager[M_BUF_LEN] = "";
+    char queryid[XS_BUF_LEN];
     char errmsg[ERRSIZE];
     FILE * fpout;
 
-    cmd_readline(window, msg, 15, &with_esc, queryid, 16, true);
+    cmd_readline(window, msg, strlen(msg), &with_esc, queryid, sizeof(queryid), true);
     if (check_string(queryid) == -1) {
-        wprintw(window, "Do nothing. Value not valid.");
+        wprintw(window, "Do nothing. Value is not valid.");
         return;
     }
 
     if (strlen(queryid) != 0 && with_esc == false) {
         /* do query and send result into less */
-	snprintf(query, 8192, "%s%s%s", PG_GET_QUERYREP_BY_QUERYID_QUERY_P1, queryid, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
+	snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_GET_QUERYREP_BY_QUERYID_QUERY_P1, queryid, PG_GET_QUERYREP_BY_QUERYID_QUERY_P2);
         if ((res = do_query(conn, query, errmsg)) == NULL) {
             wprintw(window, "%s", errmsg);
             return;
@@ -4080,9 +4065,9 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         }
 
         if (getenv("PAGER") != NULL)
-            strncpy(pager, getenv("PAGER"), 128);
+            strncpy(pager, getenv("PAGER"), M_BUF_LEN);
         else
-            strncpy(pager, DEFAULT_PAGER, 128);
+            strncpy(pager, DEFAULT_PAGER, M_BUF_LEN);
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
@@ -4428,10 +4413,10 @@ int main(int argc, char *argv[])
     static int console_no = 1;                          /* console number   */
     static int console_index = 0;                       /* console index in screen array */
 
-    PGconn      *conns[8];                              /* connections array    */
+    PGconn      *conns[MAX_SCREEN];                     /* connections array    */
     PGresult    *p_res = NULL,
                 *c_res = NULL;                          /* query results        */
-    char query[4096];                                   /* query text           */
+    char query[QUERY_MAXLEN];                           /* query text           */
     int n_rows, n_cols, n_prev_rows = 0;                /* query results opts   */
     char errmsg[ERRSIZE];                               /* query error message  */
 
@@ -4654,10 +4639,10 @@ int main(int argc, char *argv[])
                 case 'Z':               /* change screens colors */
                     change_colors(&ws_color, &wc_color, &wa_color, &wl_color);
                     break;
-                case 32:                /* pause program execution with space */
+                case 32:                /* pause program execution with 'space' */
                     do_noop(w_cmd, interval);
                     break;
-                case 265: case 'h':     /* print help with F1 */
+                case 265: case 'h':     /* print help with F1 or 'h' */
                     print_help_screen(&first_iter);
                     break;
                 case 'q':               /* exit program */

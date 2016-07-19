@@ -12,9 +12,19 @@
 #define PROGRAM_AUTHORS_CONTACTS    "<lesovsky@gmail.com>"
 
 /* sizes, limits and defaults */
-#define BUFFERSIZE_S        16
-#define BUFFERSIZE_M        64
-#define BUFFERSIZE          4096
+#define XS_BUF_LEN	16
+#define S_BUF_LEN	64
+#define M_BUF_LEN	128
+#define L_BUF_LEN	1024
+#define X_BUF_LEN	4096
+#define XL_BUF_LEN	BUFSIZ
+
+#define CONN_ARG_MAXLEN		S_BUF_LEN
+#define CONNINFO_MAXLEN		S_BUF_LEN * 5	/* host, port, username, dbname, password */
+#define COL_MAXLEN		S_BUF_LEN
+#define CONNINFO_TITLE_LEN	48
+#define QUERY_MAXLEN		XL_BUF_LEN
+
 #define ERRSIZE             128
 #define MAX_SCREEN          8
 #define TOTAL_CONTEXTS      12
@@ -46,6 +56,13 @@
 #define GUC_DATA_DIRECTORY      "data_directory"
 #define GUC_SERVER_VERSION      "server_version"
 #define GUC_SERVER_VERSION_NUM  "server_version_num"
+
+/* 
+ * PostgreSQL version notations:
+ * PostgreSQL stores his version in XXYYY format, where XX is major version 
+ * and YYY is minor. For example, 90540 means 9.5.4.
+ * */
+#define PG92 90200
 
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
@@ -115,11 +132,11 @@ struct context_s
 struct args_s
 {
     int count;
-    char connfile[BUFFERSIZE];
-    char host[BUFFERSIZE_M];
-    char port[BUFFERSIZE_M];
-    char user[BUFFERSIZE_M];
-    char dbname[BUFFERSIZE_M];
+    char connfile[PATH_MAX];
+    char host[CONN_ARG_MAXLEN];
+    char port[CONN_ARG_MAXLEN];
+    char user[CONN_ARG_MAXLEN];
+    char dbname[CONN_ARG_MAXLEN];
     bool need_passwd;
 };
 
@@ -130,20 +147,20 @@ struct screen_s
 {
     int screen;
     bool conn_used;
-    char host[BUFFERSIZE_M];
-    char port[BUFFERSIZE_M];
-    char user[BUFFERSIZE_M];
-    char dbname[BUFFERSIZE_M];
-    char password[BUFFERSIZE_M];
-    char conninfo[BUFFERSIZE];
-    char pg_version_num[10];
-    char pg_version[10];
+    char host[CONN_ARG_MAXLEN];
+    char port[CONN_ARG_MAXLEN];
+    char user[CONN_ARG_MAXLEN];
+    char dbname[CONN_ARG_MAXLEN];
+    char password[CONN_ARG_MAXLEN];
+    char conninfo[CONNINFO_MAXLEN];
+    char pg_version_num[XS_BUF_LEN];
+    char pg_version[XS_BUF_LEN];
     bool subscreen_enabled;                     /* subscreen status: on/off */
     int subscreen;                              /* subscreen type: logtail, iostat, etc. */
     char log_path[PATH_MAX];                    /* logfile path for logtail subscreen */
     int log_fd;                                 /* logfile fd for log viewing */
     enum context current_context;
-    char pg_stat_activity_min_age[BUFFERSIZE_S];
+    char pg_stat_activity_min_age[XS_BUF_LEN];
     struct context_s context_list[TOTAL_CONTEXTS];
     int signal_options;
     bool pg_stat_sys;
@@ -189,7 +206,7 @@ struct iodata_s
 {
     int major;
     int minor;
-    char devname[BUFFERSIZE_M];
+    char devname[S_BUF_LEN];
     unsigned long r_completed;          /* reads completed successfully */
     unsigned long r_merged;             /* reads merged */
     unsigned long r_sectors;            /* sectors read */
@@ -243,7 +260,7 @@ struct nicdata_s
 
 /* struct for column widths */
 struct colAttrs {
-    char name[40];
+    char name[COL_MAXLEN];
     int width;
 };
 
@@ -724,7 +741,7 @@ int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], co
 void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 
 /* connections and queries unctions */
-char * password_prompt(const char *prompt, int maxlen, bool echo);
+char * password_prompt(const char *prompt, int pw_maxlen, bool echo);
 void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * screen, bool *reconnected);
 void prepare_conninfo(struct screen_s * screens[]);
 void open_connections(struct screen_s * screens[], PGconn * conns[]);
