@@ -3530,20 +3530,28 @@ void start_psql(WINDOW * window, struct screen_s * screen)
 long int change_refresh(WINDOW * window, long int interval)
 {
     long int interval_save = interval;
-    static char value[XS_BUF_LEN],               /* truncated value for refresh interval */
-                msg[S_BUF_LEN],                  /* prompt */
-                str[XS_BUF_LEN];               /* entered value */
+    static char msg[S_BUF_LEN],                 /* prompt */
+                str[XS_BUF_LEN];                /* entered value */
     bool with_esc;
+    int offset = 0;				/* additional offset for message */
 
-    wprintw(window, "Change refresh (min 1, max 300) to ");
+    wprintw(window, "Change refresh (min 1, max 300, current %i) to ", interval / 1000000);
     wrefresh(window);
 
-    /* use offset 35 that equals message constructed above and printed by ncurses */
-    cmd_readline(window, msg, 35, &with_esc, str, sizeof(str), true);
+    /* calculate additional offset equals number of digits in interval */
+    while ((interval / 1000000) != 0) {
+      interval /= 10;
+      ++offset;
+    }
+    /* restore current interval */
+    interval = interval_save;
 
-    if (strlen(value) != 0 && with_esc == false) {
-        if (strlen(value) != 0) {
-            interval = atol(value);
+    /* use offset 45 that equals message constructed above and printed by ncurses */
+    cmd_readline(window, msg, 45 + offset, &with_esc, str, sizeof(str), true);
+
+    if (strlen(str) != 0 && with_esc == false) {
+        if (strlen(str) != 0) {
+            interval = atol(str);
             if (interval < 1) {
                 wprintw(window, "Should not be less than 1 second.");
                 interval = interval_save;
@@ -3554,7 +3562,7 @@ long int change_refresh(WINDOW * window, long int interval)
                 interval = interval * 1000000;
             }
         }
-    } else if (strlen(value) == 0 && with_esc == false ) {
+    } else if (strlen(str) == 0 && with_esc == false ) {
         wprintw(window, "Leave old value: %i seconds.", interval_save / 1000000);
         interval = interval_save;
     }
