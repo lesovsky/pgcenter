@@ -1,8 +1,11 @@
 pgcenter (devel) unstable; urgency=low
 
+  * use unsigned data types for always positive variables.
+  * stdout sanity check in password_prompt().
+  * use sizeof(...) instead of macros.
   * refresh interval is limited between 1 and 300 seconds.
   * check port number at startup.
-  * replace raw numbers to 'define' macroses.
+  * replace raw numbers to 'define' macros.
   * replace strcpy/strcat with strncpy/snprintf.
   * sanitize malloc() or replace it with char.
   * print_*stat*: don't exit if stats read failed.

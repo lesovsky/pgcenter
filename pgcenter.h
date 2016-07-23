@@ -739,11 +739,11 @@ void init_args_struct(struct args_s *args);
 void check_portnum(char * portnum);
 void arg_parse(int argc, char *argv[], struct args_s *args);
 void create_initial_conn(struct args_s * args, struct screen_s * screens[]);
-int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const int pos);
+unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const unsigned int pos);
 void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 
 /* connections and queries unctions */
-char * password_prompt(const char *prompt, int pw_maxlen, bool echo);
+char * password_prompt(const char *prompt, unsigned int pw_maxlen, bool echo);
 void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * screen, bool *reconnected);
 void prepare_conninfo(struct screen_s * screens[]);
 void open_connections(struct screen_s * screens[], PGconn * conns[]);
@@ -753,57 +753,57 @@ PGresult * do_query(PGconn * conn, char * query, char errmsg[]);
 
 /* system resources functions */
 void get_time(char * strtime);
-float get_loadavg(int m);
+float get_loadavg(unsigned int m);
 void print_loadavg(WINDOW * window);
 void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short);
-void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev);
-void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], int bdev);
-void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
-void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], int idev);
+void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev);
+void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev);
+void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
+void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
 void get_HZ(void);
 void read_uptime(unsigned long long *uptime);
-void read_cpu_stat(struct cpu_s *st_cpu, int nbr,
+void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
         unsigned long long *uptime, unsigned long long *uptime0);
 unsigned long long get_interval(unsigned long long prev_uptime,
         unsigned long long curr_uptime);
 double ll_sp_value(unsigned long long value1, unsigned long long value2,
         unsigned long long itv);
 void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
-        int curr, unsigned long long itv);
+        unsigned int curr, unsigned long long itv);
 void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
-        struct iodata_s *p_ios[], int bdev, bool * repaint);
+        struct iodata_s *p_ios[], unsigned int bdev, bool * repaint);
 void get_speed_duplex(struct nicdata_s * nicdata);
 
 /* print screen functions */
 void print_title(WINDOW * window, char * progname);
 void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
-void print_conninfo(WINDOW * window, PGconn *conn, int console_no);
+void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
 void print_autovac_info(WINDOW * window, PGconn * conn);
-void print_pgstatstmt_info(WINDOW * window, PGconn * conn, long int interval);
+void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long int interval);
 void print_data(WINDOW *window, PGresult *res, char ***arr, 
-        int n_rows, int n_cols, struct screen_s * screen);
+        unsigned int n_rows, unsigned int n_cols, struct screen_s * screen);
 void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn * conn);
 
 /* data arrays functions */
-char *** init_array(char ***arr, int n_rows, int n_cols);
-char *** free_array(char ***arr, int n_rows, int n_cols);
-void pgrescpy(char ***arr, PGresult *res, int n_rows, int n_cols);
+char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
+char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
+void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols);
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, 
-        int n_rows, int n_cols, long int interval);
-void sort_array(char ***res_arr, int n_rows, int n_cols, struct screen_s * screen);
+        unsigned int n_rows, unsigned int n_cols, unsigned long int interval);
+void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struct screen_s * screen);
 
 /* key-press functions */
-int switch_conn(WINDOW * window, struct screen_s * screens[],
-        int ch, int console_index, int console_no, PGresult * res, bool * first_iter);
+unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
+        unsigned int ch, unsigned int console_index, unsigned int console_no, PGresult * res, bool * first_iter);
 void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter);
 void change_sort_order_direction(struct screen_s * screen, bool * first_iter);
 void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter);
-int add_connection(WINDOW * window, struct screen_s * screens[],
-        PGconn * conns[], int console_index);
-int close_connection(WINDOW * window, struct screen_s * screens[],
-        PGconn * conns[], int console_index, bool *first_iter);
+unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
+        PGconn * conns[], unsigned int console_index);
+unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
+        PGconn * conns[], unsigned int console_index, bool *first_iter);
 void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args);
 void show_config(WINDOW * window, PGconn * conn);
 void reload_conf(WINDOW * window, PGconn * conn);
@@ -814,10 +814,10 @@ void get_statemask(WINDOW * window, struct screen_s * screen);
 void set_statemask(WINDOW * window, struct screen_s * screen);
 void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate);
 void start_psql(WINDOW * window, struct screen_s * screen);
-long int change_refresh(WINDOW * window, long int interval);
-void do_noop(WINDOW * window, long int interval);
+unsigned long int change_refresh(WINDOW * window, unsigned long int interval);
+void do_noop(WINDOW * window, unsigned long int interval);
 void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter);
-void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn, int subscreen);
+void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn, unsigned int subscreen);
 void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted);
@@ -827,30 +827,30 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 /* functions routines */
 double min(double d1, double d2);
 double max(double d1, double d2);
-int key_is_pressed(void);
-void strrpl(char * o_string, char * s_string, char * r_string);
+unsigned int key_is_pressed(void);
+void strrpl(char * o_string, char * s_string, char * r_string, unsigned int buf_size);
 int check_string(char * string);
-struct colAttrs * init_colattrs(int n_cols);
-void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, int n_rows, int n_cols);
-void cmd_readline(WINDOW *window, char * msg, int pos, bool * with_esc, char * str, int len, bool echoing);
-void clear_screen_connopts(struct screen_s * screens[], int i);
-void shift_screens(struct screen_s * screens[], PGconn * conns[], int i);
+struct colAttrs * init_colattrs(unsigned int n_cols);
+void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols);
+void cmd_readline(WINDOW *window, char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
+void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
+void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);
 bool check_pg_listen_addr(struct screen_s * screen);
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
 void get_pg_version(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
-int count_block_devices(void);
-int count_nic_devices(void);
-void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], int bdev);
-void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], int idev);
-ITEM ** init_menuitems(int n_choices);
+unsigned int count_block_devices(void);
+unsigned int count_nic_devices(void);
+void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], unsigned int bdev);
+void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], unsigned int idev);
+ITEM ** init_menuitems(unsigned int n_choices);
 
 /* color functions */
-void init_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
-void draw_color_help(WINDOW * w, int * ws_color, int * wc_color,
-        int * wa_color, int * wl_color, int target, int * target_color);
-void change_colors(int * ws_color, int * wc_color, int * wa_color, int * wl_color);
+void init_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color);
+void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_color,
+        unsigned int * wa_color, unsigned int * wl_color, unsigned int target, unsigned int * target_color);
+void change_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color);
 
 /* help functions */
 void print_help_screen(bool * first_iter);
