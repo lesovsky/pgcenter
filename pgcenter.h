@@ -827,7 +827,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 /* functions routines */
 double min(double d1, double d2);
 double max(double d1, double d2);
-unsigned int key_is_pressed(void);
+bool key_is_pressed(void);
 void strrpl(char * o_string, char * s_string, char * r_string, unsigned int buf_size);
 int check_string(char * string);
 struct colAttrs * init_colattrs(unsigned int n_cols);

@@ -122,14 +122,18 @@ double max(double d1, double d2)
  * 1 if key is pressed or 0 if not.
  ****************************************************************************
  */
-unsigned int key_is_pressed(void)
+bool key_is_pressed(void)
 {
-    unsigned int ch = getch();
+    int ch = getch();
+
     if (ch != ERR) {
         ungetch(ch);
-        return 1;
+	if (ch != ERR)
+	    return true;
+        else
+            return false;
     } else
-        return 0;
+        return false;
 }
 
 /*
@@ -2511,7 +2515,7 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
  */
 void cmd_readline(WINDOW *window, char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing)
 {
-    unsigned int ch;
+    int ch;
     unsigned int i = 0;
     bool done = false;
 
@@ -3168,7 +3172,8 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
     WINDOW *menu_win;
     MENU *menu;
     ITEM **items;
-    unsigned int n_choices, c, i;
+    unsigned int n_choices, i;
+    int ch;
     bool done = false;
 
     cbreak();
@@ -3200,8 +3205,8 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
     while (1) {
         if (done)
             break;
-        c = wgetch(menu_win);
-        switch (c) {
+        ch = wgetch(menu_win);
+        switch (ch) {
             case KEY_DOWN:
                 menu_driver(menu, REQ_DOWN_ITEM);
                 break;
@@ -3597,7 +3602,8 @@ unsigned long int change_refresh(WINDOW * window, unsigned long int interval)
 void do_noop(WINDOW * window, unsigned long int interval)
 {
     bool paused = true;
-    unsigned int sleep_usec, ch;
+    unsigned int sleep_usec;
+    int ch;
 
     while (paused != false) {
         wprintw(window, "pgCenter paused, press any key to resume.");
@@ -4259,8 +4265,8 @@ void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_colo
 void change_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color)
 {
     WINDOW * w;
-    unsigned int ch,
-        target = 'S',
+    int ch;
+    unsigned int target = 'S',
         * target_color = ws_color;
     unsigned int ws_save = *ws_color,
         wc_save = *wc_color,
@@ -4391,7 +4397,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 void print_help_screen(bool * first_iter)
 {
     WINDOW * w;
-    unsigned int ch;
+    int ch;
 
     w = subwin(stdscr, 0, 0, 0, 0);
     cbreak();
@@ -4451,7 +4457,7 @@ int main(int argc, char *argv[])
     struct mem_s *st_mem_short;                         /* mem usage struct */
 
     WINDOW *w_sys, *w_cmd, *w_dba, *w_sub;              /* ncurses windows  */
-    unsigned int ch;                                    /* store key press  */
+    int ch;                                    		/* store key press  */
     bool first_iter = true;                             /* first-run flag   */
     static unsigned int console_no = 1;                 /* console number   */
     static unsigned int console_index = 0;              /* console index in screen array */
