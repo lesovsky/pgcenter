@@ -1,5 +1,9 @@
 pgcenter (devel) unstable; urgency=low
 
+  * print_autovac_info() refactoring, remove unnecessary 'else' sections.
+  * print_postgres_activity() refactoring, remove unnecessary 'else' sections.
+  * read_uptime() refactoring, use fscanf instead of sscanf, check ret.value.
+  * get_loadavg() refactoring, use float's array anf reduce number of calls.
   * use unsigned data types for always positive variables.
   * stdout sanity check in password_prompt().
   * use sizeof(...) instead of macros.

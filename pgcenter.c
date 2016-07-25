@@ -904,38 +904,26 @@ void print_title(WINDOW * window, char * progname)
 
 /*
  ************************************************* summary window function **
- * Read /proc/loadavg and return load average value.
- *
- * IN:
- * @m       Minute value.
+ * Read /proc/loadavg and return load average values.
  *
  * RETURNS:
- * Load average for 1, 5 or 15 minutes.
+ * Load average for 1, 5, 15 minutes.
  ****************************************************************************
  */
-float get_loadavg(unsigned int m)
+float * get_loadavg()
 {
-    /* 1, 5, 15 are common load average metrics */
-    if ( m != 1 && m != 5 && m != 15 )
-        m = 1;
-
-    float avg = 0, avg1, avg5, avg15;
+    static float la[3];
     FILE *fp;
 
     if ((fp = fopen(LOADAVG_FILE, "r")) != NULL) {
-        if ((fscanf(fp, "%f %f %f", &avg1, &avg5, &avg15)) != 3)
-            avg1 = avg5 = avg15 = 0;            /* something goes wrong */
+        if ((fscanf(fp, "%f %f %f", &la[0], &la[1], &la[2])) != 3)
+            la[0] = la[1] = la[2] = 0;            /* something goes wrong */
         fclose(fp);
     } else {
-        avg1 = avg5 = avg15 = 0;                /* can't read statfile */
+        la[0] = la[1] = la[2] = 0;                /* can't read statfile */
     }
 
-    switch (m) {
-        case 1: avg = avg1; break;
-        case 5: avg = avg5; break;
-        case 15: avg = avg15; break;
-    }
-    return avg;
+    return la;
 }
 
 /*
@@ -948,8 +936,8 @@ float get_loadavg(unsigned int m)
  */
 void print_loadavg(WINDOW * window)
 {
-    wprintw(window, "load average: %.2f, %.2f, %.2f\n",
-                    get_loadavg(1), get_loadavg(5), get_loadavg(15));
+    float * la = get_loadavg();
+    wprintw(window, "load average: %.2f, %.2f, %.2f\n", la[0], la[1], la[2]);
 }
 
 /*
@@ -1000,59 +988,44 @@ void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no)
  */
 void print_postgres_activity(WINDOW * window, PGconn * conn)
 {
-    unsigned int t_count, i_count, x_count, a_count, w_count, o_count;
+    unsigned int t_count = 0,			/* total number of connections */
+        	 i_count = 0,			/* number of idle connections */
+        	 x_count = 0,			/* number of idle in xact */
+        	 a_count = 0,			/* number of active connections */
+        	 w_count = 0,			/* number of waiting connections */
+        	 o_count = 0;			/* other, unclassiffied */
     PGresult *res;
     static char errmsg[ERRSIZE];
 
-    if (PQstatus(conn) == CONNECTION_BAD) {
-        t_count = 0;			/* total number of connections */
-        i_count = 0;			/* number of idle connections */
-        x_count = 0;			/* number of idle in xact */
-        a_count = 0;			/* number of active connections */
-        w_count = 0;			/* number of waiting connections */
-        o_count = 0;			/* other, unclassiffied */
-    } 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg)) != NULL) {
         t_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        t_count = 0;
-    }
+    } 
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY, errmsg)) != NULL) {
         i_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        i_count = 0;
-    }
+    } 
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY, errmsg)) != NULL) {
         x_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        x_count = 0;
-    }
+    } 
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY, errmsg)) != NULL) {
         a_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        a_count = 0;
-    }
+    } 
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY, errmsg)) != NULL) {
         w_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        w_count = 0;
-    }
+    } 
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY, errmsg)) != NULL) {
         o_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        o_count = 0;
-    }
+    } 
 
     mvwprintw(window, 1, COLS / 2,
             "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
@@ -1254,18 +1227,16 @@ void get_HZ(void)
 void read_uptime(unsigned long long *uptime)
 {
     FILE *fp;
-    char line[S_BUF_LEN];
     unsigned long up_sec, up_cent;
 
-    if ((fp = fopen(UPTIME_FILE, "r")) == NULL)
+    if ((fp = fopen(UPTIME_FILE, "r")) != NULL) {
+        if ((fscanf(fp, "%lu.%lu", &up_sec, &up_cent)) != 2) {
+	    fclose(fp);
+	    return;
+    	}
+    } else
         return;
 
-    if (fgets(line, sizeof(line), fp) == NULL) {
-        fclose(fp);
-        return;
-    }
-
-    sscanf(line, "%lu.%lu", &up_sec, &up_cent);
     *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
     fclose(fp);
 }
@@ -1966,30 +1937,25 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
  */
 void print_autovac_info(WINDOW * window, PGconn * conn)
 {
-    unsigned int av_count, avw_count;
-    char av_max_time[XS_BUF_LEN];
+    unsigned int av_count = 0,		/* total number of autovacuum workers*/
+		 avw_count = 0;		/* number of wraparound workers */
+    char av_max_time[XS_BUF_LEN] = "--:--:--";
     PGresult *res;
     static char errmsg[ERRSIZE];
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
         av_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        av_count = 0;
     }
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY, errmsg)) != NULL) {
         avw_count = atoi(PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        avw_count = 0;
     }
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg)) != NULL) {
         snprintf(av_max_time, sizeof(av_max_time), "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
-    } else {
-        snprintf(av_max_time, sizeof(av_max_time), "%s", "--:--:--");
     }
 
     mvwprintw(window, 2, COLS / 2, "autovacuum: %2u workers, %2u wraparound, %s avw_maxtime",

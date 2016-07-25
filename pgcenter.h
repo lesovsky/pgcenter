@@ -753,7 +753,7 @@ PGresult * do_query(PGconn * conn, char * query, char errmsg[]);
 
 /* system resources functions */
 void get_time(char * strtime);
-float get_loadavg(unsigned int m);
+float * get_loadavg();
 void print_loadavg(WINDOW * window);
 void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short);
 void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev);
