@@ -616,7 +616,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
     }
     
     /* get PostgreSQL version if reconnect successful */
-    if (reconnected) {
+    if (*reconnected == true) {
         get_pg_version(conn, screen);
     }
 }

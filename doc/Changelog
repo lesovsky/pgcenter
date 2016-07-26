@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * reconnect_if_failed() refactoring, eliminate unwanted 'get pg version' queries.
   * print_autovac_info()/print_postgres_activity() refactoring, merge queries into one.
   * print_autovac_info() refactoring, remove unnecessary 'else' sections.
   * print_postgres_activity() refactoring, remove unnecessary 'else' sections.
