@@ -282,6 +282,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].context = pg_stat_statements_temp;
         screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key = PG_STAT_STATEMENTS_TEMP_ORDER_MIN;
         screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].context = pg_stat_statements_local;
+        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_desc = true;
     }
 }
 
@@ -831,6 +834,13 @@ void prepare_query(struct screen_s * screen, char * query)
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key + 1);
             snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1, tmp, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
+            break;
+        case pg_stat_statements_local:
+            /* here we use query native ORDER BY, and we should incrementing order key */
+            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key + 1);
+            atoi(screen->pg_version_num) < PG92
+                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2)
+                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2);
             break;
     }
 }
@@ -2141,6 +2151,15 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             min = PG_STAT_STATEMENTS_TEMP_DIFF_MIN;
             max = PG_STAT_STATEMENTS_TEMP_DIFF_MAX;
             break;
+        case pg_stat_statements_local:
+            if (atoi(screen->pg_version_num) < PG92) {
+                min = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MIN;
+                max = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX;
+            } else {
+                min = PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN;
+                max = PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX;
+            }
+            break;
         default:
             break;
     }
@@ -2203,6 +2222,10 @@ void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struc
     if (screen->current_context == pg_stat_statements_temp 
             && order_key < PG_STAT_STATEMENTS_TEMP_DIFF_MIN 
             && order_key > PG_STAT_STATEMENTS_TEMP_DIFF_MAX)
+        return;
+    if (screen->current_context == pg_stat_statements_local
+            && order_key < PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN 
+            && order_key > PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX)
         return;
 
     /* don't sort arrays with invalid key */
@@ -2388,6 +2411,14 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
         case pg_stat_statements_temp:
             min = PG_STAT_STATEMENTS_TEMP_ORDER_MIN;
             max = PG_STAT_STATEMENTS_TEMP_ORDER_MAX;
+            *first_iter = true;
+            break;
+        case pg_stat_statements_local:
+            min = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
+            if (atoi(screen->pg_version_num) < PG92)
+                max = PG_STAT_STATEMENTS_LOCAL_ORDER_91_MAX;
+            else
+                max = PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX;
             *first_iter = true;
             break;
         default:
@@ -4021,7 +4052,8 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     if (screen->current_context != pg_stat_statements_timing
             && screen->current_context != pg_stat_statements_general
             && screen->current_context != pg_stat_statements_io
-            && screen->current_context != pg_stat_statements_temp) {
+            && screen->current_context != pg_stat_statements_temp
+            && screen->current_context != pg_stat_statements_local) {
         wprintw(window, "Get query text not allowed here.");
         return;
     }
@@ -4320,6 +4352,9 @@ void switch_context(WINDOW * window, struct screen_s * screen,
         case pg_stat_statements_temp:
             wprintw(window, "Show pg_stat_statements temp");
             break;
+        case pg_stat_statements_local:
+            wprintw(window, "Show pg_stat_statements local io");
+            break;
         default:
             break;
     }
@@ -4354,7 +4389,7 @@ void print_help_screen(bool * first_iter)
     wprintw(w, "general actions:\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
   s,t,T           's' sizes, 't' tables, 'T' tables IO,\n\
-  x,X,c,v         'x' stmt timings, 'X' stmt general, 'c' stmt IO, 'v' stmt temp.\n\
+  x,X,c,v,V       'x' stmt timings, 'X' stmt general, 'c' stmt IO, 'v' stmt temp, 'V' stmt local IO\n\
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
   p                       'p' start psql session.\n\
@@ -4611,6 +4646,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'v':               /* open pg_stat_statements_temp screen */
                     switch_context(w_cmd, screens[console_index], pg_stat_statements_temp, p_res, &first_iter);
+                    break;
+                case 'V':               /* open pg_stat_statements_local screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_statements_local, p_res, &first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index], p_res, &first_iter);

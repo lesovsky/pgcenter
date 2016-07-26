@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * pg_stat_statements: add local IO information context (V - hotkey).
   * nicstat: return from function if sock() failed (instead of program exit).
   * print_log() refactoring, check return value for fstat.
   * reconnect_if_failed() refactoring, eliminate unwanted 'get pg version' queries.

@@ -27,7 +27,6 @@
 
 #define ERRSIZE             128
 #define MAX_SCREEN          8
-#define TOTAL_CONTEXTS      12
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:00.5"
 
@@ -78,6 +77,8 @@
 #define HZ                  hz
 unsigned int hz;
 
+/* information contexts */
+#define TOTAL_CONTEXTS      		13
 #define PG_STAT_DATABASE_NUM                    0
 #define PG_STAT_REPLICATION_NUM                 1
 #define PG_STAT_TABLES_NUM                      2
@@ -90,6 +91,7 @@ unsigned int hz;
 #define PG_STAT_STATEMENTS_GENERAL_NUM          9
 #define PG_STAT_STATEMENTS_IO_NUM               10
 #define PG_STAT_STATEMENTS_TEMP_NUM             11
+#define PG_STAT_STATEMENTS_LOCAL_NUM		12
 
 #define GROUP_ACTIVE        1 << 0
 #define GROUP_IDLE          1 << 1
@@ -116,7 +118,8 @@ enum context
     pg_stat_statements_timing,
     pg_stat_statements_general,
     pg_stat_statements_io,
-    pg_stat_statements_temp
+    pg_stat_statements_temp,
+    pg_stat_statements_local
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -473,7 +476,7 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_91_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS t_all_t, \
         round(sum(p.total_time)) AS all_t, \
         sum(p.calls) AS calls, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
@@ -496,10 +499,10 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t, \
-        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS tot_read_t, \
-        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS tot_write_t, \
-        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS tot_cpu_t, \
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS t_all_t, \
+        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS t_read_t, \
+        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS t_write_t, \
+        date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS t_cpu_t, \
         round(sum(p.total_time)) AS all_t, \
         round(sum(p.blk_read_time)) AS read_t, \
         round(sum(p.blk_write_time)) AS write_t, \
@@ -534,7 +537,7 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
+        sum(p.calls) AS t_calls, sum(p.rows) as t_rows, \
         sum(p.calls) AS calls, sum(p.rows) as rows, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
@@ -556,7 +559,7 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \
         a.rolname AS user, d.datname AS database, \
-        sum(p.calls) AS total_calls, sum(p.rows) as total_rows, \
+        sum(p.calls) AS t_calls, sum(p.rows) as t_rows, \
         sum(p.calls) AS calls, sum(p.rows) as rows, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
@@ -585,11 +588,11 @@ struct colAttrs {
     "SELECT \
         a.rolname AS user, d.datname AS database, \
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_hits, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_hits, \
         (sum(p.shared_blks_read) + sum(p.local_blks_read)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_reads, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_reads, \
         (sum(p.shared_blks_written) + sum(p.local_blks_written)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_written, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_written, \
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit)) \
             * (SELECT current_setting('block_size')::int / 1024) as hits, \
         (sum(p.shared_blks_read) + sum(p.local_blks_read)) \
@@ -618,13 +621,13 @@ struct colAttrs {
     "SELECT \
         a.rolname AS user, d.datname AS database, \
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_hits, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_hits, \
         (sum(p.shared_blks_read) + sum(p.local_blks_read)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_reads, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_reads, \
         (sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_dirtied, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_dirtied, \
         (sum(p.shared_blks_written) + sum(p.local_blks_written)) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_written, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_written, \
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit)) \
             * (SELECT current_setting('block_size')::int / 1024) as hits, \
         (sum(p.shared_blks_read) + sum(p.local_blks_read)) \
@@ -664,13 +667,13 @@ struct colAttrs {
     "SELECT \
         a.rolname AS user, d.datname AS database, \
         sum(p.temp_blks_read) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_read, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_tmp_read, \
         sum(p.temp_blks_written) \
-            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_write, \
+            * (SELECT current_setting('block_size')::int / 1024) as t_tmp_write, \
         sum(p.temp_blks_read) \
-            * (SELECT current_setting('block_size')::int / 1024) as temp_read, \
+            * (SELECT current_setting('block_size')::int / 1024) as tmp_read, \
         sum(p.temp_blks_written) \
-            * (SELECT current_setting('block_size')::int / 1024) as temp_write, \
+            * (SELECT current_setting('block_size')::int / 1024) as tmp_write, \
         sum(p.calls) AS calls, \
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
         regexp_replace( \
@@ -694,6 +697,71 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_TEMP_ORDER_MAX    6
 #define PG_STAT_STATEMENTS_TEMP_DIFF_MIN    4
 #define PG_STAT_STATEMENTS_TEMP_DIFF_MAX    6
+
+#define PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_hits, \
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_reads, \
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_written, \
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as lo_hits, \
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as lo_reads, \
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as lo_written, \
+        sum(p.calls) AS calls, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
+
+#define PG_STAT_STATEMENTS_LOCAL_QUERY_P1 \
+    "SELECT \
+        a.rolname AS user, d.datname AS database, \
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_hits, \
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_reads, \
+        (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_dirtied, \
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_written, \
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as lo_hits, \
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as lo_reads, \
+        (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) as lo_dirtied, \
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as lo_written, \
+        sum(p.calls) AS calls, \
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(p.query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_statements p \
+    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_database d ON d.oid=p.dbid \
+    WHERE d.datname != 'postgres' AND calls > 50 \
+    GROUP BY a.rolname, d.datname, query ORDER BY "
+#define PG_STAT_STATEMENTS_LOCAL_QUERY_P2 " DESC"
+
+#define PG_STAT_STATEMENTS_LOCAL_ORDER_MIN    2
+#define PG_STAT_STATEMENTS_LOCAL_ORDER_91_MAX    8
+#define PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX    10
+#define PG_STAT_STATEMENTS_LOCAL_DIFF_91_MIN    5
+#define PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX    8
+#define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN    6
+#define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX    10
 
 /* other queries */
 /* don't log our queries */

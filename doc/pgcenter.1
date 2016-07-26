@@ -513,7 +513,7 @@ used by default, and
 can be switched to
 .I pg_stat_all_tables
 using
-.B V
+.B ,
 hotkey.
 .nf
 Used query: SELECT
@@ -595,7 +595,7 @@ used by default, and
 can be switched to 
 .I pg_statio_all_tables
 using 
-.B V 
+.B , 
 hotkey.
 .nf
 Used query: SELECT
@@ -997,9 +997,9 @@ views. Different versions of the PostgreSQL may have different number of fields.
 .nf
 Used query: SELECT
         a.rolname AS user, d.datname AS database,
-        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS tot_all_t,
-        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS tot_read_t,
-        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS tot_write_t,
+        date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval) AS t_all_t,
+        date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval) AS t_read_t,
+        date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval) AS t_write_t,
         date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval) AS tot_cpu_t,
         round(sum(p.total_time)) AS all_t,
         round(sum(p.blk_read_time)) AS read_t,
@@ -1035,26 +1035,26 @@ User who executed the statement.
 Database in which the statement was executed.
 .RE
 
-.B tot_all_t
+.B t_all_t
 .RS
 Total time spent in the statement since last stats reset.
 .RE
 
-.B tot_read_t
+.B t_read_t
 .RS
 Total time the statement spent reading blocks (if 
 .I track_io_timing
 is enabled, otherwise zero) since last stats reset.
 .RE
 
-.B tot_write_t
+.B t_write_t
 .RS
 Total time the statement spent writing blocks (if
 .I track_io_timing
 is enabled, otherwise zero) since last stats reset.
 .RE
 
-.B tot_cpu_t
+.B t_cpu_t
 .RS
 Total time the statement spent in CPU cycling (if
 .I track_io_timing
@@ -1124,7 +1124,7 @@ views.
 .nf
 Used query: SELECT
         a.rolname AS user, d.datname AS database,
-        sum(p.calls) AS total_calls, sum(p.rows) as total_rows,
+        sum(p.calls) AS t_calls, sum(p.rows) as t_rows,
         sum(p.calls) AS calls, sum(p.rows) as rows,
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid,
         regexp_replace(
@@ -1155,12 +1155,12 @@ User who executed the statement.
 Database in which the statement was executed.
 .RE
 
-.B total_calls
+.B t_calls
 .RS
 Total number of times the statement was executed.
 .RE
 
-.B total_rows
+.B t_rows
 .RS
 Total number of rows retrieved or affected by the statement.
 .RE
@@ -1204,13 +1204,13 @@ views.
 Used query: SELECT
         a.rolname AS user, d.datname AS database,
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit))
-            * (SELECT current_setting('block_size')::int / 1024) as tot_hits,
+            * (SELECT current_setting('block_size')::int / 1024) as t_hits,
         (sum(p.shared_blks_read) + sum(p.local_blks_read))
-            * (SELECT current_setting('block_size')::int / 1024) as tot_reads,
+            * (SELECT current_setting('block_size')::int / 1024) as t_reads,
         (sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied))
-            * (SELECT current_setting('block_size')::int / 1024) as tot_dirtied,
+            * (SELECT current_setting('block_size')::int / 1024) as t_dirtied,
         (sum(p.shared_blks_written) + sum(p.local_blks_written))
-            * (SELECT current_setting('block_size')::int / 1024) as tot_written,
+            * (SELECT current_setting('block_size')::int / 1024) as t_written,
         (sum(p.shared_blks_hit) + sum(p.local_blks_hit))
             * (SELECT current_setting('block_size')::int / 1024) as hits,
         (sum(p.shared_blks_read) + sum(p.local_blks_read))
@@ -1249,22 +1249,22 @@ User who executed the statement.
 Database in which the statement was executed.
 .RE
 
-.B tot_hits
+.B t_hits
 .RS
 Total amount of shared and local data hits from cache by the statement since stats reset, in Kbytes.
 .RE
 
-.B tot_reads
+.B t_reads
 .RS
 Total amount of shared and local data read by the statement since stats reset, in Kbytes.
 .RE
 
-.B tot_dirtied
+.B t_dirtied
 .RS
 Total amount of shared and local data dirtied by the statement since stats reset, in Kbytes.
 .RE
 
-.B tot_written
+.B t_written
 .RS
 Total amount of shared and local data written by the statement since stats reset, in Kbytes.
 .RE
@@ -1323,13 +1323,13 @@ views.
 Used query: SELECT
         a.rolname AS user, d.datname AS database,
         sum(p.temp_blks_read)
-            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_read,
+            * (SELECT current_setting('block_size')::int / 1024) as t_tmp_read,
         sum(p.temp_blks_written)
-            * (SELECT current_setting('block_size')::int / 1024) as tot_temp_write,
+            * (SELECT current_setting('block_size')::int / 1024) as t_tmp_write,
         sum(p.temp_blks_read)
-            * (SELECT current_setting('block_size')::int / 1024) as temp_read,
+            * (SELECT current_setting('block_size')::int / 1024) as tmp_read,
         sum(p.temp_blks_written)
-            * (SELECT current_setting('block_size')::int / 1024) as temp_write,
+            * (SELECT current_setting('block_size')::int / 1024) as tmp_write,
         sum(p.calls) AS calls,
         left(md5(d.datname || a.rolname || p.query ), 10) AS queryid,
         regexp_replace(
@@ -1360,22 +1360,22 @@ User who executed the statement.
 Database in which the statement was executed.
 .RE
 
-.B tot_temp_read
+.B t_tmp_read
 .RS
 Total amount of temp data read by the statement since last stats reset, in Kbytes.
 .RE
 
-.B tot_temp_write
+.B t_tmp_write
 .RS
 Total amount of temp data written by the statement sice last stats reset, in Kbytes.
 .RE
 
-.B temp_read
+.B tmp_read
 .RS
 Amount of temp data read by the statement per interval, in Kbytes.
 .RE
 
-.B temp_write
+.B tmp_write
 .RS
 Amount of temp data written by the statement per interval, in Kbytes.
 .RE
@@ -1383,6 +1383,117 @@ Amount of temp data written by the statement per interval, in Kbytes.
 .B calls
 .RS
 Number of times the statement was executed per second.
+.RE
+
+.B queryid
+.RS
+Query ID generated with MD5 hash function and truncated to 10 symbols. Hash based on username, dbname and query text.
+.RE
+
+.B query
+.RS
+Text of a representative statement
+.RE
+.RE
+
+.IP "\fBpg_stat_statements_local context\fR"
+Show statistics about local input/output (backends that use local memory and not shared buffers) from pg_stat_statements module which tracking execution statistics of all SQL statements executed by a server. The module must be loaded by adding
+.I pg_stat_statements
+to
+.I shared_preload_libraries 
+in 
+.IR postgresql.conf .
+This means that a server restart is needed to add or remove the module. When module loaded,
+.I pg_stat_statement
+extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
+.I pg_authid
+and
+.I pg_database
+views.
+.nf
+Used query: SELECT
+        a.rolname AS user, d.datname AS database,
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_hits,
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_reads,
+        (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_dirtied,
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as t_lo_written,
+        (sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) as lo_hits,
+        (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) as lo_reads,
+        (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) as lo_dirtied,
+        (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) as lo_written,
+        sum(p.calls) AS calls,
+        left(md5(d.datname || a.rolname || p.query ), 10) AS queryid,
+        regexp_replace(
+        regexp_replace(
+        regexp_replace(
+        regexp_replace(
+        regexp_replace(p.query,
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'),
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'),
+            E'--.*$', '', 'ng'),
+            E'/\\\\*.*?\\\\*\\/', '', 'g'),
+            E'\\\\s+', ' ', 'g') AS query
+    FROM pg_stat_statements p
+    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_database d ON d.oid=p.dbid
+    WHERE d.datname != 'postgres' AND calls > 50
+    GROUP BY a.rolname, d.datname, query;
+.fi
+
+.B user
+.RS
+.RS
+User who executed the statement.
+.RE
+
+.B database
+.RS
+Database in which the statement was executed.
+.RE
+
+.B t_lo_hits
+.RS
+Total amount of data hits from backends local memory by the statement since stats reset, in Kbytes.
+.RE
+
+.B t_lo_reads
+.RS
+Total amount of data read from backends local memory by the statement since stats reset, in Kbytes.
+.RE
+
+.B t_lo_dirtied
+.RS
+Total amount of data dirtied in backends local memory by the statement since stats reset, in Kbytes.
+.RE
+
+.B t_lo_written
+.RS
+Total amount of data written to backends local memory by the statement since stats reset, in Kbytes.
+.RE
+
+.B lo_hits
+.RS
+Amount of data hits from backends local memory by the statement per interval (default 1 second), in Kbytes.
+.RE
+
+.B lo_reads
+.RS
+Amount of data read from backends local memory by the statement per interval (default 1 second), in Kbytes.
+.RE
+
+.B lo_dirtied
+.RS
+Amount of data dirtied in backends local memory by the statement per interval (default 1 second), in Kbytes.
+.RE
+
+.B lo_written
+.RS
+Amount of data written to backends local memory by the statement per interval (default 1 second), in Kbytes.
+.RE
+
+.B calls
+.RS
+Number of rows retrieved or affected by the statement per interval.
 .RE
 
 .B queryid
