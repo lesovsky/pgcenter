@@ -1157,6 +1157,9 @@ void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], 
             perror("FATAL: malloc for nicdata stats failed.");
             exit(EXIT_FAILURE);
         }
+	/* initialize interfaces with unknown speed and duplex */
+	c_nicdata[i]->speed = -1;
+	c_nicdata[i]->duplex = DUPLEX_UNKNOWN;
     }
 }
 
@@ -1658,23 +1661,22 @@ void get_speed_duplex(struct nicdata_s * nicdata)
 
     sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
-        perror("FATAL: socket failure.");               /* todo: should exit from nicstat function instead of program */
-        exit(1);
+        return;
     }
 
     strncpy(ifr.ifr_name, nicdata->ifname, sizeof(ifr.ifr_name));
     ifr.ifr_data = (void *) &edata;
     edata.cmd = ETHTOOL_GSET;
     status = ioctl(sock, SIOCETHTOOL, &ifr);
+    close(sock);
+    
     if (status < 0) {
-        nicdata->speed = -1;
-        nicdata->duplex = DUPLEX_UNKNOWN;
         return;
     }
+
     nicdata->speed = edata.speed * 1000000;
     nicdata->duplex = edata.duplex;
 
-    close(sock);
 }
 
 /*
@@ -3844,7 +3846,11 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     n_cols = COLS - x - 1;                                      /* calculate number of chars in row for cutting multiline log entries */
     wclear(window);                                             /* clear log window */
 
-    fstat(screen->log_fd, &stats);                                     /* TODO: handle error here ? */
+    if ((fstat(screen->log_fd, &stats)) == -1) {
+	wprintw(w_cmd, "Failed to stat %s", screen->log_path);
+	wrefresh(w_cmd);
+	return;
+    }
     if (S_ISREG (stats.st_mode) && stats.st_size != 0) {            /* log should be regular file and not be empty */
         end_pos = lseek(screen->log_fd, 0, SEEK_END);                  /* get end of file position */   
         pos = end_pos;                                              /* set position to the end of file */

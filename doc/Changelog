@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * nicstat: return from function if sock() failed (instead of program exit).
+  * print_log() refactoring, check return value for fstat.
   * reconnect_if_failed() refactoring, eliminate unwanted 'get pg version' queries.
   * print_autovac_info()/print_postgres_activity() refactoring, merge queries into one.
   * print_autovac_info() refactoring, remove unnecessary 'else' sections.

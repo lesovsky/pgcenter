@@ -226,6 +226,11 @@ struct iodata_s
 
 #define STATS_IODATA_SIZE (sizeof(struct iodata_s))
 
+/* This may be defined by <linux/ethtool.h> */
+#ifndef DUPLEX_UNKNOWN
+#define DUPLEX_UNKNOWN          0xff
+#endif /* DUPLEX_UNKNOWN */
+
 /* struct for NIC data (settings and stats) */
 struct nicdata_s
 {
@@ -243,11 +248,6 @@ struct nicdata_s
 };
 
 #define STATS_NICDATA_SIZE (sizeof(struct nicdata_s))
-
-/* This may be defined by <linux/ethtool.h> */
-#ifndef DUPLEX_UNKNOWN
-#define DUPLEX_UNKNOWN          0xff
-#endif /* DUPLEX_UNKNOWN */
 
 /*
  * Macros used to display statistics values.
