@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * print_autovac_info()/print_postgres_activity() refactoring, merge queries into one.
   * print_autovac_info() refactoring, remove unnecessary 'else' sections.
   * print_postgres_activity() refactoring, remove unnecessary 'else' sections.
   * read_uptime() refactoring, use fscanf instead of sscanf, check ret.value.

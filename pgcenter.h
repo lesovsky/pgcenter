@@ -271,25 +271,24 @@ struct colAttrs {
 #define PG_FATAL_ERR    PGRES_FATAL_ERROR
 
 /* sysstat screen queries */
-#define PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY \
-        "SELECT count(*) FROM pg_stat_activity"
-#define PG_STAT_ACTIVITY_COUNT_IDLE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'"
-#define PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')"
-#define PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state = 'active'"
-#define PG_STAT_ACTIVITY_COUNT_WAITING_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE waiting"
-#define PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE state IN ('fastpath function call','disabled')"
+#define PG_STAT_ACTIVITY_COUNT_QUERY \
+    "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
+       SELECT \
+         (SELECT count(*) AS total FROM pgsa), \
+         (SELECT count(*) AS idle FROM pgsa WHERE state = 'idle'), \
+         (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
+         (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
+         (SELECT count(*) AS waiting FROM pgsa WHERE waiting), \
+         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled'));"
+
 #define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
-#define PG_STAT_ACTIVITY_AVW_COUNT_QUERY \
-        "SELECT count(*) FROM pg_stat_activity WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()"
-#define PG_STAT_ACTIVITY_AV_LONGEST_QUERY \
-        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
-        FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()"
+    "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
+       SELECT \
+         (SELECT count(*) AS av_workers FROM pgsa WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()), \
+         (SELECT count(*) AS av_wrap FROM pgsa WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()), \
+	 (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS av_maxtime FROM pgsa \
+	 WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid());"
+
 #define PG_STAT_STATEMENTS_SYS_QUERY \
         "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 #define PG_STAT_ACTIVITY_SYS_QUERY \

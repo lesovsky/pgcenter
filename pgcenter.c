@@ -997,33 +997,13 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
     PGresult *res;
     static char errmsg[ERRSIZE];
 
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_TOTAL_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_QUERY, errmsg)) != NULL) {
         t_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    } 
-
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_QUERY, errmsg)) != NULL) {
-        i_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    } 
-
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_IDLE_IN_T_QUERY, errmsg)) != NULL) {
-        x_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    } 
-
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_ACTIVE_QUERY, errmsg)) != NULL) {
-        a_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    } 
-
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_WAITING_QUERY, errmsg)) != NULL) {
-        w_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    } 
-
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_OTHERS_QUERY, errmsg)) != NULL) {
-        o_count = atoi(PQgetvalue(res, 0, 0));
+        i_count = atoi(PQgetvalue(res, 0, 1));
+        x_count = atoi(PQgetvalue(res, 0, 2));
+        a_count = atoi(PQgetvalue(res, 0, 3));
+        w_count = atoi(PQgetvalue(res, 0, 4));
+        o_count = atoi(PQgetvalue(res, 0, 5));
         PQclear(res);
     } 
 
@@ -1945,19 +1925,11 @@ void print_autovac_info(WINDOW * window, PGconn * conn)
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
         av_count = atoi(PQgetvalue(res, 0, 0));
+        avw_count = atoi(PQgetvalue(res, 0, 1));
+        snprintf(av_max_time, sizeof(av_max_time), "%s", PQgetvalue(res, 0, 2));
         PQclear(res);
     }
     
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_AVW_COUNT_QUERY, errmsg)) != NULL) {
-        avw_count = atoi(PQgetvalue(res, 0, 0));
-        PQclear(res);
-    }
-    
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_LONGEST_QUERY, errmsg)) != NULL) {
-        snprintf(av_max_time, sizeof(av_max_time), "%s", PQgetvalue(res, 0, 0));
-        PQclear(res);
-    }
-
     mvwprintw(window, 2, COLS / 2, "autovacuum: %2u workers, %2u wraparound, %s avw_maxtime",
                     av_count, avw_count, av_max_time);
     wrefresh(window);
