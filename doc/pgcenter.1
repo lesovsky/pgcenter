@@ -1684,17 +1684,11 @@ Show statistics about long queries from \fIpg_stat_activity\fR view. Show inform
 \ \ \ \fBf\fR\ \ :\fBpg_stat_functions\fR toggle \fR
 Show statistics from \fIpg_stat_user_functions\fR view about tracked functions and their executions, such as number of calls and execution time. The \fItrack_functions\fR parameter in \fIpostgresql.conf\fR controls exactly which functions are tracked.
 .TP 7
-\ \ \ \fBx\fR\ \ :\fBpg_stat_statements_timing\fR toggle \fR
-Show statistics from \fIpg_stat_statements\fR module which tracking execution statistics of all SQL statements executed by a server. Includes times when statement is spent reading blocks, writing blocks or cycling on CPU. If query too long, you can get query report with \fBG\fR hotkey.
+\ \ \ \fBx\fR\ \ :\fBSwitch to next pg_stat_statements screen\fR toggle \fR
+Switches between pg_stat_statements screens: timings, general, input/output, temporary input/output, local input/output.
 .TP 7
-\ \ \ \fBX\fR\ \ :\fBpg_stat_statements_general\fR toggle \fR
-Show statistics from \fIpg_stat_statements\fR module which tracking execution statistics of all SQL statements executed by a server. Includes information about calls and returned rows. If query too long, you can get query report with \fBG\fR hotkey.
-.TP 7
-\ \ \ \fBc\fR\ \ :\fBpg_stat_statements_io\fR toggle \fR
-Show buffer input/output statistics from \fIpg_stat_statements\fR module which tracking execution statistics of all SQL statements executed by a server. Includes information about hits/reads, read/written buffer I/O. If query too long, you can get query report with \fBG\fR hotkey.
-.TP 7
-\ \ \ \fBv\fR\ \ :\fBpg_stat_statements_temp\fR toggle \fR
-Show temp buffer input/output statistics from \fIpg_stat_statements\fR module which tracking execution statistics of all SQL statements executed by a server. Includes information about how temp buffers read/written. If query too long, you can get query report with \fBG\fR hotkey.
+\ \ \ \fBX\fR\ \ :\fBShow pg_stat_statements menu\fR toggle \fR
+Open pg_stat_statements menu and allow to choose pg_stat_statements screen without switching.
 .TP 7
 \ \ \ \fBE\fR\ \ :\fBEdit configuration files menu\fR toggle \fR
 Open configuration files menu and edit specific config. Supported editing of postgresql.conf, pg_hba.conf, pg_ident.conf and recovery.conf. Used only if \fBpgcenter\fR and \fBPostgreSQL\fR running on the same host. Use $EDITOR environment variable or \fBvi\fR by default. Requires database superuser privileges.

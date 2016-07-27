@@ -876,7 +876,9 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * con
 void show_config(WINDOW * window, PGconn * conn);
 void reload_conf(WINDOW * window, PGconn * conn);
 void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc);
-void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter); 
+void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter);
+void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, bool *first_iter);
+void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter);
 void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate);
 void get_statemask(WINDOW * window, struct screen_s * screen);
 void set_statemask(WINDOW * window, struct screen_s * screen);

@@ -3219,6 +3219,138 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
 
 /*
  ****************************************************** key press function **
+ * Invoke menu for pg_stat_statements contexts.
+ *
+ * IN:
+ * @w_cmd           Window where errors will be displayed.
+ * @w_dba           Window where db answers printed.
+ * @screen          Current screen settings.
+ * @first_iter      Reset counters when function ends.
+ ****************************************************************************
+ */
+void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter)
+{
+    char *choices[] = { 
+	"pg_stat_statements timings",
+	"pg_stat_statements general",
+	"pg_stat_statements input/output",
+	"pg_stat_statements temp input/output",
+	"pg_stat_statements local input/output" };
+    WINDOW *menu_win;
+    MENU *menu;
+    ITEM **items;
+    unsigned int n_choices, i;
+    int ch;
+    bool done = false;
+
+    cbreak();
+    noecho();
+    keypad(stdscr, TRUE);
+
+    /* allocate stuff */
+    n_choices = ARRAY_SIZE(choices);
+    items = init_menuitems(n_choices + 1);
+    for (i = 0; i < n_choices; i++)
+        items[i] = new_item(choices[i], NULL);
+    items[n_choices] = (ITEM *)NULL;
+    menu = new_menu((ITEM **)items);
+
+    /* construct menu, outer window for header and inner window for menu */
+    menu_win = newwin(11,64,5,0);
+    keypad(menu_win, TRUE);
+    set_menu_win(menu, menu_win);
+    set_menu_sub(menu, derwin(menu_win, 5,40,1,0));
+
+    /* clear stuff from db answer window */
+    wclear(w_dba);
+    wrefresh(w_dba);
+    /* print menu header */
+    mvwprintw(menu_win, 0, 0, "Choose pg_stat_statements mode (Enter to choose, Esc to exit):");
+    post_menu(menu);
+    wrefresh(menu_win);
+    
+    while (1) {
+        if (done)
+            break;
+        ch = wgetch(menu_win);
+        switch (ch) {
+            case KEY_DOWN:
+                menu_driver(menu, REQ_DOWN_ITEM);
+                break;
+            case KEY_UP:
+                menu_driver(menu, REQ_UP_ITEM);
+                break;
+            case 10:
+                if (!strcmp(item_name(current_item(menu)), "pg_stat_statements timings"))
+                    screen->current_context = pg_stat_statements_timing;
+                else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements general"))
+                    screen->current_context = pg_stat_statements_general;
+                else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements input/output"))
+                    screen->current_context = pg_stat_statements_io;
+                else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements temp input/output"))
+                    screen->current_context = pg_stat_statements_temp;
+                else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements local input/output"))
+                    screen->current_context = pg_stat_statements_local;
+                else
+                    wprintw(w_cmd, "Do nothing. Unknown mode.");     /* never should be here. */
+                done = true;
+                break;
+            case 27:
+                done = true;
+                break;
+        }       
+    }
+ 
+    /* clear menu items from screen */
+    clear();
+    refresh();
+
+    /* free stuff */
+    unpost_menu(menu);
+    for (i = 0; i < n_choices; i++)
+        free_item(items[i]);
+    free_menu(menu);
+    delwin(menu_win);
+    *first_iter = true;
+}
+
+/*
+ ****************************************************** key press function **
+ * Switch pg_stat_statements contexts to next.
+ *
+ * IN:
+ * @w_cmd           Window where errors will be displayed.
+ * @screen          Current screen settings.
+ * @p_res	    Array with previous query results.
+ * @first_iter      Reset counters when function ends.
+ ****************************************************************************
+ */
+void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, bool *first_iter)
+{
+    /*
+     * Check current context and switch to pg_stat_statements.
+     * any -> pgss_timing -> pgss_general -> pgss_io -> pgss_temp -> pgss_local -> pgss_timing -> ...
+     */
+    switch (screen->current_context) {
+	case pg_stat_statements_timing:
+            switch_context(w_cmd, screen, pg_stat_statements_general, p_res, first_iter);
+            break;
+	case pg_stat_statements_general:
+            switch_context(w_cmd, screen, pg_stat_statements_io, p_res, first_iter);
+            break;
+	case pg_stat_statements_io:
+            switch_context(w_cmd, screen, pg_stat_statements_temp, p_res, first_iter);
+            break;
+	case pg_stat_statements_temp:
+            switch_context(w_cmd, screen, pg_stat_statements_local, p_res, first_iter);
+            break;
+	case pg_stat_statements_local: default:
+            switch_context(w_cmd, screen, pg_stat_statements_timing, p_res, first_iter);
+            break;
+    }
+}
+/*
+ ****************************************************** key press function **
  * Cancel or terminate postgres backend.
  *
  * IN:
@@ -4390,7 +4522,7 @@ void print_help_screen(bool * first_iter)
     wprintw(w, "general actions:\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
   s,t,T           's' sizes, 't' tables, 'T' tables IO,\n\
-  x,X,c,v,V       'x' stmt timings, 'X' stmt general, 'c' stmt IO, 'v' stmt temp, 'V' stmt local IO\n\
+  x,X             'x' pg_stat_statements switch, 'X' pg_stat_statements menu.\n\
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
   p                       'p' start psql session.\n\
@@ -4636,20 +4768,11 @@ int main(int argc, char *argv[])
                 case 'f':               /* open pg_stat_functions screen */
                     switch_context(w_cmd, screens[console_index], pg_stat_functions, p_res, &first_iter);
                     break;
-                case 'x':               /* open pg_stat_statements_timing screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_timing, p_res, &first_iter);
+                case 'x':               /* switch to next pg_stat_statements screen */
+                    pgss_switch(w_cmd, screens[console_index], p_res, &first_iter);
                     break;
-                case 'X':               /* open pg_stat_statements_general screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_general, p_res, &first_iter);
-                    break;
-                case 'c':               /* open pg_stat_statements_io screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_io, p_res, &first_iter);
-                    break;
-                case 'v':               /* open pg_stat_statements_temp screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_temp, p_res, &first_iter);
-                    break;
-                case 'V':               /* open pg_stat_statements_local screen */
-                    switch_context(w_cmd, screens[console_index], pg_stat_statements_local, p_res, &first_iter);
+                case 'X':               /* open pg_stat_statements menu */
+                    pgss_menu(w_cmd, w_dba, screens[console_index], &first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index], p_res, &first_iter);

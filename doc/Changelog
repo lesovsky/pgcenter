@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * pg_stat_statements: use menu and switching, remove c, v, V hotkeys.
   * show details and hint if query has failed.
   * rewrite replication context, show detailed lag info.
   * pg_stat_statements: add local IO information context (V - hotkey).
