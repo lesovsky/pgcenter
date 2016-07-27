@@ -620,7 +620,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
     
     /* get PostgreSQL version if reconnect successful */
     if (*reconnected == true) {
-        get_pg_version(conn, screen);
+        get_pg_special(conn, screen);
     }
 }
 
@@ -700,7 +700,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
             }
 
             /* get PostgreSQL version */
-            get_pg_version(conns[i], screens[i]);
+            get_pg_special(conns[i], screens[i]);
 
             PGresult * res;
             char errmsg[ERRSIZE];
@@ -765,7 +765,15 @@ void prepare_query(struct screen_s * screen, char * query)
                 snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
-            snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_REPLICATION_QUERY);
+            snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
+			screen->pg_special.pg_is_in_recovery == false
+				? PG_STAT_REPLICATION_NOREC
+				: PG_STAT_REPLICATION_REC,
+			PG_STAT_REPLICATION_QUERY_P2,
+			screen->pg_special.pg_is_in_recovery == false
+				? PG_STAT_REPLICATION_NOREC
+				: PG_STAT_REPLICATION_REC,
+			PG_STAT_REPLICATION_QUERY_P3);
             break;
         case pg_stat_tables:
             snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_TABLES_QUERY_P1,
@@ -2721,7 +2729,7 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
                             wclear(window);
                             wprintw(window, "Successfully connected.");
                             console_index = screens[i]->screen;
-                            get_pg_version(conns[i], screens[i]);
+                            get_pg_special(conns[i], screens[i]);
                         }
                     } else if (with_esc) {
                         clear_screen_connopts(screens, i);
@@ -2736,7 +2744,7 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
                     wclear(window);
                     wprintw(window, "Successfully connected.");
                     console_index = screens[i]->screen;
-                    get_pg_version(conns[i], screens[i]);
+                    get_pg_special(conns[i], screens[i]);
                 }
                 break;
             /* finish work if user input empty or cancelled */
@@ -3030,21 +3038,33 @@ void get_conf_value(PGconn * conn, char * config_option_name, char * config_opti
 
 /*
  ******************************************************** routine function **
- * Get postgres version and save into screen opts.
+ * Get postgres various information and save into screen opts.
  *
  * IN:
  * @conn                    Current connection.
  * @screen                  Current screen.
  ****************************************************************************
  */
-void get_pg_version(PGconn * conn, struct screen_s * screen)
+void get_pg_special(PGconn * conn, struct screen_s * screen)
 {
+    PGresult * res;
+    char errmsg[ERRSIZE];
+
+    /* get postgres version information */
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
     get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
     if (strlen(screen->pg_version_num) == 0)
         strncpy(screen->pg_version_num, "-.-.-", sizeof(screen->pg_version_num));
     if (strlen(screen->pg_version) == 0)
         strncpy(screen->pg_version, "-.-.-", sizeof(screen->pg_version_num));
+
+    /* pg_is_in_recovery() */
+    if ((res = do_query(conn, PG_IS_IN_RECOVERY_QUERY, errmsg)) != NULL) {
+        (atoi(PQgetvalue(res, 0, 0)) == 0)
+	    ? (screen->pg_special.pg_is_in_recovery = false)
+	    : (screen->pg_special.pg_is_in_recovery = true);
+        PQclear(res);
+    }
 }
 
 /*

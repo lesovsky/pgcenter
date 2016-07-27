@@ -146,6 +146,15 @@ struct args_s
 
 #define ARGS_SIZE (sizeof(struct args_s))
 
+/* struct for postgres specific details, get that when connected to postgres server */
+struct pg_special_s
+{
+    bool pg_is_in_recovery;			/* is postgres a standby? - true/false */
+    unsigned int av_max_workers;		/* autovacuum_max_workers GUC value */
+};
+
+#define PG_SPECIAL_SIZE (sizeof(struct pg_special_s))
+
 /* struct which define connection options */
 struct screen_s
 {
@@ -157,6 +166,7 @@ struct screen_s
     char dbname[CONN_ARG_MAXLEN];
     char password[CONN_ARG_MAXLEN];
     char conninfo[CONNINFO_MAXLEN];
+    struct pg_special_s pg_special;
     char pg_version_num[XS_BUF_LEN];
     char pg_version[XS_BUF_LEN];
     bool subscreen_enabled;                     /* subscreen status: on/off */
@@ -326,16 +336,23 @@ struct colAttrs {
 #define PG_STAT_DATABASE_ORDER_91_MAX       10
 #define PG_STAT_DATABASE_ORDER_LATEST_MAX   15
 
-#define PG_STAT_REPLICATION_QUERY \
+#define PG_STAT_REPLICATION_QUERY_P1 \
     "SELECT \
         client_addr AS client, usename AS user, application_name AS name, \
         state, sync_state AS mode, \
-	(pg_xlog_location_diff(pg_current_xlog_location(),sent_location) / 1024)::int as pending, \
+	(pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_QUERY_P2 \
+    ",sent_location) / 1024)::int as pending, \
 	(pg_xlog_location_diff(sent_location,write_location) / 1024)::int as write, \
 	(pg_xlog_location_diff(write_location,flush_location) / 1024)::int as flush, \
 	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::int as replay, \
-	(pg_xlog_location_diff(pg_current_xlog_location(),replay_location))::int / 1024 as total_lag \
-    FROM pg_stat_replication"
+	(pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_QUERY_P3 \
+    ",replay_location))::int / 1024 as total_lag FROM pg_stat_replication"
+
+/* use functions depending on recovery */
+#define PG_STAT_REPLICATION_NOREC "pg_current_xlog_location()"
+#define PG_STAT_REPLICATION_REC "pg_last_xlog_receive_location()"
 
 #define PG_STAT_REPLICATION_ORDER_MIN 5
 #define PG_STAT_REPLICATION_ORDER_MAX 9
@@ -769,6 +786,9 @@ struct colAttrs {
 /* set work_mem for pg_stat_statements queries */
 #define PG_INCREASE_WORK_MEM_QUERY "SET work_mem TO '32MB'"
 
+/* check pg_is_in_recovery() */
+#define PG_IS_IN_RECOVERY_QUERY "SELECT pg_is_in_recovery()::int"
+
 /* get full config query */
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 
@@ -907,7 +927,7 @@ void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);
 bool check_pg_listen_addr(struct screen_s * screen);
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
-void get_pg_version(PGconn * conn, struct screen_s * screen);
+void get_pg_special(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
 unsigned int count_block_devices(void);
