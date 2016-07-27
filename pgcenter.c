@@ -2093,9 +2093,8 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
                 max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
             break;
         case pg_stat_replication:
-            min = PG_STAT_REPLICATION_ORDER_MIN;
-            /* don't diff last column */
-            max = PG_STAT_REPLICATION_ORDER_MAX - 1;
+            /* diff nothing, use returned values as-is */
+            min = max = INVALID_ORDER_KEY;
             break;
         case pg_stat_tables:
             min = PG_STAT_TABLES_ORDER_MIN;

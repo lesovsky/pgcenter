@@ -439,14 +439,14 @@ Statistics from
 system view which will contain one row per WAL sender process, showing statistics about replication to that sender's connected standby server. Only directly connected standbys are listed; no information is available about downstream standby servers.
 .nf
 Used query: SELECT
-                client_addr AS client, usename AS user, application_name AS name,
-                state, sync_state AS mode,
-                (pg_xlog_location_diff(sent_location, '0/0') / 1024)::int AS sent,
-                (pg_xlog_location_diff(write_location, '0/0') / 1024)::int AS write,
-                (pg_xlog_location_diff(flush_location, '0/0') / 1024)::int AS flush,
-                (pg_xlog_location_diff(replay_location, '0/0') / 1024)::int AS replay,
-                (pg_xlog_location_diff(sent_location,replay_location) / 1024)::int AS lag"
-            FROM pg_stat_replication ORDER BY client_addr;
+	        client_addr AS client, usename AS user, application_name AS name,
+        	state, sync_state AS mode,
+	 	(pg_xlog_location_diff(pg_current_xlog_location(),sent_location) / 1024)::int as pending,
+	        (pg_xlog_location_diff(sent_location,write_location) / 1024)::int as write,
+        	(pg_xlog_location_diff(write_location,flush_location) / 1024)::int as flush,
+	        (pg_xlog_location_diff(flush_location,replay_location) / 1024)::int as replay,
+        	(pg_xlog_location_diff(pg_current_xlog_location(),replay_location))::int / 1024 as total_lag
+	    FROM pg_stat_replication"
 .fi
 
 .B client
@@ -475,29 +475,29 @@ Current WAL sender state.
 Synchronous state of this standby server.
 .RE
 
-.B sent
+.B pending
 .RS
-WAL data sent over network to this standby in kilobytes per second.
+Difference between XLOG current position and XLOG sent position, shows amount of XLOG in kilobytes which should be sent over network.
 .RE
 
 .B write
 .RS
-WAL data written on this standby in kilobytes per second.
+Difference between XLOG sent position and XLOG write position, shows amount of XLOG in kilobytes which sent over network, but not written yet on remote host.
 .RE
 
 .B flush
 .RS
-WAL data flushed on disk on this standby in kilobytes per second.
+Difference between XLOG write position and XLOG flush position, shows amount of XLOG in kilobytes which written, but not flushed yet on remote host.
 .RE
 
 .B replay
 .RS
-WAL data replayed by postgres on this standby in kilobytes per second.
+Difference between XLOG flush position and XLOG replay position, shows amount of XLOG in kilobytes which flushed, but not replayed yet on remote host.
 .RE
 
-.B lag
+.B total_lag
 .RS
-Amount of data on which the standby is behind the master in kilobytes.
+Difference between XLOG current position on the master server and XLOG replay position onremote host, shows the total amount of XLOG in kilobytes, the standby is behind.
 .RE
 .RE
 

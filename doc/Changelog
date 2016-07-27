@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * rewrite replication context, show detailed lag info.
   * pg_stat_statements: add local IO information context (V - hotkey).
   * nicstat: return from function if sock() failed (instead of program exit).
   * print_log() refactoring, check return value for fstat.
