@@ -870,9 +870,11 @@ PGresult * do_query(PGconn * conn, char * query, char errmsg[])
             return res;
             break;
         default:
-	    snprintf(errmsg, ERRSIZE, "%s: %s",
+	    snprintf(errmsg, ERRSIZE, "%s: %s\nDETAIL: %s\nHINT: %s",
 			PQresultErrorField(res, PG_DIAG_SEVERITY),
-			PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY));
+			PQresultErrorField(res, PG_DIAG_MESSAGE_PRIMARY),
+			PQresultErrorField(res, PG_DIAG_MESSAGE_DETAIL),
+			PQresultErrorField(res, PG_DIAG_MESSAGE_HINT));
             PQclear(res);
             return NULL;
             break;
