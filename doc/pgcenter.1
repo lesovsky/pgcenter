@@ -247,35 +247,27 @@ Line 2-3 shows current PostgreSQL autovacuum activity.
 .B workers
 .RS
 .RS
-Total number of workers currently running.
+Total number of autovacuum workers currently running.
 .RE
+
+.B max
 .RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid();
-.fi
+Max number of allowed autovacuum workers.
+.RE
+
+.B manual
+.RS
+Total number of vacuum workers started by user.
 .RE
 
 .B wraparound
 .RS
 Total number of workers currently running and perform anti wraparound vacuum.
 .RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid();
-.fi
-.RE
 
 .B avw_maxtime
 .RS
-Execution time of the oldest autovacuum worker.
-.RE
-.RS
-.nf
-Used query: SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') 
-            FROM pg_stat_activity WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid();
-.fi
+Execution time of the oldest autovacuum or user-started worker.
 .RE
 .RE
 

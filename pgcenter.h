@@ -55,6 +55,7 @@
 #define GUC_DATA_DIRECTORY      "data_directory"
 #define GUC_SERVER_VERSION      "server_version"
 #define GUC_SERVER_VERSION_NUM  "server_version_num"
+#define GUC_AV_MAX_WORKERS	"autovacuum_max_workers"
 
 /* 
  * PostgreSQL version notations:
@@ -151,6 +152,8 @@ struct pg_special_s
 {
     bool pg_is_in_recovery;			/* is postgres a standby? - true/false */
     unsigned int av_max_workers;		/* autovacuum_max_workers GUC value */
+    char pg_version_num[XS_BUF_LEN];		/* postgresql version XXYYZZ format */
+    char pg_version[XS_BUF_LEN];		/* postgresql version X.Y.Z format */
 };
 
 #define PG_SPECIAL_SIZE (sizeof(struct pg_special_s))
@@ -167,8 +170,6 @@ struct screen_s
     char password[CONN_ARG_MAXLEN];
     char conninfo[CONNINFO_MAXLEN];
     struct pg_special_s pg_special;
-    char pg_version_num[XS_BUF_LEN];
-    char pg_version[XS_BUF_LEN];
     bool subscreen_enabled;                     /* subscreen status: on/off */
     int subscreen;                              /* subscreen type: logtail, iostat, etc. */
     char log_path[PATH_MAX];                    /* logfile path for logtail subscreen */
@@ -299,8 +300,9 @@ struct colAttrs {
        SELECT \
          (SELECT count(*) AS av_workers FROM pgsa WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()), \
          (SELECT count(*) AS av_wrap FROM pgsa WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()), \
+	 (SELECT count(*) AS v_manual FROM pgsa WHERE query ~* '^vacuum' AND pid <> pg_backend_pid()), \
 	 (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS av_maxtime FROM pgsa \
-	 WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid());"
+	 WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid());"
 
 #define PG_STAT_STATEMENTS_SYS_QUERY \
         "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
@@ -868,7 +870,7 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
-void print_autovac_info(WINDOW * window, PGconn * conn);
+void print_vacuum_info(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long int interval);
 void print_data(WINDOW *window, PGresult *res, char ***arr, 
         unsigned int n_rows, unsigned int n_cols, struct screen_s * screen);

@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * autovac info: print number of user vacuum and autovac max worker limit.
   * check_pg_listen_addr() refactoring.
   * pg_stat_replication now works on standbys too.
   * pg_stat_statements: use menu and switching, remove c, v, V hotkeys.

@@ -759,7 +759,7 @@ void prepare_query(struct screen_s * screen, char * query)
     char tmp[2];
     switch (screen->current_context) {
         case pg_stat_database: default:
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_91_QUERY);
             else
                 snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
@@ -800,7 +800,7 @@ void prepare_query(struct screen_s * screen, char * query)
              * build query from several parts, 
              * thus user can change duration which is used in WHERE clause.
              */
-            if (atoi(screen->pg_version_num) < PG92) {
+            if (atoi(screen->pg_special.pg_version_num) < PG92) {
                 snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P1, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P2, screen->pg_stat_activity_min_age,
@@ -820,21 +820,21 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_statements_timing:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
-	    atoi(screen->pg_version_num) < PG92
+	    atoi(screen->pg_special.pg_version_num) < PG92
                 ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2)
                 : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
             break;
         case pg_stat_statements_general:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
-            atoi(screen->pg_version_num) < PG92
+            atoi(screen->pg_special.pg_version_num) < PG92
                 ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2)
                 : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
             break;
         case pg_stat_statements_io:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key + 1);
-            atoi(screen->pg_version_num) < PG92
+            atoi(screen->pg_special.pg_version_num) < PG92
                 ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2)
                 : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2);
             break;
@@ -846,7 +846,7 @@ void prepare_query(struct screen_s * screen, char * query)
         case pg_stat_statements_local:
             /* here we use query native ORDER BY, and we should incrementing order key */
             sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key + 1);
-            atoi(screen->pg_version_num) < PG92
+            atoi(screen->pg_special.pg_version_num) < PG92
                 ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2)
                 : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2);
             break;
@@ -1924,36 +1924,38 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
     static char uptime[S_BUF_LEN];
     get_pg_uptime(conn, uptime);
 
-    wprintw(window, " (ver: %s, up %s)", screen->pg_version, uptime);
+    wprintw(window, " (ver: %s, up %s)", screen->pg_special.pg_version, uptime);
 }
 
 /*
  ************************************************** system window function **
- * Print autovacuum info.
+ * Print (auto)vacuum info.
  *
  * IN:
  * @window          Window where resultwill be printing.
- * @ewindow         Window for error printing if query failed.
+ * @screen	    Screen information.
  * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_autovac_info(WINDOW * window, PGconn * conn)
+void print_vacuum_info(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
-    unsigned int av_count = 0,		/* total number of autovacuum workers*/
-		 avw_count = 0;		/* number of wraparound workers */
-    char av_max_time[XS_BUF_LEN] = "--:--:--";
+    unsigned int av_count = 0,		/* total number of autovacuum workers */
+		 avw_count = 0,		/* number of wraparound workers */
+		 mv_count = 0;		/* number of manual vacuums executed by user */
+    char vac_maxtime[XS_BUF_LEN] = "--:--:--";		/* the longest worker or vacuum */
     PGresult *res;
     static char errmsg[ERRSIZE];
     
     if ((res = do_query(conn, PG_STAT_ACTIVITY_AV_COUNT_QUERY, errmsg)) != NULL) {
         av_count = atoi(PQgetvalue(res, 0, 0));
         avw_count = atoi(PQgetvalue(res, 0, 1));
-        snprintf(av_max_time, sizeof(av_max_time), "%s", PQgetvalue(res, 0, 2));
+        mv_count = atoi(PQgetvalue(res, 0, 2));
+        snprintf(vac_maxtime, sizeof(vac_maxtime), "%s", PQgetvalue(res, 0, 3));
         PQclear(res);
     }
     
-    mvwprintw(window, 2, COLS / 2, "autovacuum: %2u workers, %2u wraparound, %s avw_maxtime",
-                    av_count, avw_count, av_max_time);
+    mvwprintw(window, 2, COLS / 2, "autovacuum: %2u/%u workers/max, %2u manual, %2u wraparound, %s vac_maxtime",
+                    av_count, screen->pg_special.av_max_workers, mv_count, avw_count, vac_maxtime);
     wrefresh(window);
 }
 
@@ -2097,7 +2099,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_DATABASE_ORDER_91_MAX;
             else
                 max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
@@ -2135,7 +2137,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             min = max = PG_STAT_FUNCTIONS_DIFF_COL;
             break;
         case pg_stat_statements_timing:
-            if (atoi(screen->pg_version_num) < PG92) {
+            if (atoi(screen->pg_special.pg_version_num) < PG92) {
                 min = PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN;
                 max = PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX;
             } else {
@@ -2148,7 +2150,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             max = PG_STAT_STATEMENTS_GENERAL_DIFF_MAX;
             break;
         case pg_stat_statements_io:
-            if (atoi(screen->pg_version_num) < PG92) {
+            if (atoi(screen->pg_special.pg_version_num) < PG92) {
                 min = PG_STAT_STATEMENTS_IO_DIFF_91_MIN;
                 max = PG_STAT_STATEMENTS_IO_DIFF_91_MAX;
             } else {
@@ -2161,7 +2163,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
             max = PG_STAT_STATEMENTS_TEMP_DIFF_MAX;
             break;
         case pg_stat_statements_local:
-            if (atoi(screen->pg_version_num) < PG92) {
+            if (atoi(screen->pg_special.pg_version_num) < PG92) {
                 min = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MIN;
                 max = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX;
             } else {
@@ -2362,7 +2364,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
     switch (screen->current_context) {
         case pg_stat_database:
             min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_DATABASE_ORDER_91_MAX;
             else
                 max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
@@ -2398,7 +2400,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_timing:
             min = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX;
             else
                 max = PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX;
@@ -2411,7 +2413,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_io:
             min = PG_STAT_STATEMENTS_IO_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_STATEMENTS_IO_ORDER_91_MAX;
             else
                 max = PG_STAT_STATEMENTS_IO_ORDER_LATEST_MAX;
@@ -2424,7 +2426,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             break;
         case pg_stat_statements_local:
             min = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
-            if (atoi(screen->pg_version_num) < PG92)
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_STATEMENTS_LOCAL_ORDER_91_MAX;
             else
                 max = PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX;
@@ -2641,13 +2643,16 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i
         strncpy(screens[i]->user,        screens[i + 1]->user, sizeof(screens[i]->user));
         strncpy(screens[i]->dbname,      screens[i + 1]->dbname, sizeof(screens[i]->dbname));
         strncpy(screens[i]->password,    screens[i + 1]->password, sizeof(screens[i]->password));
-        strncpy(screens[i]->pg_version_num,  screens[i + 1]->pg_version_num, sizeof(screens[i]->pg_version_num));
-        strncpy(screens[i]->pg_version,  screens[i + 1]->pg_version, sizeof(screens[i]->pg_version));
+        strncpy(screens[i]->pg_special.pg_version_num,
+		screens[i + 1]->pg_special.pg_version_num, sizeof(screens[i]->pg_special.pg_version_num));
+        strncpy(screens[i]->pg_special.pg_version,
+		screens[i + 1]->pg_special.pg_version, sizeof(screens[i]->pg_special.pg_version));
         screens[i]->subscreen =        screens[i + 1]->subscreen;
         strncpy(screens[i]->log_path,    screens[i + 1]->log_path, sizeof(screens[i]->log_path));
         screens[i]->log_fd =            screens[i + 1]->log_fd;
         screens[i]->current_context =   screens[i + 1]->current_context;
-        strncpy(screens[i]->pg_stat_activity_min_age, screens[i + 1]->pg_stat_activity_min_age, sizeof(screens[i]->pg_stat_activity_min_age));
+        strncpy(screens[i]->pg_stat_activity_min_age,
+		screens[i + 1]->pg_stat_activity_min_age, sizeof(screens[i]->pg_stat_activity_min_age));
         screens[i]->signal_options =    screens[i + 1]->signal_options;
         screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
 
@@ -3056,14 +3061,15 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
 {
     PGresult * res;
     char errmsg[ERRSIZE];
+    char av_max_workers[8];
 
     /* get postgres version information */
-    get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_version_num);
-    get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_version);
-    if (strlen(screen->pg_version_num) == 0)
-        strncpy(screen->pg_version_num, "-.-.-", sizeof(screen->pg_version_num));
-    if (strlen(screen->pg_version) == 0)
-        strncpy(screen->pg_version, "-.-.-", sizeof(screen->pg_version_num));
+    get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_special.pg_version_num);
+    get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_special.pg_version);
+    if (strlen(screen->pg_special.pg_version_num) == 0)
+        strncpy(screen->pg_special.pg_version_num, "-.-.-", sizeof(screen->pg_special.pg_version_num));
+    if (strlen(screen->pg_special.pg_version) == 0)
+        strncpy(screen->pg_special.pg_version, "-.-.-", sizeof(screen->pg_special.pg_version_num));
 
     /* pg_is_in_recovery() */
     if ((res = do_query(conn, PG_IS_IN_RECOVERY_QUERY, errmsg)) != NULL) {
@@ -3072,6 +3078,12 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
 	    : (screen->pg_special.pg_is_in_recovery = true);
         PQclear(res);
     }
+
+    /* get autovacuum_max_workers */
+    get_conf_value(conn, GUC_AV_MAX_WORKERS, av_max_workers);
+    (strlen(av_max_workers) == 0)
+	? (screen->pg_special.av_max_workers = 0)
+	: (screen->pg_special.av_max_workers = atoi(av_max_workers));
 }
 
 /*
@@ -4848,7 +4860,7 @@ int main(int argc, char *argv[])
             print_conninfo(w_sys, conns[console_index], console_no);
             print_pg_general(w_sys, screens[console_index], conns[console_index]);
             print_postgres_activity(w_sys, conns[console_index]);
-            print_autovac_info(w_sys, conns[console_index]);
+            print_vacuum_info(w_sys, screens[console_index], conns[console_index]);
             print_pgss_info(w_sys, conns[console_index], interval);
             wrefresh(w_sys);
 
