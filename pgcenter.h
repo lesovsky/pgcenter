@@ -787,7 +787,7 @@ struct colAttrs {
 #define PG_INCREASE_WORK_MEM_QUERY "SET work_mem TO '32MB'"
 
 /* check pg_is_in_recovery() */
-#define PG_IS_IN_RECOVERY_QUERY "SELECT pg_is_in_recovery()::int"
+#define PG_IS_IN_RECOVERY_QUERY "SELECT pg_is_in_recovery()"
 
 /* get full config query */
 #define PG_SETTINGS_QUERY "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
@@ -925,7 +925,7 @@ void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsig
 void cmd_readline(WINDOW *window, char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
 void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);
-bool check_pg_listen_addr(struct screen_s * screen);
+bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn);
 void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
 void get_pg_special(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);

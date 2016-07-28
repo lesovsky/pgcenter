@@ -2966,12 +2966,19 @@ void reload_conf(WINDOW * window, PGconn * conn)
  * Return true if listen_addresses is local and false if not.
  ****************************************************************************
  */
-bool check_pg_listen_addr(struct screen_s * screen)
+bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
 {
+    /* an absoulute path means the unix socket is used and it is always local */
+    if (!strncmp(screen->host, "/", 1)
+	|| !strncmp(PQhost(conn), "/", 1)
+	|| (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+        return true;
+    }
+
     struct ifaddrs *ifaddr, *ifa;
     int family, s;
     char host[NI_MAXHOST];
-
+    
     if (getifaddrs(&ifaddr) == -1) {
         freeifaddrs(ifaddr);
         return false;
@@ -2993,7 +3000,7 @@ bool check_pg_listen_addr(struct screen_s * screen)
                 printf("getnameinfo() failed: %s\n", gai_strerror(s));
                 return false;
             }
-            if (!strcmp(host, screen->host) || !strncmp(screen->host, "/", 1)) {
+            if (!strcmp(host, screen->host)) {
                 freeifaddrs(ifaddr);
                 return true;
                 break;
@@ -3060,7 +3067,7 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
 
     /* pg_is_in_recovery() */
     if ((res = do_query(conn, PG_IS_IN_RECOVERY_QUERY, errmsg)) != NULL) {
-        (atoi(PQgetvalue(res, 0, 0)) == 0)
+        (!strcmp(PQgetvalue(res, 0, 0), "f"))
 	    ? (screen->pg_special.pg_is_in_recovery = false)
 	    : (screen->pg_special.pg_is_in_recovery = true);
         PQclear(res);
@@ -3086,8 +3093,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char 
     static char config_path[PATH_MAX];
     pid_t pid;
 
-    if (check_pg_listen_addr(screen)
-                || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+    if (check_pg_listen_addr(screen, conn)) {
         get_conf_value(conn, config_file_guc, config_path);
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
@@ -3941,8 +3947,7 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
         /* open subscreen */
         switch (subscreen) {
             case SUBSCREEN_LOGTAIL:
-                if (check_pg_listen_addr(screen) 
-                        || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+                if (check_pg_listen_addr(screen, conn)) {
                     *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                     wrefresh(window);
                     /* get logfile path  */
@@ -4130,8 +4135,7 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
     pid_t pid;
 
-    if (check_pg_listen_addr(screen)
-            || (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+    if (check_pg_listen_addr(screen, conn)) {
         /* get logfile path  */
         get_logfile_path(screen->log_path, conn);
         if (strlen(screen->log_path) != 0) {
