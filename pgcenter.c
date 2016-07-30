@@ -1,5 +1,5 @@
 /*
- * pgcenter: adminitrative console for PostgreSQL.
+ * pgcenter: top-like admin console for PostgreSQL.
  * (C) 2015 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
  */
 
@@ -150,7 +150,7 @@ bool key_is_pressed(void)
  * @o_string                Modified string.
  ****************************************************************************
  */
-void strrpl(char * o_string, char * s_string, char * r_string, unsigned int buf_size)
+void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size)
 {
     char buffer[buf_size];
     char * ch;
@@ -182,7 +182,7 @@ void strrpl(char * o_string, char * s_string, char * r_string, unsigned int buf_
  * with different conditions (numeric, alfa, alfanumeric, etc.).
  ****************************************************************************
  */
-int check_string(char * string)
+int check_string(const char * string)
 {
     unsigned int i;
     for (i = 0; string[i] != '\0'; i++) {
@@ -361,7 +361,7 @@ void init_args_struct(struct args_s *args)
  * @port        Port value.
  ****************************************************************************
  */
-void check_portnum(char * portstr)
+void check_portnum(const char * portstr)
 {
     unsigned int portnum = atoi(portstr);
     if ( portnum < 1 || portnum > 65535) {
@@ -494,7 +494,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
  */
 void create_initial_conn(struct args_s * args, struct screen_s * screens[])
 {
-    struct passwd *pw = getpwuid(getuid());
+    const struct passwd *pw = getpwuid(getuid());
 
     if ( strlen(args->host) != 0 )
         strncpy(screens[0]->host, args->host, sizeof(screens[0]->host));
@@ -543,14 +543,14 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
  * Success or failure.
  ****************************************************************************
  */
-unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const unsigned int pos)
+unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], unsigned int pos)
 {
     FILE *fp;
     static char pgcenterrc_path[PATH_MAX];
     struct stat statbuf;
     char strbuf[XL_BUF_LEN];
     unsigned int i = pos;
-    struct passwd *pw = getpwuid(getuid());
+    const struct passwd *pw = getpwuid(getuid());
 
     if (strlen(args->connfile) == 0) {
 	snprintf(pgcenterrc_path, sizeof(pgcenterrc_path), "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
@@ -868,7 +868,7 @@ void prepare_query(struct screen_s * screen, char * query)
  * Answer from PostgreSQL.
  ****************************************************************************
  */
-PGresult * do_query(PGconn * conn, char * query, char errmsg[])
+PGresult * do_query(PGconn * conn, const char * query, char errmsg[])
 {
     PGresult    *res;
 
@@ -915,7 +915,7 @@ void get_time(char * strtime)
  * @window          Window where title will be printed.
  ****************************************************************************
  */
-void print_title(WINDOW * window, char * progname)
+void print_title(WINDOW * window, const char * progname)
 {
     static char strtime[20];
     get_time(strtime);
@@ -972,23 +972,24 @@ void print_loadavg(WINDOW * window)
  */
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no)
 {
-    static char state[XS_BUF_LEN];
+    const char * states[] = { "ok", "failed", "unknown" };
+    int st_index;
     char buffer[CONNINFO_TITLE_LEN];
 
     switch (PQstatus(conn)) {
         case CONNECTION_OK:
-            strncpy(state, "ok", sizeof(state));
+            st_index = 0;	/* ok */
             break;
         case CONNECTION_BAD:
-            strncpy(state, "failed", sizeof(state));
+            st_index = 1;	/* failed */
             break;
         default:
-            strncpy(state, "unknown", sizeof(state));
+            st_index = 2;	/* unknown */
             break;
     }
 
     snprintf(buffer, sizeof(buffer), "conn%i [%s]: %s:%s %s@%s",
-                console_no, state,
+                console_no, states[st_index],
                 PQhost(conn), PQport(conn),
                 PQuser(conn), PQdb(conn));
 
@@ -1043,7 +1044,7 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
  * @interval        Screen refresh interval.
  ****************************************************************************
  */
-void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long int interval)
+void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval)
 {
     float avgtime;
     static unsigned int qps, prev_queries = 0;
@@ -1053,8 +1054,7 @@ void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long int interval)
     char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
-        avgtime = 0;
-        qps = 0;
+        avgtime = qps = 0;
         strncpy(maxtime, "--:--:--", sizeof(maxtime));
     } 
 
@@ -2091,7 +2091,7 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
  ****************************************************************************
  */
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen,
-		unsigned int n_rows, unsigned int n_cols, unsigned long int interval)
+		unsigned int n_rows, unsigned int n_cols, unsigned long interval)
 {
     unsigned int i, j, min = 0, max = 0;
     unsigned int divisor;
@@ -2495,7 +2495,7 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
  * Pointer to the input string.
  ****************************************************************************
  */
-void cmd_readline(WINDOW *window, char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing)
+void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing)
 {
     int ch;
     unsigned int i = 0;
@@ -3030,7 +3030,7 @@ bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
  * @config_option_value     Config option value or empty string.
  ****************************************************************************
  */
-void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value)
+void get_conf_value(PGconn * conn, const char * config_option_name, char * config_option_value)
 {
     PGresult * res;
     char errmsg[ERRSIZE],
@@ -3100,7 +3100,7 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
  * Open configuration file in $EDITOR.
  ****************************************************************************
  */
-void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc)
+void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const char * config_file_guc)
 {
     static char config_path[PATH_MAX];
     pid_t pid;
@@ -3178,7 +3178,7 @@ ITEM ** init_menuitems(unsigned int n_choices) {
  */
 void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter)
 {
-    char *choices[] = { "postgresql.conf", "pg_hba.conf", "pg_ident.conf", "recovery.conf" };
+    const char * choices[] = { "postgresql.conf", "pg_hba.conf", "pg_ident.conf", "recovery.conf" };
     WINDOW *menu_win;
     MENU *menu;
     ITEM **items;
@@ -3268,7 +3268,7 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
  */
 void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter)
 {
-    char *choices[] = { 
+    const char * choices[] = { 
 	"pg_stat_statements timings",
 	"pg_stat_statements general",
 	"pg_stat_statements input/output",
@@ -3407,17 +3407,18 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
     char errmsg[ERRSIZE],
          query[QUERY_MAXLEN],
-         action[XS_BUF_LEN],
          msg[S_BUF_LEN],
          pid[6];
+    char * actions[] = { "Terminate", "Cancel" };
+    int actions_idx;
     PGresult * res;
     bool with_esc;
 
     if (do_terminate) {
-        strncpy(action, "Terminate", sizeof(action));
+        actions_idx = 0;	/* Terminate */
         strncpy(msg, "Terminate single backend, enter pid: ", sizeof(msg));
     } else {
-        strncpy(action, "Cancel", sizeof(action));
+        actions_idx = 1;	/* Cancel */
         strncpy(msg, "Cancel single backend, enter pid: ", sizeof(msg));
     }
 
@@ -3431,10 +3432,10 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
         res = do_query(conn, query, errmsg);
         if (res != NULL) {
-            wprintw(window, "%s backend with pid %s.", action, pid);
+            wprintw(window, "%s backend with pid %s.", actions[actions_idx], pid);
             PQclear(res);
         } else {
-            wprintw(window, "%s backend failed. %s", action, errmsg);
+            wprintw(window, "%s backend failed. %s", actions[actions_idx], errmsg);
         }
     } else if (strlen(pid) == 0 && with_esc == false) {
         wprintw(window, "Do nothing. Nothing etntered.");
@@ -3492,7 +3493,7 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     } 
 
     unsigned int i;
-    char mask[5],
+    char mask[5] = "",
          msg[] = "";        /* set empty message, we don't want show msg from cmd_readline */
     bool with_esc;
 
@@ -3574,26 +3575,26 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
 
     char query[QUERY_MAXLEN],
          mask[5] = "",
-         action[XS_BUF_LEN],
          state[M_BUF_LEN];
+    const char * actions[] = { "terminate", "cancel" };
     PGresult * res;
-    unsigned int i, signaled = 0;
+    unsigned int i, actions_idx, signaled = 0;
 
     if (do_terminate)
-        strncpy(action, "terminate", sizeof(action));
+	actions_idx = 0;		/* terminate */
     else
-        strncpy(action, "cancel", sizeof(action));
+        actions_idx = 1;		/* cancel */
     
     if (screen->signal_options & GROUP_ACTIVE)
-        mask[0] = 'a';
+        strncat(mask, "a", sizeof(mask));
     if (screen->signal_options & GROUP_IDLE)
-        mask[0] = 'i';
+        strncat(mask, "i", sizeof(mask));
     if (screen->signal_options & GROUP_IDLE_IN_XACT)
-        mask[0] = 'x';
+        strncat(mask, "x", sizeof(mask));
     if (screen->signal_options & GROUP_WAITING)
-        mask[0] = 'w';
+        strncat(mask, "w", sizeof(mask));
     if (screen->signal_options & GROUP_OTHER)
-        mask[0] = 'o';
+        strncat(mask, "o", sizeof(mask));
 
     for (i = 0; i < strlen(mask); i++) {
         switch (mask[i]) {
@@ -3616,7 +3617,7 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
                 break;
         }
 	snprintf(query, sizeof(query), "%s%s%s%s%s%s%s%s%s",
-		 PG_SIG_GROUP_BACKEND_P1, action,
+		 PG_SIG_GROUP_BACKEND_P1, actions[actions_idx],
 		 PG_SIG_GROUP_BACKEND_P2, state,
 		 PG_SIG_GROUP_BACKEND_P3, screen->pg_stat_activity_min_age,
 		 PG_SIG_GROUP_BACKEND_P4, screen->pg_stat_activity_min_age,
@@ -3689,13 +3690,13 @@ void start_psql(WINDOW * window, struct screen_s * screen)
  * @interval            Interval.
  ****************************************************************************
  */
-unsigned long int change_refresh(WINDOW * window, unsigned long int interval)
+unsigned long change_refresh(WINDOW * window, unsigned long interval)
 {
-    long int interval_save = interval;
+    unsigned long interval_save = interval;
     static char msg[S_BUF_LEN],                 /* prompt */
                 str[XS_BUF_LEN];                /* entered value */
     bool with_esc;
-    unsigned int offset = 0;				/* additional offset for message */
+    unsigned int offset = 0;			/* additional offset for message */
 
     wprintw(window, "Change refresh (min 1, max 300, current %i) to ", interval / 1000000);
     wrefresh(window);
@@ -3741,7 +3742,7 @@ unsigned long int change_refresh(WINDOW * window, unsigned long int interval)
  * @interval            Sleep interval.
  ****************************************************************************
  */
-void do_noop(WINDOW * window, unsigned long int interval)
+void do_noop(WINDOW * window, unsigned long interval)
 {
     bool paused = true;
     unsigned int sleep_usec;
@@ -4617,7 +4618,7 @@ int main(int argc, char *argv[])
     unsigned int n_rows, n_cols, n_prev_rows = 0;       /* query results opts   */
     char errmsg[ERRSIZE];                               /* query error message  */
 
-    unsigned long int interval = DEFAULT_INTERVAL,      /* sleep interval       */
+    unsigned long interval = DEFAULT_INTERVAL,          /* sleep interval       */
              sleep_usec = 0;                            /* time spent in sleep  */
 
     char ***p_arr = NULL,

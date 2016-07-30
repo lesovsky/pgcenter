@@ -826,10 +826,10 @@ void init_signal_handlers(void);
 void init_screens(struct screen_s *screens[]);
 struct args_s * init_args_mem(void);
 void init_args_struct(struct args_s *args);
-void check_portnum(char * portnum);
+void check_portnum(const char * portnum);
 void arg_parse(int argc, char *argv[], struct args_s *args);
 void create_initial_conn(struct args_s * args, struct screen_s * screens[]);
-unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], const unsigned int pos);
+unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], unsigned int pos);
 void exit_prog(struct screen_s * screens[], PGconn * conns[]);
 
 /* connections and queries unctions */
@@ -839,7 +839,7 @@ void prepare_conninfo(struct screen_s * screens[]);
 void open_connections(struct screen_s * screens[], PGconn * conns[]);
 void close_connections(struct screen_s * screens[], PGconn * conns[]);
 void prepare_query(struct screen_s * screen, char * query);
-PGresult * do_query(PGconn * conn, char * query, char errmsg[]);
+PGresult * do_query(PGconn * conn, const char * query, char errmsg[]);
 
 /* system resources functions */
 void get_time(char * strtime);
@@ -865,13 +865,13 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
 void get_speed_duplex(struct nicdata_s * nicdata);
 
 /* print screen functions */
-void print_title(WINDOW * window, char * progname);
+void print_title(WINDOW * window, const char * progname);
 void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_postgres_activity(WINDOW * window, PGconn * conn);
 void print_vacuum_info(WINDOW * window, struct screen_s * screen, PGconn * conn);
-void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long int interval);
+void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval);
 void print_data(WINDOW *window, PGresult *res, char ***arr, 
         unsigned int n_rows, unsigned int n_cols, struct screen_s * screen);
 void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn * conn);
@@ -881,7 +881,7 @@ char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
 char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
 void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols);
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, 
-        unsigned int n_rows, unsigned int n_cols, unsigned long int interval);
+        unsigned int n_rows, unsigned int n_cols, unsigned long interval);
 void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struct screen_s * screen);
 
 /* key-press functions */
@@ -897,7 +897,7 @@ unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
 void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args);
 void show_config(WINDOW * window, PGconn * conn);
 void reload_conf(WINDOW * window, PGconn * conn);
-void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, char * config_file_guc);
+void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const char * config_file_guc);
 void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter);
 void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, bool *first_iter);
 void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter);
@@ -906,8 +906,8 @@ void get_statemask(WINDOW * window, struct screen_s * screen);
 void set_statemask(WINDOW * window, struct screen_s * screen);
 void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate);
 void start_psql(WINDOW * window, struct screen_s * screen);
-unsigned long int change_refresh(WINDOW * window, unsigned long int interval);
-void do_noop(WINDOW * window, unsigned long int interval);
+unsigned long change_refresh(WINDOW * window, unsigned long interval);
+void do_noop(WINDOW * window, unsigned long interval);
 void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter);
 void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn, unsigned int subscreen);
 void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn);
@@ -920,15 +920,15 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 double min(double d1, double d2);
 double max(double d1, double d2);
 bool key_is_pressed(void);
-void strrpl(char * o_string, char * s_string, char * r_string, unsigned int buf_size);
-int check_string(char * string);
+void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);
+int check_string(const char * string);
 struct colAttrs * init_colattrs(unsigned int n_cols);
 void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols);
-void cmd_readline(WINDOW *window, char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
+void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
 void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);
 bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn);
-void get_conf_value(PGconn * conn, char * config_option_name, char * config_option_value);
+void get_conf_value(PGconn * conn, const char * config_option_name, char * config_option_value);
 void get_pg_special(PGconn * conn, struct screen_s * screen);
 void get_logfile_path(char * path, PGconn * conn);
 void get_pg_uptime(PGconn * conn, char * uptime);
