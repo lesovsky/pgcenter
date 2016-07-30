@@ -4675,7 +4675,7 @@ int main(int argc, char *argv[])
     noecho();
     nodelay(stdscr, TRUE);
     keypad(stdscr,TRUE);
-    ESCDELAY = 100;                 /* milliseconds to wait after escape */
+    set_escdelay(100);                 /* milliseconds to wait after escape */
 
     w_sys = newwin(5, 0, 0, 0);
     w_cmd = newwin(1, 0, 4, 0);

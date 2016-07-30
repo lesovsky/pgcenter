@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * use set_escdelay() instead of direct changing ESCDELAY.
   * fix signal_group_backend(), doesn't work if mask has more than one flag.
   * improve const correctness.
   * autovac info: print number of user vacuum and autovac max worker limit.
