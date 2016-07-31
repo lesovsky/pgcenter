@@ -63,6 +63,7 @@
  * and YYY is minor. For example, 90540 means 9.5.4.
  * */
 #define PG92 90200
+#define PG96 90600
 
 #define PGCENTERRC_READ_OK  0
 #define PGCENTERRC_READ_ERR 1
@@ -285,7 +286,8 @@ struct colAttrs {
 #define PG_FATAL_ERR    PGRES_FATAL_ERROR
 
 /* sysstat screen queries */
-#define PG_STAT_ACTIVITY_COUNT_QUERY \
+/* for postgresql versions before 9.6 */
+#define PG_STAT_ACTIVITY_COUNT_95_QUERY \
     "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
        SELECT \
          (SELECT count(*) AS total FROM pgsa), \
@@ -293,6 +295,17 @@ struct colAttrs {
          (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
          (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
          (SELECT count(*) AS waiting FROM pgsa WHERE waiting), \
+         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled'));"
+
+/* for postgresql versions since 9.6 */
+#define PG_STAT_ACTIVITY_COUNT_QUERY \
+    "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
+       SELECT \
+         (SELECT count(*) AS total FROM pgsa), \
+         (SELECT count(*) AS idle FROM pgsa WHERE state = 'idle'), \
+         (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
+         (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
+         (SELECT count(*) AS waiting FROM pgsa WHERE wait_event IS NOT NULL), \
          (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled'));"
 
 #define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
@@ -445,10 +458,35 @@ struct colAttrs {
     "'::interval) AND current_query <> '<IDLE>' AND procpid <> pg_backend_pid() \
     ORDER BY COALESCE(xact_start, query_start)"
 
-#define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
+#define PG_STAT_ACTIVITY_LONG_95_QUERY_P1 \
     "SELECT \
         pid, client_addr AS cl_addr, client_port AS cl_port, \
         datname, usename, state, waiting, \
+        date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
+        date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
+        date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_activity \
+    WHERE ((clock_timestamp() - xact_start) > '"
+#define PG_STAT_ACTIVITY_LONG_95_QUERY_P2 \
+    "'::interval OR (clock_timestamp() - query_start) > '"
+#define PG_STAT_ACTIVITY_LONG_95_QUERY_P3 \
+    "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
+    ORDER BY COALESCE(xact_start, query_start)"
+
+#define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
+    "SELECT \
+        pid, client_addr AS cl_addr, client_port AS cl_port, \
+        datname, usename, state, wait_event, wait_event_type AS wait_evtype, \
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
@@ -869,7 +907,7 @@ void print_title(WINDOW * window, const char * progname);
 void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);
-void print_postgres_activity(WINDOW * window, PGconn * conn);
+void print_postgres_activity(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_vacuum_info(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval);
 void print_data(WINDOW *window, PGresult *res, char ***arr, 

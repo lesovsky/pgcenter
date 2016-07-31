@@ -76,7 +76,7 @@ $ pgcenter
 ```
 
 #### Known issues
-- mainly developed and tested under PostgreSQL 9.4 (but tested with others 9.x releases).
+- mainly developed and tested under PostgreSQL 9.5/9.6 (but tested with others 9.x releases).
 - this is beta software, in some circumstances may occurs segfaults. When segfaults occur, you may help me to do this software better:
   - Build pgcenter from latest sources (see above instructions).
   - Enable coredump with ```ulimit -c unlimited```

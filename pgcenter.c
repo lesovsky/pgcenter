@@ -805,7 +805,12 @@ void prepare_query(struct screen_s * screen, char * query)
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P1, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P2, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_91_QUERY_P3);
-            } else {
+            } else if (atoi(screen->pg_special.pg_version_num) > PG92 && atoi(screen->pg_special.pg_version_num) < PG96) {
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
+                        PG_STAT_ACTIVITY_LONG_95_QUERY_P1, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_95_QUERY_P2, screen->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_95_QUERY_P3);
+	    } else {
                 snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
                         PG_STAT_ACTIVITY_LONG_QUERY_P1, screen->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_QUERY_P2, screen->pg_stat_activity_min_age,
@@ -1007,7 +1012,7 @@ void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no)
  * @conn            Current postgres connection.
  ****************************************************************************
  */
-void print_postgres_activity(WINDOW * window, PGconn * conn)
+void print_postgres_activity(WINDOW * window, struct screen_s * screen, PGconn * conn)
 {
     unsigned int t_count = 0,			/* total number of connections */
         	 i_count = 0,			/* number of idle connections */
@@ -1017,8 +1022,14 @@ void print_postgres_activity(WINDOW * window, PGconn * conn)
         	 o_count = 0;			/* other, unclassiffied */
     PGresult *res;
     static char errmsg[ERRSIZE];
+    char query[QUERY_MAXLEN];
 
-    if ((res = do_query(conn, PG_STAT_ACTIVITY_COUNT_QUERY, errmsg)) != NULL) {
+    if (atoi(screen->pg_special.pg_version_num) < PG96)
+    	snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_ACTIVITY_COUNT_95_QUERY);
+    else
+        snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_ACTIVITY_COUNT_QUERY);
+
+    if ((res = do_query(conn, query, errmsg)) != NULL) {
         t_count = atoi(PQgetvalue(res, 0, 0));
         i_count = atoi(PQgetvalue(res, 0, 1));
         x_count = atoi(PQgetvalue(res, 0, 2));
@@ -3608,7 +3619,10 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
                 strncpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')", sizeof(state));
                 break;
             case 'w':
-                strncpy(state, "waiting", sizeof(state));
+		if (atoi(screen->pg_special.pg_version_num) < PG96)
+	            strncpy(state, "waiting", sizeof(state));
+		else 
+	            strncpy(state, "wait_event IS NOT NULL OR wait_event_type IS NOT NULL", sizeof(state));
                 break;
             case 'o':
                 strncpy(state, "state IN ('fastpath function call', 'disabled')", sizeof(state));
@@ -4860,7 +4874,7 @@ int main(int argc, char *argv[])
             print_mem_usage(w_sys, st_mem_short);
             print_conninfo(w_sys, conns[console_index], console_no);
             print_pg_general(w_sys, screens[console_index], conns[console_index]);
-            print_postgres_activity(w_sys, conns[console_index]);
+            print_postgres_activity(w_sys, screens[console_index], conns[console_index]);
             print_vacuum_info(w_sys, screens[console_index], conns[console_index]);
             print_pgss_info(w_sys, conns[console_index], interval);
             wrefresh(w_sys);
