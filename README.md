@@ -14,6 +14,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 - show pg_stat_statements statistics: cpu timings, io timings;
 - show pg_stat_statements statistics: blks i/o (hits, reads, dirtied, written, temp);
 - show relations sizes info;
+- show vacuum progress (since 9.6);
 - configuration files editor and postgres reload;
 - log files viewing (full log or tail);
 - cancel/terminate queries or processes by pid or whole group;
@@ -28,7 +29,8 @@ PostgreSQL provides various statistics which includes information about tables, 
 - pg_stat_user_indexes, pg_statio_user_indexes - statistics for each index in the current database, showing info about accesses and I/O to that specific index;
 - pg_stat_user_functions -  statistics for each tracked function, showing info about executions of that function;
 - pg_stat_statements - query executions and resource usage statistics for each distinct database ID, user ID and query ID;
-- statistics about tables sizes based on pg_relation_size() and pg_total_relation_size().
+- statistics about tables sizes based on pg_relation_size() and pg_total_relation_size();
+- pg_stat_progress_vacuum - contains one row for each backend (including autovacuum worker processes) that is currently vacuuming.
 
 #### Actions:
 - Show current configuration, edit configuration files and reloading PostgreSQL service;

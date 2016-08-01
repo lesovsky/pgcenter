@@ -80,7 +80,7 @@
 unsigned int hz;
 
 /* information contexts */
-#define TOTAL_CONTEXTS      		13
+#define TOTAL_CONTEXTS      		14
 #define PG_STAT_DATABASE_NUM                    0
 #define PG_STAT_REPLICATION_NUM                 1
 #define PG_STAT_TABLES_NUM                      2
@@ -94,6 +94,7 @@ unsigned int hz;
 #define PG_STAT_STATEMENTS_IO_NUM               10
 #define PG_STAT_STATEMENTS_TEMP_NUM             11
 #define PG_STAT_STATEMENTS_LOCAL_NUM		12
+#define PG_STAT_PROGRESS_VACUUM_NUM		13
 
 #define GROUP_ACTIVE        1 << 0
 #define GROUP_IDLE          1 << 1
@@ -121,7 +122,8 @@ enum context
     pg_stat_statements_general,
     pg_stat_statements_io,
     pg_stat_statements_temp,
-    pg_stat_statements_local
+    pg_stat_statements_local,
+    pg_stat_progress_vacuum
 };
 
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
@@ -486,7 +488,7 @@ struct colAttrs {
 #define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
     "SELECT \
         pid, client_addr AS cl_addr, client_port AS cl_port, \
-        datname, usename, state, wait_event, wait_event_type AS wait_evtype, \
+        datname, usename, state, wait_event_type AS wait_etype, wait_event, \
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
@@ -818,6 +820,25 @@ struct colAttrs {
 #define PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX    8
 #define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN    6
 #define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX    10
+
+#define PG_STAT_PROGRESS_VACUUM_QUERY \
+    "SELECT \
+     	a.pid, \
+	date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
+        v.datname, v.relid::regclass AS relation, \
+	a.state, v.phase, \
+	v.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS total, \
+	v.heap_blks_scanned * (SELECT current_setting('block_size')::int / 1024) AS scanned, \
+	v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024) AS vacuumed, \
+	a.wait_event_type AS wait_etype, a.wait_event, \
+	a.query \
+    FROM pg_stat_progress_vacuum v \
+    JOIN pg_stat_activity a ON v.pid = a.pid \
+    ORDER BY COALESCE(a.xact_start, a.query_start)"
+
+/* don't use array sorting when showing vacuum progress, row order defined in query */
+#define PG_STAT_PROGRESS_VACUUM_ORDER_MIN INVALID_ORDER_KEY
+#define PG_STAT_PROGRESS_VACUUM_ORDER_MAX INVALID_ORDER_KEY
 
 /* other queries */
 /* don't log our queries */

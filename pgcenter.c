@@ -285,6 +285,9 @@ void init_screens(struct screen_s *screens[])
         screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].context = pg_stat_statements_local;
         screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
         screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_desc = true;
+        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].context = pg_stat_progress_vacuum;
+        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].order_key = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
+        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].order_desc = true;
     }
 }
 
@@ -855,6 +858,9 @@ void prepare_query(struct screen_s * screen, char * query)
                 ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2)
                 : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2);
             break;
+	case pg_stat_progress_vacuum:
+            snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_PROGRESS_VACUUM_QUERY);
+	    break;
     }
 }
 
@@ -2182,6 +2188,10 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
                 max = PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX;
             }
             break;
+        case pg_stat_progress_vacuum:
+            /* diff nothing, use returned values as-is */
+            min = max = INVALID_ORDER_KEY;
+            break;
         default:
             break;
     }
@@ -2442,6 +2452,10 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             else
                 max = PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX;
             *first_iter = true;
+            break;
+        case pg_stat_progress_vacuum:
+            min = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
+            max = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
             break;
         default:
             break;
@@ -4539,6 +4553,9 @@ void switch_context(WINDOW * window, struct screen_s * screen,
         case pg_stat_statements_local:
             wprintw(window, "Show pg_stat_statements local io");
             break;
+        case pg_stat_progress_vacuum:
+            wprintw(window, "Show vacuum progress");
+            break;
         default:
             break;
     }
@@ -4572,7 +4589,7 @@ void print_help_screen(bool * first_iter)
                 PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
     wprintw(w, "general actions:\n\
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
-  s,t,T           's' sizes, 't' tables, 'T' tables IO,\n\
+  s,t,T,v         's' tables sizes, 't' tables, 'T' tables IO, 'v' vacuum progress,\n\
   x,X             'x' pg_stat_statements switch, 'X' pg_stat_statements menu.\n\
   Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
   C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
@@ -4824,6 +4841,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'X':               /* open pg_stat_statements menu */
                     pgss_menu(w_cmd, w_dba, screens[console_index], &first_iter);
+                    break;
+                case 'v':               /* show pg_stat_activity screen */
+                    switch_context(w_cmd, screens[console_index], pg_stat_progress_vacuum, p_res, &first_iter);
                     break;
                 case 'A':               /* change duration threshold in pg_stat_activity wcreen */
                     change_min_age(w_cmd, screens[console_index], p_res, &first_iter);

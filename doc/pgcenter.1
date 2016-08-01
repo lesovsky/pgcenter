@@ -1499,6 +1499,84 @@ Text of a representative statement
 .RE
 .RE
 
+.IP "\fBpg_stat_progress_vacuum context\fR"
+Whenever VACUUM is running, the pg_stat_progress_vacuum view will contain one row for each backend (including autovacuum worker processes) that is currently vacuuming. The tables below describe the information that will be reported and provide information about how to interpret it. Progress reporting is not currently supported for VACUUM FULL and backends running VACUUM FULL will not be listed in this view. This statistics are available since PostgreSQL 9.6, for more information see https://www.postgresql.org/docs/9.6/static/progress-reporting.html. Additionally used
+.I pg_stat_activity
+view.
+.nf
+Used query:
+    SELECT
+        a.pid,
+        date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age,
+        v.datname, v.relid::regclass AS relation,
+        a.state, v.phase,
+        v.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS total,
+        v.heap_blks_scanned * (SELECT current_setting('block_size')::int / 1024) AS scanned,
+        v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024) AS vacuumed,
+        a.wait_event_type AS wait_etype, a.wait_event,
+        a.query
+    FROM pg_stat_progress_vacuum v
+    JOIN pg_stat_activity a ON v.pid = a.pid
+    ORDER BY COALESCE(a.xact_start, a.query_start)
+.fi
+
+.B pid
+.RS
+.RS
+Process ID of vacuum.
+.RE
+
+.B xact_age
+.RS
+Age of vacuum task.
+.RE
+
+.B datname
+.RS
+Database name where vacuum worker is connected.
+.RE
+
+.B state
+.RS
+Postgres backend state (see pg_stat_activity backends states).
+.RE
+
+.B phase
+.RS
+Current processing phase of vacuum. See VACUUM phases - https://www.postgresql.org/docs/9.6/static/progress-reporting.html#VACUUM-PHASES.
+.RE
+
+.B total
+.RS
+Total size of the table in Kbytes. This number is reported as of the beginning of the scan; size increased during vacuum will not be (and need not be) shown and this space will not be visited by this VACUUM.
+.RE
+
+.B scanned
+.RS
+Size of table in Kbytes that is scanned. Because the visibility map is used to optimize scans, some blocks will be skipped without inspection; skipped blocks are included in this total, so that this number will eventually become equal to total when the vacuum is complete. This counter only advances when the phase is scanning heap.
+.RE
+
+.B vacuumed
+.RS
+Size of table in Kbytes that is vacuumed. Unless the table has no indexes, this counter only advances when the phase is vacuuming heap. Blocks that contain no dead tuples are skipped, so the counter may sometimes skip forward in large increments.
+.RE
+
+.B wait_etype
+.RS
+The type of event for which the backend is waiting, if any; otherwise NULL.
+.RE
+
+.B wait_event
+.RS
+Wait event name if backend is currently waiting, otherwise NULL.
+.RE
+
+.B query
+.RS
+Text of a representative statement.
+.RE
+.RE
+
 .SH SUBSCREENS
 Subscreens it's a additional screens which presents auxilary data which not directly related with the PostgreSQL but may be useful in troubleshoot.
 
@@ -1676,8 +1754,11 @@ Show statistics about long queries from \fIpg_stat_activity\fR view. Show inform
 \ \ \ \fBf\fR\ \ :\fBpg_stat_functions\fR toggle \fR
 Show statistics from \fIpg_stat_user_functions\fR view about tracked functions and their executions, such as number of calls and execution time. The \fItrack_functions\fR parameter in \fIpostgresql.conf\fR controls exactly which functions are tracked.
 .TP 7
+\ \ \ \fBv\fR\ \ :\fBpg_stat_progress_vacuum\fR toggle \fR
+Show statistics from \fIpg_stat_progress_vacuum\fR view about vacuum execution progress. Available since PostgreSQL 9.6.
+.TP 7
 \ \ \ \fBx\fR\ \ :\fBSwitch to next pg_stat_statements screen\fR toggle \fR
-Switches between pg_stat_statements screens: timings, general, input/output, temporary input/output, local input/output.
+Switches between \fBpg_stat_statements\fR screens: timings, general, input/output, temporary input/output, local input/output.
 .TP 7
 \ \ \ \fBX\fR\ \ :\fBShow pg_stat_statements menu\fR toggle \fR
 Open pg_stat_statements menu and allow to choose pg_stat_statements screen without switching.
