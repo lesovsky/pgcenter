@@ -3000,7 +3000,7 @@ bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
 {
     /* an absoulute path means the unix socket is used and it is always local */
     if (!strncmp(screen->host, "/", 1)
-	|| !strncmp(PQhost(conn), "/", 1)
+	|| ((PQhost(conn)!= NULL) && !strncmp(PQhost(conn), "/", 1))
 	|| (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
         return true;
     }

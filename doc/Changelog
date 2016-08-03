@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix check first symbol in listen_addresses.
   * add pg_stat_progress_vacuum (since 9.6).
   * add compatibility with pg-9.6 (pg_stat_activity).
   * use set_escdelay() instead of direct changing ESCDELAY.
