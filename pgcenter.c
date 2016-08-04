@@ -424,25 +424,25 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 short_options, long_options, &option_index)) != -1 ) {
         switch (param) {
             case 'h':
-                strncpy(args->host, optarg, sizeof(args->host));
+                snprintf(args->host, sizeof(args->host), "%s", optarg);
                 args->count++;
                 break;
             case 'f':
-                strncpy(args->connfile, optarg, sizeof(args->connfile));
+                snprintf(args->connfile, sizeof(args->connfile), "%s", optarg);
                 args->count++;
                 break;
             case 'p':
-                strncpy(args->port, optarg, sizeof(args->port));
+                snprintf(args->port, sizeof(args->port), "%s", optarg);
 		check_portnum(args->port);
                 args->count++;
                 break;
             case 'U':
-                strncpy(args->user, optarg, sizeof(args->user));
+                snprintf(args->user, sizeof(args->user), "%s", optarg);
                 args->count++;
                 break;
             case 'd':
+                snprintf(args->dbname, sizeof(args->dbname), "%s", optarg);
                 args->count++;
-                strncpy(args->dbname, optarg, sizeof(args->dbname));
                 break;
             case 'w':
                 args->need_passwd = false;
@@ -462,19 +462,19 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
                 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], sizeof(args->dbname));
-            strncpy(args->user, argv[optind + 1], sizeof(args->user));
+            snprintf(args->dbname, sizeof(args->dbname), "%s", argv[optind]);
+            snprintf(args->user, sizeof(args->user), "%s", argv[optind + 1]);
             optind++;
             args->count++;
         }
         else if ( (argc - optind >= 1) && strlen(args->user) != 0 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], sizeof(args->dbname));
+            snprintf(args->dbname, sizeof(args->dbname), "%s", argv[optind]);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) != 0 ) {
-            strncpy(args->user, argv[optind], sizeof(args->user));
+            snprintf(args->user, sizeof(args->user), "%s", argv[optind]);
             args->count++;
         } else if ( (argc - optind >= 1) && strlen(args->user) == 0 && strlen(args->dbname) == 0 ) {
-            strncpy(args->dbname, argv[optind], sizeof(args->dbname));
+            snprintf(args->dbname, sizeof(args->dbname), "%s", argv[optind]);
             args->count++;
         } else
             fprintf(stderr,
