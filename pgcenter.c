@@ -161,7 +161,7 @@ void strrpl(char * o_string, const char * s_string, const char * r_string, unsig
     strncat(buffer, o_string, ch - o_string);
     sprintf(buffer + (ch - o_string), "%s%s", r_string, ch + strlen(s_string));
     o_string[0] = 0;
-    strncpy(o_string, buffer, buf_size);
+    snprintf(o_string, buf_size, "%s", buffer);
     strrpl(o_string, s_string, r_string, buf_size);
 
     return;
@@ -242,7 +242,7 @@ void init_screens(struct screen_s *screens[])
         screens[i]->subscreen = SUBSCREEN_NONE;
         screens[i]->log_path[0] = '\0';
         screens[i]->current_context = DEFAULT_QUERY_CONTEXT;
-        strncpy(screens[i]->pg_stat_activity_min_age, PG_STAT_ACTIVITY_MIN_AGE_DEFAULT, XS_BUF_LEN);
+        snprintf(screens[i]->pg_stat_activity_min_age, XS_BUF_LEN, "%s", PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
         screens[i]->signal_options = 0;
         screens[i]->pg_stat_sys = false;
 
@@ -500,33 +500,32 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
     const struct passwd *pw = getpwuid(getuid());
 
     if ( strlen(args->host) != 0 )
-        strncpy(screens[0]->host, args->host, sizeof(screens[0]->host));
+        snprintf(screens[0]->host, sizeof(screens[0]->host), "%s", args->host);
 
     if ( strlen(args->port) != 0 )
-        strncpy(screens[0]->port, args->port, sizeof(screens[0]->port));
+        snprintf(screens[0]->port, sizeof(screens[0]->port), "%s", args->port);
 
     if ( strlen(args->user) == 0 )
-        strncpy(screens[0]->user, pw->pw_name, sizeof(screens[0]->user));
+        snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", pw->pw_name);
     else
-        strncpy(screens[0]->user, args->user, sizeof(screens[0]->user));
+        snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", args->user);
 
     if ( strlen(args->dbname) == 0 && strlen(args->user) == 0)
-        strncpy(screens[0]->dbname, pw->pw_name, sizeof(screens[0]->dbname));
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", pw->pw_name);
     else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0)
-        strncpy(screens[0]->dbname, args->user, sizeof(screens[0]->dbname));
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->user);
     else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
-        strncpy(screens[0]->dbname, args->dbname, sizeof(screens[0]->dbname));
-        strncpy(screens[0]->user, pw->pw_name, sizeof(screens[0]->user));
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
+        snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", pw->pw_name);
     } else
-        strncpy(screens[0]->dbname, args->dbname, sizeof(screens[0]->dbname));
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
 
     if ( args->need_passwd )
-        strncpy(screens[0]->password, 
-		password_prompt("Password: ", sizeof(screens[0]->password), false),
-		sizeof(screens[0]->password));
+        snprintf(screens[0]->password, sizeof(screens[0]->password), "%s",
+		password_prompt("Password: ", sizeof(screens[0]->password), false));
 
     if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
-        strncpy(screens[0]->dbname, screens[0]->user, sizeof(screens[0]->dbname));
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", screens[0]->user);
 
     screens[0]->conn_used = true;
 }
@@ -558,19 +557,17 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * scre
     if (strlen(args->connfile) == 0) {
 	snprintf(pgcenterrc_path, sizeof(pgcenterrc_path), "%s/%s", pw->pw_dir, PGCENTERRC_FILE);
     } else {
-        strncpy(pgcenterrc_path, args->connfile, sizeof(pgcenterrc_path));
+        snprintf(pgcenterrc_path, sizeof(pgcenterrc_path), "%s", args->connfile);
     }
 
     if (access(pgcenterrc_path, F_OK) == -1 && strlen(args->connfile) != 0) {
-        fprintf(stderr,
-                    "WARNING: no access to %s.\n", pgcenterrc_path);
+        fprintf(stderr, "WARNING: no access to %s.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 
     stat(pgcenterrc_path, &statbuf);
     if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) && access(pgcenterrc_path, F_OK) != -1) {
-        fprintf(stderr,
-                    "WARNING: %s has wrong permissions.\n", pgcenterrc_path);
+        fprintf(stderr, "WARNING: %s has wrong permissions.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 
@@ -688,9 +685,8 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 printf("%s:%s %s@%s require ", 
                                 screens[i]->host, screens[i]->port,
                                 screens[i]->user, screens[i]->dbname);
-                strncpy(screens[i]->password,
-			password_prompt("password: ", sizeof(screens[i]->password), false),
-			sizeof(screens[i]->password));
+                snprintf(screens[i]->password, sizeof(screens[i]->password), "%s",
+			password_prompt("password: ", sizeof(screens[i]->password), false));
 		snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
 			 sizeof(screens[i]->conninfo) - strlen(screens[i]->conninfo),
 			 " password=%s", screens[i]->password);
@@ -1072,7 +1068,7 @@ void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval)
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = qps = 0;
-        strncpy(maxtime, "--:--:--", sizeof(maxtime));
+        snprintf(maxtime, sizeof(maxtime), "--:--:--");
     } 
 
     divisor = interval / 1000000;
@@ -1090,7 +1086,7 @@ void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval)
         snprintf(maxtime, sizeof(maxtime), "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        snprintf(maxtime, sizeof(maxtime), "%s", "--:--:--");
+        snprintf(maxtime, sizeof(maxtime), "--:--:--");
     }
 
     mvwprintw(window, 3, COLS / 2,
@@ -1612,7 +1608,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
                     &io_in_progress, &t_spent, &t_weighted);
         c_ios[i]->major = major;
         c_ios[i]->minor = minor;
-        strncpy(c_ios[i]->devname, devname, S_BUF_LEN);
+        snprintf(c_ios[i]->devname, S_BUF_LEN, "%s", devname);
         c_ios[i]->r_completed = r_completed;
         c_ios[i]->r_merged = r_merged;
         c_ios[i]->r_sectors = r_sectors;
@@ -1701,7 +1697,7 @@ void get_speed_duplex(struct nicdata_s * nicdata)
         return;
     }
 
-    strncpy(ifr.ifr_name, nicdata->ifname, sizeof(ifr.ifr_name));
+    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", nicdata->ifname);
     ifr.ifr_data = (void *) &edata;
     edata.cmd = ETHTOOL_GSET;
     status = ioctl(sock, SIOCETHTOOL, &ifr);
@@ -1776,7 +1772,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
                 &lu[0], &lu[1], &lu[2], &lu[3], &lu[4], &lu[5], &lu[6], &lu[7],
              /* wbps    wpps    werrs    wdrop    wfifo    wcoll    wcarrier wcomp */
                 &lu[8], &lu[9], &lu[10], &lu[11], &lu[12], &lu[13], &lu[14], &lu[15]);
-        strncpy(c_nicd[i]->ifname, ifname, IF_NAMESIZE + 1);
+        snprintf(c_nicd[i]->ifname, IF_NAMESIZE + 1, "%s", ifname);
         c_nicd[i]->rbytes = lu[0];
         c_nicd[i]->rpackets = lu[1];
         c_nicd[i]->wbytes = lu[8];
@@ -1922,7 +1918,7 @@ void get_pg_uptime(PGconn * conn, char * uptime)
         snprintf(uptime, S_BUF_LEN, "%s", PQgetvalue(res, 0, 0));
         PQclear(res);
     } else {
-        strncpy(uptime, "--:--:--", S_BUF_LEN);
+        snprintf(uptime, S_BUF_LEN, "--:--:--");
     }
 }
 
@@ -2087,7 +2083,7 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
 
     for (i = 0; i < n_rows; i++)
         for (j = 0; j < n_cols; j++) {
-            strncpy(arr[i][j], PQgetvalue(res, i, j), XL_BUF_LEN);
+            snprintf(arr[i][j], XL_BUF_LEN, "%s", PQgetvalue(res, i, j));
             arr[i][j][XL_BUF_LEN] = '\0';
         }
 }
@@ -2200,12 +2196,9 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
-                strncpy(res_arr[i][j], c_arr[i][j], XL_BUF_LEN);     /* copy unsortable values as is */
+                snprintf(res_arr[i][j], XL_BUF_LEN, "%s", c_arr[i][j]);     /* copy unsortable values as is */
             else {
-                int n = snprintf(NULL, 0, "%lli", atoll(c_arr[i][j]) - atoll(p_arr[i][j]));
-                char buf[n+1];
-                snprintf(buf, n+1, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
-                strncpy(res_arr[i][j], buf, XL_BUF_LEN);
+                snprintf(res_arr[i][j], XL_BUF_LEN, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
             }
     }
 }
@@ -2270,17 +2263,17 @@ void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struc
             if (desc)
                 if (atoll(res_arr[j][order_key]) > atoll(res_arr[i][order_key])) {        // desc: j > i
                     for (x = 0; x < n_cols; x++) {
-                        strncpy(temp, res_arr[i][x], sizeof(temp));
-                        strncpy(res_arr[i][x], res_arr[j][x], XL_BUF_LEN);
-                        strncpy(res_arr[j][x], temp, XL_BUF_LEN);
+                        snprintf(temp, sizeof(temp), "%s", res_arr[i][x]);
+                        snprintf(res_arr[i][x], XL_BUF_LEN, "%s", res_arr[j][x]);
+                        snprintf(res_arr[j][x], XL_BUF_LEN, "%s", temp);
                     }
                 }
             if (!desc)
                 if (atoll(res_arr[i][order_key]) > atoll(res_arr[j][order_key])) {        // asc: i > j
                     for (x = 0; x < n_cols; x++) {
-                        strncpy(temp, res_arr[i][x], sizeof(temp));
-                        strncpy(res_arr[i][x], res_arr[j][x], XL_BUF_LEN);
-                        strncpy(res_arr[j][x], temp, XL_BUF_LEN);
+                        snprintf(temp, sizeof(temp), "%s", res_arr[i][x]);
+                        snprintf(res_arr[i][x], XL_BUF_LEN, "%s", res_arr[j][x]);
+                        snprintf(res_arr[j][x], XL_BUF_LEN, "%s", temp);
                     }
                 }
         }
@@ -2359,7 +2352,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
             if (j == n_cols - 1) {
                 getyx(window, winsz_y, winsz_x);
                 columns[x].width = COLS - winsz_x;
-                strncpy(arr[i][j], arr[i][j], columns[x].width);
+                snprintf(arr[i][j], columns[x].width, "%s", arr[i][j]);
                 arr[i][j][columns[x].width] = '\0';
             }
             wprintw(window, "%-*s", columns[x].width, arr[i][j]);
@@ -2559,7 +2552,6 @@ void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * wit
                 done = true;
                 break;
             case 10:                            /* Enter */
-                strncpy(str, str, len);
                 str[len] = '\0';
                 flushinp();
                 nodelay(window, TRUE);
@@ -2663,21 +2655,21 @@ void clear_screen_connopts(struct screen_s * screens[], unsigned int i)
 void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i)
 {
     while (screens[i + 1]->conn_used != false) {
-        strncpy(screens[i]->host,        screens[i + 1]->host, sizeof(screens[i]->host));
-        strncpy(screens[i]->port,        screens[i + 1]->port, sizeof(screens[i]->port));
-        strncpy(screens[i]->user,        screens[i + 1]->user, sizeof(screens[i]->user));
-        strncpy(screens[i]->dbname,      screens[i + 1]->dbname, sizeof(screens[i]->dbname));
-        strncpy(screens[i]->password,    screens[i + 1]->password, sizeof(screens[i]->password));
-        strncpy(screens[i]->pg_special.pg_version_num,
-		screens[i + 1]->pg_special.pg_version_num, sizeof(screens[i]->pg_special.pg_version_num));
-        strncpy(screens[i]->pg_special.pg_version,
-		screens[i + 1]->pg_special.pg_version, sizeof(screens[i]->pg_special.pg_version));
+        snprintf(screens[i]->host, sizeof(screens[i]->host), "%s", screens[i + 1]->host);
+        snprintf(screens[i]->port, sizeof(screens[i]->port), "%s", screens[i + 1]->port);
+        snprintf(screens[i]->user, sizeof(screens[i]->user), "%s", screens[i + 1]->user);
+        snprintf(screens[i]->dbname, sizeof(screens[i]->dbname), "%s", screens[i + 1]->dbname);
+        snprintf(screens[i]->password, sizeof(screens[i]->password), "%s", screens[i + 1]->password);
+        snprintf(screens[i]->pg_special.pg_version_num, sizeof(screens[i]->pg_special.pg_version_num), "%s",
+		screens[i + 1]->pg_special.pg_version_num);
+        snprintf(screens[i]->pg_special.pg_version, sizeof(screens[i]->pg_special.pg_version), "%s",
+		screens[i + 1]->pg_special.pg_version);
         screens[i]->subscreen =        screens[i + 1]->subscreen;
-        strncpy(screens[i]->log_path,    screens[i + 1]->log_path, sizeof(screens[i]->log_path));
+        snprintf(screens[i]->log_path, sizeof(screens[i]->log_path), "%s", screens[i + 1]->log_path);
         screens[i]->log_fd =            screens[i + 1]->log_fd;
         screens[i]->current_context =   screens[i + 1]->current_context;
-        strncpy(screens[i]->pg_stat_activity_min_age,
-		screens[i + 1]->pg_stat_activity_min_age, sizeof(screens[i]->pg_stat_activity_min_age));
+        snprintf(screens[i]->pg_stat_activity_min_age, sizeof(screens[i]->pg_stat_activity_min_age), "%s",
+		screens[i + 1]->pg_stat_activity_min_age);
         screens[i]->signal_options =    screens[i + 1]->signal_options;
         screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
 
@@ -2745,7 +2737,7 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
                     /* read password and add to conn options */
                     cmd_readline(window, msg2, strlen(msg2), &with_esc2, params, sizeof(params), false);
                     if (strlen(params) != 0 && with_esc2 == false) {
-                        strncpy(screens[i]->password, params, sizeof(screens[i]->password));
+                        snprintf(screens[i]->password, sizeof(screens[i]->password), "%s", params);
 			snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
 				 sizeof(screens[i]->conninfo) - strlen(screens[i]->conninfo), " password=%s", screens[i]->password);
                         /* try establish connection and finish work */
@@ -3092,9 +3084,9 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_special.pg_version_num);
     get_conf_value(conn, GUC_SERVER_VERSION, screen->pg_special.pg_version);
     if (strlen(screen->pg_special.pg_version_num) == 0)
-        strncpy(screen->pg_special.pg_version_num, "-.-.-", sizeof(screen->pg_special.pg_version_num));
+        snprintf(screen->pg_special.pg_version_num, sizeof(screen->pg_special.pg_version_num), "-.-.-");
     if (strlen(screen->pg_special.pg_version) == 0)
-        strncpy(screen->pg_special.pg_version, "-.-.-", sizeof(screen->pg_special.pg_version_num));
+        snprintf(screen->pg_special.pg_version, sizeof(screen->pg_special.pg_version_num), "-.-.-");
 
     /* pg_is_in_recovery() */
     if ((res = do_query(conn, PG_IS_IN_RECOVERY_QUERY, errmsg)) != NULL) {
@@ -3441,10 +3433,10 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 
     if (do_terminate) {
         actions_idx = 0;	/* Terminate */
-        strncpy(msg, "Terminate single backend, enter pid: ", sizeof(msg));
+        snprintf(msg, sizeof(msg), "Terminate single backend, enter pid: ");
     } else {
         actions_idx = 1;	/* Cancel */
-        strncpy(msg, "Cancel single backend, enter pid: ", sizeof(msg));
+        snprintf(msg, sizeof(msg), "Cancel single backend, enter pid: ");
     }
 
     cmd_readline(window, msg, strlen(msg), &with_esc, pid, sizeof(pid), true);
@@ -3624,22 +3616,22 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
     for (i = 0; i < strlen(mask); i++) {
         switch (mask[i]) {
             case 'a':
-                strncpy(state, "state = 'active'", sizeof(state));
+                snprintf(state, sizeof(state), "state = 'active'");
                 break;
             case 'i':
-                strncpy(state, "state = 'idle'", sizeof(state));
+                snprintf(state, sizeof(state), "state = 'idle'");
                 break;
             case 'x':
-                strncpy(state, "state IN ('idle in transaction (aborted)', 'idle in transaction')", sizeof(state));
+                snprintf(state, sizeof(state), "state IN ('idle in transaction (aborted)', 'idle in transaction')");
                 break;
             case 'w':
 		if (atoi(screen->pg_special.pg_version_num) < PG96)
-	            strncpy(state, "waiting", sizeof(state));
+	            snprintf(state, sizeof(state), "waiting");
 		else 
-	            strncpy(state, "wait_event IS NOT NULL OR wait_event_type IS NOT NULL", sizeof(state));
+	            snprintf(state, sizeof(state), "wait_event IS NOT NULL OR wait_event_type IS NOT NULL");
                 break;
             case 'o':
-                strncpy(state, "state IN ('fastpath function call', 'disabled')", sizeof(state));
+                snprintf(state, sizeof(state), "state IN ('fastpath function call', 'disabled')");
                 break;
             default:
                 break;
@@ -3877,8 +3869,8 @@ void get_logfile_path(char * path, PGconn * conn)
      */
     /* check that the log_filename have %H%M%S pattern */
     if (strstr(path_tpl, "%H%M%S") != NULL) {
-        strncpy(path_log, path_tpl, sizeof(path_log));
-        strncpy(path_log_fallback, path_tpl, sizeof(path_log_fallback));
+        snprintf(path_log, sizeof(path_log), "%s", path_tpl);
+        snprintf(path_log_fallback, sizeof(path_log_fallback), "%s", path_tpl);
         if((res = do_query(conn, q4, errmsg)) == NULL) {
             PQclear(res);
             return;
@@ -3887,7 +3879,7 @@ void get_logfile_path(char * path, PGconn * conn)
         strrpl(path_log_fallback, "%H%M%S", "000000", sizeof(path_log_fallback));
         PQclear(res);
     } else {
-        strncpy(path_log, path_tpl, sizeof(path_log));
+        snprintf(path_log, sizeof(path_log), "%s", path_tpl);
     }
 
     /* translate log_filename pattern string in real path */
@@ -4126,26 +4118,23 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 
         /* now we should cut multiline log entries to screen length */
         char str[n_cols];                                           /* use var for one line */
-        char tmp[XL_BUF_LEN];                                           /* tmp var for line from buffer */
+        char tmp[XL_BUF_LEN];                                       /* tmp var for line from buffer */
         do {                                                        /* scan buffer from begin */
             nl_ptr = strstr(buffer, "\n");                          /* find \n in buffer */
             if (nl_ptr != NULL) {                                   /* if found */
                 if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
-                    strncpy(buffer, nl_ptr + 1, sizeof(buffer));    /* decrease buffer, cut skipped line */
+                    snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1);    /* decrease buffer, cut skipped line */
                     nl_count--;                                     /* decrease newline counter */
                     continue;                                       /* start next iteration */
                 }                                                   /* at this place we have sufficient number of lines for tail */
-                strncpy(tmp, buffer, nl_ptr - buffer);              /* copy log line into temp buffer */
-                tmp[nl_ptr - buffer] = '\0';                                     
+                snprintf(tmp, nl_ptr - buffer + 1, "%s", buffer);       /* copy log line into temp buffer */
                 if (strlen(tmp) > n_cols) {                         /* if line longer than screen size (multiline) than truncate line to screen size */
-                    strncpy(str, buffer, n_cols);
-                    str[n_cols] = '\0';
+                    snprintf(str, n_cols, "%s", buffer);
                 } else {                                            /* if line have normal size, copy line as is */
-                    strncpy(str, buffer, strlen(tmp));
-                    str[strlen(tmp)] = '\0';
+                    snprintf(str, strlen(tmp) + 1, "%s", buffer);
                 }
                 wprintw(window, "%s\n", str);                       /* print line to log screen */
-                strncpy(buffer, nl_ptr + 1, sizeof(buffer));        /* decrease buffer, cut printed line */
+                snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1); /* decrease buffer, cut printed line */
             } else {
                 break;                                              /* if \n not found, finish work */
             }
@@ -4188,9 +4177,9 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 /* get pager from environment variables, otherwise use default pager */
                 static char pager[S_BUF_LEN];
                 if (getenv("PAGER") != NULL)
-                    strncpy(pager, getenv("PAGER"), sizeof(pager));
+                    snprintf(pager, sizeof(pager), "%s", getenv("PAGER"));
                 else
-                    strncpy(pager, DEFAULT_PAGER, sizeof(pager));
+                    snprintf(pager, sizeof(pager), "%s", DEFAULT_PAGER);
                 execlp(pager, pager, screen->log_path, NULL);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
@@ -4287,9 +4276,9 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
         }
 
         if (getenv("PAGER") != NULL)
-            strncpy(pager, getenv("PAGER"), sizeof(pager));
+            snprintf(pager, sizeof(pager), "%s", getenv("PAGER"));
         else
-            strncpy(pager, DEFAULT_PAGER, sizeof(pager));
+            snprintf(pager, sizeof(pager), "%s", DEFAULT_PAGER);
         
         if ((fpout = popen(pager, "w")) == NULL) {
             wprintw(window, "Do nothing. Failed to open pipe to %s", pager);
