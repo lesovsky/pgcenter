@@ -2084,7 +2084,6 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
     for (i = 0; i < n_rows; i++)
         for (j = 0; j < n_cols; j++) {
             snprintf(arr[i][j], XL_BUF_LEN, "%s", PQgetvalue(res, i, j));
-            arr[i][j][XL_BUF_LEN] = '\0';
         }
 }
 
@@ -2352,7 +2351,6 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
             if (j == n_cols - 1) {
                 getyx(window, winsz_y, winsz_x);
                 columns[x].width = COLS - winsz_x;
-                snprintf(arr[i][j], columns[x].width, "%s", arr[i][j]);
                 arr[i][j][columns[x].width] = '\0';
             }
             wprintw(window, "%-*s", columns[x].width, arr[i][j]);
