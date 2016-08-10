@@ -57,6 +57,8 @@ void print_usage(void)
   -w, --no-password         never prompt for password\n \
   -W, --password            force password prompt (should happen automatically)\n\n");
     printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
+
+    exit(EXIT_SUCCESS);
 }
 
 /*
@@ -85,8 +87,7 @@ void sig_handler(int signo)
 void init_signal_handlers(void)
 {
     if (signal(SIGINT, sig_handler) == SIG_ERR) {
-        perror("FATAL: failed to establish SIGINT handler.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: failed to establish SIGINT handler.\n");
     }
 }
 
@@ -134,6 +135,40 @@ bool key_is_pressed(void)
             return false;
     } else
         return false;
+}
+
+/*
+ ******************************************************** routine function **
+ * Print diagnose message, if something goes wrong. Don't use it in ncurses
+ * mode.
+ *
+ * IN:
+ * @do_exit                 Exit after message?
+ * @mtype                   Message type (severity).
+ * @msg                     Message text.
+ ****************************************************************************
+ */
+void mreport(bool do_exit, enum mtype mtype, const char * msg, ...)
+{
+    FILE * out = stdout;
+    int status = EXIT_SUCCESS;
+
+    if (mtype == msg_fatal || mtype == msg_error) {
+        out = stderr;
+        status = EXIT_FAILURE;
+    }
+
+    /* detach stdout/stderr file descriptors from ncurses mode */
+    endwin();
+
+    va_list args;
+    va_start(args, msg);
+    vfprintf(out, msg, args);
+    va_end(args);        
+ 
+    if (do_exit) {
+        exit(status);
+    }
 }
 
 /*
@@ -207,8 +242,7 @@ int check_string(const char * string)
 struct args_s * init_args_mem(void) {
     struct args_s *args;
     if ((args = (struct args_s *) malloc(sizeof(struct args_s))) == NULL) {
-        perror("FATAL: malloc for input args failed.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc() for input args failed.\n");
     }
     return args;
 }
@@ -226,8 +260,7 @@ void init_screens(struct screen_s *screens[])
     unsigned int i;
     for (i = 0; i < MAX_SCREEN; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
-                perror("FATAL: malloc for screens failed.");
-                exit(EXIT_FAILURE);
+            mreport(true, msg_fatal, "FATAL: malloc() for screens failed.\n");
         }
         memset(screens[i], 0, SCREEN_SIZE);
         screens[i]->screen = i;
@@ -309,8 +342,7 @@ char * password_prompt(const char *prompt, unsigned int pw_maxlen, bool echo)
     struct termios t_orig, t;
     char *password;
     if ((password = (char *) malloc(pw_maxlen + 1)) == NULL) {
-            perror("FATAL: malloc for password is failed.");
-            exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc() for password prompt failed.\n");
     }
 
     if (!echo) {
@@ -321,8 +353,7 @@ char * password_prompt(const char *prompt, unsigned int pw_maxlen, bool echo)
     }
 
     if (fputs(prompt, stdout) == EOF) {
-        perror("FATAL: failed to write to stdout.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: write to stdout failed.\n");
     }
 
     if (fgets(password, pw_maxlen + 1, stdin) == NULL)
@@ -368,8 +399,7 @@ void check_portnum(const char * portstr)
 {
     unsigned int portnum = atoi(portstr);
     if ( portnum < 1 || portnum > 65535) {
-	fprintf(stderr, "Invalid port number: %s. Check input options or conninfo file.\n", portstr);
-	exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "Invalid port number: %s. Check input options or conninfo file.\n", portstr);
     }
 }
 
@@ -406,17 +436,11 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
     };
 
     if (argc > 1) {
-        if ((strcmp(argv[1], "-?") == 0)
-                || (argc == 2 && (strcmp(argv[1], "--help") == 0)))
-        {
+        if ((strcmp(argv[1], "-?") == 0) || (argc == 2 && (strcmp(argv[1], "--help") == 0))) {
             print_usage();
-            exit(EXIT_SUCCESS);
         }
-        if (strcmp(argv[1], "--version") == 0
-                || strcmp(argv[1], "-V") == 0)
-        {
-            fprintf(stdout, "%s %.1f.%d\n", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
-            exit(EXIT_SUCCESS);
+        if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-V") == 0) {
+            mreport(true, msg_notice, "%s %.1f.%d\n", PROGRAM_NAME, PROGRAM_VERSION, PROGRAM_RELEASE);
         }
     }
     
@@ -433,7 +457,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 break;
             case 'p':
                 snprintf(args->port, sizeof(args->port), "%s", optarg);
-		check_portnum(args->port);
+        		check_portnum(args->port);
                 args->count++;
                 break;
             case 'U':
@@ -451,8 +475,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
                 args->need_passwd = true;
                 break;
             case '?': default:
-                fprintf(stderr, "Try \"%s --help\" for more information.\n", argv[0]);
-                exit(EXIT_SUCCESS);
+                mreport(true, msg_fatal, "Try \"%s --help\" for more information.\n", argv[0]);
                 break;
         }
     }
@@ -477,9 +500,9 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
             snprintf(args->dbname, sizeof(args->dbname), "%s", argv[optind]);
             args->count++;
         } else
-            fprintf(stderr,
-                    "%s: warning: extra command-line argument \"%s\" ignored\n",
-                    argv[0], argv[optind]);
+            mreport(false, msg_warning,
+                    "WARNING: extra command-line argument \"%s\" ignored\n",
+                    argv[optind]);
         optind++;
     }
 }
@@ -561,13 +584,13 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * scre
     }
 
     if (access(pgcenterrc_path, F_OK) == -1 && strlen(args->connfile) != 0) {
-        fprintf(stderr, "WARNING: no access to %s.\n", pgcenterrc_path);
+        mreport(false, msg_error, "ERROR: no access to %s.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 
     stat(pgcenterrc_path, &statbuf);
     if ( statbuf.st_mode & (S_IRWXG | S_IRWXO) && access(pgcenterrc_path, F_OK) != -1) {
-        fprintf(stderr, "WARNING: %s has wrong permissions.\n", pgcenterrc_path);
+        mreport(false, msg_error, "ERROR: %s has wrong permissions.\n", pgcenterrc_path);
         return PGCENTERRC_READ_ERR;
     }
 
@@ -610,8 +633,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
     if (PQstatus(conn) == CONNECTION_BAD) {
         wclear(window);
         PQreset(conn);
-        wprintw(window,
-                "The connection to the server was lost. Attempting reconnect.");
+        wprintw(window, "The connection to the server was lost. Attempting reconnect.");
         wrefresh(window);
         /* reset previous query results after reconnect */
         *reconnected = true;
@@ -692,9 +714,9 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
 			 " password=%s", screens[i]->password);
                 conns[i] = PQconnectdb(screens[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
-                fprintf(stderr, "ERROR: Connection to %s:%s with %s@%s failed.\n",
-                screens[i]->host, screens[i]->port,
-                screens[i]->user, screens[i]->dbname);
+                mreport(false, msg_error, "ERROR: Connection to %s:%s with %s@%s failed (console %i).\n",
+                        screens[i]->host, screens[i]->port,
+                        screens[i]->user, screens[i]->dbname, i + 1);
                 continue;
             }
 
@@ -734,6 +756,7 @@ void close_connections(struct screen_s * screens[], PGconn * conns[])
  * Graceful quit.
  *
  * IN:
+ * @screens     Array of screens.
  * @conns       Array of connections.
  ****************************************************************************
  */
@@ -1110,16 +1133,14 @@ void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short)
     /* Allocate structures for CPUs "all" and 0 */
     for (i = 0; i < 2; i++) {
         if ((st_cpu[i] = (struct cpu_s *) malloc(STATS_CPU_SIZE * 2)) == NULL) {
-            perror("FATAL: malloc for cpu stats failed.");
-            exit(EXIT_FAILURE);
+            mreport(true, msg_fatal, "FATAL: malloc for cpu stats failed.\n");
         }
         memset(st_cpu[i], 0, STATS_CPU_SIZE * 2);
     }
 
     /* Allocate structures for memory */
     if ((*st_mem_short = (struct mem_s *) malloc(STATS_MEM_SIZE)) == NULL) {
-            perror("FATAL: malloc for mem stats failed.");
-            exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc for memory stats failed.\n");
     }
     memset(*st_mem_short, 0, STATS_MEM_SIZE);
 }
@@ -1138,13 +1159,9 @@ void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned i
 {
     unsigned int i;
     for (i = 0; i < bdev; i++) {
-        if ((c_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
-            perror("FATAL: malloc for iostat stats failed.");
-            exit(EXIT_FAILURE);
-        }
-        if ((p_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
-            perror("FATAL: malloc for iostat stats failed.");
-            exit(EXIT_FAILURE);
+        if ((c_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL ||
+            (p_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
+                mreport(true, msg_fatal, "FATAL: malloc for iostat failed.\n");
         }
     }
 }
@@ -1182,14 +1199,11 @@ void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], 
 {
     unsigned int i;
     for (i = 0; i < idev; i++) {
-        if ((c_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
-            perror("FATAL: malloc for nicdata stats failed.");
-            exit(EXIT_FAILURE);
+        if ((c_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL ||
+            (p_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL ) {
+                mreport(true, msg_fatal, "FATAL: malloc for nicstat failed.\n");
         }
-        if ((p_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL) {
-            perror("FATAL: malloc for nicdata stats failed.");
-            exit(EXIT_FAILURE);
-        }
+
 	/* initialize interfaces with unknown speed and duplex */
 	c_nicdata[i]->speed = -1;
 	c_nicdata[i]->duplex = DUPLEX_UNKNOWN;
@@ -1227,8 +1241,8 @@ void get_HZ(void)
 {
     unsigned long ticks;
     if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
-        perror("FATAL: sysconf failure.");
-    
+        mreport(false, msg_error, "ERROR: sysconf failure.\n");
+            
     hz = (unsigned int) ticks;
 }
 
@@ -1595,7 +1609,6 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
         wclear(window);
         wprintw(window, "Do nothing. Can't open %s", DISKSTATS_FILE);
-        wrefresh(window);
         *repaint = true;
         return;
     }
@@ -1756,7 +1769,6 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
     if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
         wclear(window);
         wprintw(window, "Do nothing. Can't open %s", NETDEV_FILE);
-        wrefresh(window);
         *repaint = true;
         return;
     }
@@ -1994,13 +2006,11 @@ unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
     wclear(window);
     if ( screens[ch - '0' - 1]->conn_used ) {
         console_no = ch - '0', console_index = console_no - 1;
-        wprintw(window, "Switch to another pgbouncer connection (console %i)",
-                console_no);
+        wprintw(window, "Switch to console %i.", console_no);
         *first_iter = true;
         PQclear(res);
     } else
-        wprintw(window, "Do not switch because no connection associated (stay on console %i)",
-                console_no);
+        wprintw(window, "No connection associated, stay on console %i.", console_no);
 
     return console_index;
 }
@@ -2023,18 +2033,15 @@ char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
     unsigned int i, j;
 
     if ((arr = malloc(sizeof(char **) * n_rows)) == NULL) {
-        perror("FATAL: malloc for stats array failed.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc for stats array failed.\n");
     }
     for (i = 0; i < n_rows; i++) {
         if ((arr[i] = malloc(sizeof(char *) * n_cols)) == NULL) {
-            perror("FATAL: malloc for stats array rows failed.");
-            exit(EXIT_FAILURE);
+            mreport(true, msg_fatal, "FATAL: malloc for rows stats failed.\n");
         }
         for (j = 0; j < n_cols; j++)
             if ((arr[i][j] = malloc(sizeof(char) * BUFSIZ)) == NULL) {
-                perror("FATAL: malloc for stats array cols failed.");
-                exit(EXIT_FAILURE);
+                mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
             }
     }
     return arr;
@@ -2290,8 +2297,7 @@ void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struc
 struct colAttrs * init_colattrs(unsigned int n_cols) {
     struct colAttrs *cols;
     if ((cols = (struct colAttrs *) malloc(sizeof(struct colAttrs) * n_cols)) == NULL) {
-        perror("FATAL: malloc for column attributes failed.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc for column attributes failed.\n");
     }
     return cols;
 }
@@ -3017,7 +3023,8 @@ bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
                             host, NI_MAXHOST,
                             NULL, 0, NI_NUMERICHOST);
             if (s != 0) {
-                printf("getnameinfo() failed: %s\n", gai_strerror(s));
+                mreport(false, msg_warning,
+                        "WARNING: getnameinfo() failed: %s\n", gai_strerror(s));
                 return false;
             }
             if (!strcmp(host, screen->host)) {
@@ -3141,10 +3148,10 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const
                 execlp(editor, editor, config_path, NULL);
                 exit(EXIT_FAILURE);
             } else if (pid < 0) {
-                wprintw(window, "Can't open %s: fork failed.", config_path);
+                wprintw(window, "ERROR: fork failed, can't open %s", config_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
-                wprintw(window, "Unknown error: waitpid failed.");
+                wprintw(window, "ERROR: waitpid failed.");
                 return;
             }
         } else {
@@ -3173,8 +3180,7 @@ void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const
 ITEM ** init_menuitems(unsigned int n_choices) {
     ITEM ** items;
     if ((items = (ITEM**) malloc(sizeof(ITEM *) * (n_choices))) == NULL) {
-        perror("FATAL: malloc for menu items failed.");
-        exit(EXIT_FAILURE);
+        mreport(true, msg_fatal, "FATAL: malloc for menu items failed.");
     }
     return items;
 }
@@ -3682,9 +3688,9 @@ void start_psql(WINDOW * window, struct screen_s * screen)
                 NULL);
         exit(EXIT_SUCCESS);         /* finish child */
     } else if (pid < 0) {
-        wprintw(window, "Can't exec %s: fork failed.", psql);
+        wprintw(window, "ERROR: fork failed, can't exec %s.", psql);
     } else if (waitpid(pid, NULL, 0) != pid) {
-        wprintw(window, "Unknown error: waitpid failed.");
+        wprintw(window, "ERROR: waitpid failed.");
     }
 
     /* 
@@ -3767,7 +3773,7 @@ void do_noop(WINDOW * window, unsigned long interval)
     int ch;
 
     while (paused != false) {
-        wprintw(window, "pgCenter paused, press any key to resume.");
+        wprintw(window, "Pause, press any key to resume.");
         wrefresh(window);
         /* sleep */
         for (sleep_usec = 0; sleep_usec < interval; sleep_usec += INTERVAL_STEP) {
@@ -4181,10 +4187,10 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 execlp(pager, pager, screen->log_path, NULL);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
-                wprintw(window, "Can't open %s: fork failed.", screen->log_path);
+                wprintw(window, "ERROR: fork failed, can't open %s.", screen->log_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
-                wprintw(window, "Unknown error: waitpid failed.");
+                wprintw(window, "ERROR: waitpid failed.");
                 return;
             }
         } else {

@@ -107,6 +107,15 @@ unsigned int hz;
 #define SUBSCREEN_IOSTAT    2
 #define SUBSCREEN_NICSTAT   3
 
+/* enum for program internal messages */
+enum mtype
+{
+    msg_notice,
+    msg_warning,
+    msg_error,
+    msg_fatal
+};
+
 /* enum for query context */
 enum context
 {
@@ -979,6 +988,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 double min(double d1, double d2);
 double max(double d1, double d2);
 bool key_is_pressed(void);
+void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
 void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);
 int check_string(const char * string);
 struct colAttrs * init_colattrs(unsigned int n_cols);

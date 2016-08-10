@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add mreport() - general function for log/error message reporting.
   * totally replace strncpy with snprintf.
   * fix check first symbol in listen_addresses.
   * add pg_stat_progress_vacuum (since 9.6).
