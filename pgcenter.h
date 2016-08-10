@@ -560,7 +560,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
@@ -589,7 +588,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
 
@@ -620,7 +618,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
@@ -642,7 +639,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P2 " DESC"
 
@@ -681,7 +677,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_IO_QUERY_P1 \
@@ -718,7 +713,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_IO_QUERY_P2 " DESC"
 
@@ -756,7 +750,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_TEMP_QUERY_P2 " DESC"
 
@@ -789,7 +782,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 
 #define PG_STAT_STATEMENTS_LOCAL_QUERY_P1 \
@@ -818,7 +810,6 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    WHERE d.datname != 'postgres' AND calls > 50 \
     GROUP BY a.rolname, d.datname, query ORDER BY "
 #define PG_STAT_STATEMENTS_LOCAL_QUERY_P2 " DESC"
 
