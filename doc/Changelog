@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix segfault, when diskstats/net are failed to read at startup.
   * add mreport() - general function for log/error message reporting.
   * totally replace strncpy with snprintf.
   * fix check first symbol in listen_addresses.

@@ -1813,7 +1813,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
     /* print headers */
     wclear(window);
     wattron(window, A_BOLD);
-    wprintw(window, "\nInterface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\n");
+    wprintw(window, "\n    Interface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\n");
     wattroff(window, A_BOLD);
 
     double rbps, rpps, wbps, wpps, ravs, wavs, ierr, oerr, coll, sat, rutil, wutil, util;
@@ -1857,7 +1857,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
         }
 
         /* print statistics */
-        wprintw(window, "%10s", c_nicd[i]->ifname);
+        wprintw(window, "%14s", c_nicd[i]->ifname);
         wprintw(window, "%8.2f%8.2f", rbps / 1024 / 128, wbps / 1024 / 128);
         wprintw(window, "%9.2f%9.2f", rpps, wpps);
         wprintw(window, "%9.2f%9.2f", ravs, wavs);
@@ -3923,8 +3923,12 @@ unsigned int count_block_devices(void)
     unsigned int bdev = 0;
     char ch;
 
+    /* 
+     * On initial allocating of stat structure at startup, if read fails allocate
+     * basic array for 10 devices.
+     */
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
-        return -1;
+        return 10;
     }
 
     while (!feof(fp)) {
@@ -3951,8 +3955,12 @@ unsigned int count_nic_devices(void)
     unsigned int idev = 0;
     char ch;
 
+    /* 
+     * On initial allocating of stat structure at startup, if read fails allocate
+     * basic array for 10 devices.
+     */
     if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
-        return -1;
+        return 10;
     }
 
     while (!feof(fp)) {
