@@ -1,5 +1,9 @@
 pgcenter (devel) unstable; urgency=low
 
+  * use qsort_r() instead of hand-made sorting.
+    - many improvements in arrays functions (diff, sort);
+    - queries use it's own order now (user can't change 'ORDER BY' in query);
+    - sorting available for all columns now.
   * remove unnecessary WHERE from pg_stat_statements queries.
   * fix segfault, when diskstats/net are failed to read at startup.
   * add mreport() - general function for log/error message reporting.

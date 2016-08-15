@@ -208,27 +208,102 @@ void strrpl(char * o_string, const char * s_string, const char * r_string, unsig
  *
  * IN:
  * @string              String which should be checked.
+ * @ctype               Type of check.
  *
  * RETURNS:
  * 0 if string is valid, -1 otherwise.
- *
- * NOTE:
- * In future, this function can be extended in case when string must be checked
- * with different conditions (numeric, alfa, alfanumeric, etc.).
  ****************************************************************************
  */
-int check_string(const char * string)
+int check_string(const char * string, enum chk_type ctype)
 {
     unsigned int i;
     for (i = 0; string[i] != '\0'; i++) {
-        if (!isalnum(string[i])) {
-            /* found non-alfanumeric char */
-            return -1;
+        switch (ctype) {
+            case is_alfanum:
+                if (!isalnum(string[i]))    /* non-alfanumeric char found */
+                    return -1;
+                break;
+            case is_number:
+                if (!isdigit(string[i]))
+                    return -1;              /* not a number char found */
+                break;
         }
     }
 
     /* string is ok */
     return 0;
+}
+
+/*
+ ******************************************************** routine function **
+ * String comparison function for qsort (descending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int str_cmp_desc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *pa = ((const char ***) a)[0][*key];
+    const char *pb = ((const char ***) b)[0][*key];
+
+    return -strcmp(pa, pb);
+}
+
+/*
+ ******************************************************** routine function **
+ * String comparison function for qsort (ascending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int str_cmp_asc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *pa = ((const char ***) a)[0][*key];
+    const char *pb = ((const char ***) b)[0][*key];
+
+    return strcmp(pa, pb);
+}
+
+/*
+ ******************************************************** routine function **
+ * Integer comparison function for qsort (descending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int int_cmp_desc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *ia = ((const char ***) a)[0][*key];
+    const char *ib = ((const char ***) b)[0][*key];
+
+    return atoll(ib) - atoll(ia);
+}
+
+/*
+ ******************************************************** routine function **
+ * Integer comparison function for qsort (ascending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int int_cmp_asc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *ia = ((const char ***) a)[0][*key];
+    const char *ib = ((const char ***) b)[0][*key];
+
+    return atoll(ia) - atoll(ib);
 }
 
 /*
@@ -257,7 +332,7 @@ struct args_s * init_args_mem(void) {
  */
 void init_screens(struct screen_s *screens[])
 {
-    unsigned int i;
+    unsigned int i, j;
     for (i = 0; i < MAX_SCREEN; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for screens failed.\n");
@@ -279,48 +354,54 @@ void init_screens(struct screen_s *screens[])
         screens[i]->signal_options = 0;
         screens[i]->pg_stat_sys = false;
 
-        screens[i]->context_list[PG_STAT_DATABASE_NUM].context = pg_stat_database;
-        screens[i]->context_list[PG_STAT_DATABASE_NUM].order_key = PG_STAT_DATABASE_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_DATABASE_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_REPLICATION_NUM].context = pg_stat_replication;
-        screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_key = PG_STAT_REPLICATION_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_REPLICATION_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_TABLES_NUM].context = pg_stat_tables;
-        screens[i]->context_list[PG_STAT_TABLES_NUM].order_key = PG_STAT_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_TABLES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_INDEXES_NUM].context = pg_stat_indexes;
-        screens[i]->context_list[PG_STAT_INDEXES_NUM].order_key = PG_STAT_INDEXES_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_INDEXES_NUM].order_desc = true;
-        screens[i]->context_list[PG_STATIO_TABLES_NUM].context = pg_statio_tables;
-        screens[i]->context_list[PG_STATIO_TABLES_NUM].order_key = PG_STATIO_TABLES_ORDER_MIN;
-        screens[i]->context_list[PG_STATIO_TABLES_NUM].order_desc = true;
-        screens[i]->context_list[PG_TABLES_SIZE_NUM].context = pg_tables_size;
-        screens[i]->context_list[PG_TABLES_SIZE_NUM].order_key = PG_TABLES_SIZE_ORDER_MIN;
-        screens[i]->context_list[PG_TABLES_SIZE_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].context = pg_stat_activity_long;
-        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_key = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_ACTIVITY_LONG_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].context = pg_stat_functions;
-        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].order_key = PG_STAT_FUNCTIONS_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_FUNCTIONS_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].context = pg_stat_statements_timing;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].context = pg_stat_statements_general;
-        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].context = pg_stat_statements_io;
-        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key = PG_STAT_STATEMENTS_IO_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_IO_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].context = pg_stat_statements_temp;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key = PG_STAT_STATEMENTS_TEMP_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].context = pg_stat_statements_local;
-        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_desc = true;
-        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].context = pg_stat_progress_vacuum;
-        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].order_key = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
-        screens[i]->context_list[PG_STAT_PROGRESS_VACUUM_NUM].order_desc = true;
+        for (j = 0; j < TOTAL_CONTEXTS; j++) {
+            switch (j) {
+                case 0:
+                    screens[i]->context_list[j].context = pg_stat_database;
+                    break;
+                case 1:
+                    screens[i]->context_list[j].context = pg_stat_replication;
+                    break;
+                case 2:
+                    screens[i]->context_list[j].context = pg_stat_tables;
+                    break;
+                case 3:
+                    screens[i]->context_list[j].context = pg_stat_indexes;
+                    break;
+                case 4:
+                    screens[i]->context_list[j].context = pg_statio_tables;
+                    break;
+                case 5:
+                    screens[i]->context_list[j].context = pg_tables_size;
+                    break;
+                case 6:
+                    screens[i]->context_list[j].context = pg_stat_activity_long;
+                    break;
+                case 7:
+                    screens[i]->context_list[j].context = pg_stat_functions;
+                    break;
+                case 8:
+                    screens[i]->context_list[j].context = pg_stat_statements_timing;
+                    break;
+                case 9:
+                    screens[i]->context_list[j].context = pg_stat_statements_general;
+                    break;
+                case 10:
+                    screens[i]->context_list[j].context = pg_stat_statements_io;
+                    break;
+                case 11:
+                    screens[i]->context_list[j].context = pg_stat_statements_temp;
+                    break;
+                case 12:
+                    screens[i]->context_list[j].context = pg_stat_statements_local;
+                    break;
+                case 13:
+                    screens[i]->context_list[j].context = pg_stat_progress_vacuum;
+                    break;
+            }
+            screens[i]->context_list[j].order_key = 0;
+            screens[i]->context_list[j].order_desc = true;    
+        }
     }
 }
 
@@ -778,13 +859,11 @@ void exit_prog(struct screen_s * screens[], PGconn * conns[])
  */
 void prepare_query(struct screen_s * screen, char * query)
 {
-    char tmp[2];
     switch (screen->current_context) {
         case pg_stat_database: default:
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_91_QUERY);
-            else
-                snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_91_QUERY)
+                : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
             snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
@@ -840,46 +919,34 @@ void prepare_query(struct screen_s * screen, char * query)
             }
             break;
         case pg_stat_functions:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_FUNCTIONS_NUM].order_key + 1);
-            snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_FUNCTIONS_QUERY_P1, tmp, PG_STAT_FUNCTIONS_QUERY_P2);
+            snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_FUNCTIONS_QUERY_P1);
             break;
         case pg_stat_statements_timing:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TIMING_NUM].order_key + 1);
-	    atoi(screen->pg_special.pg_version_num) < PG92
-                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2)
-                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1, tmp, PG_STAT_STATEMENTS_TIMING_QUERY_P2);
+    	    atoi(screen->pg_special.pg_version_num) < PG92
+                ? snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_TIMING_91_QUERY_P1)
+                : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_TIMING_QUERY_P1);
             break;
         case pg_stat_statements_general:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_GENERAL_NUM].order_key + 1);
             atoi(screen->pg_special.pg_version_num) < PG92
-                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2)
-                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_GENERAL_QUERY_P2);
+                ? snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1)
+                : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_GENERAL_QUERY_P1);
             break;
         case pg_stat_statements_io:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_IO_NUM].order_key + 1);
             atoi(screen->pg_special.pg_version_num) < PG92
-                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2)
-                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_IO_QUERY_P1, tmp, PG_STAT_STATEMENTS_IO_QUERY_P2);
+                ? snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_IO_91_QUERY_P1)
+                : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_IO_QUERY_P1);
             break;
         case pg_stat_statements_temp:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_TEMP_NUM].order_key + 1);
-            snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1, tmp, PG_STAT_STATEMENTS_TEMP_QUERY_P2);
+            snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_TEMP_QUERY_P1);
             break;
         case pg_stat_statements_local:
-            /* here we use query native ORDER BY, and we should incrementing order key */
-            sprintf(tmp, "%d", screen->context_list[PG_STAT_STATEMENTS_LOCAL_NUM].order_key + 1);
             atoi(screen->pg_special.pg_version_num) < PG92
-                ? snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2)
-                : snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_STATEMENTS_LOCAL_QUERY_P1, tmp, PG_STAT_STATEMENTS_LOCAL_QUERY_P2);
+                ? snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1)
+                : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_STATEMENTS_LOCAL_QUERY_P1);
             break;
-	case pg_stat_progress_vacuum:
+        case pg_stat_progress_vacuum:
             snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_PROGRESS_VACUUM_QUERY);
-	    break;
+            break;
     }
 }
 
@@ -2117,77 +2184,72 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
  
     switch (screen->current_context) {
         case pg_stat_database:
-            min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                max = PG_STAT_DATABASE_ORDER_91_MAX;
-            else
-                max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
+            min = PG_STAT_DATABASE_DIFF_MIN;
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? (max = PG_STAT_DATABASE_DIFF_MAX_91)
+                : (max = PG_STAT_DATABASE_DIFF_MAX_LT);
             break;
         case pg_stat_replication:
             /* diff nothing, use returned values as-is */
             min = max = INVALID_ORDER_KEY;
             break;
         case pg_stat_tables:
-            min = PG_STAT_TABLES_ORDER_MIN;
-            max = PG_STAT_TABLES_ORDER_MAX;
+            min = PG_STAT_TABLES_DIFF_MIN;
+            max = PG_STAT_TABLES_DIFF_MAX;
             break;
         case pg_stat_indexes:
-            min = PG_STAT_INDEXES_ORDER_MIN;
-            max = PG_STAT_INDEXES_ORDER_MAX;
+            min = PG_STAT_INDEXES_DIFF_MIN;
+            max = PG_STAT_INDEXES_DIFF_MAX;
             break;
         case pg_statio_tables:
-            min = PG_STATIO_TABLES_ORDER_MIN;
-            max = PG_STATIO_TABLES_ORDER_MAX;
+            min = PG_STATIO_TABLES_DIFF_MIN;
+            max = PG_STATIO_TABLES_DIFF_MAX;
             break;
         case pg_tables_size:
-            min = PG_TABLES_SIZE_ORDER_MIN;
-            max = PG_TABLES_SIZE_ORDER_MAX;
+            min = PG_TABLES_SIZE_DIFF_MIN;
+            max = PG_TABLES_SIZE_DIFF_MAX;
             break;
         case pg_stat_activity_long:
-            /* 
-             * use INVALID_ORDER_KEY because here we no need array or sort diff.
-             * copy current array content in result array as is.
-             */
-            min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
-            max = PG_STAT_ACTIVITY_LONG_ORDER_MAX;
+            /* diff nothing, use returned values as-is */
+            min = max = INVALID_ORDER_KEY;
             break;
         case pg_stat_functions:
             /* only one column for diff */
-            min = max = PG_STAT_FUNCTIONS_DIFF_COL;
+            min = max = PG_STAT_FUNCTIONS_DIFF_MIN;
             break;
         case pg_stat_statements_timing:
             if (atoi(screen->pg_special.pg_version_num) < PG92) {
-                min = PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN;
-                max = PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX;
+                min = PGSS_TIMING_DIFF_MIN_91;
+                max = PGSS_TIMING_DIFF_MAX_91;
             } else {
-                min = PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN;
-                max = PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX;
+                min = PGSS_TIMING_DIFF_MIN_LT;
+                max = PGSS_TIMING_DIFF_MAX_LT;
             }
             break;
         case pg_stat_statements_general:
-            min = PG_STAT_STATEMENTS_GENERAL_DIFF_MIN;
-            max = PG_STAT_STATEMENTS_GENERAL_DIFF_MAX;
+            min = PGSS_GENERAL_DIFF_MIN_LT;
+            max = PGSS_GENERAL_DIFF_MAX_LT;
             break;
         case pg_stat_statements_io:
             if (atoi(screen->pg_special.pg_version_num) < PG92) {
-                min = PG_STAT_STATEMENTS_IO_DIFF_91_MIN;
-                max = PG_STAT_STATEMENTS_IO_DIFF_91_MAX;
+                min = PGSS_IO_DIFF_MIN_91;
+                max = PGSS_IO_DIFF_MAX_91;
             } else {
-                min = PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN;
-                max = PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX;
+                min = PGSS_IO_DIFF_MIN_LT;
+                max = PGSS_IO_DIFF_MAX_LT;
             }
             break;
         case pg_stat_statements_temp:
-            min = PG_STAT_STATEMENTS_TEMP_DIFF_MIN;
-            max = PG_STAT_STATEMENTS_TEMP_DIFF_MAX;
+            min = PGSS_TEMP_DIFF_MIN_LT;
+            max = PGSS_TEMP_DIFF_MAX_LT;
             break;
         case pg_stat_statements_local:
             if (atoi(screen->pg_special.pg_version_num) < PG92) {
-                min = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MIN;
-                max = PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX;
+                min = PGSS_LOCAL_DIFF_MIN_91;
+                max = PGSS_LOCAL_DIFF_MAX_91;
             } else {
-                min = PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN;
-                max = PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX;
+                min = PGSS_LOCAL_DIFF_MIN_LT;
+                max = PGSS_LOCAL_DIFF_MAX_LT;
             }
             break;
         case pg_stat_progress_vacuum:
@@ -2225,7 +2287,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s 
  */
 void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struct screen_s * screen)
 {
-    unsigned int i, j, x, order_key = 0;
+    unsigned int i, order_key = 0;
     bool desc = false;
 
     for (i = 0; i < TOTAL_CONTEXTS; i++)
@@ -2234,55 +2296,22 @@ void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struc
             desc = screen->context_list[i].order_desc;
         }
 
-    /* some context show absolute values, and sorting perform only for one column */
-    if (screen->current_context == pg_stat_functions && order_key != PG_STAT_FUNCTIONS_DIFF_COL)
-        return;
-    /* todo: here we not check pg_version_num and in old pg versions may have unexpected bahaviour */
-    if (screen->current_context == pg_stat_statements_timing
-            && order_key < PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN
-            && order_key > PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX)
-        return;
-    if (screen->current_context == pg_stat_statements_general 
-            && order_key < PG_STAT_STATEMENTS_GENERAL_DIFF_MIN 
-            && order_key > PG_STAT_STATEMENTS_GENERAL_DIFF_MAX)
-        return;
-    if (screen->current_context == pg_stat_statements_io 
-            && order_key < PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN 
-            && order_key > PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX)
-        return;
-    if (screen->current_context == pg_stat_statements_temp 
-            && order_key < PG_STAT_STATEMENTS_TEMP_DIFF_MIN 
-            && order_key > PG_STAT_STATEMENTS_TEMP_DIFF_MAX)
-        return;
-    if (screen->current_context == pg_stat_statements_local
-            && order_key < PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN 
-            && order_key > PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX)
-        return;
-
     /* don't sort arrays with invalid key */
     if (order_key == INVALID_ORDER_KEY)
         return;
 
-    static char temp[XL_BUF_LEN];
-    for (i = 0; i < n_rows; i++) {
-        for (j = i + 1; j < n_rows; j++) {
-            if (desc)
-                if (atoll(res_arr[j][order_key]) > atoll(res_arr[i][order_key])) {        // desc: j > i
-                    for (x = 0; x < n_cols; x++) {
-                        snprintf(temp, sizeof(temp), "%s", res_arr[i][x]);
-                        snprintf(res_arr[i][x], XL_BUF_LEN, "%s", res_arr[j][x]);
-                        snprintf(res_arr[j][x], XL_BUF_LEN, "%s", temp);
-                    }
-                }
-            if (!desc)
-                if (atoll(res_arr[i][order_key]) > atoll(res_arr[j][order_key])) {        // asc: i > j
-                    for (x = 0; x < n_cols; x++) {
-                        snprintf(temp, sizeof(temp), "%s", res_arr[i][x]);
-                        snprintf(res_arr[i][x], XL_BUF_LEN, "%s", res_arr[j][x]);
-                        snprintf(res_arr[j][x], XL_BUF_LEN, "%s", temp);
-                    }
-                }
-        }
+    /* 
+     * Comparator function depends on column data type. 
+     * So check first element of an array, is it a string or number. 
+     */
+    if (check_string(&res_arr[0][order_key][0], is_number) == -1) {
+        (desc)
+            ? qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_desc, &order_key)
+            : qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_asc, &order_key);
+    } else {
+        (desc)
+            ? qsort_r(res_arr, n_rows, sizeof(char **), int_cmp_desc, &order_key)
+            : qsort_r(res_arr, n_rows, sizeof(char **), int_cmp_asc, &order_key);
     }
 }
 
@@ -2378,105 +2407,91 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
  */
 void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter)
 {
-    unsigned int min = 0, max = 0, i;
+    unsigned int max = 0, i;
+
+    /* Determine max limit of range where cursor can move */
     switch (screen->current_context) {
         case pg_stat_database:
-            min = PG_STAT_DATABASE_ORDER_MIN;
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                max = PG_STAT_DATABASE_ORDER_91_MAX;
-            else
-                max = PG_STAT_DATABASE_ORDER_LATEST_MAX;
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? (max = PG_STAT_DATABASE_CMAX_91)
+                : (max = PG_STAT_DATABASE_CMAX_LT);
             break;
         case pg_stat_replication:
-            min = PG_STAT_REPLICATION_ORDER_MIN;
-            max = PG_STAT_REPLICATION_ORDER_MAX;
+            max = PG_STAT_REPLICATION_CMAX_LT;
             break;
         case pg_stat_tables:
-            min = PG_STAT_TABLES_ORDER_MIN;
-            max = PG_STAT_TABLES_ORDER_MAX;
+            max = PG_STAT_TABLES_CMAX_LT;
             break;
         case pg_stat_indexes:
-            min = PG_STAT_INDEXES_ORDER_MIN;
-            max = PG_STAT_INDEXES_ORDER_MAX;
+            max = PG_STAT_INDEXES_CMAX_LT;
             break;
         case pg_statio_tables:
-            min = PG_STATIO_TABLES_ORDER_MIN;
-            max = PG_STATIO_TABLES_ORDER_MAX;
+            max = PG_STATIO_TABLES_CMAX_LT;
             break;
         case pg_tables_size:
-            min = PG_TABLES_SIZE_ORDER_MIN - 3;		/* adjust sorting, including other (un-diffable) cols */
-            max = PG_TABLES_SIZE_ORDER_MAX;
+            max = PG_TABLES_SIZE_CMAX_LT;
             break;
         case pg_stat_activity_long:
-            min = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
-            max = PG_STAT_ACTIVITY_LONG_ORDER_MIN;
+            if (atoi(screen->pg_special.pg_version_num) < PG92)
+                max = PG_STAT_ACTIVITY_LONG_CMAX_91;
+            else if (atoi(screen->pg_special.pg_version_num) < PG96)
+                max = PG_STAT_ACTIVITY_LONG_CMAX_95;
+            else
+                max = PG_STAT_ACTIVITY_LONG_CMAX_LT;
             break;
         case pg_stat_functions:
-            min = PG_STAT_FUNCTIONS_ORDER_MIN;
-            max = PG_STAT_FUNCTIONS_ORDER_MAX;
+            max = PG_STAT_FUNCTIONS_CMAX_LT;
             *first_iter = true;
             break;
         case pg_stat_statements_timing:
-            min = PG_STAT_STATEMENTS_TIMING_ORDER_MIN;
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                max = PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX;
-            else
-                max = PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX;
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? (max = PGSS_TIMING_CMAX_91)
+                : (max = PGSS_TIMING_CMAX_LT);
             *first_iter = true;
             break;
         case pg_stat_statements_general:
-            min = PG_STAT_STATEMENTS_GENERAL_ORDER_MIN;
-            max = PG_STAT_STATEMENTS_GENERAL_ORDER_MAX;
+            max = PGSS_GENERAL_CMAX_LT;
             *first_iter = true;
             break;
         case pg_stat_statements_io:
-            min = PG_STAT_STATEMENTS_IO_ORDER_MIN;
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                max = PG_STAT_STATEMENTS_IO_ORDER_91_MAX;
-            else
-                max = PG_STAT_STATEMENTS_IO_ORDER_LATEST_MAX;
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? (max = PGSS_IO_CMAX_91)
+                : (max = PGSS_IO_CMAX_LT);
             *first_iter = true;
             break;
         case pg_stat_statements_temp:
-            min = PG_STAT_STATEMENTS_TEMP_ORDER_MIN;
-            max = PG_STAT_STATEMENTS_TEMP_ORDER_MAX;
+            max = PGSS_TEMP_CMAX_LT;
             *first_iter = true;
             break;
         case pg_stat_statements_local:
-            min = PG_STAT_STATEMENTS_LOCAL_ORDER_MIN;
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
-                max = PG_STAT_STATEMENTS_LOCAL_ORDER_91_MAX;
-            else
-                max = PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX;
+            (atoi(screen->pg_special.pg_version_num) < PG92)
+                ? (max = PGSS_LOCAL_CMAX_91)
+                : (max = PGSS_LOCAL_CMAX_LT);
             *first_iter = true;
             break;
         case pg_stat_progress_vacuum:
-            min = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
-            max = PG_STAT_PROGRESS_VACUUM_ORDER_MIN;
+            max = PG_STAT_PROGRESS_VACUUM_CMAX_LT;
             break;
         default:
             break;
     }
-    if (increment) {
-        for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screen->current_context == screen->context_list[i].context) {
-                if (screen->context_list[i].order_key + 1 > max)
-                    screen->context_list[i].order_key = min;
-                else 
-                    screen->context_list[i].order_key++;
+
+    /* Change number of column used for sort */
+    for (i = 0; i < TOTAL_CONTEXTS; i++) {
+        if (screen->current_context == screen->context_list[i].context) {
+            if (increment) {
+                /* switch from last to first column */
+                if (++screen->context_list[i].order_key > max) {
+                    screen->context_list[i].order_key = 0;
+                }
+            } else {
+                /* switch from first to last column */
+                if (--screen->context_list[i].order_key < 0) {
+                    screen->context_list[i].order_key = max;
+                }
             }
         }
     }
-
-    if (!increment)
-        for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screen->current_context == screen->context_list[i].context) {
-                if (screen->context_list[i].order_key - 1 < min)
-                    screen->context_list[i].order_key = max;
-                else
-                    screen->context_list[i].order_key--;
-            }
-        }
 }
 
 /*
@@ -4267,7 +4282,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
     FILE * fpout;
 
     cmd_readline(window, msg, strlen(msg), &with_esc, queryid, sizeof(queryid), true);
-    if (check_string(queryid) == -1) {
+    if (check_string(queryid, is_alfanum) == -1) {
         wprintw(window, "Do nothing. Value is not valid.");
         return;
     }

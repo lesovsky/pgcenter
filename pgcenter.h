@@ -79,23 +79,6 @@
 #define HZ                  hz
 unsigned int hz;
 
-/* information contexts */
-#define TOTAL_CONTEXTS      		14
-#define PG_STAT_DATABASE_NUM                    0
-#define PG_STAT_REPLICATION_NUM                 1
-#define PG_STAT_TABLES_NUM                      2
-#define PG_STAT_INDEXES_NUM                     3
-#define PG_STATIO_TABLES_NUM                    4
-#define PG_TABLES_SIZE_NUM                      5
-#define PG_STAT_ACTIVITY_LONG_NUM               6
-#define PG_STAT_FUNCTIONS_NUM                   7
-#define PG_STAT_STATEMENTS_TIMING_NUM           8
-#define PG_STAT_STATEMENTS_GENERAL_NUM          9
-#define PG_STAT_STATEMENTS_IO_NUM               10
-#define PG_STAT_STATEMENTS_TEMP_NUM             11
-#define PG_STAT_STATEMENTS_LOCAL_NUM		12
-#define PG_STAT_PROGRESS_VACUUM_NUM		13
-
 #define GROUP_ACTIVE        1 << 0
 #define GROUP_IDLE          1 << 1
 #define GROUP_IDLE_IN_XACT  1 << 2
@@ -114,6 +97,13 @@ enum mtype
     msg_warning,
     msg_error,
     msg_fatal
+};
+
+/* type of checks for string */
+enum chk_type
+{
+    is_alfanum,
+    is_number
 };
 
 /* enum for query context */
@@ -135,6 +125,7 @@ enum context
     pg_stat_progress_vacuum
 };
 
+#define TOTAL_CONTEXTS          14
 #define DEFAULT_QUERY_CONTEXT   pg_stat_database
 
 /* struct for context list used in screen */
@@ -356,11 +347,15 @@ struct colAttrs {
         temp_files AS tmp_files, temp_bytes AS tmp_bytes, \
         blk_read_time AS read_t, blk_write_time AS write_t \
     FROM pg_stat_database \
-    ORDER BY datname"
+    ORDER BY datname DESC"
 
-#define PG_STAT_DATABASE_ORDER_MIN          1
-#define PG_STAT_DATABASE_ORDER_91_MAX       10
-#define PG_STAT_DATABASE_ORDER_LATEST_MAX   15
+/* Start and end number for columns used for make diff array */
+#define PG_STAT_DATABASE_DIFF_MIN           1
+#define PG_STAT_DATABASE_DIFF_MAX_91        10
+#define PG_STAT_DATABASE_DIFF_MAX_LT        15
+/* Max number of columns for specified context, can vary in different PostgreSQL versions */
+#define PG_STAT_DATABASE_CMAX_91            10
+#define PG_STAT_DATABASE_CMAX_LT            15
 
 #define PG_STAT_REPLICATION_QUERY_P1 \
     "SELECT \
@@ -374,14 +369,13 @@ struct colAttrs {
 	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::int as replay, \
 	(pg_xlog_location_diff("
 #define PG_STAT_REPLICATION_QUERY_P3 \
-    ",replay_location))::int / 1024 as total_lag FROM pg_stat_replication"
+    ",replay_location))::int / 1024 as total_lag FROM pg_stat_replication \
+    ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 
 /* use functions depending on recovery */
 #define PG_STAT_REPLICATION_NOREC "pg_current_xlog_location()"
 #define PG_STAT_REPLICATION_REC "pg_last_xlog_receive_location()"
-
-#define PG_STAT_REPLICATION_ORDER_MIN 5
-#define PG_STAT_REPLICATION_ORDER_MAX 9
+#define PG_STAT_REPLICATION_CMAX_LT 9
 
 #define PG_STAT_TABLES_QUERY_P1 \
     "SELECT \
@@ -392,10 +386,11 @@ struct colAttrs {
         n_tup_del as deletes, n_tup_hot_upd as hot_updates, \
         n_live_tup as live, n_dead_tup as dead \
     FROM pg_stat_"
-#define PG_STAT_TABLES_QUERY_P2 "_tables ORDER BY 1"
+#define PG_STAT_TABLES_QUERY_P2 "_tables ORDER BY (schemaname || '.' || relname) DESC"
 
-#define PG_STAT_TABLES_ORDER_MIN 1
-#define PG_STAT_TABLES_ORDER_MAX 10
+#define PG_STAT_TABLES_DIFF_MIN     1
+#define PG_STAT_TABLES_DIFF_MAX     10
+#define PG_STAT_TABLES_CMAX_LT      10
 
 #define PG_STATIO_TABLES_QUERY_P1 \
     "SELECT \
@@ -409,10 +404,11 @@ struct colAttrs {
         tidx_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tidx_read, \
         tidx_blks_hit * (SELECT current_setting('block_size')::int / 1024) AS tidx_hit \
     FROM pg_statio_"
-#define PG_STATIO_TABLES_QUERY_P2 "_tables ORDER BY 1"
+#define PG_STATIO_TABLES_QUERY_P2 "_tables ORDER BY (schemaname || '.' || relname) DESC"
 
-#define PG_STATIO_TABLES_ORDER_MIN 1
-#define PG_STATIO_TABLES_ORDER_MAX 8
+#define PG_STATIO_TABLES_DIFF_MIN   1
+#define PG_STATIO_TABLES_DIFF_MAX   8
+#define PG_STATIO_TABLES_CMAX_LT    8
 
 #define PG_STAT_INDEXES_QUERY_P1 \
     "SELECT \
@@ -423,10 +419,12 @@ struct colAttrs {
     FROM \
         pg_stat_"
 #define PG_STAT_INDEXES_QUERY_P2 "_indexes s, pg_statio_"
-#define PG_STAT_INDEXES_QUERY_P3 "_indexes i WHERE s.indexrelid = i.indexrelid ORDER BY 1"
+#define PG_STAT_INDEXES_QUERY_P3 "_indexes i WHERE s.indexrelid = i.indexrelid \
+        ORDER BY (s.schemaname ||'.'|| s.relname ||'.'|| s.indexrelname) DESC"
 
-#define PG_STAT_INDEXES_ORDER_MIN 2
-#define PG_STAT_INDEXES_ORDER_MAX 6
+#define PG_STAT_INDEXES_DIFF_MIN    2
+#define PG_STAT_INDEXES_DIFF_MAX    6
+#define PG_STAT_INDEXES_CMAX_LT     6
 
 #define PG_TABLES_SIZE_QUERY_P1 \
     "SELECT \
@@ -440,10 +438,12 @@ struct colAttrs {
         (pg_total_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) - \
             (pg_relation_size((s.schemaname ||'.'|| s.relname)::regclass) / 1024) AS idx_change \
         FROM pg_stat_"
-#define PG_TABLES_SIZE_QUERY_P2 "_tables s, pg_class c WHERE s.relid = c.oid ORDER BY 1"
+#define PG_TABLES_SIZE_QUERY_P2 "_tables s, pg_class c WHERE s.relid = c.oid \
+        ORDER BY (s.schemaname || '.' || s.relname) DESC"
 
-#define PG_TABLES_SIZE_ORDER_MIN 4
-#define PG_TABLES_SIZE_ORDER_MAX 6
+#define PG_TABLES_SIZE_DIFF_MIN     4
+#define PG_TABLES_SIZE_DIFF_MAX     6
+#define PG_TABLES_SIZE_CMAX_LT      6
 
 #define PG_STAT_ACTIVITY_LONG_91_QUERY_P1 \
     "SELECT \
@@ -467,7 +467,7 @@ struct colAttrs {
     "'::interval OR (clock_timestamp() - query_start) > '"
 #define PG_STAT_ACTIVITY_LONG_91_QUERY_P3 \
     "'::interval) AND current_query <> '<IDLE>' AND procpid <> pg_backend_pid() \
-    ORDER BY COALESCE(xact_start, query_start)"
+    ORDER BY procpid DESC"
 
 #define PG_STAT_ACTIVITY_LONG_95_QUERY_P1 \
     "SELECT \
@@ -492,7 +492,7 @@ struct colAttrs {
     "'::interval OR (clock_timestamp() - query_start) > '"
 #define PG_STAT_ACTIVITY_LONG_95_QUERY_P3 \
     "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
-    ORDER BY COALESCE(xact_start, query_start)"
+    ORDER BY pid DESC"
 
 #define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
     "SELECT \
@@ -517,11 +517,12 @@ struct colAttrs {
     "'::interval OR (clock_timestamp() - query_start) > '"
 #define PG_STAT_ACTIVITY_LONG_QUERY_P3 \
     "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
-    ORDER BY COALESCE(xact_start, query_start)"
+    ORDER BY pid DESC"
 
 /* don't use array sorting when showing long activity, row order defined in query */
-#define PG_STAT_ACTIVITY_LONG_ORDER_MIN INVALID_ORDER_KEY
-#define PG_STAT_ACTIVITY_LONG_ORDER_MAX INVALID_ORDER_KEY
+#define PG_STAT_ACTIVITY_LONG_CMAX_91       8
+#define PG_STAT_ACTIVITY_LONG_CMAX_95       10
+#define PG_STAT_ACTIVITY_LONG_CMAX_LT       11
 
 #define PG_STAT_FUNCTIONS_QUERY_P1 \
     "SELECT \
@@ -532,13 +533,11 @@ struct colAttrs {
         round((total_time / calls)::numeric, 4) AS avg_t, \
         round((self_time / calls)::numeric, 4) AS avg_self_t \
     FROM pg_stat_user_functions \
-    ORDER BY "
-#define PG_STAT_FUNCTIONS_QUERY_P2 " DESC"
+    ORDER BY funcid DESC"
 
 /* diff array using only one column */
-#define PG_STAT_FUNCTIONS_DIFF_COL     3
-#define PG_STAT_FUNCTIONS_ORDER_MIN    2
-#define PG_STAT_FUNCTIONS_ORDER_MAX    7
+#define PG_STAT_FUNCTIONS_DIFF_MIN     3
+#define PG_STAT_FUNCTIONS_CMAX_LT      7
 
 #define PG_STAT_STATEMENTS_TIMING_91_QUERY_P1 \
     "SELECT \
@@ -560,7 +559,8 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
 #define PG_STAT_STATEMENTS_TIMING_QUERY_P1 \
     "SELECT \
@@ -588,16 +588,15 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_TIMING_QUERY_P2 " DESC"
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
-#define PG_STAT_STATEMENTS_TIMING_ORDER_MIN         2
-#define PG_STAT_STATEMENTS_TIMING_ORDER_91_MAX      4
-#define PG_STAT_STATEMENTS_TIMING_ORDER_LATEST_MAX  10
-#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MIN  3
-#define PG_STAT_STATEMENTS_TIMING_DIFF_91_MAX  4
-#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MIN  6
-#define PG_STAT_STATEMENTS_TIMING_DIFF_LATEST_MAX  10
+#define PGSS_TIMING_DIFF_MIN_91  3
+#define PGSS_TIMING_DIFF_MAX_91  4
+#define PGSS_TIMING_DIFF_MIN_LT  6
+#define PGSS_TIMING_DIFF_MAX_LT  10
+#define PGSS_TIMING_CMAX_91      6
+#define PGSS_TIMING_CMAX_LT      12
 
 #define PG_STAT_STATEMENTS_GENERAL_91_QUERY_P1 \
     "SELECT \
@@ -618,7 +617,8 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
 #define PG_STAT_STATEMENTS_GENERAL_QUERY_P1 \
     "SELECT \
@@ -639,13 +639,12 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_GENERAL_QUERY_P2 " DESC"
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
-#define PG_STAT_STATEMENTS_GENERAL_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_GENERAL_ORDER_MAX    5
-#define PG_STAT_STATEMENTS_GENERAL_DIFF_MIN    4
-#define PG_STAT_STATEMENTS_GENERAL_DIFF_MAX    5
+#define PGSS_GENERAL_DIFF_MIN_LT    4
+#define PGSS_GENERAL_DIFF_MAX_LT    5
+#define PGSS_GENERAL_CMAX_LT        7
 
 #define PG_STAT_STATEMENTS_IO_91_QUERY_P1 \
     "SELECT \
@@ -677,7 +676,8 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
 #define PG_STAT_STATEMENTS_IO_QUERY_P1 \
     "SELECT \
@@ -713,16 +713,15 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_IO_QUERY_P2 " DESC"
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
-#define PG_STAT_STATEMENTS_IO_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_IO_ORDER_91_MAX    8
-#define PG_STAT_STATEMENTS_IO_ORDER_LATEST_MAX    10
-#define PG_STAT_STATEMENTS_IO_DIFF_91_MIN    5
-#define PG_STAT_STATEMENTS_IO_DIFF_91_MAX    8
-#define PG_STAT_STATEMENTS_IO_DIFF_LATEST_MIN    6
-#define PG_STAT_STATEMENTS_IO_DIFF_LATEST_MAX    10
+#define PGSS_IO_DIFF_MIN_91    5
+#define PGSS_IO_DIFF_MAX_91    8
+#define PGSS_IO_DIFF_MIN_LT    6
+#define PGSS_IO_DIFF_MAX_LT    10
+#define PGSS_IO_CMAX_91    10
+#define PGSS_IO_CMAX_LT    12
 
 #define PG_STAT_STATEMENTS_TEMP_QUERY_P1 \
     "SELECT \
@@ -750,13 +749,13 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_TEMP_QUERY_P2 " DESC"
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
-#define PG_STAT_STATEMENTS_TEMP_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_TEMP_ORDER_MAX    6
-#define PG_STAT_STATEMENTS_TEMP_DIFF_MIN    4
-#define PG_STAT_STATEMENTS_TEMP_DIFF_MAX    6
+#define PGSS_TEMP_DIFF_MIN_LT   4
+#define PGSS_TEMP_DIFF_MAX_LT   6
+#define PGSS_TEMP_CMIN_LT       2
+#define PGSS_TEMP_CMAX_LT       8
 
 #define PG_STAT_STATEMENTS_LOCAL_91_QUERY_P1 \
     "SELECT \
@@ -782,7 +781,8 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
 #define PG_STAT_STATEMENTS_LOCAL_QUERY_P1 \
     "SELECT \
@@ -810,16 +810,15 @@ struct colAttrs {
     FROM pg_stat_statements p \
     JOIN pg_authid a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
-    GROUP BY a.rolname, d.datname, query ORDER BY "
-#define PG_STAT_STATEMENTS_LOCAL_QUERY_P2 " DESC"
+    GROUP BY a.rolname, d.datname, query \
+    ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
 
-#define PG_STAT_STATEMENTS_LOCAL_ORDER_MIN    2
-#define PG_STAT_STATEMENTS_LOCAL_ORDER_91_MAX    8
-#define PG_STAT_STATEMENTS_LOCAL_ORDER_LATEST_MAX    10
-#define PG_STAT_STATEMENTS_LOCAL_DIFF_91_MIN    5
-#define PG_STAT_STATEMENTS_LOCAL_DIFF_91_MAX    8
-#define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MIN    6
-#define PG_STAT_STATEMENTS_LOCAL_DIFF_LATEST_MAX    10
+#define PGSS_LOCAL_DIFF_MIN_91    5
+#define PGSS_LOCAL_DIFF_MAX_91    8
+#define PGSS_LOCAL_DIFF_MIN_LT    6
+#define PGSS_LOCAL_DIFF_MAX_LT    10
+#define PGSS_LOCAL_CMAX_91    10
+#define PGSS_LOCAL_CMAX_LT    12
 
 #define PG_STAT_PROGRESS_VACUUM_QUERY \
     "SELECT \
@@ -834,11 +833,9 @@ struct colAttrs {
 	a.query \
     FROM pg_stat_progress_vacuum v \
     JOIN pg_stat_activity a ON v.pid = a.pid \
-    ORDER BY COALESCE(a.xact_start, a.query_start)"
+    ORDER BY a.pid DESC"
 
-/* don't use array sorting when showing vacuum progress, row order defined in query */
-#define PG_STAT_PROGRESS_VACUUM_ORDER_MIN INVALID_ORDER_KEY
-#define PG_STAT_PROGRESS_VACUUM_ORDER_MAX INVALID_ORDER_KEY
+#define PG_STAT_PROGRESS_VACUUM_CMAX_LT 11
 
 /* other queries */
 /* don't log our queries */
@@ -938,6 +935,10 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 /* data arrays functions */
 char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
 char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
+int str_cmp_desc(const void * a, const void * b, void * arg);
+int str_cmp_asc(const void * a, const void * b, void * arg);
+int int_cmp_desc(const void * a, const void * b, void * arg);
+int int_cmp_asc(const void * a, const void * b, void * arg);
 void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols);
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, 
         unsigned int n_rows, unsigned int n_cols, unsigned long interval);
@@ -981,7 +982,7 @@ double max(double d1, double d2);
 bool key_is_pressed(void);
 void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
 void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);
-int check_string(const char * string);
+int check_string(const char * string, enum chk_type ctype);
 struct colAttrs * init_colattrs(unsigned int n_cols);
 void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols);
 void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
