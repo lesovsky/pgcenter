@@ -4156,7 +4156,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
                 }                                                   /* at this place we have sufficient number of lines for tail */
                 snprintf(tmp, nl_ptr - buffer + 1, "%s", buffer);       /* copy log line into temp buffer */
                 if (strlen(tmp) > n_cols) {                         /* if line longer than screen size (multiline) than truncate line to screen size */
-                    snprintf(str, n_cols, "%s", buffer);
+                    snprintf(str, n_cols - 4, "%s", buffer);
                 } else {                                            /* if line have normal size, copy line as is */
                     snprintf(str, strlen(tmp) + 1, "%s", buffer);
                 }

@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix torn multiline records in log tail.
   * use qsort_r() instead of hand-made sorting.
     - many improvements in arrays functions (diff, sort);
     - queries use it's own order now (user can't change 'ORDER BY' in query);
