@@ -5,6 +5,7 @@ CFLAGS = -g -std=gnu99 -Wall -pedantic
 PREFIX ?= /usr
 INCLUDEDIR =
 LIBDIR =
+MANDIR = /usr/share/man/man1
 
 # PostgreSQL stuff
 PGCONFIG ?= pg_config
@@ -54,7 +55,7 @@ endif
 LIBS = $(PGLIBS) $(NLIBS)
 DESTDIR ?=
 
-.PHONY: all clean install
+.PHONY: all clean install install-man uninstall
 
 all: pgcenter
 
@@ -68,5 +69,9 @@ install:
 	mkdir -p $(DESTDIR)$(PREFIX)/bin/
 	install -pm 755 $(PROGRAM_NAME) $(DESTDIR)$(PREFIX)/bin/
 
+install-man:
+	gzip -c doc/$(PROGRAM_NAME).1 > $(MANDIR)/$(PROGRAM_NAME).1.gz
+
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(PROGRAM_NAME)
+	rm -f $(MANDIR)/$(PROGRAM_NAME).1.gz
