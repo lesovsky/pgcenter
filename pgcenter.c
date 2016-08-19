@@ -603,31 +603,58 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
 {
     const struct passwd *pw = getpwuid(getuid());
 
+    /* get connection options from environment variables */
+    if (getenv("PGHOST") != NULL)
+        snprintf(screens[0]->host, sizeof(screens[0]->host), "%s", getenv("PGHOST"));
+    if (getenv("PGPORT") != NULL)
+        snprintf(screens[0]->port, sizeof(screens[0]->port), "%s", getenv("PGPORT"));
+    if (getenv("PGUSER") != NULL)
+        snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", getenv("PGUSER"));
+    if (getenv("PGDATABASE") != NULL)
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", getenv("PGDATABASE"));
+    if (getenv("PGPASSWORD") != NULL)
+        snprintf(screens[0]->password, sizeof(screens[0]->password), "%s", getenv("PGPASSWORD"));
+    
+    /* if host specified via arg, use the given host */
     if ( strlen(args->host) != 0 )
         snprintf(screens[0]->host, sizeof(screens[0]->host), "%s", args->host);
 
+    /* if port specified via arg, use the given host */
     if ( strlen(args->port) != 0 )
         snprintf(screens[0]->port, sizeof(screens[0]->port), "%s", args->port);
 
-    if ( strlen(args->user) == 0 )
+    /* when PGUSER env isn't set and the user arg isn't specified, set the user as current logged username */
+    if ( strlen(args->user) == 0 && strlen(screens[0]->user) == 0 )
         snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", pw->pw_name);
-    else
+
+    /* but if the user specified via arg, use the given name */
+    if ( strlen(args->user) > 0 )
         snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", args->user);
 
-    if ( strlen(args->dbname) == 0 && strlen(args->user) == 0)
+    /* if the dbname specified via arg, use the given name */
+    if ( strlen(args->dbname) > 0 )
+        snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
+
+    /* dbname and username env aren't set and args are empty too, use logged username as dbname */
+    if ( strlen(args->dbname) == 0 && strlen(args->user) == 0 && strlen(screens[0]->dbname) == 0)
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", pw->pw_name);
-    else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0)
+    /* dbname arg isn't specified, but user arg is specified, use username arg as dbname */
+    else if ( strlen(args->dbname) == 0 && strlen(args->user) != 0 && strlen(screens[0]->dbname) == 0 )
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->user);
-    else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0) {
+    /* dbname arg is set, and user isn't set. use the logged username as an username */
+    else if ( strlen(args->dbname) != 0 && strlen(args->user) == 0 && strlen(screens[0]->user) == 0 ) {
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
         snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", pw->pw_name);
-    } else
+    /* default: use dbname specified with arg */
+    } else if (strlen(screens[0]->dbname) == 0)
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
 
-    if ( args->need_passwd )
+    /* password required, but isn't set with env, ask pass */
+    if ( args->need_passwd && strlen(screens[0]->password) == 0 )
         snprintf(screens[0]->password, sizeof(screens[0]->password), "%s",
-		password_prompt("Password: ", sizeof(screens[0]->password), false));
+		          password_prompt("Password: ", sizeof(screens[0]->password), false));
 
+    /* a user is set and a dbname is still empty, use the username as the dbname */
     if ( strlen(screens[0]->user) != 0 && strlen(screens[0]->dbname) == 0 )
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", screens[0]->user);
 

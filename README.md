@@ -5,6 +5,7 @@ PostgreSQL provides various statistics which includes information about tables, 
 #### Features:
 - top-like interface;
 - use same connection options as with psql;
+- tabs support, possible to work concurrently with many postgres services (limited by 8).
 - show current system load and cpu/memory/swap usage;
 - show input/output statistics for devices and partitions like iostat;
 - show network traffic statistics for network interfaces like nicstat;
@@ -76,6 +77,20 @@ $ make
 $ sudo make install
 $ pgcenter
 ```
+
+##### Connect to PostgreSQL server #####
+pgCenter able to connect to Postgres with different ways:
+```
+$ pgcenter -h <host> -p <port> -U <username> -d <dbname>
+$ pgcenter -U <username> -d <dbname>
+$ pgcenter -U <username>
+$ pgcenter <dbname> <username>
+$ pgcenter <dbname>
+$ pgcenter
+```
+- Allowed to use libpq environment variables, such as PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD. This settings have the lowest priority and used in case when no connections settings specified via input arguments and connection file (.pgcenterrc) not found or not specified.
+- Connection file stores connection settings and limited by eight connections (max number of tabs). This file used when input arguments are not specified. If connection options are specified at startup, connection starts in the first tab, other connections from the file start in the next tabs.
+- Connection settings specified with input arguments have top priority, connection with these settings will opens in the first tab.
 
 #### Known issues
 - mainly developed and tested under PostgreSQL 9.5/9.6 (but tested with others 9.x releases).
