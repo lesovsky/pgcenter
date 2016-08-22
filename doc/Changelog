@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add filtration feature.
   * allow to use connection settings from libpq env vars.
   * add install-man section into Makefile.
   * fix torn multiline records in log tail.

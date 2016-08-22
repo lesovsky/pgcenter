@@ -1802,6 +1802,9 @@ Change column which is used for sort.
 \ \ \ \fB/\fR\ \ :\fBChange sort order\fR toggle \fR
 Change sort order, descent or ascent. Descent order used by default.
 .TP 7
+\ \ \ \fBF\fR\ \ :\fBSet filtration\fR toggle \fR
+Set filter pattern for a column, or reset filtration with empty value. Note, filter patterns are remebered between tab and context switches. Filtered column marked with \fB*\fR symbol. No filtration by default.
+.TP 7
 \ \ \ \fB-\fR\ \ :\fBCancel backend\fR toggle \fR
 Cancel query execution using backend pid with \fIpg_cancel_backend()\fR function. This function allowed only when \fBpg_stat_activity\fR screen enabled by \fBa\fR hotkey. Requires database superuser privileges.
 .TP 7

@@ -27,6 +27,7 @@
 
 #define ERRSIZE             128
 #define MAX_SCREEN          8
+#define MAX_COLS            20              /* filtering purposes */
 #define INVALID_ORDER_KEY   99
 #define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:00.5"
 
@@ -134,6 +135,7 @@ struct context_s
     enum context context;
     int order_key;
     bool order_desc;
+    char fstrings[MAX_COLS][S_BUF_LEN];         /* filtering patterns */
 };
 
 /* struct for input args */
@@ -975,6 +977,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn);
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted);
 void switch_context(WINDOW * window, struct screen_s * screen,
         enum context context, PGresult * res, bool * first_iter);
+void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * first_iter);
 
 /* functions routines */
 double min(double d1, double d2);
@@ -984,7 +987,7 @@ void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
 void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);
 int check_string(const char * string, enum chk_type ctype);
 struct colAttrs * init_colattrs(unsigned int n_cols);
-void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols);
+void calculate_width(struct colAttrs *columns, PGresult *res, struct screen_s * screen, char ***arr, unsigned int n_rows, unsigned int n_cols);
 void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
 void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
 void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);

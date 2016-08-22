@@ -332,7 +332,7 @@ struct args_s * init_args_mem(void) {
  */
 void init_screens(struct screen_s *screens[])
 {
-    unsigned int i, j;
+    unsigned int i, j, k;       /* all are iterators */
     for (i = 0; i < MAX_SCREEN; i++) {
         if ((screens[i] = (struct screen_s *) malloc(SCREEN_SIZE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for screens failed.\n");
@@ -399,8 +399,12 @@ void init_screens(struct screen_s *screens[])
                     screens[i]->context_list[j].context = pg_stat_progress_vacuum;
                     break;
             }
+            /* initiate sorting */
             screens[i]->context_list[j].order_key = 0;
-            screens[i]->context_list[j].order_desc = true;    
+            screens[i]->context_list[j].order_desc = true;
+            /* create empty array for filtration patterns */
+            for (k = 0; k < MAX_COLS; k++)
+                screens[i]->context_list[j].fstrings[k][0] = '\0';
         }
     }
 }
@@ -1974,6 +1978,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
  * IN:
  * @n_rows          Number of rows in query result.
  * @n_cols          Number of columns in query result.
+ * @screen          Screen options.
  * @res             Query result.
  * @arr             Array with sorted result.
  *
@@ -1981,13 +1986,27 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
  * @columns         Struct with column names and their max width.
  ****************************************************************************
  */
-void calculate_width(struct colAttrs *columns, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols)
+void calculate_width(struct colAttrs *columns, PGresult *res,
+    struct screen_s * screen, char ***arr, unsigned int n_rows, unsigned int n_cols)
 {
     unsigned int i, col, row;
+    struct context_s ctx;
+
+    /* determine current context */
+    if (screen != NULL)
+        for (i = 0; i < TOTAL_CONTEXTS; i++) {
+            if (screen->current_context == screen->context_list[i].context)
+                ctx = screen->context_list[i];
+        }
 
     for (col = 0, i = 0; col < n_cols; col++, i++) {
         /* determine length of column names */
-        snprintf(columns[i].name, sizeof(columns[i].name), "%s", PQfname(res, col));
+        if (strlen(ctx.fstrings[i]) > 0 && screen != NULL)
+            /* mark columns with filtration */
+            snprintf(columns[i].name, sizeof(columns[i].name), "%s*", PQfname(res, col));
+        else
+            snprintf(columns[i].name, sizeof(columns[i].name), "%s", PQfname(res, col));
+
         unsigned int width = strlen(PQfname(res, col));
         if (arr == NULL) {
             for (row = 0; row < n_rows; row++ ) {
@@ -2360,6 +2379,47 @@ struct colAttrs * init_colattrs(unsigned int n_cols) {
 
 /*
  ******************************************************** routine function **
+ * Set filtration pattern or reset one.
+ *
+ * IN:
+ * @win                 Window for diagnose messages.
+ * @screen              Screen options (filtration patterns array).
+ * @res                 Reset postgres query results after setup filtration.
+ * @first_iter          Reset data.
+ ****************************************************************************
+ */
+void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * first_iter) {
+    int i;
+    bool with_esc;
+    char pattern[S_BUF_LEN], msg[S_BUF_LEN];
+    struct context_s ctx;
+
+    /* get current context and its filter strings array */
+    for (i = 0; i < TOTAL_CONTEXTS; i++)
+        if (screen->current_context == screen->context_list[i].context)
+            ctx = screen->context_list[i];
+
+    snprintf(msg, 128, "Set filter, current: \"%s\": ", ctx.fstrings[ctx.order_key]);
+
+    cmd_readline(win, msg, strlen(msg), &with_esc, pattern, sizeof(pattern), true);
+    if (strlen(pattern) > 0 && with_esc == false) {
+        snprintf(ctx.fstrings[ctx.order_key], sizeof(ctx.fstrings[ctx.order_key]), "%s", pattern);
+    } else if (strlen(pattern) == 0 && with_esc == false ) {
+        wprintw(win, "Reset filtering.");
+        snprintf(ctx.fstrings[ctx.order_key], sizeof(ctx.fstrings[ctx.order_key]), "%s", "");
+    }
+
+    /* Save pattern to context */
+    for (i = 0; i < TOTAL_CONTEXTS; i++)
+        if (screen->current_context == screen->context_list[i].context)
+            screen->context_list[i] = ctx;
+
+    PQclear(res);
+    *first_iter = true;
+}
+
+/*
+ ******************************************************** routine function **
  * Print array content into ncurses screen.
  *
  * IN:
@@ -2374,16 +2434,27 @@ struct colAttrs * init_colattrs(unsigned int n_cols) {
  */
 void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols, struct screen_s * screen)
 {
-    unsigned int i, j, x, order_key = 0;
+    unsigned int i, j, x;
     unsigned int winsz_x, winsz_y;
     struct colAttrs *columns = init_colattrs(n_cols);
+    struct context_s ctx;
+    bool print = true, filter = false;
 
-    calculate_width(columns, res, arr, n_rows, n_cols);
+    calculate_width(columns, res, screen, arr, n_rows, n_cols);
     wclear(window);
 
     for (i = 0; i < TOTAL_CONTEXTS; i++)
         if (screen->current_context == screen->context_list[i].context)
-            order_key = screen->context_list[i].order_key;
+            ctx = screen->context_list[i];
+
+    /* enable filtration if there is an any filter pattern */
+    for (i = 0; i < MAX_COLS; i++) {
+        if (strlen(ctx.fstrings[i]) > 0) {
+            filter = true;
+            break;
+        } else
+            filter = false;
+    }
 
     /* print header */
     wattron(window, A_BOLD);
@@ -2396,7 +2467,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
             winsz_y--;
         } 
         /* mark sort column */
-        if (j == order_key) {
+        if (j == ctx.order_key) {
             wattron(window, A_REVERSE);
             wprintw(window, "%-*s", columns[x].width, columns[x].name);
             wattroff(window, A_REVERSE);
@@ -2408,6 +2479,19 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
 
     /* print data from array */
     for (i = 0; i < n_rows; i++) {
+        /* filtering cycle - searching filter pattern */
+        if (filter)
+            for (j = 0; j < n_cols; j++) {
+                if (!strstr(arr[i][j], ctx.fstrings[j]) && strlen(ctx.fstrings[j]) > 0)
+                    print = false;          /* pattern not found */
+                else if (strlen(ctx.fstrings[j]) == 0)
+                    continue;               /* skip empty pattern */
+                else {
+                    print = true;           /* pattern found */
+                    break;
+                }
+            }
+        /* printing cycle - don't print filtered rows */
         for (j = 0, x = 0; j < n_cols; j++, x++) {
             /* truncate last field length to end of screen */
             if (j == n_cols - 1) {
@@ -2415,7 +2499,8 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
                 columns[x].width = COLS - winsz_x;
                 arr[i][j][columns[x].width] = '\0';
             }
-            wprintw(window, "%-*s", columns[x].width, arr[i][j]);
+            if (print)
+                wprintw(window, "%-*s", columns[x].width, arr[i][j]);
         }
     }
     wrefresh(window);
@@ -2964,7 +3049,7 @@ void show_config(WINDOW * window, PGconn * conn)
     row_count = PQntuples(res);
     col_count = PQnfields(res);
     columns = init_colattrs(col_count);
-    calculate_width(columns, res, NULL, row_count, col_count);
+    calculate_width(columns, res, NULL, NULL, row_count, col_count);
     
     fprintf(fpout, " PostgreSQL configuration: %i rows\n", row_count);
     /* print column names */
@@ -4634,7 +4719,7 @@ void print_help_screen(bool * first_iter)
   a,d,i,f,r       mode: 'a' activity, 'd' databases, 'i' indexes, 'f' functions, 'r' replication,\n\
   s,t,T,v         's' tables sizes, 't' tables, 'T' tables IO, 'v' vacuum progress,\n\
   x,X             'x' pg_stat_statements switch, 'X' pg_stat_statements menu.\n\
-  Left,Right,/    'Left,Right' change column sort, '/' change sort desc/asc.\n\
+  Left,Right,/,F  'Left,Right' change column sort, '/' change sort desc/asc, 'F' set filter.\n\
   C,E,R           config: 'C' show config, 'E' edit configs, 'R' reload config.\n\
   p                       'p' start psql session.\n\
   l               'l' open log file with pager.\n\
@@ -4901,6 +4986,9 @@ int main(int argc, char *argv[])
                     break;
                 case 'G':               /* get query text using pg_stat_statements.queryid */
                     get_query_by_id(w_cmd, screens[console_index], conns[console_index]);
+                    break;
+                case 'F':               /* set filtering for a column */
+                    set_filter(w_cmd, screens[console_index], p_res, &first_iter);
                     break;
                 case 'z':               /* change refresh interval */
                     interval = change_refresh(w_cmd, interval);
