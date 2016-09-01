@@ -1,6 +1,6 @@
 /*
- * pgcenter: administrative console for PostgreSQL.
- * (C) 2015 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
+ * pgcenter: top-like admin console for PostgreSQL.
+ * (C) 2016 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
  */
 
 #ifndef PGCENTER_H
@@ -9,7 +9,7 @@
 #define PROGRAM_NAME        "pgcenter"
 #define PROGRAM_VERSION     0.2
 #define PROGRAM_RELEASE     0
-#define PROGRAM_AUTHORS_CONTACTS    "<lesovsky@gmail.com>"
+#define PROGRAM_ISSUES_URL  "https://github.com/lesovsky/pgcenter/issues"
 
 /* sizes, limits and defaults */
 #define XS_BUF_LEN	16
@@ -29,7 +29,7 @@
 #define MAX_SCREEN          8
 #define MAX_COLS            20              /* filtering purposes */
 #define INVALID_ORDER_KEY   99
-#define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:00.5"
+#define PG_STAT_ACTIVITY_MIN_AGE_DEFAULT "00:00:00.0"
 
 #define LOADAVG_FILE            "/proc/loadavg"
 #define STAT_FILE               "/proc/stat"
@@ -90,6 +90,10 @@ unsigned int hz;
 #define SUBSCREEN_LOGTAIL   1
 #define SUBSCREEN_IOSTAT    2
 #define SUBSCREEN_NICSTAT   3
+
+/* comparison functions */
+#define min(a,b)    (a > b) ? b : a
+#define max(a,b)    (a > b) ? a : a
 
 /* enum for program internal messages */
 enum mtype
@@ -980,8 +984,6 @@ void switch_context(WINDOW * window, struct screen_s * screen,
 void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * first_iter);
 
 /* functions routines */
-double min(double d1, double d2);
-double max(double d1, double d2);
 bool key_is_pressed(void);
 void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
 void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);

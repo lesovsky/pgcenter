@@ -1,6 +1,6 @@
 /*
  * pgcenter: top-like admin console for PostgreSQL.
- * (C) 2015 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
+ * (C) 2016 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
  */
 
 #define _GNU_SOURCE
@@ -42,7 +42,7 @@
  */
 void print_usage(void)
 {
-    printf("%s is the adminitrative console for PostgreSQL.\n\n", PROGRAM_NAME);
+    printf("%s is the admin console for PostgreSQL.\n\n", PROGRAM_NAME);
     printf("Usage:\n \
   %s [OPTION]... [DBNAME [USERNAME]]\n\n", PROGRAM_NAME);
     printf("General options:\n \
@@ -56,7 +56,7 @@ void print_usage(void)
   -f, --file=FILENAME       conninfo file (default: \"~/.pgcenterrc\")\n \
   -w, --no-password         never prompt for password\n \
   -W, --password            force password prompt (should happen automatically)\n\n");
-    printf("Report bugs to %s.\n", PROGRAM_AUTHORS_CONTACTS);
+    printf("Report bugs to %s.\n", PROGRAM_ISSUES_URL);
 
     exit(EXIT_SUCCESS);
 }
@@ -93,30 +93,6 @@ void init_signal_handlers(void)
 
 /*
  ******************************************************** routine function **
- * Get minimal value from two doubles.
- ****************************************************************************
- */
-double min(double d1, double d2)
-{
-    if (d1 < d2)
-        return (d1);
-    return (d2);
-}
-
-/*
- ******************************************************** routine function **
- * Get maximal value from two doubles.
- ****************************************************************************
- */
-double max(double d1, double d2)
-{
-    if (d1 > d2)
-        return (d1);
-    return (d2);
-}
-
-/*
- ******************************************************** routine function **
  * Trap keys in program.
  *
  * RETURNS:
@@ -129,10 +105,7 @@ bool key_is_pressed(void)
 
     if (ch != ERR) {
         ungetch(ch);
-	if (ch != ERR)
-	    return true;
-        else
-            return false;
+        return true;
     } else
         return false;
 }
@@ -143,7 +116,7 @@ bool key_is_pressed(void)
  * mode.
  *
  * IN:
- * @do_exit                 Exit after message?
+ * @do_exit                 Exit after a message?
  * @mtype                   Message type (severity).
  * @msg                     Message text.
  ****************************************************************************
@@ -204,7 +177,7 @@ void strrpl(char * o_string, const char * s_string, const char * r_string, unsig
 
 /*
  ******************************************************** routine function **
- * Check string validity.
+ * Check string is valid.
  *
  * IN:
  * @string              String which should be checked.
@@ -565,7 +538,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         }
     }
 
-    /* handle extra parameters if exists, first - dbname, second - user, others - ignore */
+    /* handle extra parameters if they're exist, first - dbname, second - user, others - ignore */
     while (argc - optind >= 1) {
         if ( (argc - optind > 1)
                 && strlen(args->user) == 0
@@ -594,7 +567,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
 
 /*
  ******************************************************** startup function **
- * Take input parameters and add them into connections options.
+ * Take input parameters and add them to connections options.
  *
  * IN:
  * @args            Struct with input arguments.
@@ -623,7 +596,7 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
     if ( strlen(args->host) != 0 )
         snprintf(screens[0]->host, sizeof(screens[0]->host), "%s", args->host);
 
-    /* if port specified via arg, use the given host */
+    /* if port specified via arg, use the given port */
     if ( strlen(args->port) != 0 )
         snprintf(screens[0]->port, sizeof(screens[0]->port), "%s", args->port);
 
@@ -635,7 +608,7 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
     if ( strlen(args->user) > 0 )
         snprintf(screens[0]->user, sizeof(screens[0]->user), "%s", args->user);
 
-    /* if the dbname specified via arg, use the given name */
+    /* if the dbname specified via arg, use the given dbname */
     if ( strlen(args->dbname) > 0 )
         snprintf(screens[0]->dbname, sizeof(screens[0]->dbname), "%s", args->dbname);
 
@@ -667,17 +640,14 @@ void create_initial_conn(struct args_s * args, struct screen_s * screens[])
 
 /*
  ******************************************************** startup function **
- * Read ~/.pgcenterrc file and fill up conrections options array.
+ * Read ~/.pgcenterrc file and fill up connections options array.
  *
  * IN:
  * @args            Struct with input arguments.
- * @pos             Start position inside array.
+ * @pos             Start position in array.
  *
  * OUT:
  * @screens         Connections options array.
- *
- * RETURNS:
- * Success or failure.
  ****************************************************************************
  */
 unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * screens[], unsigned int pos)
@@ -731,7 +701,7 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct screen_s * scre
 
 /*
  ******************************************************** routine function **
- * Check connection state, try reconnect if failed.
+ * Check connection state, try to reconnect if connection failed.
  *
  * IN:
  * @window          Window where status will be printed.
@@ -752,7 +722,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * scree
         sleep(1);
     }
     
-    /* get PostgreSQL version if reconnect successful */
+    /* get PostgreSQL details after successful reconnect */
     if (*reconnected == true) {
         get_pg_special(conn, screen);
     }
@@ -832,7 +802,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
                 continue;
             }
 
-            /* get PostgreSQL version */
+            /* get PostgreSQL details */
             get_pg_special(conns[i], screens[i]);
 
             PGresult * res;
@@ -840,7 +810,7 @@ void open_connections(struct screen_s * screens[], PGconn * conns[])
             /* suppress log messages with log_min_duration_statement */
             if ((res = do_query(conns[i], PG_SUPPRESS_LOG_QUERY, errmsg)) != NULL)
                PQclear(res);
-            /* increase work_mem */
+            /* increase our work_mem */
             if ((res = do_query(conns[i], PG_INCREASE_WORK_MEM_QUERY, errmsg)) != NULL)
                 PQclear(res);
         }
@@ -881,7 +851,7 @@ void exit_prog(struct screen_s * screens[], PGconn * conns[])
 
 /*
  ****************************************************************************
- * Prepare query using current screen query context.
+ * Prepare a query using current screen query context.
  *
  * IN:
  * @screen              Current screen where query context is stored.
@@ -992,8 +962,7 @@ void prepare_query(struct screen_s * screen, char * query)
  * OUT:
  * @errmsg          Error message returned by postgres.
  *
- * RETURNS:
- * Answer from PostgreSQL.
+ * RETURNS:         PostgreSQL query result or error message if error occurs.
  ****************************************************************************
  */
 PGresult * do_query(PGconn * conn, const char * query, char errmsg[])
@@ -1037,7 +1006,7 @@ void get_time(char * strtime)
 
 /*
  ************************************************* summary window function **
- * Print title into summary window: program name and current time.
+ * Print title to the summary window: program name and current time.
  *
  * IN:
  * @window          Window where title will be printed.
@@ -1076,7 +1045,7 @@ float * get_loadavg()
 
 /*
  ************************************************* summary window function **
- * Print load average into summary window.
+ * Print load average to the summary window.
  *
  * IN:
  * @window      Window where load average will be printed.
@@ -1127,8 +1096,8 @@ void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no)
 
 /*
  ************************************************** system window function **
- * Print current postgres process activity: total/idle/idle in transaction/
- * /active/waiting/others backends.
+ * Print current postgres process activity: number of total/idle/idle in 
+ * transaction/active/waiting/others backends.
  *
  * IN:
  * @window          Window where info will be printed.
@@ -1520,7 +1489,7 @@ void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
  * to specified window.
  *
  * IN:
- * @window      Window where spu statistics will be printed.
+ * @window      Window where cpu statistics will be printed.
  * @st_cpu      Struct with cpu statistics.
  ****************************************************************************
  */
@@ -1666,7 +1635,7 @@ void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], unsigne
  *
  * IN:
  * @window          Window where stat will be printed.
- * @w_cmd           Window for errors and messaged.
+ * @w_cmd           Window for errors and messages.
  * @c_ios           Snapshot for current stat.
  * @p_ios           Snapshot for previous stat.
  * @bdev            Number of devices.
@@ -1701,7 +1670,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
     read_uptime(&(uptime0[curr]));
 
     /*
-     * If read /proc/diskstats failed, fire up repaint flag.
+     * If /proc/diskstats read failed, fire up repaint flag.
      * Next when subscreen repainting fails, subscreen will be closed.
      */
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
@@ -2022,7 +1991,8 @@ void calculate_width(struct colAttrs *columns, PGresult *res,
                     width = val_len;
             }
         }
-        columns[i].width = width + 2;		/* set column width equal to longest value + 2 spaces*/
+        /* set column width equal to longest value + 2 spaces */
+        columns[i].width = width + 2;
     }
 }
 
@@ -2052,7 +2022,7 @@ void get_pg_uptime(PGconn * conn, char * uptime)
  * Print PostgreSQL general info
  *
  * IN:
- * @window          Window where resultwill be printing.
+ * @window          Window where result will be printed.
  * @screen          Screen with postgres version info.
  * @conn            Current connection.
  ****************************************************************************
@@ -2070,7 +2040,7 @@ void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn)
  * Print (auto)vacuum info.
  *
  * IN:
- * @window          Window where resultwill be printing.
+ * @window          Window where result will be printed.
  * @screen	    Screen information.
  * @conn            Current postgres connection.
  ****************************************************************************
@@ -2134,8 +2104,8 @@ unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
  *
  * IN:
  * @arr             3D pointer array.
- * @n_rows          Number of rows of current query result.
- * @n_cols          Number of columns of current query result.
+ * @n_rows          Number of rows in the current query result.
+ * @n_cols          Number of columns in the current query result.
  *
  * RETURNS:
  * Returns allocated space based on rows and column numbers.
@@ -2166,8 +2136,8 @@ char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
  *
  * IN:      
  * @arr             3D pointer array.
- * @n_rows          Number of rows of current query result.
- * @n_cols          Number of columns of current query result.
+ * @n_rows          Number of rows in the current query result.
+ * @n_cols          Number of columns in the current query result.
  *
  * RETURNS:
  * Returns pointer to empty 3D pointer array.
@@ -2188,13 +2158,13 @@ char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
 
 /*
  ******************************************************** routine function **
- * Copy database query results into array.
+ * Copy database query results into an array.
  *
  * IN:
  * @arr             3D pointer array where query results will be stored.
  * @res             Database query result.
- * @n_rows          Number of rows in query result.
- * @n_cols          Number of cols in query result.
+ * @n_rows          Number of rows in the query result.
+ * @n_cols          Number of cols in the query result.
  ****************************************************************************
  */
 void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols)
@@ -2209,7 +2179,7 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
 
 /*
  ******************************************************** routime function **
- * Diff arrays and build array with deltas.
+ * Compare arrays and build diff array with deltas.
  *
  * IN:
  * @p_arr           Array with results of previous query.
@@ -2420,7 +2390,7 @@ void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * f
 
 /*
  ******************************************************** routine function **
- * Print array content into ncurses screen.
+ * Print array content to the ncurses screen.
  *
  * IN:
  * @window          Ncurses window where result will be printed.
@@ -2608,7 +2578,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
 
 /*
  ****************************************************** key-press function **
- * Change column-based sort
+ * Change column-based sort from desc to asc and vice-versa.
  *
  * IN:
  * @screen              Current screen.
@@ -2630,24 +2600,21 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
  * Read input from cmd window.
  *
  * IN:
- * @window          Window where pause status will be printed.
+ * @window          Window where prompt will be printed.
  * @msg             Message prompt.
- * @pos             When you delete wrong input, cursor do not moving beyond.
+ * @pos             At deleting wrong input, cursor do not moving beyond that pos.
  * @len             Max allowed length of string.
  * @echoing         Show characters typed by the user.
  *
  * OUT:
  * @with_esc        Flag which determines when function finish with ESC.
  * @str             Entered string.             
- *
- * RETURNS:
- * Pointer to the input string.
  ****************************************************************************
  */
 void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing)
 {
     int ch;
-    unsigned int i = 0;
+    int i = 0;
     bool done = false;
 
     if (echoing)
@@ -2726,7 +2693,7 @@ void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * wit
 void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter)
 {
     if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "Long query min age not allowed here.");
+        wprintw(window, "Long query min age is not allowed here.");
         return;
     }
 
@@ -2948,7 +2915,7 @@ unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
             endwin();
             exit(EXIT_SUCCESS);
         }
-    } else if (i == (MAX_SCREEN - 1)) {        /* last possible active console */
+    } else if (i == (MAX_SCREEN - 1)) {         /* last possible active console */
         clear_screen_connopts(screens, i);
         console_index = console_index - 1;
     } else {                                    /* middle active console */
@@ -3101,7 +3068,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
             wprintw(window, "Reload failed. %s", errmsg);
         }
     } else if (strlen(confirmation) == 0 && with_esc == false) {
-        wprintw(window, "Do nothing. Nothing etntered.");
+        wprintw(window, "Do nothing. Nothing entered.");
     } else if (with_esc) {
         ;
     } else 
@@ -3605,7 +3572,7 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
 void get_statemask(WINDOW * window, struct screen_s * screen)
 {
     if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "Get current mask can viewed in long queries screen.");
+        wprintw(window, "Current mask can viewed in activity screen.");
         return;
     }
 
@@ -3636,7 +3603,7 @@ void get_statemask(WINDOW * window, struct screen_s * screen)
 void set_statemask(WINDOW * window, struct screen_s * screen)
 {
     if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "State mask setup allowed in long queries screen.");
+        wprintw(window, "State mask setup allowed in activity screen.");
         return;
     } 
 
@@ -3645,7 +3612,7 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
          msg[] = "";        /* set empty message, we don't want show msg from cmd_readline */
     bool with_esc;
 
-    wprintw(window, "Set action mask for group backends [");
+    wprintw(window, "Set state mask for group backends [");
     wattron(window, A_BOLD | A_UNDERLINE);
     wprintw(window, "a");
     wattroff(window, A_BOLD | A_UNDERLINE);
@@ -3670,7 +3637,7 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
     /* use offset 77 that equals message constructed above and printed by ncurses */
     cmd_readline(window, msg, 77, &with_esc, mask, sizeof(mask), true);
     if (strlen(mask) == 0 && with_esc == false) {           /* mask not entered */
-        wprintw(window, "Do nothing. Mask not entered.");
+        wprintw(window, "Do nothing. Mask not specified.");
     } else if (with_esc) {                                  /* user escaped */
         ;			/* do nothing here, info message will be printed by cmd_readline */
     } else {                                                /* user enter string with valid length */
@@ -3717,7 +3684,7 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
         return;
     } 
     if (screen->signal_options == 0) {
-        wprintw(window, "Do nothing. Mask not set.");
+        wprintw(window, "Do nothing. Mask not specified.");
         return;
     }
 
@@ -4050,10 +4017,7 @@ unsigned int count_block_devices(void)
     unsigned int bdev = 0;
     char ch;
 
-    /* 
-     * On initial allocating of stat structure at startup, if read fails allocate
-     * basic array for 10 devices.
-     */
+    /* At program start, if statfile read failed, then allocate array for 10 devices. */
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
         return 10;
     }
@@ -4082,10 +4046,7 @@ unsigned int count_nic_devices(void)
     unsigned int idev = 0;
     char ch;
 
-    /* 
-     * On initial allocating of stat structure at startup, if read fails allocate
-     * basic array for 10 devices.
-     */
+    /* At program start, if statfile read failed, then allocate array for 10 devices. */
     if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
         return 10;
     }
@@ -4126,7 +4087,7 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
                     get_logfile_path(screen->log_path, conn);
     
                     if (strlen(screen->log_path) == 0) {
-                        wprintw(window, "Do nothing. Log filename not determined or no access permissions.");
+                        wprintw(window, "Do nothing. Unable to determine log filename or no access permissions.");
                         return;
                     }
                     if ((screen->log_fd = open(screen->log_path, O_RDONLY)) == -1 ) {
@@ -4138,7 +4099,7 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
                     wprintw(window, "Open postgresql log: %s", screen->log_path);
                     return;
                 } else {
-                    wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
+                    wprintw(window, "Do nothing. Log file view is not supported for remote hosts.");
                     return;
                 }
                 break;
@@ -4196,7 +4157,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     struct stat stats;                                          /* file stat struct */
     off_t end_pos;                                              /* end of file position */
     off_t pos;                                                  /* from this position start read of file */
-    size_t bytes_read;                                          /* bytes readen from file to buffer */
+    size_t bytes_read;                                          /* bytes read from file to buffer */
     char buffer[XL_BUF_LEN] = "";                               /* init empty buffer */
     unsigned int i, nl_count = 0, len, scan_pos;                /* iterator, newline counter, buffer length, in-buffer scan position */
     char *nl_ptr;                                               /* in-buffer newline pointer */
@@ -4212,76 +4173,76 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
 	wrefresh(w_cmd);
 	return;
     }
-    if (S_ISREG (stats.st_mode) && stats.st_size != 0) {            /* log should be regular file and not be empty */
-        end_pos = lseek(screen->log_fd, 0, SEEK_END);                  /* get end of file position */   
-        pos = end_pos;                                              /* set position to the end of file */
-        bytes_read = XL_BUF_LEN;                                        /* read with 8KB block */
-        if (end_pos < XL_BUF_LEN)                                       /* if end file pos less than buffer */
-            pos = 0;                                                /* than set read position ti the begin of file */
-        else                                                        /* if end file pos more than buffer */
-            pos = pos - bytes_read;                                 /* than set read position into end of file minus buffer size */
-        lseek(screen->log_fd, pos, SEEK_SET);                          /* set determined position in file */
-        bytes_read = read(screen->log_fd, buffer, bytes_read);         /* read file to buffer */
+    if (S_ISREG (stats.st_mode) && stats.st_size != 0) {        /* log should be a non-empty regular file */
+        end_pos = lseek(screen->log_fd, 0, SEEK_END);           /* get end of file position */
+        pos = end_pos;                                          /* set position to the end of file */
+        bytes_read = XL_BUF_LEN;                                /* read with 8KB block */
+        if (end_pos < XL_BUF_LEN)                               /* if end file pos less than buffer */
+            pos = 0;                                            /* than set read position to the begin of file */
+        else                                                    /* if end file pos more than buffer */
+            pos = pos - bytes_read;                             /* than set read position into end of file minus buffer size */
+        lseek(screen->log_fd, pos, SEEK_SET);                       /* set determined position in file */
+        bytes_read = read(screen->log_fd, buffer, bytes_read);      /* read file to the buffer */
 
-        len = strlen(buffer);                                       /* determine buffer length */
-        scan_pos = len;                                             /* set in-buffer scan position equal buffer length, */
+        len = strlen(buffer);                                   /* determine the buffer length */
+        scan_pos = len;                                         /* set in-buffer scan position equal buffer length */
 
         /* print header */
         wattron(window, A_BOLD);
         wprintw(window, "\ntail %s\n", screen->log_path);
         wattroff(window, A_BOLD);
 
-        for (i = 0; i < len; i++)                                   /* get number of newlines in buffer */
+        for (i = 0; i < len; i++)                               /* get number of newlines in the buffer */
             if (buffer[i] == '\n')
                 nl_count++;
-        if (n_lines > nl_count) {                                   /* if number of newlines less than required */
-            wprintw(window, "%s", buffer);                          /* than print out buffer content */
+        if (n_lines > nl_count) {                               /* if number of newlines less than required */
+            wprintw(window, "%s", buffer);                      /* then print out buffer content */
             wrefresh(window);
-            return;                                                 /* and finish work */
+            return;                                             /* and finish work */
         }
 
         /*
-         * at this place, we have log more than buffersize, we fill buffer 
-         * and we need find \n position from which we start print log.
+         * at this place, log size more than buffersize, fill the buffer 
+         * and find \n position from which start printing.
          */
-        unsigned int n_lines_save = n_lines;                                 /* save number of lines need for tail. */
+        unsigned int n_lines_save = n_lines;                    /* save number of lines need for tail. */
         do {
-            nl_ptr = memrchr(buffer, '\n', scan_pos);               /* find \n from scan_pos */
-            if (nl_ptr != NULL) {                                   /* if found */
-                scan_pos = (nl_ptr - buffer);                       /* remember this place */
-            } else {                                                /* if not found */
-                break;                                              /* finish work */
+            nl_ptr = memrchr(buffer, '\n', scan_pos);           /* find \n from scan_pos */
+            if (nl_ptr != NULL) {                               /* if found */
+                scan_pos = (nl_ptr - buffer);                   /* remember this place */
+            } else {                                            /* if not found */
+                break;                                          /* finish work */
             }
-            n_lines--;                                              /* after each iteration decrement line counter */
-        } while (n_lines != 0);                                     /* stop cycle when line counter equal zero - we found need amount of lines */
+            n_lines--;                                          /* after each iteration decrement the line counter */
+        } while (n_lines != 0);                                 /* stop cycle when line counter equal zero - we found need amount of lines */
 
         /* now we should cut multiline log entries to screen length */
-        char str[n_cols];                                           /* use var for one line */
-        char tmp[XL_BUF_LEN];                                       /* tmp var for line from buffer */
-        do {                                                        /* scan buffer from begin */
-            nl_ptr = strstr(buffer, "\n");                          /* find \n in buffer */
-            if (nl_ptr != NULL) {                                   /* if found */
-                if (nl_count > n_lines_save) {                      /* and if lines too much, skip them */
-                    snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1);    /* decrease buffer, cut skipped line */
-                    nl_count--;                                     /* decrease newline counter */
-                    continue;                                       /* start next iteration */
-                }                                                   /* at this place we have sufficient number of lines for tail */
+        char str[n_cols];                                       /* use var for one line */
+        char tmp[XL_BUF_LEN];                                   /* tmp var for line from buffer */
+        do {                                                    /* scan buffer from begin */
+            nl_ptr = strstr(buffer, "\n");                      /* find \n in buffer */
+            if (nl_ptr != NULL) {                               /* if found */
+                if (nl_count > n_lines_save) {                              /* and if lines too much, skip them */
+                    snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1);     /* decrease buffer, cut skipped line */
+                    nl_count--;                                             /* decrease newline counter */
+                    continue;                                   /* start next iteration */
+                }                                                       /* at this place we have sufficient number of lines for tail */
                 snprintf(tmp, nl_ptr - buffer + 1, "%s", buffer);       /* copy log line into temp buffer */
-                if (strlen(tmp) > n_cols) {                         /* if line longer than screen size (multiline) than truncate line to screen size */
+                if (strlen(tmp) > n_cols) {                             /* if line longer than screen size (multiline), truncate line to screen size */
                     snprintf(str, n_cols - 4, "%s", buffer);
-                } else {                                            /* if line have normal size, copy line as is */
+                } else {                                                /* if line have normal size, copy line as is */
                     snprintf(str, strlen(tmp) + 1, "%s", buffer);
                 }
-                wprintw(window, "%s\n", str);                       /* print line to log screen */
-                snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1); /* decrease buffer, cut printed line */
+                wprintw(window, "%s\n", str);                           /* print line to log screen */
+                snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1);     /* decrease buffer, cut printed line */
             } else {
-                break;                                              /* if \n not found, finish work */
+                break;                                                  /* if \n not found, finish work */
             }
-            n_lines++;                                              /* after each iteration, increase newline counter */
-        } while (n_lines != n_lines_save);                          /* print lines until newline counter not equal saved newline counter */
+            n_lines++;                                                  /* after each iteration, increase newline counter */
+        } while (n_lines != n_lines_save);                              /* print lines until newline counter not equal saved newline counter */
     } else {
-        wprintw(w_cmd, "Do nothing. Log not a regular file or empty.");         /* if file not regular or empty */
-        subscreen_process(w_cmd, &window, screen, conn, SUBSCREEN_NONE);              /* close log file and log screen */
+        wprintw(w_cmd, "Do nothing. Log is not a regular file or empty.");     /* if file not regular or empty */
+        subscreen_process(w_cmd, &window, screen, conn, SUBSCREEN_NONE);    /* close log file and log screen */
     }
     
     wrefresh(window);
@@ -4295,9 +4256,6 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
  * @window          Window where errors will be displayed.
  * @screen          Screen options.
  * @conn            Current connection.
- *
- * RETURNS:
- * Open log file in $PAGER.
  ****************************************************************************
  */
 void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
@@ -4329,10 +4287,10 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                 return;
             }
         } else {
-            wprintw(window, "Do nothing. Log filename not determined (not SUPERUSER?) or no access permissions.");
+            wprintw(window, "Do nothing. Unable to determine log filename (not SUPERUSER?) or no access permissions.");
         }
     } else {
-        wprintw(window, "Do nothing. Log file view not supported for remote hosts.");
+        wprintw(window, "Do nothing. Log file viewing is not supported for remote hosts.");
     }
 
     /* return to ncurses mode */
@@ -4365,7 +4323,7 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
 
 /*
  ****************************************************** key-press function **
- * Get query text using pg_stat_statements.queryid (only for 9.4 and never).
+ * Get query text using pseudo pg_stat_statements.queryid.
  *
  * IN:
  * @window              Window where result will be printed.
@@ -4380,7 +4338,7 @@ void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
             && screen->current_context != pg_stat_statements_io
             && screen->current_context != pg_stat_statements_temp
             && screen->current_context != pg_stat_statements_local) {
-        wprintw(window, "Get query text not allowed here.");
+        wprintw(window, "Get query text is not allowed here.");
         return;
     }
     
@@ -4737,7 +4695,7 @@ other actions:\n\
   , Q             ',' show system tables on/off, 'Q' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
-  F1              show help screen.\n\
+  h,F1            show help screen.\n\
   q               quit.\n\n");
     wprintw(w, "Type 'Esc' to continue.\n");
 

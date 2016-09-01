@@ -1,5 +1,8 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix runglish, typos and cosmetic changes.
+  * change long queries min age from 500ms to 0ms.
+  * replace min() and max() functions with macros.
   * add filtration feature.
   * allow to use connection settings from libpq env vars.
   * add install-man section into Makefile.
