@@ -61,8 +61,15 @@ $ sudo apt-get install pgcenter
 Debian users can create package using this [link](https://wiki.debian.org/CreatePackageFromPPA) or download deb package from [Launchpad page](https://launchpad.net/~lesovsky/+archive/ubuntu/pgcenter/+packages) and install pgCenter with *dpkg -i*.
 **Warning**: *Launchpad uses it's own buildfarm for packages creating and pgCenter installed from Launchpad crashes in some circumstances.*
 
-##### Install from RHEL/CentOS
-- install pgCenter from Essential Kaos testing repo. Also pgCenter is available in EPEL testing repo.
+##### Install from RHEL/CentOS/Fedora
+Fortunately, pgCenter in the RHEL-family is available from several sources:
+- official [PostgreSQL YUM repository](https://yum.postgresql.org/).
+- Extra Packages for Enterprise Linux (EPEL)
+```
+$ sudo yum install epel-release
+$ sudo yum --enablerepo=epel-testing install pgcenter
+```
+- Essential Kaos testing repo.
 ```
 $ sudo yum install http://release.yum.kaos.io/i386/kaos-repo-6.8-0.el6.noarch.rpm
 $ sudo yum --enablerepo=kaos-testing install pgcenter
@@ -95,12 +102,12 @@ $ pgcenter
 
 #### Known issues
 - mainly developed and tested under PostgreSQL 9.5/9.6 (but tested with others 9.x releases).
-- this is beta software, in some circumstances may occurs segfaults. When segfaults occur, you may help me to make this software better:
-  - Build pgcenter from latest sources (see instructions above).
-  - Enable coredump with ```ulimit -c unlimited```
-  - Reproduce segafult (after pgcenter crash, coredump file will be created in current directory).
+- this is a beta software, in some circumstances segfaults may occur. When segfaults occur, you may help me to make this software better:
+  - Build pgcenter from the latest sources (see instructions above).
+  - Enable coredumps with ```ulimit -c unlimited```
+  - Reproduce the segafult (after pgcenter crash, a coredump file will be created in the current directory).
   - Run pgcenter with gdb ```gdb ./pgcenter <coredump>```
-  - In gdb console, run ```where``` command, get the latest 15 lines and create [issue](https://github.com/lesovsky/pgcenter/issues).
+  - In gdb console, run ```where``` command, get the latest 15 lines and create an [issue](https://github.com/lesovsky/pgcenter/issues).
 
 #### Thanks
 - Sebastien Godard for [sysstat](https://github.com/sysstat/sysstat).
