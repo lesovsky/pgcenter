@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * exclude (auto)vacuum tasks accounting in xact_maxtime field.
   * fix runglish, typos and cosmetic changes.
   * change long queries min age from 500ms to 0ms.
   * replace min() and max() functions with macros.
