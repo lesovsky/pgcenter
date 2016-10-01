@@ -1,5 +1,10 @@
 pgcenter (devel) unstable; urgency=low
 
+ -- Alexey Lesovsky <lesovsky@gmail.com>  Sat, 01 Oct 2016 13:23:00 +0500
+
+pgcenter (0.3.0) unstable; urgency=low
+
+  * print static program name in title instead of argv[0].
   * exclude (auto)vacuum tasks accounting in xact_maxtime field.
   * fix runglish, typos and cosmetic changes.
   * change long queries min age from 500ms to 0ms.

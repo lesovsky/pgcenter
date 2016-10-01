@@ -7,7 +7,7 @@
 #define PGCENTER_H
 
 #define PROGRAM_NAME        "pgcenter"
-#define PROGRAM_VERSION     0.2
+#define PROGRAM_VERSION     0.3
 #define PROGRAM_RELEASE     0
 #define PROGRAM_ISSUES_URL  "https://github.com/lesovsky/pgcenter/issues"
 
@@ -928,7 +928,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
 void get_speed_duplex(struct nicdata_s * nicdata);
 
 /* print screen functions */
-void print_title(WINDOW * window, const char * progname);
+void print_title(WINDOW * window);
 void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int console_no);
 void print_pg_general(WINDOW * window, struct screen_s * screen, PGconn * conn);

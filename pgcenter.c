@@ -1012,11 +1012,11 @@ void get_time(char * strtime)
  * @window          Window where title will be printed.
  ****************************************************************************
  */
-void print_title(WINDOW * window, const char * progname)
+void print_title(WINDOW * window)
 {
     static char strtime[20];
     get_time(strtime);
-    wprintw(window, "%s: %s, ", progname, strtime);
+    wprintw(window, "%s: %s, ", PROGRAM_NAME, strtime);
 }
 
 /*
@@ -4977,7 +4977,7 @@ int main(int argc, char *argv[])
              * Sysstat screen.
              */
             wclear(w_sys);
-            print_title(w_sys, argv[0]);
+            print_title(w_sys);
             print_loadavg(w_sys);
             print_cpu_usage(w_sys, st_cpu);
             print_mem_usage(w_sys, st_mem_short);
