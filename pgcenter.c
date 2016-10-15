@@ -2369,7 +2369,7 @@ void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * f
         if (screen->current_context == screen->context_list[i].context)
             ctx = screen->context_list[i];
 
-    snprintf(msg, 128, "Set filter, current: \"%s\": ", ctx.fstrings[ctx.order_key]);
+    snprintf(msg, S_BUF_LEN, "Set filter, current: \"%s\": ", ctx.fstrings[ctx.order_key]);
 
     cmd_readline(win, msg, strlen(msg), &with_esc, pattern, sizeof(pattern), true);
     if (strlen(pattern) > 0 && with_esc == false) {
