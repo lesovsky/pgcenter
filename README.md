@@ -89,7 +89,7 @@ $ pgcenter
 ##### Run in Docker (works on Mac OS X)
 
 ```
-$ docker build . -t pgcenter
+$ docker build -t pgcenter .
 Sending build context to Docker daemon 968.2 kB
 [...]
 $ docker run -it pgcenter -h mydbhost.com -U user -d dbname
