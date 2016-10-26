@@ -86,6 +86,16 @@ $ sudo make install
 $ pgcenter
 ```
 
+##### Run in Docker (works on Mac OS X)
+
+```
+$ docker build . -t pgcenter
+Sending build context to Docker daemon 968.2 kB
+[...]
+$ docker run -it pgcenter -h mydbhost.com -U user -d dbname
+mydbhost.com: user@dbname require password: ******
+```
+
 ##### Connect to PostgreSQL server #####
 pgCenter able to connect to Postgres with different ways:
 ```
