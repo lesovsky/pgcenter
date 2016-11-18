@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * reduce size of memory allocations for data arrays.
   * fix bufsize in set_filter().
 
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sat, 01 Oct 2016 13:23:00 +0500

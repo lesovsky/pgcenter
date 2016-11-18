@@ -2123,8 +2123,15 @@ char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
             mreport(true, msg_fatal, "FATAL: malloc for rows stats failed.\n");
         }
         for (j = 0; j < n_cols; j++)
-            if ((arr[i][j] = malloc(sizeof(char) * BUFSIZ)) == NULL) {
-                mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
+            /* allocate a big room only for values in the last column */
+            if (j != n_cols - 1) {
+              if ((arr[i][j] = malloc(sizeof(char) * S_BUF_LEN)) == NULL) {
+                  mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
+              }
+            } else {
+              if ((arr[i][j] = malloc(sizeof(char) * L_BUF_LEN)) == NULL) {
+                  mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
+              }
             }
     }
     return arr;
@@ -2173,7 +2180,11 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
 
     for (i = 0; i < n_rows; i++)
         for (j = 0; j < n_cols; j++) {
-            snprintf(arr[i][j], XL_BUF_LEN, "%s", PQgetvalue(res, i, j));
+            /* allocate a big room only for values in the last column */
+            if (j != n_cols - 1)
+              snprintf(arr[i][j], S_BUF_LEN, "%s", PQgetvalue(res, i, j));
+            else
+              snprintf(arr[i][j], L_BUF_LEN, "%s", PQgetvalue(res, i, j));
         }
 }
 
