@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix float sorting -- issues #29.
   * reduce size of memory allocations for data arrays.
   * fix bufsize in set_filter().
 

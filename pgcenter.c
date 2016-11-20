@@ -200,6 +200,10 @@ int check_string(const char * string, enum chk_type ctype)
                 if (!isdigit(string[i]))
                     return -1;              /* not a number char found */
                 break;
+            case is_float:
+                if (!isdigit(string[i]) && string[i] != '.')    /* not a number, nor point */
+                    return -1;
+                break;
         }
     }
 
@@ -277,6 +281,42 @@ int int_cmp_asc(const void * a, const void * b, void * arg)
     const char *ib = ((const char ***) b)[0][*key];
 
     return atoll(ia) - atoll(ib);
+}
+
+/*
+ ******************************************************** routine function **
+ * Float comparison function for qsort (descending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int fl_cmp_desc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *fa = ((const char ***) a)[0][*key];
+    const char *fb = ((const char ***) b)[0][*key];
+
+    return atof(fb) > atof(fa);
+}
+
+/*
+ ******************************************************** routine function **
+ * Float comparison function for qsort (descending order).
+ *
+ * IN: 
+ * @a, @b       Array elements.
+ * @arg         Order key.
+ ****************************************************************************
+ */
+int fl_cmp_asc(const void * a, const void * b, void * arg)
+{
+    int *key = (int *) arg;
+    const char *fa = ((const char ***) a)[0][*key];
+    const char *fb = ((const char ***) b)[0][*key];
+
+    return atof(fb) < atof(fa);
 }
 
 /*
@@ -2331,14 +2371,18 @@ void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struc
      * Comparator function depends on column data type. 
      * So check first element of an array, is it a string or number. 
      */
-    if (check_string(&res_arr[0][order_key][0], is_number) == -1) {
-        (desc)
-            ? qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_desc, &order_key)
-            : qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_asc, &order_key);
-    } else {
+    if (check_string(&res_arr[0][order_key][0], is_number) == 0) {
         (desc)
             ? qsort_r(res_arr, n_rows, sizeof(char **), int_cmp_desc, &order_key)
             : qsort_r(res_arr, n_rows, sizeof(char **), int_cmp_asc, &order_key);
+    } else if (check_string(&res_arr[0][order_key][0], is_float) == 0) {
+        (desc)
+            ? qsort_r(res_arr, n_rows, sizeof(char **), fl_cmp_desc, &order_key)
+            : qsort_r(res_arr, n_rows, sizeof(char **), fl_cmp_asc, &order_key);
+    } else {
+        (desc)
+            ? qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_desc, &order_key)
+            : qsort_r(res_arr, n_rows, sizeof(char **), str_cmp_asc, &order_key);
     }
 }
 

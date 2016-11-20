@@ -108,7 +108,8 @@ enum mtype
 enum chk_type
 {
     is_alfanum,
-    is_number
+    is_number,
+    is_float
 };
 
 /* enum for query context */
@@ -946,6 +947,8 @@ int str_cmp_desc(const void * a, const void * b, void * arg);
 int str_cmp_asc(const void * a, const void * b, void * arg);
 int int_cmp_desc(const void * a, const void * b, void * arg);
 int int_cmp_asc(const void * a, const void * b, void * arg);
+int fl_cmp_desc(const void * a, const void * b, void * arg);
+int fl_cmp_asc(const void * a, const void * b, void * arg);
 void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols);
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct screen_s * screen, 
         unsigned int n_rows, unsigned int n_cols, unsigned long interval);
