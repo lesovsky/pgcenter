@@ -190,21 +190,25 @@ void strrpl(char * o_string, const char * s_string, const char * r_string, unsig
 int check_string(const char * string, enum chk_type ctype)
 {
     unsigned int i;
-    for (i = 0; string[i] != '\0'; i++) {
-        switch (ctype) {
-            case is_alfanum:
+    switch (ctype) {
+        case is_alfanum:
+            for (i = 0; string[i] != '\0'; i++) {
                 if (!isalnum(string[i]))    /* non-alfanumeric char found */
                     return -1;
-                break;
-            case is_number:
+            }
+        break;
+        case is_number:
+            for (i = 0; string[i] != '\0'; i++) {
                 if (!isdigit(string[i]))
-                    return -1;              /* not a number char found */
-                break;
-            case is_float:
-                if (!isdigit(string[i]) && string[i] != '.')    /* not a number, nor point */
+                    return -1;              /* not a digit char found */
+            }
+        break;
+        case is_float:
+            for (i = 0; string[i] != '\0'; i++) {
+                if (!isdigit(string[i]) && string[i] != '.')    /* not a digit, nor point */
                     return -1;
-                break;
-        }
+            }
+        break;
     }
 
     /* string is ok */
