@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add max_connections info into activity string.
   * rewrite check_string() function.
   * fix float sorting -- issues #29.
   * reduce size of memory allocations for data arrays.

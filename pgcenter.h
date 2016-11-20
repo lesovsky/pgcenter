@@ -57,6 +57,7 @@
 #define GUC_SERVER_VERSION      "server_version"
 #define GUC_SERVER_VERSION_NUM  "server_version_num"
 #define GUC_AV_MAX_WORKERS	"autovacuum_max_workers"
+#define GUC_MAX_CONNS           "max_connections"
 
 /* 
  * PostgreSQL version notations:
@@ -162,6 +163,7 @@ struct pg_special_s
 {
     bool pg_is_in_recovery;			/* is postgres a standby? - true/false */
     unsigned int av_max_workers;		/* autovacuum_max_workers GUC value */
+    unsigned int pg_max_conns;                  /* max_connections GUC value */
     char pg_version_num[XS_BUF_LEN];		/* postgresql version XXYYZZ format */
     char pg_version[XS_BUF_LEN];		/* postgresql version X.Y.Z format */
 };

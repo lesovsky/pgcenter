@@ -1176,8 +1176,8 @@ void print_postgres_activity(WINDOW * window, struct screen_s * screen, PGconn *
     } 
 
     mvwprintw(window, 1, COLS / 2,
-            "  activity:%3i total,%3i idle,%3i idle_in_xact,%3i active,%3i waiting,%3i others",
-            t_count, i_count, x_count, a_count, w_count, o_count);
+            "  activity:%3i/%i total/max,%3i idle,%3i idle_xact,%3i active,%3i waiting,%3i others",
+            t_count, screen->pg_special.pg_max_conns, i_count, x_count, a_count, w_count, o_count);
     wrefresh(window);
 }
 
@@ -3236,7 +3236,7 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
 {
     PGresult * res;
     char errmsg[ERRSIZE];
-    char av_max_workers[8];
+    char av_max_workers[8], pg_max_conns[8];
 
     /* get postgres version information */
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, screen->pg_special.pg_version_num);
@@ -3259,6 +3259,12 @@ void get_pg_special(PGconn * conn, struct screen_s * screen)
     (strlen(av_max_workers) == 0)
 	? (screen->pg_special.av_max_workers = 0)
 	: (screen->pg_special.av_max_workers = atoi(av_max_workers));
+
+    /* get max connections limit */
+    get_conf_value(conn, GUC_MAX_CONNS, pg_max_conns);
+    (strlen(pg_max_conns) == 0)
+	? (screen->pg_special.pg_max_conns = 0)
+	: (screen->pg_special.pg_max_conns = atoi(pg_max_conns));
 }
 
 /*
