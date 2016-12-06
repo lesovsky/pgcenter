@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix build errors on Ubuntu
   * split single file to many; collapse excessive comments.
   * add max_connections info into activity string.
   * rewrite check_string() function.

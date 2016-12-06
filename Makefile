@@ -1,5 +1,5 @@
 PROGRAM_NAME = pgcenter
-SOURCE = pgcenter.c
+SOURCES = pgcenter.c common.c stats.c pgf.c hotkeys.c
 CC ?= gcc
 CFLAGS = -g -std=gnu99 -Wall -pedantic
 PREFIX ?= /usr
@@ -59,15 +59,11 @@ DESTDIR ?=
 
 all: pgcenter
 
-pgcenter: pgcenter.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c common.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c stats.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c pgf.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c hotkeys.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -o $(PROGRAM_NAME) $(SOURCE) common.o stats.o pgf.o hotkeys.o
+pgcenter:
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(SOURCES) $(LIBS) -o $(PROGRAM_NAME)
 
 clean:
-	rm -f $(PROGRAM_NAME) common.o stats.o pgf.o hotkeys.o
+	rm -f $(PROGRAM_NAME)
 
 install:
 	mkdir -p $(DESTDIR)$(PREFIX)/bin/
