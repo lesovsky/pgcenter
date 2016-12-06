@@ -60,10 +60,14 @@ DESTDIR ?=
 all: pgcenter
 
 pgcenter: pgcenter.c
-	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) -o $(PROGRAM_NAME) $(SOURCE) $(LIBS)
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c common.c
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c stats.c
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c pgf.c
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -c hotkeys.c
+	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(LIBS) -o $(PROGRAM_NAME) $(SOURCE) common.o stats.o pgf.o hotkeys.o
 
 clean:
-	rm -f $(PROGRAM_NAME)
+	rm -f $(PROGRAM_NAME) common.o stats.o pgf.o hotkeys.o
 
 install:
 	mkdir -p $(DESTDIR)$(PREFIX)/bin/

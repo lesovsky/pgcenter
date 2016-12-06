@@ -1,6 +1,17 @@
 /*
+ ****************************************************************************
+ * qstats.h
+ *      query reports definitions.
+ *
+ * (C) 2016 by Alexey V. Lesovsky (lesovsky <at> gmail.com)
+ * 
+ ****************************************************************************
+ */
+/*
  * based on https://github.com/PostgreSQL-Consulting/pg-utils/blob/master/sql/global_reports/query_stat_total.sql
  */
+#ifndef __QSTATS_H__
+#define __QSTATS_H__
 
 #define PG_GET_QUERYREP_BY_QUERYID_QUERY_P1 \
     "WITH pg_stat_statements_normalized AS ( \
@@ -112,3 +123,5 @@ enum qstats_attr {
     REP_USER                    = 22,
     REP_QUERY                   = 23
 };  /* qstats_attr */
+
+#endif /* __QSTATS_H__ */
