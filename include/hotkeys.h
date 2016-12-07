@@ -62,14 +62,14 @@ void do_noop(WINDOW * window, unsigned long interval);
 void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter);
 void change_sort_order_direction(struct tab_s * tab, bool * first_iter);
 void set_filter(WINDOW * win, struct tab_s * tab, PGresult * res, bool * first_iter);
-unsigned int switch_conn(WINDOW * window, struct tab_s * tabs[],
+unsigned int switch_tab(WINDOW * window, struct tab_s * tabs[],
         unsigned int ch, unsigned int tab_index, unsigned int tab_no, PGresult * res, bool * first_iter);
 void switch_context(WINDOW * window, struct tab_s * tab, enum context context, PGresult * res, bool * first_iter);
 void change_min_age(WINDOW * window, struct tab_s * tab, PGresult *res, bool *first_iter);
-unsigned int add_connection(WINDOW * window, struct tab_s * tabs[],
+unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
         PGconn * conns[], unsigned int tab_index);
 void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i);
-unsigned int close_connection(WINDOW * window, struct tab_s * tabs[],
+unsigned int close_tab(WINDOW * window, struct tab_s * tabs[],
         PGconn * conns[], unsigned int tab_index, bool *first_iter);
 void write_pgcenterrc(WINDOW * window, struct tab_s * tabs[], PGconn * conns[], struct args_s * args);
 void reload_conf(WINDOW * window, PGconn * conn);
@@ -94,7 +94,9 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * con
 void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn * conn, unsigned int subtab);
 void get_query_by_id(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted);
-void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_color,
-        unsigned int * wa_color, unsigned int * wl_color, unsigned int target, unsigned int * target_color);
-void change_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color);
+void draw_color_help(WINDOW * w,
+        unsigned long long int * ws_color, unsigned long long int * wc_color, unsigned long long int * wa_color,
+        unsigned long long int * wl_color, unsigned long long int target, unsigned long long int * target_color);
+void change_colors(unsigned long long int * ws_color, unsigned long long int * wc_color,
+        unsigned long long int * wa_color, unsigned long long int * wl_color);
 #endif /* __HOTKEYS_H__ */

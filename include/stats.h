@@ -25,8 +25,8 @@
 #define DISKSTATS_FILE          "/proc/diskstats"
 #define NETDEV_FILE             "/proc/net/dev"
 
-#define HZ                  hz
-unsigned int hz;
+#define HZ                  sys_hz
+unsigned int sys_hz;
 
 /*
  * Macros used to display statistics values.

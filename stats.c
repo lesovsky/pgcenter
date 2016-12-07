@@ -1,3 +1,6 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
 /*
  ****************************************************************************
  * stats.c
@@ -108,7 +111,7 @@ void get_HZ(void)
     if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
         mreport(false, msg_error, "ERROR: sysconf failure.\n");
             
-    hz = (unsigned int) ticks;
+    sys_hz = (unsigned int) ticks;
 }
 
 /*

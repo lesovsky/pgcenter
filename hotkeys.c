@@ -1,3 +1,6 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
 /*
  ****************************************************************************
  * hotkeys.c
@@ -232,19 +235,23 @@ void set_filter(WINDOW * win, struct tab_s * tab, PGresult * res, bool * first_i
  * Switch to another tab. Return index of destination tab.
  ****************************************************************************
  */
-unsigned int switch_conn(WINDOW * window, struct tab_s * tabs[],
+unsigned int switch_tab(WINDOW * window, struct tab_s * tabs[],
                 unsigned int ch, unsigned int tab_index, unsigned int tab_no, PGresult * res, bool * first_iter)
 {
+    /* transform keycodes to digits. for example: 2 has keycode 50, then 50 - '0' = 2 */
+    unsigned int dest_tab_no = ch - '0';
+    unsigned int dest_tab_index = dest_tab_no - 1;
+
     wclear(window);
-    if ( tabs[ch - '0' - 1]->conn_used ) {
-        tab_no = ch - '0', tab_index = tab_no - 1;
-        wprintw(window, "Switch to tab %i.", tab_no);
+    if ( tabs[dest_tab_index]->conn_used ) {
+        wprintw(window, "Switch to tab %i.", dest_tab_no);
         *first_iter = true;
         PQclear(res);
-    } else
+        return dest_tab_index;
+    } else {
         wprintw(window, "No connection associated, stay on tab %i.", tab_no);
-
-    return tab_index;
+        return tab_index;
+    }
 }
 
 /*
@@ -362,7 +369,7 @@ void clear_tab_connopts(struct tab_s * tabs[], unsigned int i)
  * Open new connection in the new tab.
  ****************************************************************************
  */
-unsigned int add_connection(WINDOW * window, struct tab_s * tabs[],
+unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
                 PGconn * conns[], unsigned int tab_index)
 {
     unsigned int i;
@@ -484,10 +491,10 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
 
 /*
  ****************************************************************************
- * Close current connection and return index of the previous tab.
+ * Close current tab, close connection and return index of the previous tab.
  ****************************************************************************
  */
-unsigned int close_connection(WINDOW * window, struct tab_s * tabs[],
+unsigned int close_tab(WINDOW * window, struct tab_s * tabs[],
                 PGconn * conns[], unsigned int tab_index, bool * first_iter)
 {
     unsigned int i = tab_index;
@@ -588,7 +595,7 @@ void reload_conf(WINDOW * window, PGconn * conn)
             wclear(window);
             wprintw(window, "Reload failed. %s", errmsg);
         }
-    } else if (strlen(confirmation) == 0 && with_esc == false) {
+    } else if ((strlen(confirmation) == 0) & (with_esc == false)) {
         wprintw(window, "Do nothing. Nothing entered.");
     } else if (with_esc) {
         ;
@@ -1207,15 +1214,15 @@ void signal_group_backend(WINDOW * window, struct tab_s *tab, PGconn * conn, boo
         actions_idx = 1;		/* cancel */
     
     if (tab->signal_options & GROUP_ACTIVE)
-        strncat(mask, "a", sizeof(mask));
+        strncat(mask, "a", 1);
     if (tab->signal_options & GROUP_IDLE)
-        strncat(mask, "i", sizeof(mask));
+        strncat(mask, "i", 1);
     if (tab->signal_options & GROUP_IDLE_IN_XACT)
-        strncat(mask, "x", sizeof(mask));
+        strncat(mask, "x", 1);
     if (tab->signal_options & GROUP_WAITING)
-        strncat(mask, "w", sizeof(mask));
+        strncat(mask, "w", 1);
     if (tab->signal_options & GROUP_OTHER)
-        strncat(mask, "o", sizeof(mask));
+        strncat(mask, "o", 1);
 
     for (i = 0; i < strlen(mask); i++) {
         switch (mask[i]) {
@@ -1327,17 +1334,15 @@ unsigned long change_refresh(WINDOW * window, unsigned long interval)
     cmd_readline(window, msg, 45 + offset, &with_esc, str, sizeof(str), true);
 
     if (strlen(str) != 0 && with_esc == false) {
-        if (strlen(str) != 0) {
-            interval = atol(str);
-            if (interval < 1) {
-                wprintw(window, "Should not be less than 1 second.");
-                interval = interval_save;
-            } else if (interval * 1000000 > INTERVAL_MAXLEN) {
-                wprintw(window, "Should not be more than 300 seconds.");
-                interval = INTERVAL_MAXLEN;
-            } else {
-                interval = interval * 1000000;
-            }
+        interval = atol(str);
+        if (interval < 1) {
+            wprintw(window, "Should not be less than 1 second.");
+            interval = interval_save;
+        } else if (interval * 1000000 > INTERVAL_MAXLEN) {
+            wprintw(window, "Should not be more than 300 seconds.");
+            interval = INTERVAL_MAXLEN;
+        } else {
+            interval = interval * 1000000;
         }
     } else if (strlen(str) == 0 && with_esc == false ) {
         wprintw(window, "Leave old value: %i seconds.", interval_save / 1000000);
@@ -1833,8 +1838,9 @@ query text (id: %s):\n%s",
  * @wl_color            Subtab window current color.
  ****************************************************************************
  */
-void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_color,
-		unsigned int * wa_color, unsigned int * wl_color, unsigned int target, unsigned int * target_color)
+void draw_color_help(WINDOW * w,
+        unsigned long long int * ws_color, unsigned long long int * wc_color, unsigned long long int * wa_color,
+        unsigned long long int * wl_color, unsigned long long int target, unsigned long long int * target_color)
 {
     wclear(w);
     wprintw(w, "Help for color mapping - %s, version %.1f.%d\n\n",
@@ -1883,13 +1889,14 @@ void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_colo
  * @wl_color            Subtab window current color.
  ****************************************************************************
  */
-void change_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color)
+void change_colors(unsigned long long int * ws_color, unsigned long long int * wc_color,
+            unsigned long long int * wa_color, unsigned long long int * wl_color)
 {
     WINDOW * w;
     int ch;
-    unsigned int target = 'S',
+    unsigned long long int target = 'S',
         * target_color = ws_color;
-    unsigned int ws_save = *ws_color,
+    unsigned long long int ws_save = *ws_color,
         wc_save = *wc_color,
         wa_save = *wa_color,
         wl_save = *wl_color;

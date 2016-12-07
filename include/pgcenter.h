@@ -24,7 +24,8 @@ void init_args_struct(struct args_s *args);
 void init_tabs(struct tab_s *tabs[]);
 char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
 char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols);
-void init_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color);
+void init_colors(unsigned long long int * ws_color, unsigned long long int * wc_color,
+        unsigned long long int * wa_color, unsigned long long int * wl_color);
 
 /* arguments handling functions */
 void check_portnum(const char * portnum);
@@ -46,7 +47,7 @@ int fl_cmp_asc(const void * a, const void * b, void * arg);
 /* arrays functions */
 void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct tab_s * tab, 
         unsigned int n_rows, unsigned int n_cols, unsigned long interval);
-void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struct tab_s * tab);
+void sort_array(char ***res_arr, unsigned int n_rows, struct tab_s * tab);
 void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_cols);
 
 /* print info functions */

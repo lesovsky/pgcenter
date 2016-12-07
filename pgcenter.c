@@ -1,3 +1,6 @@
+// This is an open source non-commercial project. Dear PVS-Studio, please check it.
+// PVS-Studio Static Code Analyzer for C, C++ and C#: http://www.viva64.com
+
 /*
  ****************************************************************************
  * pgcenter.c
@@ -183,7 +186,8 @@ char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
  * Setup colors for sysstat, cmdline, main stat and aux stat windows.
  ****************************************************************************
  */
-void init_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color)
+void init_colors(unsigned long long int * ws_color, unsigned long long int * wc_color,
+        unsigned long long int * wa_color, unsigned long long int * wl_color)
 {
     start_color();
     init_pair(0, COLOR_BLACK,   COLOR_BLACK);
@@ -697,7 +701,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct tab_s * t
  * Order key isn't constant and can be changed by user.
  ****************************************************************************
  */
-void sort_array(char ***res_arr, unsigned int n_rows, unsigned int n_cols, struct tab_s * tab)
+void sort_array(char ***res_arr, unsigned int n_rows, struct tab_s * tab)
 {
     unsigned int i, order_key = 0;
     bool desc = false;
@@ -1060,7 +1064,7 @@ int main(int argc, char *argv[])
          ***c_arr = NULL,
          ***r_arr = NULL;                               /* 3d arrays for query results  */
 
-    unsigned int ws_color, wc_color, wa_color, wl_color;/* colors for text zones */
+    unsigned int long long ws_color, wc_color, wa_color, wl_color;/* colors for text zones */
 
     /* init iostat stuff */
     unsigned int bdev = count_block_devices();
@@ -1146,16 +1150,16 @@ int main(int argc, char *argv[])
             ch = getch();
             switch (ch) {
                 case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8':
-                    tab_index = switch_conn(w_cmd, tabs, ch, tab_index, tab_no, p_res, &first_iter);
+                    tab_index = switch_tab(w_cmd, tabs, ch, tab_index, tab_no, p_res, &first_iter);
                     tab_no = tab_index + 1;
                     break;
                 case 'N':               /* open new tab with new connection */
-                    tab_index = add_connection(w_cmd, tabs, conns, tab_index);
+                    tab_index = add_tab(w_cmd, tabs, conns, tab_index);
                     tab_no = tab_index + 1;
                     first_iter = true;
                     break;
                 case 4:                 /* close current tab with Ctrl + D */
-                    tab_index = close_connection(w_cmd, tabs, conns, tab_index, &first_iter);
+                    tab_index = close_tab(w_cmd, tabs, conns, tab_index, &first_iter);
                     tab_no = tab_index + 1;
                     break;
                 case 'W':               /* write connections info into .pgcenterrc */
@@ -1375,7 +1379,7 @@ int main(int argc, char *argv[])
             diff_arrays(p_arr, c_arr, r_arr, tabs[tab_index], n_rows, n_cols, interval);
 
             /* sort result array using order key */
-            sort_array(r_arr, n_rows, n_cols, tabs[tab_index]);
+            sort_array(r_arr, n_rows, tabs[tab_index]);
 
             /* print sorted result array */
             print_data(w_dba, c_res, r_arr, n_rows, n_cols, tabs[tab_index]);

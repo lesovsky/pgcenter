@@ -156,7 +156,7 @@ struct tab_s
 
 /* simple comparison functions */
 #define min(a,b)    (a > b) ? b : a
-#define max(a,b)    (a > b) ? a : a
+#define max(a,b)    (a > b) ? a : b
 
 /* function declarations */
 void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
