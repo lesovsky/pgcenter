@@ -10,7 +10,7 @@
 #ifndef __QUERIES_H__
 #define __QUERIES_H__
 
-/* sysstat screen queries */
+/* sysstat tab queries */
 /* for postgresql versions before 9.6 */
 #define PG_STAT_ACTIVITY_COUNT_95_QUERY \
     "WITH pgsa AS (SELECT * FROM pg_stat_activity) \

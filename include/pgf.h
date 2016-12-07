@@ -51,17 +51,17 @@
 #define PG_TUP_OK       PGRES_TUPLES_OK
 #define PG_FATAL_ERR    PGRES_FATAL_ERROR
 
-void open_connections(struct screen_s * screens[], PGconn * conns[]);
-void close_connections(struct screen_s * screens[], PGconn * conns[]);
+void open_connections(struct tab_s * tabs[], PGconn * conns[]);
+void close_connections(struct tab_s * tabs[], PGconn * conns[]);
 PGresult * do_query(PGconn * conn, const char * query, char errmsg[]);
 void get_conf_value(PGconn * conn, const char * config_option_name, char * config_option_value);
-void get_pg_special(PGconn * conn, struct screen_s * screen);
-void reconnect_if_failed(WINDOW * window, PGconn * conn, struct screen_s * screen, bool *reconnected);
-void prepare_query(struct screen_s * screen, char * query);
+void get_pg_special(PGconn * conn, struct tab_s * tab);
+void reconnect_if_failed(WINDOW * window, PGconn * conn, struct tab_s * tab, bool *reconnected);
+void prepare_query(struct tab_s * tab, char * query);
 void get_pg_uptime(PGconn * conn, char * uptime);
 int get_conn_status(PGconn *conn);
-void write_conn_status(WINDOW * window, PGconn *conn, unsigned int console_no, int st_index);
-void get_summary_pg_activity(WINDOW * window, struct screen_s * screen, PGconn * conn);
-void get_summary_vac_activity(WINDOW * window, struct screen_s * screen, PGconn * conn);
+void write_conn_status(WINDOW * window, PGconn *conn, unsigned int tab_no, int st_index);
+void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
+void get_summary_vac_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval);
 #endif /* __PGF_H__ */

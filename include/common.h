@@ -42,7 +42,7 @@
 #define XL_BUF_LEN	BUFSIZ
 
 #define ERRSIZE             128
-#define MAX_SCREEN          8
+#define MAX_TABS            8
 #define MAX_COLS            20              /* filtering purposes */
 
 /* others defaults */
@@ -120,7 +120,7 @@ struct pg_special_s
 
 #define PG_SPECIAL_SIZE (sizeof(struct pg_special_s))
 
-/* struct for context list used in screen */
+/* struct for context list used in tab */
 struct context_s
 {
     enum context context;
@@ -130,9 +130,9 @@ struct context_s
 };
 
 /* struct which define connection options */
-struct screen_s
+struct tab_s
 {
-    int screen;
+    int tab;
     bool conn_used;
     char host[CONN_ARG_MAXLEN];
     char port[CONN_ARG_MAXLEN];
@@ -141,9 +141,9 @@ struct screen_s
     char password[CONN_ARG_MAXLEN];
     char conninfo[CONNINFO_MAXLEN];
     struct pg_special_s pg_special;
-    bool subscreen_enabled;                     /* subscreen status: on/off */
-    int subscreen;                              /* subscreen type: logtail, iostat, etc. */
-    char log_path[PATH_MAX];                    /* logfile path for logtail subscreen */
+    bool subtab_enabled;                     /* subtab status: on/off */
+    int subtab;                              /* subtab type: logtail, iostat, etc. */
+    char log_path[PATH_MAX];                    /* logfile path for logtail subtab */
     int log_fd;                                 /* logfile fd for log viewing */
     enum context current_context;
     char pg_stat_activity_min_age[XS_BUF_LEN];
@@ -152,7 +152,7 @@ struct screen_s
     bool pg_stat_sys;
 };
 
-#define SCREEN_SIZE (sizeof(struct screen_s))
+#define TAB_SIZE (sizeof(struct tab_s))
 
 /* simple comparison functions */
 #define min(a,b)    (a > b) ? b : a

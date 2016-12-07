@@ -36,10 +36,10 @@
 #define GROUP_WAITING       1 << 3
 #define GROUP_OTHER         1 << 4
 
-#define SUBSCREEN_NONE      0
-#define SUBSCREEN_LOGTAIL   1
-#define SUBSCREEN_IOSTAT    2
-#define SUBSCREEN_NICSTAT   3
+#define SUBTAB_NONE      0
+#define SUBTAB_LOGTAIL   1
+#define SUBTAB_IOSTAT    2
+#define SUBTAB_NICSTAT   3
 
 /* Macros used to determine array size */
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof(a[0]))
@@ -54,45 +54,45 @@ struct colAttrs {
 struct colAttrs * init_colattrs(unsigned int n_cols);
 ITEM ** init_menuitems(unsigned int n_choices);
 bool key_is_pressed(void);
-void print_help_screen(bool * first_iter);
-void clear_screen_connopts(struct screen_s * screens[], unsigned int i);
+void print_help_tab(bool * first_iter);
+void clear_tab_connopts(struct tab_s * tabs[], unsigned int i);
 void do_noop(WINDOW * window, unsigned long interval);
 
 /* main hotkeys functions */
-void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter);
-void change_sort_order_direction(struct screen_s * screen, bool * first_iter);
-void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * first_iter);
-unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
-        unsigned int ch, unsigned int console_index, unsigned int console_no, PGresult * res, bool * first_iter);
-void switch_context(WINDOW * window, struct screen_s * screen, enum context context, PGresult * res, bool * first_iter);
-void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter);
-unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
-        PGconn * conns[], unsigned int console_index);
-void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i);
-unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
-        PGconn * conns[], unsigned int console_index, bool *first_iter);
-void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args);
+void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter);
+void change_sort_order_direction(struct tab_s * tab, bool * first_iter);
+void set_filter(WINDOW * win, struct tab_s * tab, PGresult * res, bool * first_iter);
+unsigned int switch_conn(WINDOW * window, struct tab_s * tabs[],
+        unsigned int ch, unsigned int tab_index, unsigned int tab_no, PGresult * res, bool * first_iter);
+void switch_context(WINDOW * window, struct tab_s * tab, enum context context, PGresult * res, bool * first_iter);
+void change_min_age(WINDOW * window, struct tab_s * tab, PGresult *res, bool *first_iter);
+unsigned int add_connection(WINDOW * window, struct tab_s * tabs[],
+        PGconn * conns[], unsigned int tab_index);
+void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i);
+unsigned int close_connection(WINDOW * window, struct tab_s * tabs[],
+        PGconn * conns[], unsigned int tab_index, bool *first_iter);
+void write_pgcenterrc(WINDOW * window, struct tab_s * tabs[], PGconn * conns[], struct args_s * args);
 void reload_conf(WINDOW * window, PGconn * conn);
-bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn);
-void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const char * config_file_guc);
-void calculate_width(struct colAttrs *columns, PGresult *res, struct screen_s * screen, char ***arr, unsigned int n_rows, unsigned int n_cols);
+bool check_pg_listen_addr(struct tab_s * tab, PGconn * conn);
+void edit_config(WINDOW * window, struct tab_s * tab, PGconn * conn, const char * config_file_guc);
+void calculate_width(struct colAttrs *columns, PGresult *res, struct tab_s * tab, char ***arr, unsigned int n_rows, unsigned int n_cols);
 void show_config(WINDOW * window, PGconn * conn);
-void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter);
-void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter);
-void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, bool *first_iter);
-void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate);
-void get_statemask(WINDOW * window, struct screen_s * screen);
-void set_statemask(WINDOW * window, struct screen_s * screen);
-void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate);
-void start_psql(WINDOW * window, struct screen_s * screen);
+void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct tab_s * tab, PGconn * conn, bool *first_iter);
+void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct tab_s * tab, bool *first_iter);
+void pgss_switch(WINDOW * w_cmd, struct tab_s * tab, PGresult * p_res, bool *first_iter);
+void signal_single_backend(WINDOW * window, struct tab_s *tab, PGconn * conn, bool do_terminate);
+void get_statemask(WINDOW * window, struct tab_s * tab);
+void set_statemask(WINDOW * window, struct tab_s * tab);
+void signal_group_backend(WINDOW * window, struct tab_s *tab, PGconn * conn, bool do_terminate);
+void start_psql(WINDOW * window, struct tab_s * tab);
 unsigned long change_refresh(WINDOW * window, unsigned long interval);
-void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter);
+void system_view_toggle(WINDOW * window, struct tab_s * tab, bool * first_iter);
 void get_logfile_path(char * path, PGconn * conn);
-void log_process(WINDOW * window, WINDOW ** w_log, struct screen_s * screen, PGconn * conn, unsigned int subscreen);
-void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn);
-void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn * conn);
-void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * screen, PGconn * conn, unsigned int subscreen);
-void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn);
+void log_process(WINDOW * window, WINDOW ** w_log, struct tab_s * tab, PGconn * conn, unsigned int subtab);
+void show_full_log(WINDOW * window, struct tab_s * tab, PGconn * conn);
+void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * conn);
+void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn * conn, unsigned int subtab);
+void get_query_by_id(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted);
 void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_color,
         unsigned int * wa_color, unsigned int * wl_color, unsigned int target, unsigned int * target_color);

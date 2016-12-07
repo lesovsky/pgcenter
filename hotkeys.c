@@ -29,10 +29,10 @@ bool key_is_pressed(void)
 
 /*
  ****************************************************************************
- * Print internal help screen.
+ * Print internal help tab.
  ****************************************************************************
  */
-void print_help_screen(bool * first_iter)
+void print_help_tab(bool * first_iter)
 {
     WINDOW * w;
     int ch;
@@ -54,8 +54,8 @@ void print_help_screen(bool * first_iter)
   p                       'p' start psql session.\n\
   l               'l' open log file with pager.\n\
   N,Ctrl+D,W      'N' add new connection, Ctrl+D close current connection, 'W' write connections info.\n\
-  1..8            switch between consoles.\n\
-subscreen actions:\n\
+  1..8            switch between tabs.\n\
+subtab actions:\n\
   B,I,L           'B' iostat, 'I' nicstat, 'L' logtail.\n\
 activity actions:\n\
   -,_             '-' cancel backend by pid, '_' terminate backend by pid.\n\
@@ -67,7 +67,7 @@ other actions:\n\
   , Q             ',' show system tables on/off, 'Q' reset postgresql statistics counters.\n\
   z,Z             'z' set refresh interval, 'Z' change color scheme.\n\
   space           pause program execution.\n\
-  h,F1            show help screen.\n\
+  h,F1            show help tab.\n\
   q               quit.\n\n");
     wprintw(w, "Type 'Esc' to continue.\n");
 
@@ -87,14 +87,14 @@ other actions:\n\
  * Set sort.
  ****************************************************************************
  */
-void change_sort_order(struct screen_s * screen, bool increment, bool * first_iter)
+void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter)
 {
     unsigned int max = 0, i;
 
     /* Determine max limit of range where cursor can move */
-    switch (screen->current_context) {
+    switch (tab->current_context) {
         case pg_stat_database:
-            (atoi(screen->pg_special.pg_version_num) < PG92)
+            (atoi(tab->pg_special.pg_version_num) < PG92)
                 ? (max = PG_STAT_DATABASE_CMAX_91)
                 : (max = PG_STAT_DATABASE_CMAX_LT);
             break;
@@ -114,9 +114,9 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             max = PG_TABLES_SIZE_CMAX_LT;
             break;
         case pg_stat_activity_long:
-            if (atoi(screen->pg_special.pg_version_num) < PG92)
+            if (atoi(tab->pg_special.pg_version_num) < PG92)
                 max = PG_STAT_ACTIVITY_LONG_CMAX_91;
-            else if (atoi(screen->pg_special.pg_version_num) < PG96)
+            else if (atoi(tab->pg_special.pg_version_num) < PG96)
                 max = PG_STAT_ACTIVITY_LONG_CMAX_95;
             else
                 max = PG_STAT_ACTIVITY_LONG_CMAX_LT;
@@ -126,7 +126,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             *first_iter = true;
             break;
         case pg_stat_statements_timing:
-            (atoi(screen->pg_special.pg_version_num) < PG92)
+            (atoi(tab->pg_special.pg_version_num) < PG92)
                 ? (max = PGSS_TIMING_CMAX_91)
                 : (max = PGSS_TIMING_CMAX_LT);
             *first_iter = true;
@@ -136,7 +136,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             *first_iter = true;
             break;
         case pg_stat_statements_io:
-            (atoi(screen->pg_special.pg_version_num) < PG92)
+            (atoi(tab->pg_special.pg_version_num) < PG92)
                 ? (max = PGSS_IO_CMAX_91)
                 : (max = PGSS_IO_CMAX_LT);
             *first_iter = true;
@@ -146,7 +146,7 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
             *first_iter = true;
             break;
         case pg_stat_statements_local:
-            (atoi(screen->pg_special.pg_version_num) < PG92)
+            (atoi(tab->pg_special.pg_version_num) < PG92)
                 ? (max = PGSS_LOCAL_CMAX_91)
                 : (max = PGSS_LOCAL_CMAX_LT);
             *first_iter = true;
@@ -160,16 +160,16 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
 
     /* Change number of column used for sort */
     for (i = 0; i < TOTAL_CONTEXTS; i++) {
-        if (screen->current_context == screen->context_list[i].context) {
+        if (tab->current_context == tab->context_list[i].context) {
             if (increment) {
                 /* switch from last to first column */
-                if (++screen->context_list[i].order_key > max) {
-                    screen->context_list[i].order_key = 0;
+                if (++tab->context_list[i].order_key > max) {
+                    tab->context_list[i].order_key = 0;
                 }
             } else {
                 /* switch from first to last column */
-                if (--screen->context_list[i].order_key < 0) {
-                    screen->context_list[i].order_key = max;
+                if (--tab->context_list[i].order_key < 0) {
+                    tab->context_list[i].order_key = max;
                 }
             }
         }
@@ -181,12 +181,12 @@ void change_sort_order(struct screen_s * screen, bool increment, bool * first_it
  * Change sort order from desc to asc and vice-versa.
  ****************************************************************************
  */
-void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
+void change_sort_order_direction(struct tab_s * tab, bool * first_iter)
 {
     unsigned int i;
     for (i = 0; i < TOTAL_CONTEXTS; i++) {
-        if (screen->current_context == screen->context_list[i].context) {
-	    screen->context_list[i].order_desc ^= 1;
+        if (tab->current_context == tab->context_list[i].context) {
+	    tab->context_list[i].order_desc ^= 1;
         }
         *first_iter = true;
     }
@@ -197,7 +197,7 @@ void change_sort_order_direction(struct screen_s * screen, bool * first_iter)
  * Set filter or reset one.
  ****************************************************************************
  */
-void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * first_iter) {
+void set_filter(WINDOW * win, struct tab_s * tab, PGresult * res, bool * first_iter) {
     int i;
     bool with_esc;
     char pattern[S_BUF_LEN], msg[S_BUF_LEN];
@@ -205,8 +205,8 @@ void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * f
 
     /* get current context and its filter strings array */
     for (i = 0; i < TOTAL_CONTEXTS; i++)
-        if (screen->current_context == screen->context_list[i].context)
-            ctx = screen->context_list[i];
+        if (tab->current_context == tab->context_list[i].context)
+            ctx = tab->context_list[i];
 
     snprintf(msg, S_BUF_LEN, "Set filter, current: \"%s\": ", ctx.fstrings[ctx.order_key]);
 
@@ -220,8 +220,8 @@ void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * f
 
     /* Save pattern to context */
     for (i = 0; i < TOTAL_CONTEXTS; i++)
-        if (screen->current_context == screen->context_list[i].context)
-            screen->context_list[i] = ctx;
+        if (tab->current_context == tab->context_list[i].context)
+            tab->context_list[i] = ctx;
 
     PQclear(res);
     *first_iter = true;
@@ -232,19 +232,19 @@ void set_filter(WINDOW * win, struct screen_s * screen, PGresult * res, bool * f
  * Switch to another tab. Return index of destination tab.
  ****************************************************************************
  */
-unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
-                unsigned int ch, unsigned int console_index, unsigned int console_no, PGresult * res, bool * first_iter)
+unsigned int switch_conn(WINDOW * window, struct tab_s * tabs[],
+                unsigned int ch, unsigned int tab_index, unsigned int tab_no, PGresult * res, bool * first_iter)
 {
     wclear(window);
-    if ( screens[ch - '0' - 1]->conn_used ) {
-        console_no = ch - '0', console_index = console_no - 1;
-        wprintw(window, "Switch to console %i.", console_no);
+    if ( tabs[ch - '0' - 1]->conn_used ) {
+        tab_no = ch - '0', tab_index = tab_no - 1;
+        wprintw(window, "Switch to tab %i.", tab_no);
         *first_iter = true;
         PQclear(res);
     } else
-        wprintw(window, "No connection associated, stay on console %i.", console_no);
+        wprintw(window, "No connection associated, stay on tab %i.", tab_no);
 
-    return console_index;
+    return tab_index;
 }
 
 /*
@@ -252,7 +252,7 @@ unsigned int switch_conn(WINDOW * window, struct screen_s * screens[],
  * Switch statistics context in the curent tab.
  ****************************************************************************
  */
-void switch_context(WINDOW * window, struct screen_s * screen, 
+void switch_context(WINDOW * window, struct tab_s * tab, 
                     enum context context, PGresult * res, bool * first_iter)
 {
     wclear(window);
@@ -276,7 +276,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
             wprintw(window, "Show tables sizes");
             break;
         case pg_stat_activity_long:
-            wprintw(window, "Show activity (age threshold: %s)", screen->pg_stat_activity_min_age);
+            wprintw(window, "Show activity (age threshold: %s)", tab->pg_stat_activity_min_age);
             break;
         case pg_stat_functions:
             wprintw(window, "Show functions statistics");
@@ -303,7 +303,7 @@ void switch_context(WINDOW * window, struct screen_s * screen,
             break;
     }
 
-    screen->current_context = context;
+    tab->current_context = context;
     if (res && *first_iter == false)
         PQclear(res);
     *first_iter = true;
@@ -314,9 +314,9 @@ void switch_context(WINDOW * window, struct screen_s * screen,
  * Change query age in the pg_stat_activity stat context.
  ****************************************************************************
  */
-void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bool *first_iter)
+void change_min_age(WINDOW * window, struct tab_s * tab, PGresult *res, bool *first_iter)
 {
-    if (screen->current_context != pg_stat_activity_long) {
+    if (tab->current_context != pg_stat_activity_long) {
         wprintw(window, "Long query min age is not allowed here.");
         return;
     }
@@ -331,10 +331,10 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
         if ((sscanf(min_age, "%u:%u:%u", &hour, &min, &sec)) == 0 || (hour > 23 || min > 59 || sec > 59)) {
             wprintw(window, "Nothing to do. Failed read or invalid value.");
         } else {
-	    snprintf(screen->pg_stat_activity_min_age, sizeof(screen->pg_stat_activity_min_age), "%s", min_age);
+	    snprintf(tab->pg_stat_activity_min_age, sizeof(tab->pg_stat_activity_min_age), "%s", min_age);
         }
     } else if (strlen(min_age) == 0 && with_esc == false ) {
-        wprintw(window, "Nothing to do. Leave min age %s", screen->pg_stat_activity_min_age);
+        wprintw(window, "Nothing to do. Leave min age %s", tab->pg_stat_activity_min_age);
     }
    
     PQclear(res);
@@ -346,15 +346,15 @@ void change_min_age(WINDOW * window, struct screen_s * screen, PGresult *res, bo
  * Clear connection options in specified tab.
  ****************************************************************************
  */
-void clear_screen_connopts(struct screen_s * screens[], unsigned int i)
+void clear_tab_connopts(struct tab_s * tabs[], unsigned int i)
 {
-    screens[i]->host[0] = '\0';
-    screens[i]->port[0] = '\0';
-    screens[i]->user[0] = '\0';
-    screens[i]->dbname[0] = '\0';
-    screens[i]->password[0] = '\0';
-    screens[i]->conninfo[0] = '\0';
-    screens[i]->conn_used = false;
+    tabs[i]->host[0] = '\0';
+    tabs[i]->port[0] = '\0';
+    tabs[i]->user[0] = '\0';
+    tabs[i]->dbname[0] = '\0';
+    tabs[i]->password[0] = '\0';
+    tabs[i]->conninfo[0] = '\0';
+    tabs[i]->conn_used = false;
 }
 
 /*
@@ -362,8 +362,8 @@ void clear_screen_connopts(struct screen_s * screens[], unsigned int i)
  * Open new connection in the new tab.
  ****************************************************************************
  */
-unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
-                PGconn * conns[], unsigned int console_index)
+unsigned int add_connection(WINDOW * window, struct tab_s * tabs[],
+                PGconn * conns[], unsigned int tab_index)
 {
     unsigned int i;
     char params[CONNINFO_MAXLEN],
@@ -371,28 +371,28 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
          msg2[] = "Required password: ";
     bool with_esc, with_esc2;
     
-    for (i = 0; i < MAX_SCREEN; i++) {
-        /* search free screen */
-        if (screens[i]->conn_used == false) {
+    for (i = 0; i < MAX_TABS; i++) {
+        /* search free tab */
+        if (tabs[i]->conn_used == false) {
 
             /* read user input */
             cmd_readline(window, msg, strlen(msg), &with_esc, params, sizeof(params), true);
             if (strlen(params) != 0 && with_esc == false) {
                 /* parse user input */
                 if ((sscanf(params, "%s %s %s %s",
-                    screens[i]->host,   screens[i]->port,
-                    screens[i]->user,   screens[i]->dbname)) == 0) {
+                    tabs[i]->host,   tabs[i]->port,
+                    tabs[i]->user,   tabs[i]->dbname)) == 0) {
                         wprintw(window, "Nothing to do. Failed read or invalid value.");
                         break;
                 }
-                /* setup screen conninfo settings */
-                screens[i]->conn_used = true;
-		snprintf(screens[i]->conninfo, sizeof(screens[i]->conninfo),
+                /* setup tab conninfo settings */
+                tabs[i]->conn_used = true;
+		snprintf(tabs[i]->conninfo, sizeof(tabs[i]->conninfo),
 			 "host=%s port=%s user=%s dbname=%s",
-			 screens[i]->host, screens[i]->port,  screens[i]->user, screens[i]->dbname);
+			 tabs[i]->host, tabs[i]->port,  tabs[i]->user, tabs[i]->dbname);
 
                 /* establish new connection */
-                conns[i] = PQconnectdb(screens[i]->conninfo);
+                conns[i] = PQconnectdb(tabs[i]->conninfo);
                 /* if password required, ask user for password */
                 if ( PQstatus(conns[i]) == CONNECTION_BAD && PQconnectionNeedsPassword(conns[i]) == 1) {
                     PQfinish(conns[i]);
@@ -401,36 +401,36 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
                     /* read password and add to conn options */
                     cmd_readline(window, msg2, strlen(msg2), &with_esc2, params, sizeof(params), false);
                     if (strlen(params) != 0 && with_esc2 == false) {
-                        snprintf(screens[i]->password, sizeof(screens[i]->password), "%s", params);
-			snprintf(screens[i]->conninfo + strlen(screens[i]->conninfo),
-				 sizeof(screens[i]->conninfo) - strlen(screens[i]->conninfo), " password=%s", screens[i]->password);
+                        snprintf(tabs[i]->password, sizeof(tabs[i]->password), "%s", params);
+			snprintf(tabs[i]->conninfo + strlen(tabs[i]->conninfo),
+				 sizeof(tabs[i]->conninfo) - strlen(tabs[i]->conninfo), " password=%s", tabs[i]->password);
                         /* try establish connection and finish work */
-                        conns[i] = PQconnectdb(screens[i]->conninfo);
+                        conns[i] = PQconnectdb(tabs[i]->conninfo);
                         if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                             wclear(window);
                             wprintw(window, "Nothing to fo. Connection failed.");
                             PQfinish(conns[i]);
-                            clear_screen_connopts(screens, i);
+                            clear_tab_connopts(tabs, i);
                         } else {
                             wclear(window);
                             wprintw(window, "Successfully connected.");
-                            console_index = screens[i]->screen;
-                            get_pg_special(conns[i], screens[i]);
+                            tab_index = tabs[i]->tab;
+                            get_pg_special(conns[i], tabs[i]);
                         }
                     } else if (with_esc) {
-                        clear_screen_connopts(screens, i);
+                        clear_tab_connopts(tabs, i);
                     }
                 /* finish work if connection establish failed */
                 } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                     wprintw(window, "Nothing to do. Connection failed.");
                     PQfinish(conns[i]);
-                    clear_screen_connopts(screens, i);
+                    clear_tab_connopts(tabs, i);
                 /* if no error occured, print about success and finish work */
                 } else {
                     wclear(window);
                     wprintw(window, "Successfully connected.");
-                    console_index = screens[i]->screen;
-                    get_pg_special(conns[i], screens[i]);
+                    tab_index = tabs[i]->tab;
+                    get_pg_special(conns[i], tabs[i]);
                 }
                 break;
             /* finish work if user input empty or cancelled */
@@ -439,47 +439,47 @@ unsigned int add_connection(WINDOW * window, struct screen_s * screens[],
                 break;
             } else 
                 break;
-        /* also finish work if no available screens */
-        } else if (i == MAX_SCREEN - 1) {
-            wprintw(window, "No free consoles.");
+        /* also finish work if no available tabs */
+        } else if (i == MAX_TABS - 1) {
+            wprintw(window, "No free tabs.");
         }
     }
 
-    return console_index;
+    return tab_index;
 }
 
 /*
  ****************************************************************************
- * Shift screens when current screen closed.
+ * Shift tabs when current tab closed.
  ****************************************************************************
  */
-void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i)
+void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
 {
-    while (screens[i + 1]->conn_used != false) {
-        snprintf(screens[i]->host, sizeof(screens[i]->host), "%s", screens[i + 1]->host);
-        snprintf(screens[i]->port, sizeof(screens[i]->port), "%s", screens[i + 1]->port);
-        snprintf(screens[i]->user, sizeof(screens[i]->user), "%s", screens[i + 1]->user);
-        snprintf(screens[i]->dbname, sizeof(screens[i]->dbname), "%s", screens[i + 1]->dbname);
-        snprintf(screens[i]->password, sizeof(screens[i]->password), "%s", screens[i + 1]->password);
-        snprintf(screens[i]->pg_special.pg_version_num, sizeof(screens[i]->pg_special.pg_version_num), "%s",
-		screens[i + 1]->pg_special.pg_version_num);
-        snprintf(screens[i]->pg_special.pg_version, sizeof(screens[i]->pg_special.pg_version), "%s",
-		screens[i + 1]->pg_special.pg_version);
-        screens[i]->subscreen =        screens[i + 1]->subscreen;
-        snprintf(screens[i]->log_path, sizeof(screens[i]->log_path), "%s", screens[i + 1]->log_path);
-        screens[i]->log_fd =            screens[i + 1]->log_fd;
-        screens[i]->current_context =   screens[i + 1]->current_context;
-        snprintf(screens[i]->pg_stat_activity_min_age, sizeof(screens[i]->pg_stat_activity_min_age), "%s",
-		screens[i + 1]->pg_stat_activity_min_age);
-        screens[i]->signal_options =    screens[i + 1]->signal_options;
-        screens[i]->pg_stat_sys =       screens[i + 1]->pg_stat_sys;
+    while (tabs[i + 1]->conn_used != false) {
+        snprintf(tabs[i]->host, sizeof(tabs[i]->host), "%s", tabs[i + 1]->host);
+        snprintf(tabs[i]->port, sizeof(tabs[i]->port), "%s", tabs[i + 1]->port);
+        snprintf(tabs[i]->user, sizeof(tabs[i]->user), "%s", tabs[i + 1]->user);
+        snprintf(tabs[i]->dbname, sizeof(tabs[i]->dbname), "%s", tabs[i + 1]->dbname);
+        snprintf(tabs[i]->password, sizeof(tabs[i]->password), "%s", tabs[i + 1]->password);
+        snprintf(tabs[i]->pg_special.pg_version_num, sizeof(tabs[i]->pg_special.pg_version_num), "%s",
+		tabs[i + 1]->pg_special.pg_version_num);
+        snprintf(tabs[i]->pg_special.pg_version, sizeof(tabs[i]->pg_special.pg_version), "%s",
+		tabs[i + 1]->pg_special.pg_version);
+        tabs[i]->subtab =        tabs[i + 1]->subtab;
+        snprintf(tabs[i]->log_path, sizeof(tabs[i]->log_path), "%s", tabs[i + 1]->log_path);
+        tabs[i]->log_fd =            tabs[i + 1]->log_fd;
+        tabs[i]->current_context =   tabs[i + 1]->current_context;
+        snprintf(tabs[i]->pg_stat_activity_min_age, sizeof(tabs[i]->pg_stat_activity_min_age), "%s",
+		tabs[i + 1]->pg_stat_activity_min_age);
+        tabs[i]->signal_options =    tabs[i + 1]->signal_options;
+        tabs[i]->pg_stat_sys =       tabs[i + 1]->pg_stat_sys;
 
         conns[i] = conns[i + 1];
         i++;
-        if (i == MAX_SCREEN - 1)
+        if (i == MAX_TABS - 1)
             break;
     }
-    clear_screen_connopts(screens, i);
+    clear_tab_connopts(tabs, i);
 }
 
 /*
@@ -487,35 +487,35 @@ void shift_screens(struct screen_s * screens[], PGconn * conns[], unsigned int i
  * Close current connection and return index of the previous tab.
  ****************************************************************************
  */
-unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
-                PGconn * conns[], unsigned int console_index, bool * first_iter)
+unsigned int close_connection(WINDOW * window, struct tab_s * tabs[],
+                PGconn * conns[], unsigned int tab_index, bool * first_iter)
 {
-    unsigned int i = console_index;
-    PQfinish(conns[console_index]);
+    unsigned int i = tab_index;
+    PQfinish(conns[tab_index]);
 
     wprintw(window, "Close current connection.");
-    if (i == 0) {                               /* first active console */
-        if (screens[i + 1]->conn_used) {
-        shift_screens(screens, conns, i);
+    if (i == 0) {                               /* first active tab */
+        if (tabs[i + 1]->conn_used) {
+        shift_tabs(tabs, conns, i);
         } else {
             wrefresh(window);
             endwin();
             exit(EXIT_SUCCESS);
         }
-    } else if (i == (MAX_SCREEN - 1)) {         /* last possible active console */
-        clear_screen_connopts(screens, i);
-        console_index = console_index - 1;
-    } else {                                    /* middle active console */
-        if (screens[i + 1]->conn_used) {
-            shift_screens(screens, conns, i);
+    } else if (i == (MAX_TABS - 1)) {           /* last possible active tab */
+        clear_tab_connopts(tabs, i);
+        tab_index = tab_index - 1;
+    } else {                                    /* middle active tab */
+        if (tabs[i + 1]->conn_used) {
+            shift_tabs(tabs, conns, i);
         } else {
-            clear_screen_connopts(screens, i);
-            console_index = console_index - 1;
+            clear_tab_connopts(tabs, i);
+            tab_index = tab_index - 1;
         }
     }
 
     *first_iter = true;
-    return console_index;
+    return tab_index;
 }
 
 /*
@@ -523,7 +523,7 @@ unsigned int close_connection(WINDOW * window, struct screen_s * screens[],
  * Write info about opened connections into the ~/.pgcenterrc.
  ****************************************************************************
  */
-void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * conns[], struct args_s * args)
+void write_pgcenterrc(WINDOW * window, struct tab_s * tabs[], PGconn * conns[], struct args_s * args)
 {
     unsigned int i = 0;
     FILE *fp;
@@ -542,8 +542,8 @@ void write_pgcenterrc(WINDOW * window, struct screen_s * screens[], PGconn * con
     }
 
     if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
-        for (i = 0; i < MAX_SCREEN; i++) {
-            if (screens[i]->conn_used) {
+        for (i = 0; i < MAX_TABS; i++) {
+            if (tabs[i]->conn_used) {
                 fprintf(fp, "%s:%s:%s:%s:%s\n",
                         PQhost(conns[i]), PQport(conns[i]),
                         PQdb(conns[i]), PQuser(conns[i]),
@@ -602,10 +602,10 @@ void reload_conf(WINDOW * window, PGconn * conn)
  * Return true if listen_addresses is local and false if not.
  ****************************************************************************
  */
-bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
+bool check_pg_listen_addr(struct tab_s * tab, PGconn * conn)
 {
     /* an absoulute path means the unix socket is used and it is always local */
-    if (!strncmp(screen->host, "/", 1)
+    if (!strncmp(tab->host, "/", 1)
 	|| ((PQhost(conn)!= NULL) && !strncmp(PQhost(conn), "/", 1))
 	|| (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
         return true;
@@ -637,7 +637,7 @@ bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
                         "WARNING: getnameinfo() failed: %s\n", gai_strerror(s));
                 return false;
             }
-            if (!strcmp(host, screen->host)) {
+            if (!strcmp(host, tab->host)) {
                 freeifaddrs(ifaddr);
                 return true;
                 break;
@@ -654,12 +654,12 @@ bool check_pg_listen_addr(struct screen_s * screen, PGconn * conn)
  * Edit configuration settings. Open configuration file in $EDITOR.
  ****************************************************************************
  */
-void edit_config(WINDOW * window, struct screen_s * screen, PGconn * conn, const char * config_file_guc)
+void edit_config(WINDOW * window, struct tab_s * tab, PGconn * conn, const char * config_file_guc)
 {
     static char config_path[PATH_MAX];
     pid_t pid;
 
-    if (check_pg_listen_addr(screen, conn)) {
+    if (check_pg_listen_addr(tab, conn)) {
         get_conf_value(conn, config_file_guc, config_path);
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
@@ -717,21 +717,21 @@ struct colAttrs * init_colattrs(unsigned int n_cols) {
  ****************************************************************************
  */
 void calculate_width(struct colAttrs *columns, PGresult *res,
-    struct screen_s * screen, char ***arr, unsigned int n_rows, unsigned int n_cols)
+    struct tab_s * tab, char ***arr, unsigned int n_rows, unsigned int n_cols)
 {
     unsigned int i, col, row;
     struct context_s ctx;
 
     /* determine current context */
-    if (screen != NULL)
+    if (tab != NULL)
         for (i = 0; i < TOTAL_CONTEXTS; i++) {
-            if (screen->current_context == screen->context_list[i].context)
-                ctx = screen->context_list[i];
+            if (tab->current_context == tab->context_list[i].context)
+                ctx = tab->context_list[i];
         }
 
     for (col = 0, i = 0; col < n_cols; col++, i++) {
         /* determine length of column names */
-        if (strlen(ctx.fstrings[i]) > 0 && screen != NULL)
+        if (strlen(ctx.fstrings[i]) > 0 && tab != NULL)
             /* mark columns with filtration */
             snprintf(columns[i].name, sizeof(columns[i].name), "%s*", PQfname(res, col));
         else
@@ -828,7 +828,7 @@ ITEM ** init_menuitems(unsigned int n_choices) {
  * Print the menu with list of config files (for further editing).
  ****************************************************************************
  */
-void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, PGconn * conn, bool *first_iter)
+void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct tab_s * tab, PGconn * conn, bool *first_iter)
 {
     const char * choices[] = { "postgresql.conf", "pg_hba.conf", "pg_ident.conf", "recovery.conf" };
     WINDOW *menu_win;
@@ -877,13 +877,13 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
                 break;
             case 10:
                 if (!strcmp(item_name(current_item(menu)), PG_CONF_FILE))
-                    edit_config(w_cmd, screen, conn, GUC_CONFIG_FILE);
+                    edit_config(w_cmd, tab, conn, GUC_CONFIG_FILE);
                 else if (!strcmp(item_name(current_item(menu)), PG_HBA_FILE))
-                    edit_config(w_cmd, screen, conn, GUC_HBA_FILE);
+                    edit_config(w_cmd, tab, conn, GUC_HBA_FILE);
                 else if (!strcmp(item_name(current_item(menu)), PG_IDENT_FILE))
-                    edit_config(w_cmd, screen, conn, GUC_IDENT_FILE);
+                    edit_config(w_cmd, tab, conn, GUC_IDENT_FILE);
                 else if (!strcmp(item_name(current_item(menu)), PG_RECOVERY_FILE))
-                    edit_config(w_cmd, screen, conn, GUC_DATA_DIRECTORY);
+                    edit_config(w_cmd, tab, conn, GUC_DATA_DIRECTORY);
                 else
                     wprintw(w_cmd, "Do nothing. Unknown file.");     /* never should be here. */
                 done = true;
@@ -894,7 +894,7 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
         }       
     }
  
-    /* clear menu items from screen */
+    /* clear menu items from tab */
     clear();
     refresh();
 
@@ -912,7 +912,7 @@ void edit_config_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, 
  * Print the menu for pg_stat_statements stats contexts.
  ****************************************************************************
  */
-void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *first_iter)
+void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct tab_s * tab, bool *first_iter)
 {
     const char * choices[] = { 
 	"pg_stat_statements timings",
@@ -966,15 +966,15 @@ void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *f
                 break;
             case 10:
                 if (!strcmp(item_name(current_item(menu)), "pg_stat_statements timings"))
-                    screen->current_context = pg_stat_statements_timing;
+                    tab->current_context = pg_stat_statements_timing;
                 else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements general"))
-                    screen->current_context = pg_stat_statements_general;
+                    tab->current_context = pg_stat_statements_general;
                 else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements input/output"))
-                    screen->current_context = pg_stat_statements_io;
+                    tab->current_context = pg_stat_statements_io;
                 else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements temp input/output"))
-                    screen->current_context = pg_stat_statements_temp;
+                    tab->current_context = pg_stat_statements_temp;
                 else if (!strcmp(item_name(current_item(menu)), "pg_stat_statements local input/output"))
-                    screen->current_context = pg_stat_statements_local;
+                    tab->current_context = pg_stat_statements_local;
                 else
                     wprintw(w_cmd, "Do nothing. Unknown mode.");     /* never should be here. */
                 done = true;
@@ -985,7 +985,7 @@ void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *f
         }       
     }
  
-    /* clear menu items from screen */
+    /* clear menu items from tab */
     clear();
     refresh();
 
@@ -1003,27 +1003,27 @@ void pgss_menu(WINDOW * w_cmd, WINDOW * w_dba, struct screen_s * screen, bool *f
  * Switch to next pg_stat_statements contexts.
  ****************************************************************************
  */
-void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, bool *first_iter)
+void pgss_switch(WINDOW * w_cmd, struct tab_s * tab, PGresult * p_res, bool *first_iter)
 {
     /*
      * Check current context and switch to pg_stat_statements.
      * any -> pgss_timing -> pgss_general -> pgss_io -> pgss_temp -> pgss_local -> pgss_timing -> ...
      */
-    switch (screen->current_context) {
+    switch (tab->current_context) {
 	case pg_stat_statements_timing:
-            switch_context(w_cmd, screen, pg_stat_statements_general, p_res, first_iter);
+            switch_context(w_cmd, tab, pg_stat_statements_general, p_res, first_iter);
             break;
 	case pg_stat_statements_general:
-            switch_context(w_cmd, screen, pg_stat_statements_io, p_res, first_iter);
+            switch_context(w_cmd, tab, pg_stat_statements_io, p_res, first_iter);
             break;
 	case pg_stat_statements_io:
-            switch_context(w_cmd, screen, pg_stat_statements_temp, p_res, first_iter);
+            switch_context(w_cmd, tab, pg_stat_statements_temp, p_res, first_iter);
             break;
 	case pg_stat_statements_temp:
-            switch_context(w_cmd, screen, pg_stat_statements_local, p_res, first_iter);
+            switch_context(w_cmd, tab, pg_stat_statements_local, p_res, first_iter);
             break;
 	case pg_stat_statements_local: default:
-            switch_context(w_cmd, screen, pg_stat_statements_timing, p_res, first_iter);
+            switch_context(w_cmd, tab, pg_stat_statements_timing, p_res, first_iter);
             break;
     }
 }
@@ -1033,10 +1033,10 @@ void pgss_switch(WINDOW * w_cmd, struct screen_s * screen, PGresult * p_res, boo
  * Cancel query or terminate postgres backend using pid.
  ****************************************************************************
  */
-void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate)
+void signal_single_backend(WINDOW * window, struct tab_s *tab, PGconn * conn, bool do_terminate)
 {
-    if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "Terminate or cancel backend allowed in long queries screen.");
+    if (tab->current_context != pg_stat_activity_long) {
+        wprintw(window, "Terminate or cancel backend allowed in long queries tab.");
         return;
     } 
 
@@ -1085,25 +1085,25 @@ void signal_single_backend(WINDOW * window, struct screen_s *screen, PGconn * co
  * Print current mask for group cancel/terminate.
  ****************************************************************************
  */
-void get_statemask(WINDOW * window, struct screen_s * screen)
+void get_statemask(WINDOW * window, struct tab_s * tab)
 {
-    if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "Current mask can viewed in activity screen.");
+    if (tab->current_context != pg_stat_activity_long) {
+        wprintw(window, "Current mask can viewed in activity tab.");
         return;
     }
 
     wprintw(window, "Mask: ");
-    if (screen->signal_options == 0)
+    if (tab->signal_options == 0)
         wprintw(window, "empty");
-    if (screen->signal_options & GROUP_ACTIVE)
+    if (tab->signal_options & GROUP_ACTIVE)
         wprintw(window, "active ");
-    if (screen->signal_options & GROUP_IDLE)
+    if (tab->signal_options & GROUP_IDLE)
         wprintw(window, "idle ");
-    if (screen->signal_options & GROUP_IDLE_IN_XACT)
+    if (tab->signal_options & GROUP_IDLE_IN_XACT)
         wprintw(window, "idle in xact ");
-    if (screen->signal_options & GROUP_WAITING)
+    if (tab->signal_options & GROUP_WAITING)
         wprintw(window, "waiting ");
-    if (screen->signal_options & GROUP_OTHER)
+    if (tab->signal_options & GROUP_OTHER)
         wprintw(window, "other ");
 }
 
@@ -1112,10 +1112,10 @@ void get_statemask(WINDOW * window, struct screen_s * screen)
  * Set new state mask for group cancel/terminate.
  ****************************************************************************
  */
-void set_statemask(WINDOW * window, struct screen_s * screen)
+void set_statemask(WINDOW * window, struct tab_s * tab)
 {
-    if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "State mask setup allowed in activity screen.");
+    if (tab->current_context != pg_stat_activity_long) {
+        wprintw(window, "State mask setup allowed in activity tab.");
         return;
     } 
 
@@ -1154,27 +1154,27 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
         ;			/* do nothing here, info message will be printed by cmd_readline */
     } else {                                                /* user enter string with valid length */
         /* reset previous mask */
-        screen->signal_options = 0;
+        tab->signal_options = 0;
         for (i = 0; i < strlen(mask); i++) {
             switch (mask[i]) {
                 case 'a':
-                    screen->signal_options |= GROUP_ACTIVE;
+                    tab->signal_options |= GROUP_ACTIVE;
                     break;
                 case 'i':
-                    screen->signal_options |= GROUP_IDLE;
+                    tab->signal_options |= GROUP_IDLE;
                     break;
                 case 'x':
-                    screen->signal_options |= GROUP_IDLE_IN_XACT;
+                    tab->signal_options |= GROUP_IDLE_IN_XACT;
                     break;
                 case 'w':
-                    screen->signal_options |= GROUP_WAITING;
+                    tab->signal_options |= GROUP_WAITING;
                     break;
                 case 'o':
-                    screen->signal_options |= GROUP_OTHER;
+                    tab->signal_options |= GROUP_OTHER;
                     break;
             }
         }
-        get_statemask(window, screen);
+        get_statemask(window, tab);
     }
 }
 
@@ -1183,13 +1183,13 @@ void set_statemask(WINDOW * window, struct screen_s * screen)
  * Cancel queries or terminate postgres backends using state mask.
  ****************************************************************************
  */
-void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * conn, bool do_terminate)
+void signal_group_backend(WINDOW * window, struct tab_s *tab, PGconn * conn, bool do_terminate)
 {
-    if (screen->current_context != pg_stat_activity_long) {
-        wprintw(window, "Terminate or cancel backend allowed in long queries screen.");
+    if (tab->current_context != pg_stat_activity_long) {
+        wprintw(window, "Terminate or cancel backend allowed in long queries tab.");
         return;
     } 
-    if (screen->signal_options == 0) {
+    if (tab->signal_options == 0) {
         wprintw(window, "Do nothing. Mask not specified.");
         return;
     }
@@ -1206,15 +1206,15 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
     else
         actions_idx = 1;		/* cancel */
     
-    if (screen->signal_options & GROUP_ACTIVE)
+    if (tab->signal_options & GROUP_ACTIVE)
         strncat(mask, "a", sizeof(mask));
-    if (screen->signal_options & GROUP_IDLE)
+    if (tab->signal_options & GROUP_IDLE)
         strncat(mask, "i", sizeof(mask));
-    if (screen->signal_options & GROUP_IDLE_IN_XACT)
+    if (tab->signal_options & GROUP_IDLE_IN_XACT)
         strncat(mask, "x", sizeof(mask));
-    if (screen->signal_options & GROUP_WAITING)
+    if (tab->signal_options & GROUP_WAITING)
         strncat(mask, "w", sizeof(mask));
-    if (screen->signal_options & GROUP_OTHER)
+    if (tab->signal_options & GROUP_OTHER)
         strncat(mask, "o", sizeof(mask));
 
     for (i = 0; i < strlen(mask); i++) {
@@ -1229,7 +1229,7 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
                 snprintf(state, sizeof(state), "state IN ('idle in transaction (aborted)', 'idle in transaction')");
                 break;
             case 'w':
-		if (atoi(screen->pg_special.pg_version_num) < PG96)
+		if (atoi(tab->pg_special.pg_version_num) < PG96)
 	            snprintf(state, sizeof(state), "waiting");
 		else 
 	            snprintf(state, sizeof(state), "wait_event IS NOT NULL OR wait_event_type IS NOT NULL");
@@ -1243,8 +1243,8 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
 	snprintf(query, sizeof(query), "%s%s%s%s%s%s%s%s%s",
 		 PG_SIG_GROUP_BACKEND_P1, actions[actions_idx],
 		 PG_SIG_GROUP_BACKEND_P2, state,
-		 PG_SIG_GROUP_BACKEND_P3, screen->pg_stat_activity_min_age,
-		 PG_SIG_GROUP_BACKEND_P4, screen->pg_stat_activity_min_age,
+		 PG_SIG_GROUP_BACKEND_P3, tab->pg_stat_activity_min_age,
+		 PG_SIG_GROUP_BACKEND_P4, tab->pg_stat_activity_min_age,
 		 PG_SIG_GROUP_BACKEND_P5);
         
         char errmsg[ERRSIZE];
@@ -1261,10 +1261,10 @@ void signal_group_backend(WINDOW * window, struct screen_s *screen, PGconn * con
 
 /*
  ****************************************************************************
- * Start psql using current screen connection options.
+ * Start psql using current tab connection options.
  ****************************************************************************
  */
-void start_psql(WINDOW * window, struct screen_s * screen)
+void start_psql(WINDOW * window, struct tab_s * tab)
 {
     pid_t pid;
     char psql[XS_BUF_LEN] = DEFAULT_PSQL;
@@ -1277,10 +1277,10 @@ void start_psql(WINDOW * window, struct screen_s * screen)
     pid = fork();                   /* start child */
     if (pid == 0) {
         execlp(psql, psql,
-                "-h", screen->host,
-                "-p", screen->port,
-                "-U", screen->user,
-                "-d", screen->dbname,
+                "-h", tab->host,
+                "-p", tab->port,
+                "-U", tab->user,
+                "-d", tab->dbname,
                 NULL);
         exit(EXIT_SUCCESS);         /* finish child */
     } else if (pid < 0) {
@@ -1383,10 +1383,10 @@ void do_noop(WINDOW * window, unsigned long interval)
  * Toggle on/off displaying content from system views
  ****************************************************************************
  */
-void system_view_toggle(WINDOW * window, struct screen_s * screen, bool * first_iter)
+void system_view_toggle(WINDOW * window, struct tab_s * tab, bool * first_iter)
 {
-    screen->pg_stat_sys ^= 1;
-    if (screen->pg_stat_sys)
+    tab->pg_stat_sys ^= 1;
+    if (tab->pg_stat_sys)
         wprintw(window, "Show system tables: on");
     else
         wprintw(window, "Show system tables: off");
@@ -1490,67 +1490,67 @@ void get_logfile_path(char * path, PGconn * conn)
  * Aux stats managing. Open iostat/nicstat/logtail.
  ****************************************************************************
  */
-void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * screen, PGconn * conn, unsigned int subscreen)
+void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn * conn, unsigned int subtab)
 {
-    if (!screen->subscreen_enabled) {
-        /* open subscreen */
-        switch (subscreen) {
-            case SUBSCREEN_LOGTAIL:
-                if (check_pg_listen_addr(screen, conn)) {
+    if (!tab->subtab_enabled) {
+        /* open subtab */
+        switch (subtab) {
+            case SUBTAB_LOGTAIL:
+                if (check_pg_listen_addr(tab, conn)) {
                     *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                     wrefresh(window);
                     /* get logfile path  */
-                    get_logfile_path(screen->log_path, conn);
+                    get_logfile_path(tab->log_path, conn);
     
-                    if (strlen(screen->log_path) == 0) {
+                    if (strlen(tab->log_path) == 0) {
                         wprintw(window, "Do nothing. Unable to determine log filename or no access permissions.");
                         return;
                     }
-                    if ((screen->log_fd = open(screen->log_path, O_RDONLY)) == -1 ) {
-                        wprintw(window, "Do nothing. Failed to open %s", screen->log_path);
+                    if ((tab->log_fd = open(tab->log_path, O_RDONLY)) == -1 ) {
+                        wprintw(window, "Do nothing. Failed to open %s", tab->log_path);
                         return;
                     }
-                    screen->subscreen = SUBSCREEN_LOGTAIL;
-                    screen->subscreen_enabled = true;
-                    wprintw(window, "Open postgresql log: %s", screen->log_path);
+                    tab->subtab = SUBTAB_LOGTAIL;
+                    tab->subtab_enabled = true;
+                    wprintw(window, "Open postgresql log: %s", tab->log_path);
                     return;
                 } else {
                     wprintw(window, "Do nothing. Log file view is not supported for remote hosts.");
                     return;
                 }
                 break;
-            case SUBSCREEN_IOSTAT:
+            case SUBTAB_IOSTAT:
                 if (access(DISKSTATS_FILE, R_OK) == -1) {
                     wprintw(window, "Do nothing. No access to %s.", DISKSTATS_FILE);
                     return;
                 }
                 wprintw(window, "Show iostat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
-                screen->subscreen = SUBSCREEN_IOSTAT;
-                screen->subscreen_enabled = true;
+                tab->subtab = SUBTAB_IOSTAT;
+                tab->subtab_enabled = true;
                 break;
-            case SUBSCREEN_NICSTAT:
+            case SUBTAB_NICSTAT:
                 if (access(NETDEV_FILE, R_OK) == -1) {
                     wprintw(window, "Do nothing. No access to %s.", NETDEV_FILE);
                     return;
                 }
                 wprintw(window, "Show nicstat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
-                screen->subscreen = SUBSCREEN_NICSTAT;
-                screen->subscreen_enabled = true;
+                tab->subtab = SUBTAB_NICSTAT;
+                tab->subtab_enabled = true;
                 break;
-            case SUBSCREEN_NONE:
-                screen->subscreen = SUBSCREEN_NONE;
-                screen->subscreen_enabled = false;
+            case SUBTAB_NONE:
+                tab->subtab = SUBTAB_NONE;
+                tab->subtab_enabled = false;
         }
     } else {
-        /* close subscreen */
+        /* close subtab */
         wclear(*w_sub);
         wrefresh(*w_sub);
-        if (screen->log_fd > 0)
-            close(screen->log_fd);
-        screen->subscreen = SUBSCREEN_NONE;
-        screen->subscreen_enabled = false;
+        if (tab->log_fd > 0)
+            close(tab->log_fd);
+        tab->subtab = SUBTAB_NONE;
+        tab->subtab_enabled = false;
         return;
     }
 }
@@ -1560,7 +1560,7 @@ void subscreen_process(WINDOW * window, WINDOW ** w_sub, struct screen_s * scree
  * Tail postgresql log in aux stat area.
  ****************************************************************************
  */
-void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn * conn)
+void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * conn)
 {
     unsigned int x, y;                                          /* window coordinates */
     unsigned int n_lines = 1, n_cols = 1;                       /* number of rows and columns for printing */
@@ -1573,33 +1573,33 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
     char *nl_ptr;                                               /* in-buffer newline pointer */
 
     getbegyx(window, y, x);                                     /* get window coordinates */
-    /* calculate number of rows for log tailing, 2 is the number of lines for screen header */
+    /* calculate number of rows for log tailing, 2 is the number of lines for tab header */
     n_lines = LINES - y - 2;                                    /* calculate number of rows for log tailing */
     n_cols = COLS - x - 1;                                      /* calculate number of chars in row for cutting multiline log entries */
     wclear(window);                                             /* clear log window */
 
-    if ((fstat(screen->log_fd, &stats)) == -1) {
-	wprintw(w_cmd, "Failed to stat %s", screen->log_path);
+    if ((fstat(tab->log_fd, &stats)) == -1) {
+	wprintw(w_cmd, "Failed to stat %s", tab->log_path);
 	wrefresh(w_cmd);
 	return;
     }
     if (S_ISREG (stats.st_mode) && stats.st_size != 0) {        /* log should be a non-empty regular file */
-        end_pos = lseek(screen->log_fd, 0, SEEK_END);           /* get end of file position */
+        end_pos = lseek(tab->log_fd, 0, SEEK_END);           /* get end of file position */
         pos = end_pos;                                          /* set position to the end of file */
         bytes_read = XL_BUF_LEN;                                /* read with 8KB block */
         if (end_pos < XL_BUF_LEN)                               /* if end file pos less than buffer */
             pos = 0;                                            /* than set read position to the begin of file */
         else                                                    /* if end file pos more than buffer */
             pos = pos - bytes_read;                             /* than set read position into end of file minus buffer size */
-        lseek(screen->log_fd, pos, SEEK_SET);                       /* set determined position in file */
-        bytes_read = read(screen->log_fd, buffer, bytes_read);      /* read file to the buffer */
+        lseek(tab->log_fd, pos, SEEK_SET);                       /* set determined position in file */
+        bytes_read = read(tab->log_fd, buffer, bytes_read);      /* read file to the buffer */
 
         len = strlen(buffer);                                   /* determine the buffer length */
         scan_pos = len;                                         /* set in-buffer scan position equal buffer length */
 
         /* print header */
         wattron(window, A_BOLD);
-        wprintw(window, "\ntail %s\n", screen->log_path);
+        wprintw(window, "\ntail %s\n", tab->log_path);
         wattroff(window, A_BOLD);
 
         for (i = 0; i < len; i++)                               /* get number of newlines in the buffer */
@@ -1626,7 +1626,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
             n_lines--;                                          /* after each iteration decrement the line counter */
         } while (n_lines != 0);                                 /* stop cycle when line counter equal zero - we found need amount of lines */
 
-        /* now we should cut multiline log entries to screen length */
+        /* now we should cut multiline log entries to tab length */
         char str[n_cols];                                       /* use var for one line */
         char tmp[XL_BUF_LEN];                                   /* tmp var for line from buffer */
         do {                                                    /* scan buffer from begin */
@@ -1638,12 +1638,12 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
                     continue;                                   /* start next iteration */
                 }                                                       /* at this place we have sufficient number of lines for tail */
                 snprintf(tmp, nl_ptr - buffer + 1, "%s", buffer);       /* copy log line into temp buffer */
-                if (strlen(tmp) > n_cols) {                             /* if line longer than screen size (multiline), truncate line to screen size */
+                if (strlen(tmp) > n_cols) {                             /* if line longer than tab size (multiline), truncate line to tab size */
                     snprintf(str, n_cols - 4, "%s", buffer);
                 } else {                                                /* if line have normal size, copy line as is */
                     snprintf(str, strlen(tmp) + 1, "%s", buffer);
                 }
-                wprintw(window, "%s\n", str);                           /* print line to log screen */
+                wprintw(window, "%s\n", str);                           /* print line to log tab */
                 snprintf(buffer, sizeof(buffer), "%s", nl_ptr + 1);     /* decrease buffer, cut printed line */
             } else {
                 break;                                                  /* if \n not found, finish work */
@@ -1652,7 +1652,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
         } while (n_lines != n_lines_save);                              /* print lines until newline counter not equal saved newline counter */
     } else {
         wprintw(w_cmd, "Do nothing. Log is not a regular file or empty.");     /* if file not regular or empty */
-        subscreen_process(w_cmd, &window, screen, conn, SUBSCREEN_NONE);    /* close log file and log screen */
+        subtab_process(w_cmd, &window, tab, conn, SUBTAB_NONE);    /* close log file and log tab */
     }
     
     wrefresh(window);
@@ -1663,14 +1663,14 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct screen_s * screen, PGconn
  * Open postrges log in $PAGER.
  ****************************************************************************
  */
-void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
+void show_full_log(WINDOW * window, struct tab_s * tab, PGconn * conn)
 {
     pid_t pid;
 
-    if (check_pg_listen_addr(screen, conn)) {
+    if (check_pg_listen_addr(tab, conn)) {
         /* get logfile path  */
-        get_logfile_path(screen->log_path, conn);
-        if (strlen(screen->log_path) != 0) {
+        get_logfile_path(tab->log_path, conn);
+        if (strlen(tab->log_path) != 0) {
             /* escape from ncurses mode */
             refresh();
             endwin();
@@ -1682,10 +1682,10 @@ void show_full_log(WINDOW * window, struct screen_s * screen, PGconn * conn)
                     snprintf(pager, sizeof(pager), "%s", getenv("PAGER"));
                 else
                     snprintf(pager, sizeof(pager), "%s", DEFAULT_PAGER);
-                execlp(pager, pager, screen->log_path, NULL);
+                execlp(pager, pager, tab->log_path, NULL);
                 exit(EXIT_SUCCESS);
             } else if (pid < 0) {
-                wprintw(window, "ERROR: fork failed, can't open %s.", screen->log_path);
+                wprintw(window, "ERROR: fork failed, can't open %s.", tab->log_path);
                 return;
             } else if (waitpid(pid, NULL, 0) != pid) {
                 wprintw(window, "ERROR: waitpid failed.");
@@ -1727,13 +1727,13 @@ void pg_stat_reset(WINDOW * window, PGconn * conn, bool * reseted)
  * Get query text using pseudo pg_stat_statements.queryid.
  ****************************************************************************
  */
-void get_query_by_id(WINDOW * window, struct screen_s * screen, PGconn * conn)
+void get_query_by_id(WINDOW * window, struct tab_s * tab, PGconn * conn)
 {
-    if (screen->current_context != pg_stat_statements_timing
-            && screen->current_context != pg_stat_statements_general
-            && screen->current_context != pg_stat_statements_io
-            && screen->current_context != pg_stat_statements_temp
-            && screen->current_context != pg_stat_statements_local) {
+    if (tab->current_context != pg_stat_statements_timing
+            && tab->current_context != pg_stat_statements_general
+            && tab->current_context != pg_stat_statements_io
+            && tab->current_context != pg_stat_statements_temp
+            && tab->current_context != pg_stat_statements_local) {
         wprintw(window, "Get query text is not allowed here.");
         return;
     }
@@ -1826,11 +1826,11 @@ query text (id: %s):\n%s",
 
 /*
  ****************************************************************************
- * Print internal help about color-change screen.
+ * Print internal help about color-change tab.
  * @ws_color            Sysstat window current color.
  * @wc_color            Cmdline window current color.
  * @wa_color            Database answer window current color.
- * @wl_color            Subscreen window current color.
+ * @wl_color            Subtab window current color.
  ****************************************************************************
  */
 void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_color,
@@ -1864,7 +1864,7 @@ void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_colo
     wattroff(w, COLOR_PAIR(*wl_color));
 
     wprintw(w, "1) Select a target as an upper case letter, current target is  %c :\n\
-\tS = Summary Data, M = Messages/Prompt, P = PostgreSQL Information, L = Additional screen\n", target);
+\tS = Summary Data, M = Messages/Prompt, P = PostgreSQL Information, L = Additional tab\n", target);
     wprintw(w, "2) Select a color as a number, current color is  %i :\n\
 \t0 = black,  1 = red,      2 = green,  3 = yellow,\n\
 \t4 = blue,   5 = magenta,  6 = cyan,   7 = white\n", *target_color);
@@ -1880,7 +1880,7 @@ void draw_color_help(WINDOW * w, unsigned int * ws_color, unsigned int * wc_colo
  * @ws_color            Sysstat window current color.
  * @wc_color            Cmdline window current color.
  * @wa_color            Database answer window current color.
- * @wl_color            Subscreen window current color.
+ * @wl_color            Subtab window current color.
  ****************************************************************************
  */
 void change_colors(unsigned int * ws_color, unsigned int * wc_color, unsigned int * wa_color, unsigned int * wl_color)

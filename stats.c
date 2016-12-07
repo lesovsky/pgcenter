@@ -513,7 +513,7 @@ void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
     
     /*
      * If /proc/diskstats read failed, fire up repaint flag.
-     * Next when subscreen repainting fails, subscreen will be closed.
+     * Next when subtab repainting fails, subtab will be closed.
      */
     if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
         wclear(window);
@@ -620,7 +620,7 @@ void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repai
     
     /*
      * If read /proc/net/dev failed, fire up repaint flag.
-     * Next when subscreen repainting fails, subscreen will be closed.
+     * Next when subtab repainting fails, subtab will be closed.
      */
     if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
         wclear(window);
