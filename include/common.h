@@ -37,9 +37,11 @@
 #define XS_BUF_LEN	16
 #define S_BUF_LEN	64
 #define M_BUF_LEN	128
-#define L_BUF_LEN	1024
-#define X_BUF_LEN	4096
-#define XL_BUF_LEN	BUFSIZ
+#define L_BUF_LEN	256
+#define X_BUF_LEN	512
+#define XL_BUF_LEN	1024
+#define XXL_BUF_LEN	4096
+#define XXXL_BUF_LEN	BUFSIZ
 
 #define ERRSIZE             128
 #define MAX_TABS            8

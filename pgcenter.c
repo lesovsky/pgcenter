@@ -154,7 +154,7 @@ char *** init_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
                   mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
               }
             } else {
-              if ((arr[i][j] = malloc(sizeof(char) * L_BUF_LEN)) == NULL) {
+              if ((arr[i][j] = malloc(sizeof(char) * XL_BUF_LEN)) == NULL) {
                   mreport(true, msg_fatal, "FATAL: malloc for cols stats failed.\n");
               }
             }
@@ -420,7 +420,7 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct tab_s * tabs[],
     FILE *fp;
     static char pgcenterrc_path[PATH_MAX];
     struct stat statbuf;
-    char strbuf[XL_BUF_LEN];
+    char strbuf[XXXL_BUF_LEN];
     unsigned int i = pos;
     const struct passwd *pw = getpwuid(getuid());
 
@@ -443,7 +443,7 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct tab_s * tabs[],
 
     /* read connections settings from .pgcenterrc */
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
-        while ((fgets(strbuf, XL_BUF_LEN, fp) != 0) && (i < MAX_TABS)) {
+        while ((fgets(strbuf, XXXL_BUF_LEN, fp) != 0) && (i < MAX_TABS)) {
             sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
                         tabs[i]->host,	tabs[i]->port,
                         tabs[i]->dbname,	tabs[i]->user,
@@ -688,9 +688,9 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct tab_s * t
     for (i = 0; i < n_rows; i++) {
         for (j = 0; j < n_cols; j++)
             if (j < min || j > max)
-                snprintf(res_arr[i][j], XL_BUF_LEN, "%s", c_arr[i][j]);     /* copy unsortable values as is */
+                snprintf(res_arr[i][j], XXXL_BUF_LEN, "%s", c_arr[i][j]);     /* copy unsortable values as is */
             else {
-                snprintf(res_arr[i][j], XL_BUF_LEN, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
+                snprintf(res_arr[i][j], XXXL_BUF_LEN, "%lli", (atoll(c_arr[i][j]) - atoll(p_arr[i][j])) / divisor);
             }
     }
 }
@@ -750,7 +750,7 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
             if (j != n_cols - 1)
               snprintf(arr[i][j], S_BUF_LEN, "%s", PQgetvalue(res, i, j));
             else
-              snprintf(arr[i][j], L_BUF_LEN, "%s", PQgetvalue(res, i, j));
+              snprintf(arr[i][j], XL_BUF_LEN, "%s", PQgetvalue(res, i, j));
         }
 }
 

@@ -1573,7 +1573,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * con
     off_t end_pos;                                              /* end of file position */
     off_t pos;                                                  /* from this position start read of file */
     size_t bytes_read;                                          /* bytes read from file to buffer */
-    char buffer[XL_BUF_LEN] = "";                               /* init empty buffer */
+    char buffer[XXXL_BUF_LEN] = "";                               /* init empty buffer */
     unsigned int i, nl_count = 0, len, scan_pos;                /* iterator, newline counter, buffer length, in-buffer scan position */
     char *nl_ptr;                                               /* in-buffer newline pointer */
 
@@ -1591,8 +1591,8 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * con
     if (S_ISREG (stats.st_mode) && stats.st_size != 0) {        /* log should be a non-empty regular file */
         end_pos = lseek(tab->log_fd, 0, SEEK_END);           /* get end of file position */
         pos = end_pos;                                          /* set position to the end of file */
-        bytes_read = XL_BUF_LEN;                                /* read with 8KB block */
-        if (end_pos < XL_BUF_LEN)                               /* if end file pos less than buffer */
+        bytes_read = XXXL_BUF_LEN;                                /* read with 8KB block */
+        if (end_pos < XXXL_BUF_LEN)                               /* if end file pos less than buffer */
             pos = 0;                                            /* than set read position to the begin of file */
         else                                                    /* if end file pos more than buffer */
             pos = pos - bytes_read;                             /* than set read position into end of file minus buffer size */
@@ -1633,7 +1633,7 @@ void print_log(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * con
 
         /* now we should cut multiline log entries to tab length */
         char str[n_cols];                                       /* use var for one line */
-        char tmp[XL_BUF_LEN];                                   /* tmp var for line from buffer */
+        char tmp[XXXL_BUF_LEN];                                   /* tmp var for line from buffer */
         do {                                                    /* scan buffer from begin */
             nl_ptr = strstr(buffer, "\n");                      /* find \n in buffer */
             if (nl_ptr != NULL) {                               /* if found */

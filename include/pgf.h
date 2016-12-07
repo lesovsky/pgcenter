@@ -14,7 +14,7 @@
 #include "queries.h"
 #include "libpq-fe.h"
 
-#define QUERY_MAXLEN		XL_BUF_LEN
+#define QUERY_MAXLEN		XXXL_BUF_LEN
 #define CONNINFO_TITLE_LEN	48
 
 /* 

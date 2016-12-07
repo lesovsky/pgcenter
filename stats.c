@@ -248,7 +248,7 @@ void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
     FILE *fp;
     struct cpu_s *st_cpu_i;
     struct cpu_s sc;
-    char line[XL_BUF_LEN];
+    char line[XXXL_BUF_LEN];
     unsigned int proc_nb;
 
     if ((fp = fopen(STAT_FILE, "r")) == NULL) {
@@ -351,12 +351,12 @@ void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
  */
 void read_mem_stat(struct mem_s *st_mem_short) {
     FILE *mem_fp;
-    char buffer[XL_BUF_LEN];
+    char buffer[XXXL_BUF_LEN];
     char key[M_BUF_LEN];
     unsigned long long value;
     
     if ((mem_fp = fopen(MEMINFO_FILE, "r")) != NULL) {
-        while (fgets(buffer, XL_BUF_LEN, mem_fp) != NULL) {
+        while (fgets(buffer, XXXL_BUF_LEN, mem_fp) != NULL) {
             sscanf(buffer, "%s %llu", key, &value);
             if (!strcmp(key,"MemTotal:"))
                 st_mem_short->mem_total = value / 1024;
@@ -505,7 +505,7 @@ void get_time(char * strtime)
 void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
 {
     FILE *fp;
-    char line[M_BUF_LEN];
+    char line[L_BUF_LEN];
 
     unsigned int major, minor;
     char devname[S_BUF_LEN];
