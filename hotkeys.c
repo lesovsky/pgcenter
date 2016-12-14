@@ -1872,8 +1872,8 @@ void draw_color_help(WINDOW * w,
     wprintw(w, "1) Select a target as an upper case letter, current target is  %c :\n\
 \tS = Summary Data, M = Messages/Prompt, P = PostgreSQL Information, L = Additional tab\n", target);
     wprintw(w, "2) Select a color as a number, current color is  %i :\n\
-\t0 = black,  1 = red,      2 = green,  3 = yellow,\n\
-\t4 = blue,   5 = magenta,  6 = cyan,   7 = white\n", *target_color);
+\t0 = default,  1 = black,    2 = red,    3 = green,  4 = yellow,\n\
+\t5 = blue,     6 = magenta,  7 = cyan,   8 = white\n", *target_color);
     wprintw(w, "3) Then use keys: 'Esc' to abort changes, 'Enter' to commit and end.\n");
 
     touchwin(w);
@@ -1928,7 +1928,7 @@ void change_colors(unsigned long long int * ws_color, unsigned long long int * w
                 target_color = wl_color;
                 break;
             case '0': case '1': case '2': case '3':
-            case '4': case '5': case '6': case '7':
+            case '4': case '5': case '6': case '7': case '8':
                 *target_color = ch - '0';
                 break;
             default:

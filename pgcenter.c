@@ -189,20 +189,21 @@ char *** free_array(char ***arr, unsigned int n_rows, unsigned int n_cols)
 void init_colors(unsigned long long int * ws_color, unsigned long long int * wc_color,
         unsigned long long int * wa_color, unsigned long long int * wl_color)
 {
+    use_default_colors();
     start_color();
-    init_pair(0, COLOR_BLACK,   COLOR_BLACK);
-    init_pair(1, COLOR_RED,     COLOR_BLACK);
-    init_pair(2, COLOR_GREEN,   COLOR_BLACK);
-    init_pair(3, COLOR_YELLOW,  COLOR_BLACK);
-    init_pair(4, COLOR_BLUE,    COLOR_BLACK);
-    init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
-    init_pair(6, COLOR_CYAN,    COLOR_BLACK);
-    init_pair(7, COLOR_WHITE,   COLOR_BLACK);
+    init_pair(1, COLOR_BLACK,   -1);
+    init_pair(2, COLOR_RED,     -1);
+    init_pair(3, COLOR_GREEN,   -1);
+    init_pair(4, COLOR_YELLOW,  -1);
+    init_pair(5, COLOR_BLUE,    -1);
+    init_pair(6, COLOR_MAGENTA, -1);
+    init_pair(7, COLOR_CYAN,    -1);
+    init_pair(8, COLOR_WHITE,   -1);
     /* set white as default */
-    *ws_color = 7;
-    *wc_color = 7;
-    *wa_color = 7;
-    *wl_color = 7;
+    *ws_color = 0;
+    *wc_color = 0;
+    *wa_color = 0;
+    *wl_color = 0;
 }
 
 /*
