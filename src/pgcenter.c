@@ -877,8 +877,7 @@ void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval)
  */
 void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows, unsigned int n_cols, struct tab_s * tab)
 {
-    unsigned int i, j, x;
-    unsigned int winsz_x, winsz_y;
+    unsigned int winsz_x, winsz_y, i, j, x;
     struct colAttrs *columns = init_colattrs(n_cols);
     struct context_s ctx;
     bool print = true, filter = false;

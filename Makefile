@@ -1,7 +1,8 @@
 PROGRAM_NAME = pgcenter
-SOURCES = pgcenter.c common.c stats.c pgf.c hotkeys.c
+SOURCES = ./src/*.c
 CC ?= gcc
-CFLAGS = -g -std=gnu99 -Wall -pedantic
+CFLAGS = -std=gnu99 -pedantic -Wall -Wextra -Wfloat-equal
+CFLAGS_DEV = -g
 PREFIX ?= /usr
 INCLUDEDIR =
 LIBDIR =
@@ -55,12 +56,15 @@ endif
 LIBS = $(PGLIBS) $(NLIBS)
 DESTDIR ?=
 
-.PHONY: all clean install install-man uninstall
+.PHONY: all devel clean install install-man uninstall
 
 all: pgcenter
 
 pgcenter:
 	$(CC) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(SOURCES) $(LIBS) -o $(PROGRAM_NAME)
+
+devel:
+	$(CC) $(CFLAGS_DEV) $(CFLAGS) $(INCLUDEDIR) $(LIBDIR) $(SOURCES) $(LIBS) -o $(PROGRAM_NAME)
 
 clean:
 	rm -f $(PROGRAM_NAME)

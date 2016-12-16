@@ -107,7 +107,7 @@ void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], 
  */
 void get_HZ(void)
 {
-    unsigned long ticks;
+    long ticks;
     if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
         mreport(false, msg_error, "ERROR: sysconf failure.\n");
             

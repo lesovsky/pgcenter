@@ -126,7 +126,7 @@ struct pg_special_s
 struct context_s
 {
     enum context context;
-    int order_key;
+    unsigned int order_key;
     bool order_desc;
     char fstrings[MAX_COLS][S_BUF_LEN];         /* filtering patterns */
 };

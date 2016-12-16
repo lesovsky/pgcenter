@@ -171,7 +171,7 @@ void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter)
                 }
             } else {
                 /* switch from first to last column */
-                if (--tab->context_list[i].order_key < 0) {
+                if (tab->context_list[i].order_key-- == 0) {
                     tab->context_list[i].order_key = max;
                 }
             }
