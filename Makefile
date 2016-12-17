@@ -9,28 +9,31 @@ LIBDIR =
 MANDIR = /usr/share/man/man1
 
 # PostgreSQL stuff
-PGCONFIG ?= pg_config
+RHEL_PGPATH = $(shell find /usr -maxdepth 1 -type d -name "pgsql-*" | sort -V |tail -n 1)
+RHEL_PGBINDIR = $(RHEL_PGPATH)/bin
+PATH := $(PATH):$(RHEL_PGBINDIR)
+PGCONFIG ?= $(shell env PATH=$(PATH) which pg_config)
 PGLIBDIR = $(shell $(PGCONFIG) --libdir)
 PGINCLUDEDIR = $(shell $(PGCONFIG) --includedir)
 PGLIBS = -lpq
 ifneq ($(PGLIBDIR),)
-	LIBDIR += -L$(PGLIBDIR)
+        LIBDIR += -L$(PGLIBDIR)
 endif
 ifneq ($(PGINCLUDEDIR),)
-	INCLUDEDIR += -I$(PGINCLUDEDIR)
+        INCLUDEDIR += -I$(PGINCLUDEDIR)
 endif
 
 # Ncurses stuff
 ifndef NCONFIG
-	ifeq ($(shell sh -c 'which ncurses5-config>/dev/null 2>/dev/null && echo y'), y)
-		NCONFIG = ncurses5-config
-	else ifeq ($(shell sh -c 'which ncursesw5-config>/dev/null 2>/dev/null && echo y'), y)
-		NCONFIG = ncursesw5-config
-	else ifeq ($(shell sh -c 'which ncurses6-config>/dev/null 2>/dev/null && echo y'), y)
-		NCONFIG = ncurses6-config
-	else ifeq ($(shell sh -c 'which ncursesw6-config>/dev/null 2>/dev/null && echo y'), y)
-		NCONFIG = ncursesw6-config
-	endif
+        ifeq ($(shell sh -c 'which ncurses5-config>/dev/null 2>/dev/null && echo y'), y)
+                NCONFIG = ncurses5-config
+        else ifeq ($(shell sh -c 'which ncursesw5-config>/dev/null 2>/dev/null && echo y'), y)
+                NCONFIG = ncursesw5-config
+        else ifeq ($(shell sh -c 'which ncurses6-config>/dev/null 2>/dev/null && echo y'), y)
+                NCONFIG = ncurses6-config
+        else ifeq ($(shell sh -c 'which ncursesw6-config>/dev/null 2>/dev/null && echo y'), y)
+                NCONFIG = ncursesw6-config
+        endif
 endif
 
 ifdef NCONFIG
@@ -38,18 +41,18 @@ ifdef NCONFIG
     NINCLUDEDIR = $(shell $(NCONFIG) --includedir)
     NLIBS = $(shell $(NCONFIG) --libs) -lmenu
 else
-	NLIBS = -lncurses -lmenu
+        NLIBS = -lncurses -lmenu
 endif
 
 ifneq ($(NLIBDIR),)
-	LIBDIR += -L$(NLIBDIR)
+        LIBDIR += -L$(NLIBDIR)
 endif
 ifneq ($(NINCLUDEDIR),)
-	ifeq "$(wildcard $(NINCLUDEDIR)/menu.h )" ""
-		ifneq "$(wildcard $(NINCLUDEDIR)/ncurses )" ""
-			INCLUDEDIR += -I$(NINCLUDEDIR)/ncurses
-		endif
-	endif
+        ifeq "$(wildcard $(NINCLUDEDIR)/menu.h )" ""
+                ifneq "$(wildcard $(NINCLUDEDIR)/ncurses )" ""
+                        INCLUDEDIR += -I$(NINCLUDEDIR)/ncurses
+                endif
+        endif
 endif
 
 # General stuff

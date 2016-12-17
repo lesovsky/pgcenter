@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add handling for RHEL-specific postgres paths.
   * move the sources into src/ dir.
   * add -Wextra, -Wfloat-equal into Makefile and fix collateral warnings.
   * refactoring internal color management.
