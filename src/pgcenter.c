@@ -794,10 +794,10 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[], struct tab_s * tab
 
     uptime0[curr] = 0;
     if (tab->conn_local) {
-        read_uptime(&(uptime0[curr]));
+        read_uptime(&(uptime0[curr]), tab);
         read_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]));
     } else {
-        read_remote_uptime(&(uptime0[curr]), conn);
+        read_remote_uptime(&(uptime0[curr]), tab, conn);
         read_remote_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]), conn);
     }
     itv = get_interval(uptime[!curr], uptime[curr]);
@@ -965,7 +965,7 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
  * aux-stats area.
  ****************************************************************************
  */
-void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct iodata_s *c_ios[],
         struct iodata_s *p_ios[], unsigned int bdev, bool * repaint)
 {
     /* if number of devices is changed, we should realloc structs and repaint subtab */
@@ -979,11 +979,13 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
     static unsigned long long itv;
     static unsigned int curr = 1;
     
-    uptime0[curr] = 0;
-    read_uptime(&(uptime0[curr]));
-    read_diskstats(window, c_ios, repaint);
+    if (tab->conn_local) {
+        uptime0[curr] = 0;
+        read_uptime(&(uptime0[curr]), tab);
+        read_diskstats(window, c_ios, repaint);
+    }
     itv = get_interval(uptime0[!curr], uptime0[curr]);
-    write_iostat(window, c_ios, p_ios, bdev, itv);
+    write_iostat(window, c_ios, p_ios, bdev, itv, tab->sys_special.sys_hz);
 
     /* save current stats snapshot */
     replace_iodata(c_ios, p_ios, bdev);
@@ -996,7 +998,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
  * out stats to the aux-stats area.
  ****************************************************************************
  */
-void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
+void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct nicdata_s *c_nicd[],
         struct nicdata_s *p_nicd[], unsigned int idev, bool * repaint)
 {
     /* if number of devices is changed, we should realloc structs and repaint subtab */
@@ -1012,9 +1014,11 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
     unsigned int i = 0;
     static bool first = true;
 
-    uptime0[curr] = 0;
-    read_uptime(&(uptime0[curr]));
-    read_proc_net_dev(window, c_nicd, repaint);
+    if (tab->conn_local) {
+        uptime0[curr] = 0;
+        read_uptime(&(uptime0[curr]), tab);
+        read_proc_net_dev(window, c_nicd, repaint);
+    }
     
     if (first) {
         for (i = 0; i < idev; i++)
@@ -1023,7 +1027,7 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
     }
 
     itv = get_interval(uptime0[!curr], uptime0[curr]);
-    write_nicstats(window, c_nicd, p_nicd, idev, itv);
+    write_nicstats(window, c_nicd, p_nicd, idev, itv, tab->sys_special.sys_hz);
 
     /* save current stats snapshot */
     replace_nicdata(c_nicd, p_nicd, idev);
@@ -1096,7 +1100,7 @@ int main(int argc, char *argv[])
     init_stats(st_cpu, &st_mem_short);
     init_iostats(c_ios, p_ios, bdev);
     init_nicdata(c_nicdata, p_nicdata, idev);
-    get_HZ();
+//    get_HZ();
 
     /* 
      * Handling connection settings. The main idea here is combine together: 
@@ -1416,7 +1420,7 @@ int main(int argc, char *argv[])
                     print_log(w_sub, w_cmd, tabs[tab_index], conns[tab_index]);
                     break;
                 case SUBTAB_IOSTAT:
-                    print_iostat(w_sub, w_cmd, c_ios, p_ios, bdev, &repaint);
+                    print_iostat(w_sub, w_cmd, tabs[tab_index], c_ios, p_ios, bdev, &repaint);
                     if (repaint) {
                         free_iostats(c_ios, p_ios, bdev);
                         bdev = count_block_devices();
@@ -1427,7 +1431,7 @@ int main(int argc, char *argv[])
                     }
                     break;
                 case SUBTAB_NICSTAT:
-                    print_nicstat(w_sub, w_cmd, c_nicdata, p_nicdata, idev, &repaint);
+                    print_nicstat(w_sub, w_cmd, tabs[tab_index], c_nicdata, p_nicdata, idev, &repaint);
                     if (repaint) {
                         free_nicdata(c_nicdata, p_nicdata, idev);
                         idev = count_nic_devices();

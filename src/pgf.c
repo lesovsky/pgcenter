@@ -44,7 +44,7 @@ void open_connections(struct tab_s * tabs[], PGconn * conns[])
             check_pg_listen_addr(tabs[i], conns[i]);
             
             /* get specific details about system and postgres */
-            /* TODO: get_sys_special() */
+            get_sys_special(conns[i], tabs[i]);
             get_pg_special(conns[i], tabs[i]);
 
             PGresult * res;
@@ -123,6 +123,22 @@ void get_conf_value(PGconn * conn, const char * config_option_name, char * confi
 
 /*
  ****************************************************************************
+ * Get various information about running OS.
+ ****************************************************************************
+ */
+void get_sys_special(PGconn * conn, struct tab_s * tab)
+{
+//    PGresult * res;               not used now, byut maybe in disk/iface funcs?
+//    char errmsg[ERRSIZE]; 
+    
+    /* get system clock resolution */
+    get_HZ(tab, conn);
+
+    /* get number of block and network devices */
+}
+
+/*
+ ****************************************************************************
  * Get various information about postgres and save into tab opts.
  ****************************************************************************
  */
@@ -181,6 +197,7 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct tab_s * tab, boo
     
     /* get PostgreSQL details after successful reconnect */
     if (*reconnected == true) {
+        get_sys_special(conn, tab);
         get_pg_special(conn, tab);
     }
 }

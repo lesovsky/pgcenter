@@ -105,13 +105,25 @@ void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], 
  * Get system clock resolution.
  ****************************************************************************
  */
-void get_HZ(void)
+void get_HZ(struct tab_s * tab, PGconn * conn)
 {
     long ticks;
-    if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
-        mreport(false, msg_error, "ERROR: sysconf failure.\n");
-            
-    sys_hz = (unsigned int) ticks;
+    static char errmsg[ERRSIZE];
+    PGresult * res;
+    
+    if (tab->conn_local) {
+        if ((ticks = sysconf(_SC_CLK_TCK)) == -1)
+            mreport(false, msg_error, "ERROR: sysconf failure.\n");        
+    } else {
+        if ((res = do_query(conn, PG_SYS_GET_CLK_QUERY, errmsg)) != NULL) {
+            ticks = atol(PQgetvalue(res, 0, 0));
+            PQclear(res);
+        } else {
+            ticks = DEFAULT_HZ;             /* can't get ticks, use defaults */
+        }
+    }
+           
+    tab->sys_special.sys_hz = (unsigned int) ticks;
 }
 
 /*
@@ -233,10 +245,11 @@ double ll_sp_value(unsigned long long value1, unsigned long long value2,
  * Read machine uptime independently of the number of processors.
  ****************************************************************************
  */
-void read_uptime(unsigned long long *uptime)
+void read_uptime(unsigned long long *uptime, struct tab_s * tab)
 {
     FILE *fp;
     unsigned long up_sec, up_cent;
+    int sys_hz = tab->sys_special.sys_hz;
 
     if ((fp = fopen(UPTIME_FILE, "r")) != NULL) {
         if ((fscanf(fp, "%lu.%lu", &up_sec, &up_cent)) != 2) {
@@ -246,7 +259,7 @@ void read_uptime(unsigned long long *uptime)
     } else
         return;
 
-    *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
+    *uptime = (unsigned long long) up_sec * sys_hz + (unsigned long long) up_cent * sys_hz / 100;
     fclose(fp);
 }
 
@@ -255,10 +268,11 @@ void read_uptime(unsigned long long *uptime)
  * Read machine uptime using sql interface.
  ****************************************************************************
  */
-void read_remote_uptime(unsigned long long *uptime, PGconn * conn)
+void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn * conn)
 {
     static char errmsg[ERRSIZE];
     double up_full, up_sec, up_cent;
+    int sys_hz = tab->sys_special.sys_hz;
     PGresult * res;
 
     if ((res = do_query(conn, PG_SYS_PROC_UPTIME_QUERY, errmsg)) != NULL) {
@@ -269,8 +283,7 @@ void read_remote_uptime(unsigned long long *uptime, PGconn * conn)
     
     up_cent = modf(up_full, &up_sec);
     up_cent = up_cent * 100;
-    /* TODO: replace HZ with its remote analog */
-    *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
+    *uptime = (unsigned long long) up_sec * sys_hz + (unsigned long long) up_cent * sys_hz / 100;
 }
 
 /*
@@ -716,13 +729,13 @@ void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
  * Calculate IO stats and print it out.
  ****************************************************************************
  */
-void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv)
+void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv, int sys_hz)
 {
     unsigned int i = 0;
     double r_await[bdev], w_await[bdev];
     
     for (i = 0; i < bdev; i++) {
-        c_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv);
+        c_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv, sys_hz);
         c_ios[i]->await = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
             ((c_ios[i]->r_spent - p_ios[i]->r_spent) + (c_ios[i]->w_spent - p_ios[i]->w_spent)) /
             ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
@@ -752,16 +765,16 @@ void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_
         }
         wprintw(window, "%6s:\t\t", c_ios[i]->devname);
         wprintw(window, "%8.2f%8.2f",
-                S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv),
-                S_VALUE(p_ios[i]->w_merged, c_ios[i]->w_merged, itv));
+                S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv, sys_hz),
+                S_VALUE(p_ios[i]->w_merged, c_ios[i]->w_merged, itv, sys_hz));
         wprintw(window, "%9.2f%9.2f",
-                S_VALUE(p_ios[i]->r_completed, c_ios[i]->r_completed, itv),
-                S_VALUE(p_ios[i]->w_completed, c_ios[i]->w_completed, itv));
+                S_VALUE(p_ios[i]->r_completed, c_ios[i]->r_completed, itv, sys_hz),
+                S_VALUE(p_ios[i]->w_completed, c_ios[i]->w_completed, itv, sys_hz));
         wprintw(window, "%9.2f%9.2f%9.2f%9.2f",
-                S_VALUE(p_ios[i]->r_sectors, c_ios[i]->r_sectors, itv) / 2048,
-                S_VALUE(p_ios[i]->w_sectors, c_ios[i]->w_sectors, itv) / 2048,
+                S_VALUE(p_ios[i]->r_sectors, c_ios[i]->r_sectors, itv, sys_hz) / 2048,
+                S_VALUE(p_ios[i]->w_sectors, c_ios[i]->w_sectors, itv, sys_hz) / 2048,
                 c_ios[i]->arqsz,
-                S_VALUE(p_ios[i]->t_weighted, c_ios[i]->t_weighted, itv) / 1000.0);
+                S_VALUE(p_ios[i]->t_weighted, c_ios[i]->t_weighted, itv, sys_hz) / 1000.0);
         wprintw(window, "%10.2f%10.2f%10.2f", c_ios[i]->await, r_await[i], w_await[i]);
         wprintw(window, "%8.2f", c_ios[i]->util / 10.0);
         wprintw(window, "\n");
@@ -828,7 +841,7 @@ void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repai
  * Compute NIC stats and print it out.
  ****************************************************************************
  */
-void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv)
+void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv, int sys_hz)
 {
     /* print headers */
     wclear(window);
@@ -845,14 +858,14 @@ void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_
            continue;
         }
 
-        rbps = S_VALUE(p_nicd[i]->rbytes, c_nicd[i]->rbytes, itv);
-        wbps = S_VALUE(p_nicd[i]->wbytes, c_nicd[i]->wbytes, itv);
-        rpps = S_VALUE(p_nicd[i]->rpackets, c_nicd[i]->rpackets, itv);
-        wpps = S_VALUE(p_nicd[i]->wpackets, c_nicd[i]->wpackets, itv);
-        ierr = S_VALUE(p_nicd[i]->ierr, c_nicd[i]->ierr, itv);
-        oerr = S_VALUE(p_nicd[i]->oerr, c_nicd[i]->oerr, itv);
-        coll = S_VALUE(p_nicd[i]->coll, c_nicd[i]->coll, itv);
-        sat = S_VALUE(p_nicd[i]->sat, c_nicd[i]->sat, itv);
+        rbps = S_VALUE(p_nicd[i]->rbytes, c_nicd[i]->rbytes, itv, sys_hz);
+        wbps = S_VALUE(p_nicd[i]->wbytes, c_nicd[i]->wbytes, itv, sys_hz);
+        rpps = S_VALUE(p_nicd[i]->rpackets, c_nicd[i]->rpackets, itv, sys_hz);
+        wpps = S_VALUE(p_nicd[i]->wpackets, c_nicd[i]->wpackets, itv, sys_hz);
+        ierr = S_VALUE(p_nicd[i]->ierr, c_nicd[i]->ierr, itv, sys_hz);
+        oerr = S_VALUE(p_nicd[i]->oerr, c_nicd[i]->oerr, itv, sys_hz);
+        coll = S_VALUE(p_nicd[i]->coll, c_nicd[i]->coll, itv, sys_hz);
+        sat = S_VALUE(p_nicd[i]->sat, c_nicd[i]->sat, itv, sys_hz);
 
 	/* if no data about pps, zeroing averages */
         (rpps > 0) ? ( ravs = rbps / rpps ) : ( ravs = 0 );

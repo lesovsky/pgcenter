@@ -27,15 +27,14 @@
 #define DISKSTATS_FILE          "/proc/diskstats"
 #define NETDEV_FILE             "/proc/net/dev"
 
-#define HZ                  sys_hz
-unsigned int sys_hz;
+#define DEFAULT_HZ          100         /* default clock ticks */
 
 /*
  * Macros used to display statistics values.
  * NB: Define SP_VALUE() to normalize to %;
  */
 #define SP_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * 100)
-#define S_VALUE(m,n,p) (((double) ((n) - (m))) / (p) * HZ)
+#define S_VALUE(m,n,p,q) (((double) ((n) - (m))) / (p) * q)
 
 /* struct which used for cpu statistic */
 struct cpu_s {
@@ -125,11 +124,10 @@ void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned i
 void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
 
 /* cpu stat functions */
-void get_HZ(void);
 double ll_sp_value(unsigned long long value1, unsigned long long value2,
         unsigned long long itv);
-void read_uptime(unsigned long long *uptime);
-void read_remote_uptime(unsigned long long *uptime, PGconn * conn);
+void read_uptime(unsigned long long *uptime, struct tab_s * tab);
+void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn * conn);
 void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
         unsigned long long *uptime, unsigned long long *uptime0);
 void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
@@ -148,14 +146,14 @@ void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short);
 unsigned int count_block_devices(void);
 void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], unsigned int bdev);
 void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint);
-void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv);
+void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv, int sys_hz);
 
 /* nicstat functions */
 unsigned int count_nic_devices(void);
 void get_speed_duplex(struct nicdata_s * nicdata);
 void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], unsigned int idev);
 void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repaint);
-void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv);
+void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv, int sys_hz);
 
 /* others */
 float * get_loadavg();

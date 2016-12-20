@@ -62,9 +62,9 @@ void print_vacuum_info(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void print_pgss_info(WINDOW * window, PGconn * conn, unsigned long interval);
 void print_data(WINDOW *window, PGresult *res, char ***arr, 
         unsigned int n_rows, unsigned int n_cols, struct tab_s * tab);
-void print_iostat(WINDOW * window, WINDOW * w_cmd, struct iodata_s *c_ios[],
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct iodata_s *c_ios[],
         struct iodata_s *p_ios[], unsigned int bdev, bool * repaint);
-void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct nicdata_s *c_nicd[],
+void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct nicdata_s *c_nicd[],
         struct nicdata_s *p_nicd[], unsigned int idev, bool * repaint);
 
 /* other functions */

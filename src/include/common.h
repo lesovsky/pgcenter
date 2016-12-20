@@ -113,6 +113,16 @@ struct args_s
 
 #define ARGS_SIZE (sizeof(struct args_s))
 
+/* struct for specific details about system when postgres runs */
+struct sys_special_s
+{
+    int sys_hz;             /* system clock resolution */
+    unsigned int bdev;      /* number of block devices */
+    unsigned int idev;      /* number of network interfaces */
+};
+
+#define SYS_SPECIAL_SIZE (sizeof(struct sys_special_s))
+
 /* struct for postgres specific details, get that when connected to postgres server */
 struct pg_special_s
 {
@@ -147,6 +157,7 @@ struct tab_s
     char password[CONN_ARG_MAXLEN];
     char conninfo[CONNINFO_MAXLEN];
     struct pg_special_s pg_special;
+    struct sys_special_s sys_special;       /* details about os when pg runs */
     bool subtab_enabled;                     /* subtab status: on/off */
     int subtab;                              /* subtab type: logtail, iostat, etc. */
     char log_path[PATH_MAX];                    /* logfile path for logtail subtab */
@@ -173,4 +184,6 @@ void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * wit
 void sig_handler(int signo);
 void init_signal_handlers(void);
 void check_pg_listen_addr(struct tab_s * tab, PGconn * conn);
+
+void get_HZ(struct tab_s * tab, PGconn * conn);
 #endif /* __COMMON_H__ */
