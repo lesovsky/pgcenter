@@ -772,9 +772,10 @@ void print_title(WINDOW * window)
  * Get load average and print to the sysstat area.
  ****************************************************************************
  */
-void print_loadavg(WINDOW * window)
+void print_loadavg(WINDOW * window, struct tab_s * tab, PGconn * conn)
 {
-    float * la = get_loadavg();
+    float * la;
+    tab->conn_local ? (la = get_loadavg()) : (la = get_remote_loadavg(conn));
     wprintw(window, "load average: %.2f, %.2f, %.2f\n", la[0], la[1], la[2]);
 }
 
@@ -784,7 +785,7 @@ void print_loadavg(WINDOW * window)
  * to the sysstat area.
  ****************************************************************************
  */
-void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[])
+void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[], struct tab_s * tab, PGconn * conn)
 {
     static unsigned long long uptime[2]  = {0, 0};
     static unsigned long long uptime0[2] = {0, 0};
@@ -792,8 +793,13 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[])
     static unsigned long long itv;
 
     uptime0[curr] = 0;
-    read_uptime(&(uptime0[curr]));
-    read_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]));
+    if (tab->conn_local) {
+        read_uptime(&(uptime0[curr]));
+        read_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]));
+    } else {
+        read_remote_uptime(&(uptime0[curr]), conn);
+        read_remote_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]), conn);
+    }
     itv = get_interval(uptime[!curr], uptime[curr]);
     write_cpu_stat_raw(window, st_cpu, curr, itv);
     itv = get_interval(uptime0[!curr], uptime0[curr]);
@@ -805,9 +811,13 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[])
  * Get mem stats and print it to sysstat area.
  ****************************************************************************
  */
-void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short)
+void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short, struct tab_s * tab, PGconn * conn)
 {
-    read_mem_stat(st_mem_short);
+    if (tab->conn_local)
+        read_mem_stat(st_mem_short);
+    else 
+        read_remote_mem_stat(st_mem_short, conn);
+    
     write_mem_stat(window, st_mem_short);
 }
 
@@ -1311,9 +1321,9 @@ int main(int argc, char *argv[])
              */
             wclear(w_sys);
             print_title(w_sys);
-            print_loadavg(w_sys);
-            print_cpu_usage(w_sys, st_cpu);
-            print_mem_usage(w_sys, st_mem_short);
+            print_loadavg(w_sys, tabs[tab_index], conns[tab_index]);
+            print_cpu_usage(w_sys, st_cpu, tabs[tab_index], conns[tab_index]);
+            print_mem_usage(w_sys, st_mem_short, tabs[tab_index], conns[tab_index]);
             print_conninfo(w_sys, conns[tab_index], tab_no);
             print_pg_general(w_sys, tabs[tab_index], conns[tab_index]);
             print_postgres_activity(w_sys, tabs[tab_index], conns[tab_index]);

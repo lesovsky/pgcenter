@@ -16,9 +16,11 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <ifaddrs.h>
 #include <limits.h>
 #include <linux/types.h>
 #include <ncurses.h>
+#include <netdb.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -27,6 +29,7 @@
 #include <stdarg.h>     /* va_start, va_end */
 #include <termios.h>    /* tcsetattr */
 #include <unistd.h>     /* sysconf */
+#include "libpq-fe.h"
 
 #define PROGRAM_NAME        "pgcenter"
 #define PROGRAM_VERSION     0.3
@@ -136,6 +139,7 @@ struct tab_s
 {
     int tab;
     bool conn_used;
+    bool conn_local;
     char host[CONN_ARG_MAXLEN];
     char port[CONN_ARG_MAXLEN];
     char user[CONN_ARG_MAXLEN];
@@ -168,4 +172,5 @@ char * password_prompt(const char *prompt, unsigned int pw_maxlen, bool echo);
 void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);
 void sig_handler(int signo);
 void init_signal_handlers(void);
+void check_pg_listen_addr(struct tab_s * tab, PGconn * conn);
 #endif /* __COMMON_H__ */

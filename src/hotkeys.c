@@ -605,59 +605,6 @@ void reload_conf(WINDOW * window, PGconn * conn)
 
 /*
  ****************************************************************************
- * Get postgres listen_addresses and check is that local address or not.
- * Return true if listen_addresses is local and false if not.
- ****************************************************************************
- */
-bool check_pg_listen_addr(struct tab_s * tab, PGconn * conn)
-{
-    /* an absoulute path means the unix socket is used and it is always local */
-    if (!strncmp(tab->host, "/", 1)
-	|| ((PQhost(conn)!= NULL) && !strncmp(PQhost(conn), "/", 1))
-	|| (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
-        return true;
-    }
-
-    struct ifaddrs *ifaddr, *ifa;
-    int family, s;
-    char host[NI_MAXHOST];
-    
-    if (getifaddrs(&ifaddr) == -1) {
-        freeifaddrs(ifaddr);
-        return false;
-    }
-    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-        if (ifa->ifa_addr == NULL)
-            continue;
-
-        family = ifa->ifa_addr->sa_family;
-
-        /* Check AF_INET* interface addresses */
-        if (family == AF_INET || family == AF_INET6) {
-            s = getnameinfo(ifa->ifa_addr,
-                            (family == AF_INET) ? sizeof(struct sockaddr_in) :
-                                                  sizeof(struct sockaddr_in6),
-                            host, NI_MAXHOST,
-                            NULL, 0, NI_NUMERICHOST);
-            if (s != 0) {
-                mreport(false, msg_warning,
-                        "WARNING: getnameinfo() failed: %s\n", gai_strerror(s));
-                return false;
-            }
-            if (!strcmp(host, tab->host)) {
-                freeifaddrs(ifaddr);
-                return true;
-                break;
-            }
-        }
-    }
-
-    freeifaddrs(ifaddr);
-    return false;
-}
-
-/*
- ****************************************************************************
  * Edit configuration settings. Open configuration file in $EDITOR.
  ****************************************************************************
  */
@@ -666,7 +613,7 @@ void edit_config(WINDOW * window, struct tab_s * tab, PGconn * conn, const char 
     static char config_path[PATH_MAX];
     pid_t pid;
 
-    if (check_pg_listen_addr(tab, conn)) {
+    if (tab->conn_local) {
         get_conf_value(conn, config_file_guc, config_path);
         if (strlen(config_path) != 0) {
             /* if we want edit recovery.conf, attach config name to data_directory path */
@@ -1501,7 +1448,7 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
         /* open subtab */
         switch (subtab) {
             case SUBTAB_LOGTAIL:
-                if (check_pg_listen_addr(tab, conn)) {
+                if (tab->conn_local) {
                     *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                     wrefresh(window);
                     /* get logfile path  */
@@ -1672,7 +1619,7 @@ void show_full_log(WINDOW * window, struct tab_s * tab, PGconn * conn)
 {
     pid_t pid;
 
-    if (check_pg_listen_addr(tab, conn)) {
+    if (tab->conn_local) {
         /* get logfile path  */
         get_logfile_path(tab->log_path, conn);
         if (strlen(tab->log_path) != 0) {

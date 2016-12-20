@@ -10,7 +10,32 @@
 #ifndef __QUERIES_H__
 #define __QUERIES_H__
 
-/* sysstat tab queries */
+/* sys stats from /proc */
+#define PG_SYS_PROC_LOADAVG_QUERY \
+    "SELECT min1, min5, min15 FROM pgcenter.sys_proc_loadavg"
+
+#define PG_SYS_PROC_UPTIME_QUERY \
+        "SELECT seconds_total FROM pgcenter.sys_proc_uptime"
+
+#define PG_SYS_PROC_TOTAL_CPU_STAT_QUERY \
+        "SELECT * FROM pgcenter.sys_proc_stat WHERE cpu = 'cpu'"
+
+#define PG_SYS_PROC_PART_CPU_STAT_QUERY \
+        "SELECT right(cpu,-3),* FROM pgcenter.sys_proc_stat WHERE cpu ~ 'cpu[0-9]+' \
+        ORDER BY right(cpu,-3)::int"
+        
+#define PG_SYS_PROC_MEMINFO_QUERY \
+        "SELECT metric, cur_value FROM pgcenter.sys_proc_meminfo WHERE metric IN \
+        ('MemTotal:','MemFree:','SwapTotal:','SwapFree:', \
+        'Cached:','Dirty:','Writeback:','Buffers:','Slab:') \
+        ORDER BY 1"
+
+#define PG_SYS_PROC_DISKSTATS_QUERY \
+        "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
+
+#define PG_SYS_PROC_NETDEV_QUERY \
+        "SELECT * FROM pgcenter.sys_proc_netdev ORDER BY iface"
+
 /* for postgresql versions before 9.6 */
 #define PG_STAT_ACTIVITY_COUNT_95_QUERY \
     "WITH pgsa AS (SELECT * FROM pg_stat_activity) \

@@ -192,6 +192,29 @@ float * get_loadavg()
 
 /*
  ****************************************************************************
+ * Read remote /proc/loadavg via sql and return load average values.
+ ****************************************************************************
+ */
+float * get_remote_loadavg(PGconn * conn)
+{
+    static char errmsg[ERRSIZE];
+    static float la[3];
+    PGresult * res;
+
+    if ((res = do_query(conn, PG_SYS_PROC_LOADAVG_QUERY, errmsg)) != NULL) {
+        la[0] = atof(PQgetvalue(res, 0, 0));
+        la[1] = atof(PQgetvalue(res, 0, 1));
+        la[2] = atof(PQgetvalue(res, 0, 2));
+        PQclear(res);
+    } else {
+        la[0] = la[1] = la[2] = 0;                /* can't read statfile */
+    }
+    
+    return la;
+}
+
+/*
+ ****************************************************************************
  * Workaround for CPU counters read from /proc/stat: Dyn-tick kernels
  * have a race issue that can make those counters go backward.
  ****************************************************************************
@@ -225,6 +248,29 @@ void read_uptime(unsigned long long *uptime)
 
     *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
     fclose(fp);
+}
+
+/*
+ ****************************************************************************
+ * Read machine uptime using sql interface.
+ ****************************************************************************
+ */
+void read_remote_uptime(unsigned long long *uptime, PGconn * conn)
+{
+    static char errmsg[ERRSIZE];
+    double up_full, up_sec, up_cent;
+    PGresult * res;
+
+    if ((res = do_query(conn, PG_SYS_PROC_UPTIME_QUERY, errmsg)) != NULL) {
+        up_full = atof(PQgetvalue(res, 0, 0));
+        PQclear(res);
+    } else
+        return;                /* can't read statfile */
+    
+    up_cent = modf(up_full, &up_sec);
+    up_cent = up_cent * 100;
+    /* TODO: replace HZ with its remote analog */
+    *uptime = (unsigned long long) up_sec * HZ + (unsigned long long) up_cent * HZ / 100;
 }
 
 /*
@@ -302,6 +348,74 @@ void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
 
 /*
  ****************************************************************************
+ * Read cpu statistics from /proc/stat using sql interface. 
+ * Also calculate uptime if read_uptime() function return NULL.
+ ****************************************************************************
+ */
+void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
+                            unsigned long long *uptime, unsigned long long *uptime0, PGconn * conn)
+{
+    struct cpu_s *st_cpu_i;
+    struct cpu_s sc;
+    unsigned int proc_nb;
+    static char errmsg[ERRSIZE];
+    PGresult * res_cpu_total;
+    PGresult * res_cpu_part;
+
+    if ((res_cpu_total = do_query(conn, PG_SYS_PROC_TOTAL_CPU_STAT_QUERY, errmsg)) != NULL) {
+        memset(st_cpu, 0, STATS_CPU_SIZE);
+        /* fill st_cpu */
+        st_cpu->cpu_user = atoll(PQgetvalue(res_cpu_total,0,1));
+        st_cpu->cpu_nice = atoll(PQgetvalue(res_cpu_total,0,2));
+        st_cpu->cpu_sys = atoll(PQgetvalue(res_cpu_total,0,3));
+        st_cpu->cpu_idle = atoll(PQgetvalue(res_cpu_total,0,4));
+        st_cpu->cpu_iowait = atoll(PQgetvalue(res_cpu_total,0,5));
+        st_cpu->cpu_hardirq = atoll(PQgetvalue(res_cpu_total,0,6));
+        st_cpu->cpu_softirq = atoll(PQgetvalue(res_cpu_total,0,7));
+        st_cpu->cpu_steal = atoll(PQgetvalue(res_cpu_total,0,8));
+        st_cpu->cpu_guest = atoll(PQgetvalue(res_cpu_total,0,9));
+        st_cpu->cpu_guest_nice = atoll(PQgetvalue(res_cpu_total,0,10));
+        *uptime = st_cpu->cpu_user + st_cpu->cpu_nice +
+                  st_cpu->cpu_sys + st_cpu->cpu_idle +
+                  st_cpu->cpu_iowait + st_cpu->cpu_steal +
+                  st_cpu->cpu_hardirq + st_cpu->cpu_softirq +
+                  st_cpu->cpu_guest + st_cpu->cpu_guest_nice;
+        PQclear(res_cpu_total);
+    } else if ((res_cpu_part = do_query(conn, PG_SYS_PROC_PART_CPU_STAT_QUERY, errmsg)) != NULL) {
+        if (nbr > 1) {
+            memset(&sc, 0, STATS_CPU_SIZE);
+            /* fill st_cpu */
+            proc_nb = atoi(PQgetvalue(res_cpu_total,0,0));
+            st_cpu->cpu_user = atoll(PQgetvalue(res_cpu_total,0,2));
+            st_cpu->cpu_nice = atoll(PQgetvalue(res_cpu_total,0,3));
+            st_cpu->cpu_sys = atoll(PQgetvalue(res_cpu_total,0,4));
+            st_cpu->cpu_idle = atoll(PQgetvalue(res_cpu_total,0,5));
+            st_cpu->cpu_iowait = atoll(PQgetvalue(res_cpu_total,0,6));
+            st_cpu->cpu_hardirq = atoll(PQgetvalue(res_cpu_total,0,7));
+            st_cpu->cpu_softirq = atoll(PQgetvalue(res_cpu_total,0,8));
+            st_cpu->cpu_steal = atoll(PQgetvalue(res_cpu_total,0,9));
+            st_cpu->cpu_guest = atoll(PQgetvalue(res_cpu_total,0,10));
+            st_cpu->cpu_guest_nice = atoll(PQgetvalue(res_cpu_total,0,11));
+            
+            if (proc_nb < (nbr - 1)) {
+                st_cpu_i = st_cpu + proc_nb + 1;
+                *st_cpu_i = sc;
+            }
+
+            if (!proc_nb && !*uptime0) {
+                *uptime0 = sc.cpu_user + sc.cpu_nice   +
+                        sc.cpu_sys     + sc.cpu_idle   +
+                        sc.cpu_iowait  + sc.cpu_steal  +
+                        sc.cpu_hardirq + sc.cpu_softirq;
+                printf("read_cpu_stat: uptime0 = %llu\n", *uptime0);
+            }
+        }
+        PQclear(res_cpu_part);
+    }
+}
+
+/*
+ ****************************************************************************
  * Compute time interval.
  ****************************************************************************
  */
@@ -349,7 +463,8 @@ void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
  * Read /proc/meminfo and save results into struct.
  ****************************************************************************
  */
-void read_mem_stat(struct mem_s *st_mem_short) {
+void read_mem_stat(struct mem_s *st_mem_short)
+{
     FILE *mem_fp;
     char buffer[XXXL_BUF_LEN];
     char key[M_BUF_LEN];
@@ -393,10 +508,56 @@ void read_mem_stat(struct mem_s *st_mem_short) {
 
 /*
  ****************************************************************************
+ * Read remote /proc/meminfo via sql and save results into struct.
+ ****************************************************************************
+ */
+void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn)
+{
+    static char errmsg[ERRSIZE];
+    char * tmp;         /* used in strtoull() */
+    PGresult * res;
+
+    if ((res = do_query(conn, PG_SYS_PROC_MEMINFO_QUERY, errmsg)) != NULL) {
+        if (!strcmp(PQgetvalue(res,0,0),"Buffers:"))
+            st_mem_short->buffers = strtoull(PQgetvalue(res,0,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,1,0),"Cached:"))
+            st_mem_short->cached = strtoull(PQgetvalue(res,1,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,2,0),"Dirty:"))
+            st_mem_short->dirty = strtoull(PQgetvalue(res,2,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,3,0),"MemFree:"))
+            st_mem_short->mem_free = strtoull(PQgetvalue(res,3,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,4,0),"MemTotal:"))
+            st_mem_short->mem_total = strtoull(PQgetvalue(res,4,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,5,0),"Slab:"))
+            st_mem_short->slab = strtoull(PQgetvalue(res,5,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,6,0),"SwapFree:"))
+            st_mem_short->swap_free = strtoull(PQgetvalue(res,6,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,7,0),"SwapTotal:"))
+            st_mem_short->swap_total = strtoull(PQgetvalue(res,7,1), &tmp, 10) / 1024;
+        if (!strcmp(PQgetvalue(res,8,0),"Writeback:"))
+            st_mem_short->writeback = strtoull(PQgetvalue(res,8,1), &tmp, 10) / 1024;
+        
+        st_mem_short->mem_used = st_mem_short->mem_total - st_mem_short->mem_free
+            - st_mem_short->cached - st_mem_short->buffers - st_mem_short->slab;
+        st_mem_short->swap_used = st_mem_short->swap_total - st_mem_short->swap_free;
+        
+        PQclear(res);
+    } else {
+        /* can't read stats */
+        st_mem_short->mem_total = st_mem_short->mem_free = st_mem_short->mem_used = 0;
+        st_mem_short->cached = st_mem_short->buffers = st_mem_short->slab = 0;
+        st_mem_short->swap_total = st_mem_short->swap_free = st_mem_short->swap_used = 0;
+        st_mem_short->dirty = st_mem_short->writeback = 0;
+    }
+}
+
+/*
+ ****************************************************************************
  * Print content of mem struct to the ncurses window
  ****************************************************************************
  */
-void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short) {
+void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short)
+{
     wprintw(window, " MiB mem: %6llu total, %6llu free, %6llu used, %8llu buff/cached\n",
             st_mem_short->mem_total, st_mem_short->mem_free, st_mem_short->mem_used,
             st_mem_short->cached + st_mem_short->buffers + st_mem_short->slab);

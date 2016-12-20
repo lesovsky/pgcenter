@@ -247,3 +247,61 @@ void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * wit
     nodelay(window, TRUE);
     keypad(window, FALSE);
 }
+
+/*
+ ****************************************************************************
+ * Get postgres listen_addresses and check is that local address or not.
+ * Return true if listen_addresses is local and false if not.
+ ****************************************************************************
+ */
+void check_pg_listen_addr(struct tab_s * tab, PGconn * conn)
+{
+    /* an absoulute path means the unix socket is used and it is always local */
+    if (!strncmp(tab->host, "/", 1)
+	|| ((PQhost(conn)!= NULL) && !strncmp(PQhost(conn), "/", 1))
+	|| (PQstatus(conn) == CONNECTION_OK && PQhost(conn) == NULL)) {
+        tab->conn_local = true;
+        return;
+    }
+
+    struct ifaddrs *ifaddr, *ifa;
+    int family, s;
+    char host[NI_MAXHOST];
+    
+    if (getifaddrs(&ifaddr) == -1) {
+        freeifaddrs(ifaddr);
+        tab->conn_local = false;
+        return;
+    }
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        family = ifa->ifa_addr->sa_family;
+
+        /* Check AF_INET* interface addresses */
+        if (family == AF_INET || family == AF_INET6) {
+            s = getnameinfo(ifa->ifa_addr,
+                            (family == AF_INET) ? sizeof(struct sockaddr_in) :
+                                                  sizeof(struct sockaddr_in6),
+                            host, NI_MAXHOST,
+                            NULL, 0, NI_NUMERICHOST);
+            if (s != 0) {
+                mreport(false, msg_warning,
+                        "WARNING: getnameinfo() failed: %s\n", gai_strerror(s));
+                tab->conn_local = false;
+                return;
+            }
+            if (!strcmp(host, tab->host)) {
+                freeifaddrs(ifaddr);
+                tab->conn_local = true;
+                return;
+                break;
+            }
+        }
+    }
+
+    freeifaddrs(ifaddr);
+    tab->conn_local = false;
+    return;
+}

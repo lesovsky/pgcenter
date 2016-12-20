@@ -10,9 +10,7 @@
 #ifndef __HOTKEYS_H__
 #define __HOTKEYS_H__
 
-#include <ifaddrs.h>
 #include <menu.h>
-#include <netdb.h>
 #include <pwd.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -73,7 +71,6 @@ unsigned int close_tab(WINDOW * window, struct tab_s * tabs[],
         PGconn * conns[], unsigned int tab_index, bool *first_iter);
 void write_pgcenterrc(WINDOW * window, struct tab_s * tabs[], PGconn * conns[], struct args_s * args);
 void reload_conf(WINDOW * window, PGconn * conn);
-bool check_pg_listen_addr(struct tab_s * tab, PGconn * conn);
 void edit_config(WINDOW * window, struct tab_s * tab, PGconn * conn, const char * config_file_guc);
 void calculate_width(struct colAttrs *columns, PGresult *res, struct tab_s * tab, char ***arr, unsigned int n_rows, unsigned int n_cols);
 void show_config(WINDOW * window, PGconn * conn);

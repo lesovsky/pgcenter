@@ -13,9 +13,11 @@
 #include <net/if.h>
 #include <linux/ethtool.h>
 #include <linux/sockios.h>
+#include <math.h>
 #include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <time.h>
+#include "pgf.h"
 #include "common.h"
 
 #define LOADAVG_FILE            "/proc/loadavg"
@@ -127,8 +129,11 @@ void get_HZ(void);
 double ll_sp_value(unsigned long long value1, unsigned long long value2,
         unsigned long long itv);
 void read_uptime(unsigned long long *uptime);
+void read_remote_uptime(unsigned long long *uptime, PGconn * conn);
 void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
         unsigned long long *uptime, unsigned long long *uptime0);
+void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
+        unsigned long long *uptime, unsigned long long *uptime0, PGconn * conn);
 unsigned long long get_interval(unsigned long long prev_uptime,
         unsigned long long curr_uptime);
 void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
@@ -136,6 +141,7 @@ void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
 
 /* mem/swap stat functions */
 void read_mem_stat(struct mem_s *st_mem_short);
+void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn);
 void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short);
 
 /* iostat functions */
@@ -153,6 +159,7 @@ void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_
 
 /* others */
 float * get_loadavg();
+float * get_remote_loadavg(PGconn * conn);
 void get_time(char * strtime);
 
 #endif /* __STATS_H__ */

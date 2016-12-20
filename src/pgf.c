@@ -40,7 +40,11 @@ void open_connections(struct tab_s * tabs[], PGconn * conns[])
                 continue;
             }
 
-            /* get PostgreSQL details */
+            /* determine is it a local PostgreSQL or remote */
+            check_pg_listen_addr(tabs[i], conns[i]);
+            
+            /* get specific details about system and postgres */
+            /* TODO: get_sys_special() */
             get_pg_special(conns[i], tabs[i]);
 
             PGresult * res;

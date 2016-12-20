@@ -52,9 +52,9 @@ void pgrescpy(char ***arr, PGresult *res, unsigned int n_rows, unsigned int n_co
 
 /* print info functions */
 void print_title(WINDOW * window);
-void print_loadavg(WINDOW * window);
-void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[]);
-void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short);
+void print_loadavg(WINDOW * window, struct tab_s * tab, PGconn * conn);
+void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[], struct tab_s * tabs, PGconn * conn);
+void print_mem_usage(WINDOW * window, struct mem_s *st_mem_short, struct tab_s * tab, PGconn * conn);
 void print_conninfo(WINDOW * window, PGconn *conn, unsigned int tab_no);
 void print_pg_general(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void print_postgres_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
