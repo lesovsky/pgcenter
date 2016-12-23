@@ -12,6 +12,7 @@
 
 #include "common.h"
 #include "queries.h"
+#include "stats.h"
 
 #define QUERY_MAXLEN		XXXL_BUF_LEN
 #define CONNINFO_TITLE_LEN	48

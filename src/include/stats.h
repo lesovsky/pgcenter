@@ -118,9 +118,9 @@ struct nicdata_s
 
 /* init/free stuff */
 void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short);
-void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev);
+void init_iostat(struct tab_s * tabs[], int index);
 void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
-void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev);
+void free_iostat(struct tab_s * tabs[], int index);
 void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
 
 /* cpu stat functions */
@@ -143,10 +143,12 @@ void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn);
 void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short);
 
 /* iostat functions */
-unsigned int count_block_devices(void);
-void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], unsigned int bdev);
-void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint);
-void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv, int sys_hz);
+int count_block_devices(struct tab_s * tab, PGconn * conn);
+void replace_iostat(struct iodata_s * curr[], struct iodata_s * prev[], int bdev);
+void read_local_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, bool * repaint);
+void read_remote_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, PGconn * conn, bool * repaint);
+void write_iostat(WINDOW * window, struct iodata_s * curr[], struct iodata_s * prev[], 
+        int bdev, unsigned long long itv, int sys_hz);
 
 /* nicstat functions */
 unsigned int count_nic_devices(void);

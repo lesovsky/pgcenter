@@ -33,6 +33,9 @@
     'Cached:','Dirty:','Writeback:','Buffers:','Slab:') \
     ORDER BY 1"
 
+#define PG_SYS_PROC_BDEV_CNT_QUERY \
+    "SELECT count(1) FROM pgcenter.sys_proc_diskstats"
+    
 #define PG_SYS_PROC_DISKSTATS_QUERY \
     "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
 

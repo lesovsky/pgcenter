@@ -41,13 +41,23 @@ void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short)
  * Allocate memory for IO statistics structs.
  ****************************************************************************
  */
-void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev)
+void init_iostat(struct tab_s * tabs[], int index)
 {
-    unsigned int i;
-    for (i = 0; i < bdev; i++) {
-        if ((c_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL ||
-            (p_ios[i] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
+    int start, end, i, j;
+    
+    /* init structs for all tabs if index < 0, otherwise only for particular tab */
+    index < 0 ? (start = 0, end = MAX_TABS) : (start = index, end = index + 1);
+    
+    /* go through the tabs */
+    for (i = start; i < end; i++) {
+        /* go through the iostats array entries */
+        for (j = 0; j < tabs[i]->sys_special.bdev; j++) {
+            if ((tabs[i]->curr_iostat[j] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL ||
+                (tabs[i]->prev_iostat[j] = (struct iodata_s *) malloc(STATS_IODATA_SIZE)) == NULL) {
                 mreport(true, msg_fatal, "FATAL: malloc for iostat failed.\n");
+            }
+            memset(tabs[i]->curr_iostat[j], 0, STATS_IODATA_SIZE);
+            memset(tabs[i]->prev_iostat[j], 0, STATS_IODATA_SIZE);
         }
     }
 }
@@ -57,12 +67,20 @@ void init_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned i
  * Free memory consumed by IO statistics structs.
  ****************************************************************************
  */
-void free_iostats(struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev)
+void free_iostat(struct tab_s * tabs[], int index)
 {
-    unsigned int i;
-    for (i = 0; i < bdev; i++) {
-        free(c_ios[i]);
-        free(p_ios[i]);
+    int start, end, i, j;
+
+    /* init structs for all tabs if index < 0, otherwise only for particular tab */
+    index < 0 ? (start = 0, end = MAX_TABS) : (start = index, end = index + 1);
+
+    /* go through the tabs */
+    for (i = start; i < end; i++) {
+        /* go through the iostats array entries */
+        for (j = 0; j < tabs[i]->sys_special.bdev; j++) {
+            free(tabs[i]->curr_iostat[j]);
+            free(tabs[i]->prev_iostat[j]);
+        }
     }
 }
 
@@ -131,24 +149,34 @@ void get_HZ(struct tab_s * tab, PGconn * conn)
  * Count block devices in /proc/diskstat.
  ****************************************************************************
  */
-unsigned int count_block_devices(void)
+int count_block_devices(struct tab_s * tab, PGconn * conn)
 {
+    int bdev = 0;
     FILE * fp;
-    unsigned int bdev = 0;
     char ch;
-
-    /* At program start, if statfile read failed, then allocate array for 10 devices. */
-    if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
-        return 10;
+    static char errmsg[ERRSIZE];
+    PGresult * res;
+    
+    if (tab->conn_local) {
+        /* if statfile is failed to read, then allocate the array for 10 devices. */
+        if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
+            bdev = 10;              /* can't get stats, use defaults */
+        }
+        while (!feof(fp)) {
+            ch = fgetc(fp);
+            if (ch == '\n')
+                bdev++;
+        }
+        fclose(fp);
+    } else {
+        if ((res = do_query(conn, PG_SYS_PROC_BDEV_CNT_QUERY, errmsg)) != NULL) {
+            bdev = atol(PQgetvalue(res, 0, 0));
+            PQclear(res);
+        } else {
+            bdev = 10;              /* can't get stats, use defaults */
+        }
     }
 
-    while (!feof(fp)) {
-        ch = fgetc(fp);
-        if (ch == '\n')
-            bdev++;
-    }
-
-    fclose(fp);
     return bdev;
 }
 
@@ -163,7 +191,7 @@ unsigned int count_nic_devices(void)
     unsigned int idev = 0;
     char ch;
 
-    /* At program start, if statfile read failed, then allocate array for 10 devices. */
+    /* if statfile is failed to read, then allocate the array for 10 devices. */
     if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
         return 10;
     }
@@ -527,7 +555,7 @@ void read_mem_stat(struct mem_s *st_mem_short)
 void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn)
 {
     static char errmsg[ERRSIZE];
-    char * tmp;         /* used in strtoull() */
+    char * tmp;                     /* for strtoull() */
     PGresult * res;
 
     if ((res = do_query(conn, PG_SYS_PROC_MEMINFO_QUERY, errmsg)) != NULL) {
@@ -584,9 +612,9 @@ void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short)
  * Save current io statistics snapshot.
  ****************************************************************************
  */
-void replace_iodata(struct iodata_s *curr[], struct iodata_s *prev[], unsigned int bdev)
+void replace_iostat(struct iodata_s *curr[], struct iodata_s *prev[], int bdev)
 {
-    unsigned int i;
+    int i;
     for (i = 0; i < bdev; i++) {
         prev[i]->r_completed = curr[i]->r_completed;
         prev[i]->r_merged = curr[i]->r_merged;
@@ -676,7 +704,7 @@ void get_time(char * strtime)
  * Read /proc/diskstats and save stats.
  ****************************************************************************
  */
-void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
+void read_local_diskstats(WINDOW * window, struct iodata_s *curr[], int bdev, bool * repaint)
 {
     FILE *fp;
     char line[L_BUF_LEN];
@@ -686,7 +714,7 @@ void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
     unsigned long r_completed, r_merged, r_sectors, r_spent,
                   w_completed, w_merged, w_sectors, w_spent,
                   io_in_progress, t_spent, t_weighted;
-    unsigned int i = 0;
+    int i = 0;
     
     /*
      * If /proc/diskstats read failed, fire up repaint flag.
@@ -699,26 +727,26 @@ void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
         return;
     }
 
-    while (fgets(line, sizeof(line), fp) != NULL) {
+    while ((fgets(line, sizeof(line), fp) != NULL) && (i < bdev)) {
         sscanf(line, "%u %u %s %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu %lu",
                     &major, &minor, devname,
                     &r_completed, &r_merged, &r_sectors, &r_spent,
                     &w_completed, &w_merged, &w_sectors, &w_spent,
                     &io_in_progress, &t_spent, &t_weighted);
-        c_ios[i]->major = major;
-        c_ios[i]->minor = minor;
-        snprintf(c_ios[i]->devname, S_BUF_LEN, "%s", devname);
-        c_ios[i]->r_completed = r_completed;
-        c_ios[i]->r_merged = r_merged;
-        c_ios[i]->r_sectors = r_sectors;
-        c_ios[i]->r_spent = r_spent;
-        c_ios[i]->w_completed = w_completed;
-        c_ios[i]->w_merged = w_merged;
-        c_ios[i]->w_sectors = w_sectors;
-        c_ios[i]->w_spent = w_spent;
-        c_ios[i]->io_in_progress = io_in_progress;
-        c_ios[i]->t_spent = t_spent;
-        c_ios[i]->t_weighted = t_weighted;
+        curr[i]->major = major;
+        curr[i]->minor = minor;
+        snprintf(curr[i]->devname, S_BUF_LEN, "%s", devname);
+        curr[i]->r_completed = r_completed;
+        curr[i]->r_merged = r_merged;
+        curr[i]->r_sectors = r_sectors;
+        curr[i]->r_spent = r_spent;
+        curr[i]->w_completed = w_completed;
+        curr[i]->w_merged = w_merged;
+        curr[i]->w_sectors = w_sectors;
+        curr[i]->w_spent = w_spent;
+        curr[i]->io_in_progress = io_in_progress;
+        curr[i]->t_spent = t_spent;
+        curr[i]->t_weighted = t_weighted;
         i++;
     }
     fclose(fp);
@@ -726,29 +754,72 @@ void read_diskstats(WINDOW * window, struct iodata_s *c_ios[], bool * repaint)
 
 /*
  ****************************************************************************
+ * Read /proc/diskstats via sql and save stats.
+ ****************************************************************************
+ */
+void read_remote_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, PGconn * conn, bool * repaint)
+{
+    static char errmsg[ERRSIZE];
+    char * tmp;                     /* for strtoull() */
+    PGresult * res;
+    int i;
+    
+    if ((res = do_query(conn, PG_SYS_PROC_DISKSTATS_QUERY, errmsg)) != NULL) {
+        for (i = 0; i < bdev; i++) {
+            curr[i]->major = strtoul(PQgetvalue(res, i, 0), &tmp, 10);
+            curr[i]->minor = strtoul(PQgetvalue(res, i, 1), &tmp, 10);
+            snprintf(curr[i]->devname, S_BUF_LEN, "%s", PQgetvalue(res, i, 2));
+            curr[i]->r_completed = strtoul(PQgetvalue(res, i, 3), &tmp, 10);
+            curr[i]->r_merged = strtoul(PQgetvalue(res, i, 4), &tmp, 10);
+            curr[i]->r_sectors = strtoul(PQgetvalue(res, i, 5), &tmp, 10);
+            curr[i]->r_spent = strtoul(PQgetvalue(res, i, 6), &tmp, 10);
+            curr[i]->w_completed = strtoul(PQgetvalue(res, i, 7), &tmp, 10);
+            curr[i]->w_merged = strtoul(PQgetvalue(res, i, 8), &tmp, 10);
+            curr[i]->w_sectors = strtoul(PQgetvalue(res, i, 9), &tmp, 10);
+            curr[i]->w_spent = strtoul(PQgetvalue(res, i, 10), &tmp, 10);
+            curr[i]->io_in_progress = strtoul(PQgetvalue(res, i, 11), &tmp, 10);
+            curr[i]->t_spent = strtoul(PQgetvalue(res, i, 12), &tmp, 10);
+            curr[i]->t_weighted = strtoul(PQgetvalue(res, i, 13), &tmp, 10);
+        }
+        PQclear(res);
+    } else {
+        /*
+         * If /proc/diskstats read failed, fire up repaint flag.
+         * Next when repainting subtab fails, subtab will be closed.
+         */
+        wclear(window);
+        wprintw(window, "Do nothing. Failed to get stats.");
+        *repaint = true;
+        return;
+    }
+}
+
+/*
+ ****************************************************************************
  * Calculate IO stats and print it out.
  ****************************************************************************
  */
-void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_ios[], unsigned int bdev, unsigned long long itv, int sys_hz)
+void write_iostat(WINDOW * window, struct iodata_s * curr[], struct iodata_s * prev[], 
+        int bdev, unsigned long long itv, int sys_hz)
 {
-    unsigned int i = 0;
+    int i = 0;
     double r_await[bdev], w_await[bdev];
     
     for (i = 0; i < bdev; i++) {
-        c_ios[i]->util = S_VALUE(p_ios[i]->t_spent, c_ios[i]->t_spent, itv, sys_hz);
-        c_ios[i]->await = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
-            ((c_ios[i]->r_spent - p_ios[i]->r_spent) + (c_ios[i]->w_spent - p_ios[i]->w_spent)) /
-            ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
-        c_ios[i]->arqsz = ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed)) ?
-            ((c_ios[i]->r_sectors - p_ios[i]->r_sectors) + (c_ios[i]->w_sectors - p_ios[i]->w_sectors)) /
-            ((double) ((c_ios[i]->r_completed + c_ios[i]->w_completed) - (p_ios[i]->r_completed + p_ios[i]->w_completed))) : 0.0;
+        curr[i]->util = S_VALUE(prev[i]->t_spent, curr[i]->t_spent, itv, sys_hz);
+        curr[i]->await = ((curr[i]->r_completed + curr[i]->w_completed) - (prev[i]->r_completed + prev[i]->w_completed)) ?
+            ((curr[i]->r_spent - prev[i]->r_spent) + (curr[i]->w_spent - prev[i]->w_spent)) /
+            ((double) ((curr[i]->r_completed + curr[i]->w_completed) - (prev[i]->r_completed + prev[i]->w_completed))) : 0.0;
+        curr[i]->arqsz = ((curr[i]->r_completed + curr[i]->w_completed) - (prev[i]->r_completed + prev[i]->w_completed)) ?
+            ((curr[i]->r_sectors - prev[i]->r_sectors) + (curr[i]->w_sectors - prev[i]->w_sectors)) /
+            ((double) ((curr[i]->r_completed + curr[i]->w_completed) - (prev[i]->r_completed + prev[i]->w_completed))) : 0.0;
 
-        r_await[i] = (c_ios[i]->r_completed - p_ios[i]->r_completed) ?
-            (c_ios[i]->r_spent - p_ios[i]->r_spent) /
-            ((double) (c_ios[i]->r_completed - p_ios[i]->r_completed)) : 0.0;
-        w_await[i] = (c_ios[i]->w_completed - p_ios[i]->w_completed) ?
-            (c_ios[i]->w_spent - p_ios[i]->w_spent) /
-            ((double) (c_ios[i]->w_completed - p_ios[i]->w_completed)) : 0.0;
+        r_await[i] = (curr[i]->r_completed - prev[i]->r_completed) ?
+            (curr[i]->r_spent - prev[i]->r_spent) /
+            ((double) (curr[i]->r_completed - prev[i]->r_completed)) : 0.0;
+        w_await[i] = (curr[i]->w_completed - prev[i]->w_completed) ?
+            (curr[i]->w_spent - prev[i]->w_spent) /
+            ((double) (curr[i]->w_completed - prev[i]->w_completed)) : 0.0;
     }
 
     /* print headers */
@@ -760,23 +831,23 @@ void write_iostat(WINDOW * window, struct iodata_s *c_ios[], struct iodata_s *p_
     /* print statistics */
     for (i = 0; i < bdev; i++) {
         /* skip devices without iops */
-        if (c_ios[i]->r_completed == 0 && c_ios[i]->w_completed == 0) {
+        if (curr[i]->r_completed == 0 && curr[i]->w_completed == 0) {
             continue;
         }
-        wprintw(window, "%6s:\t\t", c_ios[i]->devname);
+        wprintw(window, "%6s:\t\t", curr[i]->devname);
         wprintw(window, "%8.2f%8.2f",
-                S_VALUE(p_ios[i]->r_merged, c_ios[i]->r_merged, itv, sys_hz),
-                S_VALUE(p_ios[i]->w_merged, c_ios[i]->w_merged, itv, sys_hz));
+                S_VALUE(prev[i]->r_merged, curr[i]->r_merged, itv, sys_hz),
+                S_VALUE(prev[i]->w_merged, curr[i]->w_merged, itv, sys_hz));
         wprintw(window, "%9.2f%9.2f",
-                S_VALUE(p_ios[i]->r_completed, c_ios[i]->r_completed, itv, sys_hz),
-                S_VALUE(p_ios[i]->w_completed, c_ios[i]->w_completed, itv, sys_hz));
+                S_VALUE(prev[i]->r_completed, curr[i]->r_completed, itv, sys_hz),
+                S_VALUE(prev[i]->w_completed, curr[i]->w_completed, itv, sys_hz));
         wprintw(window, "%9.2f%9.2f%9.2f%9.2f",
-                S_VALUE(p_ios[i]->r_sectors, c_ios[i]->r_sectors, itv, sys_hz) / 2048,
-                S_VALUE(p_ios[i]->w_sectors, c_ios[i]->w_sectors, itv, sys_hz) / 2048,
-                c_ios[i]->arqsz,
-                S_VALUE(p_ios[i]->t_weighted, c_ios[i]->t_weighted, itv, sys_hz) / 1000.0);
-        wprintw(window, "%10.2f%10.2f%10.2f", c_ios[i]->await, r_await[i], w_await[i]);
-        wprintw(window, "%8.2f", c_ios[i]->util / 10.0);
+                S_VALUE(prev[i]->r_sectors, curr[i]->r_sectors, itv, sys_hz) / 2048,
+                S_VALUE(prev[i]->w_sectors, curr[i]->w_sectors, itv, sys_hz) / 2048,
+                curr[i]->arqsz,
+                S_VALUE(prev[i]->t_weighted, curr[i]->t_weighted, itv, sys_hz) / 1000.0);
+        wprintw(window, "%10.2f%10.2f%10.2f", curr[i]->await, r_await[i], w_await[i]);
+        wprintw(window, "%8.2f", curr[i]->util / 10.0);
         wprintw(window, "\n");
     }
     wrefresh(window);

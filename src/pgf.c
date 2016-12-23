@@ -128,13 +128,11 @@ void get_conf_value(PGconn * conn, const char * config_option_name, char * confi
  */
 void get_sys_special(PGconn * conn, struct tab_s * tab)
 {
-//    PGresult * res;               not used now, byut maybe in disk/iface funcs?
-//    char errmsg[ERRSIZE]; 
-    
     /* get system clock resolution */
     get_HZ(tab, conn);
 
     /* get number of block and network devices */
+    tab->sys_special.bdev = count_block_devices(tab, conn);
 }
 
 /*

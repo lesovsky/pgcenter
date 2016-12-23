@@ -58,7 +58,7 @@ void init_tabs(struct tab_s *tabs[])
         if ((tabs[i] = (struct tab_s *) malloc(TAB_SIZE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for tabs failed.\n");
         }
-        memset(tabs[i], 0, TAB_SIZE);
+        memset(tabs[i], 0, TAB_SIZE);        
         tabs[i]->tab = i;
         tabs[i]->conn_used = false;
         tabs[i]->host[0] = '\0';
@@ -74,6 +74,11 @@ void init_tabs(struct tab_s *tabs[])
         snprintf(tabs[i]->pg_stat_activity_min_age, XS_BUF_LEN, "%s", PG_STAT_ACTIVITY_MIN_AGE_DEFAULT);
         tabs[i]->signal_options = 0;
         tabs[i]->pg_stat_sys = false;
+        
+        if ((tabs[i]->curr_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL ||
+            (tabs[i]->prev_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL) {
+            mreport(true, msg_fatal, "FATAL: malloc() for tabs (iostat) failed.\n");
+        }
 
         for (j = 0; j < TOTAL_CONTEXTS; j++) {
             switch (j) {
@@ -965,11 +970,10 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
  * aux-stats area.
  ****************************************************************************
  */
-void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct iodata_s *c_ios[],
-        struct iodata_s *p_ios[], unsigned int bdev, bool * repaint)
+void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * conn, bool * repaint)
 {
     /* if number of devices is changed, we should realloc structs and repaint subtab */
-    if (bdev != count_block_devices()) {
+    if (tab->sys_special.bdev != count_block_devices(tab, conn)) {
         wprintw(w_cmd, "The number of devices is changed. ");
         *repaint = true;
         return;
@@ -979,16 +983,18 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct io
     static unsigned long long itv;
     static unsigned int curr = 1;
     
-    if (tab->conn_local) {
-        uptime0[curr] = 0;
-        read_uptime(&(uptime0[curr]), tab);
-        read_diskstats(window, c_ios, repaint);
-    }
+    uptime0[curr] = 0;
+    read_uptime(&(uptime0[curr]), tab);
+    if (tab->conn_local)
+        read_local_diskstats(window, tab->curr_iostat, tab->sys_special.bdev, repaint);
+    else
+        read_remote_diskstats(window, tab->curr_iostat, tab->sys_special.bdev, conn, repaint);
+    
     itv = get_interval(uptime0[!curr], uptime0[curr]);
-    write_iostat(window, c_ios, p_ios, bdev, itv, tab->sys_special.sys_hz);
+    write_iostat(window, tab->curr_iostat, tab->prev_iostat, tab->sys_special.bdev, itv, tab->sys_special.sys_hz);
 
     /* save current stats snapshot */
-    replace_iodata(c_ios, p_ios, bdev);
+    replace_iostat(tab->curr_iostat, tab->prev_iostat, tab->sys_special.bdev);
     curr ^= 1;
 }
 
@@ -1080,11 +1086,6 @@ int main(int argc, char *argv[])
 
     unsigned int long long ws_color, wc_color, wa_color, wl_color;/* colors for text zones */
 
-    /* init iostat stuff */
-    unsigned int bdev = count_block_devices();
-    struct iodata_s *c_ios[bdev];
-    struct iodata_s *p_ios[bdev];
-
     /* init nicstat stuff */
     unsigned int idev = count_nic_devices();
     struct nicdata_s *c_nicdata[idev];
@@ -1098,9 +1099,7 @@ int main(int argc, char *argv[])
     init_args_struct(args);
     init_tabs(tabs);
     init_stats(st_cpu, &st_mem_short);
-    init_iostats(c_ios, p_ios, bdev);
     init_nicdata(c_nicdata, p_nicdata, idev);
-//    get_HZ();
 
     /* 
      * Handling connection settings. The main idea here is combine together: 
@@ -1132,6 +1131,9 @@ int main(int argc, char *argv[])
     /* open connections to postgres */
     prepare_conninfo(tabs);
     open_connections(tabs, conns);
+    
+    /* when conns are opened, init other system-specific stats */
+    init_iostat(tabs, -1);
 
     /* init ncurses */
     initscr();
@@ -1420,11 +1422,11 @@ int main(int argc, char *argv[])
                     print_log(w_sub, w_cmd, tabs[tab_index], conns[tab_index]);
                     break;
                 case SUBTAB_IOSTAT:
-                    print_iostat(w_sub, w_cmd, tabs[tab_index], c_ios, p_ios, bdev, &repaint);
+                    print_iostat(w_sub, w_cmd, tabs[tab_index], conns[tab_index], &repaint);
                     if (repaint) {
-                        free_iostats(c_ios, p_ios, bdev);
-                        bdev = count_block_devices();
-                        init_iostats(c_ios, p_ios, bdev);
+                        free_iostat(tabs, tab_index);
+                        tabs[tab_index]->sys_special.bdev = count_block_devices(tabs[tab_index], conns[tab_index]);
+                        init_iostat(tabs, tab_index);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_NONE);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_IOSTAT);
                         repaint = false;

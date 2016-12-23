@@ -117,7 +117,7 @@ struct args_s
 struct sys_special_s
 {
     int sys_hz;             /* system clock resolution */
-    unsigned int bdev;      /* number of block devices */
+    int bdev;      /* number of block devices */
     unsigned int idev;      /* number of network interfaces */
 };
 
@@ -167,6 +167,8 @@ struct tab_s
     struct context_s context_list[TOTAL_CONTEXTS];
     int signal_options;
     bool pg_stat_sys;
+    struct iodata_s ** curr_iostat;           /* current IO stats snapshot */
+    struct iodata_s ** prev_iostat;           /* previous IO stats snapshot */
 };
 
 #define TAB_SIZE (sizeof(struct tab_s))
