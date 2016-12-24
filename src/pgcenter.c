@@ -972,6 +972,8 @@ void print_data(WINDOW *window, PGresult *res, char ***arr, unsigned int n_rows,
  */
 void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * conn, bool * repaint)
 {
+    static int tab_save = -1;
+    
     /* if number of devices is changed, we should realloc structs and repaint subtab */
     if (tab->sys_special.bdev != count_block_devices(tab, conn)) {
         wprintw(w_cmd, "The number of devices is changed. ");
@@ -982,7 +984,13 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * 
     static unsigned long long uptime0[2] = {0, 0};
     static unsigned long long itv;
     static unsigned int curr = 1;
-    
+
+    /* reset uptime when tabs switched */
+    if (tab->tab != tab_save) {
+        uptime0[0] = 0, uptime0[1] = 0;
+        tab_save = tab->tab;
+    }
+
     uptime0[curr] = 0;
     read_uptime(&(uptime0[curr]), tab);
     if (tab->conn_local)

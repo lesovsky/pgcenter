@@ -45,7 +45,7 @@ void init_iostat(struct tab_s * tabs[], int index)
 {
     int start, end, i, j;
     
-    /* init structs for all tabs if index < 0, otherwise only for particular tab */
+    /* init structs for all tabs if index < 0, otherwise only for a particular tab */
     index < 0 ? (start = 0, end = MAX_TABS) : (start = index, end = index + 1);
     
     /* go through the tabs */
