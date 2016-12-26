@@ -39,8 +39,14 @@
 #define PG_SYS_PROC_DISKSTATS_QUERY \
     "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
 
+#define PG_SYS_ETHTOOL_LINK_QUERY \
+    "SELECT * FROM pgcenter.get_netdev_link_settings"
+
+#define PG_SYS_PROC_IFDEV_CNT_QUERY \
+    "SELECT count(1) FROM pgcenter.sys_proc_netdev"
+
 #define PG_SYS_PROC_NETDEV_QUERY \
-    "SELECT * FROM pgcenter.sys_proc_netdev ORDER BY iface"
+    "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
 
 /* for postgresql versions before 9.6 */
 #define PG_STAT_ACTIVITY_COUNT_95_QUERY \

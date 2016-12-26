@@ -86,35 +86,53 @@ void free_iostat(struct tab_s * tabs[], int index)
 
 /*
  ****************************************************************************
- * Allocate memory for NIC data structs.
+ * Allocate memory for network interfaces statistics structs.
  ****************************************************************************
  */
-void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev)
+void init_ifstat(struct tab_s * tabs[], int index)
 {
-    unsigned int i;
-    for (i = 0; i < idev; i++) {
-        if ((c_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL ||
-            (p_nicdata[i] = (struct nicdata_s *) malloc(STATS_NICDATA_SIZE)) == NULL ) {
-                mreport(true, msg_fatal, "FATAL: malloc for nicstat failed.\n");
+    int start, end, i, j;
+    
+    /* init structs for all tabs if index < 0, otherwise only for a particular tab */
+    index < 0 ? (start = 0, end = MAX_TABS) : (start = index, end = index + 1);
+    
+    /* go through the tabs */
+    for (i = start; i < end; i++) {
+        /* go through the iostats array entries */
+        for (j = 0; j < tabs[i]->sys_special.idev; j++) {
+            if ((tabs[i]->curr_ifstat[j] = (struct ifdata_s *) malloc(STATS_IFDATA_SIZE)) == NULL ||
+                (tabs[i]->prev_ifstat[j] = (struct ifdata_s *) malloc(STATS_IFDATA_SIZE)) == NULL) {
+                mreport(true, msg_fatal, "FATAL: malloc for ifstat failed.\n");
+            }
+            memset(tabs[i]->curr_ifstat[j], 0, STATS_IFDATA_SIZE);
+            memset(tabs[i]->prev_ifstat[j], 0, STATS_IFDATA_SIZE);
+            
+            /* initialize interfaces with unknown speed and duplex */
+            tabs[i]->curr_ifstat[j]->speed = -1;
+            tabs[i]->curr_ifstat[j]->duplex = DUPLEX_UNKNOWN;
         }
-
-	/* initialize interfaces with unknown speed and duplex */
-	c_nicdata[i]->speed = -1;
-	c_nicdata[i]->duplex = DUPLEX_UNKNOWN;
     }
 }
 
 /*
  ****************************************************************************
- * Free memory consumed by NIC data structs.
+ * Free memory consumed by network interfaces statistics structs.
  ****************************************************************************
  */
-void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev)
+void free_ifstat(struct tab_s * tabs[], int index)
 {
-    unsigned int i;
-    for (i = 0; i < idev; i++) {
-        free(c_nicdata[i]);
-        free(p_nicdata[i]);
+    int start, end, i, j;
+
+    /* init structs for all tabs if index < 0, otherwise only for particular tab */
+    index < 0 ? (start = 0, end = MAX_TABS) : (start = index, end = index + 1);
+
+    /* go through the tabs */
+    for (i = start; i < end; i++) {
+        /* go through the iostats array entries */
+        for (j = 0; j < tabs[i]->sys_special.idev; j++) {
+            free(tabs[i]->curr_ifstat[j]);
+            free(tabs[i]->prev_ifstat[j]);
+        }
     }
 }
 
@@ -146,67 +164,50 @@ void get_HZ(struct tab_s * tab, PGconn * conn)
 
 /*
  ****************************************************************************
- * Count block devices in /proc/diskstat.
+ * Count specified devices, block devices or network interfaces.
  ****************************************************************************
  */
-int count_block_devices(struct tab_s * tab, PGconn * conn)
+int count_devices(int type, bool conn_local, PGconn * conn)
 {
-    int bdev = 0;
+    int ndev = 0;
     FILE * fp;
     char ch;
-    static char errmsg[ERRSIZE];
+    static char statfile[PATH_MAX], query[QUERY_MAXLEN], errmsg[ERRSIZE];
     PGresult * res;
-    
-    if (tab->conn_local) {
+
+    switch (type) {
+        case BLKDEV:
+            snprintf(statfile, PATH_MAX, "%s", DISKSTATS_FILE);
+            snprintf(query, QUERY_MAXLEN, "%s", PG_SYS_PROC_BDEV_CNT_QUERY);
+        break;
+        case NETDEV:
+            snprintf(statfile, PATH_MAX, "%s", NETDEV_FILE);
+            snprintf(query, QUERY_MAXLEN, "%s", PG_SYS_PROC_IFDEV_CNT_QUERY);
+        break;
+    }
+
+    if (conn_local) {
         /* if statfile is failed to read, then allocate the array for 10 devices. */
-        if ((fp = fopen(DISKSTATS_FILE, "r")) == NULL) {
-            bdev = 10;              /* can't get stats, use defaults */
+        if ((fp = fopen(statfile, "r")) == NULL) {
+            ndev = 10;              /* can't get stats, use defaults */
         }
+        /* count number of lines */
         while (!feof(fp)) {
             ch = fgetc(fp);
             if (ch == '\n')
-                bdev++;
+                ndev++;
         }
         fclose(fp);
     } else {
-        if ((res = do_query(conn, PG_SYS_PROC_BDEV_CNT_QUERY, errmsg)) != NULL) {
-            bdev = atol(PQgetvalue(res, 0, 0));
+        if ((res = do_query(conn, query, errmsg)) != NULL) {
+            ndev = atoi(PQgetvalue(res, 0, 0));
             PQclear(res);
         } else {
-            bdev = 10;              /* can't get stats, use defaults */
+            ndev = 10;              /* can't get stats, use defaults */
         }
     }
 
-    return bdev;
-}
-
-/*
- ****************************************************************************
- * Count NIC devices in /proc/net/dev.
- ****************************************************************************
- */
-unsigned int count_nic_devices(void)
-{
-    FILE * fp;
-    unsigned int idev = 0;
-    char ch;
-
-    /* if statfile is failed to read, then allocate the array for 10 devices. */
-    if ((fp = fopen(NETDEV_FILE, "r")) == NULL) {
-        return 10;
-    }
-
-    while (!feof(fp)) {
-        ch = fgetc(fp);
-        if (ch == '\n')
-            idev++;
-    }
-
-    /* header has two lines */
-    idev = idev - 2;
-
-    fclose(fp);
-    return idev;
+    return ndev;
 }
 
 /*
@@ -214,7 +215,7 @@ unsigned int count_nic_devices(void)
  * Read /proc/loadavg and return load average values.
  ****************************************************************************
  */
-float * get_loadavg()
+float * get_local_loadavg()
 {
     static float la[3];
     FILE *fp;
@@ -273,7 +274,7 @@ double ll_sp_value(unsigned long long value1, unsigned long long value2,
  * Read machine uptime independently of the number of processors.
  ****************************************************************************
  */
-void read_uptime(unsigned long long *uptime, struct tab_s * tab)
+void read_local_uptime(unsigned long long *uptime, struct tab_s * tab)
 {
     FILE *fp;
     unsigned long up_sec, up_cent;
@@ -317,7 +318,7 @@ void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn *
 /*
  ****************************************************************************
  * Read cpu statistics from /proc/stat. Also calculate uptime if 
- * read_uptime() function return NULL.
+ * read_*_uptime() function return NULL.
  *
  * IN:
  * @st_cpu          Struct where stat will be saved.
@@ -329,7 +330,7 @@ void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn *
  * @uptime0         Machine uptime. Filled only if previously set to zero.
  ****************************************************************************
  */
-void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
+void read_local_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
                             unsigned long long *uptime, unsigned long long *uptime0)
 {
     FILE *fp;
@@ -390,7 +391,7 @@ void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
 /*
  ****************************************************************************
  * Read cpu statistics from /proc/stat using sql interface. 
- * Also calculate uptime if read_uptime() function return NULL.
+ * Also calculate uptime if read_*_uptime() function return NULL.
  ****************************************************************************
  */
 void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
@@ -638,30 +639,39 @@ void replace_iostat(struct iodata_s *curr[], struct iodata_s *prev[], int bdev)
  * Get interface speed and duplex settings.
  ****************************************************************************
  */
-void get_speed_duplex(struct nicdata_s * nicdata)
+void get_speed_duplex(struct ifdata_s * ifdata, bool conn_local, PGconn * conn)
 {
     struct ifreq ifr;
     struct ethtool_cmd edata;
     int status, sock;
+    char query[QUERY_MAXLEN], errmsg[ERRSIZE];
+    PGresult * res;
 
-    sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
-    if (sock < 0) {
-        return;
-    }
+    if (conn_local) {
+        sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+        if (sock < 0) {
+            return;
+        }
 
-    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", nicdata->ifname);
-    ifr.ifr_data = (void *) &edata;
-    edata.cmd = ETHTOOL_GSET;
-    status = ioctl(sock, SIOCETHTOOL, &ifr);
-    close(sock);
+        snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", ifdata->ifname);
+        ifr.ifr_data = (void *) &edata;
+        edata.cmd = ETHTOOL_GSET;
+        status = ioctl(sock, SIOCETHTOOL, &ifr);
+        close(sock);
     
-    if (status < 0) {
-        return;
+        if (status < 0) {
+            return;
+        }
+        ifdata->speed = edata.speed * 1000000;
+        ifdata->duplex = edata.duplex;
+    } else {
+        snprintf(query, QUERY_MAXLEN, "%s('%s')", PG_SYS_ETHTOOL_LINK_QUERY, ifdata->ifname);
+        if ((res = do_query(conn, query, errmsg)) != NULL) {
+            ifdata->speed = atoi(PQgetvalue(res, 0, 1)) * 1000000;
+            ifdata->duplex = atoi(PQgetvalue(res, 0, 2));
+            PQclear(res);
+        }
     }
-
-    nicdata->speed = edata.speed * 1000000;
-    nicdata->duplex = edata.duplex;
-
 }
 
 /*
@@ -669,9 +679,9 @@ void get_speed_duplex(struct nicdata_s * nicdata)
  * Save current nicstat snapshot.
  ****************************************************************************
  */
-void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], unsigned int idev)
+void replace_ifdata(struct ifdata_s *curr[], struct ifdata_s *prev[], int idev)
 {
-    unsigned int i;
+    int i;
     for (i = 0; i < idev; i++) {
         prev[i]->rbytes = curr[i]->rbytes;
         prev[i]->rpackets = curr[i]->rpackets;
@@ -858,7 +868,7 @@ void write_iostat(WINDOW * window, struct iodata_s * curr[], struct iodata_s * p
  * Read /proc/net/dev and save stats.
  ****************************************************************************
  */
-void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repaint)
+void read_local_netdev(WINDOW * window, struct ifdata_s *curr[], bool * repaint)
 {
     FILE *fp;
     unsigned int i = 0, j = 0;
@@ -888,20 +898,20 @@ void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repai
                 &lu[0], &lu[1], &lu[2], &lu[3], &lu[4], &lu[5], &lu[6], &lu[7],
              /* wbps    wpps    werrs    wdrop    wfifo    wcoll    wcarrier wcomp */
                 &lu[8], &lu[9], &lu[10], &lu[11], &lu[12], &lu[13], &lu[14], &lu[15]);
-        snprintf(c_nicd[i]->ifname, IF_NAMESIZE + 1, "%s", ifname);
-        c_nicd[i]->rbytes = lu[0];
-        c_nicd[i]->rpackets = lu[1];
-        c_nicd[i]->wbytes = lu[8];
-        c_nicd[i]->wpackets = lu[9];
-        c_nicd[i]->ierr = lu[2];
-        c_nicd[i]->oerr = lu[10];
-        c_nicd[i]->coll = lu[13];
-        c_nicd[i]->sat = lu[2];
-        c_nicd[i]->sat += lu[3];
-        c_nicd[i]->sat += lu[11];
-        c_nicd[i]->sat += lu[12];
-        c_nicd[i]->sat += lu[13];
-        c_nicd[i]->sat += lu[14];
+        snprintf(curr[i]->ifname, IF_NAMESIZE + 1, "%s", ifname);
+        curr[i]->rbytes = lu[0];
+        curr[i]->rpackets = lu[1];
+        curr[i]->wbytes = lu[8];
+        curr[i]->wpackets = lu[9];
+        curr[i]->ierr = lu[2];
+        curr[i]->oerr = lu[10];
+        curr[i]->coll = lu[13];
+        curr[i]->sat = lu[2];
+        curr[i]->sat += lu[3];
+        curr[i]->sat += lu[11];
+        curr[i]->sat += lu[12];
+        curr[i]->sat += lu[13];
+        curr[i]->sat += lu[14];
         i++;
     }
     fclose(fp);
@@ -909,10 +919,52 @@ void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repai
 
 /*
  ****************************************************************************
+ * Read remote /proc/net/dev via sql and save stats.
+ ****************************************************************************
+ */
+void read_remote_netdev(WINDOW * window, struct ifdata_s *curr[], int idev, PGconn * conn, bool * repaint)
+{
+    static char errmsg[ERRSIZE];
+    char * tmp;                     /* for strtoull() */
+    PGresult * res;
+    int i;
+    
+    if ((res = do_query(conn, PG_SYS_PROC_NETDEV_QUERY, errmsg)) != NULL) {
+        for (i = 0; i < idev; i++) {
+            snprintf(curr[i]->ifname, IF_NAMESIZE + 1, "%s", PQgetvalue(res, i, 0));
+            curr[i]->rbytes = strtoul(PQgetvalue(res, i, 2), &tmp, 10);
+            curr[i]->rpackets = strtoul(PQgetvalue(res, i, 3), &tmp, 10);
+            curr[i]->wbytes = strtoul(PQgetvalue(res, i, 10), &tmp, 10);
+            curr[i]->wpackets = strtoul(PQgetvalue(res, i, 11), &tmp, 10);
+            curr[i]->ierr = strtoul(PQgetvalue(res, i, 4), &tmp, 10);
+            curr[i]->oerr = strtoul(PQgetvalue(res, i, 12), &tmp, 10);
+            curr[i]->coll = strtoul(PQgetvalue(res, i, 15), &tmp, 10);
+            curr[i]->sat = strtoul(PQgetvalue(res, i, 4), &tmp, 10);
+            curr[i]->sat += strtoul(PQgetvalue(res, i, 5), &tmp, 10);
+            curr[i]->sat += strtoul(PQgetvalue(res, i, 13), &tmp, 10);
+            curr[i]->sat += strtoul(PQgetvalue(res, i, 14), &tmp, 10);
+            curr[i]->sat += strtoul(PQgetvalue(res, i, 15), &tmp, 10);
+            curr[i]->sat += strtoul(PQgetvalue(res, i, 16), &tmp, 10);            
+        }
+        PQclear(res);
+    } else {
+        /*
+         * If /proc/diskstats read failed, fire up repaint flag.
+         * Next when repainting subtab fails, subtab will be closed.
+         */
+        wclear(window);
+        wprintw(window, "Do nothing. Failed to get remote ifstats.");
+        *repaint = true;
+        return;
+    }
+}
+
+/*
+ ****************************************************************************
  * Compute NIC stats and print it out.
  ****************************************************************************
  */
-void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv, int sys_hz)
+void write_nicstats(WINDOW * window, struct ifdata_s *curr[], struct ifdata_s *prev[], int idev, unsigned long long itv, int sys_hz)
 {
     /* print headers */
     wclear(window);
@@ -921,48 +973,48 @@ void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_
     wattroff(window, A_BOLD);
 
     double rbps, rpps, wbps, wpps, ravs, wavs, ierr, oerr, coll, sat, rutil, wutil, util;
-    unsigned int i = 0;
+    int i = 0;
 
     for (i = 0; i < idev; i++) {
         /* skip interfaces which never seen packets */
-        if (c_nicd[i]->rpackets == 0 && c_nicd[i]->wpackets == 0) {
+        if (curr[i]->rpackets == 0 && curr[i]->wpackets == 0) {
            continue;
         }
 
-        rbps = S_VALUE(p_nicd[i]->rbytes, c_nicd[i]->rbytes, itv, sys_hz);
-        wbps = S_VALUE(p_nicd[i]->wbytes, c_nicd[i]->wbytes, itv, sys_hz);
-        rpps = S_VALUE(p_nicd[i]->rpackets, c_nicd[i]->rpackets, itv, sys_hz);
-        wpps = S_VALUE(p_nicd[i]->wpackets, c_nicd[i]->wpackets, itv, sys_hz);
-        ierr = S_VALUE(p_nicd[i]->ierr, c_nicd[i]->ierr, itv, sys_hz);
-        oerr = S_VALUE(p_nicd[i]->oerr, c_nicd[i]->oerr, itv, sys_hz);
-        coll = S_VALUE(p_nicd[i]->coll, c_nicd[i]->coll, itv, sys_hz);
-        sat = S_VALUE(p_nicd[i]->sat, c_nicd[i]->sat, itv, sys_hz);
+        rbps = S_VALUE(prev[i]->rbytes, curr[i]->rbytes, itv, sys_hz);
+        wbps = S_VALUE(prev[i]->wbytes, curr[i]->wbytes, itv, sys_hz);
+        rpps = S_VALUE(prev[i]->rpackets, curr[i]->rpackets, itv, sys_hz);
+        wpps = S_VALUE(prev[i]->wpackets, curr[i]->wpackets, itv, sys_hz);
+        ierr = S_VALUE(prev[i]->ierr, curr[i]->ierr, itv, sys_hz);
+        oerr = S_VALUE(prev[i]->oerr, curr[i]->oerr, itv, sys_hz);
+        coll = S_VALUE(prev[i]->coll, curr[i]->coll, itv, sys_hz);
+        sat = S_VALUE(prev[i]->sat, curr[i]->sat, itv, sys_hz);
 
 	/* if no data about pps, zeroing averages */
         (rpps > 0) ? ( ravs = rbps / rpps ) : ( ravs = 0 );
         (wpps > 0) ? ( wavs = wbps / wpps ) : ( wavs = 0 );
 
         /* Calculate utilisation */
-        if (c_nicd[i]->speed > 0) {
+        if (curr[i]->speed > 0) {
             /*
              * The following have a mysterious "800",
              * it is 100 for the % conversion, and 8 for bytes2bits.
              */
-            rutil = min(rbps * 800 / c_nicd[i]->speed, 100);
-            wutil = min(wbps * 800 / c_nicd[i]->speed, 100);
-            if (c_nicd[i]->duplex == 2) {
+            rutil = min(rbps * 800 / curr[i]->speed, 100);
+            wutil = min(wbps * 800 / curr[i]->speed, 100);
+            if (curr[i]->duplex == 2) {
                 /* Full duplex */
                 util = max(rutil, wutil);
             } else {
                 /* Half Duplex */
-                util = min((rbps + wbps) * 800 / c_nicd[i]->speed, 100);
+                util = min((rbps + wbps) * 800 / curr[i]->speed, 100);
             }
         } else {
             util = rutil = wutil = 0;
         }
 
         /* print statistics */
-        wprintw(window, "%14s", c_nicd[i]->ifname);
+        wprintw(window, "%14s", curr[i]->ifname);
         wprintw(window, "%8.2f%8.2f", rbps / 1024 / 128, wbps / 1024 / 128);
         wprintw(window, "%9.2f%9.2f", rpps, wpps);
         wprintw(window, "%9.2f%9.2f", ravs, wavs);

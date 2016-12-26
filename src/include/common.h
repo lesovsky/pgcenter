@@ -118,7 +118,7 @@ struct sys_special_s
 {
     int sys_hz;             /* system clock resolution */
     int bdev;      /* number of block devices */
-    unsigned int idev;      /* number of network interfaces */
+    int idev;      /* number of network interfaces */
 };
 
 #define SYS_SPECIAL_SIZE (sizeof(struct sys_special_s))
@@ -169,6 +169,8 @@ struct tab_s
     bool pg_stat_sys;
     struct iodata_s ** curr_iostat;           /* current IO stats snapshot */
     struct iodata_s ** prev_iostat;           /* previous IO stats snapshot */
+    struct ifdata_s ** curr_ifstat;           /* current iface stats snapshot */
+    struct ifdata_s ** prev_ifstat;           /* previous iface stats snapshot */
 };
 
 #define TAB_SIZE (sizeof(struct tab_s))

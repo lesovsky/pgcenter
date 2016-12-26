@@ -132,7 +132,8 @@ void get_sys_special(PGconn * conn, struct tab_s * tab)
     get_HZ(tab, conn);
 
     /* get number of block and network devices */
-    tab->sys_special.bdev = count_block_devices(tab, conn);
+    tab->sys_special.bdev = count_devices(BLKDEV, tab->conn_local, conn);
+    tab->sys_special.idev = count_devices(NETDEV, tab->conn_local, conn);
 }
 
 /*

@@ -90,16 +90,16 @@ struct iodata_s
     double await;                       /* latency */
     double util;                        /* device utilization */
 };
-
 #define STATS_IODATA_SIZE (sizeof(struct iodata_s))
+#define BLKDEV     1
 
 /* This may be defined by <linux/ethtool.h> */
 #ifndef DUPLEX_UNKNOWN
 #define DUPLEX_UNKNOWN          0xff
 #endif /* DUPLEX_UNKNOWN */
 
-/* struct for NIC data (settings and stats) */
-struct nicdata_s
+/* struct for network interface's data (settings and stats) */
+struct ifdata_s
 {
     char ifname[IF_NAMESIZE + 1];
     long speed;
@@ -113,27 +113,25 @@ struct nicdata_s
     unsigned long coll;
     unsigned long sat;
 };
-
-#define STATS_NICDATA_SIZE (sizeof(struct nicdata_s))
+#define STATS_IFDATA_SIZE (sizeof(struct ifdata_s))
+#define NETDEV     2
 
 /* init/free stuff */
 void init_stats(struct cpu_s *st_cpu[], struct mem_s **st_mem_short);
 void init_iostat(struct tab_s * tabs[], int index);
-void init_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
+void init_ifstat(struct tab_s * tabs[], int index);
 void free_iostat(struct tab_s * tabs[], int index);
-void free_nicdata(struct nicdata_s *c_nicdata[], struct nicdata_s *p_nicdata[], unsigned int idev);
+void free_ifstat(struct tab_s * tabs[], int index);
+
+/* load average stats */
+float * get_local_loadavg();
+float * get_remote_loadavg(PGconn * conn);
 
 /* cpu stat functions */
-double ll_sp_value(unsigned long long value1, unsigned long long value2,
-        unsigned long long itv);
-void read_uptime(unsigned long long *uptime, struct tab_s * tab);
-void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn * conn);
-void read_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
+void read_local_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
         unsigned long long *uptime, unsigned long long *uptime0);
 void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
         unsigned long long *uptime, unsigned long long *uptime0, PGconn * conn);
-unsigned long long get_interval(unsigned long long prev_uptime,
-        unsigned long long curr_uptime);
 void write_cpu_stat_raw(WINDOW * window, struct cpu_s *st_cpu[],
         unsigned int curr, unsigned long long itv);
 
@@ -143,7 +141,6 @@ void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn);
 void write_mem_stat(WINDOW * window, struct mem_s *st_mem_short);
 
 /* iostat functions */
-int count_block_devices(struct tab_s * tab, PGconn * conn);
 void replace_iostat(struct iodata_s * curr[], struct iodata_s * prev[], int bdev);
 void read_local_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, bool * repaint);
 void read_remote_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, PGconn * conn, bool * repaint);
@@ -151,15 +148,18 @@ void write_iostat(WINDOW * window, struct iodata_s * curr[], struct iodata_s * p
         int bdev, unsigned long long itv, int sys_hz);
 
 /* nicstat functions */
-unsigned int count_nic_devices(void);
-void get_speed_duplex(struct nicdata_s * nicdata);
-void replace_nicdata(struct nicdata_s *curr[], struct nicdata_s *prev[], unsigned int idev);
-void read_proc_net_dev(WINDOW * window, struct nicdata_s *c_nicd[], bool * repaint);
-void write_nicstats(WINDOW * window, struct nicdata_s *c_nicd[], struct nicdata_s *p_nicd[], unsigned int idev, unsigned long long itv, int sys_hz);
+void get_speed_duplex(struct ifdata_s * ifdata, bool conn_local, PGconn * conn);
+void replace_ifdata(struct ifdata_s *curr[], struct ifdata_s *prev[], int idev);
+void read_local_netdev(WINDOW * window, struct ifdata_s *curr[], bool * repaint);
+void read_remote_netdev(WINDOW * window, struct ifdata_s *curr[], int idev, PGconn * conn, bool * repaint);
+void write_nicstats(WINDOW * window, struct ifdata_s *curr[], struct ifdata_s *prev[], int idev, unsigned long long itv, int sys_hz);
 
 /* others */
-float * get_loadavg();
-float * get_remote_loadavg(PGconn * conn);
+void read_local_uptime(unsigned long long *uptime, struct tab_s * tab);
+void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn * conn);
+double ll_sp_value(unsigned long long value1, unsigned long long value2, unsigned long long itv);
+unsigned long long get_interval(unsigned long long prev_uptime, unsigned long long curr_uptime);
+int count_devices(int type, bool conn_local, PGconn * conn);
 void get_time(char * strtime);
 
 #endif /* __STATS_H__ */

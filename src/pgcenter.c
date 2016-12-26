@@ -75,9 +75,14 @@ void init_tabs(struct tab_s *tabs[])
         tabs[i]->signal_options = 0;
         tabs[i]->pg_stat_sys = false;
         
+        /* init iostat/ifstat storage */
         if ((tabs[i]->curr_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL ||
             (tabs[i]->prev_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for tabs (iostat) failed.\n");
+        }
+        if ((tabs[i]->curr_ifstat = (struct ifdata_s **) malloc(STATS_IFDATA_SIZE)) == NULL ||
+            (tabs[i]->prev_ifstat = (struct ifdata_s **) malloc(STATS_IFDATA_SIZE)) == NULL) {
+            mreport(true, msg_fatal, "FATAL: malloc() for tabs (ifstat) failed.\n");
         }
 
         for (j = 0; j < TOTAL_CONTEXTS; j++) {
@@ -780,7 +785,7 @@ void print_title(WINDOW * window)
 void print_loadavg(WINDOW * window, struct tab_s * tab, PGconn * conn)
 {
     float * la;
-    tab->conn_local ? (la = get_loadavg()) : (la = get_remote_loadavg(conn));
+    tab->conn_local ? (la = get_local_loadavg()) : (la = get_remote_loadavg(conn));
     wprintw(window, "load average: %.2f, %.2f, %.2f\n", la[0], la[1], la[2]);
 }
 
@@ -799,8 +804,8 @@ void print_cpu_usage(WINDOW * window, struct cpu_s *st_cpu[], struct tab_s * tab
 
     uptime0[curr] = 0;
     if (tab->conn_local) {
-        read_uptime(&(uptime0[curr]), tab);
-        read_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]));
+        read_local_uptime(&(uptime0[curr]), tab);
+        read_local_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]));
     } else {
         read_remote_uptime(&(uptime0[curr]), tab, conn);
         read_remote_cpu_stat(st_cpu[curr], 2, &(uptime[curr]), &(uptime0[curr]), conn);
@@ -975,7 +980,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * 
     static int tab_save = -1;
     
     /* if number of devices is changed, we should realloc structs and repaint subtab */
-    if (tab->sys_special.bdev != count_block_devices(tab, conn)) {
+    if (tab->sys_special.bdev != count_devices(BLKDEV, tab->conn_local, conn)) {
         wprintw(w_cmd, "The number of devices is changed. ");
         *repaint = true;
         return;
@@ -992,11 +997,13 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * 
     }
 
     uptime0[curr] = 0;
-    read_uptime(&(uptime0[curr]), tab);
-    if (tab->conn_local)
+    if (tab->conn_local) {
+        read_local_uptime(&(uptime0[curr]), tab);
         read_local_diskstats(window, tab->curr_iostat, tab->sys_special.bdev, repaint);
-    else
+    } else {
+        read_remote_uptime(&(uptime0[curr]), tab, conn);
         read_remote_diskstats(window, tab->curr_iostat, tab->sys_special.bdev, conn, repaint);
+    }
     
     itv = get_interval(uptime0[!curr], uptime0[curr]);
     write_iostat(window, tab->curr_iostat, tab->prev_iostat, tab->sys_special.bdev, itv, tab->sys_special.sys_hz);
@@ -1012,11 +1019,12 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * 
  * out stats to the aux-stats area.
  ****************************************************************************
  */
-void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct nicdata_s *c_nicd[],
-        struct nicdata_s *p_nicd[], unsigned int idev, bool * repaint)
+void print_ifstat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * conn, bool * repaint)
 {
+    static int tab_save = -1;
+    
     /* if number of devices is changed, we should realloc structs and repaint subtab */
-    if (idev != count_nic_devices()) {
+    if (tab->sys_special.idev != count_devices(NETDEV, tab->conn_local, conn)) {
         wprintw(w_cmd, "The number of devices is changed.");
         *repaint = true;
         return;
@@ -1025,26 +1033,35 @@ void print_nicstat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, struct n
     static unsigned long long uptime0[2] = {0, 0};
     static unsigned long long itv;
     static unsigned int curr = 1;
-    unsigned int i = 0;
+    int i = 0;
     static bool first = true;
 
+    /* reset uptime when tabs switched */
+    if (tab->tab != tab_save) {
+        uptime0[0] = 0, uptime0[1] = 0;
+        tab_save = tab->tab;
+    }
+
+    uptime0[curr] = 0;
     if (tab->conn_local) {
-        uptime0[curr] = 0;
-        read_uptime(&(uptime0[curr]), tab);
-        read_proc_net_dev(window, c_nicd, repaint);
+        read_local_uptime(&(uptime0[curr]), tab);
+        read_local_netdev(window, tab->curr_ifstat, repaint);
+    } else {
+        read_remote_uptime(&(uptime0[curr]), tab, conn);
+        read_remote_netdev(window, tab->curr_ifstat, tab->sys_special.idev, conn, repaint);
     }
     
     if (first) {
-        for (i = 0; i < idev; i++)
-            get_speed_duplex(c_nicd[i]);
+        for (i = 0; i < tab->sys_special.idev; i++)
+            get_speed_duplex(tab->curr_ifstat[i], tab->conn_local, conn);
         first = false;
     }
 
     itv = get_interval(uptime0[!curr], uptime0[curr]);
-    write_nicstats(window, c_nicd, p_nicd, idev, itv, tab->sys_special.sys_hz);
+    write_nicstats(window, tab->curr_ifstat, tab->prev_ifstat, tab->sys_special.idev, itv, tab->sys_special.sys_hz);
 
     /* save current stats snapshot */
-    replace_nicdata(c_nicd, p_nicd, idev);
+    replace_ifdata(tab->curr_ifstat, tab->prev_ifstat, tab->sys_special.idev);
     curr ^= 1;
 }
 
@@ -1094,11 +1111,6 @@ int main(int argc, char *argv[])
 
     unsigned int long long ws_color, wc_color, wa_color, wl_color;/* colors for text zones */
 
-    /* init nicstat stuff */
-    unsigned int idev = count_nic_devices();
-    struct nicdata_s *c_nicdata[idev];
-    struct nicdata_s *p_nicdata[idev];
-
     /* repaint iostat/nicstat if number of devices changed */
     bool repaint = false;
 
@@ -1107,7 +1119,6 @@ int main(int argc, char *argv[])
     init_args_struct(args);
     init_tabs(tabs);
     init_stats(st_cpu, &st_mem_short);
-    init_nicdata(c_nicdata, p_nicdata, idev);
 
     /* 
      * Handling connection settings. The main idea here is combine together: 
@@ -1142,6 +1153,7 @@ int main(int argc, char *argv[])
     
     /* when conns are opened, init other system-specific stats */
     init_iostat(tabs, -1);
+    init_ifstat(tabs, -1);
 
     /* init ncurses */
     initscr();
@@ -1433,7 +1445,7 @@ int main(int argc, char *argv[])
                     print_iostat(w_sub, w_cmd, tabs[tab_index], conns[tab_index], &repaint);
                     if (repaint) {
                         free_iostat(tabs, tab_index);
-                        tabs[tab_index]->sys_special.bdev = count_block_devices(tabs[tab_index], conns[tab_index]);
+                        tabs[tab_index]->sys_special.bdev = count_devices(BLKDEV, tabs[tab_index]->conn_local, conns[tab_index]);
                         init_iostat(tabs, tab_index);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_NONE);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_IOSTAT);
@@ -1441,11 +1453,11 @@ int main(int argc, char *argv[])
                     }
                     break;
                 case SUBTAB_NICSTAT:
-                    print_nicstat(w_sub, w_cmd, tabs[tab_index], c_nicdata, p_nicdata, idev, &repaint);
+                    print_ifstat(w_sub, w_cmd, tabs[tab_index], conns[tab_index], &repaint);
                     if (repaint) {
-                        free_nicdata(c_nicdata, p_nicdata, idev);
-                        idev = count_nic_devices();
-                        init_nicdata(c_nicdata, p_nicdata, idev);
+                        free_ifstat(tabs, tab_index);
+                        tabs[tab_index]->sys_special.idev = count_devices(NETDEV, tabs[tab_index]->conn_local, conns[tab_index]);
+                        init_ifstat(tabs, tab_index);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_NONE);
                         subtab_process(w_cmd, &w_sub, tabs[tab_index], conns[tab_index], SUBTAB_NICSTAT);
                         repaint = false;
