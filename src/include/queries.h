@@ -11,6 +11,9 @@
 #define __QUERIES_H__
 
 /* sys stats from /proc */
+#define DISKSTATS_VIEW  "pgcenter.sys_proc_diskstats"
+#define NETDEV_VIEW     "pgcenter.sys_proc_netdev"
+
 #define PG_SYS_GET_CLK_QUERY \
     "SELECT pgcenter.get_sys_clk_ticks()"
 

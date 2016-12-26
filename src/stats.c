@@ -189,7 +189,7 @@ int count_devices(int type, bool conn_local, PGconn * conn)
     if (conn_local) {
         /* if statfile is failed to read, then allocate the array for 10 devices. */
         if ((fp = fopen(statfile, "r")) == NULL) {
-            ndev = 10;              /* can't get stats, use defaults */
+            return 0;              /* can't get stats */
         }
         /* count number of lines */
         while (!feof(fp)) {
@@ -203,7 +203,7 @@ int count_devices(int type, bool conn_local, PGconn * conn)
             ndev = atoi(PQgetvalue(res, 0, 0));
             PQclear(res);
         } else {
-            ndev = 10;              /* can't get stats, use defaults */
+            return 0;              /* can't get stats */
         }
     }
 
@@ -637,6 +637,7 @@ void replace_iostat(struct iodata_s *curr[], struct iodata_s *prev[], int bdev)
 /*
  ****************************************************************************
  * Get interface speed and duplex settings.
+ * Interfaces with unknown speed and duplex will shown without %util values.
  ****************************************************************************
  */
 void get_speed_duplex(struct ifdata_s * ifdata, bool conn_local, PGconn * conn)
@@ -994,7 +995,7 @@ void write_nicstats(WINDOW * window, struct ifdata_s *curr[], struct ifdata_s *p
         (rpps > 0) ? ( ravs = rbps / rpps ) : ( ravs = 0 );
         (wpps > 0) ? ( wavs = wbps / wpps ) : ( wavs = 0 );
 
-        /* Calculate utilisation */
+        /* Calculate utilization */
         if (curr[i]->speed > 0) {
             /*
              * The following have a mysterious "800",
@@ -1002,10 +1003,10 @@ void write_nicstats(WINDOW * window, struct ifdata_s *curr[], struct ifdata_s *p
              */
             rutil = min(rbps * 800 / curr[i]->speed, 100);
             wutil = min(wbps * 800 / curr[i]->speed, 100);
-            if (curr[i]->duplex == 2) {
+            if (curr[i]->duplex == 1) {
                 /* Full duplex */
                 util = max(rutil, wutil);
-            } else {
+            } else if (curr[i]->duplex == 0) {
                 /* Half Duplex */
                 util = min((rbps + wbps) * 800 / curr[i]->speed, 100);
             }

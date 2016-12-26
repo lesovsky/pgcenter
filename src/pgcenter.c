@@ -1004,7 +1004,7 @@ void print_iostat(WINDOW * window, WINDOW * w_cmd, struct tab_s * tab, PGconn * 
         read_remote_uptime(&(uptime0[curr]), tab, conn);
         read_remote_diskstats(window, tab->curr_iostat, tab->sys_special.bdev, conn, repaint);
     }
-    
+
     itv = get_interval(uptime0[!curr], uptime0[curr]);
     write_iostat(window, tab->curr_iostat, tab->prev_iostat, tab->sys_special.bdev, itv, tab->sys_special.sys_hz);
 
@@ -1443,7 +1443,7 @@ int main(int argc, char *argv[])
                     break;
                 case SUBTAB_IOSTAT:
                     print_iostat(w_sub, w_cmd, tabs[tab_index], conns[tab_index], &repaint);
-                    if (repaint) {
+                    if (repaint == true) {
                         free_iostat(tabs, tab_index);
                         tabs[tab_index]->sys_special.bdev = count_devices(BLKDEV, tabs[tab_index]->conn_local, conns[tab_index]);
                         init_iostat(tabs, tab_index);

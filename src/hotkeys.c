@@ -11,6 +11,7 @@
  ****************************************************************************
  */
 #include "include/common.h"
+#include "include/pgf.h"
 #include "include/hotkeys.h"
 
 
@@ -1472,9 +1473,16 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                 }
                 break;
             case SUBTAB_IOSTAT:
-                if (access(DISKSTATS_FILE, R_OK) == -1) {
-                    wprintw(window, "Do nothing. No access to %s.", DISKSTATS_FILE);
-                    return;
+                if (tab->conn_local) {
+                    if (access(DISKSTATS_FILE, R_OK) == -1) {
+                        wprintw(window, "Do nothing. No access to %s.", DISKSTATS_FILE);
+                        return;
+                    }
+                } else {
+                    if (check_view_exists(conn, DISKSTATS_VIEW) == false) {
+                        wprintw(window, "Do nothing. No access to view %s", DISKSTATS_VIEW);
+                        return;
+                    }
                 }
                 wprintw(window, "Show iostat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
@@ -1482,9 +1490,16 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                 tab->subtab_enabled = true;
                 break;
             case SUBTAB_NICSTAT:
-                if (access(NETDEV_FILE, R_OK) == -1) {
-                    wprintw(window, "Do nothing. No access to %s.", NETDEV_FILE);
-                    return;
+                if (tab->conn_local) {
+                    if (access(NETDEV_FILE, R_OK) == -1) {
+                        wprintw(window, "Do nothing. No access to %s.", NETDEV_FILE);
+                        return;
+                    }
+                } else {
+                    if (check_view_exists(conn, NETDEV_VIEW) == false) {
+                        wprintw(window, "Do nothing. No access to view %s", NETDEV_VIEW);
+                        return;
+                    }
                 }
                 wprintw(window, "Show nicstat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);

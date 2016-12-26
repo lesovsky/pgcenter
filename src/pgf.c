@@ -467,3 +467,24 @@ void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval)
             qps, avgtime, maxtime);
     wrefresh(window);
 }
+
+/* 
+ ****************************************************************************
+ * Check pgcenter's statview existance.
+ ****************************************************************************
+ */
+bool check_view_exists(PGconn * conn, char * view)
+{
+    PGresult *res;
+    char query[QUERY_MAXLEN], errmsg[ERRSIZE];
+    bool exists;
+    
+    snprintf(query, QUERY_MAXLEN, "SELECT '%s'::regclass", view);
+    if ((res = do_query(conn, query, errmsg)) != NULL) {
+        exists = true;
+        PQclear(res);
+    } else {
+        exists = false;
+    }
+    return exists;
+}

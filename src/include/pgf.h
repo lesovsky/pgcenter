@@ -65,4 +65,5 @@ void write_conn_status(WINDOW * window, PGconn *conn, unsigned int tab_no, int s
 void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void get_summary_vac_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval);
+bool check_view_exists(PGconn * conn, char * view);
 #endif /* __PGF_H__ */
