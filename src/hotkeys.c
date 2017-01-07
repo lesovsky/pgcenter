@@ -423,7 +423,10 @@ unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
                             wclear(window);
                             wprintw(window, "Successfully connected.");
                             tab_index = tabs[i]->tab;
+                            get_sys_special(conns[i], tabs[i]);
                             get_pg_special(conns[i], tabs[i]);
+                            init_iostat(tabs, i);
+                            init_ifstat(tabs, i);
                         }
                     } else if (with_esc) {
                         clear_tab_connopts(tabs, i);
@@ -438,7 +441,10 @@ unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
                     wclear(window);
                     wprintw(window, "Successfully connected.");
                     tab_index = tabs[i]->tab;
+                    get_sys_special(conns[i], tabs[i]);
                     get_pg_special(conns[i], tabs[i]);
+                    init_iostat(tabs, i);
+                    init_ifstat(tabs, i);
                 }
                 break;
             /* finish work if user input empty or cancelled */
@@ -469,10 +475,13 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
         snprintf(tabs[i]->user, sizeof(tabs[i]->user), "%s", tabs[i + 1]->user);
         snprintf(tabs[i]->dbname, sizeof(tabs[i]->dbname), "%s", tabs[i + 1]->dbname);
         snprintf(tabs[i]->password, sizeof(tabs[i]->password), "%s", tabs[i + 1]->password);
-        snprintf(tabs[i]->pg_special.pg_version_num, sizeof(tabs[i]->pg_special.pg_version_num), "%s",
-		tabs[i + 1]->pg_special.pg_version_num);
-        snprintf(tabs[i]->pg_special.pg_version, sizeof(tabs[i]->pg_special.pg_version), "%s",
-		tabs[i + 1]->pg_special.pg_version);
+        tabs[i]->conn_local = tabs[i + 1]->conn_local;
+        
+//        snprintf(tabs[i]->pg_special.pg_version_num, sizeof(tabs[i]->pg_special.pg_version_num), "%s",
+//                tabs[i + 1]->pg_special.pg_version_num);
+//        snprintf(tabs[i]->pg_special.pg_version, sizeof(tabs[i]->pg_special.pg_version), "%s",
+//                tabs[i + 1]->pg_special.pg_version);
+        
         tabs[i]->subtab =        tabs[i + 1]->subtab;
         snprintf(tabs[i]->log_path, sizeof(tabs[i]->log_path), "%s", tabs[i + 1]->log_path);
         tabs[i]->log_fd =            tabs[i + 1]->log_fd;
@@ -481,8 +490,20 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
 		tabs[i + 1]->pg_stat_activity_min_age);
         tabs[i]->signal_options =    tabs[i + 1]->signal_options;
         tabs[i]->pg_stat_sys =       tabs[i + 1]->pg_stat_sys;
+        tabs[i]->curr_iostat = tabs[i + 1]->curr_iostat;    tabs[i]->prev_iostat = tabs[i + 1]->prev_iostat;
+        tabs[i]->curr_ifstat = tabs[i + 1]->curr_ifstat;    tabs[i]->prev_ifstat = tabs[i + 1]->prev_ifstat;
 
+        /* move connection from next tab to current one */
         conns[i] = conns[i + 1];
+        
+        /* update special details about pg and os */
+        free_iostat(tabs, i);
+        free_ifstat(tabs, i);
+        get_sys_special(conns[i], tabs[i]);
+        get_pg_special(conns[i], tabs[i]);
+        init_iostat(tabs, i);
+        init_ifstat(tabs, i);
+        
         i++;
         if (i == MAX_TABS - 1)
             break;
@@ -504,7 +525,7 @@ unsigned int close_tab(WINDOW * window, struct tab_s * tabs[],
     wprintw(window, "Close current connection.");
     if (i == 0) {                               /* first active tab */
         if (tabs[i + 1]->conn_used) {
-        shift_tabs(tabs, conns, i);
+            shift_tabs(tabs, conns, i);
         } else {
             wrefresh(window);
             endwin();

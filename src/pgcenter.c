@@ -1340,7 +1340,7 @@ int main(int argc, char *argv[])
             wattroff(w_cmd, COLOR_PAIR(wc_color));
             curs_set(0);
         } else {
-            reconnect_if_failed(w_cmd, conns[tab_index], tabs[tab_index], &first_iter);
+            reconnect_if_failed(w_cmd, conns, tabs, tab_index, &first_iter);
 
             /* 
              * Sysstat tab.

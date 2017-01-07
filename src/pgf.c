@@ -182,11 +182,11 @@ void get_pg_special(PGconn * conn, struct tab_s * tab)
  * It's helpful for restore connection when postgres restarts.
  ****************************************************************************
  */
-void reconnect_if_failed(WINDOW * window, PGconn * conn, struct tab_s * tab, bool *reconnected)
+void reconnect_if_failed(WINDOW * window, PGconn * conns[], struct tab_s * tabs[], int tab_index, bool *reconnected)
 {
-    if (PQstatus(conn) == CONNECTION_BAD) {
+    if (PQstatus(conns[tab_index]) == CONNECTION_BAD) {
         wclear(window);
-        PQreset(conn);
+        PQreset(conns[tab_index]);
         wprintw(window, "The connection to the server was lost. Attempting reconnect.");
         wrefresh(window);
         /* reset previous query results after reconnect */
@@ -194,10 +194,14 @@ void reconnect_if_failed(WINDOW * window, PGconn * conn, struct tab_s * tab, boo
         sleep(1);
     }
     
-    /* get PostgreSQL details after successful reconnect */
+    /* get pg and os details after successful reconnect */
     if (*reconnected == true) {
-        get_sys_special(conn, tab);
-        get_pg_special(conn, tab);
+        free_iostat(tabs, tab_index);
+        free_ifstat(tabs, tab_index);
+        get_sys_special(conns[tab_index], tabs[tab_index]);
+        get_pg_special(conns[tab_index], tabs[tab_index]);
+        init_iostat(tabs, tab_index);
+        init_ifstat(tabs, tab_index);
     }
 }
 

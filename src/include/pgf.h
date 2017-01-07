@@ -57,7 +57,7 @@ PGresult * do_query(PGconn * conn, const char * query, char errmsg[]);
 void get_conf_value(PGconn * conn, const char * config_option_name, char * config_option_value);
 void get_pg_special(PGconn * conn, struct tab_s * tab);
 void get_sys_special(PGconn * conn, struct tab_s * tab);
-void reconnect_if_failed(WINDOW * window, PGconn * conn, struct tab_s * tab, bool *reconnected);
+void reconnect_if_failed(WINDOW * window, PGconn * conns[], struct tab_s * tabs[], int tab_index, bool *reconnected);
 void prepare_query(struct tab_s * tab, char * query);
 void get_pg_uptime(PGconn * conn, char * uptime);
 int get_conn_status(PGconn *conn);
