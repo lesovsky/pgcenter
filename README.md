@@ -102,7 +102,6 @@ $ pgcenter
 ```
 
 ##### Run in Docker (works on Mac OS X)
-
 ```
 $ docker build -t pgcenter .
 Sending build context to Docker daemon 968.2 kB
@@ -125,19 +124,7 @@ $ pgcenter
 - Connection file stores connection settings and number of connections is limited to eight (maximum number of tabs). This file is used when input arguments are not specified. If connection options are specified during startup, first connection starts in the first tab, while other connections would start in the following tabs.
 - Connection settings specified with input arguments would have top priority and connection with such settings will opens in the first tab.
 
---
-Known issues:
-developed and tested under PostgreSQL 9.5/9.6 (also tested with other 9.x releases).
-this is a beta software, in some circumstances segfaults may occur. When segfaults occur please let me know - this would help me making necessary improvements in this software:
-build pgcenter from the latest sources (see instructions above);
-enable coredumps with ulimit -c unlimited;
-reproduce the segafult (after pgcenter crash, a coredump file will be created in the current directory);
-run pgcenter with gdb gdb ./pgcenter <coredump>;
-in gdb console, run where command, get the latest 15 lines and create an issue.
-
-
-
-#### Known issues
+### Known issues
 - developed and tested under PostgreSQL 9.5/9.6 (also tested with others 9.x releases).
 - this is a beta software, in some circumstances segfaults may occur. When segfaults occur please let me know - this would help me making necessary improvements in this software:
   - Build pgcenter from the latest sources (see instructions above).
