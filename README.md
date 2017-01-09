@@ -22,7 +22,8 @@ PostgreSQL provides various statistics which include information about tables, i
 - cancel queries or terminate processes by their pid or handle whole group using state mask;
 - query reporting;
 
-#### Statistics:
+#### PostgreSQL statistics:
+- current postgres activity - postgres uptime and version, number of clients and their states, number of (auto)vacuums tasks, statements per second, age of a longest transaction;
 - pg_stat_activity - long running queries and abnormal activity, i.e. idle in transaction, aborted or waiting processes;
 - pg_stat_database - database-wide statistics;
 - pg_stat_replication - WAL sender process statistics about replication to that sender's connected standby server;
@@ -34,10 +35,24 @@ PostgreSQL provides various statistics which include information about tables, i
 - statistics about tables sizes based on pg_relation_size() and pg_total_relation_size();
 - pg_stat_progress_vacuum - contains one row for each backend (including autovacuum worker processes) that is currently vacuuming.
 
+#### System activity statistics
+- load average and cpu usage (user, system, nice, idle, iowait, software and hardware interrupts, steal);
+- memory and swap usage, cached, dirty memory and writeback activity;
+- storage devices stats: iops, throughput, latencies, average queue and requests size, device utilization;
+- network interfaces stats: throughput in bytes and packets, different kind of errors, saturation and utilization.
+
+pgCenter is able to show current system activity on the host where postgres runs. Particularly, it's a load average, cpu utilization, memory and swap usage, iostat and nicstat - all these information collected from /proc filesystem from database's host. How it works? In short, pgCenter gets system stats through postgres connection using sql functions. At startup, when pgCenter connects to postgres service, it determines is it a remote or local service. In case of remote, pgCenter installs its functions written on procedural language and views based on these functions. Next, pgCenter using these functions and views collects stats from procfs and shows to user.
+Installing and removing the functions are available through pgCenter startup parameters (see program built-in help).
+Currently, only plperlu is supported and it has several limitations:
+- plperlu procedural language must be installed in the database you want to connect.
+- perl module Linux::Ethtool::Settings shoul be installed in the system, it used to get speed and duplex of network interfaces and properly calculate some metrics.
+
+Anyway, pgCenter can runs without these stats functions, in this case, zeroes will be shown in the system stats interface (la,cpu,mem,swap,io,network) and a lot of errors will be appear in postgres log.
+Stats functions and views bodies aren't hard-coded, stored in the source code tree and available for free use. See share/ directory.
+
 #### Actions:
 - Show current configuration, edit configuration files and reloading PostgreSQL service;
 - Tail and viewing log files;
-- Show iostat/nicstat statistics;
 - Cancel queries or terminate backends using backend pid;
 - Cancel queries or terminate group of backends using state of backends;
 - Toggle displaying system tables and indexes for tables and indexes statistics;
@@ -46,7 +61,7 @@ PostgreSQL provides various statistics which include information about tables, i
 - Start psql session.
 
 #### Recommendations:
-- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing, system monitoring functions or iostat/nicstat.
+- run pgCenter on the same host with PostgreSQL. When pgCenter works with remote PostgreSQL, some features will not work, eg. config editing, logfile viewing.
 - run pgCenter under database SUPERUSER account, eg. postgres. Some internal PostgreSQL information, system functions or data from views are available only for privileged accounts.
 
 #### Install notes:
@@ -122,3 +137,4 @@ $ pgcenter
 #### Thanks
 - Sebastien Godard for [sysstat](https://github.com/sysstat/sysstat).
 - Brendan Gregg and Tim Cook for [nicstat](http://sourceforge.net/projects/nicstat/).
+- Pavel Stěhule for his [articles](http://postgres.cz/wiki/PostgreSQL)

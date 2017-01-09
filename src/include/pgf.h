@@ -11,11 +11,15 @@
 #define __PGF_H__
 
 #include "common.h"
+#include "hotkeys.h"
 #include "queries.h"
 #include "stats.h"
 
 #define QUERY_MAXLEN		XXXL_BUF_LEN
 #define CONNINFO_TITLE_LEN	48
+
+#define REMOTE_STATS_SCHEMA_PL_FUNCS_FILE       "/usr/share/pgcenter/init-stats-schema-plperlu.sql"
+#define REMOTE_STATS_SCHEMA_VIEWS_FILE          "/usr/share/pgcenter/init-stats-views.sql"
 
 /* 
  * PostgreSQL version notations:
@@ -66,4 +70,6 @@ void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn)
 void get_summary_vac_activity(WINDOW * window, struct tab_s * tab, PGconn * conn);
 void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval);
 bool check_view_exists(PGconn * conn, char * view);
+void install_stats_schema(struct tab_s * tab, PGconn * conn);
+void uninstall_stats_schema(PGconn * conn);
 #endif /* __PGF_H__ */

@@ -6,7 +6,8 @@ CFLAGS_DEV = -g
 PREFIX ?= /usr
 INCLUDEDIR =
 LIBDIR =
-MANDIR = /usr/share/man/man1
+SHAREDIR = $(PREFIX)/share
+MANDIR = $(SHAREDIR)/man/man1
 
 # PostgreSQL stuff
 RHEL_PGPATH = $(shell find /usr -maxdepth 1 -type d -name "pgsql-*" | sort -V |tail -n 1)
@@ -74,11 +75,16 @@ clean:
 
 install:
 	mkdir -p $(DESTDIR)$(PREFIX)/bin/
+	mkdir -p $(DESTDIR)$(SHAREDIR)/$(PROGRAM_NAME)/
 	install -pm 755 $(PROGRAM_NAME) $(DESTDIR)$(PREFIX)/bin/
+	install -pm 644 share/init-stats-schema-plperlu.sql $(DESTDIR)$(SHAREDIR)/$(PROGRAM_NAME)/
+	install -pm 644 share/init-stats-views.sql $(DESTDIR)$(SHAREDIR)/$(PROGRAM_NAME)/
 
 install-man:
-	gzip -c doc/$(PROGRAM_NAME).1 > $(MANDIR)/$(PROGRAM_NAME).1.gz
+	gzip -c share/doc/$(PROGRAM_NAME).1 > $(MANDIR)/$(PROGRAM_NAME).1.gz
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(PROGRAM_NAME)
-	rm -f $(MANDIR)/$(PROGRAM_NAME).1.gz
+	rm -f $(DESTDIR)$(MANDIR)/$(PROGRAM_NAME).1.gz
+	rm -f $(DESTDIR)$(SHAREDIR)/$(PROGRAM_NAME)/init-stat-functions-plperlu.sql
+	rmdir $(DESTDIR)$(SHAREDIR)/$(PROGRAM_NAME)/

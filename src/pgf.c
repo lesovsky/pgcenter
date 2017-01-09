@@ -28,11 +28,11 @@ void open_connections(struct tab_s * tabs[], PGconn * conns[])
                                 tabs[i]->host, tabs[i]->port,
                                 tabs[i]->user, tabs[i]->dbname);
                 snprintf(tabs[i]->password, sizeof(tabs[i]->password), "%s",
-			password_prompt("password: ", sizeof(tabs[i]->password), false));
-		snprintf(tabs[i]->conninfo + strlen(tabs[i]->conninfo),
-			 sizeof(tabs[i]->conninfo) - strlen(tabs[i]->conninfo),
-			 " password=%s", tabs[i]->password);
-                conns[i] = PQconnectdb(tabs[i]->conninfo);
+            password_prompt("password: ", sizeof(tabs[i]->password), false));
+        snprintf(tabs[i]->conninfo + strlen(tabs[i]->conninfo),
+            sizeof(tabs[i]->conninfo) - strlen(tabs[i]->conninfo),
+                    " password=%s", tabs[i]->password);
+                    conns[i] = PQconnectdb(tabs[i]->conninfo);
             } else if ( PQstatus(conns[i]) == CONNECTION_BAD ) {
                 mreport(false, msg_error, "ERROR: Connection to %s:%s with %s@%s failed (tab %i).\n",
                         tabs[i]->host, tabs[i]->port,
@@ -55,6 +55,12 @@ void open_connections(struct tab_s * tabs[], PGconn * conns[])
             /* increase our work_mem */
             if ((res = do_query(conns[i], PG_INCREASE_WORK_MEM_QUERY, errmsg)) != NULL)
                 PQclear(res);
+            
+            /* install/uninstall stats schema */
+            if (tabs[i]->install_stats)
+                install_stats_schema(tabs[i], conns[i]);
+            if (tabs[i]->uninstall_stats)
+                uninstall_stats_schema(conns[i]);
         }
     }
 }
@@ -483,12 +489,118 @@ bool check_view_exists(PGconn * conn, char * view)
     char query[QUERY_MAXLEN], errmsg[ERRSIZE];
     bool exists;
     
-    snprintf(query, QUERY_MAXLEN, "SELECT '%s'::regclass", view);
-    if ((res = do_query(conn, query, errmsg)) != NULL) {
+    snprintf(query, QUERY_MAXLEN, "SELECT 1 FROM %s LIMIT 1", view);
+    if ((res = do_query(conn, query, errmsg)) != NULL && PQntuples(res) > 0) {
         exists = true;
         PQclear(res);
     } else {
         exists = false;
     }
     return exists;
+}
+
+/* 
+ ****************************************************************************
+ * Install stats schema and functions into the database.
+ ****************************************************************************
+ */
+void install_stats_schema(struct tab_s * tab, PGconn * conn)
+{
+    int sql_fd, i, n_files, n_read;
+    struct stat stats;
+    PGresult *res;
+    char query[QUERY_MAXLEN], errmsg[ERRSIZE], sql_file[PATH_MAX];
+    char * buffer;
+    
+    /* Perhaps in the future, functions on other languages will be added. */
+    char * sql_plperlu_files_list[2] = { REMOTE_STATS_SCHEMA_PL_FUNCS_FILE, REMOTE_STATS_SCHEMA_VIEWS_FILE };
+    char * (* sql_files_list)[2];       /* pointer to set of files used in the loop below */
+
+    mreport(false, msg_notice, "INFO: installing stats schema into %s@%s:%s/%s\n",
+            PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn));
+    
+    /* sql schema depend on the chosen language */
+    if (!strcmp(tab->stats_lang, "plperlu") || strlen(tab->stats_lang) == 0) {
+        sql_files_list = &sql_plperlu_files_list;          /* assign pointer to particular set of files */
+        snprintf(tab->stats_lang, 8, "plperlu");
+    } else {
+        mreport(false, msg_warning, "ERROR: %s language is not supported.\n", tab->stats_lang);
+        return;
+    }
+    
+    n_files = ARRAY_SIZE((*sql_files_list));
+    for (i = 0; i < n_files; i++) {
+        if ((stat((*sql_files_list)[i], &stats)) == -1) {
+            mreport(false, msg_warning, "ERROR: failed to get size of %s.\n", sql_file);
+            return;
+        }
+
+        /* it's too strange, if sql file has size more than 1MB */
+        if (stats.st_size > XXXL_BUF_LEN * 128) {
+            mreport(false, msg_warning, "ERROR: %s too big.\n", sql_file);
+            return;
+        }
+
+        if ((buffer = (char *) malloc((size_t) stats.st_size)) == NULL) {
+            mreport(false, msg_warning, "ERROR: malloc() for buffer failed (install stats schema).\n");
+            return;
+        }
+
+        snprintf(sql_file, PATH_MAX, "%s", (*sql_files_list)[i]);
+        if ((sql_fd = open(sql_file, O_RDONLY)) == -1 ) {
+            mreport(false, msg_warning, "ERROR: failed to open stats schema file: %s.\n", sql_file);
+            return;
+        }
+
+        if ((n_read = read(sql_fd, buffer, stats.st_size)) > 0) {
+            buffer[n_read] = '\0';
+            snprintf(query, QUERY_MAXLEN, "%s", buffer);
+
+            if ((res = do_query(conn, query, errmsg)) != NULL) {
+                PQclear(res);       /* success */
+            } else {
+                mreport(false, msg_warning, "ERROR: install stats schema into %s@%s:%s/%s failed:\n%s\n",
+                        PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn), errmsg);
+                free(buffer);
+                close(sql_fd);
+                return;
+            }
+        } else {
+            mreport(false, msg_warning, "ERROR: %s read failed.\n", sql_file);
+            free(buffer);
+            close(sql_fd);
+            return;
+        }
+
+        free(buffer);
+        close(sql_fd);
+    }
+    /* if we are here, report about success */
+    mreport(false, msg_notice, "INFO: stats schema installed (procedural language: %s) on %s@%s:%s/%s\n",
+            tab->stats_lang, PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn));
+}
+
+/* 
+ ****************************************************************************
+ * Uninstall stats schema from the database.
+ ****************************************************************************
+ */
+void uninstall_stats_schema(PGconn * conn)
+{
+    PGresult *res;
+    char query[QUERY_MAXLEN], errmsg[ERRSIZE];
+
+    snprintf(query, QUERY_MAXLEN, "%s", PG_DROP_STATS_SCHEMA_QUERY);
+
+    mreport(false, msg_notice, "INFO: remove stats schema from %s@%s:%s/%s\n",
+            PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn));
+    if ((res = do_query(conn, query, errmsg)) != NULL) {
+        mreport(false, msg_notice, "INFO: stats schema removed from %s@%s:%s/%s\n",
+            PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn));
+        PQclear(res);
+    } else {
+        mreport(false, msg_notice, "ERROR: failed to remove stats schema from %s@%s:%s/%s:\n%s\n",
+            PQuser(conn), PQhost(conn), PQport(conn), PQdb(conn), errmsg);
+    }
+    return;
 }

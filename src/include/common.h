@@ -109,6 +109,10 @@ struct args_s
     char user[CONN_ARG_MAXLEN];
     char dbname[CONN_ARG_MAXLEN];
     bool need_passwd;
+    bool install_stats;
+    bool do_everywhere;
+    char stats_lang[CONN_ARG_MAXLEN];
+    bool uninstall_stats;
 };
 
 #define ARGS_SIZE (sizeof(struct args_s))
@@ -156,6 +160,9 @@ struct tab_s
     char dbname[CONN_ARG_MAXLEN];
     char password[CONN_ARG_MAXLEN];
     char conninfo[CONNINFO_MAXLEN];
+    bool install_stats;                     /* install stats schema at startup? */
+    char stats_lang[CONN_ARG_MAXLEN];       /* use stats functions based on specified lang */
+    bool uninstall_stats;                   /* uninstall stats schema */
     struct pg_special_s pg_special;
     struct sys_special_s sys_special;       /* details about os when pg runs */
     bool subtab_enabled;                     /* subtab status: on/off */

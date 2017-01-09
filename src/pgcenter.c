@@ -43,7 +43,11 @@ void init_args_struct(struct args_s *args)
     args->port[0] = '\0';
     args->user[0] = '\0';
     args->dbname[0] = '\0';
-    args->need_passwd = false;             /* by default password not need */
+    args->need_passwd = false;              /* by default password not need */
+    args->install_stats = false;            /* install remote sysstat schema? */
+    args->stats_lang[0] = '\0';             /* language of stats functions */
+    args->uninstall_stats = false;          /* uninstall stats schema */
+    args->do_everywhere = false;            /* install/uninstall stats schema on all dbs? */
 }
 
 /*
@@ -67,6 +71,9 @@ void init_tabs(struct tab_s *tabs[])
         tabs[i]->dbname[0] = '\0';
         tabs[i]->password[0] = '\0';
         tabs[i]->conninfo[0] = '\0';
+        tabs[i]->install_stats = false;
+        tabs[i]->stats_lang[0] = '\0';
+        tabs[i]->uninstall_stats = false;
         tabs[i]->subtab_enabled = false;
         tabs[i]->subtab = SUBTAB_NONE;
         tabs[i]->log_path[0] = '\0';
@@ -229,6 +236,12 @@ void print_usage(void)
     printf("General options:\n \
   -?, --help                show this help, then exit.\n \
   -V, --version             print version, then exit.\n\n");
+    printf("Remote system stats options:\n \
+  -i, --install=LANG        install stats schema and functions into the database.\n \
+  -l, --stats-lang=LANG     use specified language functions.\n \
+                            available languages: plperlu\n \
+  -u, --uninstall           remove stats schema and functions.\n \
+  -e, --do-everywhere       install or remove stats schema into the all databases.\n\n");
     printf("Options:\n \
   -h, --host=HOSTNAME       database server host or socket directory\n \
   -p, --port=PORT           database server port (default: \"5432\")\n \
@@ -265,7 +278,7 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
     int param, option_index;
 
     /* short options */
-    const char * short_options = "f:h:p:U:d:wW?";
+    const char * short_options = "f:h:p:U:d:l:ieuwW?";
 
     /* long options */
     const struct option long_options[] = {
@@ -274,6 +287,10 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
         {"host", required_argument, NULL, 'h'},
         {"port", required_argument, NULL, 'p'},
         {"dbname", required_argument, NULL, 'd'},
+        {"install", no_argument, NULL, 'i'},
+        {"do-everywhere", no_argument, NULL, 'e'},
+        {"stats-lang", required_argument, NULL, 'l'},
+        {"uninstall", no_argument, NULL, 'u'},
         {"no-password", no_argument, NULL, 'w'},
         {"password", no_argument, NULL, 'W'},
         {"user", required_argument, NULL, 'U'},
@@ -312,6 +329,18 @@ void arg_parse(int argc, char *argv[], struct args_s *args)
             case 'd':
                 snprintf(args->dbname, sizeof(args->dbname), "%s", optarg);
                 args->count++;
+                break;
+            case 'i':
+                args->install_stats = true;
+                break;
+            case 'e':
+                args->do_everywhere = true;
+                break;
+            case 'l':
+                snprintf(args->stats_lang, sizeof(args->stats_lang), "%s", optarg);
+                break;
+            case 'u':
+                args->uninstall_stats = true;
                 break;
             case 'w':
                 args->need_passwd = false;
@@ -418,6 +447,9 @@ void create_initial_conn(struct args_s * args, struct tab_s * tabs[])
     if ( strlen(tabs[0]->user) != 0 && strlen(tabs[0]->dbname) == 0 )
         snprintf(tabs[0]->dbname, sizeof(tabs[0]->dbname), "%s", tabs[0]->user);
 
+    tabs[0]->install_stats = args->install_stats;
+    snprintf(tabs[0]->stats_lang, sizeof(tabs[0]->stats_lang), "%s", args->stats_lang);
+    tabs[0]->uninstall_stats = args->uninstall_stats;
     tabs[0]->conn_used = true;
 }
 
@@ -462,6 +494,14 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct tab_s * tabs[],
                         tabs[i]->tab = i;
                         tabs[i]->conn_used = true;
             check_portnum(tabs[i]->port);
+
+            /* should we install/uninstall stats schema into this database? */
+            if (args->do_everywhere && args->install_stats) {
+                tabs[i]->install_stats = true;
+                snprintf(tabs[i]->stats_lang, sizeof(tabs[0]->stats_lang), "%s", args->stats_lang);
+            } else if (args->do_everywhere && args->uninstall_stats) {
+                tabs[i]->uninstall_stats = true;
+            }
             /* if "null" read from file, than we should connecting through unix socket */
             if (!strcmp(tabs[i]->host, "(null)")) {
                 tabs[i]->host[0] = '\0';

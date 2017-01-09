@@ -10,7 +10,7 @@
 #ifndef __QUERIES_H__
 #define __QUERIES_H__
 
-/* sys stats from /proc */
+/* Linux sys stats from /proc pseudo-filesystem */
 #define DISKSTATS_VIEW  "pgcenter.sys_proc_diskstats"
 #define NETDEV_VIEW     "pgcenter.sys_proc_netdev"
 
@@ -31,7 +31,7 @@
     ORDER BY right(cpu,-3)::int"
         
 #define PG_SYS_PROC_MEMINFO_QUERY \
-    "SELECT metric, cur_value FROM pgcenter.sys_proc_meminfo WHERE metric IN \
+    "SELECT metric, metric_value FROM pgcenter.sys_proc_meminfo WHERE metric IN \
     ('MemTotal:','MemFree:','SwapTotal:','SwapFree:', \
     'Cached:','Dirty:','Writeback:','Buffers:','Slab:') \
     ORDER BY 1"
@@ -50,6 +50,9 @@
 
 #define PG_SYS_PROC_NETDEV_QUERY \
     "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
+
+/* drop pgcenter's stats schema and all its content */
+#define PG_DROP_STATS_SCHEMA_QUERY "DROP SCHEMA pgcenter CASCADE"
 
 /* for postgresql versions before 9.6 */
 #define PG_STAT_ACTIVITY_COUNT_95_QUERY \

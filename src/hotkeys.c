@@ -423,6 +423,7 @@ unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
                             wclear(window);
                             wprintw(window, "Successfully connected.");
                             tab_index = tabs[i]->tab;
+                            check_pg_listen_addr(tabs[i], conns[i]);
                             get_sys_special(conns[i], tabs[i]);
                             get_pg_special(conns[i], tabs[i]);
                             init_iostat(tabs, i);
@@ -441,6 +442,7 @@ unsigned int add_tab(WINDOW * window, struct tab_s * tabs[],
                     wclear(window);
                     wprintw(window, "Successfully connected.");
                     tab_index = tabs[i]->tab;
+                    check_pg_listen_addr(tabs[i], conns[i]);
                     get_sys_special(conns[i], tabs[i]);
                     get_pg_special(conns[i], tabs[i]);
                     init_iostat(tabs, i);
@@ -476,12 +478,7 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
         snprintf(tabs[i]->dbname, sizeof(tabs[i]->dbname), "%s", tabs[i + 1]->dbname);
         snprintf(tabs[i]->password, sizeof(tabs[i]->password), "%s", tabs[i + 1]->password);
         tabs[i]->conn_local = tabs[i + 1]->conn_local;
-        
-//        snprintf(tabs[i]->pg_special.pg_version_num, sizeof(tabs[i]->pg_special.pg_version_num), "%s",
-//                tabs[i + 1]->pg_special.pg_version_num);
-//        snprintf(tabs[i]->pg_special.pg_version, sizeof(tabs[i]->pg_special.pg_version), "%s",
-//                tabs[i + 1]->pg_special.pg_version);
-        
+
         tabs[i]->subtab =        tabs[i + 1]->subtab;
         snprintf(tabs[i]->log_path, sizeof(tabs[i]->log_path), "%s", tabs[i + 1]->log_path);
         tabs[i]->log_fd =            tabs[i + 1]->log_fd;
@@ -495,7 +492,7 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
 
         /* move connection from next tab to current one */
         conns[i] = conns[i + 1];
-        
+
         /* update special details about pg and os */
         free_iostat(tabs, i);
         free_ifstat(tabs, i);
@@ -503,7 +500,7 @@ void shift_tabs(struct tab_s * tabs[], PGconn * conns[], unsigned int i)
         get_pg_special(conns[i], tabs[i]);
         init_iostat(tabs, i);
         init_ifstat(tabs, i);
-        
+
         i++;
         if (i == MAX_TABS - 1)
             break;
@@ -1501,7 +1498,7 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                     }
                 } else {
                     if (check_view_exists(conn, DISKSTATS_VIEW) == false) {
-                        wprintw(window, "Do nothing. No access to view %s", DISKSTATS_VIEW);
+                        wprintw(window, "Do nothing. No access to %s view or it is empty.", DISKSTATS_VIEW);
                         return;
                     }
                 }
@@ -1518,7 +1515,7 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                     }
                 } else {
                     if (check_view_exists(conn, NETDEV_VIEW) == false) {
-                        wprintw(window, "Do nothing. No access to view %s", NETDEV_VIEW);
+                        wprintw(window, "Do nothing. No access to %s view or it is empty.", NETDEV_VIEW);
                         return;
                     }
                 }

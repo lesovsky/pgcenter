@@ -187,7 +187,6 @@ int count_devices(int type, bool conn_local, PGconn * conn)
     }
 
     if (conn_local) {
-        /* if statfile is failed to read, then allocate the array for 10 devices. */
         if ((fp = fopen(statfile, "r")) == NULL) {
             return 0;              /* can't get stats */
         }
@@ -199,7 +198,7 @@ int count_devices(int type, bool conn_local, PGconn * conn)
         }
         fclose(fp);
     } else {
-        if ((res = do_query(conn, query, errmsg)) != NULL) {
+        if ((res = do_query(conn, query, errmsg)) != NULL && PQntuples(res) > 0) {
             ndev = atoi(PQgetvalue(res, 0, 0));
             PQclear(res);
         } else {
@@ -242,7 +241,8 @@ float * get_remote_loadavg(PGconn * conn)
     static float la[3];
     PGresult * res;
 
-    if ((res = do_query(conn, PG_SYS_PROC_LOADAVG_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_SYS_PROC_LOADAVG_QUERY, errmsg)) != NULL
+        && PQntuples(res) > 0) {
         la[0] = atof(PQgetvalue(res, 0, 0));
         la[1] = atof(PQgetvalue(res, 0, 1));
         la[2] = atof(PQgetvalue(res, 0, 2));
@@ -304,7 +304,8 @@ void read_remote_uptime(unsigned long long *uptime, struct tab_s * tab, PGconn *
     int sys_hz = tab->sys_special.sys_hz;
     PGresult * res;
 
-    if ((res = do_query(conn, PG_SYS_PROC_UPTIME_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_SYS_PROC_UPTIME_QUERY, errmsg)) != NULL
+        && PQntuples(res) > 0) {
         up_full = atof(PQgetvalue(res, 0, 0));
         PQclear(res);
     } else
@@ -404,7 +405,8 @@ void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
     PGresult * res_cpu_total;
     PGresult * res_cpu_part;
 
-    if ((res_cpu_total = do_query(conn, PG_SYS_PROC_TOTAL_CPU_STAT_QUERY, errmsg)) != NULL) {
+    if ((res_cpu_total = do_query(conn, PG_SYS_PROC_TOTAL_CPU_STAT_QUERY, errmsg)) != NULL
+        && PQntuples(res_cpu_total) > 0) {
         memset(st_cpu, 0, STATS_CPU_SIZE);
         /* fill st_cpu */
         st_cpu->cpu_user = atoll(PQgetvalue(res_cpu_total,0,1));
@@ -423,7 +425,8 @@ void read_remote_cpu_stat(struct cpu_s *st_cpu, unsigned int nbr,
                   st_cpu->cpu_hardirq + st_cpu->cpu_softirq +
                   st_cpu->cpu_guest + st_cpu->cpu_guest_nice;
         PQclear(res_cpu_total);
-    } else if ((res_cpu_part = do_query(conn, PG_SYS_PROC_PART_CPU_STAT_QUERY, errmsg)) != NULL) {
+    } else if ((res_cpu_part = do_query(conn, PG_SYS_PROC_PART_CPU_STAT_QUERY, errmsg)) != NULL
+        && PQntuples(res_cpu_part) > 0) {
         if (nbr > 1) {
             memset(&sc, 0, STATS_CPU_SIZE);
             /* fill st_cpu */
@@ -559,7 +562,8 @@ void read_remote_mem_stat(struct mem_s *st_mem_short, PGconn * conn)
     char * tmp;                     /* for strtoull() */
     PGresult * res;
 
-    if ((res = do_query(conn, PG_SYS_PROC_MEMINFO_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_SYS_PROC_MEMINFO_QUERY, errmsg)) != NULL
+        && PQntuples(res) > 0) {
         if (!strcmp(PQgetvalue(res,0,0),"Buffers:"))
             st_mem_short->buffers = strtoull(PQgetvalue(res,0,1), &tmp, 10) / 1024;
         if (!strcmp(PQgetvalue(res,1,0),"Cached:"))
@@ -775,7 +779,8 @@ void read_remote_diskstats(WINDOW * window, struct iodata_s * curr[], int bdev, 
     PGresult * res;
     int i;
     
-    if ((res = do_query(conn, PG_SYS_PROC_DISKSTATS_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_SYS_PROC_DISKSTATS_QUERY, errmsg)) != NULL
+        && PQntuples(res) > 0) {
         for (i = 0; i < bdev; i++) {
             curr[i]->major = strtoul(PQgetvalue(res, i, 0), &tmp, 10);
             curr[i]->minor = strtoul(PQgetvalue(res, i, 1), &tmp, 10);
@@ -930,7 +935,8 @@ void read_remote_netdev(WINDOW * window, struct ifdata_s *curr[], int idev, PGco
     PGresult * res;
     int i;
     
-    if ((res = do_query(conn, PG_SYS_PROC_NETDEV_QUERY, errmsg)) != NULL) {
+    if ((res = do_query(conn, PG_SYS_PROC_NETDEV_QUERY, errmsg)) != NULL
+        && PQntuples(res) > 0) {
         for (i = 0; i < idev; i++) {
             snprintf(curr[i]->ifname, IF_NAMESIZE + 1, "%s", PQgetvalue(res, i, 0));
             curr[i]->rbytes = strtoul(PQgetvalue(res, i, 2), &tmp, 10);
