@@ -243,6 +243,11 @@ unsigned int switch_tab(WINDOW * window, struct tab_s * tabs[],
     unsigned int dest_tab_no = ch - '0';
     unsigned int dest_tab_index = dest_tab_no - 1;
 
+    if (dest_tab_index == tab_index) {
+        wprintw(window, "Already here.");
+        return tab_index;
+    }
+
     wclear(window);
     if ( tabs[dest_tab_index]->conn_used ) {
         wprintw(window, "Switch to tab %i.", dest_tab_no);
@@ -1463,7 +1468,7 @@ void get_logfile_path(char * path, PGconn * conn)
  */
 void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn * conn, unsigned int subtab)
 {
-    if (!tab->subtab_enabled) {
+    if (tab->subtab == SUBTAB_NONE) {
         /* open subtab */
         switch (subtab) {
             case SUBTAB_LOGTAIL:
@@ -1482,7 +1487,6 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                         return;
                     }
                     tab->subtab = SUBTAB_LOGTAIL;
-                    tab->subtab_enabled = true;
                     wprintw(window, "Open postgresql log: %s", tab->log_path);
                     return;
                 } else {
@@ -1505,7 +1509,6 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                 wprintw(window, "Show iostat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                 tab->subtab = SUBTAB_IOSTAT;
-                tab->subtab_enabled = true;
                 break;
             case SUBTAB_NICSTAT:
                 if (tab->conn_local) {
@@ -1522,11 +1525,7 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
                 wprintw(window, "Show nicstat");
                 *w_sub = newwin(0, 0, ((LINES * 2) / 3), 0);
                 tab->subtab = SUBTAB_NICSTAT;
-                tab->subtab_enabled = true;
                 break;
-            case SUBTAB_NONE:
-                tab->subtab = SUBTAB_NONE;
-                tab->subtab_enabled = false;
         }
     } else {
         /* close subtab */
@@ -1535,7 +1534,6 @@ void subtab_process(WINDOW * window, WINDOW ** w_sub, struct tab_s * tab, PGconn
         if (tab->log_fd > 0)
             close(tab->log_fd);
         tab->subtab = SUBTAB_NONE;
-        tab->subtab_enabled = false;
         return;
     }
 }

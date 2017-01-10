@@ -74,7 +74,6 @@ void init_tabs(struct tab_s *tabs[])
         tabs[i]->install_stats = false;
         tabs[i]->stats_lang[0] = '\0';
         tabs[i]->uninstall_stats = false;
-        tabs[i]->subtab_enabled = false;
         tabs[i]->subtab = SUBTAB_NONE;
         tabs[i]->log_path[0] = '\0';
         tabs[i]->current_context = DEFAULT_QUERY_CONTEXT;
@@ -1103,6 +1102,8 @@ int main(int argc, char *argv[])
     WINDOW *w_sys, *w_cmd, *w_dba, *w_sub;              /* ncurses windows  */
     int ch;                                    		/* store key press  */
     bool first_iter = true;                             /* first-run flag   */
+    bool repaint = false;                               /* repaint iostat/nicstat */
+
     static unsigned int tab_no = 1;                 /* tab number   */
     static unsigned int tab_index = 0;              /* tab index in tab array */
 
@@ -1121,9 +1122,6 @@ int main(int argc, char *argv[])
          ***r_arr = NULL;                               /* 3d arrays for query results  */
 
     unsigned int long long ws_color, wc_color, wa_color, wl_color;/* colors for text zones */
-
-    /* repaint iostat/nicstat if number of devices changed */
-    bool repaint = false;
 
     /* init various stuff */
     init_signal_handlers();
@@ -1465,7 +1463,7 @@ int main(int argc, char *argv[])
                     break;
                 case SUBTAB_NICSTAT:
                     print_ifstat(w_sub, w_cmd, tabs[tab_index], conns[tab_index], &repaint);
-                    if (repaint) {
+                    if (repaint == true) {
                         free_ifstat(tabs, tab_index);
                         tabs[tab_index]->sys_special.idev = count_devices(NETDEV, tabs[tab_index]->conn_local, conns[tab_index]);
                         init_ifstat(tabs, tab_index);

@@ -165,7 +165,6 @@ struct tab_s
     bool uninstall_stats;                   /* uninstall stats schema */
     struct pg_special_s pg_special;
     struct sys_special_s sys_special;       /* details about os when pg runs */
-    bool subtab_enabled;                     /* subtab status: on/off */
     int subtab;                              /* subtab type: logtail, iostat, etc. */
     char log_path[PATH_MAX];                    /* logfile path for logtail subtab */
     int log_fd;                                 /* logfile fd for log viewing */

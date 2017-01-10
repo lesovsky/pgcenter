@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * refactoring: remove unnecessary variable from tab_s struct.
   * refactoring: remove redundant loop+case from init_tabs().
   * add system stats.
   * add handling for RHEL-specific postgres paths.
