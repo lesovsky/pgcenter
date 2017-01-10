@@ -454,15 +454,22 @@ unsigned int create_pgcenterrc_conn(struct args_s * args, struct tab_s * tabs[],
         return PGCENTERRC_READ_ERR;
     }
 
-    /* read connections settings from .pgcenterrc */
+    /* read connections settings from .pgcenterrc line by line, parse and fill conn settings */
+    char *fields[PGCENTERRC_NFIELDS];
     if ((fp = fopen(pgcenterrc_path, "r")) != NULL) {
         while ((fgets(strbuf, XXXL_BUF_LEN, fp) != 0) && (i < MAX_TABS)) {
-            sscanf(strbuf, "%[^:]:%[^:]:%[^:]:%[^:]:%[^:\n]",
-                        tabs[i]->host,	tabs[i]->port,
-                        tabs[i]->dbname,	tabs[i]->user,
-                        tabs[i]->password);
-                        tabs[i]->tab = i;
-                        tabs[i]->conn_used = true;
+            if (parsestr(strbuf, fields, PGCENTERRC_NFIELDS, ':') == PGCENTERRC_NFIELDS) {
+                snprintf(tabs[i]->host, CONN_ARG_MAXLEN, "%s", fields[0]);
+                snprintf(tabs[i]->port, CONN_ARG_MAXLEN, "%s", fields[1]);
+                snprintf(tabs[i]->dbname, CONN_ARG_MAXLEN, "%s", fields[2]);
+                snprintf(tabs[i]->user, CONN_ARG_MAXLEN, "%s", fields[3]);
+                snprintf(tabs[i]->password, CONN_ARG_MAXLEN, "%s", fields[4]);
+                tabs[i]->current_context = atoi(fields[5]);
+            } else {
+                mreport(true, msg_fatal, "FATAL: wrong number of parameters were read.\n");
+            }
+            tabs[i]->tab = i;
+            tabs[i]->conn_used = true;
             check_portnum(tabs[i]->port);
 
             /* should we install/uninstall stats schema into this database? */

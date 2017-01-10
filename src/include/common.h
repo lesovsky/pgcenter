@@ -62,6 +62,7 @@
 #define CONNINFO_MAXLEN		S_BUF_LEN * 5	/* host, port, username, dbname, password */
 
 #define PGCENTERRC_FILE         ".pgcenterrc"
+#define PGCENTERRC_NFIELDS      6
 
 /* enum for program internal messages */
 enum mtype
@@ -188,6 +189,7 @@ struct tab_s
 /* function declarations */
 void mreport(bool do_exit, enum mtype mtype, const char * msg, ...);
 void strrpl(char * o_string, const char * s_string, const char * r_string, unsigned int buf_size);
+int parsestr(char *str, char *out[], int n_fields, char delimiter);
 int check_string(const char * string, enum chk_type ctype);
 char * password_prompt(const char *prompt, unsigned int pw_maxlen, bool echo);
 void cmd_readline(WINDOW *window, const char * msg, unsigned int pos, bool * with_esc, char * str, unsigned int len, bool echoing);

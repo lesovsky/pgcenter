@@ -94,6 +94,22 @@ void strrpl(char * o_string, const char * s_string, const char * r_string, unsig
 
 /*
  ****************************************************************************
+ * Parse string to fields using specified delimiter.
+ ****************************************************************************
+ */
+int parsestr(char *str, char *out[], int n_fields, char delimiter)
+{
+    int num = 0;
+    out[num++] = str;
+    while (num < n_fields && str && (str = strchr(str, delimiter))) {
+        *str = 0;               /* null-terminate previous field */
+        out[num++] = ++str;     /* save start of next field */
+    }
+    return num;
+}
+
+/*
+ ****************************************************************************
  * Check that the string is satisfied to given type (number,float,string).
  * Return 0 if string is valid, -1 otherwise.
  ****************************************************************************

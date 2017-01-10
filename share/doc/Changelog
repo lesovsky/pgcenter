@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * allow to save current stat context into conninfo file (~/.pgcenterrc).
+  * implement parsetr() as the fast replacement for sscanf().
   * refactoring: remove unnecessary variable from tab_s struct.
   * refactoring: remove redundant loop+case from init_tabs().
   * add system stats.

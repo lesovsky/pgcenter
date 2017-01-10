@@ -575,10 +575,10 @@ void write_pgcenterrc(WINDOW * window, struct tab_s * tabs[], PGconn * conns[], 
     if ((fp = fopen(pgcenterrc_path, "w")) != NULL ) {
         for (i = 0; i < MAX_TABS; i++) {
             if (tabs[i]->conn_used) {
-                fprintf(fp, "%s:%s:%s:%s:%s\n",
-                        PQhost(conns[i]), PQport(conns[i]),
-                        PQdb(conns[i]), PQuser(conns[i]),
-                        PQpass(conns[i]));
+                fprintf(fp, "%s:%s:%s:%s:%s:%i\n",
+                        PQhost(conns[i]),   PQport(conns[i]),
+                        PQdb(conns[i]),     PQuser(conns[i]),
+                        PQpass(conns[i]),   tabs[i]->current_context);
             }
         }
         wprintw(window, "Wrote configuration to '%s'", pgcenterrc_path);
