@@ -92,51 +92,22 @@ void init_tabs(struct tab_s *tabs[])
             mreport(true, msg_fatal, "FATAL: malloc() for tabs (ifstat) failed.\n");
         }
 
+        tabs[i]->context_list[0].context = pg_stat_database;
+        tabs[i]->context_list[1].context = pg_stat_replication;
+        tabs[i]->context_list[2].context = pg_stat_tables;
+        tabs[i]->context_list[3].context = pg_stat_indexes;
+        tabs[i]->context_list[4].context = pg_statio_tables;
+        tabs[i]->context_list[5].context = pg_tables_size;
+        tabs[i]->context_list[6].context = pg_stat_activity_long;
+        tabs[i]->context_list[7].context = pg_stat_functions;
+        tabs[i]->context_list[8].context = pg_stat_statements_timing;
+        tabs[i]->context_list[9].context = pg_stat_statements_general;
+        tabs[i]->context_list[10].context = pg_stat_statements_io;
+        tabs[i]->context_list[11].context = pg_stat_statements_temp;
+        tabs[i]->context_list[12].context = pg_stat_statements_local;
+        tabs[i]->context_list[13].context = pg_stat_progress_vacuum;
+
         for (j = 0; j < TOTAL_CONTEXTS; j++) {
-            switch (j) {
-                case 0:
-                    tabs[i]->context_list[j].context = pg_stat_database;
-                    break;
-                case 1:
-                    tabs[i]->context_list[j].context = pg_stat_replication;
-                    break;
-                case 2:
-                    tabs[i]->context_list[j].context = pg_stat_tables;
-                    break;
-                case 3:
-                    tabs[i]->context_list[j].context = pg_stat_indexes;
-                    break;
-                case 4:
-                    tabs[i]->context_list[j].context = pg_statio_tables;
-                    break;
-                case 5:
-                    tabs[i]->context_list[j].context = pg_tables_size;
-                    break;
-                case 6:
-                    tabs[i]->context_list[j].context = pg_stat_activity_long;
-                    break;
-                case 7:
-                    tabs[i]->context_list[j].context = pg_stat_functions;
-                    break;
-                case 8:
-                    tabs[i]->context_list[j].context = pg_stat_statements_timing;
-                    break;
-                case 9:
-                    tabs[i]->context_list[j].context = pg_stat_statements_general;
-                    break;
-                case 10:
-                    tabs[i]->context_list[j].context = pg_stat_statements_io;
-                    break;
-                case 11:
-                    tabs[i]->context_list[j].context = pg_stat_statements_temp;
-                    break;
-                case 12:
-                    tabs[i]->context_list[j].context = pg_stat_statements_local;
-                    break;
-                case 13:
-                    tabs[i]->context_list[j].context = pg_stat_progress_vacuum;
-                    break;
-            }
             /* initiate sorting */
             tabs[i]->context_list[j].order_key = 0;
             tabs[i]->context_list[j].order_desc = true;
