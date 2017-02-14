@@ -643,7 +643,7 @@ void diff_arrays(char ***p_arr, char ***c_arr, char ***res_arr, struct tab_s * t
             break;
         case pg_stat_replication:
             /* diff nothing, use returned values as-is */
-            min = max = INVALID_ORDER_KEY;
+            min = max = PG_STAT_REPLICATION_DIFF_MIN;
             break;
         case pg_stat_tables:
             min = PG_STAT_TABLES_DIFF_MIN;

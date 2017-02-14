@@ -218,6 +218,13 @@ void reconnect_if_failed(WINDOW * window, PGconn * conns[], struct tab_s * tabs[
  */
 void prepare_query(struct tab_s * tab, char * query)
 {
+    /* determine proper wal function which depends on recovery state */
+    char wal_function[S_BUF_LEN];
+    if (tab->pg_special.pg_is_in_recovery == false)
+        snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_NOREC);
+    else
+        snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_REC);
+    
     switch (tab->current_context) {
         case pg_stat_database: default:
             (atoi(tab->pg_special.pg_version_num) < PG92)
@@ -225,15 +232,17 @@ void prepare_query(struct tab_s * tab, char * query)
                 : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
-            snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
-			tab->pg_special.pg_is_in_recovery == false
-				? PG_STAT_REPLICATION_NOREC
-				: PG_STAT_REPLICATION_REC,
-			PG_STAT_REPLICATION_QUERY_P2,
-			tab->pg_special.pg_is_in_recovery == false
-				? PG_STAT_REPLICATION_NOREC
-				: PG_STAT_REPLICATION_REC,
-			PG_STAT_REPLICATION_QUERY_P3);
+            if (atoi(tab->pg_special.pg_version_num) < PG95) {
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_94_QUERY_P1,
+                         wal_function, PG_STAT_REPLICATION_94_QUERY_P2,
+                         wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
+                         wal_function, PG_STAT_REPLICATION_94_QUERY_P4);
+            } else {
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
+                         wal_function, PG_STAT_REPLICATION_QUERY_P2,
+                         wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
+                         wal_function, PG_STAT_REPLICATION_QUERY_P4);
+            }
             break;
         case pg_stat_tables:
             snprintf(query, QUERY_MAXLEN, "%s%s%s", PG_STAT_TABLES_QUERY_P1,

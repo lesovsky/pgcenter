@@ -124,25 +124,51 @@
 #define PG_STAT_DATABASE_CMAX_91            10
 #define PG_STAT_DATABASE_CMAX_LT            15
 
+#define PG_STAT_REPLICATION_94_QUERY_P1 \
+    "SELECT \
+        client_addr AS client, usename AS user, application_name AS name, \
+        state, sync_state AS mode, \
+        (pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_94_QUERY_P2 ",'0/0') / 1024)::bigint as xlog, \
+        (pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_94_QUERY_P3 \
+    ",sent_location) / 1024)::bigint as pending, \
+	(pg_xlog_location_diff(sent_location,write_location) / 1024)::bigint as write, \
+	(pg_xlog_location_diff(write_location,flush_location) / 1024)::bigint as flush, \
+	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::bigint as replay, \
+	(pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_94_QUERY_P4 \
+    ",replay_location))::bigint / 1024 as total_lag \
+    FROM pg_stat_replication \
+    ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
+
 #define PG_STAT_REPLICATION_QUERY_P1 \
     "SELECT \
         client_addr AS client, usename AS user, application_name AS name, \
         state, sync_state AS mode, \
-	(pg_xlog_location_diff("
-#define PG_STAT_REPLICATION_QUERY_P2 \
-    ",sent_location) / 1024)::int as pending, \
-	(pg_xlog_location_diff(sent_location,write_location) / 1024)::int as write, \
-	(pg_xlog_location_diff(write_location,flush_location) / 1024)::int as flush, \
-	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::int as replay, \
-	(pg_xlog_location_diff("
+        (pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_QUERY_P2 ",'0/0') / 1024)::bigint as xlog, \
+        (pg_xlog_location_diff("
 #define PG_STAT_REPLICATION_QUERY_P3 \
-    ",replay_location))::int / 1024 as total_lag FROM pg_stat_replication \
+    ",sent_location) / 1024)::bigint as pending, \
+	(pg_xlog_location_diff(sent_location,write_location) / 1024)::bigint as write, \
+	(pg_xlog_location_diff(write_location,flush_location) / 1024)::bigint as flush, \
+	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::bigint as replay, \
+	(pg_xlog_location_diff("
+#define PG_STAT_REPLICATION_QUERY_P4 \
+    ",replay_location))::bigint / 1024 as total_lag, \
+    (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, \
+    date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age \
+    FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 
 /* use functions depending on recovery */
 #define PG_STAT_REPLICATION_NOREC "pg_current_xlog_location()"
 #define PG_STAT_REPLICATION_REC "pg_last_xlog_receive_location()"
-#define PG_STAT_REPLICATION_CMAX_LT 9
+#define PG_STAT_REPLICATION_CMAX_94 10
+#define PG_STAT_REPLICATION_CMAX_LT 12
+/* diff array using only one column */
+#define PG_STAT_REPLICATION_DIFF_MIN     5
 
 #define PG_STAT_TABLES_QUERY_P1 \
     "SELECT \

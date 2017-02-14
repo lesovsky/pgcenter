@@ -27,6 +27,7 @@
  * and YYY is minor. For example, 90540 means 9.5.4.
  * */
 #define PG92 90200
+#define PG95 90500
 #define PG96 90600
 
 #define PG_CONF_FILE            "postgresql.conf"

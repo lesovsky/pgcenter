@@ -1,5 +1,7 @@
 pgcenter (devel) unstable; urgency=low
 
+  * add xact_age,time_age to pg_stat_replication stats (available since 9.5).
+  * add xlog field to pg_stat_replication stats.
   * allow to save current stat context into conninfo file (~/.pgcenterrc).
   * implement parsetr() as the fast replacement for sscanf().
   * refactoring: remove unnecessary variable from tab_s struct.
