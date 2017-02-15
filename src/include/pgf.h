@@ -48,8 +48,9 @@
 #define GUC_DATA_DIRECTORY      "data_directory"
 #define GUC_SERVER_VERSION      "server_version"
 #define GUC_SERVER_VERSION_NUM  "server_version_num"
-#define GUC_AV_MAX_WORKERS	"autovacuum_max_workers"
+#define GUC_AV_MAX_WORKERS      "autovacuum_max_workers"
 #define GUC_MAX_CONNS           "max_connections"
+#define GUC_MAX_PREPS           "max_prepared_transactions"
 
 /* PostgreSQL answers, see PQresultStatus() at http://www.postgresql.org/docs/current/static/libpq-exec.html */
 #define PG_CMD_OK       PGRES_COMMAND_OK

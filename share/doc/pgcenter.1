@@ -173,70 +173,42 @@ Used query: SELECT now() - pg_postmaster_start_time();
 .RE
 
 .IP "\fBSummary activity\fR"
-Line 2-2 shows current PostgreSQL connections grouped by their states.
+Line 2-2 shows current PostgreSQL connections grouped by their states. Information about connections are get from pg_stat_activity and pg_prepared_xacts.
 
-.B total
 .RS
+.B conns
 .RS
-Total connections number.
+Information about connected clients, total and max available (specified in max_connections).
 .RE
+
+.B prepared
 .RS
-Used query: SELECT count(*) FROM pg_stat_activity;
+Information about prepared transactions, total and max available (specified in max_prepared_reansactions).
 .RE
 
 .B idle
 .RS
 Number of backends in \fBidle\fR state which is waiting for a new client command.
 .RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE state = 'idle';
-.fi
-.RE
 
 .B idle_in_xact
 .RS
 Number of backends in \fBidle in transaction\fR means the backend is in a transaction, but is not currently executing a query, and \fBidle in transaction (aborted)\fR which is similar to idle in transaction, except one of the statements in the transaction caused an error.
-.RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE state IN ('idle in transaction', 'idle in transaction (aborted)');
-.fi
 .RE
 
 .B active
 .RS
 Number of backends in \fBactive\fR state when backends is executing a queries.
 .RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE state = 'active';
-.fi
-.RE
 
 .B waiting
 .RS
 Number of backends which is currently waiting on a lock.
 .RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE waiting;
-.fi
-.RE
 
 .B others
 .RS
 Number of backends with \fBfastpath function call\fR state which executes fast-path functions and \fBdisabled\fR state which is reported only if \fItrack_activities\fR is disabled in backend.
-.RE
-.RS
-.nf
-Used query: SELECT count(*) FROM pg_stat_activity 
-            WHERE state IN ('fastpath function call','disabled');
-.fi
 .RE
 .RE
 
@@ -294,8 +266,7 @@ Average queries duration in milisecond. Result defines here present the average 
 .RE
 .RS
 .nf
-Used query: SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query 
-            FROM pg_stat_statements;
+Used query: SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query FROM pg_stat_statements;
 .fi
 .RE
 
@@ -305,8 +276,17 @@ Execution time of the oldest transaction (not a query or session).
 .RE
 .RS
 .nf
-Used query: SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00')
-            FROM pg_stat_activity;
+Used query: SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity;
+.fi
+.RE
+
+.B prep_maxtime
+.RS
+Execution time of the oldest prepared transaction (not a query or session).
+.RE
+.RS
+.nf
+Used query: SELECT coalesce(date_trunc('seconds', max(now() - prepared)), '00:00:00') FROM pg_prepared_xacts;
 .fi
 .RE
 .RE

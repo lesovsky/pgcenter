@@ -63,7 +63,8 @@
          (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
          (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
          (SELECT count(*) AS waiting FROM pgsa WHERE waiting), \
-         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled'));"
+         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled')), \
+         (SELECT count(*) AS total_prepared FROM pg_prepared_xacts)"
 
 /* for postgresql versions since 9.6 */
 #define PG_STAT_ACTIVITY_COUNT_QUERY \
@@ -74,7 +75,8 @@
          (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
          (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
          (SELECT count(*) AS waiting FROM pgsa WHERE wait_event IS NOT NULL), \
-         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled'));"
+         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled')), \
+         (SELECT count(*) AS total_prepared FROM pg_prepared_xacts)"
 
 #define PG_STAT_ACTIVITY_AV_COUNT_QUERY \
     "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
@@ -88,8 +90,12 @@
 #define PG_STAT_STATEMENTS_SYS_QUERY \
         "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 #define PG_STAT_ACTIVITY_SYS_QUERY \
-        "SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pg_stat_activity \
-            WHERE (query !~* '^autovacuum:' AND query !~* '^vacuum') AND pid <> pg_backend_pid()"
+        "SELECT \
+            (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
+                AS xact_maxtime FROM pg_stat_activity \
+                WHERE (query !~* '^autovacuum:' AND query !~* '^vacuum') AND pid <> pg_backend_pid()), \
+            (SELECT COALESCE(date_trunc('seconds', max(clock_timestamp() - prepared)), '00:00:00') \
+                AS prep_maxtime FROM pg_prepared_xacts);"
 
 /* context queries */
 #define PG_STAT_DATABASE_91_QUERY \

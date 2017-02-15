@@ -9,7 +9,7 @@ PostgreSQL provides various statistics which include information about tables, i
 - shows current system load and cpu/memory/swap usage;
 - shows input/output statistics for devices and partitions like iostat;
 - shows network traffic statistics for network interfaces like nicstat;
-- shows current postgres status (connections, longest transaction, autovacuum);
+- shows current postgres status (connections, prepared transactions, longest transaction, autovacuum);
 - provides statistics on tables, indexes, functions, current query activity, replication;
 - shows pg_stat_statements statistics: calls, rows;
 - shows pg_stat_statements statistics: cpu timings, IO timings;

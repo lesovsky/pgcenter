@@ -151,7 +151,7 @@ void get_pg_special(PGconn * conn, struct tab_s * tab)
 {
     PGresult * res;
     char errmsg[ERRSIZE];
-    char av_max_workers[8], pg_max_conns[8];
+    char av_max_workers[8], pg_max_conns[8], pg_max_preps[8];
 
     /* get postgres version information */
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, tab->pg_special.pg_version_num);
@@ -180,6 +180,12 @@ void get_pg_special(PGconn * conn, struct tab_s * tab)
     (strlen(pg_max_conns) == 0)
 	? (tab->pg_special.pg_max_conns = 0)
 	: (tab->pg_special.pg_max_conns = atoi(pg_max_conns));
+    
+    /* get max prepared transactions limit */
+    get_conf_value(conn, GUC_MAX_PREPS, pg_max_preps);
+    (strlen(pg_max_preps) == 0)
+    ? (tab->pg_special.pg_max_preps = 0)
+    : (tab->pg_special.pg_max_preps = atoi(pg_max_preps));
 }
 
 /*
@@ -391,7 +397,8 @@ void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn)
         	 x_count = 0,			/* number of idle in xact */
         	 a_count = 0,			/* number of active connections */
         	 w_count = 0,			/* number of waiting connections */
-        	 o_count = 0;			/* other, unclassiffied */
+        	 o_count = 0,			/* other, unclassiffied */
+        	 p_count = 0;			/* number of prepared xacts */
     PGresult *res;
     static char errmsg[ERRSIZE];
     char query[QUERY_MAXLEN];
@@ -408,12 +415,15 @@ void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn)
         a_count = atoi(PQgetvalue(res, 0, 3));
         w_count = atoi(PQgetvalue(res, 0, 4));
         o_count = atoi(PQgetvalue(res, 0, 5));
+        p_count = atoi(PQgetvalue(res, 0, 6));
         PQclear(res);
     }
 
     mvwprintw(window, 1, COLS / 2,
-            "  activity:%3i/%i total/max,%3i idle,%3i idle_xact,%3i active,%3i waiting,%3i others",
-            t_count, tab->pg_special.pg_max_conns, i_count, x_count, a_count, w_count, o_count);
+            "  activity:%3i/%i conns,%3i/%i prepared,%3i idle,%3i idle_xact,%3i active,%3i waiting,%3i others",
+            t_count, tab->pg_special.pg_max_conns,
+            p_count, tab->pg_special.pg_max_preps,
+            i_count, x_count, a_count, w_count, o_count);
     wrefresh(window);
 }
 
@@ -454,13 +464,12 @@ void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval)
     float avgtime;
     static unsigned int qps, prev_queries = 0;
     unsigned int divisor;
-    char maxtime[XS_BUF_LEN] = "";
+    char x_maxtime[XS_BUF_LEN] = "--:--:--", p_maxtime[XS_BUF_LEN] = "--:--:--";
     PGresult *res;
     char errmsg[ERRSIZE];
 
     if (PQstatus(conn) == CONNECTION_BAD) {
         avgtime = qps = 0;
-        snprintf(maxtime, sizeof(maxtime), "--:--:--");
     } 
 
     divisor = interval / 1000000;
@@ -475,15 +484,14 @@ void get_pgss_summary(WINDOW * window, PGconn * conn, unsigned long interval)
     }
 
     if ((res = do_query(conn, PG_STAT_ACTIVITY_SYS_QUERY, errmsg)) != NULL) {
-        snprintf(maxtime, sizeof(maxtime), "%s", PQgetvalue(res, 0, 0));
+        snprintf(x_maxtime, sizeof(x_maxtime), "%s", PQgetvalue(res, 0, 0));
+        snprintf(p_maxtime, sizeof(p_maxtime), "%s", PQgetvalue(res, 0, 1));
         PQclear(res);
-    } else {
-        snprintf(maxtime, sizeof(maxtime), "--:--:--");
     }
 
     mvwprintw(window, 3, COLS / 2,
-            "statements: %3i stmt/s,  %3.3f stmt_avgtime, %s xact_maxtime",
-            qps, avgtime, maxtime);
+            "statements: %3i stmt/s, %3.3f stmt_avgtime, %s xact_maxtime, %s prep_maxtime",
+            qps, avgtime, x_maxtime, p_maxtime);
     wrefresh(window);
 }
 
