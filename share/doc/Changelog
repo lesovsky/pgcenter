@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * fix wrong memory allocation for iostat/ifstat.
   * add details about prepared transactions: total, max, maxtime.
   * add xact_age,time_age to pg_stat_replication stats (available since 9.5).
   * add xlog field to pg_stat_replication stats.

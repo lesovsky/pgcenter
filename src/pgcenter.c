@@ -82,12 +82,13 @@ void init_tabs(struct tab_s *tabs[])
         tabs[i]->pg_stat_sys = false;
         
         /* init iostat/ifstat storage */
-        if ((tabs[i]->curr_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL ||
-            (tabs[i]->prev_iostat = (struct iodata_s **) malloc(STATS_IODATA_SIZE)) == NULL) {
+        /* that looks like an ugly hack, 8 is the pointer size on amd64 arch */
+        if ((tabs[i]->curr_iostat = (struct iodata_s **) malloc(8 * MAXDEV_IN_FILE)) == NULL ||
+            (tabs[i]->prev_iostat = (struct iodata_s **) malloc(8 * MAXDEV_IN_FILE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for tabs (iostat) failed.\n");
         }
-        if ((tabs[i]->curr_ifstat = (struct ifdata_s **) malloc(STATS_IFDATA_SIZE)) == NULL ||
-            (tabs[i]->prev_ifstat = (struct ifdata_s **) malloc(STATS_IFDATA_SIZE)) == NULL) {
+        if ((tabs[i]->curr_ifstat = (struct ifdata_s **) malloc(8 * MAXDEV_IN_FILE)) == NULL ||
+            (tabs[i]->prev_ifstat = (struct ifdata_s **) malloc(8 * MAXDEV_IN_FILE)) == NULL) {
             mreport(true, msg_fatal, "FATAL: malloc() for tabs (ifstat) failed.\n");
         }
 

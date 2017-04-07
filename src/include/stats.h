@@ -27,6 +27,7 @@
 #define DISKSTATS_FILE          "/proc/diskstats"
 #define NETDEV_FILE             "/proc/net/dev"
 
+#define MAXDEV_IN_FILE      64          /* max devices per stats files */
 #define DEFAULT_HZ          100         /* default clock ticks */
 
 /*
