@@ -356,7 +356,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -385,7 +385,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -414,7 +414,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -436,7 +436,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -473,7 +473,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -510,7 +510,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -546,7 +546,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -578,7 +578,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"
@@ -607,7 +607,7 @@
             E'/\\\\*.*?\\\\*\\/', '', 'g'), \
             E'\\\\s+', ' ', 'g') AS query \
     FROM pg_stat_statements p \
-    JOIN pg_authid a ON a.oid=p.userid \
+    JOIN pg_roles a ON a.oid=p.userid \
     JOIN pg_database d ON d.oid=p.dbid \
     GROUP BY a.rolname, d.datname, query \
     ORDER BY left(md5(d.datname || a.rolname || p.query ), 10) DESC"

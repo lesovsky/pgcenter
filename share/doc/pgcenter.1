@@ -979,7 +979,7 @@ in
 This means that a server restart is needed to add or remove the module. When module loaded,
 .I pg_stat_statement
 extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
-.I pg_authid
+.I pg_roles
 and
 .I pg_database
 views. Different versions of the PostgreSQL may have different number of fields.
@@ -1007,7 +1007,7 @@ Used query: SELECT
             E'/\\\\*.*?\\\\*\\/', '', 'g'),
             E'\\\\s+', ' ', 'g') AS query
     FROM pg_stat_statements p
-    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_roles a ON a.oid=p.userid
     JOIN pg_database d ON d.oid=p.dbid
     WHERE d.datname != 'postgres' AND calls > 50
     GROUP BY a.rolname, d.datname, query;
@@ -1106,7 +1106,7 @@ in
 This means that a server restart is needed to add or remove the module. When module loaded,
 .I pg_stat_statement
 extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
-.I pg_authid
+.I pg_roles
 and
 .I pg_database
 views.
@@ -1127,7 +1127,7 @@ Used query: SELECT
             E'/\\\\*.*?\\\\*\\/', '', 'g'),
             E'\\\\s+', ' ', 'g') AS query
     FROM pg_stat_statements p
-    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_roles a ON a.oid=p.userid
     JOIN pg_database d ON d.oid=p.dbid
     WHERE d.datname != 'postgres' AND calls > 50
     GROUP BY a.rolname, d.datname, query;
@@ -1185,7 +1185,7 @@ in
 This means that a server restart is needed to add or remove the module. When module loaded,
 .I pg_stat_statement
 extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
-.I pg_authid
+.I pg_roles
 and
 .I pg_database
 views.
@@ -1221,7 +1221,7 @@ Used query: SELECT
             E'/\\\\*.*?\\\\*\\/', '', 'g'),
             E'\\\\s+', ' ', 'g') AS query
     FROM pg_stat_statements p
-    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_roles a ON a.oid=p.userid
     JOIN pg_database d ON d.oid=p.dbid
     WHERE d.datname != 'postgres' AND calls > 50
     GROUP BY a.rolname, d.datname, query;
@@ -1304,7 +1304,7 @@ in
 This means that a server restart is needed to add or remove the module. When module loaded,
 .I pg_stat_statement
 extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
-.I pg_authid
+.I pg_roles
 and
 .I pg_database
 views.
@@ -1332,7 +1332,7 @@ Used query: SELECT
             E'/\\\\*.*?\\\\*\\/', '', 'g'),
             E'\\\\s+', ' ', 'g') AS query
     FROM pg_stat_statements p
-    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_roles a ON a.oid=p.userid
     JOIN pg_database d ON d.oid=p.dbid
     WHERE d.datname != 'postgres' AND calls > 50
     GROUP BY a.rolname, d.datname, query;
@@ -1395,7 +1395,7 @@ in
 This means that a server restart is needed to add or remove the module. When module loaded,
 .I pg_stat_statement
 extension must be installed in target database. For more information see http://www.postgresql.org/docs/9.4/static/pgstatstatements.html. Additionally used
-.I pg_authid
+.I pg_roles
 and
 .I pg_database
 views.
@@ -1423,7 +1423,7 @@ Used query: SELECT
             E'/\\\\*.*?\\\\*\\/', '', 'g'),
             E'\\\\s+', ' ', 'g') AS query
     FROM pg_stat_statements p
-    JOIN pg_authid a ON a.oid=p.userid
+    JOIN pg_roles a ON a.oid=p.userid
     JOIN pg_database d ON d.oid=p.dbid
     WHERE d.datname != 'postgres' AND calls > 50
     GROUP BY a.rolname, d.datname, query;

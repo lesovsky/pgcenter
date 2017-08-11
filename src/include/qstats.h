@@ -47,7 +47,7 @@
             sum(blk_read_time) AS blk_read_time, sum(blk_write_time) AS blk_write_time, \
             sum(calls) AS calls, sum(rows) AS rows \
         FROM pg_stat_statements_normalized p \
-        JOIN pg_authid a ON a.oid=p.userid \
+        JOIN pg_roles a ON a.oid=p.userid \
         JOIN pg_database d ON d.oid=p.dbid \
         WHERE TRUE AND left(md5(d.datname || a.rolname || p.query ), 10) = '"
 
