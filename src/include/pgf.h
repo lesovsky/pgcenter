@@ -51,6 +51,7 @@
 #define GUC_AV_MAX_WORKERS      "autovacuum_max_workers"
 #define GUC_MAX_CONNS           "max_connections"
 #define GUC_MAX_PREPS           "max_prepared_transactions"
+#define GUC_TRACK_XACT_TS       "track_commit_timestamp"
 
 /* PostgreSQL answers, see PQresultStatus() at http://www.postgresql.org/docs/current/static/libpq-exec.html */
 #define PG_CMD_OK       PGRES_COMMAND_OK

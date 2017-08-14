@@ -162,6 +162,10 @@
 	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::bigint as replay, \
 	(pg_xlog_location_diff("
 #define PG_STAT_REPLICATION_QUERY_P4 \
+    ",replay_location))::bigint / 1024 as total_lag \
+    FROM pg_stat_replication \
+    ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
+#define PG_STAT_REPLICATION_QUERY_EXT_P4 \
     ",replay_location))::bigint / 1024 as total_lag, \
     (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, \
     date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age \
@@ -172,7 +176,8 @@
 #define PG_STAT_REPLICATION_NOREC "pg_current_xlog_location()"
 #define PG_STAT_REPLICATION_REC "pg_last_xlog_receive_location()"
 #define PG_STAT_REPLICATION_CMAX_94 10
-#define PG_STAT_REPLICATION_CMAX_LT 12
+#define PG_STAT_REPLICATION_CMAX_LT 10
+#define PG_STAT_REPLICATION_CMAX_LT_EXT 12
 /* diff array using only one column */
 #define PG_STAT_REPLICATION_DIFF_MIN     5
 

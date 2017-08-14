@@ -103,7 +103,12 @@ void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter)
                 : (max = PG_STAT_DATABASE_CMAX_LT);
             break;
         case pg_stat_replication:
-            max = PG_STAT_REPLICATION_CMAX_LT;
+            if (atoi(tab->pg_special.pg_version_num) < PG95)
+                max = PG_STAT_REPLICATION_CMAX_94;
+            else if (tab->pg_special.track_commit_timestamp == true)
+                max = PG_STAT_REPLICATION_CMAX_LT_EXT;
+            else
+                max = PG_STAT_REPLICATION_CMAX_LT;
             break;
         case pg_stat_tables:
             max = PG_STAT_TABLES_CMAX_LT;

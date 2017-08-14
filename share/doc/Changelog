@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * make pg_stat_replication's xact_age,time_age optional, only when track_commit_timestamp is enabled.
   * use pg_roles instead of pg_authid due to https://github.com/lesovsky/pgcenter/issues/35.
   * fix wrong memory allocation for iostat/ifstat.
   * add details about prepared transactions: total, max, maxtime.

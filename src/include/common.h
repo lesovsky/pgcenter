@@ -132,6 +132,7 @@ struct sys_special_s
 struct pg_special_s
 {
     bool pg_is_in_recovery;             /* is postgres a standby? - true/false */
+    bool track_commit_timestamp;        /* is track_commit_timestamp enabled? */
     unsigned int av_max_workers;        /* autovacuum_max_workers GUC value */
     unsigned int pg_max_conns;          /* max_connections GUC value */
     unsigned int pg_max_preps;          /* max_prepared_transactions GUC value */

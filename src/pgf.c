@@ -151,7 +151,7 @@ void get_pg_special(PGconn * conn, struct tab_s * tab)
 {
     PGresult * res;
     char errmsg[ERRSIZE];
-    char av_max_workers[8], pg_max_conns[8], pg_max_preps[8];
+    char av_max_workers[8], pg_max_conns[8], pg_max_preps[8], pg_track_xact_ts[8];
 
     /* get postgres version information */
     get_conf_value(conn, GUC_SERVER_VERSION_NUM, tab->pg_special.pg_version_num);
@@ -167,6 +167,16 @@ void get_pg_special(PGconn * conn, struct tab_s * tab)
 	    ? (tab->pg_special.pg_is_in_recovery = false)
 	    : (tab->pg_special.pg_is_in_recovery = true);
         PQclear(res);
+    }
+
+    /* is track_commit_timestamp enabled */
+    get_conf_value(conn, GUC_TRACK_XACT_TS, pg_track_xact_ts);
+    if (pg_track_xact_ts != '\0') {
+        (!strcmp(pg_track_xact_ts, "off"))
+        ? (tab->pg_special.track_commit_timestamp = false)
+        : (tab->pg_special.track_commit_timestamp = true);
+    } else {
+        tab->pg_special.track_commit_timestamp = false;
     }
 
     /* get autovacuum_max_workers */
@@ -243,6 +253,11 @@ void prepare_query(struct tab_s * tab, char * query)
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P2,
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P4);
+            } else if (tab->pg_special.track_commit_timestamp == true) {
+                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
+                         wal_function, PG_STAT_REPLICATION_QUERY_P2,
+                         wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
+                         wal_function, PG_STAT_REPLICATION_QUERY_EXT_P4);
             } else {
                 snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
                          wal_function, PG_STAT_REPLICATION_QUERY_P2,
