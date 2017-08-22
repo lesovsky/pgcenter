@@ -234,13 +234,8 @@ void reconnect_if_failed(WINDOW * window, PGconn * conns[], struct tab_s * tabs[
  */
 void prepare_query(struct tab_s * tab, char * query)
 {
-    /* determine proper wal function which depends on recovery state */
     char wal_function[S_BUF_LEN];
-    if (tab->pg_special.pg_is_in_recovery == false)
-        snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_NOREC);
-    else
-        snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_REC);
-    
+
     switch (tab->current_context) {
         case pg_stat_database: default:
             (atoi(tab->pg_special.pg_version_num) < PG92)
@@ -248,21 +243,51 @@ void prepare_query(struct tab_s * tab, char * query)
                 : snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_DATABASE_QUERY);
             break;
         case pg_stat_replication:
+            /* determine proper wal function which depends on recovery state */
+            if (atoi(tab->pg_special.pg_version_num) < PG10) {
+                if (tab->pg_special.pg_is_in_recovery == false)
+                    snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_NOREC);
+                else
+                    snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_REC);
+            } else {
+                if (tab->pg_special.pg_is_in_recovery == false)
+                    snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_NOREC_10);
+                else
+                    snprintf(wal_function, S_BUF_LEN, "%s", PG_STAT_REPLICATION_REC_10);
+            }
+            /* make query */
             if (atoi(tab->pg_special.pg_version_num) < PG95) {
+                /* query for postgresql 9.5 and earlier */
                 snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_94_QUERY_P1,
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P2,
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
                          wal_function, PG_STAT_REPLICATION_94_QUERY_P4);
-            } else if (tab->pg_special.track_commit_timestamp == true) {
-                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
-                         wal_function, PG_STAT_REPLICATION_QUERY_P2,
-                         wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
-                         wal_function, PG_STAT_REPLICATION_QUERY_EXT_P4);
+            } else if (atoi(tab->pg_special.pg_version_num) < PG10) {
+                /* queries for postgresql 9.6 with or without track_commit_timestamp */
+                if (tab->pg_special.track_commit_timestamp == true) {
+                    snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_96_QUERY_P1,
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_P2,
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_P3,
+                        wal_function, PG_STAT_REPLICATION_QUERY_EXT_P4);
+                } else {
+                    snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_96_QUERY_P1,
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_P2,
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_P3,
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_P4);
+                }
             } else {
-                snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
-                         wal_function, PG_STAT_REPLICATION_QUERY_P2,
-                         wal_function, PG_STAT_REPLICATION_94_QUERY_P3,
-                         wal_function, PG_STAT_REPLICATION_QUERY_P4);
+                /* queries for postgresql 10.0 with or without track_commit_timestamp */
+                if (tab->pg_special.track_commit_timestamp == true) {
+                    snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
+                        wal_function, PG_STAT_REPLICATION_QUERY_P2,
+                        wal_function, PG_STAT_REPLICATION_QUERY_P3,
+                        wal_function, PG_STAT_REPLICATION_QUERY_EXT_P4);
+                } else {
+                    snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_QUERY_P1,
+                        wal_function, PG_STAT_REPLICATION_QUERY_P2,
+                        wal_function, PG_STAT_REPLICATION_QUERY_P3,
+                        wal_function, PG_STAT_REPLICATION_QUERY_P4);
+                }
             }
             break;
         case pg_stat_tables:

@@ -160,21 +160,41 @@
     FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 
-#define PG_STAT_REPLICATION_QUERY_P1 \
+/* 9.6 query */
+#define PG_STAT_REPLICATION_96_QUERY_P1 \
     "SELECT \
         client_addr AS client, usename AS user, application_name AS name, \
         state, sync_state AS mode, \
         (pg_xlog_location_diff("
-#define PG_STAT_REPLICATION_QUERY_P2 ",'0/0') / 1024)::bigint as xlog, \
+#define PG_STAT_REPLICATION_96_QUERY_P2 ",'0/0') / 1024)::bigint as xlog, \
         (pg_xlog_location_diff("
-#define PG_STAT_REPLICATION_QUERY_P3 \
+#define PG_STAT_REPLICATION_96_QUERY_P3 \
     ",sent_location) / 1024)::bigint as pending, \
 	(pg_xlog_location_diff(sent_location,write_location) / 1024)::bigint as write, \
 	(pg_xlog_location_diff(write_location,flush_location) / 1024)::bigint as flush, \
 	(pg_xlog_location_diff(flush_location,replay_location) / 1024)::bigint as replay, \
 	(pg_xlog_location_diff("
-#define PG_STAT_REPLICATION_QUERY_P4 \
+#define PG_STAT_REPLICATION_96_QUERY_P4 \
     ",replay_location))::bigint / 1024 as total_lag \
+    FROM pg_stat_replication \
+    ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
+
+/* since postgresql 10 xlog functions renamed to wal functions */
+#define PG_STAT_REPLICATION_QUERY_P1 \
+    "SELECT \
+        client_addr AS client, usename AS user, application_name AS name, \
+        state, sync_state AS mode, \
+        (pg_wal_lsn_diff("
+#define PG_STAT_REPLICATION_QUERY_P2 ",'0/0') / 1024)::bigint as wal, \
+        (pg_wal_lsn_diff("
+#define PG_STAT_REPLICATION_QUERY_P3 \
+    ",sent_lsn) / 1024)::bigint as pending, \
+	(pg_wal_lsn_diff(sent_lsn,write_lsn) / 1024)::bigint as write, \
+	(pg_wal_lsn_diff(write_lsn,flush_lsn) / 1024)::bigint as flush, \
+	(pg_wal_lsn_diff(flush_lsn,replay_lsn) / 1024)::bigint as replay, \
+	(pg_wal_lsn_diff("
+#define PG_STAT_REPLICATION_QUERY_P4 \
+    ",replay_lsn))::bigint / 1024 as total_lag \
     FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 #define PG_STAT_REPLICATION_QUERY_EXT_P4 \
@@ -187,6 +207,8 @@
 /* use functions depending on recovery */
 #define PG_STAT_REPLICATION_NOREC "pg_current_xlog_location()"
 #define PG_STAT_REPLICATION_REC "pg_last_xlog_receive_location()"
+#define PG_STAT_REPLICATION_NOREC_10 "pg_current_wal_lsn()"
+#define PG_STAT_REPLICATION_REC_10 "pg_last_wal_receive_lsn()"
 #define PG_STAT_REPLICATION_CMAX_94 10
 #define PG_STAT_REPLICATION_CMAX_LT 10
 #define PG_STAT_REPLICATION_CMAX_LT_EXT 12
