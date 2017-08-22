@@ -67,7 +67,7 @@
          (SELECT count(*) AS total_prepared FROM pg_prepared_xacts)"
 
 /* for postgresql versions since 9.6 */
-#define PG_STAT_ACTIVITY_COUNT_QUERY \
+#define PG_STAT_ACTIVITY_COUNT_96_QUERY \
     "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
        SELECT \
          (SELECT count(*) AS total FROM pgsa), \
@@ -75,6 +75,18 @@
          (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
          (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
          (SELECT count(*) AS waiting FROM pgsa WHERE wait_event IS NOT NULL), \
+         (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled')), \
+         (SELECT count(*) AS total_prepared FROM pg_prepared_xacts)"
+
+/* for postgresql versions since 10.0 */
+#define PG_STAT_ACTIVITY_COUNT_QUERY \
+    "WITH pgsa AS (SELECT * FROM pg_stat_activity) \
+       SELECT \
+         (SELECT count(*) AS total FROM pgsa), \
+         (SELECT count(*) AS idle FROM pgsa WHERE state = 'idle'), \
+         (SELECT count(*) AS idle_in_xact FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')), \
+         (SELECT count(*) AS active FROM pgsa WHERE state = 'active'), \
+         (SELECT count(*) AS waiting FROM pgsa WHERE wait_event_type = 'Lock'), \
          (SELECT count(*) AS others FROM pgsa WHERE state IN ('fastpath function call','disabled')), \
          (SELECT count(*) AS total_prepared FROM pg_prepared_xacts)"
 

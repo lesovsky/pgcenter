@@ -29,6 +29,7 @@
 #define PG92 90200
 #define PG95 90500
 #define PG96 90600
+#define PG10 100000
 
 #define PG_CONF_FILE            "postgresql.conf"
 #define PG_HBA_FILE             "pg_hba.conf"

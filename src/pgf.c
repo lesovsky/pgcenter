@@ -420,6 +420,8 @@ void get_summary_pg_activity(WINDOW * window, struct tab_s * tab, PGconn * conn)
 
     if (atoi(tab->pg_special.pg_version_num) < PG96)
     	snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_ACTIVITY_COUNT_95_QUERY);
+    else if (atoi(tab->pg_special.pg_version_num) < PG10)
+        snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_ACTIVITY_COUNT_96_QUERY);
     else
         snprintf(query, QUERY_MAXLEN, "%s", PG_STAT_ACTIVITY_COUNT_QUERY);
 
