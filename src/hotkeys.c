@@ -127,6 +127,8 @@ void change_sort_order(struct tab_s * tab, bool increment, bool * first_iter)
                 max = PG_STAT_ACTIVITY_LONG_CMAX_91;
             else if (atoi(tab->pg_special.pg_version_num) < PG96)
                 max = PG_STAT_ACTIVITY_LONG_CMAX_95;
+            else if (atoi(tab->pg_special.pg_version_num) < PG10)
+                max = PG_STAT_ACTIVITY_LONG_CMAX_96;
             else
                 max = PG_STAT_ACTIVITY_LONG_CMAX_LT;
             break;

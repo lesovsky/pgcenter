@@ -332,10 +332,35 @@
     "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
     ORDER BY pid DESC"
 
-#define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
+#define PG_STAT_ACTIVITY_LONG_96_QUERY_P1 \
     "SELECT \
         pid, client_addr AS cl_addr, client_port AS cl_port, \
         datname, usename, state, wait_event_type AS wait_etype, wait_event, \
+        date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
+        date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
+        date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace( \
+        regexp_replace(query, \
+            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'), \
+            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'), \
+            E'--.*$', '', 'ng'), \
+            E'/\\\\*.*?\\\\*\\/', '', 'g'), \
+            E'\\\\s+', ' ', 'g') AS query \
+    FROM pg_stat_activity \
+    WHERE ((clock_timestamp() - xact_start) > '"
+#define PG_STAT_ACTIVITY_LONG_96_QUERY_P2 \
+    "'::interval OR (clock_timestamp() - query_start) > '"
+#define PG_STAT_ACTIVITY_LONG_96_QUERY_P3 \
+    "'::interval) AND state <> 'idle' AND pid <> pg_backend_pid() \
+    ORDER BY pid DESC"
+
+#define PG_STAT_ACTIVITY_LONG_QUERY_P1 \
+    "SELECT \
+        pid, client_addr AS cl_addr, client_port AS cl_port, \
+        datname, usename, state, backend_type, wait_event_type AS wait_etype, wait_event, \
         date_trunc('seconds', clock_timestamp() - xact_start) AS xact_age, \
         date_trunc('seconds', clock_timestamp() - query_start) AS query_age, \
         date_trunc('seconds', clock_timestamp() - state_change) AS change_age, \
@@ -360,7 +385,8 @@
 /* don't use array sorting when showing long activity, row order defined in query */
 #define PG_STAT_ACTIVITY_LONG_CMAX_91       8
 #define PG_STAT_ACTIVITY_LONG_CMAX_95       10
-#define PG_STAT_ACTIVITY_LONG_CMAX_LT       11
+#define PG_STAT_ACTIVITY_LONG_CMAX_96       11
+#define PG_STAT_ACTIVITY_LONG_CMAX_LT       12
 
 #define PG_STAT_FUNCTIONS_QUERY_P1 \
     "SELECT \

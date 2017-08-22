@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * pg-10: add pg_stat_activity.backend_type.
   * pg-10: add support for updated pg_stat_replication (xlog -> wal).
   * change waiting connections accounting in postgres summary area.
   * make pg_stat_replication's xact_age,time_age optional, only when track_commit_timestamp is enabled.

@@ -878,6 +878,11 @@ is disabled in this backend.
 .RE
 .RE
 
+.B backend_type
+.RS
+Type of current backend. Possible types are autovacuum launcher, autovacuum worker, background worker, background writer, client backend, checkpointer, startup, walreceiver, walsender and walwriter. Available since PostgreSQL 10.
+.RE
+
 .B waiting
 .RS
 True if this backend is currently waiting on a lock.

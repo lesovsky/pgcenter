@@ -325,7 +325,12 @@ void prepare_query(struct tab_s * tab, char * query)
                         PG_STAT_ACTIVITY_LONG_95_QUERY_P1, tab->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_95_QUERY_P2, tab->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_95_QUERY_P3);
-	    } else {
+	        } else if (atoi(tab->pg_special.pg_version_num) > PG95 && atoi(tab->pg_special.pg_version_num) < PG10) {
+	            snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
+                        PG_STAT_ACTIVITY_LONG_96_QUERY_P1, tab->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_96_QUERY_P2, tab->pg_stat_activity_min_age,
+                        PG_STAT_ACTIVITY_LONG_96_QUERY_P3);
+	        } else {
                 snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s",
                         PG_STAT_ACTIVITY_LONG_QUERY_P1, tab->pg_stat_activity_min_age,
                         PG_STAT_ACTIVITY_LONG_QUERY_P2, tab->pg_stat_activity_min_age,
