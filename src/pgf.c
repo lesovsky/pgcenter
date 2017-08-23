@@ -268,7 +268,7 @@ void prepare_query(struct tab_s * tab, char * query)
                     snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_96_QUERY_P1,
                         wal_function, PG_STAT_REPLICATION_96_QUERY_P2,
                         wal_function, PG_STAT_REPLICATION_96_QUERY_P3,
-                        wal_function, PG_STAT_REPLICATION_QUERY_EXT_P4);
+                        wal_function, PG_STAT_REPLICATION_96_QUERY_EXT_P4);
                 } else {
                     snprintf(query, QUERY_MAXLEN, "%s%s%s%s%s%s%s", PG_STAT_REPLICATION_96_QUERY_P1,
                         wal_function, PG_STAT_REPLICATION_96_QUERY_P2,

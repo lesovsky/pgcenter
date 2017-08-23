@@ -178,6 +178,12 @@
     ",replay_location))::bigint / 1024 as total_lag \
     FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
+#define PG_STAT_REPLICATION_96_QUERY_EXT_P4 \
+    ",replay_location))::bigint / 1024 as total_lag, \
+    (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, \
+    date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age \
+    FROM pg_stat_replication \
+    ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 
 /* since postgresql 10 xlog functions renamed to wal functions */
 #define PG_STAT_REPLICATION_QUERY_P1 \
@@ -198,7 +204,7 @@
     FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 #define PG_STAT_REPLICATION_QUERY_EXT_P4 \
-    ",replay_location))::bigint / 1024 as total_lag, \
+    ",replay_lsn))::bigint / 1024 as total_lag, \
     (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, \
     date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age \
     FROM pg_stat_replication \
