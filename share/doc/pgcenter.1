@@ -417,6 +417,9 @@ Used query: SELECT
                 (pg_xlog_location_diff(sent_location,write_location) / 1024)::bigint as write,
                 (pg_xlog_location_diff(write_location,flush_location) / 1024)::bigint as flush,
                 (pg_xlog_location_diff(flush_location,replay_location) / 1024)::bigint as replay,
+                date_trunc('seconds', write_lag) as write_lag,
+                date_trunc('seconds', flush_lag) as flush_lag,
+                date_trunc('seconds', replay_lag) as replay_lag,
                 (pg_xlog_location_diff(pg_current_xlog_location(),replay_location))::bigint / 1024 as total_lag,
                 (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age,
                 date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age
@@ -477,6 +480,21 @@ Difference between XLOG flush position and XLOG replay position, shows amount of
 .B total_lag
 .RS
 Difference between XLOG current position on the master server and XLOG replay position onremote host, shows the total amount of XLOG in kilobytes, the standby is behind.
+.RE
+
+.B write_lag
+.RS
+Time elapsed between flushing recent WAL locally and receiving notification that this standby server has written it (but not yet flushed it or applied it). This can be used to gauge the delay that synchronous_commit level remote_write incurred while committing if this server was configured as a synchronous standby. Available since PostgreSQL 10.
+.RE
+
+.B flush_lag
+.RS
+Time elapsed between flushing recent WAL locally and receiving notification that this standby server has written and flushed it (but not yet applied it). This can be used to gauge the delay that synchronous_commit level remote_flush incurred while committing if this server was configured as a synchronous standby. Available since PostgreSQL 10.
+.RE
+
+.B replay_lag
+.RS
+Time elapsed between flushing recent WAL locally and receiving notification that this standby server has written, flushed and applied it. This can be used to gauge the delay that synchronous_commit level remote_apply incurred while committing if this server was configured as a synchronous standby. Available since PostgreSQL 10.
 .RE
 
 .B xact_age

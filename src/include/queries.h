@@ -200,11 +200,17 @@
 	(pg_wal_lsn_diff(flush_lsn,replay_lsn) / 1024)::bigint as replay, \
 	(pg_wal_lsn_diff("
 #define PG_STAT_REPLICATION_QUERY_P4 \
-    ",replay_lsn))::bigint / 1024 as total_lag \
+    ",replay_lsn))::bigint / 1024 as total_lag, \
+    date_trunc('seconds', write_lag) AS write_lag, \
+    date_trunc('seconds', flush_lag) AS flush_lag, \
+    date_trunc('seconds', replay_lag) AS replay_lag \
     FROM pg_stat_replication \
     ORDER BY left(md5(client_addr::text || client_port::text), 10) DESC"
 #define PG_STAT_REPLICATION_QUERY_EXT_P4 \
     ",replay_lsn))::bigint / 1024 as total_lag, \
+    date_trunc('seconds', write_lag) AS write_lag, \
+    date_trunc('seconds', flush_lag) AS flush_lag, \
+    date_trunc('seconds', replay_lag) AS replay_lag, \
     (pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, \
     date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age \
     FROM pg_stat_replication \
@@ -216,8 +222,10 @@
 #define PG_STAT_REPLICATION_NOREC_10 "pg_current_wal_lsn()"
 #define PG_STAT_REPLICATION_REC_10 "pg_last_wal_receive_lsn()"
 #define PG_STAT_REPLICATION_CMAX_94 10
-#define PG_STAT_REPLICATION_CMAX_LT 10
-#define PG_STAT_REPLICATION_CMAX_LT_EXT 12
+#define PG_STAT_REPLICATION_CMAX_96 10
+#define PG_STAT_REPLICATION_CMAX_96_EXT 12
+#define PG_STAT_REPLICATION_CMAX_LT 13
+#define PG_STAT_REPLICATION_CMAX_LT_EXT 15
 /* diff array using only one column */
 #define PG_STAT_REPLICATION_DIFF_MIN     5
 
