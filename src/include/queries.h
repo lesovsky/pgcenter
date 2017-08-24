@@ -130,7 +130,8 @@
         tup_inserted AS inserts, tup_updated AS updates, tup_deleted AS deletes, \
         conflicts, deadlocks, \
         temp_files AS tmp_files, temp_bytes AS tmp_bytes, \
-        blk_read_time AS read_t, blk_write_time AS write_t \
+        blk_read_time AS read_t, blk_write_time AS write_t, \
+        date_trunc('seconds', now() - stats_reset) as stats_age \
     FROM pg_stat_database \
     ORDER BY datname DESC"
 
@@ -140,7 +141,7 @@
 #define PG_STAT_DATABASE_DIFF_MAX_LT        15
 /* Max number of columns for specified context, can vary in different PostgreSQL versions */
 #define PG_STAT_DATABASE_CMAX_91            10
-#define PG_STAT_DATABASE_CMAX_LT            15
+#define PG_STAT_DATABASE_CMAX_LT            16
 
 #define PG_STAT_REPLICATION_94_QUERY_P1 \
     "SELECT \

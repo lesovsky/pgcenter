@@ -314,7 +314,8 @@ Used query: SELECT
                 tup_inserted AS inserts, tup_updated AS updates, tup_deleted AS deletes, 
                 conflicts, deadlocks, 
                 temp_files AS tmp_files, temp_bytes AS tmp_bytes, 
-                blk_read_time AS read_t, blk_write_time AS write_t 
+                blk_read_time AS read_t, blk_write_time AS write_t,
+                date_trunc('seconds', now() - stats_reset) as stats_age 
             FROM pg_stat_database ORDER BY datname;
 .fi
 
@@ -401,6 +402,11 @@ Time spent reading data file blocks by backends in this database, in millisecond
 .B write_t
 .RS
 Time spent writing data file blocks by backends in this database, in milliseconds.
+.RE
+
+.B stats_age
+.RS
+Age of stats collected by server.
 .RE
 .RE
 
