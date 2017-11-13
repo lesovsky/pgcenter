@@ -32,7 +32,7 @@
 #include "libpq-fe.h"
 
 #define PROGRAM_NAME        "pgcenter"
-#define PROGRAM_VERSION     0.3
+#define PROGRAM_VERSION     0.4
 #define PROGRAM_RELEASE     0
 #define PROGRAM_ISSUES_URL  "https://github.com/lesovsky/pgcenter/issues"
 
