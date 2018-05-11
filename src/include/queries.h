@@ -100,7 +100,7 @@
 	 WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid());"
 
 #define PG_STAT_STATEMENTS_SYS_QUERY \
-        "SELECT (sum(total_time) / sum(calls))::numeric(6,3) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+        "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 #define PG_STAT_ACTIVITY_SYS_QUERY \
         "SELECT \
             (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') \
