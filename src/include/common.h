@@ -136,8 +136,8 @@ struct pg_special_s
     unsigned int av_max_workers;        /* autovacuum_max_workers GUC value */
     unsigned int pg_max_conns;          /* max_connections GUC value */
     unsigned int pg_max_preps;          /* max_prepared_transactions GUC value */
-    char pg_version_num[XS_BUF_LEN];    /* postgresql version XXYYZZ format */
-    char pg_version[XS_BUF_LEN];        /* postgresql version X.Y.Z format */
+    char pg_version_num[M_BUF_LEN];    /* postgresql version XXYYZZ format */
+    char pg_version[M_BUF_LEN];        /* postgresql version X.Y.Z format */
 };
 
 #define PG_SPECIAL_SIZE (sizeof(struct pg_special_s))
