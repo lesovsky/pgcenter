@@ -90,6 +90,13 @@ $ sudo yum install http://release.yum.kaos.io/i386/kaos-repo-6.8-0.el6.noarch.rp
 $ sudo yum --enablerepo=kaos-testing install pgcenter
 ```
 
+##### Install from Arch
+
+pgCenter is available in Arch User Repository:
+- [pgcenter](https://aur.archlinux.org/packages/pgcenter/)
+
+Use preferred AUR helper or `git clone` and `makepkg` to install.
+
 ##### Install from sources
 - install git, make, gcc, postgresql devel and ncurses devel packages.
 - clone sources and build.
