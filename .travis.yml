@@ -1,16 +1,10 @@
-language: c
+language: go
+go:
+  - "1.11.x"
+  - master
 
+dist: trusty
 sudo: false
-
-compiler:
-  - clang
-  - gcc
-
-addons:
-  apt:
-    packages:
-      - libpq-dev
-      - libncurses5-dev
 
 script:
   - make

@@ -1,4 +1,4 @@
-# pgCenter
+# pgCenter 	[![Build Status](https://travis-ci.org/lesovsky/pgcenter.svg)](https://travis-ci.org/lesovsky/pgcenter)
 
 pgCenter is a command-line admin tool for observing and troubleshooting Postgres.
 
