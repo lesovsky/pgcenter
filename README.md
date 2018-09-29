@@ -1,4 +1,6 @@
-#### README: pgCenter [![Build Status](https://travis-ci.org/lesovsky/pgcenter.svg)](https://travis-ci.org/lesovsky/pgcenter)
+#### IMPORTANT, This is archived version of pgCenter
+
+#### pgCenter
 
 PostgreSQL provides various statistics which include information about tables, indexes, functions and other database objects and their usage. These statistics hold detailed information about a lot of things: connections, current queries, database operations (INSERT/DELETE/UPDATE), etc. However, most of these provided as permanently incremented counters. pgCenter provides convenient interface that allows viewing PostgreSQL statistics' updates in a per-second intervals. pgCenter also provides fast access for database management tasks, such as editing configuration files, reloading postgres service, viewing log files and canceling or terminating database backends (by pid or using the state mask). In addition, if you need to execute specific operations, pgCenter allows you to start psql session.
 
