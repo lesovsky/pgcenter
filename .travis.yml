@@ -7,4 +7,4 @@ dist: trusty
 sudo: false
 
 script:
-  - make
+  - env GO111MODULE=on make
