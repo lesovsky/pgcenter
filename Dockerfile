@@ -1,14 +1,9 @@
-# can't currently use alpine because qsort_r is not provided (among other things)
-FROM ubuntu
+FROM golang:1.11
 
-RUN apt-get update && apt-get install -y \
-  build-essential \
-  libpq-dev \
-  libncurses-dev \
-  && rm -rf /var/lib/apt/lists/*
+WORKDIR /go/src/pgcenter
 
-ADD . /
+ADD . .
 
-RUN make && make install
+RUN export GO111MODULE="on" && export GOPATH="/go" && make && make install
 
-ENTRYPOINT ["./pgcenter"]
+ENTRYPOINT ["pgcenter"]
