@@ -170,7 +170,6 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 
 	/* print header - filtered column mark with star; ordered column make shadowed */
 	var pname string
-	//for i, name := range s.CurrPGresult.Cols {		// TODO: remove before release, commented 18 sept 2018
 	for i := 0; i < s.CurrPGresult.Ncols; i++ {
 		name := s.CurrPGresult.Cols[i]
 
@@ -195,24 +194,6 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 	for colnum, rownum := 0, 0; rownum < s.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
 		// be optimistic, we want to print the row.
 		doPrint = true
-
-		// apply filters OLD code // TODO: remove before release, commented 18 sept 2018
-		//if filter {
-		//	for i := 0; i < s.DiffPGresult.Ncols; i++ {
-		//		if strings.Contains(s.DiffPGresult.Result[rownum][i].String, ctx.current.Filters[i]) && ctx.current.Filters[i] != "" {
-		//			// pattern is not empty and it's found in the value, there is no reason to scan other values - print the whole row.
-		//			doPrint = true
-		//			break
-		//		} else if ctx.current.Filters[i] == "" {
-		//			// no pattern for this column - skip it
-		//			continue
-		//		} else {
-		//			// pattern is not empty and it's not found in the value - assume to don't print the row,
-		//			// but don't break the loop, because another pattern can be found for other values and we want to print the row.
-		//			doPrint = false
-		//		}
-		//	}
-		//}
 
 		// apply filters using regexp
 		if filter {

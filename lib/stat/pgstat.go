@@ -29,11 +29,6 @@ const (
 	StatementsTempView    = "pg_stat_statements_temp"    // fictional name, based on pg_stat_statements
 	StatementsLocalView   = "pg_stat_statements_local"   // fictional name, based on pg_stat_statements
 
-	ConfMain     = "postgresql.conf"
-	ConfHba      = "pg_hba.conf"
-	ConfIdent    = "pg_ident.conf"
-	ConfRecovery = "recovery.conf"
-
 	GucMainConfFile = "config_file"
 	GucHbaFile      = "hba_file"
 	GucIdentFile    = "ident_file"
@@ -385,35 +380,6 @@ func (r *PGresult) Sort(key int, desc bool) {
 		})
 	}
 }
-
-// DEPRECATED in favor SetAlignCustom() // TODO: clean out code
-// Calculate column width used at result formatting
-func (r *PGresult) SetAlign() {
-	r.Colmaxlen = make(map[string]int)
-
-	/* calculate base length of columns which is based on the length of the title */
-	for _, n := range r.Cols {
-		r.Colmaxlen[n] = len(n)
-	}
-
-	/* calculate max length of columns based on the longest value of the column */
-	colnum := 0
-	for _, colname := range r.Cols { // walk per-column   // don't use Collen here - it's unordered
-		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
-			/* m[row][column] */
-			if len(r.Result[rownum][colnum].String) > r.Colmaxlen[colname] {
-				r.Colmaxlen[colname] = len(r.Result[rownum][colnum].String)
-			}
-		}
-
-		/* add 2 extra spaces to column's length */
-		r.Colmaxlen[colname] = r.Colmaxlen[colname] + 2
-
-		colnum++
-	}
-}
-
-// DEPRECATED in favor SetAlignCustom()
 
 // Calculate column width used at result formatting and truncate too long values
 func (r *PGresult) SetAlignCustom(truncLimit int) {
