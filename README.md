@@ -52,7 +52,7 @@ In case of connecting to remote Postgres there is possibility to use additional 
 #### Install notes
 pgCenter is written on Go language and distributed as a single precompiled binary file. Download it from [releases](https://github.com/lesovsky/pgcenter/releases), unpack and it's ready to use.
 
-Additional information and usage examples available [here]().
+Additional information and usage examples available [here](https://github.com/lesovsky/pgcenter/blob/master/doc/examples.md).
 
 #### Known issues
 pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:
