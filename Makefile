@@ -18,6 +18,7 @@ DESTDIR ?=
 all: pgcenter
 
 pgcenter:
+	go mod download
 	GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o ${PROGRAM_NAME} ${SOURCE}
 
 install:
