@@ -252,11 +252,14 @@ func (s *Pgstat) GetPgstatSample(conn *sql.DB, query string) error {
 }
 
 // Parse a result of the query and create PGresult struct
-func (r *PGresult) New(rs *sql.Rows) error {
+func (r *PGresult) New(rs *sql.Rows) (err error) {
 	var container []sql.NullString
 	var pointers []interface{}
 
-	r.Cols, _ = rs.Columns()
+	if r.Cols, err = rs.Columns(); err != nil {
+		r.Valid = false
+		return fmt.Errorf("failed to read columns names: %s", err)
+	}
 	r.Ncols = len(r.Cols)
 
 	for rs.Next() {
@@ -267,10 +270,10 @@ func (r *PGresult) New(rs *sql.Rows) error {
 			pointers[i] = &container[i]
 		}
 
-		err := rs.Scan(pointers...)
+		err = rs.Scan(pointers...)
 		if err != nil {
 			r.Valid = false
-			return fmt.Errorf("Failed to scan row: %s", err)
+			return fmt.Errorf("failed to scan row: %s", err)
 		}
 
 		// Yes, it's better to avoid append() here, but we can't pre-allocate array of required size due to there is no

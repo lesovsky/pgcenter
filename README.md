@@ -47,12 +47,12 @@ pgCenter supports majority of statistics views available in Postgres, and at the
 - storage devices statistics: iops, throughput, latencies, average queue and requests size, devices utilization;
 - network interfaces statistics: throughput in bytes and packets, different kind of errors, saturation and utilization.
 
-In case of connecting to remote Postgres there is possibility to use additional SQL functions used for retrieving `/proc` statistics from remote host. For more information see details here.
+In case of connecting to remote Postgres there is possibility to use additional SQL functions used for retrieving `/proc` statistics from remote host. For more information see details [here](doc/pgcenter-config-readme.md).
 
 #### Install notes
 pgCenter is written on Go language and distributed as a single precompiled binary file. Download it from [releases](https://github.com/lesovsky/pgcenter/releases), unpack and it's ready to use.
 
-Additional information and usage examples available [here]().
+Additional information and usage examples available [here](doc/examples.md).
 
 #### Known issues
 pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:

@@ -7,7 +7,7 @@ const (
 - datname	datname		Name of this database
 - commits	xact_commit	Number of transactions in this database that have been committed
 - rollbacks	xact_rollback	Number of transactions in this database that have been rolled back
-- reads		blks_read	Number of disk blocks read in this database
+- reads*	blks_read	Number of data read in this database, in kilobytes
 - hits		blks_hit	Number of times disk blocks were found already in the buffer cache, so that a read was 
 				not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating
 				system's file system cache)
