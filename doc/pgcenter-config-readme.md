@@ -31,12 +31,12 @@ In general, a prefered way is installing dependencies using distro’s default p
 
 ```
 apt install gcc make perl
-mcpan Linux::Ethtool::Settings
+cpan Linux::Ethtool::Settings
 ```
 
 Perhaps it’s possible to use the same approach in other distros, because of perl module name is the same.
 
-Run `config` command and install stats function into a database:
+Run `config` command and install stats schema into a database:
 ```
 pgcenter config --install -h 1.2.3.4 -U postgres db_production
 ```

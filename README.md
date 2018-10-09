@@ -1,5 +1,9 @@
-# pgCenter 	[![Build Status](https://travis-ci.org/lesovsky/pgcenter.svg)](https://travis-ci.org/lesovsky/pgcenter)
+<img width="255" alt="" src="https://github.com/lesovsky/pgcenter/raw/master/doc/images/pgcenter-logo.png" align="right">
 
+<a href="https://pgcenter.org"><img src="https://img.shields.io/badge/pgCenter-org-orange.svg" alt="pgCenter.org" /></a>
+[![Build Status](https://travis-ci.org/lesovsky/pgcenter.svg)](https://travis-ci.org/lesovsky/pgcenter)
+
+---
 pgCenter is a command-line admin tool for observing and troubleshooting Postgres.
 
 - [Main goal](#main-goal)
@@ -8,10 +12,11 @@ pgCenter is a command-line admin tool for observing and troubleshooting Postgres
   - [PostgreSQL statistics](#postgresql-statistics)
   - [System statistics](#system-statistics)
 - [Install notes](#install-notes)
+- [Usage notes](#usage-notes)
 - [Known issues](#known-issues)
 - [Thanks](#thanks)
----
 
+---
 #### Main goal
 Postgres provides various activity statistics that include detailed information about its behaviour: connections, statements, database operations, replication, resources usage and more. General purpose of the statistics is to help DBAs to monitor and troubleshoot Postgres. However, these statistics provided in textual form retrieved from SQL functions and views, and Postgres doesn't provide any tools for working with them.
 pgCenter's main goal is to help Postgres DBA manage statistics that theу have in their databases and see all the necessary data in convenient format based on builtin stats views and functions.
@@ -53,6 +58,15 @@ In case of connecting to remote Postgres there is possibility to use additional 
 pgCenter is written on Go language and distributed as a single precompiled binary file. Download it from [releases](https://github.com/lesovsky/pgcenter/releases), unpack and it's ready to use.
 
 Additional information and usage examples available [here](doc/examples.md).
+
+#### Usage notes
+- pgCenter has been developed to work on Linux and hasn't been tested on other OS (operating systems), therefore, it is not recommended to use it on alternative systems because it will not operate properly.
+- pgCenter can also be run using Docker.
+- pgCenter supports a wide range of PostgreSQL versions, despite of difference in statistics between each version. If pgCenter is unable to read a particular stat, it will show a descriptive error message.
+- ideally, pgCenter requires `SUPERUSER` database privileges, or at least privileges that will allow you to view statistics, read settings, logfiles and send signals to other backends. Roles with such privileges (except reading logs) have been introduced in Postgres 10, see details [here](https://www.postgresql.org/docs/current/static/default-roles.html).
+- it is recommended to run pgCenter on the same host where Postgres is running. This is because for Postgres pgCenter is just a simple client application and it may have the same problems as other applications that work with Postgres, such as network-related problems, slow responses, etc.
+- it is possible to run pgCenter on one host and connect to Postgres which runs on another host, but some functions may not work - this fully applies to `pgcenter top` command.
+- pgCenter also supports Amazon RDS for PostgreSQL, but as mentioned above, some functions will not work and also system stats will not be available, because of PostgreSQL RDS instances don't support untrusted procedural languages due to security reasons.
 
 #### Known issues
 pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:
