@@ -157,7 +157,11 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 		return
 	}
 
-	s.DiffPGresult.SetAlignCustom(1000) // we don't want truncate lines here, so just use high limit
+	// configure aligning, use fixed aligning instead of dynamic
+	if !ctx.current.Aligned {
+		s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		ctx.current.Aligned = true
+	}
 
 	// is filter required?
 	var filter bool
@@ -182,9 +186,9 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 
 		/* mark ordered column with background color */
 		if i != ctx.current.OrderKey {
-			fmt.Fprintf(v, "%-*s ", s.DiffPGresult.Colmaxlen[name], pname)
+			fmt.Fprintf(v, "%-*s", ctx.current.ColsWidth[i]+2, pname)
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s \033[0m", 47, 1, s.DiffPGresult.Colmaxlen[name], pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, ctx.current.ColsWidth[i]+2, pname)
 		}
 	}
 	fmt.Fprintf(v, "\n")
@@ -210,10 +214,18 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 		}
 
 		// print values
-		for _, colname := range s.DiffPGresult.Cols {
+		for i := range s.DiffPGresult.Cols {
 			if doPrint {
-				/* m[row][column] */
-				fmt.Fprintf(v, "%-*s ", s.DiffPGresult.Colmaxlen[colname], s.DiffPGresult.Result[rownum][colnum].String)
+				// truncate values that longer than column width
+				valuelen := len(s.DiffPGresult.Result[rownum][colnum].String)
+				if valuelen > ctx.current.ColsWidth[i] {
+					width := ctx.current.ColsWidth[i]
+					// truncate value up to column width and replace last character with '~' symbol
+					s.DiffPGresult.Result[rownum][colnum].String = s.DiffPGresult.Result[rownum][colnum].String[:width-1] + "~"
+				}
+
+				// print value
+				fmt.Fprintf(v, "%-*s", ctx.current.ColsWidth[i]+2, s.DiffPGresult.Result[rownum][colnum].String)
 				colnum++
 			}
 		}

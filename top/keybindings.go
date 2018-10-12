@@ -26,6 +26,8 @@ func keybindings(g *gocui.Gui) error {
 		{"", gocui.KeyCtrlQ, quit},
 		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft},
 		{"sysstat", gocui.KeyArrowRight, orderKeyRight},
+		{"sysstat", gocui.KeyArrowUp, changeWidth(colsWidthIncr)},
+		{"sysstat", gocui.KeyArrowDown, changeWidth(colsWidthDecr)},
 		{"sysstat", '<', switchSortOrder},
 		{"sysstat", ',', toggleSysTables},
 		{"sysstat", 'I', toggleIdleConns},

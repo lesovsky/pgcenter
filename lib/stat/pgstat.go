@@ -29,6 +29,9 @@ const (
 	StatementsTempView    = "pg_stat_statements_temp"    // fictional name, based on pg_stat_statements
 	StatementsLocalView   = "pg_stat_statements_local"   // fictional name, based on pg_stat_statements
 
+	colsTruncMinLimit = 1 // minimal allowed value for truncation
+	colsWidthMin      = 8 // base width for columns (used by default, if column name too short)
+
 	GucMainConfFile = "config_file"
 	GucHbaFile      = "hba_file"
 	GucIdentFile    = "ident_file"
@@ -93,13 +96,12 @@ type PgActivityStat struct {
 
 // Container for basic Postgres stats collected from pg_stat_* views
 type PGresult struct {
-	Result    [][]sql.NullString /* values */
-	Cols      []string           /* list of columns' names*/
-	Ncols     int                /* numbers of columns in Result */
-	Nrows     int                /* number of rows in Result */
-	Colmaxlen map[string]int     /* lengths of the longest value for each column */
-	Valid     bool               /* Used for result invalidations, on context switching for example */
-	Err       error              /* Error returned by query, if any */
+	Result [][]sql.NullString /* values */
+	Cols   []string           /* list of columns' names*/
+	Ncols  int                /* numbers of columns in Result */
+	Nrows  int                /* number of rows in Result */
+	Valid  bool               /* Used for result invalidations, on context switching for example */
+	Err    error              /* Error returned by query, if any */
 }
 
 // Get Postgres connection status - is it alive or not?
@@ -295,7 +297,6 @@ func (d *PGresult) Diff(p *PGresult, c *PGresult, itv uint, interval [2]int, uke
 	d.Cols = c.Cols
 	d.Ncols = len(c.Cols)
 	d.Nrows = c.Nrows
-	d.Colmaxlen = c.Colmaxlen // use lengthes of current values
 
 	// Take every row from 'current' snapshot and check its existing in 'previous' snapshot. If row exists in both snapshots
 	// make diff between them. If target row is not found in 'previous' snapshot, no diff needed, hence append this row
@@ -385,55 +386,87 @@ func (r *PGresult) Sort(key int, desc bool) {
 }
 
 // Calculate column width used at result formatting and truncate too long values
-func (r *PGresult) SetAlignCustom(truncLimit int) {
-	r.Colmaxlen = make(map[string]int)
+func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
+	// forbid to make truncation limit too small
+	if truncLimit < colsTruncMinLimit {
+		truncLimit = colsTruncMinLimit
+	}
 
 	/* calculate max length of columns based on the longest value of the column */
-	colnum := 0
-	for _, colname := range r.Cols { // walk per-column   // don't use Collen here - it's unordered
-		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
-			//
-			valuelen := len(r.Result[rownum][colnum].String)
-			colnamelen := len(colname)
-			switch {
-			// if value is empty, e.g. NULL - set length based on colname length, but no longer that already set
-			case valuelen == 0 && colnamelen >= r.Colmaxlen[colname]:
-				r.Colmaxlen[colname] = colnamelen
-			// for non-empty values, but for those whose length less than length of colnames, use length based on length of column name, bit no longer than already set
-			case valuelen > 0 && valuelen <= colnamelen && valuelen >= r.Colmaxlen[colname]:
-				r.Colmaxlen[colname] = colnamelen
-			// for non-empty values, but for those whose length longer than length of colnames, use length based on length of value, bit no longer than already set
-			case valuelen > 0 && valuelen > colnamelen && valuelen < truncLimit && valuelen >= r.Colmaxlen[colname]:
-				r.Colmaxlen[colname] = valuelen
-			// for very long values, truncate value and set length limited by truncLimit value,
-			case valuelen >= truncLimit:
-				r.Result[rownum][colnum].String = r.Result[rownum][colnum].String[:truncLimit]
-				r.Colmaxlen[colname] = truncLimit
-				//default:	// default case is used for debug purposes for catching cases that don't met upper conditions
-				//	fmt.Printf("*** DEBUG %s -- %s***", colname, r.Result[rownum][colnum].String)
-			}
+	var valuelen, colnamelen int
+	for colidx, colname := range r.Cols { // walk per-column
+		if len(r.Result) == 0 {
+			// no rows in result, set width using length of a column name
+			widthes[colidx] = len(colname)
 		}
 
-		/* add 2 extra spaces to column's length */
-		r.Colmaxlen[colname] = r.Colmaxlen[colname] + 2
+		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
+			valuelen = len(r.Result[rownum][colidx].String)
+			colnamelen = len(colname)
 
-		colnum++
+			// align short-length columns to default width
+			if colnamelen < colsWidthMin {
+				colnamelen = colsWidthMin
+			}
+
+			switch {
+			// if value is empty, e.g. NULL - set width based on colname length
+			case valuelen == 0 && colnamelen >= widthes[colidx]:
+				widthes[colidx] = colnamelen
+			// for non-empty values, but for those whose length less than length of colnames, use length based on length of column name, but no longer than already set
+			case valuelen > 0 && valuelen <= colnamelen && valuelen >= widthes[colidx]:
+				widthes[colidx] = colnamelen
+			// for non-empty values, but for those whose length longer than length of colnames, use length based on length of value, but no longer than already set
+			case valuelen > 0 && valuelen > colnamelen && valuelen < truncLimit && valuelen >= widthes[colidx] && colidx < r.Ncols-1:
+				// dynamic aligning is used in 'report' when you can't adjust width on the fly
+				// fixed aligning is used in 'top' because it's quite uncomfortable when width is changing constantly
+				if dynamic {
+					widthes[colidx] = valuelen
+				} else {
+					widthes[colidx] = colnamelen
+				}
+			// for last column set width using truncation limit
+			case colidx == r.Ncols-1:
+				widthes[colidx] = truncLimit
+			// do nothing if length of value or column is less (or equal) than already specified width
+			case valuelen <= widthes[colidx] && colnamelen <= widthes[colidx]:
+
+			// for very long values, truncate value and set length limited by truncLimit value,
+			case valuelen >= truncLimit:
+				r.Result[rownum][colidx].String = r.Result[rownum][colidx].String[:truncLimit-1] + "~"
+				widthes[colidx] = truncLimit
+				//default:	// default case is used for debug purposes for catching cases that don't meet upper conditions
+				//	fmt.Printf("*** DEBUG %s -- %s, %d:%d:%d ***", colname, r.Result[rownum][colnum].String, widthes[colidx], colnamelen, valuelen)
+			}
+		}
 	}
 }
 
 // Print content of PGresult container to buffer
 func (r *PGresult) Fprint(buf *bytes.Buffer) {
+	// do simple ad-hoc aligning for current PGresult, do align using the longest value in the column
+	widthMap := map[int]int{}
+	var valuelen int
+	for colnum := range r.Cols {
+		for rownum := 0; rownum < len(r.Result); rownum++ {
+			valuelen = len(r.Result[rownum][colnum].String)
+			if valuelen > widthMap[colnum] {
+				widthMap[colnum] = valuelen
+			}
+		}
+	}
+
 	/* print header */
-	for _, name := range r.Cols {
-		fmt.Fprintf(buf, "%-*s", r.Colmaxlen[name], name)
+	for colidx, colname := range r.Cols {
+		fmt.Fprintf(buf, "%-*s", widthMap[colidx]+2, colname)
 	}
 	fmt.Fprintf(buf, "\n\n")
 
 	/* print data to buffer */
 	for colnum, rownum := 0, 0; rownum < r.Nrows; rownum, colnum = rownum+1, 0 {
-		for _, colname := range r.Cols {
+		for range r.Cols {
 			/* m[row][column] */
-			fmt.Fprintf(buf, "%-*s", r.Colmaxlen[colname], r.Result[rownum][colnum].String)
+			fmt.Fprintf(buf, "%-*s", widthMap[colnum]+2, r.Result[rownum][colnum].String)
 			colnum++
 		}
 		fmt.Fprintf(buf, "\n")
@@ -441,18 +474,19 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 }
 
 // Print content of PGresult container to stdout
+// DEPRECATION WARNING since v0.5.0: This function used nowhere, seems it should be removed.
 func (r *PGresult) Print() {
 	/* print header */
 	for _, name := range r.Cols {
-		fmt.Printf("\033[%d;%dm%-*s \033[0m", 37, 1, r.Colmaxlen[name], name)
+		fmt.Printf("\033[%d;%dm%-*s \033[0m", 37, 1, len(name)+2, name)
 	}
 	fmt.Printf("\n")
 
 	/* print data to buffer */
 	for colnum, rownum := 0, 0; rownum < r.Nrows; rownum, colnum = rownum+1, 0 {
-		for _, colname := range r.Cols {
+		for range r.Cols {
 			/* m[row][column] */
-			fmt.Printf("%-*s ", r.Colmaxlen[colname], r.Result[rownum][colnum].String)
+			fmt.Printf("%-*s ", len(r.Result[rownum][colnum].String)+2, r.Result[rownum][colnum].String)
 			colnum++
 		}
 		fmt.Printf("\n")

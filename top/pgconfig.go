@@ -30,7 +30,6 @@ func showPgConfig(g *gocui.Gui, _ *gocui.View) error {
 		return nil
 	}
 
-	res.SetAlignCustom(512)
 	fmt.Fprintf(&buf, "PostgreSQL configuration:\n")
 	res.Fprint(&buf)
 

@@ -21,6 +21,8 @@ type ContextUnit struct {
 	OrderKey  int                    // Number of column used for order
 	OrderDesc bool                   // Order direction: descending (true) or ascending (false)
 	UniqueKey int                    // Unique key that used on rows comparing when building diffs, by default it's zero which is OK in almost all contexts
+	ColsWidth map[int]int            // Set width for columns and control an aligning
+	Aligned   bool                   // Is aligning calculated?
 	Msg       string                 // Show this text in Cmdline when switching to this unit
 	Filters   map[int]*regexp.Regexp // Storage for filter patterns: key is the column index, value - regexp pattern
 }
@@ -36,6 +38,7 @@ var (
 		Ncols:     17,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show databases statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -47,6 +50,7 @@ var (
 		Ncols:     15,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show replication statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -58,6 +62,7 @@ var (
 		Ncols:     19,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show tables statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -69,6 +74,7 @@ var (
 		Ncols:     6,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show indexes statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -80,6 +86,7 @@ var (
 		Ncols:     7,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show tables sizes statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -91,6 +98,7 @@ var (
 		Ncols:     8,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show functions statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -103,6 +111,7 @@ var (
 		Ncols:     14,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show vacuum statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -114,6 +123,7 @@ var (
 		Ncols:     14,
 		OrderKey:  0,
 		OrderDesc: true,
+		ColsWidth: map[int]int{},
 		Msg:       "Show activity statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -126,6 +136,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		UniqueKey: 11,
+		ColsWidth: map[int]int{},
 		Msg:       "Show statements timings statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -138,6 +149,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		UniqueKey: 6,
+		ColsWidth: map[int]int{},
 		Msg:       "Show statements general statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -150,6 +162,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		UniqueKey: 11,
+		ColsWidth: map[int]int{},
 		Msg:       "Show statements IO statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -162,6 +175,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		UniqueKey: 7,
+		ColsWidth: map[int]int{},
 		Msg:       "Show statements temp files statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
@@ -174,6 +188,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		UniqueKey: 11,
+		ColsWidth: map[int]int{},
 		Msg:       "Show statements temp tables statistics (local IO)",
 		Filters:   map[int]*regexp.Regexp{},
 	}

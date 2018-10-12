@@ -18,6 +18,14 @@ import (
 	"strings"
 )
 
+const (
+	colsWidthIncr = iota // increase width of an active column
+	colsWidthDecr        // decrease width of an active column
+
+	colsWidthMax  = 256 // max width allowed for columnn, they can't be wider than that value
+	colsWidthStep = 4   // minimal step of changing column's width, 1 is too boring and 4 looks good
+)
+
 // Container for context settings.
 type context struct {
 	current       *stat.ContextUnit // Current unit in use
@@ -64,7 +72,7 @@ func (c *context) Setup(pi stat.PgInfo) {
 }
 
 // Switch sort order to left column
-func orderKeyLeft(g *gocui.Gui, _ *gocui.View) error {
+func orderKeyLeft(_ *gocui.Gui, _ *gocui.View) error {
 	ctx.current.OrderKey--
 	if ctx.current.OrderKey < 0 {
 		ctx.current.OrderKey = ctx.current.Ncols - 1
@@ -74,13 +82,45 @@ func orderKeyLeft(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // Switch sort order to right column
-func orderKeyRight(g *gocui.Gui, _ *gocui.View) error {
+func orderKeyRight(_ *gocui.Gui, _ *gocui.View) error {
 	ctx.current.OrderKey++
 	if ctx.current.OrderKey >= ctx.current.Ncols {
 		ctx.current.OrderKey = 0
 	}
 	do_update <- 1
 	return nil
+}
+
+// Increase or decrease width of an active column
+func changeWidth(d int) func(_ *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		var width int
+		cidx := ctx.current.OrderKey                               // index of an active column
+		clen := len(stats.DiffPGresult.Cols[ctx.current.OrderKey]) // length of the column's name
+
+		// set new width
+		switch d {
+		case colsWidthIncr:
+			width = ctx.current.ColsWidth[cidx] + colsWidthStep
+		case colsWidthDecr:
+			width = ctx.current.ColsWidth[cidx] - colsWidthStep
+		default:
+			width = ctx.current.ColsWidth[cidx] // should never be here.
+		}
+
+		// new width should not be less than column's name or longer than defined limit
+		switch {
+		case width < clen:
+			width = clen
+		case width > colsWidthMax:
+			width = colsWidthMax
+		}
+
+		ctx.current.ColsWidth[cidx] = width
+
+		do_update <- 1
+		return nil
+	}
 }
 
 // Switch sort order direction between descend and ascend

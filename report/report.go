@@ -137,15 +137,18 @@ func doReport(r *tar.Reader, opts ReportOptions) error {
 			doSort(diffStat, opts)
 		}
 
-		// align values for printing
-		diffStat.SetAlignCustom(opts.TruncLimit)
+		// align values for printing, use dynamic aligning
+		if !opts.Context.Aligned {
+			diffStat.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true) // we don't want truncate lines here, so just use high limit
+			opts.Context.Aligned = true
+		}
 
 		// print report
 		// print header after every Nth lines
 		if lineCnt <= 0 {
 			fmt.Printf("         ")
-			for _, name := range prevStat.Cols {
-				fmt.Printf("\033[%d;%dm%-*s \033[0m", 37, 1, diffStat.Colmaxlen[name], name)
+			for i, name := range prevStat.Cols {
+				fmt.Printf("\033[%d;%dm%-*s\033[0m", 37, 1, opts.Context.ColsWidth[i]+2, name)
 			}
 			fmt.Printf("\n")
 			lineCnt = repeatHeaderAfter
@@ -183,9 +186,16 @@ func doReport(r *tar.Reader, opts ReportOptions) error {
 					fmt.Printf("         ")
 				}
 
-				for _, colname := range diffStat.Cols {
-					/* m[row][column] */
-					fmt.Printf("%-*s ", diffStat.Colmaxlen[colname], diffStat.Result[rownum][colnum].String)
+				for i := range diffStat.Cols {
+					// truncate values that longer than column width
+					valuelen := len(diffStat.Result[rownum][colnum].String)
+					if valuelen > opts.Context.ColsWidth[i] {
+						width := opts.Context.ColsWidth[i]
+						// truncate value up to column width and replace last character with '~' symbol
+						diffStat.Result[rownum][colnum].String = diffStat.Result[rownum][colnum].String[:width-1] + "~"
+					}
+
+					fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, diffStat.Result[rownum][colnum].String)
 					colnum++
 				}
 
