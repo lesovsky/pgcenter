@@ -85,7 +85,7 @@ func doReport(r *tar.Reader, opts ReportOptions) error {
 		s := strings.Split(hdr.Name, ".")
 		currTs, err := time.Parse(layout, s[1])
 		if err != nil {
-			return fmt.Errorf("failed to parse timestamp from filename: %s", err)
+			return fmt.Errorf("failed to parse timestamp from filename %s: %s", hdr.Name, err)
 		}
 
 		// skip snapshots if they're outside of the requested time interval
@@ -96,13 +96,13 @@ func doReport(r *tar.Reader, opts ReportOptions) error {
 		// read stats to a buffer
 		data := make([]byte, hdr.Size)
 		if _, err := io.ReadFull(r, data); err != nil {
-			return fmt.Errorf("failed to read stat: %s", err)
+			return fmt.Errorf("failed to read stat from %s: %s", hdr.Name, err)
 		}
 
 		// initialize an empty struct and unmarshal data from the buffer
 		currStat := stat.PGresult{}
 		if err = json.Unmarshal(data, &currStat); err != nil {
-			return fmt.Errorf("failed to unmarshal data from buffer: %s", err)
+			return fmt.Errorf("break on %s: failed to unmarshal data from buffer: %s", hdr.Name, err)
 		}
 
 		// if previous stats snapshot is not defined, copy current to previous (when reading first snapshot at startup, for example)
@@ -122,7 +122,7 @@ func doReport(r *tar.Reader, opts ReportOptions) error {
 		// calculate delta between current and previous stats snapshots
 		if opts.Context.DiffIntvl != stat.NoDiff {
 			if err := diffStat.Diff(&prevStat, &currStat, uint(interval/opts.Interval), opts.Context.DiffIntvl, opts.Context.UniqueKey); err != nil {
-				return fmt.Errorf("diff failed: %s", err)
+				return fmt.Errorf("failed diff on %s: %s", hdr.Name, err)
 			}
 		} else {
 			diffStat = currStat

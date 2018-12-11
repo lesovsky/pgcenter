@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * report: show last processed stats file on error
   * return of the Changelog!
   * output aligning rewritten
 
