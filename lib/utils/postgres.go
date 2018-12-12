@@ -51,7 +51,7 @@ func CreateConn(c *Conninfo) (conn *sql.DB, err error) {
 
 // Build connection string using connection settings
 func assembleConnstr(c *Conninfo) string {
-	s := "sslmode=disable application_name=pgcenter "
+	s := "application_name=pgcenter "
 	if c.Host != "" {
 		s = fmt.Sprintf("%s host=%s ", s, c.Host)
 	}
