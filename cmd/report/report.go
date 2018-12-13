@@ -69,6 +69,15 @@ func init() {
 
 // Analyze startup parameters and prepare settings for report program
 func preFlightSetup(_ *cobra.Command, _ []string) {
+	// select appropriate report and context with settings
+	selectReport()
+
+	// if user asks to describe a stat view, show a description and exit
+	if describe {
+		doDescribe()
+		os.Exit(0)
+	}
+
 	// use descending order by default
 	opts.OrderDesc = true
 
@@ -77,14 +86,6 @@ func preFlightSetup(_ *cobra.Command, _ []string) {
 
 	// determine column name where values should be filtered and compile regexp
 	parseFilterString()
-
-	// select appropriate report and context with settings
-	selectReport()
-
-	// if user asks to describe a stat view, show a description and exit
-	if describe {
-		doDescribe()
-	}
 }
 
 // Setup start and end times for report, don't show stats before start time and after end time
@@ -215,15 +216,37 @@ func selectReport() {
 }
 
 // Show columns description of the used stats
-// TODO: feature not completed, other descriptions should be added
 func doDescribe() {
 	if describe {
-		switch {
-		case opts.ReportType == stat.DatabaseView:
+		switch opts.ReportType {
+		case  stat.DatabaseView:
 			fmt.Println(stat.PgStatDatabaseDescription)
+		case stat.ActivityView:
+			fmt.Println(stat.PgStatActivityDescription)
+		case stat.ReplicationView:
+			fmt.Println(stat.PgStatReplicationDescription)
+		case stat.TablesView:
+			fmt.Println(stat.PgStatTablesDescription)
+		case stat.IndexesView:
+			fmt.Println(stat.PgStatIndexesDescription)
+		case stat.FunctionsView:
+			fmt.Println(stat.PgStatFunctionsDescription)
+		case stat.SizesView:
+			fmt.Println(stat.PgStatSizesDescription)
+		case stat.VacuumView:
+			fmt.Println(stat.PgStatVacuumDescription)
+		case stat.StatementsTimingView:
+			fmt.Println(stat.PgStatStatementsTimingDescription)
+		case stat.StatementsGeneralView:
+			fmt.Println(stat.PgStatStatementsGeneralDescription)
+		case stat.StatementsIOView:
+			fmt.Println(stat.PgStatStatementsIODescription)
+		case stat.StatementsTempView:
+			fmt.Println(stat.PgStatStatementsTempDescription)
+		case stat.StatementsLocalView:
+			fmt.Println(stat.PgStatStatementsLocalDescription)
 		default:
-			fmt.Println("SORRY, NOT IMPLEMENTED YET")
+			fmt.Println("Unknown description requested")		// should not be here, but who knows...
 		}
 	}
-	os.Exit(0)
 }
