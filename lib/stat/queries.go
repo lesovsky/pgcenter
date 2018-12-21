@@ -224,13 +224,13 @@ coalesce(t.n_tup_hot_upd, 0) AS hot_updates,
 coalesce(t.n_live_tup, 0) AS live,
 coalesce(t.n_dead_tup, 0) AS dead,
 coalesce(i.heap_blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS heap_read,
-coalesce(i.heap_blks_hit * (SELECT current_setting('block_size')::int / 1024), 0) AS heap_hit,
+coalesce(i.heap_blks_hit, 0) AS heap_hit,
 coalesce(i.idx_blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS idx_read,
-coalesce(i.idx_blks_hit * (SELECT current_setting('block_size')::int / 1024), 0) AS idx_hit,
+coalesce(i.idx_blks_hit, 0) AS idx_hit,
 coalesce(i.toast_blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS toast_read,
-coalesce(i.toast_blks_hit * (SELECT current_setting('block_size')::int / 1024), 0) AS toast_hit,
+coalesce(i.toast_blks_hit, 0) AS toast_hit,
 coalesce(i.tidx_blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS tidx_read,
-coalesce(i.tidx_blks_hit * (SELECT current_setting('block_size')::int / 1024), 0) AS tidx_hit
+coalesce(i.tidx_blks_hit, 0) AS tidx_hit
 FROM pg_stat_{{.ViewType}}_tables t, pg_statio_{{.ViewType}}_tables i
 WHERE t.relid = i.relid
 ORDER BY (t.schemaname || '.' || t.relname) DESC`
@@ -242,7 +242,7 @@ coalesce(s.idx_scan, 0) AS idx_scan,
 coalesce(s.idx_tup_read, 0) AS idx_tup_read,
 coalesce(s.idx_tup_fetch, 0) AS idx_tup_fetch,
 coalesce(i.idx_blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS idx_read,
-coalesce(i.idx_blks_hit * (SELECT current_setting('block_size')::int / 1024), 0) AS idx_hit
+coalesce(i.idx_blks_hit, 0) AS idx_hit
 FROM pg_stat_{{.ViewType}}_indexes s, pg_statio_{{.ViewType}}_indexes i
 WHERE s.indexrelid = i.indexrelid
 ORDER BY (s.schemaname ||'.'|| s.relname ||'.'|| s.indexrelname) DESC`
@@ -427,11 +427,11 @@ ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 	PgStatStatementsIoQueryDefault = `SELECT
 a.rolname AS user,
 d.datname AS database,
-(sum(p.shared_blks_hit) + sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) AS t_hits,
+sum(p.shared_blks_hit) + sum(p.local_blks_hit) AS t_hits,
 (sum(p.shared_blks_read) + sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS t_reads,
 (sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS t_dirtied,
 (sum(p.shared_blks_written) + sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS t_written,
-(sum(p.shared_blks_hit) + sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) AS hits,
+sum(p.shared_blks_hit) + sum(p.local_blks_hit) AS hits,
 (sum(p.shared_blks_read) + sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS reads,
 (sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS dirtied,
 (sum(p.shared_blks_written) + sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS written,
@@ -471,11 +471,11 @@ ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 	PgStatStatementsLocalQueryDefault = `SELECT
 a.rolname AS user,
 d.datname AS database,
-(sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_hits,
+sum(p.local_blks_hit) AS t_lo_hits,
 (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_reads,
 (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_dirtied,
 (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_written,
-(sum(p.local_blks_hit)) * (SELECT current_setting('block_size')::int / 1024) AS lo_hits,
+sum(p.local_blks_hit) AS lo_hits,
 (sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS lo_reads,
 (sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS lo_dirtied,
 (sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS lo_written,

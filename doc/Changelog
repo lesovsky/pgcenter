@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * lib/stat: fix wrong calculation of hits values
   * report: extend built-in help about supported statistics
   * lib/utils/postgres: use lib/pq default settings for SSL
   * report: show last processed stats file on error
