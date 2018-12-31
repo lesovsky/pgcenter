@@ -8,6 +8,7 @@ import (
 	record "github.com/lesovsky/pgcenter/cmd/record"
 	report "github.com/lesovsky/pgcenter/cmd/report"
 	top "github.com/lesovsky/pgcenter/cmd/top"
+	profile "github.com/lesovsky/pgcenter/cmd/profile"
 )
 
 const (
@@ -19,6 +20,7 @@ Usage:
 
 Available commands:
   config	%s
+  profile	%s
   record	%s
   report	%s
   top		%s
@@ -43,6 +45,27 @@ Options:
   -h, --host HOSTNAME		database server host or socket directory.
   -p, --port PORT		database server port (default 5432)
   -U, --username USERNAME	database user name
+
+General options:
+  -?, --help		show this help and exit
+      --version		show version information and exit
+
+Report bugs to %s
+`
+	profileHelpTemplate = `%s
+
+Usage:
+  pgcenter profile [OPTIONS]... [DBNAME [USERNAME]]
+
+Options:
+  -d, --dbname DBNAME		database name to connect to
+  -h, --host HOSTNAME		database server host or socket directory.
+  -p, --port PORT		database server port (default 5432)
+  -U, --username USERNAME	database user name
+
+  -P, --pid PID			backend PID to profile to
+  -F, --freq FREQ		profile at this frequency (min 1, max 1000)
+  -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)	
 
 General options:
   -?, --help		show this help and exit
@@ -131,6 +154,7 @@ func printMainHelp() string {
 	return fmt.Sprintf(mainHelpTemplate,
 		Root.Long,
 		config.CommandDefinition.Short,
+		profile.CommandDefinition.Short,
 		record.CommandDefinition.Short,
 		report.CommandDefinition.Short,
 		top.CommandDefinition.Short,
@@ -140,6 +164,12 @@ func printMainHelp() string {
 func printConfigHelp() string {
 	return fmt.Sprintf(configHelpTemplate,
 		config.CommandDefinition.Long,
+		ProgramIssuesUrl)
+}
+
+func printProfileHelp() string {
+	return fmt.Sprintf(profileHelpTemplate,
+		profile.CommandDefinition.Long,
 		ProgramIssuesUrl)
 }
 

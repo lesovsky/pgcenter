@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
+	"github.com/lesovsky/pgcenter/cmd/profile"
 	"github.com/lesovsky/pgcenter/cmd/record"
 	"github.com/lesovsky/pgcenter/cmd/report"
 	"github.com/lesovsky/pgcenter/cmd/top"
@@ -33,6 +34,12 @@ func init() {
 	config.CommandDefinition.SetVersionTemplate(PrintVersion())
 	config.CommandDefinition.SetHelpTemplate(printConfigHelp())
 	config.CommandDefinition.SetUsageTemplate(printConfigHelp())
+
+	// Setup 'profile' sub-command
+	Root.AddCommand(profile.CommandDefinition)
+	profile.CommandDefinition.SetVersionTemplate(PrintVersion())
+	profile.CommandDefinition.SetHelpTemplate(printProfileHelp())
+	profile.CommandDefinition.SetUsageTemplate(printProfileHelp())
 
 	// Setup 'record' sub-command
 	Root.AddCommand(record.CommandDefinition)
