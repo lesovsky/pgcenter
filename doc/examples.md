@@ -29,6 +29,16 @@ In most cases, connection setting can be omitted.
     pgcenter top -h 1.2.3.4 -U postgres production_db
     ```
 
+- Run `profile` command to connect to Postgres and profile backend with PID 12345:
+    ```
+    pgcenter profile -U postgres -P 12345 production_db
+    ```
+
+- Run `profile` command to profile backend with PID 12345 with frequency 50 (every 20ms):
+    ```
+    pgcenter profile -U postgres -P 12345 -F 50 production_db
+    ```
+
 - Run `record` command to connect to Postgres, poll statistics and continuously save to a local file:
     ```
     pgcenter record -f /tmp/stats.tar -U postgres production_db

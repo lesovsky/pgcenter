@@ -39,7 +39,6 @@ type TraceOptions struct {
 }
 
 var (
-	// TODO: what will happen in case of parallel query?
 	query = `SELECT
 				extract(epoch from clock_timestamp() - query_start) AS query_duration,
 				date_trunc('milliseconds', state_change) AS state_change_time,

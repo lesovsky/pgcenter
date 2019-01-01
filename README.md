@@ -26,6 +26,7 @@ pgCenter's main goal is to help Postgres DBA manage statistics that theу have i
 - Configuration management function  allows viewing and editing of current configuration files and reloading the service, if needed.
 - Logfiles functions allow you to quickly check Postgres logs without stopping statistics monitoring.
 - "Poor man’s monitoring" allows you to collect Postgres statistics into files and build reports later on. See details [here](doc/pgcenter-record-readme.md).
+- Wait events profiler allows to see what wait events occur during queries execution. See details [here](doc/pgcenter-profile-readme.md).
 
 #### Supported statistics
 When troubleshooting Postgres it's always important to keep an eye not only on Postgres metrics, but also system metrics, since Postgres utilizes system resources, such as cpu, memory, storage and network when working. pgCenter allows you to see both kinds of statistics related to Postgres and your system.
