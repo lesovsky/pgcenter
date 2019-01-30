@@ -19,7 +19,7 @@ all: pgcenter
 
 pgcenter:
 	go mod download
-	GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o ${PROGRAM_NAME} ${SOURCE}
+	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o ${PROGRAM_NAME} ${SOURCE}
 
 install:
 	mkdir -p ${DESTDIR}${PREFIX}/bin/
