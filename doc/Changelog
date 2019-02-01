@@ -1,5 +1,8 @@
 pgcenter (devel) unstable; urgency=low
 
+  * profile: emit error if '-P' is not specified
+  * config: emit error if neither '-i' nor '-u' specified
+  * config: moved parameters check from main program code to command management code
   * some refactoring in connection handling code
   * add wait events profiling feature
   * lib/stat: fix wrong calculation of hits values

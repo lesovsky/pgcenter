@@ -29,11 +29,6 @@ var (
 
 // Main function for 'pgcenter config' command.
 func RunMain(args []string, c utils.Conninfo, cfg Config) {
-	if cfg.Install == cfg.Uninstall {
-		fmt.Printf("ERROR: can't use install and uninstall options together\n")
-		return
-	}
-
 	conninfo = c // copy conninfo from external struct into local one
 	utils.HandleExtraArgs(args, &conninfo)
 

@@ -34,6 +34,8 @@ func init() {
 	CommandDefinition.Flags().IntVarP(&opts.Pid, "pid", "P", -1, "PID of Postgres backend to profile to")
 	CommandDefinition.Flags().IntVarP(&frequency, "freq", "F", 100, "profile with this frequency")
 	CommandDefinition.Flags().IntVarP(&opts.Strsize, "strsize", "s", 128, "limit length of print query strings to STRSIZE chars (default 128)")
+
+	_ = CommandDefinition.MarkFlagRequired("pid")
 }
 
 func preFlightSetup(_ *cobra.Command, _ []string) {
