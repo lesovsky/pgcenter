@@ -1,5 +1,6 @@
 pgcenter (devel) unstable; urgency=low
 
+  * some refactoring in connection handling code
   * add wait events profiling feature
   * lib/stat: fix wrong calculation of hits values
   * report: extend built-in help about supported statistics

@@ -16,7 +16,7 @@ const (
 	errCodeInvalidPassword = "28P01"
 
 	// Self-identification queries
-	PQhostQuery   = "SELECT inet_server_addr() inet, current_setting('unix_socket_directories') unix;"
+	PQhostQuery   = "SELECT coalesce(host(inet_server_addr())::text, current_setting('unix_socket_directories')) host"
 	PQportQuery   = "SELECT coalesce(inet_server_port(),5432)"
 	PQuserQuery   = "SELECT current_user"
 	PQdbQuery     = "SELECT current_database()"
@@ -70,7 +70,12 @@ func assembleConnstr(c *Conninfo) string {
 // Connect to Postgres, ask password if required.
 func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 	conn, err = sql.Open(dbDriver, connstr)
+	if err != nil {
+		return nil, err
+	}
+
 	if err = PQstatus(conn); err != nil {
+		// handle libpq errors
 		if pqerr, ok := err.(*pq.Error); ok {
 			switch {
 			// Password required -- ask user and retry connection
@@ -84,26 +89,46 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 				}
 			}
 		}
+
+		// handle other golang 'pq' driver-specific errors
+		switch err {
+		case pq.ErrSSLNotSupported:
+			// By default pq-driver tries to connect with SSL.
+			// So if SSL is not enabled on the other side - fix our connection string and try to reconnect
+			connstr = connstr + " sslmode=disable"
+			conn, err = sql.Open(dbDriver, connstr)
+			if err = PQstatus(conn); err != nil {
+				return nil, err
+			}
+		default:
+			return nil, err
+		}
 	}
+
 	return conn, nil
 }
 
-// Fill empty connection settings by normal values.
+// Fills empty connection settings by normal values
 func replaceEmptySettings(c *Conninfo, conn *sql.DB) (err error) {
 	if c.Host == "" {
-		c.Host, err = PQhost(conn)
-		if err != nil {
+		if c.Host, err = PQhost(conn); err != nil {
 			return err
 		}
 	}
 	if c.Port == 0 {
-		c.Port, _ = PQport(conn)
+		if c.Port, err = PQport(conn); err != nil {
+			return err
+		}
 	}
 	if c.User == "" {
-		c.User, _ = PQuser(conn)
+		if c.User, err = PQuser(conn); err != nil {
+			return err
+		}
 	}
 	if c.Dbname == "" {
-		c.Dbname, _ = PQdb(conn)
+		if c.Dbname, err = PQdb(conn); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -144,17 +169,12 @@ func setSafeSession(conn *sql.DB) {
 
 // Returns endpoint (hostname or UNIX-socket) to which pgCenter is connected
 func PQhost(c *sql.DB) (_ string, err error) {
-	// Don't use query with coalesce(inet, unix), because 'inet' and 'unix' are the different types,
-	// at casting 'inet' to text, netmask is added to the final address and the netmask is unnecessary.
-	var i, u sql.NullString
-	err = c.QueryRow(PQhostQuery).Scan(&i, &u)
+	var host sql.NullString
+	err = c.QueryRow(PQhostQuery).Scan(&host)
 	if err != nil {
 		return "", err
 	}
-	if i.String != "" {
-		return i.String, err
-	}
-	return u.String, err
+	return host.String, nil
 }
 
 // Returns port number to which pgCenter is connected
@@ -175,7 +195,7 @@ func PQdb(c *sql.DB) (s string, err error) {
 	return s, err
 }
 
-// Returns connections status
+// Returns connections status - just do 'SELECT 1' and return result - nil or err
 func PQstatus(c *sql.DB) error {
 	var s string
 	return c.QueryRow(PQstatusQuery).Scan(&s)
