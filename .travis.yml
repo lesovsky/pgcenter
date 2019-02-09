@@ -14,7 +14,9 @@ addons:
 dist: trusty
 sudo: false
 
-script: go test ${gobuild_args} ./...
+script:
+  - env GO111MODULE=on go mod download
+  - go test ${gobuild_args} ./...
 
 deploy:
   provider: script
