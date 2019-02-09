@@ -10,7 +10,7 @@ const (
 	// ProgramName is the name of this program
 	ProgramName = "pgcenter"
 	// ProgramVersion is the version of this program
-	ProgramVersion = "0.5"
+	ProgramVersion = "0.6"
 	// ProgramRelease is release number of this program
 	ProgramRelease = "0"
 	// ProgramIssuesUrl is the public URL for posting issues, bug reports and asking questions

@@ -1,4 +1,4 @@
-pgcenter (devel) unstable; urgency=low
+pgcenter (0.6.0) unstable; urgency=low
 
   * added goreleser support
   * top: fix wrong handling of group cancel/terminate mask
