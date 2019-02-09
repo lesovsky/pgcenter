@@ -1,7 +1,9 @@
 <img width="255" alt="" src="https://github.com/lesovsky/pgcenter/raw/master/doc/images/pgcenter-logo.png" align="right">
 
-<a href="https://pgcenter.org"><img src="https://img.shields.io/badge/pgCenter-org-orange.svg" alt="pgCenter.org" /></a>
+[![Web site](https://img.shields.io/badge/pgCenter-org-orange.svg)](https://pgcenter.org)
+[![GitHub release](https://img.shields.io/github/release/lesovsky/pgcenter.svg?style=flat)](https://github.com/lesovsky/pgcenter/releases/)
 [![Build Status](https://travis-ci.org/lesovsky/pgcenter.svg)](https://travis-ci.org/lesovsky/pgcenter)
+[![Go Report Card](https://goreportcard.com/badge/lesovsky/pgcenter)](https://goreportcard.com/report/lesovsky/pgcenter)
 
 ---
 pgCenter is a command-line admin tool for observing and troubleshooting Postgres.
