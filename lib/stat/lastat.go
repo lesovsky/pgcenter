@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	PROC_LOADAVG       = "/proc/loadavg"
+	procLoadAvgFile    = "/proc/loadavg"
 	pgProcLoadAvgQuery = "SELECT min1, min5, min15 FROM pgcenter.sys_proc_loadavg"
 )
 
-// Container for 'load average' stats
+// LoadAvg is the container for 'load average' stats
 type LoadAvg struct {
 	One     float64
 	Five    float64
@@ -32,9 +32,9 @@ func (la *LoadAvg) Read(conn *sql.DB, isLocal bool) {
 	}
 }
 
-// Read stat from local procfs cource
+// ReadLocal reads stat from local 'procfs' filesystem
 func (la *LoadAvg) ReadLocal() {
-	content, err := ioutil.ReadFile(PROC_LOADAVG)
+	content, err := ioutil.ReadFile(procLoadAvgFile)
 	if err != nil {
 		return
 	}
@@ -53,7 +53,7 @@ func (la *LoadAvg) ReadLocal() {
 	la.Fifteen, _ = strconv.ParseFloat(fields[2], 64)
 }
 
-// Read stats from remote SQL schema
+// ReadRemote reads stats from remote Postgres instance
 func (la *LoadAvg) ReadRemote(conn *sql.DB) {
 	conn.QueryRow(pgProcLoadAvgQuery).Scan(&la.One, &la.Five, &la.Fifteen)
 }

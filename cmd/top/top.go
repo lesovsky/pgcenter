@@ -6,13 +6,14 @@ import (
 	//"github.com/lesovsky/pgcenter/cmd"                /* code related with 'root command' handling */
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"github.com/lesovsky/pgcenter/top" /* code related to 'pgcenter top' functionality */
-	"github.com/spf13/cobra"             /* cli */
+	"github.com/spf13/cobra"           /* cli */
 )
 
 var (
 	conn utils.Conninfo
 )
 
+// CommandDefinition is the definition of 'top' CLI sub-command
 var CommandDefinition = &cobra.Command{
 	Use:     "top",
 	Short:   "top-like stats viewer",

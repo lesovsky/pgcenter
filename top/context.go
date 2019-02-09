@@ -31,7 +31,7 @@ type context struct {
 	current       *stat.ContextUnit // Current unit in use
 	contextList   stat.ContextList  // List of all available units
 	sharedOptions stat.Options      // Queries' settings that depends on Postgres version
-	aux           AuxType           // Type of current auxiliary stats
+	aux           auxType           // Type of current auxiliary stats
 }
 
 var (
@@ -64,7 +64,7 @@ func (c *context) Setup(pi stat.PgInfo) {
 	c.current = c.contextList[stat.ActivityView]
 
 	// Aux stats is not displayed by default
-	c.aux = AUX_NONE
+	c.aux = auxNone
 
 	// Adjust queries depending on Postgres version
 	c.contextList.AdjustQueries(pi)
@@ -77,7 +77,7 @@ func orderKeyLeft(_ *gocui.Gui, _ *gocui.View) error {
 	if ctx.current.OrderKey < 0 {
 		ctx.current.OrderKey = ctx.current.Ncols - 1
 	}
-	do_update <- 1
+	doUpdate <- 1
 	return nil
 }
 
@@ -87,7 +87,7 @@ func orderKeyRight(_ *gocui.Gui, _ *gocui.View) error {
 	if ctx.current.OrderKey >= ctx.current.Ncols {
 		ctx.current.OrderKey = 0
 	}
-	do_update <- 1
+	doUpdate <- 1
 	return nil
 }
 
@@ -118,7 +118,7 @@ func changeWidth(d int) func(_ *gocui.Gui, _ *gocui.View) error {
 
 		ctx.current.ColsWidth[cidx] = width
 
-		do_update <- 1
+		doUpdate <- 1
 		return nil
 	}
 }
@@ -127,7 +127,7 @@ func changeWidth(d int) func(_ *gocui.Gui, _ *gocui.View) error {
 func switchSortOrder(g *gocui.Gui, _ *gocui.View) error {
 	ctx.current.OrderDesc = !ctx.current.OrderDesc
 	printCmdline(g, "Switch sort order")
-	do_update <- 1
+	doUpdate <- 1
 	return nil
 }
 
@@ -178,7 +178,7 @@ func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 
 		printCmdline(g, ctx.current.Msg)
 
-		do_update <- 1
+		doUpdate <- 1
 		return nil
 	}
 }
@@ -192,7 +192,7 @@ func switchContextToPgss(g *gocui.Gui, c string) {
 	ctx.current = ctx.contextList[c]
 
 	printCmdline(g, ctx.current.Msg)
-	do_update <- 1
+	doUpdate <- 1
 }
 
 // A toggle to show system tables stats
@@ -209,7 +209,7 @@ func toggleSysTables(g *gocui.Gui, _ *gocui.View) error {
 		printCmdline(g, "Show system tables: on")
 	}
 
-	do_update <- 1
+	doUpdate <- 1
 	return nil
 }
 
@@ -246,6 +246,6 @@ func toggleIdleConns(g *gocui.Gui, _ *gocui.View) error {
 		printCmdline(g, "Show idle connections: on.")
 	}
 
-	do_update <- 1
+	doUpdate <- 1
 	return nil
 }

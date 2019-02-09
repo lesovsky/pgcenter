@@ -11,6 +11,7 @@ import (
 	"github.com/lib/pq"
 )
 
+// Config describes actions which can be performed against pgcenter's config
 type Config struct {
 	Install   bool
 	Uninstall bool
@@ -27,7 +28,7 @@ var (
 	err      error
 )
 
-// Main function for 'pgcenter config' command.
+// RunMain is the main entry point for 'pgcenter config' command.
 func RunMain(args []string, c utils.Conninfo, cfg Config) {
 	conninfo = c // copy conninfo from external struct into local one
 	utils.HandleExtraArgs(args, &conninfo)

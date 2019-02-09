@@ -62,7 +62,7 @@ func runPsql(g *gocui.Gui, _ *gocui.View) error {
 	signal.Ignore(os.Interrupt)
 
 	// exit from UI and stats loop... will restore it after psql is closed.
-	do_exit <- 1
+	doExit <- 1
 	g.Close()
 	cmd := exec.Command(utils.DefaultPsql,
 		"-h", conninfo.Host, "-p", strconv.Itoa(conninfo.Port),

@@ -8,13 +8,14 @@ import (
 	"github.com/lesovsky/pgcenter/lib/stat"
 	"github.com/lib/pq"
 	"os"
+	"regexp"
 	"time"
 )
 
 var (
 	stats                 stat.Stat               // container for stats
-	do_exit               = make(chan int)        // graceful quit of program or goroutines
-	do_update             = make(chan int)        // force stat refresh/redraw (when context switched or something else)
+	doExit                = make(chan int)        // graceful quit of program or goroutines
+	doUpdate              = make(chan int)        // force stat refresh/redraw (when context switched or something else)
 	refreshMinGranularity = 1 * time.Second       // min resolution of stats refreshing
 	refreshInterval       = refreshMinGranularity // default refreshing interval
 )
@@ -25,9 +26,9 @@ func statLoop(g *gocui.Gui) {
 
 	for {
 		select {
-		case <-do_exit:
+		case <-doExit:
 			return
-		case <-do_update:
+		case <-doUpdate:
 			// discard previous PGresult stats and re-read stats
 			stats.PrevPGresult.Valid = false
 			doWork(g)
@@ -85,20 +86,20 @@ func printAllStat(g *gocui.Gui, s stat.Stat) {
 		v.Clear()
 		printDbstat(v, s)
 
-		if ctx.aux > AUX_NONE {
+		if ctx.aux > auxNone {
 			v, err := g.View("aux")
 			if err != nil {
 				return fmt.Errorf("Set focus on aux view failed: %s", err)
 			}
 
 			switch ctx.aux {
-			case AUX_DISKSTAT:
+			case auxDiskstat:
 				v.Clear()
 				printIostat(v, stats.DiffDiskstats)
-			case AUX_NICSTAT:
+			case auxNicstat:
 				v.Clear()
 				printNicstat(v, stats.DiffNetdevs)
-			case AUX_LOGTAIL:
+			case auxLogtail:
 				// don't clear screen
 				printLogtail(g, v)
 			}
@@ -164,15 +165,27 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 	}
 
 	// is filter required?
-	var filter bool
-	for _, v := range ctx.current.Filters {
-		if v != nil {
-			filter = true
-			break
-		}
-	}
+	var filter = isFilterRequired(ctx.current.Filters)
 
 	/* print header - filtered column mark with star; ordered column make shadowed */
+	printStatHeader(v, &s)
+
+	// print data
+	printStatData(v, &s, filter)
+}
+
+// Returns true if filtering is required
+func isFilterRequired(f map[int]*regexp.Regexp) bool {
+	for _, v := range f {
+		if v != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// Prints stats header - columns' names
+func printStatHeader(v *gocui.View, s *stat.Stat) {
 	var pname string
 	for i := 0; i < s.CurrPGresult.Ncols; i++ {
 		name := s.CurrPGresult.Cols[i]
@@ -192,8 +205,10 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 		}
 	}
 	fmt.Fprintf(v, "\n")
+}
 
-	// print data
+// Prints stats data - content of stats views
+func printStatData(v *gocui.View, s *stat.Stat, filter bool) {
 	var doPrint bool
 	for colnum, rownum := 0, 0; rownum < s.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
 		// be optimistic, we want to print the row.
@@ -283,8 +298,8 @@ func printLogtail(g *gocui.Gui, v *gocui.View) error {
 	// pgCenter builds multiline log-records into a single one and truncates resulting line to screen's length. But
 	// it's possible to print them completely with v.Wrap = true. But with v.Wrap and v.Autoscroll, it's possible to
 	// solve all issues - just read a quite big amount of logs, and limit this amount by size of the view - all
-	// unneded log records will be outside of the screen, thus user will see real tail of the logfile. But this approach
-	// can't to be used, because the log-file path has to printed in the begining, before log records.
+	// unneeded log records will be outside of the screen, thus user will see real tail of the logfile. But this approach
+	// can't to be used, because the log-file path has to printed in the beginning, before log records.
 	// Logfile path can be moved to the view's title, but in this case the view frame will be drawn.
 
 	x, y := v.Size()

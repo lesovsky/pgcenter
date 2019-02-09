@@ -75,57 +75,41 @@ func killGroup(g *gocui.Gui, _ *gocui.View, mode string) {
 		return
 	}
 
-	var tempMask string
-	if (groupMask & groupIdle) != 0 {
-		tempMask += "i"
-	}
-	if (groupMask & groupIdleXact) != 0 {
-		tempMask += "x "
-	}
-	if (groupMask & groupActive) != 0 {
-		tempMask += "a"
-	}
-	if (groupMask & groupWaiting) != 0 {
-		tempMask += "w"
-	}
-	if (groupMask & groupOthers) != 0 {
-		tempMask += "o"
-	}
-
-	var query string
+	var template, query string
 	var killed sql.NullInt64
 	var killedTotal int64
 
 	// Select kill function: pg_cancel_backend or pg_terminate_backend
 	switch mode {
 	case "cancel":
-		query = stat.PgCancelGroupQuery
+		template = stat.PgCancelGroupQuery
 	case "terminate":
-		query = stat.PgTerminateGroupQuery
+		template = stat.PgTerminateGroupQuery
 	}
 
-	for _, ch := range tempMask {
-		switch string(ch) {
-		case "i":
-			ctx.sharedOptions.BackendState = "state = 'idle'"
-		case "x":
-			ctx.sharedOptions.BackendState = "state IN ('idle in transaction (aborted)', 'idle in transaction')"
-		case "a":
-			ctx.sharedOptions.BackendState = "state = 'active'"
-		case "w":
-			if stats.PgVersionNum < 90600 {
-				ctx.sharedOptions.BackendState = "wait_event IS NOT NULL OR wait_event_type IS NOT NULL"
-			} else {
+	/* advanced mode */
+	var states = map[int]string{
+		groupIdle:     "state = 'idle'",
+		groupIdleXact: "state IN ('idle in transaction (aborted)', 'idle in transaction')",
+		groupActive:   "state = 'active'",
+		groupWaiting:  "wait_event IS NOT NULL OR wait_event_type IS NOT NULL",
+		groupOthers:   "state IN ('fastpath function call', 'disabled')",
+	}
+
+	for state, part := range states {
+		if (groupMask & state) != 0 {
+			ctx.sharedOptions.BackendState = part
+			if state == groupWaiting && stats.PgVersionNum < 90600 {
 				ctx.sharedOptions.BackendState = "waiting"
 			}
-		case "o":
-			ctx.sharedOptions.BackendState = "state IN ('fastpath function call', 'disabled')"
+			query, _ = stat.PrepareQuery(template, ctx.sharedOptions)
+			err := conn.QueryRow(query).Scan(&killed)
+			if err != nil {
+				printCmdline(g, "failed to send signal to backends: %s", err)
+			}
+
+			killedTotal += killed.Int64
 		}
-
-		query, _ = stat.PrepareQuery(query, ctx.sharedOptions)
-		conn.QueryRow(query).Scan(&killed)
-
-		killedTotal += killed.Int64
 	}
 
 	switch mode {
@@ -136,7 +120,6 @@ func killGroup(g *gocui.Gui, _ *gocui.View, mode string) {
 	}
 }
 
-// Specify types of backends into dedicated group. Using the group it's possible to send them a signal.
 func setBackendMask(g *gocui.Gui, v *gocui.View, answer string) {
 	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogSetMask])
 	answer = strings.TrimSuffix(answer, "\n")
@@ -162,7 +145,6 @@ func setBackendMask(g *gocui.Gui, v *gocui.View, answer string) {
 	showBackendMask(g, v)
 }
 
-// Show which types of backends are in the group.
 func showBackendMask(g *gocui.Gui, v *gocui.View) error {
 	ct := "Mask: "
 	if groupMask == 0 {

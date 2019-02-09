@@ -15,12 +15,13 @@ var (
 	cfg  config.Config
 )
 
+// CommandDefinition is the definition of 'config' CLI sub-command
 var CommandDefinition = &cobra.Command{
 	Use:     "config",
 	Short:   "configures Postgres to work with pgcenter",
 	Long:    `'pgcenter config' configures Postgres to work with pgcenter`,
 	Version: "dummy", // use constants from 'cmd' package
-	PreRun: preFlightSetup,
+	PreRun:  preFlightSetup,
 	Run: func(command *cobra.Command, args []string) {
 		config.RunMain(args, conn, cfg)
 	},
@@ -35,8 +36,8 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&cfg.Uninstall, "uninstall", "u", false, "uninstall stats schema from the database")
 }
 
-// Checks passed options
-func  preFlightSetup(CommandDefinition *cobra.Command, _ []string) {
+// preFlightSetup performs sanity checks of passed options
+func preFlightSetup(CommandDefinition *cobra.Command, _ []string) {
 	if !cfg.Install && !cfg.Uninstall {
 		fmt.Printf("ERROR: using '--install' or '--uninstall' options are mandatory\n")
 		_ = CommandDefinition.Help()

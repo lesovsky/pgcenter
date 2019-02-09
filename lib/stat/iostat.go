@@ -11,7 +11,7 @@ import (
 	"io/ioutil"
 )
 
-// Used for storing stats per single device
+// Diskstat is the container for storing stats per single block device
 type Diskstat struct {
 	/* diskstats basic */
 	Major, Minor int     // 1 - major number; 2 - minor mumber
@@ -38,10 +38,10 @@ type Diskstat struct {
 	// But for devices serving requests in parallel, such as RAID arrays and modern SSDs, this number does not reflect their performance limits.
 }
 
-// Container for all stats from proc-file
+// Diskstats is the container for all stats related to all block devices
 type Diskstats []Diskstat
 
-// Container for previous, current and delta snapshots of stats
+// Iostat is the container for previous, current and delta snapshots of stats
 type Iostat struct {
 	CurrDiskstats Diskstats
 	PrevDiskstats Diskstats
@@ -49,19 +49,20 @@ type Iostat struct {
 }
 
 const (
-	// The file provides IO statistics of block devices. For more details refer to Linux kernel's Documentation/iostats.txt.
-	PROC_DISKSTATS       = "/proc/diskstats"
+	// ProcDiskstats provides IO statistics of block devices. For more details refer to Linux kernel's Documentation/iostats.txt.
+	ProcDiskstats = "/proc/diskstats"
+	// pgProcDiskstatsQuery is the SQL for retrieving IO stats from Postgres instance
 	pgProcDiskstatsQuery = "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
 )
 
-// Create a stats container of specified size
+// New creates a stats container of specified size
 func (c *Iostat) New(size int) {
 	c.CurrDiskstats = make(Diskstats, size)
 	c.PrevDiskstats = make(Diskstats, size)
 	c.DiffDiskstats = make(Diskstats, size)
 }
 
-// Read stats into container
+// Read method reads stats from the source
 func (c Diskstats) Read(conn *sql.DB, isLocal bool) error {
 	if isLocal {
 		if err := c.ReadLocal(); err != nil {
@@ -74,11 +75,11 @@ func (c Diskstats) Read(conn *sql.DB, isLocal bool) error {
 	return nil
 }
 
-// Read stats from local procfs source
+// ReadLocal method reads stats from local 'procfs' filesystem
 func (c Diskstats) ReadLocal() error {
-	content, err := ioutil.ReadFile(PROC_DISKSTATS)
+	content, err := ioutil.ReadFile(ProcDiskstats)
 	if err != nil {
-		return fmt.Errorf("failed to read %s", PROC_DISKSTATS)
+		return fmt.Errorf("failed to read %s", ProcDiskstats)
 	}
 	reader := bufio.NewReader(bytes.NewBuffer(content))
 
@@ -99,7 +100,7 @@ func (c Diskstats) ReadLocal() error {
 			&ios.Wcompleted, &ios.Wmerged, &ios.Wsectors, &ios.Wspent,
 			&ios.Ioinprogress, &ios.Tspent, &ios.Tweighted)
 		if err != nil {
-			return fmt.Errorf("failed to scan data from %s", PROC_DISKSTATS)
+			return fmt.Errorf("failed to scan data from %s", ProcDiskstats)
 		}
 
 		ios.Uptime = uptime
@@ -109,7 +110,7 @@ func (c Diskstats) ReadLocal() error {
 	return nil
 }
 
-// Read stats from remote SQL schema
+// ReadRemote method reads stats from remote Postgres instance
 func (c Diskstats) ReadRemote(conn *sql.DB) {
 	var uptime float64
 	conn.QueryRow(pgProcUptimeQuery).Scan(&uptime)
@@ -138,102 +139,69 @@ func (c Diskstats) ReadRemote(conn *sql.DB) {
 	}
 }
 
-// Compare stats between two containers and create delta
-func (d Diskstats) Diff(c Diskstats, p Diskstats) {
-	for i := 0; i < len(c); i++ {
+// Diff method compares stats snapshots and creates delta
+func (c Diskstats) Diff(curr Diskstats, prev Diskstats) {
+	for i := 0; i < len(curr); i++ {
 		// Skip inactive devices
-		if c[i].Rcompleted+c[i].Wcompleted == 0 {
+		if curr[i].Rcompleted+curr[i].Wcompleted == 0 {
 			continue
 		}
 
-		itv := c[i].Uptime - p[i].Uptime
-		d[i].Device = c[i].Device
-		d[i].Completed = c[i].Rcompleted + c[i].Wcompleted
+		itv := curr[i].Uptime - prev[i].Uptime
+		c[i].Device = curr[i].Device
+		c[i].Completed = curr[i].Rcompleted + curr[i].Wcompleted
 
-		d[i].Util = s_value(p[i].Tspent, c[i].Tspent, itv, SysTicks) / 10
+		c[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, SysTicks) / 10
 
-		if ((c[i].Rcompleted + c[i].Wcompleted) - (p[i].Rcompleted + p[i].Wcompleted)) > 0 {
-			d[i].Await = ((c[i].Rspent - p[i].Rspent) + (c[i].Wspent - p[i].Wspent)) /
-				((c[i].Rcompleted + c[i].Wcompleted) - (p[i].Rcompleted + p[i].Wcompleted))
+		if ((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted)) > 0 {
+			c[i].Await = ((curr[i].Rspent - prev[i].Rspent) + (curr[i].Wspent - prev[i].Wspent)) /
+				((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted))
 		} else {
-			d[i].Await = 0
+			c[i].Await = 0
 		}
 
-		if ((c[i].Rcompleted + c[i].Wcompleted) - (p[i].Rcompleted + p[i].Wcompleted)) > 0 {
-			d[i].Arqsz = ((c[i].Rsectors - p[i].Rsectors) + (c[i].Wsectors - p[i].Wsectors)) /
-				((c[i].Rcompleted + c[i].Wcompleted) - (p[i].Rcompleted + p[i].Wcompleted))
+		if ((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted)) > 0 {
+			c[i].Arqsz = ((curr[i].Rsectors - prev[i].Rsectors) + (curr[i].Wsectors - prev[i].Wsectors)) /
+				((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted))
 		} else {
-			d[i].Arqsz = 0
+			c[i].Arqsz = 0
 		}
 
-		if (c[i].Rcompleted - p[i].Rcompleted) > 0 {
-			d[i].Rawait = (c[i].Rspent - p[i].Rspent) / (c[i].Rcompleted - p[i].Rcompleted)
+		if (curr[i].Rcompleted - prev[i].Rcompleted) > 0 {
+			c[i].Rawait = (curr[i].Rspent - prev[i].Rspent) / (curr[i].Rcompleted - prev[i].Rcompleted)
 		} else {
-			d[i].Rawait = 0
+			c[i].Rawait = 0
 		}
 
-		if (c[i].Wcompleted - p[i].Wcompleted) > 0 {
-			d[i].Wawait = (c[i].Wspent - p[i].Wspent) / (c[i].Wcompleted - p[i].Wcompleted)
+		if (curr[i].Wcompleted - prev[i].Wcompleted) > 0 {
+			c[i].Wawait = (curr[i].Wspent - prev[i].Wspent) / (curr[i].Wcompleted - prev[i].Wcompleted)
 		} else {
-			d[i].Wawait = 0
+			c[i].Wawait = 0
 		}
 
-		d[i].Rmerged = s_value(p[i].Rmerged, c[i].Rmerged, itv, SysTicks)
-		d[i].Wmerged = s_value(p[i].Wmerged, c[i].Wmerged, itv, SysTicks)
-		d[i].Rcompleted = s_value(p[i].Rcompleted, c[i].Rcompleted, itv, SysTicks)
-		d[i].Wcompleted = s_value(p[i].Wcompleted, c[i].Wcompleted, itv, SysTicks)
-		d[i].Rsectors = s_value(p[i].Rsectors, c[i].Rsectors, itv, SysTicks) / 2048
-		d[i].Wsectors = s_value(p[i].Wsectors, c[i].Wsectors, itv, SysTicks) / 2048
-		d[i].Tweighted = s_value(p[i].Tweighted, c[i].Tweighted, itv, SysTicks) / 1000
+		c[i].Rmerged = sValue(prev[i].Rmerged, curr[i].Rmerged, itv, SysTicks)
+		c[i].Wmerged = sValue(prev[i].Wmerged, curr[i].Wmerged, itv, SysTicks)
+		c[i].Rcompleted = sValue(prev[i].Rcompleted, curr[i].Rcompleted, itv, SysTicks)
+		c[i].Wcompleted = sValue(prev[i].Wcompleted, curr[i].Wcompleted, itv, SysTicks)
+		c[i].Rsectors = sValue(prev[i].Rsectors, curr[i].Rsectors, itv, SysTicks) / 2048
+		c[i].Wsectors = sValue(prev[i].Wsectors, curr[i].Wsectors, itv, SysTicks) / 2048
+		c[i].Tweighted = sValue(prev[i].Tweighted, curr[i].Tweighted, itv, SysTicks) / 1000
 	}
 }
 
-// Print stats from specified container
-func (d Diskstats) Print() {
-	for i := 0; i < len(d); i++ {
-		if d[i].Completed == 0 {
+// Print method prints IO stats
+func (c Diskstats) Print() {
+	for i := 0; i < len(c); i++ {
+		if c[i].Completed == 0 {
 			continue
 		}
 
 		fmt.Printf("%6s\t\t%8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
-			d[i].Device,
-			d[i].Rmerged, d[i].Wmerged,
-			d[i].Rcompleted, d[i].Wcompleted,
-			d[i].Rsectors, d[i].Wsectors, d[i].Arqsz, d[i].Tweighted,
-			d[i].Await, d[i].Rawait, d[i].Wawait,
-			d[i].Util)
+			c[i].Device,
+			c[i].Rmerged, c[i].Wmerged,
+			c[i].Rcompleted, c[i].Wcompleted,
+			c[i].Rsectors, c[i].Wsectors, c[i].Arqsz, c[i].Tweighted,
+			c[i].Await, c[i].Rawait, c[i].Wawait,
+			c[i].Util)
 	}
-}
-
-// Function returns value of particular stat of a block device
-func (d Diskstat) SingleStat(stat string) (value float64) {
-	switch stat {
-	case "rcompleted":
-		value = d.Rcompleted
-	case "rmerged":
-		value = d.Rmerged
-	case "rsectors":
-		value = d.Rsectors
-	case "rspent":
-		value = d.Rspent
-	case "wcompleted":
-		value = d.Wspent
-	case "wmerged":
-		value = d.Wmerged
-	case "wsectors":
-		value = d.Wsectors
-	case "wspent":
-		value = d.Wspent
-	case "ioinprogress":
-		value = d.Ioinprogress
-	case "tspent":
-		value = d.Tspent
-	case "tweighted":
-		value = d.Tweighted
-	case "uptime":
-		value = d.Uptime
-	default:
-		value = 0
-	}
-	return value
 }

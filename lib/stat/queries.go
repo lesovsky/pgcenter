@@ -8,38 +8,46 @@ import (
 )
 
 const (
-	PgGetSingleSettingQuery  = "SELECT current_setting($1)"
-	PgGetVersionQuery        = "SELECT current_setting('server_version'),current_setting('server_version_num')"
+	// PgGetSingleSettingQuery queries specified Postgres configuration setting
+	PgGetSingleSettingQuery = "SELECT current_setting($1)"
+	// PgGetVersionQuery queries Postgres versions
+	PgGetVersionQuery = "SELECT current_setting('server_version'),current_setting('server_version_num')"
+	// PgGetRecoveryStatusQuery queries current Postgres recovery status
 	PgGetRecoveryStatusQuery = "SELECT pg_is_in_recovery()"
-	PgGetUptimeQuery         = "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
-
-	PgGetConfigAllQuery      = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
+	// PgGetUptimeQuery queries Postgres uptime
+	PgGetUptimeQuery = "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
+	// PgGetConfigAllQuery queries current Postgres configuration
+	PgGetConfigAllQuery = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
+	// PgGetCurrentLogfileQuery queries current Postgres logfile
 	PgGetCurrentLogfileQuery = "SELECT pg_current_logfile();"
-	PgReloadConfQuery        = "SELECT pg_reload_conf()"
-
+	// PgReloadConfQuery does Postgres reload
+	PgReloadConfQuery = "SELECT pg_reload_conf()"
+	// PgPostmasterStartTimeQuery queries time when Postgres has been started
 	PgPostmasterStartTimeQuery = "SELECT to_char(pg_postmaster_start_time(), 'HH24MISS')"
-
-	PgCancelSingleQuery    = `SELECT pg_cancel_backend($1)`
+	// PgCancelSingleQuery cancels query executed by backend with specified PID
+	PgCancelSingleQuery = `SELECT pg_cancel_backend($1)`
+	// PgTerminateSingleQuery terminates the backend with specified PID
 	PgTerminateSingleQuery = `SELECT pg_terminate_backend($1)`
-
+	// PgCancelGroupQuery cancels a group of queries based on specified criteria
 	PgCancelGroupQuery = `SELECT
 count(pg_cancel_backend(pid))
 FROM pg_stat_activity
 WHERE {{.BackendState}}
 AND ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
 AND pid != pg_backend_pid()`
-
+	// PgTerminateGroupQuery terminate a group of backends based on specified crteria
 	PgTerminateGroupQuery = `SELECT
 count(pg_terminate_backend(pid))
 FROM pg_stat_activity
 WHERE {{.BackendState}}
 AND ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
 AND pid != pg_backend_pid()`
-
+	// PgResetStats resets statistics counter in the current database
 	PgResetStats = "SELECT pg_stat_reset()"
-	PgResetPgss  = "SELECT pg_stat_statements_reset()"
+	// PgResetPgss resets pg_stat_statements statistics
+	PgResetPgss = "SELECT pg_stat_statements_reset()"
 
-	// Default query for getting activity
+	// PgActivityQueryDefault is the default query for getting stats about connected clients from pg_stat_activity
 	PgActivityQueryDefault = `SELECT
 count(*) FILTER (WHERE state IS NOT NULL) AS total,
 count(*) FILTER (WHERE state = 'idle') AS idle,
@@ -50,7 +58,7 @@ count(*) FILTER (WHERE state IN ('fastpath function call','disabled')) AS others
 (SELECT count(*) FROM pg_prepared_xacts) AS total_prepared
 FROM pg_stat_activity WHERE backend_type = 'client backend'`
 
-	// Query for getting activity for versions prior 10. The 'backend_type' has been introduced in 10.
+	// PgActivityQueryBefore10 queries activity stats about connected clients for versions prior 10. The 'backend_type' has been introduced in 10.
 	PgActivityQueryBefore10 = `SELECT
 count(*) FILTER (WHERE state IS NOT NULL) AS total,
 count(*) FILTER (WHERE state = 'idle') AS idle,
@@ -61,7 +69,7 @@ count(*) FILTER (WHERE state IN ('fastpath function call','disabled')) AS others
 (SELECT count(*) FROM pg_prepared_xacts) AS total_prepared
 FROM pg_stat_activity`
 
-	// Query for getting activity for versions prior 9.6. There wait_events has been introduced in 9.6.
+	// PgActivityQueryBefore96 queries stats activity about connected clients for versions prior 9.6. There wait_events have been introduced in 9.6.
 	PgActivityQueryBefore96 = `SELECT
 count(*) FILTER (WHERE state IS NOT NULL) AS total,
 count(*) FILTER (WHERE state = 'idle') AS idle,
@@ -72,7 +80,7 @@ count(*) FILTER (WHERE state IN ('fastpath function call','disabled')) AS others
 (SELECT count(*) FROM pg_prepared_xacts) AS total_prepared
 FROM pg_stat_activity`
 
-	// Query for getting activity for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced in 9.4.
+	// PgActivityQueryBefore94 queries stats activity about connected clients for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced in 9.4.
 	PgActivityQueryBefore94 = `WITH pgsa AS (SELECT * FROM pg_stat_activity)
 SELECT
 (SELECT count(*) FROM pgsa) AS total,
@@ -83,7 +91,7 @@ SELECT
 (SELECT count(*) FROM pgsa WHERE state IN ('fastpath function call','disabled')) AS others,
 (SELECT count(*) FROM pg_prepared_xacts) AS total_prepared`
 
-	// Default query for getting autovacuum activity
+	// PgAutovacQueryDefault is the default query for getting stats about autovacuum activity from pg_stat_activity
 	PgAutovacQueryDefault = `SELECT
 count(*) FILTER (WHERE query ~* '^autovacuum:') AS av_workers,
 count(*) FILTER (WHERE query ~* '^autovacuum:.*to prevent wraparound') AS av_wrap,
@@ -92,7 +100,7 @@ coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS av_maxti
 FROM pg_stat_activity
 WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid()`
 
-	// Query for getting autovacuum activity for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced.
+	// PgAutovacQueryBefore94 queries stats about autovacuum activity for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced.
 	PgAutovacQueryBefore94 = `WITH pgsa AS (SELECT * FROM pg_stat_activity)
 SELECT
 (SELECT count(*) FROM pgsa WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()) AS av_workers,
@@ -101,6 +109,7 @@ SELECT
 (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pgsa
 WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid()) AS av_maxtime`
 
+	// PgActivityTimeQuery queries stats about longest transactions
 	PgActivityTimeQuery = `SELECT
 (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS xact_maxtime
 FROM pg_stat_activity
@@ -108,8 +117,10 @@ WHERE (query !~* '^autovacuum:' AND query !~* '^vacuum') AND pid <> pg_backend_p
 (SELECT COALESCE(date_trunc('seconds', max(clock_timestamp() - prepared)), '00:00:00') AS prep_maxtime
 FROM pg_prepared_xacts)`
 
+	// PgStatementsQuery queries general stats from pg_stat_statements
 	PgStatementsQuery = `SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements`
 
+	// PgStatDatabaseQueryDefault is the default query for getting databases' stats from pg_stat_database view
 	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQueryDefault, DiffIntvl: [2]int{1,15}, Ncols: 17, OrderKey: 0, OrderDesc: true }
 	PgStatDatabaseQueryDefault = `SELECT
 datname,
@@ -132,6 +143,7 @@ date_trunc('seconds', now() - stats_reset)::text AS stats_age
 FROM pg_stat_database
 ORDER BY datname DESC`
 
+	// PgStatReplicationQueryDefault is the default query for getting replication stats from pg_stat_replication view
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQueryDefault, DiffIntvl: [2]int{6,6}, Ncols: 15, OrderKey: 0, OrderDesc: true }
 	PgStatReplicationQueryDefault = `SELECT
 pid AS pid,
@@ -152,6 +164,7 @@ coalesce(date_trunc('seconds', replay_lag), '0 seconds'::interval) AS replay_lag
 FROM pg_stat_replication
 ORDER BY pid DESC`
 
+	// PgStatReplicationQueryExtended is the extended query for getting replication stats from pg_stat_replication view
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQueryExtended, DiffIntvl: [2]int{6,6}, Ncols: 17, OrderKey: 0, OrderDesc: true }
 	PgStatReplicationQueryExtended = `SELECT
 pid AS pid,
@@ -174,6 +187,7 @@ date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_time
 FROM pg_stat_replication
 ORDER BY pid DESC`
 
+	// PgStatReplicationQuery96 is the query for getting replication stats from versions prior 9.6
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQuery96, DiffIntvl: [2]int{6,6}, Ncols: 12, OrderKey: 0, OrderDesc: true }
 	PgStatReplicationQuery96 = `SELECT
 pid AS pid,
@@ -191,6 +205,7 @@ sync_state AS mode,
 FROM pg_stat_replication
 ORDER BY pid DESC`
 
+	// PgStatReplicationQuery96Extended is the extended query for getting replication stats from versions prior 9.6
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQuery96Extended, DiffIntvl: [2]int{6,6}, Ncols: 14, OrderKey: 0, OrderDesc: true }
 	PgStatReplicationQuery96Extended = `SELECT
 pid AS pid,
@@ -210,6 +225,7 @@ date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_time
 FROM pg_stat_replication
 ORDER BY pid DESC`
 
+	// PgStatTablesQueryDefault is the default query for getting tables' stats from pg_stat_all_tables and pg_statio_all_tables views
 	// { Name: "pg_stat_tables", Query: common.PgStatTablesQueryDefault, DiffIntvl: [2]int{1,18}, Ncols: 19, OrderKey: 0, OrderDesc: true }
 	PgStatTablesQueryDefault = `SELECT
 t.schemaname || '.' || t.relname AS relation,
@@ -235,6 +251,7 @@ FROM pg_stat_{{.ViewType}}_tables t, pg_statio_{{.ViewType}}_tables i
 WHERE t.relid = i.relid
 ORDER BY (t.schemaname || '.' || t.relname) DESC`
 
+	// PgStatIndexesQueryDefault is the default query for getting indexes' stats from pg_stat_all_indexes and pg_statio_all_indexes views
 	// { Name: "pg_stat_indexes", Query: common.PgStatIndexesQueryDefault, DiffIntvl: [2]int{1,5}, Ncols: 6, OrderKey: 0, OrderDesc: true }
 	PgStatIndexesQueryDefault = `SELECT
 s.schemaname ||'.'|| s.relname ||'.'|| s.indexrelname AS index,
@@ -247,6 +264,7 @@ FROM pg_stat_{{.ViewType}}_indexes s, pg_statio_{{.ViewType}}_indexes i
 WHERE s.indexrelid = i.indexrelid
 ORDER BY (s.schemaname ||'.'|| s.relname ||'.'|| s.indexrelname) DESC`
 
+	// PgTablesSizesQueryDefault is the defaulr query for getting stats related to tables' sizes
 	// { Name: "pg_tables_sizes", Query: common.PgTablesSizesQueryDefault, DiffIntvl: [2]int{4,6}, Ncols: 7, OrderKey: 0, OrderDesc: true }
 	PgTablesSizesQueryDefault = `SELECT
 s.schemaname ||'.'|| s.relname AS relation,
@@ -262,6 +280,7 @@ FROM pg_stat_{{.ViewType}}_tables s, pg_class c
 WHERE s.relid = c.oid AND NOT EXISTS (SELECT 1 FROM pg_locks WHERE relation = s.relid AND mode = 'AccessExclusiveLock' and granted)
 ORDER BY (s.schemaname || '.' || s.relname) DESC`
 
+	// PgStatFunctionsQueryDefault is the default query for getting stats from pg_stat_user_functions view
 	// { Name: "pg_stat_functions", Query: common.PgStatFunctionsQueryDefault, DiffIntvl: [2]int{3,3}, Ncols: 8, OrderKey: 0, OrderDesc: true }
 	PgStatFunctionsQueryDefault = `SELECT
 funcid,
@@ -275,6 +294,7 @@ round((self_time / greatest(calls, 1))::numeric(20,2), 4) AS avg_self_t
 FROM pg_stat_user_functions
 ORDER BY funcid DESC`
 
+	// PgStatVacuumQueryDefault is the default query for getting stats from pg_stat_progress_vacuum view
 	// { Name: "pg_stat_vacuum", Query: common.PgStatVacuumQueryDefault, DiffIntvl: [2]int{9,10}, Ncols: 14, OrderKey: 0, OrderDesc: true }
 	PgStatVacuumQueryDefault = `SELECT
 a.pid,
@@ -296,6 +316,7 @@ RIGHT JOIN pg_stat_activity a ON v.pid = a.pid
 WHERE (a.query ~* '^autovacuum:' OR a.query ~* '^vacuum') AND a.pid <> pg_backend_pid()
 ORDER BY a.pid DESC`
 
+	// PgStatActivityQueryDefault is the default query for getting stats from pg_stat_activity view
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQueryDefault, DiffIntvl: [2]int{99,99}, Ncols: 14, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
 	PgStatActivityQueryDefault = `SELECT
@@ -323,6 +344,7 @@ AND state != 'idle'
 {{ end }}
 ORDER BY pid DESC`
 
+	// PgStatActivityQuery96 queries for getting stats from pg_stat_activity view for versions prior 9.6
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery96, DiffIntvl: [2]int{99,99}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
 	PgStatActivityQuery96 = `SELECT
@@ -349,6 +371,7 @@ AND state != 'idle'
 {{ end }}
 ORDER BY pid DESC`
 
+	// PgStatActivityQuery95 queries activity stats from pg_stat_activity view from versions prior 9.5
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery95, DiffIntvl: [2]int{99,99}, Ncols: 12, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
 	PgStatActivityQuery95 = `SELECT
@@ -380,6 +403,7 @@ ORDER BY pid DESC`
 	// with no truncation, stats query used by pgCenter, in some circumstances (too many very long queries in
 	// pg_stat_statements) might executes too long in grouping and sorting operations.
 
+	// PgStatStatementsTimingQueryDefault is the default query for getting timings stats from pg_stat_statements view
 	// { Name: "pg_stat_statements_timing", Query: common.PgStatStatementsTimingQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsTimingQueryDefault = `SELECT
 a.rolname AS user,
@@ -404,6 +428,7 @@ JOIN pg_database d ON d.oid=p.dbid
 GROUP BY a.rolname, d.datname, left(p.query, 128)
 ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 
+	// PgStatStatementsGeneralQueryDefault is the default query for getting general stats from pg_stat_statements
 	// { Name: "pg_stat_statements_general", Query: common.PgStatStatementsGeneralQueryDefault, DiffIntvl: [2]int{4,5}, Ncols: 8, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsGeneralQueryDefault = `SELECT
 a.rolname AS user,
@@ -423,6 +448,7 @@ JOIN pg_database d ON d.oid=p.dbid
 GROUP BY a.rolname, d.datname, left(p.query, 128)
 ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 
+	// PgStatStatementsIoQueryDefault is the default query for getting IO stats from pg_stat_statements
 	// { Name: "pg_stat_statements_io", Query: common.PgStatStatementsIoQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsIoQueryDefault = `SELECT
 a.rolname AS user,
@@ -447,6 +473,7 @@ JOIN pg_database d ON d.oid=p.dbid
 GROUP BY a.rolname, d.datname, left(p.query, 128)
 ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 
+	// PgStatStatementsTempQueryDefault is the default query for getting stats about temp files IO from pg_stat_statements
 	// { Name: "pg_stat_statements_temp", Query: common.PgStatStatementsTempQueryDefault, DiffIntvl: [2]int{4,6}, Ncols: 9, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsTempQueryDefault = `SELECT
 a.rolname AS user,
@@ -467,6 +494,7 @@ JOIN pg_database d ON d.oid=p.dbid
 GROUP BY a.rolname, d.datname, left(p.query, 128)
 ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 
+	// PgStatStatementsLocalQueryDefault is the default query for getting stats about local buffers IO from pg_stat_statements
 	// { Name: "pg_stat_statements_local", Query: common.PgStatStatementsLocalQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsLocalQueryDefault = `SELECT
 a.rolname AS user,
@@ -492,7 +520,7 @@ GROUP BY a.rolname, d.datname, left(p.query, 128)
 ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
 )
 
-// Container with queries' settings that used depending on user preferences.
+// Options contains queries' settings that used depending on user preferences.
 type Options struct {
 	ViewType       string // Show stats including system tables/indexes
 	WalFunction1   string // Use old pg_xlog_* or newer pg_wal_* functions
@@ -502,7 +530,7 @@ type Options struct {
 	ShowNoIdle     bool   // don't show IDLEs, background workers)
 }
 
-// Transform query's template to a particular query
+// PrepareQuery transforms query's template to a particular query
 func PrepareQuery(s string, o Options) (string, error) {
 	t := template.Must(template.New("query").Parse(s))
 	buf := &bytes.Buffer{}
@@ -513,7 +541,7 @@ func PrepareQuery(s string, o Options) (string, error) {
 	return buf.String(), nil
 }
 
-// Adjust options that used for adjusting queries depending on Postgres version.
+// Adjust method used for adjusting query's options depending on Postgres version.
 func (o *Options) Adjust(pi PgInfo) {
 	// System tables and indexes aren't shown by default
 	o.ViewType = "user"

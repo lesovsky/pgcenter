@@ -15,21 +15,28 @@ const (
 
 	errCodeInvalidPassword = "28P01"
 
-	// Self-identification queries
-	PQhostQuery   = "SELECT coalesce(host(inet_server_addr())::text, current_setting('unix_socket_directories')) host"
-	PQportQuery   = "SELECT coalesce(inet_server_port(),5432)"
-	PQuserQuery   = "SELECT current_user"
-	PQdbQuery     = "SELECT current_database()"
+	// PQhostQuery identifies an address of used connection to Postgres, is it a network address or UNIX socket
+	PQhostQuery = "SELECT coalesce(host(inet_server_addr())::text, current_setting('unix_socket_directories')) host"
+	// PQportQuery identifies a port number of used connection to Postgres
+	PQportQuery = "SELECT coalesce(inet_server_port(),5432)"
+	// PQuserQuery identifies an user which used to connect to Postgres
+	PQuserQuery = "SELECT current_user"
+	// PQdbQuery identifies a database to which made the connection
+	PQdbQuery = "SELECT current_database()"
+	// PQstatusQuery is query used for checking status of the connection
 	PQstatusQuery = "SELECT 1"
 
-	// Session parameters used by pgCenter at connection start
-	LogMinDurationQuery   = "SET log_min_duration_statement TO 10000"
+	// LogMinDurationQuery specifies SQL to override log_min_duration_statement
+	LogMinDurationQuery = "SET log_min_duration_statement TO 10000"
+	// StatementTimeoutQuery specifies SQL to override statement_timeout
 	StatementTimeoutQuery = "SET statement_timeout TO 5000"
-	LockTimeoutQuery      = "SET lock_timeout TO 2000"
-	DeadlockTimeoutQuery  = "SET deadlock_timeout TO 1000"
+	// LockTimeoutQuery specifies SQL to override lock_timeout
+	LockTimeoutQuery = "SET lock_timeout TO 2000"
+	// DeadlockTimeoutQuery specifies SQL to override deadlock_timeout
+	DeadlockTimeoutQuery = "SET deadlock_timeout TO 1000"
 )
 
-// Assembles libpq connection string, connect to Postgres and returns 'connection' object
+// CreateConn assembles 'libpq' connection string, connects to Postgres and returns 'connection' object
 func CreateConn(c *Conninfo) (conn *sql.DB, err error) {
 	// Assemble libpq-style connection string
 	connstr := assembleConnstr(c)
@@ -67,7 +74,7 @@ func assembleConnstr(c *Conninfo) string {
 	return s
 }
 
-// Connect to Postgres, ask password if required.
+// PQconnectdb connects to Postgres, asks password if required.
 func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 	conn, err = sql.Open(dbDriver, connstr)
 	if err != nil {
@@ -82,8 +89,14 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 			case pqerr.Code == errCodeInvalidPassword:
 				fmt.Printf("Password for user %s: ", c.User)
 				bytePassword, err := terminal.ReadPassword(0)
+				if err != nil {
+					return nil, err
+				}
 				connstr = fmt.Sprintf("%s password=%s ", connstr, string(bytePassword))
 				conn, err = sql.Open(dbDriver, connstr)
+				if err != nil {
+					return nil, err
+				}
 				if err = PQstatus(conn); err != nil {
 					return nil, err
 				}
@@ -159,15 +172,15 @@ func setSafeSession(conn *sql.DB) {
 	for _, query := range []string{StatementTimeoutQuery, LockTimeoutQuery, DeadlockTimeoutQuery, LogMinDurationQuery} {
 		_, err := conn.Exec(query)
 		// Trying to SET superuser-only parameters without SUPERUSER privileges will lead to error, but it's not critical.
-		// Notice about occured error, clear it and go ahead.
+		// Notice about occurred error, clear it and go ahead.
 		if err, ok := err.(*pq.Error); ok {
 			fmt.Printf("%s: %s\nSTATEMENT: %s\n", err.Severity, err.Message, query)
 		}
-		err = nil
+		//err = nil
 	}
 }
 
-// Returns endpoint (hostname or UNIX-socket) to which pgCenter is connected
+// PQhost returns endpoint (network address or socket directory) to which pgCenter is connected
 func PQhost(c *sql.DB) (_ string, err error) {
 	var host sql.NullString
 	err = c.QueryRow(PQhostQuery).Scan(&host)
@@ -177,25 +190,25 @@ func PQhost(c *sql.DB) (_ string, err error) {
 	return host.String, nil
 }
 
-// Returns port number to which pgCenter is connected
+// PQport returns the port number to which pgCenter is connected
 func PQport(c *sql.DB) (i int, err error) {
 	err = c.QueryRow(PQportQuery).Scan(&i)
 	return i, err
 }
 
-// Returns username which is used by pgCenter
+// PQuser returns username which is used by pgCenter
 func PQuser(c *sql.DB) (s string, err error) {
 	err = c.QueryRow(PQuserQuery).Scan(&s)
 	return s, err
 }
 
-// Returns database name to which pgCenter is connected
+// PQdb returns database name to which pgCenter is connected
 func PQdb(c *sql.DB) (s string, err error) {
 	err = c.QueryRow(PQdbQuery).Scan(&s)
 	return s, err
 }
 
-// Returns connections status - just do 'SELECT 1' and return result - nil or err
+// PQstatus returns connections status - just do 'SELECT 1' and return result - nil or err
 func PQstatus(c *sql.DB) error {
 	var s string
 	return c.QueryRow(PQstatusQuery).Scan(&s)

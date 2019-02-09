@@ -13,7 +13,7 @@ import (
 	"text/template"
 )
 
-// Conatiner for report
+// Container for report
 type report struct {
 	AllTotalTime    string
 	AllIoTime       string
@@ -43,6 +43,7 @@ type report struct {
 }
 
 const (
+	// pgssReportQuery queries statements from pg_stat_statements and process stat on Postgres-side
 	pgssReportQuery = `WITH pg_stat_statements_normalized AS (
         SELECT *,
             regexp_replace(
@@ -123,6 +124,7 @@ const (
     )
     SELECT * FROM totals_readable CROSS JOIN statements_readable`
 
+	// reportTemplate is the template for the report shown to user
 	reportTemplate = `summary:
 	total_time: {{.AllTotalTime}}, cpu_time: {{.AllCpuTime}}, io_time: {{.AllIoTime}} (ALL: {{.AllTotalTimePct}}%, CPU: {{.AllCpuTimePct}}%, IO: {{.AllIoTimePct}}%)
 	total queries: {{.AllTotalQueries}}
@@ -139,7 +141,7 @@ query text (id: {{.QueryId}}):
 	{{.Query}}`
 )
 
-// Build a report an show.
+// buildQueryReport queries statements stats, generate the report and shows it.
 func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
 	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogQueryReport])
 	answer = strings.TrimSuffix(answer, "\n")
@@ -170,7 +172,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
 	return
 }
 
-// Print report in $PAGER program.
+// Print method prints report in $PAGER program.
 func (r *report) Print(g *gocui.Gui) error {
 	t := template.Must(template.New("query").Parse(reportTemplate))
 	buf := &bytes.Buffer{}
@@ -184,7 +186,7 @@ func (r *report) Print(g *gocui.Gui) error {
 	}
 
 	// Exit from UI, will restore it after $PAGER is closed.
-	do_exit <- 1
+	doExit <- 1
 	g.Close()
 
 	cmd := exec.Command(pager)

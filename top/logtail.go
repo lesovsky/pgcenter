@@ -1,5 +1,4 @@
-// Stuff related to Logtail AUXTYPE.
-
+// Package top -- stuff related to 'logtail' auxType.
 package top
 
 import (
@@ -7,8 +6,8 @@ import (
 	"os"
 )
 
-// Describes Postgres log and provides some metadata
-type Logfile struct {
+// postgresLogfile describes Postgres log file and provides some metadata
+type postgresLogfile struct {
 	Path       string   // Absolute path to logfile
 	File       *os.File // Pointer to opened logfile
 	Size       int64    // Size of the logfile (read file's content only when size grows)
@@ -17,11 +16,11 @@ type Logfile struct {
 }
 
 var (
-	pgLog Logfile
+	pgLog postgresLogfile
 )
 
-// Open logfile specified in Path variable.
-func (l *Logfile) Open() error {
+// Open method opens logfile specified in Path variable.
+func (l *postgresLogfile) Open() error {
 	var err error
 	l.File, err = os.Open(l.Path)
 	if err != nil {
@@ -31,13 +30,13 @@ func (l *Logfile) Open() error {
 	return nil
 }
 
-// Close logfile.
-func (l *Logfile) Close() error {
+// Close method closes logfile.
+func (l *postgresLogfile) Close() error {
 	return l.File.Close()
 }
 
-// Reopen logfile in case of rotate.
-func (l *Logfile) ReOpen() error {
+// ReOpen closes logfile and open it again in case of rotate.
+func (l *postgresLogfile) ReOpen() error {
 	var err error
 
 	if err = l.Close(); err != nil {
@@ -55,9 +54,8 @@ func (l *Logfile) ReOpen() error {
 	return nil
 }
 
-
-// Read logfile until required number of newlines aren't collected
-func (l *Logfile) Read() ([]byte, error) {
+// Read methos reads logfile until required number of newlines aren't collected
+func (l *postgresLogfile) Read() ([]byte, error) {
 	var offset int64 = -1 // offset used for per-byte backward reading of the logfile
 	var position int64    // position within the logfile from which reading starts
 	var startpos int64    // final position from which reading of required amount of lines will start

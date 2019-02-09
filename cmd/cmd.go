@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Root describes the CLI command of main profram
 var Root = &cobra.Command{
 	Use:     ProgramName,
 	Short:   "Admin tool for PostgreSQL",

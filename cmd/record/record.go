@@ -18,6 +18,7 @@ var (
 	opts    record.RecordOptions
 	oneshot bool
 
+	// CommandDefinition is the definition of 'record' CLI sub-command
 	CommandDefinition = &cobra.Command{
 		Use:     "record",
 		Short:   "record stats to file",

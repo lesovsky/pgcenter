@@ -6,6 +6,7 @@ import (
 	"github.com/lesovsky/pgcenter/lib/stat"
 )
 
+// Setup method performs context's setup - select queries and adjusts then depending on Postgres version
 func (o *RecordOptions) Setup(pginfo stat.PgInfo) {
 	o.contextList = stat.ContextList{
 		stat.DatabaseView:          &stat.PgStatDatabaseUnit,

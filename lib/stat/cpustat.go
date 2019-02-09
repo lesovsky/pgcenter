@@ -14,10 +14,11 @@ import (
 )
 
 const (
-	PROC_STAT          = "/proc/stat"
+	procStatFile       = "/proc/stat"
 	pgProcCpuStatQuery = "SELECT * FROM pgcenter.sys_proc_stat WHERE cpu = 'cpu'"
 )
 
+// CpuRawstat is a container for raw values collected from cpu-stat source
 type CpuRawstat struct {
 	Entry   string
 	User    float64
@@ -33,7 +34,7 @@ type CpuRawstat struct {
 	Total   float64
 }
 
-/* Struct for calculated CPU usage stats */
+// CpuUsage is a container for calculated CPU usage stats
 type CpuUsage struct {
 	User    float64
 	Sys     float64
@@ -45,12 +46,14 @@ type CpuUsage struct {
 	Steal   float64
 }
 
+// Cpustat contains current, previous CPU stats snapshots, and its delta as calculated 'usage' stats
 type Cpustat struct {
 	CurrCpuSample CpuRawstat
 	PrevCpuSample CpuRawstat
 	CpuUsage
 }
 
+// Read method reads CPU raw stats
 func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool) {
 	if isLocal {
 		s.ReadLocal()
@@ -59,9 +62,9 @@ func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool) {
 	}
 }
 
-/* Read CPU usage raw values from statfile and save to pre-calculation struct */
+// ReadLocal reads CPU raw stats from local 'procfs' filesystem
 func (s *CpuRawstat) ReadLocal() {
-	content, err := ioutil.ReadFile(PROC_STAT)
+	content, err := ioutil.ReadFile(procStatFile)
 	if err != nil {
 		return
 	}
@@ -91,6 +94,7 @@ func (s *CpuRawstat) ReadLocal() {
 	return
 }
 
+// ReadRemote method reads CPU raw stats from Postgres instance
 func (s *CpuRawstat) ReadRemote(conn *sql.DB) {
 	conn.QueryRow(pgProcCpuStatQuery).Scan(&s.Entry, &s.User, &s.Nice, &s.Sys, &s.Idle,
 		&s.Iowait, &s.Irq, &s.Softirq, &s.Steal, &s.Guest, &s.GstNice)
@@ -98,49 +102,18 @@ func (s *CpuRawstat) ReadRemote(conn *sql.DB) {
 	s.Total = s.User + s.Nice + s.Sys + s.Idle + s.Iowait + s.Irq + s.Softirq + s.Steal + s.Guest
 }
 
-/* Calculate CPU usage human-readable stat using raw values from pre-calculation struct */
+// Diff method calculates 'CPU usage' human-readable stat using current and previous snapshots
 func (u *CpuUsage) Diff(prev CpuRawstat, curr CpuRawstat) {
 	itv := curr.Total - prev.Total
 
-	u.User = s_value(prev.User, curr.User, itv, SysTicks)
-	u.Nice = s_value(prev.Nice, curr.Nice, itv, SysTicks)
-	u.Sys = s_value(prev.Sys, curr.Sys, itv, SysTicks)
-	u.Idle = s_value(prev.Idle, curr.Idle, itv, SysTicks)
-	u.Iowait = s_value(prev.Iowait, curr.Iowait, itv, SysTicks)
-	u.Irq = s_value(prev.Irq, curr.Irq, itv, SysTicks)
-	u.Softirq = s_value(prev.Softirq, curr.Softirq, itv, SysTicks)
-	u.Steal = s_value(prev.Steal, curr.Steal, itv, SysTicks)
+	u.User = sValue(prev.User, curr.User, itv, SysTicks)
+	u.Nice = sValue(prev.Nice, curr.Nice, itv, SysTicks)
+	u.Sys = sValue(prev.Sys, curr.Sys, itv, SysTicks)
+	u.Idle = sValue(prev.Idle, curr.Idle, itv, SysTicks)
+	u.Iowait = sValue(prev.Iowait, curr.Iowait, itv, SysTicks)
+	u.Irq = sValue(prev.Irq, curr.Irq, itv, SysTicks)
+	u.Softirq = sValue(prev.Softirq, curr.Softirq, itv, SysTicks)
+	u.Steal = sValue(prev.Steal, curr.Steal, itv, SysTicks)
 
 	return
-}
-
-// Function return number of ticks for particular mode
-func (s *CpuRawstat) SingleStat(mode string) (ticks float64) {
-	switch mode {
-	case "user":
-		ticks = s.User
-	case "nice":
-		ticks = s.Nice
-	case "system":
-		ticks = s.Sys
-	case "idle":
-		ticks = s.Idle
-	case "iowait":
-		ticks = s.Iowait
-	case "irq":
-		ticks = s.Irq
-	case "softirq":
-		ticks = s.Softirq
-	case "steal":
-		ticks = s.Steal
-	case "guest":
-		ticks = s.Guest
-	case "guest_nice":
-		ticks = s.GstNice
-	case "total":
-		ticks = s.Total
-	default:
-		ticks = 0
-	}
-	return ticks
 }

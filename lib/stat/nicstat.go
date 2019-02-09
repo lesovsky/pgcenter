@@ -12,7 +12,7 @@ import (
 	"math"
 )
 
-// Container for stats per single interface
+// Netdev is the container for stats related to a single network interface
 type Netdev struct {
 	Ifname string /* interface name */
 	Speed  uint32 /* interface network speed */
@@ -35,8 +35,8 @@ type Netdev struct {
 	Tcolls      float64 /* total number of detected collisions */
 	Tcarrier    float64 /* total number of carrier losses */
 	Tcompressed float64 /* total number of received multicast packets */
-	// enchanced
-	Packets     float64 /* total number of received or transmited packets */
+	// enhanced
+	Packets     float64 /* total number of received or transmitted packets */
 	Raverage    float64 /* average size of received packets */
 	Taverage    float64 /* average size of transmitted packets */
 	Saturation  float64 /* saturation - the number of errors/second seen for the interface */
@@ -46,10 +46,10 @@ type Netdev struct {
 	Uptime      float64 /* system uptime */
 }
 
-// Container for all stats from proc-file
+// Netdevs is the container for all stats of all network interfaces
 type Netdevs []Netdev
 
-// Container for previous, current and delta snapshots of stats
+// Nicstat is the container for previous, current and delta snapshots of stats
 type Nicstat struct {
 	CurrNetdevs Netdevs
 	PrevNetdevs Netdevs
@@ -57,12 +57,15 @@ type Nicstat struct {
 }
 
 const (
-	PROC_NETDEV             = "/proc/net/dev"
+	// ProcNetdevFile is the location of network interfaces statistics in 'procfs' filesystem
+	ProcNetdevFile = "/proc/net/dev"
+	// pgProcLinkSettingsQuery quering network interfaces' details from Postgres instance
 	pgProcLinkSettingsQuery = "SELECT speed::bigint * 1000000, duplex::bigint FROM pgcenter.get_netdev_link_settings($1);"
-	pgProcNetdevQuery       = "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
+	// pgProcNetdevQuery queries network interfaces stats from Postgres instance
+	pgProcNetdevQuery = "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
 )
 
-// Create a stats container of specified size
+// New creates a stats container of specified size
 func (c *Nicstat) New(size int) {
 	c.CurrNetdevs = make(Netdevs, size)
 	c.PrevNetdevs = make(Netdevs, size)
@@ -82,12 +85,12 @@ func (c Netdevs) Read(conn *sql.DB, isLocal bool) error {
 	return nil
 }
 
-// Read stats from local procfile source
+// ReadLocal reads stats from local 'procfs' filesystem
 func (c Netdevs) ReadLocal() error {
 	var j = 0
-	content, err := ioutil.ReadFile(PROC_NETDEV)
+	content, err := ioutil.ReadFile(ProcNetdevFile)
 	if err != nil {
-		return fmt.Errorf("failed to read %s", PROC_NETDEV)
+		return fmt.Errorf("failed to read %s", ProcNetdevFile)
 	}
 	reader := bufio.NewReader(bytes.NewBuffer(content))
 
@@ -113,7 +116,7 @@ func (c Netdevs) ReadLocal() error {
 			&ifs.Rbytes, &ifs.Rpackets, &ifs.Rerrs, &ifs.Rdrop, &ifs.Rfifo, &ifs.Rframe, &ifs.Rcompressed, &ifs.Rmulticast,
 			&ifs.Tbytes, &ifs.Tpackets, &ifs.Terrs, &ifs.Tdrop, &ifs.Tfifo, &ifs.Tcolls, &ifs.Tcarrier, &ifs.Tcompressed)
 		if err != nil {
-			return fmt.Errorf("failed to scan data from %s", PROC_NETDEV)
+			return fmt.Errorf("failed to scan data from %s", ProcNetdevFile)
 		}
 
 		ifs.Saturation = ifs.Rerrs + ifs.Rdrop + ifs.Tdrop + ifs.Tfifo + ifs.Tcolls + ifs.Tcarrier
@@ -128,7 +131,7 @@ func (c Netdevs) ReadLocal() error {
 	return nil
 }
 
-// Read stats from remote SQL schema
+// ReadRemote reads stats from remote Postgres instance
 func (c Netdevs) ReadRemote(conn *sql.DB) {
 	var uptime float64
 	conn.QueryRow(pgProcUptimeQuery).Scan(&uptime)
@@ -160,56 +163,56 @@ func (c Netdevs) ReadRemote(conn *sql.DB) {
 	}
 }
 
-// Compare stats between two container and create delta
-func (d Netdevs) Diff(c Netdevs, p Netdevs) {
-	for i := 0; i < len(c); i++ {
+// Diff compares stats between two container and create delta
+func (c Netdevs) Diff(curr Netdevs, prev Netdevs) {
+	for i := 0; i < len(curr); i++ {
 		// Skip inactive interfaces
-		if c[i].Rpackets+c[i].Tpackets == 0 {
+		if curr[i].Rpackets+curr[i].Tpackets == 0 {
 			continue
 		}
 
-		itv := c[i].Uptime - p[i].Uptime
-		d[i].Ifname = c[i].Ifname
-		d[i].Rbytes = s_value(p[i].Rbytes, c[i].Rbytes, itv, SysTicks)
-		d[i].Tbytes = s_value(p[i].Tbytes, c[i].Tbytes, itv, SysTicks)
-		d[i].Rpackets = s_value(p[i].Rpackets, c[i].Rpackets, itv, SysTicks)
-		d[i].Tpackets = s_value(p[i].Tpackets, c[i].Tpackets, itv, SysTicks)
-		d[i].Rerrs = s_value(p[i].Rerrs, c[i].Rerrs, itv, SysTicks)
-		d[i].Terrs = s_value(p[i].Terrs, c[i].Terrs, itv, SysTicks)
-		d[i].Tcolls = s_value(p[i].Tcolls, c[i].Tcolls, itv, SysTicks)
-		d[i].Saturation = s_value(p[i].Saturation, c[i].Saturation, itv, SysTicks)
+		itv := curr[i].Uptime - prev[i].Uptime
+		c[i].Ifname = curr[i].Ifname
+		c[i].Rbytes = sValue(prev[i].Rbytes, curr[i].Rbytes, itv, SysTicks)
+		c[i].Tbytes = sValue(prev[i].Tbytes, curr[i].Tbytes, itv, SysTicks)
+		c[i].Rpackets = sValue(prev[i].Rpackets, curr[i].Rpackets, itv, SysTicks)
+		c[i].Tpackets = sValue(prev[i].Tpackets, curr[i].Tpackets, itv, SysTicks)
+		c[i].Rerrs = sValue(prev[i].Rerrs, curr[i].Rerrs, itv, SysTicks)
+		c[i].Terrs = sValue(prev[i].Terrs, curr[i].Terrs, itv, SysTicks)
+		c[i].Tcolls = sValue(prev[i].Tcolls, curr[i].Tcolls, itv, SysTicks)
+		c[i].Saturation = sValue(prev[i].Saturation, curr[i].Saturation, itv, SysTicks)
 
-		d[i].Speed = c[i].Speed
-		d[i].Duplex = c[i].Duplex
+		c[i].Speed = curr[i].Speed
+		c[i].Duplex = curr[i].Duplex
 
-		if d[i].Rpackets > 0 {
-			d[i].Raverage = d[i].Rbytes / d[i].Rpackets
+		if c[i].Rpackets > 0 {
+			c[i].Raverage = c[i].Rbytes / c[i].Rpackets
 		} else {
-			d[i].Raverage = 0
+			c[i].Raverage = 0
 		}
-		if d[i].Tpackets > 0 {
-			d[i].Taverage = d[i].Tbytes / d[i].Tpackets
+		if c[i].Tpackets > 0 {
+			c[i].Taverage = c[i].Tbytes / c[i].Tpackets
 		} else {
-			d[i].Taverage = 0
+			c[i].Taverage = 0
 		}
 
-		d[i].Packets = c[i].Rpackets + c[i].Tpackets
+		c[i].Packets = curr[i].Rpackets + curr[i].Tpackets
 
 		/* Calculate utilization */
-		if c[i].Speed > 0 {
+		if curr[i].Speed > 0 {
 			/* The following have a mysterious "800", it is 100 for the % conversion, and 8 for bytes2bits. */
-			d[i].Rutil = math.Min(d[i].Rbytes*800/float64(c[i].Speed), 100)
-			d[i].Tutil = math.Min(d[i].Tbytes*800/float64(c[i].Speed), 100)
+			c[i].Rutil = math.Min(c[i].Rbytes*800/float64(curr[i].Speed), 100)
+			c[i].Tutil = math.Min(c[i].Tbytes*800/float64(curr[i].Speed), 100)
 
-			switch c[i].Duplex {
-			case DUPLEX_FULL:
-				d[i].Utilization = math.Max(d[i].Rutil, d[i].Tutil)
-			case DUPLEX_HALF:
-				d[i].Utilization = math.Min((d[i].Rbytes+d[i].Tbytes)*800/float64(c[i].Speed), 100)
-			case DUPLEX_UNKNOWN:
+			switch curr[i].Duplex {
+			case duplexFull:
+				c[i].Utilization = math.Max(c[i].Rutil, c[i].Tutil)
+			case duplexHalf:
+				c[i].Utilization = math.Min((c[i].Rbytes+c[i].Tbytes)*800/float64(curr[i].Speed), 100)
+			case duplexUnknown:
 			}
 		} else {
-			d[i].Rutil, d[i].Tutil, d[i].Utilization = 0, 0, 0
+			c[i].Rutil, c[i].Tutil, c[i].Utilization = 0, 0, 0
 		}
 	}
 }
@@ -225,53 +228,4 @@ func (c Netdevs) Print() {
 			c[i].Rerrs, c[i].Terrs, c[i].Tcolls,
 			c[i].Saturation, c[i].Rutil, c[i].Tutil, c[i].Utilization)
 	}
-}
-
-// Function returns value of particular stat of an interface
-func (c Netdev) SingleStat(stat string) (value float64) {
-	switch stat {
-	case "rbytes":
-		value = c.Rbytes
-	case "rpackets":
-		value = c.Rpackets
-	case "rerrs":
-		value = c.Rerrs
-	case "rdrop":
-		value = c.Rdrop
-	case "rfifo":
-		value = c.Rfifo
-	case "rframe":
-		value = c.Rframe
-	case "rcompressed":
-		value = c.Rcompressed
-	case "rmulticast":
-		value = c.Rmulticast
-	case "tbytes":
-		value = c.Tbytes
-	case "tpackets":
-		value = c.Tpackets
-	case "terrs":
-		value = c.Terrs
-	case "tdrop":
-		value = c.Tdrop
-	case "tfifo":
-		value = c.Tfifo
-	case "tcolls":
-		value = c.Tcolls
-	case "tcarrier":
-		value = c.Tcarrier
-	case "tcompressed":
-		value = c.Tcompressed
-	case "saturation":
-		value = c.Saturation
-	case "uptime":
-		value = c.Uptime
-	case "speed":
-		value = float64(c.Speed)
-	case "duplex":
-		value = float64(c.Duplex)
-	default:
-		value = 0
-	}
-	return value
 }

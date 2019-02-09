@@ -1,5 +1,5 @@
-// Auxiliary (aux) stats is not displayed by default and can be enabled if needed. Aux stats includes diskstat, nicstat
-// and logtail.
+// Package top -- auxiliary (aux) stats is not displayed by default and can be enabled if needed.
+// Aux stats includes diskstat, nicstat and logtail.
 package top
 
 import (
@@ -9,17 +9,17 @@ import (
 	"os"
 )
 
-type AuxType int
+type auxType int
 
 const (
-	AUX_NONE AuxType = iota
-	AUX_DISKSTAT
-	AUX_NICSTAT
-	AUX_LOGTAIL
+	auxNone auxType = iota
+	auxDiskstat
+	auxNicstat
+	auxLogtail
 )
 
 // Prepares aux stat - open or close dedicated 'view' in which stats are displayed, create stats containers or open log.
-func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
+func showAux(auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// Close 'view' if passed type of aux stats are already displayed
 		if ctx.aux == auxtype {
@@ -31,11 +31,11 @@ func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
 		// get number of devices and create appropriate storages. For logtail, a logfile have to be opened. In the end,
 		// set passed 'auxtype' in the context and aux stats can be displayed in the statsLoop().
 		switch auxtype {
-		case AUX_DISKSTAT:
+		case auxDiskstat:
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountLines(stat.PROC_DISKSTATS, conn, conninfo.ConnLocal)
+			nlines, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil)
@@ -43,12 +43,12 @@ func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
 			stats.Iostat.New(nlines)
 			ctx.aux = auxtype
 			printCmdline(g, "Show diskstats")
-			do_update <- 1
-		case AUX_NICSTAT:
+			doUpdate <- 1
+		case auxNicstat:
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountLines(stat.PROC_NETDEV, conn, conninfo.ConnLocal)
+			nlines, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil)
@@ -56,8 +56,8 @@ func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
 			stats.Nicstat.New(nlines)
 			ctx.aux = auxtype
 			printCmdline(g, "Show nicstat")
-			do_update <- 1
-		case AUX_LOGTAIL:
+			doUpdate <- 1
+		case auxLogtail:
 			if !conninfo.ConnLocal {
 				printCmdline(g, "Log tail is not supported for remote hosts")
 				return nil
@@ -85,7 +85,7 @@ func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
 			}
 			ctx.aux = auxtype
 			printCmdline(g, "Show logtail")
-			do_update <- 1
+			doUpdate <- 1
 		}
 
 		return nil
@@ -95,8 +95,8 @@ func showAux(auxtype AuxType) func(g *gocui.Gui, _ *gocui.View) error {
 // Depending on current AUXTYPE read specific stats: Diskstat, Nicstat. Logtail AUXTYPE processed separately.
 func getAuxStat(g *gocui.Gui) {
 	switch ctx.aux {
-	case AUX_DISKSTAT:
-		ndev, err := stat.CountLines(stat.PROC_DISKSTATS, conn, conninfo.ConnLocal)
+	case auxDiskstat:
+		ndev, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal)
 		if err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
@@ -113,8 +113,8 @@ func getAuxStat(g *gocui.Gui) {
 			stats.DiffDiskstats.Diff(stats.CurrDiskstats, stats.PrevDiskstats)
 			copy(stats.PrevDiskstats, stats.CurrDiskstats)
 		}
-	case AUX_NICSTAT:
-		ndev, err := stat.CountLines(stat.PROC_NETDEV, conn, conninfo.ConnLocal)
+	case auxNicstat:
+		ndev, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal)
 		if err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
@@ -131,7 +131,7 @@ func getAuxStat(g *gocui.Gui) {
 			stats.DiffNetdevs.Diff(stats.CurrNetdevs, stats.PrevNetdevs)
 			copy(stats.PrevNetdevs, stats.CurrNetdevs)
 		}
-	case AUX_NONE:
+	case auxNone:
 		// do nothing
 	}
 }
@@ -150,9 +150,9 @@ func openAuxView(g *gocui.Gui, _ *gocui.View) error {
 
 // Close 'gocui' object
 func closeAuxView(g *gocui.Gui, _ *gocui.View) error {
-	if ctx.aux > AUX_NONE {
+	if ctx.aux > auxNone {
 		g.DeleteView("aux")
-		ctx.aux = AUX_NONE
+		ctx.aux = auxNone
 	}
 	return nil
 }

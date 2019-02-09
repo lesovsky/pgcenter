@@ -7,12 +7,17 @@ import (
 )
 
 const (
-	ProgramName      = "pgcenter"
-	ProgramVersion   = "0.5"
-	ProgramRelease   = "0"
+	// ProgramName is the name of this program
+	ProgramName = "pgcenter"
+	// ProgramVersion is the version of this program
+	ProgramVersion = "0.5"
+	// ProgramRelease is release number of this program
+	ProgramRelease = "0"
+	// ProgramIssuesUrl is the public URL for posting issues, bug reports and asking questions
 	ProgramIssuesUrl = "https://github.com/lesovsky/pgcenter/issues"
 )
 
+// PrintVersion prints the name and version of this program
 func PrintVersion() string {
 	return fmt.Sprintf("%s %s.%s\n", ProgramName, ProgramVersion, ProgramRelease)
 }

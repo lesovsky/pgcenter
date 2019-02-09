@@ -12,7 +12,7 @@ package stat
 
 import "regexp"
 
-// Single unit of stats context.
+// ContextUnit describes a single unit of stats context.
 type ContextUnit struct {
 	Name      string                 // Context name
 	Query     string                 // Query used by default
@@ -27,10 +27,11 @@ type ContextUnit struct {
 	Filters   map[int]*regexp.Regexp // Storage for filter patterns: key is the column index, value - regexp pattern
 }
 
-// List of used context units.
+// ContextList is a list of all used context units.
 type ContextList map[string]*ContextUnit
 
 var (
+	// PgStatDatabaseUnit describes how to handle pg_stat_database view
 	PgStatDatabaseUnit = ContextUnit{
 		Name:      DatabaseView,
 		Query:     PgStatDatabaseQueryDefault,
@@ -42,7 +43,7 @@ var (
 		Msg:       "Show databases statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatReplicationUnit describes how to handle pg_stat_replication view
 	PgStatReplicationUnit = ContextUnit{
 		Name:      ReplicationView,
 		Query:     PgStatReplicationQueryDefault,
@@ -54,7 +55,7 @@ var (
 		Msg:       "Show replication statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatTablesUnit describes how to handle pg_stat_all_tables and pg_statio_all_tables views
 	PgStatTablesUnit = ContextUnit{
 		Name:      TablesView,
 		Query:     PgStatTablesQueryDefault,
@@ -66,7 +67,7 @@ var (
 		Msg:       "Show tables statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatIndexesUnit describes how to handle pg_stat_all_indexes and pg_statio_all_indeexs views
 	PgStatIndexesUnit = ContextUnit{
 		Name:      IndexesView,
 		Query:     PgStatIndexesQueryDefault,
@@ -78,7 +79,7 @@ var (
 		Msg:       "Show indexes statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgTablesSizesUnit describes how to handle statistics about tables sizes
 	PgTablesSizesUnit = ContextUnit{
 		Name:      SizesView,
 		Query:     PgTablesSizesQueryDefault,
@@ -90,7 +91,7 @@ var (
 		Msg:       "Show tables sizes statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatFunctionsUnit describes how to handle pg_stat_user_functions view
 	PgStatFunctionsUnit = ContextUnit{
 		Name:      FunctionsView,
 		Query:     PgStatFunctionsQueryDefault,
@@ -102,7 +103,7 @@ var (
 		Msg:       "Show functions statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
 	PgStatVacuumUnit = ContextUnit{
 		Name:  VacuumView,
 		Query: PgStatVacuumQueryDefault,
@@ -115,7 +116,7 @@ var (
 		Msg:       "Show vacuum statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgStatActivityUnit describes how to handle pg_stat_activity view
 	PgStatActivityUnit = ContextUnit{
 		Name:      ActivityView,
 		Query:     PgStatActivityQueryDefault,
@@ -127,7 +128,7 @@ var (
 		Msg:       "Show activity statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgSSTimingUnit describes how to handle pg_stat_statements view with timing stats
 	PgSSTimingUnit = ContextUnit{
 		Name:      StatementsTimingView,
 		Query:     PgStatStatementsTimingQueryDefault,
@@ -140,7 +141,7 @@ var (
 		Msg:       "Show statements timings statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgSSGeneralUnit describes how to handle pg_stat_statements view with general stats
 	PgSSGeneralUnit = ContextUnit{
 		Name:      StatementsGeneralView,
 		Query:     PgStatStatementsGeneralQueryDefault,
@@ -153,7 +154,7 @@ var (
 		Msg:       "Show statements general statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgSSIoUnit describes how to handle pg_stat_statements view with stats related to buffers IO
 	PgSSIoUnit = ContextUnit{
 		Name:      StatementsIOView,
 		Query:     PgStatStatementsIoQueryDefault,
@@ -166,7 +167,7 @@ var (
 		Msg:       "Show statements IO statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgSSTempUnit describes how to handle pg_stat_statements view with stats related to temp files IO
 	PgSSTempUnit = ContextUnit{
 		Name:      StatementsTempView,
 		Query:     PgStatStatementsTempQueryDefault,
@@ -179,7 +180,7 @@ var (
 		Msg:       "Show statements temp files statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
-
+	// PgSSLocalUnit describes how to handle pg_stat_statements view with stats related to local buffers IO
 	PgSSLocalUnit = ContextUnit{
 		Name:      StatementsLocalView,
 		Query:     PgStatStatementsLocalQueryDefault,
@@ -194,6 +195,7 @@ var (
 	}
 )
 
+// AdjustQueries performs adjusting of queries accordingly to Postgres version
 func (cl ContextList) AdjustQueries(pi PgInfo) {
 	for c := range cl {
 		switch c {

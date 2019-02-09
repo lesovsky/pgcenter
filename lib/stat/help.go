@@ -1,6 +1,7 @@
 package stat
 
 const (
+	// PgStatDatabaseDescription is the detailed description of pg_stat_database view
 	PgStatDatabaseDescription = `Database-wide statistics based on pg_stat_database view:
 
   column	origin		description
@@ -33,6 +34,7 @@ const (
 
 Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG-STAT-DATABASE-VIEW`
 
+	// PgStatReplicationDescription is the detailed description of pg_stat_replication view
 	PgStatReplicationDescription = `Streaming replication statistics based on pg_stat_replication view:
 
   column	origin			description
@@ -61,6 +63,7 @@ Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-REPLICATION-VIEW`
 
+	// PgStatTablesDescription is the detailed description of pg_stat_all_tables and pg_statio_all_tables views
 	PgStatTablesDescription = `Tables' statistics based on pg_stat_all_tables and pg_statio_all_tables views:
 
   column	origin			description
@@ -89,6 +92,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-R
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-TABLES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-TABLES-VIEW`
 
+	// PgStatIndexesDescription is the detailed description of pg_stat_all_indexes and pg_statio_all_indexes views
 	PgStatIndexesDescription = `Indexes' statistics based on pg_stat_all_indexes and pg_statio_all_indexes views:
 
   column	origin				description
@@ -104,6 +108,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-INDEXES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-INDEXES-VIEW`
 
+	// PgStatFunctionsDescription is the detailed description of pg_stat_user_functions view
 	PgStatFunctionsDescription = `Functions' statistics based on pg_stat_user_functions view:
 
   column	origin			description
@@ -120,6 +125,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-USER-FUNCTIONS-VIEW`
 
+	// PgStatSizesDescription is the detailed description of stats about tables sizes
 	PgStatSizesDescription = `Statistics about sizes of tables based on pg_*_size() functions:
 
   column	origin	description
@@ -135,6 +141,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-U
 
 Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-DBOBJECT`
 
+	// PgStatActivityDescription is the detailed description of pg_stat_activity view
 	PgStatActivityDescription = `Activity statistics based on pg_stat_activity view:
 
   column	origin			description
@@ -157,6 +164,7 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`
 
+	// PgStatVacuumDescription is the detailed description of pg_stat_progress_vacuum view
 	PgStatVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
 
   column	origin			description
@@ -179,6 +187,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
 
+	// PgStatStatementsTimingDescription is the detailed description of pg_stat_statements section about timing stats
 	PgStatStatementsTimingDescription = `Statements timing statistics based on pg_stat_statements:
 
   column	origin			description
@@ -200,6 +209,7 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
+	// PgStatStatementsGeneralDescription is the detailed description of pg_stat_statements section about general stats
 	PgStatStatementsGeneralDescription = `Statements general statistics based on pg_stat_statements:
 
   column	origin			description
@@ -216,6 +226,7 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
+	// PgStatStatementsIODescription is the detailed description of pg_stat_statements section about buffers IO stats
 	PgStatStatementsIODescription = `Statements statistics related to I/O, based on pg_stat_statements:
 
   column	origin			description
@@ -237,6 +248,7 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
+	// PgStatStatementsTempDescription is the detailed description of pg_stat_statements section about temp files IO stats
 	PgStatStatementsTempDescription = `Statements statistics related to temp I/O, based on pg_stat_statements:
 
   column	origin			description
@@ -254,6 +266,7 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html`
 
+	// PgStatStatementsLocalDescription is the detailed description of pg_stat_statements section about local buffers IO stats
 	PgStatStatementsLocalDescription = `Statements statistics related to local I/O, based on pg_stat_statements:
 
   column	origin			description

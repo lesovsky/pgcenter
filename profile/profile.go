@@ -22,7 +22,7 @@ type waitEvent struct {
 // A slice of wait_events that implements sort.Interface to sort by values
 type waitEventsList []waitEvent
 
-// Stats struct with data retrieved from Postgres' pg_stat_activity
+// TraceStat describes data retrieved from Postgres' pg_stat_activity view
 type TraceStat struct {
 	queryDurationSec sql.NullFloat64
 	stateChangeTime  sql.NullString
@@ -31,7 +31,7 @@ type TraceStat struct {
 	queryText        sql.NullString
 }
 
-// Program configuration options
+// TraceOptions defines program's configuration options
 type TraceOptions struct {
 	Pid      int           // PID of profiled backend
 	Interval time.Duration // Profiling interval
@@ -50,13 +50,13 @@ var (
 	waitEventDurations = make(map[string]float64) // wait events and its durations
 	waitEventPercents  = make(map[string]float64) // wait events and its percent ratios
 
-	signal_chan = make(chan os.Signal, 1)
-	exit_chan   = make(chan int)
+	signalChan = make(chan os.Signal, 1)
+	exitChan   = make(chan int)
 )
 
-// Main function for 'pgcenter profile' command
+// RunMain is the main entry point for 'pgcenter profile' command
 func RunMain(args []string, conninfo utils.Conninfo, opts TraceOptions) {
-	signal.Notify(signal_chan, syscall.SIGINT)
+	signal.Notify(signalChan, syscall.SIGINT)
 
 	// Handle extra arguments passed
 	utils.HandleExtraArgs(args, &conninfo)
@@ -72,10 +72,10 @@ func RunMain(args []string, conninfo utils.Conninfo, opts TraceOptions) {
 	go profileLoop(conn, opts)
 	go checkSignal()
 
-	<-exit_chan
+	<-exitChan
 }
 
-// Main program loop
+// Main profiling loop
 func profileLoop(conn *sql.DB, opts TraceOptions) {
 	prev, curr := TraceStat{}, TraceStat{}
 	startup := true
@@ -95,11 +95,11 @@ func profileLoop(conn *sql.DB, opts TraceOptions) {
 			printStat()
 			fmt.Printf("LOG: Process with pid %d doesn't exist (%s)\n", opts.Pid, err)
 			fmt.Printf("LOG: Stop profiling\n")
-			exit_chan <- 1
+			exitChan <- 1
 			break
 		} else if err != nil {
 			fmt.Printf("ERROR: failed to scan row: %s", err)
-			exit_chan <- 1
+			exitChan <- 1
 			break
 		}
 
@@ -213,10 +213,10 @@ func printStat() {
 // Check for SIGINT, dump stats if catched and exit
 func checkSignal() {
 	for {
-		sig := <-signal_chan
+		sig := <-signalChan
 		switch sig {
 		case syscall.SIGINT:
-			exit_chan <- 1
+			exitChan <- 1
 			return
 		default:
 			fmt.Println("LOG: unknown signal, ignore")

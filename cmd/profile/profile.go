@@ -10,11 +10,12 @@ import (
 )
 
 var (
-	conn utils.Conninfo
-	opts profile.TraceOptions
+	conn      utils.Conninfo
+	opts      profile.TraceOptions
 	frequency int
 )
 
+// CommandDefinition is the definition of 'profile' CLI sub-command
 var CommandDefinition = &cobra.Command{
 	Use:     "profile",
 	Short:   "wait events profiler",

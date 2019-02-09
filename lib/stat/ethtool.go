@@ -1,5 +1,5 @@
-// Stuff related to ethtool - link control and status
-// Check out https://github.com/torvalds/linux/blob/master/include/uapi/linux/ethtool.h - see struct ethtool_link_settings
+// Package stat -- stuff related to ethtool - link control and status
+// Check out https://github.com/torvalds/linux/blob/master/include/uapi/linux/ethtool.h - see ethtool_link_settings{} struct
 // C code example -- https://stackoverflow.com/questions/41822920/how-to-get-ethtool-settings
 package stat
 
@@ -9,64 +9,66 @@ import (
 	"unsafe"
 )
 
+// Ethtool describes ethtool communication channel
 type Ethtool struct {
 	fd int
 }
 
-// struct ethtool_cmd - link control and status - DEPRECATED struct
+// EthtoolCmd describes deprecated ethtool_cmd{} C struct used for managing link control and status. DEPRECATED struct
 type EthtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
-	Cmd              uint32 // Command number = %ETHTOOL_GSET or %ETHTOOL_SSET
-	Supported        uint32 // Bitmask of %SUPPORTED_* flags for the link modes and features
-	Advertising      uint32 // Bitmask of %ADVERTISED_* flags for the link modes and features
-	Speed            uint16 // Low bits of the speed, 1Mb units, 0 to INT_MAX or SPEED_UNKNOWN
-	Duplex           uint8  // Duplex mode; one of %DUPLEX_*
-	Port             uint8  // Physical connector type; one of %PORT_*
-	Phy_address      uint8  // MDIO address of PHY (transceiver)
-	Transceiver      uint8  // Historically used to distinguish different possible PHY types
-	Autoneg          uint8  // Enable/disable autonegotiation and auto-detection
-	Mdio_support     uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols
-	Maxtxpkt         uint32 // Historically used to report TX IRQ coalescing
-	Maxrxpkt         uint32 // Historically used to report RX IRQ coalescing
-	Speed_hi         uint16 // High bits of the speed, 1Mb units, 0 to INT_MAX or SPEED_UNKNOWN
-	Eth_tp_mdix      uint8  // Ethernet twisted-pair MDI(-X) status
-	Eth_tp_mdix_ctrl uint8  // Ethernet twisted pair MDI(-X) control
-	Lp_advertising   uint32 // Bitmask of %ADVERTISED_* flags for the link modes and features
-	Reserved         [2]uint32
+	Cmd           uint32 // Command number = %ETHTOOL_GSET or %ETHTOOL_SSET
+	Supported     uint32 // Bitmask of %SUPPORTED_* flags for the link modes and features
+	Advertising   uint32 // Bitmask of %ADVERTISED_* flags for the link modes and features
+	Speed         uint16 // Low bits of the speed, 1Mb units, 0 to INT_MAX or SPEED_UNKNOWN
+	Duplex        uint8  // Duplex mode; one of %DUPLEX_*
+	Port          uint8  // Physical connector type; one of %PORT_*
+	PhyAddress    uint8  // MDIO address of PHY (transceiver) -- origin 'phy_address'
+	Transceiver   uint8  // Historically used to distinguish different possible PHY types
+	Autoneg       uint8  // Enable/disable autonegotiation and auto-detection
+	MdioSupport   uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols -- origin 'mdio_support'
+	Maxtxpkt      uint32 // Historically used to report TX IRQ coalescing
+	Maxrxpkt      uint32 // Historically used to report RX IRQ coalescing
+	SpeedHi       uint16 // High bits of the speed, 1Mb units, 0 to INT_MAX or SPEED_UNKNOWN -- origin 'speed_hi'
+	EthTpMdix     uint8  // Ethernet twisted-pair MDI(-X) status -- origin 'eth_tp_mdix'
+	EthTpMdixCtrl uint8  // Ethernet twisted pair MDI(-X) control -- origin 'eth_tp_mdix_ctrl'
+	LpAdvertising uint32 // Bitmask of %ADVERTISED_* flags for the link modes and features -- origin 'lp_advertising'
+	Reserved      [2]uint32
 }
 
-// struct ethtool_link_settings - link control and status - NEWER struct
+// EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct
 type EthtoolLinkSettings struct {
-	Cmd                    uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
-	Speed                  uint32 // Link speed (Mbps)
-	Duplex                 uint8  // Duplex mode; one of %DUPLEX_*
-	Port                   uint8  // Physical connector type; one of %PORT_*
-	Phy_address            uint8  // MDIO address of PHY (transceiver)
-	Autoneg                uint8  // Enable/disable autonegotiation and auto-detection
-	Mdio_support           uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols supported by the interface
-	Eth_tp_mdix            uint8  // Ethernet twisted-pair MDI(-X) status
-	Eth_tp_mdix_ctrl       uint8  // Ethernet twisted pair MDI(-X) control
-	Link_mode_masks_nwords uint8  // Number of 32-bit words for each of the supported, advertising, lp_advertising link mode bitmaps.
-	Transceiver            uint8  // Used to distinguish different possible PHY types
-	Reserved1              [3]uint8
-	Reserved               [7]uint32
-	Link_mode_masks        [0]uint32
+	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
+	Speed               uint32 // Link speed (Mbps)
+	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
+	Port                uint8  // Physical connector type; one of %PORT_*
+	PhyAddress          uint8  // MDIO address of PHY (transceiver) -- origin 'phy_address'
+	Autoneg             uint8  // Enable/disable autonegotiation and auto-detection
+	MdioSupport         uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols supported by the interface -- origin 'mdio_support'
+	EthTpMdix           uint8  // Ethernet twisted-pair MDI(-X) status -- origin 'eth_tp_mdix'
+	EthTpMdixCtrl       uint8  // Ethernet twisted pair MDI(-X) control -- origin 'eth_tp_mdix_ctrl'
+	LinkModeMasksNwords uint8  // Number of 32-bit words for each of the supported, advertising, lp_advertising link mode bitmaps. -- origin 'link_mode_masks_nwords'
+	Transceiver         uint8  // Used to distinguish different possible PHY types
+	Reserved1           [3]uint8
+	Reserved            [7]uint32
+	LinkModeMasks       [0]uint32 // -- origin 'link_mode_masks'
 }
 
 type ifreq struct {
-	ifr_name [IFNAMSIZ]byte
-	ifr_data uintptr
+	ifrName [ifNameSize]byte
+	ifrData uintptr
 }
 
 const (
-	ETHTOOL_GSET          = 0x00000001 /* get settings -- DEPRECATED */
-	ETHTOOL_GLINKSETTINGS = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
-	IFNAMSIZ              = 16         /* maximum size of an interface name */
-	SIOCETHTOOL           = 0x8946     /* ioctl ethtool request */
-	DUPLEX_HALF           = 0
-	DUPLEX_FULL           = 1
-	DUPLEX_UNKNOWN        = 255
+	ethtoolGset          = 0x00000001 /* get settings -- DEPRECATED */
+	ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
+	ifNameSize           = 16         /* maximum size of an interface name */
+	siocEthtool          = 0x8946     /* ioctl ethtool request */
+	duplexHalf           = 0
+	duplexFull           = 1
+	duplexUnknown        = 255
 )
 
+// GetLinkSettings asks network interface settings using ethtool
 func GetLinkSettings(ifname string) (uint32, uint8, error) {
 	e, err := NewEthtool()
 	if err != nil {
@@ -75,19 +77,19 @@ func GetLinkSettings(ifname string) (uint32, uint8, error) {
 	defer e.Close()
 
 	ecmd := EthtoolCmd{
-		Cmd: ETHTOOL_GSET,
+		Cmd: ethtoolGset,
 	}
 
-	var name [IFNAMSIZ]byte
+	var name [ifNameSize]byte
 	copy(name[:], []byte(ifname))
 
 	ifr := ifreq{
-		ifr_name: name,
-		ifr_data: uintptr(unsafe.Pointer(&ecmd)),
+		ifrName: name,
+		ifrData: uintptr(unsafe.Pointer(&ecmd)),
 	}
 
 	_, _, ep := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd),
-		SIOCETHTOOL, uintptr(unsafe.Pointer(&ifr)))
+		siocEthtool, uintptr(unsafe.Pointer(&ifr)))
 	if ep != 0 {
 		return 0, 0, fmt.Errorf("ioctl failed: %s", syscall.Errno(ep))
 	}
@@ -97,6 +99,7 @@ func GetLinkSettings(ifname string) (uint32, uint8, error) {
 	return uint32(ecmd.Speed) * 1000000, ecmd.Duplex, nil
 }
 
+// NewEthtool opens communication channel for ethtool
 func NewEthtool() (*Ethtool, error) {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
 	if err != nil {
@@ -108,6 +111,7 @@ func NewEthtool() (*Ethtool, error) {
 	}, nil
 }
 
+// Close method closes ethtool communication channel
 func (e *Ethtool) Close() {
 	syscall.Close(e.fd)
 }

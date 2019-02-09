@@ -15,7 +15,7 @@ var (
 	conn     *sql.DB
 )
 
-// Main function for 'pgcenter top' command
+// RunMain is the main entry point for 'pgcenter top' command
 func RunMain(args []string, c utils.Conninfo) {
 	var err error
 

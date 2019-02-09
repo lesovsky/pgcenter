@@ -45,7 +45,7 @@ func uiLoop() error {
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 			// check errors rate and quit if them too much - allow no more than 5 errors within 1 second
 			if err := e.Check(errInterval, errMaxcount); err != nil {
-				return fmt.Errorf("FATAL: gui main loop failed with %s (%d errors within %.0f seconds).", err, e.err_cnt, e.t_elapsed.Seconds())
+				return fmt.Errorf("FATAL: gui main loop failed with %s (%d errors within %.0f seconds).", err, e.errCnt, e.timeElapsed.Seconds())
 			}
 			// ignore errors if they are seldom - just rebuild UI
 		}
@@ -99,7 +99,7 @@ func layout(g *gocui.Gui) error {
 	}
 
 	// Aux stats view
-	if ctx.aux > AUX_NONE {
+	if ctx.aux > auxNone {
 		if v, err := g.SetView("aux", -1, 3*maxY/5-1, maxX-1, maxY-1); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set aux view on layout failed: %s", err)

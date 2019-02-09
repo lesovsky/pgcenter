@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	PROC_MEMINFO       = "/proc/meminfo"
+	procMeminfoFile    = "/proc/meminfo"
 	pgProcMeminfoQuery = `SELECT metric, metric_value
 		FROM pgcenter.sys_proc_meminfo
 		WHERE metric IN ('MemTotal:','MemFree:','SwapTotal:','SwapFree:', 'Cached:','Dirty:','Writeback:','Buffers:','Slab:')
 		ORDER BY 1`
 )
 
-// Conatiner for memory/swap usage stats
+// Meminfo is the container for memory/swap usage stats
 type Meminfo struct {
 	MemTotal     uint64
 	MemFree      uint64
@@ -44,9 +44,9 @@ func (m *Meminfo) Read(conn *sql.DB, isLocal bool) {
 	}
 }
 
-// Read stats from local procfile source
+// ReadLocal reads stats from local 'procfs' filesystem
 func (m *Meminfo) ReadLocal() {
-	content, err := ioutil.ReadFile(PROC_MEMINFO)
+	content, err := ioutil.ReadFile(procMeminfoFile)
 	if err != nil {
 		return
 	}
@@ -92,7 +92,7 @@ func (m *Meminfo) ReadLocal() {
 	m.SwapUsed = m.SwapTotal - m.SwapFree
 }
 
-// Read stats from remote SQL schema
+// ReadRemote reads stats from remote Postgres instance
 func (m *Meminfo) ReadRemote(conn *sql.DB) {
 	rows, err := conn.Query(pgProcMeminfoQuery)
 	if err != nil {
@@ -132,35 +132,4 @@ func (m *Meminfo) ReadRemote(conn *sql.DB) {
 
 	m.MemUsed = m.MemTotal - m.MemFree - m.MemCached - m.MemBuffers - m.MemSlab
 	m.SwapUsed = m.SwapTotal - m.SwapFree
-}
-
-// Function returns value of particular memory/swap stat
-func (m Meminfo) SingleStat(stat string) (value uint64) {
-	switch stat {
-	case "mem_total":
-		value = m.MemTotal
-	case "mem_free":
-		value = m.MemFree
-	case "mem_used":
-		value = m.MemUsed
-	case "swap_total":
-		value = m.SwapTotal
-	case "swap_free":
-		value = m.SwapFree
-	case "swap_used":
-		value = m.SwapUsed
-	case "mem_cached":
-		value = m.MemCached
-	case "mem_dirty":
-		value = m.MemDirty
-	case "mem_writeback":
-		value = m.MemWriteback
-	case "mem_buffers":
-		value = m.MemBuffers
-	case "mem_slab":
-		value = m.MemSlab
-	default:
-		value = 0
-	}
-	return value
 }

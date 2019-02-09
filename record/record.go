@@ -9,13 +9,14 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/lib/stat"
 	"github.com/lesovsky/pgcenter/lib/utils"
+	"io"
 	"log"
 	"os"
 	"os/signal"
 	"time"
 )
 
-// Container for recorder settings
+// RecordOptions is the container for recorder settings
 type RecordOptions struct {
 	Interval      time.Duration    // Statistics pollint interval
 	Count         int32            // Number of statistics snapshot to record
@@ -26,12 +27,12 @@ type RecordOptions struct {
 }
 
 var (
-	conn    *sql.DB
-	stats   stat.Stat
-	do_quit = make(chan os.Signal, 1)
+	conn   *sql.DB
+	stats  stat.Stat
+	doQuit = make(chan os.Signal, 1)
 )
 
-// Main program
+// RunMain is the program's main entry point
 func RunMain(args []string, conninfo utils.Conninfo, opts RecordOptions) {
 	var err error
 	fmt.Printf("INFO: recording to %s\n", opts.OutputFile)
@@ -53,7 +54,7 @@ func RunMain(args []string, conninfo utils.Conninfo, opts RecordOptions) {
 		if f, err = os.OpenFile(opts.OutputFile, os.O_CREATE|os.O_RDWR, 0644); err != nil {
 			log.Fatalf("ERROR: failed to open file: %s\n", err)
 		} else {
-			_, _ = f.Seek(-2<<9, os.SEEK_END) // ignore errors, if seek failed it's highly likely an empty file
+			_, _ = f.Seek(-2<<9, io.SeekEnd) // ignore errors, if seek failed it's highly likely an empty file
 		}
 	} else {
 		if f, err = os.OpenFile(opts.OutputFile, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644); err != nil {
@@ -67,7 +68,7 @@ func RunMain(args []string, conninfo utils.Conninfo, opts RecordOptions) {
 	defer tw.Close()
 
 	// In case of SIGINT stop program gracefully
-	signal.Notify(do_quit, os.Interrupt)
+	signal.Notify(doQuit, os.Interrupt)
 
 	// Get necessary information about Postgres: version, recovery status, settings, etc.
 	stats.ReadPgInfo(conn, conninfo.ConnLocal)
@@ -90,7 +91,7 @@ func recordLoop(w *tar.Writer, opts RecordOptions) {
 		select {
 		case <-time.After(opts.Interval):
 			break
-		case <-do_quit:
+		case <-doQuit:
 			fmt.Println("quit")
 			i = 1 // 'i' decrements to zero after iteration and loop will be finished
 		}

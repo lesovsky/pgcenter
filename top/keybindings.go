@@ -46,9 +46,9 @@ func keybindings(g *gocui.Gui) error {
 		{"sysstat", 'l', showPgLog},
 		{"sysstat", 'C', showPgConfig},
 		{"sysstat", 'p', runPsql},
-		{"sysstat", 'B', showAux(AUX_DISKSTAT)},
-		{"sysstat", 'N', showAux(AUX_NICSTAT)},
-		{"sysstat", 'L', showAux(AUX_LOGTAIL)},
+		{"sysstat", 'B', showAux(auxDiskstat)},
+		{"sysstat", 'N', showAux(auxNicstat)},
+		{"sysstat", 'L', showAux(auxLogtail)},
 		{"sysstat", 'R', dialogOpen(dialogPgReload)},
 		{"sysstat", '/', dialogOpen(dialogFilter)},
 		{"sysstat", '-', dialogOpen(dialogCancelQuery)},
@@ -104,13 +104,13 @@ func changeRefresh(g *gocui.Gui, v *gocui.View, answer string) {
 	}
 
 	refreshInterval = time.Duration(interval) * refreshMinGranularity
-	do_update <- 1
+	doUpdate <- 1
 }
 
 // Quit program.
 func quit(g *gocui.Gui, _ *gocui.View) error {
-	close(do_update)
-	close(do_exit)
+	close(doUpdate)
+	close(doExit)
 	g.Close()
 	os.Exit(0)
 	return gocui.ErrQuit

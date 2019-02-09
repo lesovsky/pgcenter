@@ -7,6 +7,8 @@ import (
 	"github.com/lesovsky/pgcenter/lib/stat"
 	"github.com/lesovsky/pgcenter/report"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -19,6 +21,18 @@ const (
 )
 
 var (
+	// CommandDefinition is the definition of 'report' CLI sub-command
+	CommandDefinition = &cobra.Command{
+		Use:     "report",
+		Short:   "make report based on previously saved statistics",
+		Long:    `'pgcenter report' reads statistics from file and prints reports.`,
+		Version: "dummy", // use constants from 'cmd' package
+		PreRun:  preFlightSetup,
+		Run: func(command *cobra.Command, args []string) {
+			report.RunMain(args, opts)
+		},
+	}
+
 	opts           report.ReportOptions // Settings for the report program
 	tsStart, tsEnd string               // Show stats within an interval
 	doFilter       string               // Perform filtering
@@ -34,15 +48,31 @@ var (
 	showSizes       bool   // Show tables sizes
 	describe        bool   // Show description of requested stats view
 
-	CommandDefinition = &cobra.Command{
-		Use:     "report",
-		Short:   "make report based on previously saved statistics",
-		Long:    `'pgcenter report' reads statistics from file and prints reports.`,
-		Version: "dummy", // use constants from 'cmd' package
-		PreRun:  preFlightSetup,
-		Run: func(command *cobra.Command, args []string) {
-			report.RunMain(args, opts)
-		},
+	// basicReports is the reports available for user's choice
+	basicReports = map[string]struct {
+		view string
+		ctx  stat.ContextUnit
+	}{
+		"activity":    {view: stat.ActivityView, ctx: stat.PgStatActivityUnit},
+		"sizes":       {view: stat.SizesView, ctx: stat.PgTablesSizesUnit},
+		"databases":   {view: stat.DatabaseView, ctx: stat.PgStatDatabaseUnit},
+		"functions":   {view: stat.FunctionsView, ctx: stat.PgStatFunctionsUnit},
+		"replication": {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
+		"tables":      {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
+		"indexes":     {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
+		"vacuum":      {view: stat.VacuumView, ctx: stat.PgStatVacuumUnit},
+		"statements":  {view: "_STATEMENTS_"},
+	}
+	// statementsReports is the statements reports available for user's choice
+	statementsReports = map[string]struct {
+		view string
+		ctx  stat.ContextUnit
+	}{
+		"m": {view: stat.StatementsTimingView, ctx: stat.PgSSTimingUnit},
+		"g": {view: stat.StatementsGeneralView, ctx: stat.PgSSGeneralUnit},
+		"i": {view: stat.StatementsIOView, ctx: stat.PgSSIoUnit},
+		"t": {view: stat.StatementsTempView, ctx: stat.PgSSTempUnit},
+		"l": {view: stat.StatementsLocalView, ctx: stat.PgSSLocalUnit},
 	}
 )
 
@@ -67,10 +97,15 @@ func init() {
 	CommandDefinition.Flags().DurationVarP(&opts.Interval, "interval", "i", 1*time.Second, "delta interval (default: 1s)")
 }
 
-// Analyze startup parameters and prepare settings for report program
-func preFlightSetup(_ *cobra.Command, _ []string) {
+// preFlightSetup analyzes startup parameters and prepares settings for report program
+func preFlightSetup(c *cobra.Command, _ []string) {
 	// select appropriate report and context with settings
-	selectReport()
+	c.Flags().Visit(selectReport)
+
+	// check the report is selected
+	if opts.ReportType == "" {
+		log.Fatalln("ERROR: report not selected, quit")
+	}
 
 	// if user asks to describe a stat view, show a description and exit
 	if describe {
@@ -88,7 +123,22 @@ func preFlightSetup(_ *cobra.Command, _ []string) {
 	parseFilterString()
 }
 
-// Setup start and end times for report, don't show stats before start time and after end time
+// selectReport selects appropriate type of the report depending on user's choice
+func selectReport(f *pflag.Flag) {
+	if b, ok := basicReports[f.Name]; ok {
+		if b.view == "_STATEMENTS_" {
+			if s, ok := statementsReports[f.Value.String()]; ok {
+				opts.ReportType = s.view
+				opts.Context = s.ctx
+				return
+			}
+		}
+		opts.ReportType = b.view
+		opts.Context = b.ctx
+	}
+}
+
+// checkStartEndTimestampsetup examines start and end times for report, don't show stats before start time and after end time
 func checkStartEndTimestamps() {
 	var err error
 	var layout = "20060102-150405" // default layout includes date and time
@@ -142,7 +192,7 @@ func checkStartEndTimestamps() {
 	}
 }
 
-// Setup filtering options. Split a value entered by user to column name and filter pattern.
+// parseFilterString parses and defines filtering options. Split a value entered by user to column name and filter pattern.
 func parseFilterString() {
 	if doFilter != "" {
 		var err error
@@ -163,90 +213,27 @@ func parseFilterString() {
 	}
 }
 
-// Select appropriate type of the report
-func selectReport() {
-	switch {
-	case showDatabases == true:
-		opts.ReportType = stat.DatabaseView
-		opts.Context = stat.PgStatDatabaseUnit
-	case showTables == true:
-		opts.ReportType = stat.TablesView
-		opts.Context = stat.PgStatDatabaseUnit
-	case showReplication == true:
-		opts.ReportType = stat.ReplicationView
-		opts.Context = stat.PgStatReplicationUnit
-	case showIndexes == true:
-		opts.ReportType = stat.IndexesView
-		opts.Context = stat.PgStatIndexesUnit
-	case showSizes == true:
-		opts.ReportType = stat.SizesView
-		opts.Context = stat.PgTablesSizesUnit
-	case showFunctions == true:
-		opts.ReportType = stat.FunctionsView
-		opts.Context = stat.PgStatFunctionsUnit
-	case showVacuum == true:
-		opts.ReportType = stat.VacuumView
-		opts.Context = stat.PgStatVacuumUnit
-	case showActivity == true:
-		opts.ReportType = stat.ActivityView
-		opts.Context = stat.PgStatActivityUnit
-	}
-
-	if showStatements != "" {
-		switch {
-		case showStatements == "m":
-			opts.ReportType = stat.StatementsTimingView
-			opts.Context = stat.PgSSTimingUnit
-		case showStatements == "g":
-			opts.ReportType = stat.StatementsGeneralView
-			opts.Context = stat.PgSSGeneralUnit
-		case showStatements == "i":
-			opts.ReportType = stat.StatementsIOView
-			opts.Context = stat.PgSSIoUnit
-		case showStatements == "t":
-			opts.ReportType = stat.StatementsTempView
-			opts.Context = stat.PgSSTempUnit
-		case showStatements == "l":
-			opts.ReportType = stat.StatementsLocalView
-			opts.Context = stat.PgSSLocalUnit
-		default:
-			fmt.Printf("WARNING: unknown modificator '%s', ignore...\n", showStatements)
-		}
-	}
-}
-
-// Show columns description of the used stats
+// doDescribe shows detailed description of the requested stats
 func doDescribe() {
-	if describe {
-		switch opts.ReportType {
-		case  stat.DatabaseView:
-			fmt.Println(stat.PgStatDatabaseDescription)
-		case stat.ActivityView:
-			fmt.Println(stat.PgStatActivityDescription)
-		case stat.ReplicationView:
-			fmt.Println(stat.PgStatReplicationDescription)
-		case stat.TablesView:
-			fmt.Println(stat.PgStatTablesDescription)
-		case stat.IndexesView:
-			fmt.Println(stat.PgStatIndexesDescription)
-		case stat.FunctionsView:
-			fmt.Println(stat.PgStatFunctionsDescription)
-		case stat.SizesView:
-			fmt.Println(stat.PgStatSizesDescription)
-		case stat.VacuumView:
-			fmt.Println(stat.PgStatVacuumDescription)
-		case stat.StatementsTimingView:
-			fmt.Println(stat.PgStatStatementsTimingDescription)
-		case stat.StatementsGeneralView:
-			fmt.Println(stat.PgStatStatementsGeneralDescription)
-		case stat.StatementsIOView:
-			fmt.Println(stat.PgStatStatementsIODescription)
-		case stat.StatementsTempView:
-			fmt.Println(stat.PgStatStatementsTempDescription)
-		case stat.StatementsLocalView:
-			fmt.Println(stat.PgStatStatementsLocalDescription)
-		default:
-			fmt.Println("Unknown description requested")		// should not be here, but who knows...
-		}
+	var m = map[string]string{
+		stat.DatabaseView:          stat.PgStatDatabaseDescription,
+		stat.ActivityView:          stat.PgStatActivityDescription,
+		stat.ReplicationView:       stat.PgStatReplicationDescription,
+		stat.TablesView:            stat.PgStatTablesDescription,
+		stat.IndexesView:           stat.PgStatIndexesDescription,
+		stat.FunctionsView:         stat.PgStatFunctionsDescription,
+		stat.SizesView:             stat.PgStatSizesDescription,
+		stat.VacuumView:            stat.PgStatVacuumDescription,
+		stat.StatementsTimingView:  stat.PgStatStatementsTimingDescription,
+		stat.StatementsGeneralView: stat.PgStatStatementsGeneralDescription,
+		stat.StatementsIOView:      stat.PgStatStatementsIODescription,
+		stat.StatementsTempView:    stat.PgStatStatementsTempDescription,
+		stat.StatementsLocalView:   stat.PgStatStatementsLocalDescription,
+	}
+
+	if description, ok := m[opts.ReportType]; ok {
+		fmt.Println(description)
+	} else {
+		fmt.Println("Unknown description requested")
 	}
 }

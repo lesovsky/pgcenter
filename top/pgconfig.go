@@ -39,7 +39,7 @@ func showPgConfig(g *gocui.Gui, _ *gocui.View) error {
 	}
 
 	// Exit from UI and stats loop... will restore it after $PAGER is closed.
-	do_exit <- 1
+	doExit <- 1
 	g.Close()
 
 	cmd := exec.Command(pager)
@@ -61,14 +61,14 @@ func editPgConfig(g *gocui.Gui, n string) error {
 		return nil
 	}
 
-	var config_file string
+	var configFile string
 
 	if n != stat.GucRecoveryFile {
-		conn.QueryRow(stat.PgGetSingleSettingQuery, n).Scan(&config_file)
+		conn.QueryRow(stat.PgGetSingleSettingQuery, n).Scan(&configFile)
 	} else {
-		var data_directory string
-		conn.QueryRow(stat.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&data_directory)
-		config_file = data_directory + "/" + n
+		var dataDirectory string
+		conn.QueryRow(stat.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&dataDirectory)
+		configFile = dataDirectory + "/" + n
 	}
 
 	var editor string
@@ -77,10 +77,10 @@ func editPgConfig(g *gocui.Gui, n string) error {
 	}
 
 	// Exit from UI and stats loop... will restore it after $EDITOR is closed.
-	do_exit <- 1
+	doExit <- 1
 	g.Close()
 
-	cmd := exec.Command(editor, config_file)
+	cmd := exec.Command(editor, configFile)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 

@@ -10,24 +10,24 @@ import (
 	"time"
 )
 
-// Describe
+// ErrorRate describes details about how often errors occurs
 type ErrorRate struct {
-	t_curr    time.Time     // time of the latest error
-	t_prev    time.Time     // time when previous error occured
-	t_elapsed time.Duration // interval between two last errors
-	err_cnt   int           // errors counter
+	timeCurr    time.Time     // time of the latest error
+	timePrev    time.Time     // time when previous error occurred
+	timeElapsed time.Duration // interval between two last errors
+	errCnt      int           // errors counter
 }
 
 // Check the number of errors within specified interval
 func (e *ErrorRate) Check(errInterval time.Duration, errMaxcount int) error {
-	e.t_curr = time.Now()
-	e.t_elapsed = e.t_curr.Sub(e.t_prev)
-	if e.t_elapsed > errInterval { // interval between errors too long, reset counter
-		e.t_prev = e.t_curr
-		e.err_cnt = 0
+	e.timeCurr = time.Now()
+	e.timeElapsed = e.timeCurr.Sub(e.timePrev)
+	if e.timeElapsed > errInterval { // interval between errors too long, reset counter
+		e.timePrev = e.timeCurr
+		e.errCnt = 0
 	} else { // otherwise increment counter
-		e.err_cnt++
-		if e.err_cnt > errMaxcount { // if errors limit is reached, exit with error
+		e.errCnt++
+		if e.errCnt > errMaxcount { // if errors limit is reached, exit with error
 			return fmt.Errorf("too many errors")
 		}
 	}

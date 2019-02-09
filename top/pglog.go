@@ -33,7 +33,7 @@ func showPgLog(g *gocui.Gui, _ *gocui.View) error {
 	}
 
 	// exit from UI and stats loop... will restore it after $PAGER is closed.
-	do_exit <- 1
+	doExit <- 1
 	g.Close()
 
 	cmd := exec.Command(pager, currentLogfile)
@@ -82,7 +82,7 @@ func readLogPath() (string, error) {
 	// General assumption here is that there will be Ubuntu-default '%H%M%S' expression, but potentially there may be
 	// different variations of that: %H_%M_%S, %H-%M-%S or similar, and code below will not work.
 	// Also things becomes a bit tricky if logfile rotated through pg_rotate_logfile(), hence instead of Postgres startup time
-	// the time when rotation occured will be use. This use case is not covered here.
+	// the time when rotation occurred will be use. This use case is not covered here.
 	if strings.Contains(logfileRealpath, "%H%M%S") {
 		var pgStartTime string
 		conn.QueryRow(stat.PgPostmasterStartTimeQuery).Scan(&pgStartTime)

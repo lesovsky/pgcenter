@@ -5,10 +5,10 @@ package cmd
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
+	profile "github.com/lesovsky/pgcenter/cmd/profile"
 	record "github.com/lesovsky/pgcenter/cmd/record"
 	report "github.com/lesovsky/pgcenter/cmd/report"
 	top "github.com/lesovsky/pgcenter/cmd/top"
-	profile "github.com/lesovsky/pgcenter/cmd/profile"
 )
 
 const (

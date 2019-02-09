@@ -7,12 +7,15 @@ import (
 )
 
 const (
-	DefaultPager  = "less"
+	// DefaultPager is the pager program used by default if nothing other specified
+	DefaultPager = "less"
+	// DefaultEditor is the editor program used by default if nothing other specified
 	DefaultEditor = "vi"
-	DefaultPsql   = "psql"
+	// DefaultPsql is the default name of psql client
+	DefaultPsql = "psql"
 )
 
-// Container for connection settings to Postgres
+// Conninfo stores connection settings to Postgres
 type Conninfo struct {
 	Host      string
 	Port      int
@@ -21,7 +24,7 @@ type Conninfo struct {
 	ConnLocal bool // is Postgres running on localhost?
 }
 
-// Read and parse extra arguments
+// HandleExtraArgs reads and parses extra arguments passed to program
 func HandleExtraArgs(args []string, conn *Conninfo) {
 	if len(args) > 0 {
 		for i := 0; i < len(args); i++ {

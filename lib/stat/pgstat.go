@@ -14,44 +14,61 @@ import (
 )
 
 const (
-	DatabaseView          = "pg_stat_database"
-	ReplicationView       = "pg_stat_replication"
-	TablesView            = "pg_stat_tables"  // simplified name for set of views: pg_stat_*_tables and pg_statio_*_tables
-	IndexesView           = "pg_stat_indexes" // simplified name for set of views: pg_stat_*_indexes and pg_statio_*_indexes
-	SizesView             = "pg_stat_sizes"   // fictional name, no such view really exists
-	FunctionsView         = "pg_stat_user_functions"
-	VacuumView            = "pg_stat_progress_vacuum"
-	ActivityView          = "pg_stat_activity"
-	StatementsView        = "pg_stat_statements"
-	StatementsTimingView  = "pg_stat_statements_timing"  // fictional name, based on pg_stat_statements
-	StatementsGeneralView = "pg_stat_statements_general" // fictional name, based on pg_stat_statements
-	StatementsIOView      = "pg_stat_statements_io"      // fictional name, based on pg_stat_statements
-	StatementsTempView    = "pg_stat_statements_temp"    // fictional name, based on pg_stat_statements
-	StatementsLocalView   = "pg_stat_statements_local"   // fictional name, based on pg_stat_statements
-
-	colsTruncMinLimit = 1 // minimal allowed value for truncation
-	colsWidthMin      = 8 // base width for columns (used by default, if column name too short)
-
+	// DatabaseView is the name of view with databases' stats
+	DatabaseView = "pg_stat_database"
+	// ReplicationView is the name of view with replication stats
+	ReplicationView = "pg_stat_replication"
+	// TablesView is the name of view with tables' stats, it's a simplified name for the views: pg_stat_*_tables and pg_statio_*_tables
+	TablesView = "pg_stat_tables"
+	// IndexesView is the name of view with indexes' stats, it's a simplified name for the views: pg_stat_*_indexes and pg_statio_*_indexes
+	IndexesView = "pg_stat_indexes"
+	// SizesView is the name of pseudo-view with tables' sizes stats
+	SizesView = "pg_stat_sizes"
+	// FunctionsView is the name of view with functions stats
+	FunctionsView = "pg_stat_user_functions"
+	// VacuumView is the name of view with (auto)vacuum stats
+	VacuumView = "pg_stat_progress_vacuum"
+	// ActivityView is the name of view with activity stats
+	ActivityView = "pg_stat_activity"
+	// StatementsView is the name of view with statements stats
+	StatementsView = "pg_stat_statements"
+	// StatementsTimingView is the name of pseudo-view with statements' timing stats
+	StatementsTimingView = "pg_stat_statements_timing"
+	// StatementsGeneralView is the name of pseudo-view with statements' general stats
+	StatementsGeneralView = "pg_stat_statements_general"
+	// StatementsIOView is the name of pseudo-view with statements' buffers IO stats
+	StatementsIOView = "pg_stat_statements_io"
+	// StatementsTempView is the name of pseudo-view with statements' temp files IO stats
+	StatementsTempView = "pg_stat_statements_temp"
+	// StatementsLocalView is the name of pseudo-view with statements' local buffers IO stats
+	StatementsLocalView = "pg_stat_statements_local"
+	// colsTruncMinLimit is the  minimal allowed value for values truncation
+	colsTruncMinLimit = 1
+	// colsWidthMin is the base width for columns (used by default, if column name too short)
+	colsWidthMin = 8
+	// GucMainConfFile is the name of GUC which stores Postgres config file location
 	GucMainConfFile = "config_file"
-	GucHbaFile      = "hba_file"
-	GucIdentFile    = "ident_file"
-	GucRecoveryFile = "recovery.conf" // fake GUC, it isn't exist
-	GucDataDir      = "data_directory"
-)
-
-const (
+	// GucHbaFile is the name of GUC which stores Postgres HBA file location
+	GucHbaFile = "hba_file"
+	// GucIdentFile is the name of GUC which stores ident file location
+	GucIdentFile = "ident_file"
+	// GucRecoveryFile is the name of pseudo-GUC which stores recovery settings location
+	GucRecoveryFile = "recovery.conf"
+	// GucDataDir is the name of GUC which stores data directory location
+	GucDataDir = "data_directory"
+	// PgProcSysTicksQuery queries system timer's frequency from Postgres instance
 	PgProcSysTicksQuery = "SELECT pgcenter.get_sys_clk_ticks()"
 )
 
 var (
-	// Error means that creating delta is failed
-	ERR_DIFF_FAILED = errors.New("ERR_DIFF_CHANGED")
+	// errDiffFailed error means that creating delta, using two stats snapshots, is failed
+	errDiffFailed = errors.New("ERR_DIFF_CHANGED")
 
-	// Special value means to don't diff PGresults
+	// NoDiff is the special value means to don't diff PGresults snapshots
 	NoDiff = [2]int{99, 99}
 )
 
-// Container for stats
+// Pgstat is the container for all collected Postgres stats
 type Pgstat struct {
 	PgInfo
 	PgActivityStat
@@ -60,7 +77,7 @@ type Pgstat struct {
 	DiffPGresult PGresult
 }
 
-// Container for details about Postgres
+// PgInfo is the container for details about Postgres
 type PgInfo struct {
 	PgAlive         string /* is Postgres alive or not? */
 	PgVersionNum    uint   /* Postgres version in format XXYYZZ */
@@ -73,7 +90,7 @@ type PgInfo struct {
 	PgMaxPrepXacts  uint   /* max_prepared_transactions value */
 }
 
-// Container for Postgres' activity stats
+// PgActivityStat is the container for Postgres' activity stats
 type PgActivityStat struct {
 	ConnTotal    uint    /* total number of connections */
 	ConnIdle     uint    /* number of idle connections */
@@ -94,7 +111,7 @@ type PgActivityStat struct {
 	CallsPrev    uint    /* total number of queries: previous value */
 }
 
-// Container for basic Postgres stats collected from pg_stat_* views
+// PGresult is the container for basic Postgres stats collected from pg_stat_* views
 type PGresult struct {
 	Result [][]sql.NullString /* values */
 	Cols   []string           /* list of columns' names*/
@@ -104,24 +121,23 @@ type PGresult struct {
 	Err    error              /* Error returned by query, if any */
 }
 
-// Get Postgres connection status - is it alive or not?
+// GetPgState gets Postgres connection status - is it alive or not?
 func GetPgState(conn *sql.DB) string {
 	err := utils.PQstatus(conn)
 	if err != nil {
 		return "failed"
-	} else {
-		return "ok"
 	}
+	return "ok"
 }
 
-// Get Postgres uptime
+// Uptime method gets Postgres uptime
 func (s *Pgstat) Uptime(conn *sql.DB) {
 	if err := conn.QueryRow(PgGetUptimeQuery).Scan(&s.PgUptime); err != nil {
 		s.PgUptime = "--:--:--"
 	}
 }
 
-// Get information about Postgres: version, something else?
+// ReadPgInfo method gets some details about Postgres: version, GUCs, etc...
 func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	conn.QueryRow(PgGetVersionQuery).Scan(&s.PgVersion, &s.PgVersionNum)
 	conn.QueryRow(PgGetSingleSettingQuery, "track_commit_timestamp").Scan(&s.PgTrackCommitTs)
@@ -136,7 +152,7 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	}
 }
 
-// Reset activity stats during Postgres restarts
+// Reset method discards activity stats if Postgres restart detected
 func (s *Pgstat) Reset() {
 	s.PgActivityStat.ConnTotal = 0
 	s.PgActivityStat.ConnIdle = 0
@@ -157,7 +173,7 @@ func (s *Pgstat) Reset() {
 	s.PgActivityStat.CallsPrev = 0
 }
 
-// Collects activity stats
+// GetPgstatActivity method collects Postgres' activity stats
 func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 	// First of all check Postgres status: is it dead or alive?
 	// Remember the previous state of Postgres, if it's restored from 'failed' to 'ok', PgInfo have to be updated
@@ -175,26 +191,26 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 
 	conn.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
 
-	q_activity := PgActivityQueryDefault
-	q_autovac := PgAutovacQueryDefault
+	queryActivity := PgActivityQueryDefault
+	queryAutovac := PgAutovacQueryDefault
 	switch {
 	case s.PgVersionNum < 90400:
-		q_activity = PgActivityQueryBefore94
-		q_autovac = PgAutovacQueryBefore94
+		queryActivity = PgActivityQueryBefore94
+		queryAutovac = PgAutovacQueryBefore94
 	case s.PgVersionNum < 90600:
-		q_activity = PgActivityQueryBefore96
+		queryActivity = PgActivityQueryBefore96
 	case s.PgVersionNum < 100000:
-		q_activity = PgActivityQueryBefore10
+		queryActivity = PgActivityQueryBefore10
 	default:
 		// use defaults
 	}
 
-	conn.QueryRow(q_activity).Scan(
+	conn.QueryRow(queryActivity).Scan(
 		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact,
 		&s.ConnActive, &s.ConnWaiting, &s.ConnOthers,
 		&s.ConnPrepared)
 
-	conn.QueryRow(q_autovac).Scan(
+	conn.QueryRow(queryAutovac).Scan(
 		&s.AVWorkers, &s.AVAntiwrap, &s.AVManual, &s.AVMaxTime)
 
 	conn.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
@@ -205,7 +221,7 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 		&s.XactMaxTime, &s.PrepMaxTime)
 }
 
-// Read stat from pg_stat_* views, diff with previous stats snapshot and sort final resulting stats.
+// GetPgstatDiff method reads stat from pg_stat_* views, does diff with previous stats snapshot and sort final resulting stats.
 func (s *Pgstat) GetPgstatDiff(conn *sql.DB, query string, itv uint, interval [2]int, skey int, d bool, ukey int) error {
 	// Read stat
 	if err := s.GetPgstatSample(conn, query); err != nil {
@@ -220,7 +236,7 @@ func (s *Pgstat) GetPgstatDiff(conn *sql.DB, query string, itv uint, interval [2
 	// Diff previous and current stats snapshot
 	if interval != NoDiff {
 		if err := s.DiffPGresult.Diff(&s.PrevPGresult, &s.CurrPGresult, itv, interval, ukey); err != nil {
-			return ERR_DIFF_FAILED
+			return errDiffFailed
 		}
 	} else {
 		s.DiffPGresult = s.CurrPGresult
@@ -235,7 +251,7 @@ func (s *Pgstat) GetPgstatDiff(conn *sql.DB, query string, itv uint, interval [2
 	return nil
 }
 
-// Read stat from pg_stat_* views and create PGresult struct
+// GetPgstatSample method reads stat from pg_stat_* views and creates PGresult struct
 func (s *Pgstat) GetPgstatSample(conn *sql.DB, query string) error {
 	s.CurrPGresult = PGresult{}
 	rows, err := conn.Query(query)
@@ -253,7 +269,7 @@ func (s *Pgstat) GetPgstatSample(conn *sql.DB, query string) error {
 	return nil
 }
 
-// Parse a result of the query and create PGresult struct
+// New method parses a result of the query and creates PGresult struct
 func (r *PGresult) New(rs *sql.Rows) (err error) {
 	var container []sql.NullString
 	var pointers []interface{}
@@ -289,54 +305,54 @@ func (r *PGresult) New(rs *sql.Rows) (err error) {
 	return nil
 }
 
-// Take current and previous stats snapshots and make delta
-func (d *PGresult) Diff(p *PGresult, c *PGresult, itv uint, interval [2]int, ukey int) error {
-	var found bool = false
+// Diff method takes two snapshots, current and previous, and make delta
+func (r *PGresult) Diff(prev *PGresult, curr *PGresult, itv uint, interval [2]int, ukey int) error {
+	var found bool
 
-	d.Result = make([][]sql.NullString, c.Nrows)
-	d.Cols = c.Cols
-	d.Ncols = len(c.Cols)
-	d.Nrows = c.Nrows
+	r.Result = make([][]sql.NullString, curr.Nrows)
+	r.Cols = curr.Cols
+	r.Ncols = len(curr.Cols)
+	r.Nrows = curr.Nrows
 
 	// Take every row from 'current' snapshot and check its existing in 'previous' snapshot. If row exists in both snapshots
 	// make diff between them. If target row is not found in 'previous' snapshot, no diff needed, hence append this row
 	// as-is into 'result' snapshot.
 	// Thus in the end, all rows that aren't exist in the 'current' snapshot, but exist in 'previous', will be skipped.
-	for i, cv := range c.Result {
+	for i, cv := range curr.Result {
 		// Allocate container for target row and reset 'found' flag
-		d.Result[i] = make([]sql.NullString, c.Ncols)
+		r.Result[i] = make([]sql.NullString, curr.Ncols)
 		found = false
 
-		for j, pv := range p.Result {
+		for j, pv := range prev.Result {
 			if cv[ukey].String == pv[ukey].String {
 				// Row exists in both snapshots
 				found = true
 
 				// Do diff
-				for l := 0; l < c.Ncols; l++ {
+				for l := 0; l < curr.Ncols; l++ {
 					if l < interval[0] || l > interval[1] {
-						d.Result[i][l].String = c.Result[i][l].String // don't diff, copy value as-is
+						r.Result[i][l].String = curr.Result[i][l].String // don't diff, copy value as-is
 					} else {
-						if strings.Contains(c.Result[i][l].String, ".") {
-							cv, err := strconv.ParseFloat(c.Result[i][l].String, 64)
+						if strings.Contains(curr.Result[i][l].String, ".") {
+							cv, err := strconv.ParseFloat(curr.Result[i][l].String, 64)
 							if err != nil {
 								return fmt.Errorf("failed to convert to float [%d:%d]: %s", i, l, err)
 							}
-							pv, err := strconv.ParseFloat(p.Result[j][l].String, 64)
+							pv, err := strconv.ParseFloat(prev.Result[j][l].String, 64)
 							if err != nil {
 								return fmt.Errorf("failed to convert to float [%d:%d]: %s", j, l, err)
 							}
-							d.Result[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
+							r.Result[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
 						} else {
-							cv, err := strconv.ParseInt(c.Result[i][l].String, 10, 64)
+							cv, err := strconv.ParseInt(curr.Result[i][l].String, 10, 64)
 							if err != nil {
 								return fmt.Errorf("failed to convert to integer [%d:%d]: %s", i, l, err)
 							}
-							pv, err := strconv.ParseInt(p.Result[j][l].String, 10, 64)
+							pv, err := strconv.ParseInt(prev.Result[j][l].String, 10, 64)
 							if err != nil {
 								return fmt.Errorf("failed to convert to integer [%d:%d]: %s", j, l, err)
 							}
-							d.Result[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
+							r.Result[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
 						}
 					}
 				}
@@ -346,8 +362,8 @@ func (d *PGresult) Diff(p *PGresult, c *PGresult, itv uint, interval [2]int, uke
 
 		// End of the searching in 'previous' snapshot, if we reached here it means row not found and it simply should be added as is.
 		if found == false {
-			for l := 0; l < c.Ncols; l++ {
-				d.Result[i][l].String = c.Result[i][l].String // don't diff, copy value as-is
+			for l := 0; l < curr.Ncols; l++ {
+				r.Result[i][l].String = curr.Result[i][l].String // don't diff, copy value as-is
 			}
 		}
 	}
@@ -355,7 +371,7 @@ func (d *PGresult) Diff(p *PGresult, c *PGresult, itv uint, interval [2]int, uke
 	return nil
 }
 
-// Sort content using predetermined order key
+// Sort method does stats sorting using predetermined order key
 func (r *PGresult) Sort(key int, desc bool) {
 	if r.Nrows == 0 {
 		return /* nothing to sort */
@@ -369,28 +385,23 @@ func (r *PGresult) Sort(key int, desc bool) {
 			r, _ := strconv.ParseFloat(r.Result[j][key].String, 64)
 			if desc {
 				return l > r /* desc order: 10 -> 0 */
-			} else {
-				return l < r /* asc order: 0 -> 10 */
 			}
+			return l < r /* asc order: 0 -> 10 */
 		})
 	} else {
 		// value is string
 		sort.Slice(r.Result, func(i, j int) bool {
 			if desc {
 				return r.Result[i][key].String > r.Result[j][key].String /* desc order: 'z' -> 'a' */
-			} else {
-				return r.Result[i][key].String < r.Result[j][key].String /* asc order: 'a' -> 'z' */
 			}
+			return r.Result[i][key].String < r.Result[j][key].String /* asc order: 'a' -> 'z' */
 		})
 	}
 }
 
-// Calculate column width used at result formatting and truncate too long values
+// SetAlign method aligns length of values depending of the columns width
 func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
-	// forbid to make truncation limit too small
-	if truncLimit < colsTruncMinLimit {
-		truncLimit = colsTruncMinLimit
-	}
+	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 
 	/* calculate max length of columns based on the longest value of the column */
 	var valuelen, colnamelen int
@@ -402,22 +413,17 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 
 		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
 			valuelen = len(r.Result[rownum][colidx].String)
-			colnamelen = len(colname)
-
-			// align short-length columns to default width
-			if colnamelen < colsWidthMin {
-				colnamelen = colsWidthMin
-			}
+			colnamelen = utils.Max(len(colname), colsWidthMin)
 
 			switch {
 			// if value is empty, e.g. NULL - set width based on colname length
-			case valuelen == 0 && colnamelen >= widthes[colidx]:
+			case aligningIsValueEmpty(valuelen, colnamelen, widthes[colidx]):
 				widthes[colidx] = colnamelen
 			// for non-empty values, but for those whose length less than length of colnames, use length based on length of column name, but no longer than already set
-			case valuelen > 0 && valuelen <= colnamelen && valuelen >= widthes[colidx]:
+			case aligningIsLessThanColname(valuelen, colnamelen, widthes[colidx]):
 				widthes[colidx] = colnamelen
 			// for non-empty values, but for those whose length longer than length of colnames, use length based on length of value, but no longer than already set
-			case valuelen > 0 && valuelen > colnamelen && valuelen < truncLimit && valuelen >= widthes[colidx] && colidx < r.Ncols-1:
+			case aligningIsMoreThanColname(valuelen, colnamelen, widthes[colidx], truncLimit, colidx, r.Ncols):
 				// dynamic aligning is used in 'report' when you can't adjust width on the fly
 				// fixed aligning is used in 'top' because it's quite uncomfortable when width is changing constantly
 				if dynamic {
@@ -429,7 +435,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 			case colidx == r.Ncols-1:
 				widthes[colidx] = truncLimit
 			// do nothing if length of value or column is less (or equal) than already specified width
-			case valuelen <= widthes[colidx] && colnamelen <= widthes[colidx]:
+			case aligningIsLengthLessOrEqualWidth(valuelen, colnamelen, widthes[colidx]):
 
 			// for very long values, truncate value and set length limited by truncLimit value,
 			case valuelen >= truncLimit:
@@ -442,7 +448,27 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 	}
 }
 
-// Print content of PGresult container to buffer
+// aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length
+func aligningIsValueEmpty(vlen, cnlen, width int) bool {
+	return vlen == 0 && cnlen >= width
+}
+
+// aligningIsLessThanColname is the aligning helper: returns true if passed non-empty values, but if its length less than length of colnames
+func aligningIsLessThanColname(vlen, cnlen, width int) bool {
+	return vlen > 0 && vlen <= cnlen && vlen >= width
+}
+
+// aligningIsMoreThanColname isthe aligning helper: returns true if passed non-empty values, but for if its length longer than length of colnames
+func aligningIsMoreThanColname(vlen, cnlen, width, trunclim, colidx, cols int) bool {
+	return vlen > 0 && vlen > cnlen && vlen < trunclim && vlen >= width && colidx < cols-1
+}
+
+// aligningIsLengthLessOrEqualWidth is the aligning helper: returns true if length of value or column is less (or equal) than already specified width
+func aligningIsLengthLessOrEqualWidth(vlen, cnlen, width int) bool {
+	return vlen <= width && cnlen <= width
+}
+
+// Fprint method print content of PGresult container to buffer
 func (r *PGresult) Fprint(buf *bytes.Buffer) {
 	// do simple ad-hoc aligning for current PGresult, do align using the longest value in the column
 	widthMap := map[int]int{}
@@ -473,8 +499,8 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 	}
 }
 
-// Print content of PGresult container to stdout
-// DEPRECATION WARNING since v0.5.0: This function used nowhere, seems it should be removed.
+// Print method prints content of PGresult container to stdout
+// DEPRECATION WARNING since v0.5.0: This function is used nowhere, seems it should be removed.
 func (r *PGresult) Print() {
 	/* print header */
 	for _, name := range r.Cols {
