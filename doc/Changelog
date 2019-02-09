@@ -1,5 +1,8 @@
 pgcenter (devel) unstable; urgency=low
 
+  * added goreleser support
+  * top: fix wrong handling of group cancel/terminate mask
+  * implemented GoReport recommendations
   * profile: emit error if '-P' is not specified
   * config: emit error if neither '-i' nor '-u' specified
   * config: moved parameters check from main program code to command management code

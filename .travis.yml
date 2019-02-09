@@ -2,20 +2,24 @@ language: go
 go:
   - "1.11.x"
 
+env:
+  global:
+    - secure: RF2RpZJghZ5RwrBG9fKdGIbEFn/jRLZFu+mdGXtB9emxYTqBOhEFND/5F2rwPKrBkVDcB7HJehUnkuAn7N6tJV5DqdbEaaAdOHmG3NN2tZsKmyiwyBk2YwuJivjV0C/0PZVBccNz8x2y7xUGXcgnH3eEl4/2fDbu6QlEv1J4mfM5C8AnaXDko7mqMXQEpo7ysbb7YdvM5mVHIrqt4BKgoKulPGKTtc2r9cTzJMP6PqChBfwdbVQELiIKSB7SVdKqq/tXwSp3s38V1chIraqbUHridz+FJ6ZbPL+GMQdqJEt7hR47+OQxBwIJ2TTDawapWaQ3YYA6cdqvdlix3kYpRqlqRcRG8WVkhEJQHKPXsU5zw3S+wAo0axsk9tfXPUT6chWbCzcmRCQ6QvJQYoGpTEQn3Ql4eSwVMz5beRf6aZuFXXNEgYumloSQeG6edJi0af6UWdoUJ1EQn6loxhN/UoIJbdUKtp8Pg/ItvmUiIMgiQQap0LgxkV07jRBdOxesY3ExkytynUlOWXOG6rNO6qZL3b7hpv63XAEMJflblBEvALMHE9AFyskJAwqf9QSMWBlZQH4ZcRhl39CQVpTVaSXHB6a27+5MdX/Zc+G+SBBc2bdufyq6QJ0bBvNqfZAAE4dcWrQTpVF49AqeHmFa88tEfjR0Jk7b5nWZb4BbzZw=
+
+addons:
+  apt:
+    packages:
+    - rpm
+
 dist: trusty
 sudo: false
 
-script:
-  - env GO111MODULE=on make
+script: go test ${gobuild_args} ./...
 
-before_deploy:
-  - tar czf pgcenter.linux-amd64.tar.gz pgcenter
 deploy:
-  provider: releases
-  api_key:
-    secure: VWmFKklX8e8BxW+D8sINd9z7i4e9MLGQKXjELKzjr56KewM8tYdsXLzhhOuOV8dfod2Rm+V9HdtEuyzahowDCUHifoi6Dlt/bjdi7jerzDUvyg+RQZGapb4cdASi0G1RWwM2AHUBVhUoYMnWlA6tgkiPO6J9aoHtAgBqM9huCuZasUrmNupDOkE2Yi7qhVhFh1jx30m9YXz2WYhoqXL/vURY9UkHppzZva+909K48zIf1VLZmbXGkfJK4S5RkaCLQNAGOBLv2cwU3EFvH583T6oMtW7D4CDNVlUSt77b3tnOLULPlpzxdLAQq0HyVkwmlOzQ/tRbWYQSYcRFWPo6NfW8CQOXMYmGTUVaJc2I07vI6g2I+ol2E/4NR7+IqsYRIfI7gFYSGvfY17WpO5/pOhJXsa+1lwsPHxyQ4oK5LXd0TzcH7EIdC2uDHJ0u5o44D8s0zrKXtOfJBFggOiyOYtZ0O8/FJ9xTpstEdAm5k6BjafzUbkXfWbK1HK1vCewa+NENu3I19JVnBO2jVPVBxwhleYx+SxaHpz7poBkifed5M7lSmxlqK/jOtqXJerkvwMypVU4rse50knjGDBoi0tU71tccN9klA9rUJWJZK18G6Waozy+hdenPSUnWna5hTXRfGxd0uKXt59R0g7hpQUL9E1ZiwNVebDuXKMCscOw=
+  provider: script
+  script: curl -sL https://git.io/goreleaser |GO111MODULE=on bash
   skip_cleanup: true
-  file: pgcenter.linux-amd64.tar.gz
   on:
-    repo: lesovsky/pgcenter
     tags: true
+    condition: $TRAVIS_OS_NAME = linux
