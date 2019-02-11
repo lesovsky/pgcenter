@@ -64,7 +64,7 @@ func showAux(auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 			}
 
 			pgLog.Size = 0
-			pgLog.Path, _ = readLogPath()
+			pgLog.Path = readLogPath()
 
 			// Check the logfile isn't an empty
 			if info, err := os.Stat(pgLog.Path); err == nil && info.Size() == 0 {

@@ -43,15 +43,8 @@ func (l *postgresLogfile) ReOpen() error {
 		return err
 	}
 
-	if l.Path, err = readLogPath(); err != nil {
-		return err
-	}
-
-	if err = l.Open(); err != nil {
-		return err
-	}
-
-	return nil
+	l.Path = readLogPath()
+	return l.Open()
 }
 
 // Read methos reads logfile until required number of newlines aren't collected

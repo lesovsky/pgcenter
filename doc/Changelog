@@ -1,5 +1,7 @@
-pgcenter (0.6.0) unstable; urgency=low
+pgcenter (0.6.1) unstable; urgency=low
+  * top: fix srong assebling of path to logfile (issue #55)
 
+pgcenter (0.6.0) unstable; urgency=low
   * added goreleser support
   * top: fix wrong handling of group cancel/terminate mask
   * implemented GoReport recommendations
