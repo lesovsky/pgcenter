@@ -35,9 +35,9 @@ other actions:
     , Q         ',' show system tables on/off, 'Q' reset postgresql statistics counters.
     z           'z' set refresh interval.
     h,F1        show this tab.
-    Ctrl+Q      quit.
+    q,Ctrl+Q    quit.
 
-Type 'Esc' to continue.`
+Type 'q' or 'Esc' to continue.`
 )
 
 // Open gocui view and shows built-in help.

@@ -24,6 +24,7 @@ func keybindings(g *gocui.Gui) error {
 	var keys = []key{
 		{"", gocui.KeyCtrlC, quit},
 		{"", gocui.KeyCtrlQ, quit},
+		{"sysstat", 'q', quit},
 		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft},
 		{"sysstat", gocui.KeyArrowRight, orderKeyRight},
 		{"sysstat", gocui.KeyArrowUp, changeWidth(colsWidthIncr)},
@@ -69,6 +70,7 @@ func keybindings(g *gocui.Gui) error {
 		{"sysstat", 'h', showHelp},
 		{"sysstat", gocui.KeyF1, showHelp},
 		{"help", gocui.KeyEsc, closeHelp},
+		{"help", 'q', closeHelp},
 	}
 
 	g.InputEsc = true
