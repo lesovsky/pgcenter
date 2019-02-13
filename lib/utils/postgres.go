@@ -82,7 +82,7 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 	}
 
 	if err = PQstatus(conn); err != nil {
-		// handle libpq errors
+		// handle libpq errors if found
 		if pqerr, ok := err.(*pq.Error); ok {
 			switch {
 			// Password required -- ask user and retry connection
@@ -100,10 +100,14 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 				if err = PQstatus(conn); err != nil {
 					return nil, err
 				}
+			default:
+				return nil, fmt.Errorf("error occurred during connection establishing: %s", err)
 			}
+
+			return conn, nil
 		}
 
-		// handle other golang 'pq' driver-specific errors
+		// handle other golang 'pq' driver-specific errors (not related to libpq)
 		switch err {
 		case pq.ErrSSLNotSupported:
 			// By default pq-driver tries to connect with SSL.
@@ -114,7 +118,7 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 				return nil, err
 			}
 		default:
-			return nil, err
+			return nil, fmt.Errorf("error occurred during connection establishing: %s", err)
 		}
 	}
 
