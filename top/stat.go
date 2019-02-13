@@ -299,7 +299,7 @@ func printNicstat(v *gocui.View, s stat.Netdevs) {
 }
 
 // Print logtail - last lines of Postgres log
-func printLogtail(g *gocui.Gui, v *gocui.View) error {
+func printLogtail(g *gocui.Gui, v *gocui.View) {
 	// pgCenter builds multiline log-records into a single one and truncates resulting line to screen's length. But
 	// it's possible to print them completely with v.Wrap = true. But with v.Wrap and v.Autoscroll, it's possible to
 	// solve all issues - just read a quite big amount of logs, and limit this amount by size of the view - all
@@ -314,7 +314,7 @@ func printLogtail(g *gocui.Gui, v *gocui.View) error {
 	info, err := os.Stat(pgLog.Path)
 	if err != nil {
 		printCmdline(g, "Failed to stat logfile: %s", err)
-		return nil
+		return
 	}
 
 	// Update screen only if logfile is changed
@@ -324,7 +324,7 @@ func printLogtail(g *gocui.Gui, v *gocui.View) error {
 		buf, err := pgLog.Read()
 		if err != nil {
 			printCmdline(g, "Failed to read logfile: %s", err)
-			return nil
+			return
 		}
 
 		// print the log's path and file name and log's latest lines
@@ -340,10 +340,10 @@ func printLogtail(g *gocui.Gui, v *gocui.View) error {
 		err := pgLog.ReOpen()
 		if err != nil {
 			printCmdline(g, "Failed to reopen logfile: %s", err)
-			return nil
+			return
 		}
 		pgLog.Size = info.Size()
 	}
 
-	return nil
+	return
 }
