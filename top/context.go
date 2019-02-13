@@ -153,6 +153,12 @@ func setFilter(g *gocui.Gui, v *gocui.View, answer string) {
 // Switch from context unit to another one
 func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
+		// in case of switching to pg_stat_statements and it isn't available - keep current stats context
+		if stats.PgStatStatementsAvail == false && c == stat.StatementsView {
+			printCmdline(g, msgPgStatStatementsUnavailable)
+			return nil
+		}
+
 		// Save current context unit with its settings into context list
 		ctx.contextList[ctx.current.Name] = ctx.current
 

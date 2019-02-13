@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+const (
+	msgPgStatStatementsUnavailable = "NOTICE: pg_stat_statements is not available in this database"
+)
+
 var (
 	errSaved error       // keep error during program lifecycle
 	cmdTimer *time.Timer // show cmdline's messages until timer is not expired

@@ -60,6 +60,11 @@ func doWork(g *gocui.Gui) {
 		break
 	}
 	printAllStat(g, stats)
+
+	// Check availability of pg_stat_statements if it's not available
+	if !stats.PgStatStatementsAvail {
+		stats.UpdatePgStatStatementsStatus(conn)
+	}
 }
 
 // Print all stats.

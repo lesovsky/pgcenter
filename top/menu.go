@@ -67,6 +67,12 @@ var (
 // Open 'gocui' view object and display menu items depending on passed menu type.
 func menuOpen(m menuStyle) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		// in case of opening menu for switching to pg_stat_statements and if pgss isn't available - it's unnecessary to open menu, just notify user and do nothing
+		if stats.PgStatStatementsAvail == false && m.menuType == menuPgss {
+			printCmdline(g, msgPgStatStatementsUnavailable)
+			return nil
+		}
+
 		g.Cursor = true
 
 		v, err := g.SetView("menu", 0, 5, 72, 6+len(m.menuItems))

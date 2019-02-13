@@ -79,15 +79,16 @@ type Pgstat struct {
 
 // PgInfo is the container for details about Postgres
 type PgInfo struct {
-	PgAlive         string /* is Postgres alive or not? */
-	PgVersionNum    uint   /* Postgres version in format XXYYZZ */
-	PgVersion       string /* Postgres version in format X.Y.Z */
-	PgUptime        string /* Postgres uptime */
-	PgRecovery      string /* is Postgres master or standby? */
-	PgTrackCommitTs string /* track_commit_timestamp value */
-	PgAVMaxWorkers  uint   /* autovacuum_max_workers value */
-	PgMaxConns      uint   /* max_connections value */
-	PgMaxPrepXacts  uint   /* max_prepared_transactions value */
+	PgAlive               string /* is Postgres alive or not? */
+	PgVersionNum          uint   /* Postgres version in format XXYYZZ */
+	PgVersion             string /* Postgres version in format X.Y.Z */
+	PgUptime              string /* Postgres uptime */
+	PgRecovery            string /* is Postgres master or standby? */
+	PgTrackCommitTs       string /* track_commit_timestamp value */
+	PgAVMaxWorkers        uint   /* autovacuum_max_workers value */
+	PgMaxConns            uint   /* max_connections value */
+	PgMaxPrepXacts        uint   /* max_prepared_transactions value */
+	PgStatStatementsAvail bool   /* is pg_stat_statements available? */
 }
 
 // PgActivityStat is the container for Postgres' activity stats
@@ -146,10 +147,18 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	conn.QueryRow(PgGetSingleSettingQuery, "max_connections").Scan(&s.PgMaxConns)
 	conn.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
 
+	// Is pg_stat_statement available?
+	s.UpdatePgStatStatementsStatus(conn)
+
 	// In case of remote Postgres we should to know remote CLK_TCK
 	if !isLocal {
 		conn.QueryRow(PgProcSysTicksQuery).Scan(&SysTicks)
 	}
+}
+
+// UpdatePgStatStatementsStatus method refreshes info about pg_stat_availability
+func (s *Pgstat) UpdatePgStatStatementsStatus(conn *sql.DB) {
+	conn.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
 }
 
 // Reset method discards activity stats if Postgres restart detected
@@ -213,9 +222,12 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 	conn.QueryRow(queryAutovac).Scan(
 		&s.AVWorkers, &s.AVAntiwrap, &s.AVManual, &s.AVMaxTime)
 
-	conn.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
-	s.StmtPerSec = (s.CallsCurr - s.CallsPrev) / refresh
-	s.CallsPrev = s.CallsCurr
+	// read pg_stat_statements only if it's available
+	if s.PgStatStatementsAvail == true {
+		conn.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
+		s.StmtPerSec = (s.CallsCurr - s.CallsPrev) / refresh
+		s.CallsPrev = s.CallsCurr
+	}
 
 	conn.QueryRow(PgActivityTimeQuery).Scan(
 		&s.XactMaxTime, &s.PrepMaxTime)

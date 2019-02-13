@@ -1,4 +1,5 @@
 pgcenter (0.6.1) unstable; urgency=low
+  * top: do polling pg_stat_statements only if it's available (issue #59)
   * top: fixed handling of libpq errors during connection establishment (issue #58)
   * top: fix srong assebling of path to logfile (issue #55)
 

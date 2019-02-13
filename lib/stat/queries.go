@@ -16,6 +16,8 @@ const (
 	PgGetRecoveryStatusQuery = "SELECT pg_is_in_recovery()"
 	// PgGetUptimeQuery queries Postgres uptime
 	PgGetUptimeQuery = "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
+	// PgCheckPGSSExists checks that pg_stat_statements view exists
+	PgCheckPGSSExists = "SELECT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'pg_stat_statements')"
 	// PgGetConfigAllQuery queries current Postgres configuration
 	PgGetConfigAllQuery = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 	// PgGetCurrentLogfileQuery queries current Postgres logfile
