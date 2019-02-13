@@ -33,8 +33,7 @@ activity actions:
 
 other actions:
     , Q         ',' show system tables on/off, 'Q' reset postgresql statistics counters.
-    z,Z         'z' set refresh interval, 'Z' change color scheme.
-    space       pause program execution.
+    z           'z' set refresh interval.
     h,F1        show this tab.
     Ctrl+Q      quit.
 
