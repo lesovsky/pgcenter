@@ -120,15 +120,15 @@ func printSysstat(v *gocui.View, s stat.Stat) {
 		time.Now().Format("2006-01-02 15:04:05"),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
 	/* line2: cpu usage */
-	fmt.Fprintf(v, "    %%cpu: %4.1f us, %4.1f sy, %4.1f ni, %4.1f id, %4.1f wa, %4.1f hi, %4.1f si, %4.1f st\n",
+	fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
 		s.CpuUsage.User, s.CpuUsage.Sys, s.CpuUsage.Nice, s.CpuUsage.Idle,
 		s.CpuUsage.Iowait, s.CpuUsage.Irq, s.CpuUsage.Softirq, s.CpuUsage.Steal)
 	/* line3: memory usage */
-	fmt.Fprintf(v, " MiB mem: %6d total, %6d free, %6d used, %8d buff/cached\n",
+	fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
 		s.Meminfo.MemTotal, s.Meminfo.MemFree, s.Meminfo.MemUsed,
 		s.Meminfo.MemCached+s.Meminfo.MemBuffers+s.Meminfo.MemSlab)
 	/* line4: swap usage, dirty and writeback */
-	fmt.Fprintf(v, "MiB swap: %6d total, %6d free, %6d used, %6d/%d dirty/writeback\n",
+	fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
 		s.Meminfo.SwapTotal, s.Meminfo.SwapFree, s.Meminfo.SwapUsed,
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
 }
@@ -141,16 +141,16 @@ func printPgstat(v *gocui.View, s stat.Stat) {
 		conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
 		s.PgInfo.PgVersion, s.PgInfo.PgUptime, s.PgInfo.PgRecovery)
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
-	fmt.Fprintf(v, "  activity:%3d/%d conns,%3d/%d prepared,%3d idle,%3d idle_xact,%3d active,%3d waiting,%3d others\n",
+	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
 		s.PgActivityStat.ConnTotal, s.PgInfo.PgMaxConns, s.PgActivityStat.ConnPrepared, s.PgInfo.PgMaxPrepXacts,
 		s.PgActivityStat.ConnIdle, s.PgActivityStat.ConnIdleXact, s.PgActivityStat.ConnActive,
 		s.PgActivityStat.ConnWaiting, s.PgActivityStat.ConnOthers)
 	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
-	fmt.Fprintf(v, "autovacuum: %2d/%d workers/max, %2d manual, %2d wraparound, %s vac_maxtime\n",
+	fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.PgActivityStat.AVWorkers, s.PgInfo.PgAVMaxWorkers,
 		s.PgActivityStat.AVManual, s.PgActivityStat.AVAntiwrap, s.PgActivityStat.AVMaxTime)
 	/* line4: current workload*/
-	fmt.Fprintf(v, "statements: %3d stmt/s, %3.3f stmt_avgtime, %s xact_maxtime, %s prep_maxtime\n",
+	fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.PgActivityStat.StmtPerSec, s.PgActivityStat.StmtAvgTime, s.PgActivityStat.XactMaxTime, s.PgActivityStat.PrepMaxTime)
 }
 
@@ -202,11 +202,11 @@ func printStatHeader(v *gocui.View, s *stat.Stat) {
 			pname = name
 		}
 
-		/* mark ordered column with background color */
+		/* mark ordered column with foreground color */
 		if i != ctx.current.OrderKey {
-			fmt.Fprintf(v, "%-*s", ctx.current.ColsWidth[i]+2, pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, ctx.current.ColsWidth[i]+2, pname)
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, ctx.current.ColsWidth[i]+2, pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47,  1, ctx.current.ColsWidth[i]+2, pname)
 		}
 	}
 	fmt.Fprintf(v, "\n")
@@ -258,7 +258,7 @@ func printStatData(v *gocui.View, s *stat.Stat, filter bool) {
 // Print iostat - block devices stats.
 func printIostat(v *gocui.View, s stat.Diskstats) {
 	// print header
-	fmt.Fprintf(v, "       \033[37;1mDevice:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
+	fmt.Fprintf(v, "       \033[30;47mDevice:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
 
 	for i := 0; i < len(s); i++ {
 		// skip devices which never do IOs
@@ -280,7 +280,7 @@ func printIostat(v *gocui.View, s stat.Diskstats) {
 // Print nicstat - network interfaces stat.
 func printNicstat(v *gocui.View, s stat.Netdevs) {
 	// print header
-	fmt.Fprintf(v, "    \033[37;1mInterface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
+	fmt.Fprintf(v, "    \033[30;47mInterface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
 
 	for i := 0; i < len(s); i++ {
 		// skip interfaces which never seen packets
@@ -329,7 +329,7 @@ func printLogtail(g *gocui.Gui, v *gocui.View) {
 
 		// print the log's path and file name and log's latest lines
 		if len(string(buf)) > 0 {
-			fmt.Fprintf(v, "\033[37;1m%s:\033[0m\n", pgLog.Path)
+			fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", pgLog.Path)
 			fmt.Fprintf(v, "%s", string(buf))
 		}
 		// remember log's size
