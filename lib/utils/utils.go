@@ -22,6 +22,7 @@ type Conninfo struct {
 	User      string
 	Dbname    string
 	ConnLocal bool // is Postgres running on localhost?
+	Logpath   string
 }
 
 // HandleExtraArgs reads and parses extra arguments passed to program

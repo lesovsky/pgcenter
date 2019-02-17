@@ -128,11 +128,20 @@ func lookupPostgresLogfile() (absLogfilePath string) {
 func lookupSystemLogfile() string {
 	var pgDatadir, pgClusterName, newLogfilePath string
 
+	if path, err := os.Stat(conninfo.Logpath); err != nil {
+		// print invalid path
+		return conninfo.Logpath
+	} else {
+		if !path.IsDir() {
+			return conninfo.Logpath
+		}
+	}
+
 	if stats.PgVersionNum >= 90500 {
 		conn.QueryRow(stat.PgGetSingleSettingQuery, "cluster_name").Scan(&pgClusterName)
 
 		pgClusterName = strings.Replace(pgClusterName, "/", "-", -1)
-		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		newLogfilePath = conninfo.Logpath + "/postgresql-" + pgClusterName + ".log"
 		if _, err := os.Stat(newLogfilePath); err == nil {
 			return newLogfilePath
 		}
@@ -140,29 +149,24 @@ func lookupSystemLogfile() string {
 		conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
 
 		pgClusterName = filepath.Base(filepath.Dir(pgDatadir)) + "-" + filepath.Base(pgDatadir)
-		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		newLogfilePath = conninfo.Logpath + "/postgresql-" + pgClusterName + ".log"
 		if _, err := os.Stat(newLogfilePath); err == nil {
 			return newLogfilePath
 		}
 
 		pgClusterName = filepath.Base(pgDatadir)
-		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		newLogfilePath = conninfo.Logpath + "/postgresql-" + pgClusterName + ".log"
 		if _, err := os.Stat(newLogfilePath); err == nil {
 			return newLogfilePath
 		}
 	}
 
-	newLogfilePath = "/var/log/postgresql/postgresql.log"
+	newLogfilePath = conninfo.Logpath + "/postgresql.log"
 	if _, err := os.Stat(newLogfilePath); err == nil {
 		return newLogfilePath
 	}
 
-	newLogfilePath = "/var/log/postgresql.log"
-	if _, err := os.Stat(newLogfilePath); err == nil {
-		return newLogfilePath
-	}
-
-	newLogfilePath = "/var/log/postgres.log"
+	newLogfilePath = conninfo.Logpath + "/postgres.log"
 	if _, err := os.Stat(newLogfilePath); err == nil {
 		return newLogfilePath
 	}

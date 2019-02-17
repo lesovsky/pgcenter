@@ -29,4 +29,5 @@ func init() {
 	CommandDefinition.Flags().IntVarP(&conn.Port, "port", "p", 5432, "database server port")
 	CommandDefinition.Flags().StringVarP(&conn.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&conn.Dbname, "dbname", "d", "", "database name to connect to")
+	CommandDefinition.Flags().StringVarP(&conn.Logpath, "logpath", "l", "", "database server logpath (logfile optional)")
 }

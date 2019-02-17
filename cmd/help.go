@@ -80,9 +80,10 @@ Usage:
 
 Options:
   -d, --dbname DBNAME		database name to connect to
-  -h, --host HOSTNAME		database server host or socket directory.
+  -h, --host HOSTNAME		database server host or socket directory
   -p, --port PORT		database server port (default 5432)
   -U, --username USERNAME	database user name
+  -l, --logpath PATH		database server logpath (logfile optional)
 
 General options:
   -?, --help		show this help and exit
