@@ -10,6 +10,7 @@ import (
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -50,23 +51,31 @@ func showPgLog(g *gocui.Gui, _ *gocui.View) error {
 
 // Get an absolute path of current Postgres log.
 func readLogPath() string {
-	var logfileRealpath, pgDatadir string
+	var logfileRealpath, pgDatadir, pgLoggingCollector string
 
-	// An easiest way to get logfile is using pg_current_logfile() function, but it's available since PG 10.
-	conn.QueryRow(stat.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
+	conn.QueryRow(stat.PgGetSingleSettingQuery, "logging_collector").Scan(&pgLoggingCollector)
+	if pgLoggingCollector == "on" {
+		// An easiest way to get logfile is using pg_current_logfile() function, but it's available since PG 10.
+		if stats.PgVersionNum >= 100000 {
+			conn.QueryRow(stat.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
 
-	if logfileRealpath != "" {
-		// Even pg_current_logfile() might return relative path
-		if !strings.HasPrefix(logfileRealpath, "/") {
-			conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
-			logfileRealpath = pgDatadir + "/" + logfileRealpath
+			if logfileRealpath != "" {
+				// Even pg_current_logfile() might return relative path
+				if !strings.HasPrefix(logfileRealpath, "/") {
+					conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+					logfileRealpath = pgDatadir + "/" + logfileRealpath
+				}
+			}
 		}
-		return logfileRealpath
+
+		// if we're here, it means we are connected to an older Postgres, or logging is not properly configured
+		logfileRealpath = lookupPostgresLogfile()
+	} else {
+		// log file is configured outside of Postgres
+		logfileRealpath = lookupSystemLogfile()
 	}
 
-	// if we're here, it means we are connected to old Postgres that has no pg_current_logfile() function (9.6 and older).
-	// Anyway, after September 2021 years, all Postgres 9.x will become EOL and code below could be deleted.
-	return lookupPostgresLogfile()
+	return logfileRealpath
 }
 
 // lookupPostgresLogfiles tries to assemble in a hard way an absolute path to Postgres logfile
@@ -113,4 +122,50 @@ func lookupPostgresLogfile() (absLogfilePath string) {
 	}
 
 	return absLogfilePath
+}
+
+// lookupSystemLogfiles tries to assemble an absolute path to logfile configured outside of Postgres
+func lookupSystemLogfile() string {
+	var pgDatadir, pgClusterName, newLogfilePath string
+
+	if stats.PgVersionNum >= 90500 {
+		conn.QueryRow(stat.PgGetSingleSettingQuery, "cluster_name").Scan(&pgClusterName)
+
+		pgClusterName = strings.Replace(pgClusterName, "/", "-", -1)
+		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		if _, err := os.Stat(newLogfilePath); err == nil {
+			return newLogfilePath
+		}
+	} else {
+		conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+
+		pgClusterName = filepath.Base(filepath.Dir(pgDatadir)) + "-" + filepath.Base(pgDatadir)
+		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		if _, err := os.Stat(newLogfilePath); err == nil {
+			return newLogfilePath
+		}
+
+		pgClusterName = filepath.Base(pgDatadir)
+		newLogfilePath = "/var/log/postgresql/postgresql-" + pgClusterName + ".log"
+		if _, err := os.Stat(newLogfilePath); err == nil {
+			return newLogfilePath
+		}
+	}
+
+	newLogfilePath = "/var/log/postgresql/postgresql.log"
+	if _, err := os.Stat(newLogfilePath); err == nil {
+		return newLogfilePath
+	}
+
+	newLogfilePath = "/var/log/postgresql.log"
+	if _, err := os.Stat(newLogfilePath); err == nil {
+		return newLogfilePath
+	}
+
+	newLogfilePath = "/var/log/postgres.log"
+	if _, err := os.Stat(newLogfilePath); err == nil {
+		return newLogfilePath
+	}
+
+	return ""
 }
