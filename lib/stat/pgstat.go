@@ -89,6 +89,7 @@ type PgInfo struct {
 	PgMaxConns            uint   /* max_connections value */
 	PgMaxPrepXacts        uint   /* max_prepared_transactions value */
 	PgStatStatementsAvail bool   /* is pg_stat_statements available? */
+	PgcenterSchemaAvail   bool   /* is pgcenter's stats schema available? */
 }
 
 // PgActivityStat is the container for Postgres' activity stats
@@ -152,13 +153,26 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 
 	// In case of remote Postgres we should to know remote CLK_TCK
 	if !isLocal {
-		conn.QueryRow(PgProcSysTicksQuery).Scan(&SysTicks)
+		s.IsPgcSchemaInstalled(conn)
+		if s.PgcenterSchemaAvail {
+			conn.QueryRow(PgProcSysTicksQuery).Scan(&SysTicks)
+		}
 	}
 }
 
 // UpdatePgStatStatementsStatus method refreshes info about pg_stat_availability
 func (s *Pgstat) UpdatePgStatStatementsStatus(conn *sql.DB) {
 	conn.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
+}
+
+// isPgcSchemaInstalled method checks pgcenter's stats schema existance
+func (s *Pgstat) IsPgcSchemaInstalled(conn *sql.DB) {
+	var avail bool
+	if err := conn.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {
+		// in case of error, just tells the schema is not available
+		s.PgcenterSchemaAvail = false
+	}
+	s.PgcenterSchemaAvail = avail
 }
 
 // Reset method discards activity stats if Postgres restart detected

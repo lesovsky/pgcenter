@@ -35,7 +35,7 @@ func showAux(auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal)
+			nlines, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil)
@@ -48,7 +48,7 @@ func showAux(auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal)
+			nlines, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil)
@@ -96,7 +96,7 @@ func showAux(auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 func getAuxStat(g *gocui.Gui) {
 	switch ctx.aux {
 	case auxDiskstat:
-		ndev, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal)
+		ndev, err := stat.CountLines(stat.ProcDiskstats, conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail)
 		if err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
@@ -106,7 +106,7 @@ func getAuxStat(g *gocui.Gui) {
 			stats.Iostat.New(ndev)
 		}
 		// Read stats
-		if err := stats.CurrDiskstats.Read(conn, conninfo.ConnLocal); err != nil {
+		if err := stats.CurrDiskstats.Read(conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail); err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
 		} else {
@@ -114,7 +114,7 @@ func getAuxStat(g *gocui.Gui) {
 			copy(stats.PrevDiskstats, stats.CurrDiskstats)
 		}
 	case auxNicstat:
-		ndev, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal)
+		ndev, err := stat.CountLines(stat.ProcNetdevFile, conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail)
 		if err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
@@ -124,7 +124,7 @@ func getAuxStat(g *gocui.Gui) {
 			stats.Nicstat.New(ndev)
 		}
 		// Read stats
-		if err := stats.CurrNetdevs.Read(conn, conninfo.ConnLocal); err != nil {
+		if err := stats.CurrNetdevs.Read(conn, conninfo.ConnLocal, stats.PgcenterSchemaAvail); err != nil {
 			printCmdline(g, err.Error())
 			closeAuxView(g, nil)
 		} else {

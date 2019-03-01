@@ -24,10 +24,10 @@ type LoadAvg struct {
 }
 
 // Read stats into container
-func (la *LoadAvg) Read(conn *sql.DB, isLocal bool) {
+func (la *LoadAvg) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
 	if isLocal {
 		la.ReadLocal()
-	} else {
+	} else if pgcAvail {
 		la.ReadRemote(conn)
 	}
 }

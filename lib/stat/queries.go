@@ -18,6 +18,9 @@ const (
 	PgGetUptimeQuery = "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
 	// PgCheckPGSSExists checks that pg_stat_statements view exists
 	PgCheckPGSSExists = "SELECT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'pg_stat_statements')"
+	// PgCheckPgcenterSchemaQuery checks existance of pgcenter's stats schema
+	PgCheckPgcenterSchemaQuery = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgcenter')"
+	// LogMinDurationQuery specifies SQL to override log_min_duration_statement
 	// PgGetConfigAllQuery queries current Postgres configuration
 	PgGetConfigAllQuery = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 	// PgGetCurrentLogfileQuery queries current Postgres logfile

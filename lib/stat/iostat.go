@@ -63,12 +63,12 @@ func (c *Iostat) New(size int) {
 }
 
 // Read method reads stats from the source
-func (c Diskstats) Read(conn *sql.DB, isLocal bool) error {
+func (c Diskstats) Read(conn *sql.DB, isLocal bool, pgcAvail bool) error {
 	if isLocal {
 		if err := c.ReadLocal(); err != nil {
 			return err
 		}
-	} else {
+	} else if pgcAvail {
 		c.ReadRemote(conn)
 	}
 

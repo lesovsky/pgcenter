@@ -54,10 +54,10 @@ type Cpustat struct {
 }
 
 // Read method reads CPU raw stats
-func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool) {
+func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
 	if isLocal {
 		s.ReadLocal()
-	} else {
+	} else if pgcAvail{
 		s.ReadRemote(conn)
 	}
 }

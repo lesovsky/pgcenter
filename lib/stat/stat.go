@@ -56,13 +56,13 @@ func init() {
 
 // GetSysStat method read all required system stats. Ignore any errors during reading stat, just print zeroes
 func (s *Stat) GetSysStat(conn *sql.DB, isLocal bool) {
-	s.LoadAvg.Read(conn, isLocal)
+	s.LoadAvg.Read(conn, isLocal, s.PgcenterSchemaAvail)
 
-	s.CurrCpuSample.Read(conn, isLocal)
+	s.CurrCpuSample.Read(conn, isLocal, s.PgcenterSchemaAvail)
 	s.CpuUsage.Diff(s.PrevCpuSample, s.CurrCpuSample)
 	s.PrevCpuSample = s.CurrCpuSample
 
-	s.Meminfo.Read(conn, isLocal)
+	s.Meminfo.Read(conn, isLocal, s.PgcenterSchemaAvail)
 }
 
 // sValue routine calculates percent ratio of calculated metric within specified time interval
@@ -94,11 +94,13 @@ func uptime() (float64, error) {
 }
 
 // CountLines just count lines in specified source
-func CountLines(f string, conn *sql.DB, isLocal bool) (int, error) {
+func CountLines(f string, conn *sql.DB, isLocal bool, pgcAvail bool) (int, error) {
 	if isLocal {
 		return CountLinesLocal(f)
+	} else if pgcAvail {
+		return CountLinesRemote(f, conn)
 	}
-	return CountLinesRemote(f, conn)
+	return 0, nil
 }
 
 // CountLinesLocal counts lines in local file

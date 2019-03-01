@@ -36,10 +36,10 @@ type Meminfo struct {
 }
 
 // Read stats into container
-func (m *Meminfo) Read(conn *sql.DB, isLocal bool) {
+func (m *Meminfo) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
 	if isLocal {
 		m.ReadLocal()
-	} else {
+	} else if pgcAvail{
 		m.ReadRemote(conn)
 	}
 }

@@ -73,12 +73,12 @@ func (c *Nicstat) New(size int) {
 }
 
 // Read stats into container
-func (c Netdevs) Read(conn *sql.DB, isLocal bool) error {
+func (c Netdevs) Read(conn *sql.DB, isLocal bool, pgcAvail bool) error {
 	if isLocal {
 		if err := c.ReadLocal(); err != nil {
 			return err
 		}
-	} else {
+	} else if pgcAvail {
 		c.ReadRemote(conn)
 	}
 
