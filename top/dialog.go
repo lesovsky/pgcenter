@@ -70,16 +70,20 @@ func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 
 		maxX, _ := g.Size()
 		// Open one-line editable view, print a propmt and set cursor after it.
-		if v, err := g.SetView("dialog", -1, 3, maxX-1, 5); err != nil {
+		if v, err := g.SetView("dialog", len(dialogPrompts[d])-1, 3, maxX-1, 5); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dialog view on layout failed: %s", err)
 			}
 
+			p, err := g.View("cmdline")
+			if err != nil {
+				return fmt.Errorf("Set focus on cmdline view failed: %s", err)
+			}
+			fmt.Fprintf(p, dialogPrompts[d])
+
+			g.Cursor = true
 			v.Editable = true
 			v.Frame = false
-			fmt.Fprintf(v, dialogPrompts[d])
-
-			v.SetCursor(len(dialogPrompts[d]), 0)
 
 			if _, err := g.SetCurrentView("dialog"); err != nil {
 				return fmt.Errorf("set dialog view as current on layout failed: %s", err)
@@ -95,6 +99,9 @@ func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 // When gocui.KeyEnter is pressed in the end of user's input, depending on dialog type an appropriate handler should be started.
 func dialogFinish(g *gocui.Gui, v *gocui.View) error {
 	var answer string
+
+	g.Cursor = false
+	printCmdline(g, "")
 
 	switch dialog {
 	case dialogPgReload:
