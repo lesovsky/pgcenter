@@ -100,7 +100,6 @@ func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 func dialogFinish(g *gocui.Gui, v *gocui.View) error {
 	var answer string
 
-	g.Cursor = false
 	printCmdline(g, "")
 
 	switch dialog {
@@ -141,6 +140,7 @@ func dialogCancel(g *gocui.Gui, v *gocui.View) error {
 
 // Close 'gocui' view object related to dialog.
 func dialogClose(g *gocui.Gui, v *gocui.View) error {
+	g.Cursor = false
 	v.Clear()
 	g.DeleteView("dialog")
 	if _, err := g.SetCurrentView("sysstat"); err != nil {
