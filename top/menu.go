@@ -62,6 +62,7 @@ var (
 
 	// Variable-transporter, function which check user's choice, uses this variable to select appropriate handler. Depending on menu type, select appropriate function.
 	menu menuType
+	items []string
 )
 
 // Open 'gocui' view object and display menu items depending on passed menu type.
@@ -72,8 +73,6 @@ func menuOpen(m menuStyle) func(g *gocui.Gui, _ *gocui.View) error {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
 		}
-
-		g.Cursor = true
 
 		v, err := g.SetView("menu", 0, 5, 72, 6+len(m.menuItems))
 		if err != nil {
@@ -86,11 +85,10 @@ func menuOpen(m menuStyle) func(g *gocui.Gui, _ *gocui.View) error {
 			return err
 		}
 
-		/* print menu items */
-		for _, item := range m.menuItems {
-			fmt.Fprintln(v, item)
-		}
 		menu = m.menuType
+		items = m.menuItems
+
+		menuDraw(v)
 
 		return nil
 	}
@@ -136,8 +134,6 @@ func menuSelect(g *gocui.Gui, v *gocui.View) error {
 
 // Close 'gocui' view object when menu is closed
 func menuClose(g *gocui.Gui, v *gocui.View) error {
-	g.Cursor = false
-
 	if err := g.DeleteView("menu"); err != nil {
 		return err
 	}
@@ -148,6 +144,19 @@ func menuClose(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func menuDraw(v *gocui.View) {
+	_, cy := v.Cursor()
+	v.Clear()
+	/* print menu items */
+	for i, item := range items {
+		if i == cy {
+			fmt.Fprintln(v, "\033[30;47m" + item + "\033[0m")
+		} else {
+			fmt.Fprintln(v, item)
+		}
+	}
+}
+
 // Move cursor to one item up or down.
 func moveCursor(d direction) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
@@ -156,8 +165,10 @@ func moveCursor(d direction) func(g *gocui.Gui, v *gocui.View) error {
 			switch d {
 			case moveDown:
 				v.SetCursor(cx, cy+1) /* errors don't make sense here */
+				menuDraw(v)
 			case moveUp:
 				v.SetCursor(cx, cy-1) /* errors don't make sense here */
+				menuDraw(v)
 			}
 		}
 		return nil
