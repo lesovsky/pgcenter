@@ -39,7 +39,7 @@ type Meminfo struct {
 func (m *Meminfo) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
 	if isLocal {
 		m.ReadLocal()
-	} else if pgcAvail{
+	} else if pgcAvail {
 		m.ReadRemote(conn)
 	}
 }

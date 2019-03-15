@@ -212,7 +212,7 @@ func printStatReport(d *stat.PGresult, opts ReportOptions, ts time.Time) (printe
 				}
 
 				// last col with no truncation of not specified otherwise
-				if i != len(d.Cols) - 1 {
+				if i != len(d.Cols)-1 {
 					fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, d.Result[rownum][colnum].String)
 				} else {
 					fmt.Printf("%s", d.Result[rownum][colnum].String)

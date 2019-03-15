@@ -206,7 +206,7 @@ func printStatHeader(v *gocui.View, s *stat.Stat) {
 		if i != ctx.current.OrderKey {
 			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, ctx.current.ColsWidth[i]+2, pname)
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47,  1, ctx.current.ColsWidth[i]+2, pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, ctx.current.ColsWidth[i]+2, pname)
 		}
 	}
 	fmt.Fprintf(v, "\n")

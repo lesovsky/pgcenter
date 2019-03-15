@@ -165,7 +165,7 @@ func (s *Pgstat) UpdatePgStatStatementsStatus(conn *sql.DB) {
 	conn.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
 }
 
-// isPgcSchemaInstalled method checks pgcenter's stats schema existance
+// IsPgcSchemaInstalled method checks pgcenter's stats schema existence
 func (s *Pgstat) IsPgcSchemaInstalled(conn *sql.DB) {
 	var avail bool
 	if err := conn.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {

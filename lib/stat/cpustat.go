@@ -57,7 +57,7 @@ type Cpustat struct {
 func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
 	if isLocal {
 		s.ReadLocal()
-	} else if pgcAvail{
+	} else if pgcAvail {
 		s.ReadRemote(conn)
 	}
 }

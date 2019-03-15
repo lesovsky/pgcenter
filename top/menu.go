@@ -61,7 +61,7 @@ var (
 	}
 
 	// Variable-transporter, function which check user's choice, uses this variable to select appropriate handler. Depending on menu type, select appropriate function.
-	menu menuType
+	menu  menuType
 	items []string
 )
 
@@ -150,7 +150,7 @@ func menuDraw(v *gocui.View) {
 	/* print menu items */
 	for i, item := range items {
 		if i == cy {
-			fmt.Fprintln(v, "\033[30;47m" + item + "\033[0m")
+			fmt.Fprintln(v, "\033[30;47m"+item+"\033[0m")
 		} else {
 			fmt.Fprintln(v, item)
 		}
