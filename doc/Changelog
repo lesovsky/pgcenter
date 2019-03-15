@@ -1,4 +1,8 @@
 pgcenter (0.6.1) unstable; urgency=low
+  * improved aligning and query truncation
+    - record: records complete length of pg_stat_statements.query (be careful, it might produce high-volume stats file)
+    - record: add startup paramter for configuring truncation
+    - report: can use '--truncate 0', for disabling trucation only for pg_stat_statements.query (might produce an "eyes-bleeding" output)
   * reworked pg_stat_statements queries: 
     - remove unnecessary GROUP BY, ORDER BY and aggregations
     - simplify usage of regexp_replace()

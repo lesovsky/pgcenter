@@ -150,7 +150,7 @@ func formatReport(d *stat.PGresult, opts *ReportOptions) {
 
 	// align values for printing, use dynamic aligning
 	if !opts.Context.Aligned {
-		d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true) // we don't want truncate lines here, so just use high limit
+		d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true)
 		opts.Context.Aligned = true
 	}
 }
@@ -211,7 +211,13 @@ func printStatReport(d *stat.PGresult, opts ReportOptions, ts time.Time) (printe
 					d.Result[rownum][colnum].String = d.Result[rownum][colnum].String[:width-1] + "~"
 				}
 
-				fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, d.Result[rownum][colnum].String)
+				// last col with no truncation of not specified otherwise
+				if i != len(d.Cols) - 1 {
+					fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, d.Result[rownum][colnum].String)
+				} else {
+					fmt.Printf("%s", d.Result[rownum][colnum].String)
+				}
+
 				colnum++
 			}
 

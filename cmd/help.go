@@ -105,6 +105,7 @@ Options:
   -c, --count			number of stats samples to collect
   -f, --file			file name where statistics to write to (default: pgcenter.stat.tar)
   -a, --append			append statistics to file, instead of creating a new file
+  -t, --truncate		maximum query length to record (default: 0, no limit)
   -1, --oneshot			append single statistics snapshot and exit (alias for --append --interval 0 --count 1)
 
 General options:
@@ -125,7 +126,7 @@ Options:
   -o, --order			order values by column (default descending, use '+' sign before a column name for ascending order)
   -g, --grep			filter values in specfied column (format: colname:filtertext)
   -l, --limit			print only limited number of rows per sample (default: unlimited)
-  -t, --truncate		maximum string size to print (default: 32)
+  -t, --truncate		maximum string size to print (default: 32, 0 disables truncate)
   -i, --interval		delta interval (default: 1s)
 
 Report options:

@@ -40,6 +40,7 @@ func init() {
 	CommandDefinition.Flags().Int32VarP(&opts.Count, "count", "c", -1, "number of stats samples to collect")
 	CommandDefinition.Flags().StringVarP(&opts.OutputFile, "file", "f", defaultRecordFile, "file where stats are saved")
 	CommandDefinition.Flags().BoolVarP(&opts.AppendFile, "append", "a", false, "append statistics to a file, instead of creating a new one")
+	CommandDefinition.Flags().IntVarP(&opts.TruncLimit, "truncate", "t", 0, "maximum query length to record (default: 0, no limit)")
 	CommandDefinition.Flags().BoolVarP(&oneshot, "oneshot", "1", false, "append single statistics snapshot to file and exit")
 }
 

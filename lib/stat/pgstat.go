@@ -427,6 +427,8 @@ func (r *PGresult) Sort(key int, desc bool) {
 
 // SetAlign method aligns length of values depending of the columns width
 func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
+	var lastColTruncLimit, lastColMaxWidth int
+	lastColTruncLimit = truncLimit
 	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 
 	/* calculate max length of columns based on the longest value of the column */
@@ -459,7 +461,15 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 				}
 			// for last column set width using truncation limit
 			case colidx == r.Ncols-1:
-				widthes[colidx] = truncLimit
+				// if truncation disabled, use width of the longest value, otherwise use the user-defined truncation limit
+				if lastColTruncLimit == 0 {
+					if lastColMaxWidth < valuelen {
+						lastColMaxWidth = valuelen
+					}
+					widthes[colidx] = lastColMaxWidth
+				} else {
+					widthes[colidx] = truncLimit
+				}
 			// do nothing if length of value or column is less (or equal) than already specified width
 			case aligningIsLengthLessOrEqualWidth(valuelen, colnamelen, widthes[colidx]):
 
