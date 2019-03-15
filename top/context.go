@@ -57,7 +57,7 @@ var (
 )
 
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.
-func (c *context) Setup(pi stat.PgInfo) {
+func (c *context) Setup(pginfo stat.PgInfo) {
 	c.contextList = ctxList
 
 	// Select default context unit
@@ -67,8 +67,8 @@ func (c *context) Setup(pi stat.PgInfo) {
 	c.aux = auxNone
 
 	// Adjust queries depending on Postgres version
-	c.contextList.AdjustQueries(pi)
-	c.sharedOptions.Adjust(pi)
+	c.contextList.AdjustQueries(pginfo)
+	c.sharedOptions.Adjust(pginfo, "top")
 }
 
 // Switch sort order to left column

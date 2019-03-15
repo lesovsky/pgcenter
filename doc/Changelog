@@ -1,4 +1,9 @@
 pgcenter (0.6.1) unstable; urgency=low
+  * reworked pg_stat_statements queries: 
+    - remove unnecessary GROUP BY, ORDER BY and aggregations
+    - simplify usage of regexp_replace()
+    - use pg_get_userbyid() instead of joining pg_roles view
+    - use configurable limit for truncating length of queries
   * top: read remote stats only if pgcenter schma is available
   * top: do polling pg_stat_statements only if it's available (issue #59)
   * top: fixed handling of libpq errors during connection establishment (issue #58)

@@ -22,6 +22,7 @@ type RecordOptions struct {
 	Count         int32            // Number of statistics snapshot to record
 	OutputFile    string           // File where statistics will be saved
 	AppendFile    bool             // Append to a file, or create/truncate at the beginning
+	TruncLimit    int              // Limit of the length, to which query should be truncated
 	contextList   stat.ContextList // List of statistics available for recording
 	sharedOptions stat.Options     // Queries' settings that depend on Postgres version
 }

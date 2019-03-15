@@ -4,6 +4,7 @@ package stat
 
 import (
 	"bytes"
+	"fmt"
 	"text/template"
 )
 
@@ -404,125 +405,92 @@ ORDER BY pid DESC`
 
 	// Some notes about pg_stat_statements-related queries:
 	// 1. regexp_replace() removes extra spaces, tabs and newlines from queries
-	// 2. values from 'query' column are truncated by left() and return only 128 symbols of the query, if ask values
-	// with no truncation, stats query used by pgCenter, in some circumstances (too many very long queries in
-	// pg_stat_statements) might executes too long in grouping and sorting operations.
 
 	// PgStatStatementsTimingQueryDefault is the default query for getting timings stats from pg_stat_statements view
 	// { Name: "pg_stat_statements_timing", Query: common.PgStatStatementsTimingQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsTimingQueryDefault = `SELECT
-a.rolname AS user,
+pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
-date_trunc('seconds', round(sum(p.total_time)) / 1000 * '1 second'::interval)::text AS t_all_t,
-date_trunc('seconds', round(sum(p.blk_read_time)) / 1000 * '1 second'::interval)::text AS t_read_t,
-date_trunc('seconds', round(sum(p.blk_write_time)) / 1000 * '1 second'::interval)::text AS t_write_t,
-date_trunc('seconds', round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) / 1000 * '1 second'::interval)::text AS t_cpu_t,
-round(sum(p.total_time)) AS all_t,
-round(sum(p.blk_read_time)) AS read_t,
-round(sum(p.blk_write_time)) AS write_t,
-round((sum(p.total_time) - (sum(p.blk_read_time) + sum(p.blk_write_time)))) AS cpu_t,
-sum(p.calls) AS calls,
-left(md5(d.datname || a.rolname || left(p.query, 128)), 10) AS queryid,
-regexp_replace(
-regexp_replace(left(p.query, 128),
-E'( |\t)+',' ','g'),
-E'\n', '', 'g') AS query
+date_trunc('seconds', round(p.total_time) / 1000 * '1 second'::interval)::text AS t_all_t,
+date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS t_read_t,
+date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS t_write_t,
+date_trunc('seconds', round(p.total_time - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS t_cpu_t,
+round(p.total_time) AS all_t,
+round(p.blk_read_time) AS read_t,
+round(p.blk_write_time) AS write_t,
+round(p.total_time - (p.blk_read_time + p.blk_write_time)) AS cpu_t,
+p.calls AS calls,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
-JOIN pg_roles a ON a.oid=p.userid
-JOIN pg_database d ON d.oid=p.dbid
-GROUP BY a.rolname, d.datname, left(p.query, 128)
-ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
+JOIN pg_database d ON d.oid=p.dbid`
 
 	// PgStatStatementsGeneralQueryDefault is the default query for getting general stats from pg_stat_statements
 	// { Name: "pg_stat_statements_general", Query: common.PgStatStatementsGeneralQueryDefault, DiffIntvl: [2]int{4,5}, Ncols: 8, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsGeneralQueryDefault = `SELECT
-a.rolname AS user,
+pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
-sum(p.calls) AS t_calls,
-sum(p.rows) AS t_rows,
-sum(p.calls) AS calls,
-sum(p.rows) AS rows,
-left(md5(d.datname || a.rolname || left(p.query, 128)), 10) AS queryid,
-regexp_replace(
-regexp_replace(left(p.query, 128),
-E'( |\t)+',' ','g'),
-E'\n', '', 'g') AS query
+p.calls AS t_calls,
+p.rows AS t_rows,
+p.calls AS calls,
+p.rows AS rows,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
-JOIN pg_roles a ON a.oid=p.userid
-JOIN pg_database d ON d.oid=p.dbid
-GROUP BY a.rolname, d.datname, left(p.query, 128)
-ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
+JOIN pg_database d ON d.oid=p.dbid`
 
 	// PgStatStatementsIoQueryDefault is the default query for getting IO stats from pg_stat_statements
 	// { Name: "pg_stat_statements_io", Query: common.PgStatStatementsIoQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsIoQueryDefault = `SELECT
-a.rolname AS user,
+pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
-sum(p.shared_blks_hit) + sum(p.local_blks_hit) AS t_hits,
-(sum(p.shared_blks_read) + sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS t_reads,
-(sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS t_dirtied,
-(sum(p.shared_blks_written) + sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS t_written,
-sum(p.shared_blks_hit) + sum(p.local_blks_hit) AS hits,
-(sum(p.shared_blks_read) + sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS reads,
-(sum(p.shared_blks_dirtied) + sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS dirtied,
-(sum(p.shared_blks_written) + sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS written,
-sum(p.calls) AS calls,
-left(md5(d.datname || a.rolname || left(p.query, 128)), 10) AS queryid,
-regexp_replace(
-regexp_replace(left(p.query, 128),
-E'( |\t)+',' ','g'),
-E'\n', '', 'g') AS query
+p.shared_blks_hit + p.local_blks_hit AS t_hits,
+(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS t_reads,
+(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS t_dirtied,
+(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS t_written,
+p.shared_blks_hit + p.local_blks_hit AS hits,
+(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS reads,
+(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS dirtied,
+(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS written,
+p.calls AS calls,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
-JOIN pg_roles a ON a.oid=p.userid
-JOIN pg_database d ON d.oid=p.dbid
-GROUP BY a.rolname, d.datname, left(p.query, 128)
-ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
+JOIN pg_database d ON d.oid=p.dbid`
 
 	// PgStatStatementsTempQueryDefault is the default query for getting stats about temp files IO from pg_stat_statements
 	// { Name: "pg_stat_statements_temp", Query: common.PgStatStatementsTempQueryDefault, DiffIntvl: [2]int{4,6}, Ncols: 9, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsTempQueryDefault = `SELECT
-a.rolname AS user,
+pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
-sum(p.temp_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_read,
-sum(p.temp_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_write,
-sum(p.temp_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS tmp_read,
-sum(p.temp_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS tmp_write,
-sum(p.calls) AS calls,
-left(md5(d.datname || a.rolname || left(p.query, 128)), 10) AS queryid,
-regexp_replace(
-regexp_replace(left(p.query, 128),
-E'( |\t)+',' ','g'),
-E'\n', '', 'g') AS query
+p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_read,
+p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_write,
+p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tmp_read,
+p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS tmp_write,
+p.calls AS calls,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
-JOIN pg_roles a ON a.oid=p.userid
-JOIN pg_database d ON d.oid=p.dbid
-GROUP BY a.rolname, d.datname, left(p.query, 128)
-ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
+JOIN pg_database d ON d.oid=p.dbid`
 
 	// PgStatStatementsLocalQueryDefault is the default query for getting stats about local buffers IO from pg_stat_statements
 	// { Name: "pg_stat_statements_local", Query: common.PgStatStatementsLocalQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	PgStatStatementsLocalQueryDefault = `SELECT
-a.rolname AS user,
+pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
-sum(p.local_blks_hit) AS t_lo_hits,
-(sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_reads,
-(sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_dirtied,
-(sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS t_lo_written,
-sum(p.local_blks_hit) AS lo_hits,
-(sum(p.local_blks_read)) * (SELECT current_setting('block_size')::int / 1024) AS lo_reads,
-(sum(p.local_blks_dirtied)) * (SELECT current_setting('block_size')::int / 1024) AS lo_dirtied,
-(sum(p.local_blks_written)) * (SELECT current_setting('block_size')::int / 1024) AS lo_written,
-sum(p.calls) AS calls,
-left(md5(d.datname || a.rolname || left(p.query, 128)), 10) AS queryid,
-regexp_replace(
-regexp_replace(left(p.query, 128),
-E'( |\t)+',' ','g'),
-E'\n', '', 'g') AS query
+p.local_blks_hit AS t_lo_hits,
+p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS t_lo_reads,
+p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS t_lo_dirtied,
+p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS t_lo_written,
+p.local_blks_hit AS lo_hits,
+p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS lo_reads,
+p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS lo_dirtied,
+p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS lo_written,
+p.calls AS calls,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
-JOIN pg_roles a ON a.oid=p.userid
-JOIN pg_database d ON d.oid=p.dbid
-GROUP BY a.rolname, d.datname, left(p.query, 128)
-ORDER BY left(md5(d.datname || a.rolname || left(p.query, 128)), 10) DESC`
+JOIN pg_database d ON d.oid=p.dbid`
 )
 
 // Options contains queries' settings that used depending on user preferences.
@@ -533,6 +501,8 @@ type Options struct {
 	QueryAgeThresh string // Show only queries with duration more than specified
 	BackendState   string // Backend state's selector for cancel/terminate function
 	ShowNoIdle     bool   // don't show IDLEs, background workers)
+	PgSSQueryLen   int    // Specify the length of query to show in pg_stat_statements
+	PgSSQueryLenFn string // Specify exact func to truncating query
 }
 
 // PrepareQuery transforms query's template to a particular query
@@ -547,7 +517,7 @@ func PrepareQuery(s string, o Options) (string, error) {
 }
 
 // Adjust method used for adjusting query's options depending on Postgres version.
-func (o *Options) Adjust(pi PgInfo) {
+func (o *Options) Adjust(pi PgInfo, util string) {
 	// System tables and indexes aren't shown by default
 	o.ViewType = "user"
 	// Don't filter queries by age
@@ -572,6 +542,20 @@ func (o *Options) Adjust(pi PgInfo) {
 			o.WalFunction2 = "pg_current_wal_lsn"
 		} else {
 			o.WalFunction2 = "pg_last_wal_receive_lsn"
+		}
+	}
+
+	// Queries settings that are specific for particular utilities
+	switch util {
+	case "top":
+		// we want truncate query length of pg_stat_statements.query, because it make no sense to process full query when sizes of user's screen is limited
+		o.PgSSQueryLenFn = "left(p.query, 256)"
+	case "record":
+		// in case of record program we want to record full length of the query, if user doesn't specified exact length
+		if o.PgSSQueryLen != 0 {
+			o.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", o.PgSSQueryLen)
+		} else {
+			o.PgSSQueryLenFn = "p.query"
 		}
 	}
 }

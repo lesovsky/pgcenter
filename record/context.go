@@ -25,6 +25,10 @@ func (o *RecordOptions) Setup(pginfo stat.PgInfo) {
 	}
 
 	// Adjust queries depending on Postgres version
+	// Pass truncation limit to query adjustment options
+	o.sharedOptions.PgSSQueryLen = o.TruncLimit
+
+	//
 	o.contextList.AdjustQueries(pginfo)
-	o.sharedOptions.Adjust(pginfo)
+	o.sharedOptions.Adjust(pginfo, "record")
 }
