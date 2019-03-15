@@ -101,11 +101,11 @@ Options:
   -p, --port PORT		database server port (default 5432)
   -U, --username USERNAME	database user name
 
-  -i, --interval		polling interval (default: 1s)
-  -c, --count			number of stats samples to collect
-  -f, --file			file name where statistics to write to (default: pgcenter.stat.tar)
+  -i, --interval DURATION	polling interval (default: 1s)
+  -c, --count INT		number of stats samples to collect
+  -f, --file FILENAME		file name where statistics to write to (default: pgcenter.stat.tar)
   -a, --append			append statistics to file, instead of creating a new file
-  -t, --truncate		maximum query length to record (default: 0, no limit)
+  -t, --truncate INT		maximum query length to record (default: 0, no limit)
   -1, --oneshot			append single statistics snapshot and exit (alias for --append --interval 0 --count 1)
 
 General options:
@@ -120,14 +120,14 @@ Usage:
   pgcenter report [OPTIONS]...
 
 Options:
-  -f, --file			read stats from file (default: pgcenter.stat.tar)
-  -s, --start			starting time of the report (format: [YYYYMMDD-]HHMMSS)
-  -e, --end			ending time of the report (format: [YYYYMMDD-]HHMMSS)
-  -o, --order			order values by column (default descending, use '+' sign before a column name for ascending order)
-  -g, --grep			filter values in specfied column (format: colname:filtertext)
-  -l, --limit			print only limited number of rows per sample (default: unlimited)
-  -t, --truncate		maximum string size to print (default: 32, 0 disables truncate)
-  -i, --interval		delta interval (default: 1s)
+  -f, --file FILE		read stats from file (default: pgcenter.stat.tar)
+  -s, --start TIMESTAMP		starting time of the report (format: [YYYYMMDD-]HHMMSS)
+  -e, --end TIMESTAMP		ending time of the report (format: [YYYYMMDD-]HHMMSS)
+  -o, --order COLNAME		order values by column (default descending, use '+' sign before a column name for ascending order)
+  -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
+  -l, --limit INT		print only limited number of rows per sample (default: unlimited)
+  -t, --truncate INT		maximum string size to print (default: 32, 0 disables truncate)
+  -i, --interval DURATION	delta interval (default: 1s)
 
 Report options:
   -A, --activity		show pg_stat_activity statistics
