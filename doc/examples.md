@@ -2,6 +2,7 @@
 
 - [General notes](#general-notes)
 - [Download](#download)
+- [Install devel](#install-from-dev-branch)
 - [Run in Docker](#run-in-docker)
 - [pgCenter usage](#pgcenter-usage)
 ---
@@ -13,6 +14,24 @@
 
 #### Download
 Download latest release from [release page](https://github.com/lesovsky/pgcenter/releases) and unpack, after that pgCenter is ready to run.
+
+#### Install from dev branch
+- Install fresh version of `golang` into the system. Install it with package manager or download it directly from the [official site](https://golang.org/dl/). In this case after downloading you need to unpack the archive and copy binaries into the $PATH.
+- Clone pgcenter's repo, switch to `dev` branch.
+```
+git clone https://github.com/lesovsky/pgcenter
+cd pgcenter
+git checkout --track origin/dev
+```
+- Build `pgcenter` using `Makefile`. It supposes `go` binary is already is in the PATH.
+```
+make
+```
+- Optionally you can install `pgcenter` into `/usr/bin` using `Makefile`. Root privileges required.
+```
+make install
+```
+Now `pgcenter` is ready for use.
 
 #### Run in Docker
 ```
