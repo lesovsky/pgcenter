@@ -76,53 +76,29 @@ func assembleConnstr(c *Conninfo) string {
 
 // PQconnectdb connects to Postgres, asks password if required.
 func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
-	conn, err = sql.Open(dbDriver, connstr)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = PQstatus(conn); err != nil {
-		// handle libpq errors if found
-		if pqerr, ok := err.(*pq.Error); ok {
+	// try connecting in the loop and handle all known errors, give up if can;t handle an error
+	for {
+		conn, err = sql.Open(dbDriver, connstr)
+		if err = PQstatus(conn); err != nil {
 			switch {
-			// Password required -- ask user and retry connection
-			case pqerr.Code == errCodeInvalidPassword:
+			case err == pq.ErrSSLNotSupported:
+				// By default pq-driver tries to connect with SSL. So if SSL is not enabled on the other side - fix our connection string and try to reconnect
+				connstr = connstr + " sslmode=disable"
+			case err.(*pq.Error).Code == errCodeInvalidPassword:
 				fmt.Printf("Password for user %s: ", c.User)
 				bytePassword, err := terminal.ReadPassword(0)
 				if err != nil {
 					return nil, err
 				}
 				connstr = fmt.Sprintf("%s password=%s ", connstr, string(bytePassword))
-				conn, err = sql.Open(dbDriver, connstr)
-				if err != nil {
-					return nil, err
-				}
-				if err = PQstatus(conn); err != nil {
-					return nil, err
-				}
+				fmt.Println()
 			default:
-				return nil, fmt.Errorf("error occurred during connection establishing: %s", err)
+				return nil, fmt.Errorf("failed connection establishing: %s", err)
 			}
-
+		} else {
 			return conn, nil
 		}
-
-		// handle other golang 'pq' driver-specific errors (not related to libpq)
-		switch err {
-		case pq.ErrSSLNotSupported:
-			// By default pq-driver tries to connect with SSL.
-			// So if SSL is not enabled on the other side - fix our connection string and try to reconnect
-			connstr = connstr + " sslmode=disable"
-			conn, err = sql.Open(dbDriver, connstr)
-			if err = PQstatus(conn); err != nil {
-				return nil, err
-			}
-		default:
-			return nil, fmt.Errorf("error occurred during connection establishing: %s", err)
-		}
 	}
-
-	return conn, nil
 }
 
 // Fills empty connection settings by normal values
