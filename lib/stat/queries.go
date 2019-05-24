@@ -100,7 +100,7 @@ SELECT
 	PgAutovacQueryDefault = `SELECT
 count(*) FILTER (WHERE query ~* '^autovacuum:') AS av_workers,
 count(*) FILTER (WHERE query ~* '^autovacuum:.*to prevent wraparound') AS av_wrap,
-count(*) FILTER (WHERE query ~ '^vacuum' AND state != 'idle') AS v_manual,
+count(*) FILTER (WHERE query ~* '^vacuum' AND state != 'idle') AS v_manual,
 coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS av_maxtime
 FROM pg_stat_activity
 WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid()`
