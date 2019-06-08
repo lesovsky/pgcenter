@@ -114,6 +114,12 @@ func quit(g *gocui.Gui, _ *gocui.View) error {
 	close(doUpdate)
 	close(doExit)
 	g.Close()
+
+	err := conn.Close()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "ERROR: failed closing pgsql connection, ignoring")
+	}
+
 	os.Exit(0)
 	return gocui.ErrQuit
 }

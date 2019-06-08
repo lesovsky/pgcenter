@@ -1,3 +1,6 @@
+pgcenter (0.6.2) unstable; urgency=low
+  * avoid rude disconnection from postgres at top-program exit
+
 pgcenter (0.6.1) unstable; urgency=low
   * improved aligning and query truncation
     - record: records complete length of pg_stat_statements.query (be careful, it might produce high-volume stats file)
