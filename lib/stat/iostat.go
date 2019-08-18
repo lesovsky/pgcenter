@@ -94,7 +94,7 @@ func (c Diskstats) ReadLocal() error {
 		}
 		var ios = Diskstat{}
 
-		_, err = fmt.Sscanln(string(line),
+		_, err = fmt.Sscan(string(line),
 			&ios.Major, &ios.Minor, &ios.Device,
 			&ios.Rcompleted, &ios.Rmerged, &ios.Rsectors, &ios.Rspent,
 			&ios.Wcompleted, &ios.Wmerged, &ios.Wsectors, &ios.Wspent,
