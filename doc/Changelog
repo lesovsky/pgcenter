@@ -1,4 +1,5 @@
 pgcenter (0.6.2) unstable; urgency=low
+  * fix #66, pgcenter crashes when no running postgres
   * avoid rude disconnection from postgres at top-program exit
 
 pgcenter (0.6.1) unstable; urgency=low
