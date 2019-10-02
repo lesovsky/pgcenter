@@ -17,7 +17,7 @@ general actions:
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.
-    p                 start psql session.
+    ~                 start psql session.
     l                 open log file with pager.
 
 aux stats actions:

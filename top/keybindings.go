@@ -46,7 +46,7 @@ func keybindings(g *gocui.Gui) error {
 		{"sysstat", 'X', menuOpen(menuPgssStyle)},
 		{"sysstat", 'l', showPgLog},
 		{"sysstat", 'C', showPgConfig},
-		{"sysstat", 'p', runPsql},
+		{"sysstat", '~', runPsql},
 		{"sysstat", 'B', showAux(auxDiskstat)},
 		{"sysstat", 'N', showAux(auxNicstat)},
 		{"sysstat", 'L', showAux(auxLogtail)},
