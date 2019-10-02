@@ -205,8 +205,22 @@ func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 	}
 }
 
+// TODO: looks like these two functions below are redundant, their code is the same - possibly they should be replaced with switchContextTo() function
+
 // Switch pg_stat_statements context units
 func switchContextToPgss(g *gocui.Gui, c string) {
+	// Save current context unit with its settings into context list
+	ctx.contextList[ctx.current.Name] = ctx.current
+
+	// Load new context unit (with settings) from the list
+	ctx.current = ctx.contextList[c]
+
+	printCmdline(g, ctx.current.Msg)
+	doUpdate <- 1
+}
+
+// Switch pg_stat_progress_* context units
+func switchContextToProgress(g *gocui.Gui, c string) {
 	// Save current context unit with its settings into context list
 	ctx.contextList[ctx.current.Name] = ctx.current
 

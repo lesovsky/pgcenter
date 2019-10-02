@@ -18,6 +18,7 @@ type direction int
 const (
 	menuNone menuType = iota
 	menuPgss
+	menuProgress
 	menuConf
 )
 
@@ -45,6 +46,17 @@ var (
 			" pg_stat_statements input/output",
 			" pg_stat_statements temp files input/output",
 			" pg_stat_statements temp tables (local) input/output",
+		},
+	}
+
+	// pg_stat_progress_* menu
+	menuProgressStyle = menuStyle{
+		menuType:  menuProgress,
+		menuTitle: " Choose pg_stat_progress_* view (Enter to choose, Esc to exit): ",
+		menuItems: []string{
+			" pg_stat_progress_vacuum",
+			" pg_stat_progress_cluster",
+			" pg_stat_progress_create_index",
 		},
 	}
 
@@ -113,6 +125,15 @@ func menuSelect(g *gocui.Gui, v *gocui.View) error {
 			switchContextToPgss(g, stat.StatementsLocalView)
 		default:
 			switchContextToPgss(g, stat.StatementsTimingView)
+		}
+	case menuProgress:
+		switch cy {
+		case 0:
+			switchContextToProgress(g, stat.ProgressVacuumView)
+		case 1:
+			switchContextToProgress(g, stat.ProgressClusterView)
+		case 2:
+			switchContextToProgress(g, stat.ProgressCreateIndexView)
 		}
 	case menuConf:
 		switch cy {
