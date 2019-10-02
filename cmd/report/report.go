@@ -222,20 +222,21 @@ func parseFilterString() {
 // doDescribe shows detailed description of the requested stats
 func doDescribe() {
 	var m = map[string]string{
-		stat.DatabaseView:          stat.PgStatDatabaseDescription,
-		stat.ActivityView:          stat.PgStatActivityDescription,
-		stat.ReplicationView:       stat.PgStatReplicationDescription,
-		stat.TablesView:            stat.PgStatTablesDescription,
-		stat.IndexesView:           stat.PgStatIndexesDescription,
-		stat.FunctionsView:         stat.PgStatFunctionsDescription,
-		stat.SizesView:             stat.PgStatSizesDescription,
-		stat.ProgressVacuumView:    stat.PgStatProgressVacuumDescription,
-		stat.ProgressClusterView:   stat.PgStatProgressClusterDescription,
-		stat.StatementsTimingView:  stat.PgStatStatementsTimingDescription,
-		stat.StatementsGeneralView: stat.PgStatStatementsGeneralDescription,
-		stat.StatementsIOView:      stat.PgStatStatementsIODescription,
-		stat.StatementsTempView:    stat.PgStatStatementsTempDescription,
-		stat.StatementsLocalView:   stat.PgStatStatementsLocalDescription,
+		stat.DatabaseView:            stat.PgStatDatabaseDescription,
+		stat.ActivityView:            stat.PgStatActivityDescription,
+		stat.ReplicationView:         stat.PgStatReplicationDescription,
+		stat.TablesView:              stat.PgStatTablesDescription,
+		stat.IndexesView:             stat.PgStatIndexesDescription,
+		stat.FunctionsView:           stat.PgStatFunctionsDescription,
+		stat.SizesView:               stat.PgStatSizesDescription,
+		stat.ProgressVacuumView:      stat.PgStatProgressVacuumDescription,
+		stat.ProgressClusterView:     stat.PgStatProgressClusterDescription,
+		stat.ProgressCreateIndexView: stat.PgStatProgressCreateIndexDescription,
+		stat.StatementsTimingView:    stat.PgStatStatementsTimingDescription,
+		stat.StatementsGeneralView:   stat.PgStatStatementsGeneralDescription,
+		stat.StatementsIOView:        stat.PgStatStatementsIODescription,
+		stat.StatementsTempView:      stat.PgStatStatementsTempDescription,
+		stat.StatementsLocalView:     stat.PgStatStatementsLocalDescription,
 	}
 
 	if description, ok := m[opts.ReportType]; ok {
