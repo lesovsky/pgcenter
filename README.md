@@ -45,7 +45,9 @@ pgCenter supports majority of statistics views available in Postgres, and at the
 - [pg_stat_user_functions](https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG-STAT-USER-FUNCTIONS-VIEW) - statistics on execution of functions.
 - [pg_stat_statements](https://www.postgresql.org/docs/current/static/pgstatstatements.html) - statistics on SQL statements executed including time and resources usage.
 - statistics on tables sizes based on `pg_relation_size()` and `pg_total_relation_size()` functions;
-- [pg_stat_progress_vacuum](https://www.postgresql.org/docs/current/static/progress-reporting.html#VACUUM-PROGRESS-REPORTING) - information about (auto)vacuums status.
+- [pg_stat_progress_vacuum](https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING) - information about progress of (auto)vacuums status.
+- [pg_stat_progress_cluster](https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING) - information about progress of CLUSTER and VACUUM FULL operations.
+- [pg_stat_progress_create_index](https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING) - information about progress of CREATE INDEX and REINDEX operations.
 
 ##### System statistics
 `pgcenter top` also provides system usage information based on statistics from `procfs` filesystem:
