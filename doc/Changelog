@@ -9,20 +9,20 @@ pgcenter (0.6.2) unstable; urgency=low
 pgcenter (0.6.1) unstable; urgency=low
   * improved aligning and query truncation
     - record: records complete length of pg_stat_statements.query (be careful, it might produce high-volume stats file)
-    - record: add startup paramter for configuring truncation
-    - report: can use '--truncate 0', for disabling trucation only for pg_stat_statements.query (might produce an "eyes-bleeding" output)
+    - record: add startup parameter for configuring truncation
+    - report: can use '--truncate 0', for disabling truncation only for pg_stat_statements.query (might produce an "eyes-bleeding" output)
   * reworked pg_stat_statements queries: 
     - remove unnecessary GROUP BY, ORDER BY and aggregations
     - simplify usage of regexp_replace()
     - use pg_get_userbyid() instead of joining pg_roles view
     - use configurable limit for truncating length of queries
-  * top: read remote stats only if pgcenter schma is available
+  * top: read remote stats only if pgcenter schema is available
   * top: do polling pg_stat_statements only if it's available (issue #59)
   * top: fixed handling of libpq errors during connection establishment (issue #58)
-  * top: fix srong assebling of path to logfile (issue #55)
+  * top: fix strong assembling of path to logfile (issue #55)
 
 pgcenter (0.6.0) unstable; urgency=low
-  * added goreleser support
+  * added goreleaser support
   * top: fix wrong handling of group cancel/terminate mask
   * implemented GoReport recommendations
   * profile: emit error if '-P' is not specified

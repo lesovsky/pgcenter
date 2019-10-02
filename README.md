@@ -23,6 +23,8 @@ pgCenter is a command-line admin tool for observing and troubleshooting Postgres
 Postgres provides various activity statistics that include detailed information about its behaviour: connections, statements, database operations, replication, resources usage and more. General purpose of the statistics is to help DBAs to monitor and troubleshoot Postgres. However, these statistics provided in textual form retrieved from SQL functions and views, and Postgres doesn't provide any tools for working with them.
 pgCenter's main goal is to help Postgres DBA manage statistics that theу have in their databases and see all the necessary data in convenient format based on builtin stats views and functions.
 
+![](doc/images/pgcenter-demo.gif)
+
 #### Key features
 - Top-like interface that allows you to monitor stats changes as you go. See details [here](doc/pgcenter-top-readme.md).
 - Configuration management function  allows viewing and editing of current configuration files and reloading the service, if needed.
