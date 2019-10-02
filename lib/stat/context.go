@@ -35,8 +35,8 @@ var (
 	PgStatDatabaseUnit = ContextUnit{
 		Name:      DatabaseView,
 		Query:     PgStatDatabaseQueryDefault,
-		DiffIntvl: [2]int{1, 15},
-		Ncols:     17,
+		DiffIntvl: [2]int{1, 16},
+		Ncols:     18,
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
@@ -255,6 +255,14 @@ func (cl ContextList) AdjustQueries(pi PgInfo) {
 				} else {
 					// use defaults assigned in context unit
 				}
+			}
+		case DatabaseView:
+			switch {
+			// versions prior 12 don't have  checksum_failures column
+			case pi.PgVersionNum < 120000:
+				cl[c].Query = PgStatDatabaseQuery11
+				cl[c].Ncols = 17
+				cl[c].DiffIntvl = [2]int{1, 15}
 			}
 		}
 	}
