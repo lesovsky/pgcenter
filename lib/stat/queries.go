@@ -320,6 +320,27 @@ RIGHT JOIN pg_stat_activity a ON v.pid = a.pid
 WHERE (a.query ~* '^autovacuum:' OR a.query ~* '^vacuum') AND a.pid <> pg_backend_pid()
 ORDER BY a.pid DESC`
 
+	// PgStatProgressClusterQueryDefault is the default query for getting stats from pg_stat_progress_cluster view
+	// { Name: "pg_stat_progress_cluster", Query: common.PgStatProgressClusterQueryDefault, DiffIntvl: [2]int{10,11}, Ncols: 13, OrderKey: 0, OrderDesc: true }
+	PgStatProgressClusterQueryDefault = `SELECT
+a.pid,
+date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age,
+p.datname,
+p.relid::regclass AS relation,
+p.cluster_index_relid::regclass AS index,
+a.state,
+p.phase,
+coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting,
+p.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS t_size,
+round(100 * p.heap_blks_scanned / greatest(p.heap_blks_total,1), 2) AS "scanned_%",
+coalesce(p.heap_tuples_scanned, 0) AS tup_scanned,
+coalesce(p.heap_tuples_written, 0) AS tup_written,
+a.query
+FROM pg_stat_progress_cluster p
+INNER JOIN pg_stat_activity a ON p.pid = a.pid
+WHERE a.pid <> pg_backend_pid()
+ORDER BY a.pid DESC`
+
 	// PgStatActivityQueryDefault is the default query for getting stats from pg_stat_activity view
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQueryDefault, DiffIntvl: [2]int{99,99}, Ncols: 14, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
