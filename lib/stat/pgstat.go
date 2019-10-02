@@ -32,6 +32,8 @@ const (
 	ProgressVacuumView = "pg_stat_progress_vacuum"
 	// ProgressClusterView is the name of pg_stat_progress_cluster view
 	ProgressClusterView = "pg_stat_progress_cluster"
+	// ProgressCreateIndexView is the name of pg_stat_progress_create_index view
+	ProgressCreateIndexView = "pg_stat_progress_create_index"
 	// ActivityView is the name of view with activity stats
 	ActivityView = "pg_stat_activity"
 	// StatementsView is the name of view with statements stats

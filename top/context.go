@@ -40,20 +40,21 @@ var (
 
 	// List of available units in 'pgcenter top' program
 	ctxList = stat.ContextList{
-		stat.DatabaseView:          &stat.PgStatDatabaseUnit,
-		stat.ReplicationView:       &stat.PgStatReplicationUnit,
-		stat.TablesView:            &stat.PgStatTablesUnit,
-		stat.IndexesView:           &stat.PgStatIndexesUnit,
-		stat.SizesView:             &stat.PgTablesSizesUnit,
-		stat.FunctionsView:         &stat.PgStatFunctionsUnit,
-		stat.ProgressVacuumView:    &stat.PgStatProgressVacuumUnit,
-		stat.ProgressClusterView:   &stat.PgStatProgressClusterUnit,
-		stat.ActivityView:          &stat.PgStatActivityUnit,
-		stat.StatementsTimingView:  &stat.PgSSTimingUnit,
-		stat.StatementsGeneralView: &stat.PgSSGeneralUnit,
-		stat.StatementsIOView:      &stat.PgSSIoUnit,
-		stat.StatementsTempView:    &stat.PgSSTempUnit,
-		stat.StatementsLocalView:   &stat.PgSSLocalUnit,
+		stat.DatabaseView:            &stat.PgStatDatabaseUnit,
+		stat.ReplicationView:         &stat.PgStatReplicationUnit,
+		stat.TablesView:              &stat.PgStatTablesUnit,
+		stat.IndexesView:             &stat.PgStatIndexesUnit,
+		stat.SizesView:               &stat.PgTablesSizesUnit,
+		stat.FunctionsView:           &stat.PgStatFunctionsUnit,
+		stat.ProgressVacuumView:      &stat.PgStatProgressVacuumUnit,
+		stat.ProgressClusterView:     &stat.PgStatProgressClusterUnit,
+		stat.ProgressCreateIndexView: &stat.PgStatProgressCreateIndexUnit,
+		stat.ActivityView:            &stat.PgStatActivityUnit,
+		stat.StatementsTimingView:    &stat.PgSSTimingUnit,
+		stat.StatementsGeneralView:   &stat.PgSSGeneralUnit,
+		stat.StatementsIOView:        &stat.PgSSIoUnit,
+		stat.StatementsTempView:      &stat.PgSSTempUnit,
+		stat.StatementsLocalView:     &stat.PgSSLocalUnit,
 	}
 )
 
@@ -187,6 +188,8 @@ func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 			case stat.ProgressVacuumView:
 				ctx.current = ctx.contextList[stat.ProgressClusterView]
 			case stat.ProgressClusterView:
+				ctx.current = ctx.contextList[stat.ProgressCreateIndexView]
+			case stat.ProgressCreateIndexView:
 				ctx.current = ctx.contextList[stat.ProgressVacuumView]
 			default:
 				ctx.current = ctx.contextList[stat.ProgressVacuumView]

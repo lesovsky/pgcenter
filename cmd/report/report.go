@@ -45,6 +45,7 @@ var (
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
 	showVacuum      bool   // Show stats from pg_stat_progress_vacuum
 	showCluster     bool   // Show stats from pg_stat_progress_cluster
+	showCreateIndex bool   // Show stats from pg_stat_progress_create_index
 	showStatements  string // Show stats from pg_stat_statements
 	showSizes       bool   // Show tables sizes
 	describe        bool   // Show description of requested stats view
@@ -54,16 +55,17 @@ var (
 		view string
 		ctx  stat.ContextUnit
 	}{
-		"activity":    {view: stat.ActivityView, ctx: stat.PgStatActivityUnit},
-		"sizes":       {view: stat.SizesView, ctx: stat.PgTablesSizesUnit},
-		"databases":   {view: stat.DatabaseView, ctx: stat.PgStatDatabaseUnit},
-		"functions":   {view: stat.FunctionsView, ctx: stat.PgStatFunctionsUnit},
-		"replication": {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
-		"tables":      {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
-		"indexes":     {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
-		"vacuum":      {view: stat.ProgressVacuumView, ctx: stat.PgStatProgressVacuumUnit},
-		"cluster":     {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
-		"statements":  {view: "_STATEMENTS_"},
+		"activity":     {view: stat.ActivityView, ctx: stat.PgStatActivityUnit},
+		"sizes":        {view: stat.SizesView, ctx: stat.PgTablesSizesUnit},
+		"databases":    {view: stat.DatabaseView, ctx: stat.PgStatDatabaseUnit},
+		"functions":    {view: stat.FunctionsView, ctx: stat.PgStatFunctionsUnit},
+		"replication":  {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
+		"tables":       {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
+		"indexes":      {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
+		"vacuum":       {view: stat.ProgressVacuumView, ctx: stat.PgStatProgressVacuumUnit},
+		"cluster":      {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
+		"create-index": {view: stat.ProgressCreateIndexView, ctx: stat.PgStatProgressCreateIndexUnit},
+		"statements":   {view: "_STATEMENTS_"},
 	}
 	// statementsReports is the statements reports available for user's choice
 	statementsReports = map[string]struct {
@@ -89,6 +91,7 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes stats")
 	CommandDefinition.Flags().BoolVarP(&showVacuum, "vacuum", "V", false, "show pg_stat_progress_vacuum stats")
 	CommandDefinition.Flags().BoolVarP(&showCluster, "cluster", "P", false, "show pg_stat_progress_cluster stats")
+	CommandDefinition.Flags().BoolVarP(&showCreateIndex, "create-index", "O", false, "show pg_stat_progress_create_index stats")
 	CommandDefinition.Flags().StringVarP(&showStatements, "statements", "X", "", "show pg_stat_statements stats")
 	CommandDefinition.Flags().StringVarP(&tsStart, "start", "s", "", "starting time of the report")
 	CommandDefinition.Flags().StringVarP(&tsEnd, "end", "e", "", "ending time of the report")

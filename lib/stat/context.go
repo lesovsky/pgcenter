@@ -113,7 +113,7 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
-		Msg:       "Show progress vacuum statistics",
+		Msg:       "Show vacuum progress statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
@@ -126,7 +126,18 @@ var (
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
-		Msg:       "Show progress cluster/vacuum full statistics",
+		Msg:       "Show cluster/vacuum full progress statistics",
+		Filters:   map[int]*regexp.Regexp{},
+	}
+	PgStatProgressCreateIndexUnit = ContextUnit{
+		Name:      ProgressCreateIndexView,
+		Query:     PgStatProgressCreateIndexQueryDefault,
+		DiffIntvl: NoDiff,
+		Ncols:     14,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show create index/reindex progress statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatActivityUnit describes how to handle pg_stat_activity view
