@@ -173,14 +173,13 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 - datname	datname			Name of the database this worker is connected to
 - relation	relid			Name of the relation which is vacuumed by this worker
 - state		state			Current overall state of this worker
+- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - phase		phase			Current processing phase of vacuum
-- total*	heap_blks_total		Total size of the table, in kB
-- t_scanned*	heap_blks_scanned	Total amount of data scanned, in kB
-- t_vacuumed*	heap_blks_vacuumed	Total amount of data vacuumed, in kB
-- scanned	heap_blks_scanned	Amount of data scanned per second, in kB
-- vacuumed	heap_blks_vacuumed	Amount of data vacuumed per second, in kB
-- wait_etype	wait_event_type		The type of event for which the worker is waiting, if any
-- wait_event	wait_event		Wait event name if worker is currently waiting
+- t_size*	heap_blks_total		Total size of the table, in kB
+- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
+- t_vacuumed_%*	heap_blks_vacuumed	The percent of data vacuumed, in kB
+- scanned	heap_blks_scanned	Amount of data scanned per interval, in kB
+- vacuumed	heap_blks_vacuumed	Amount of data vacuumed per interval, in kB
 - query		query			Text of this workers's "query"
 
 * - extended value, based on origin and calculated using additional functions.
