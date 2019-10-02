@@ -206,7 +206,7 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 
 * - extended value, based on origin and calculated using additional functions.
 
-Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING`
 
 	// PgStatProgressCreateIndexDescription is the detailed description of pg_stat_progress_cluster view
 	PgStatProgressCreateIndexDescription = `Statistics about progress of create index/reindex operations based on pg_stat_progress_create_index view:
@@ -229,7 +229,7 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 
 * - extended value, based on origin and calculated using additional functions.
 
-Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING`
 
 	// PgStatStatementsTimingDescription is the detailed description of pg_stat_statements section about timing stats
 	PgStatStatementsTimingDescription = `Statements timing statistics based on pg_stat_statements:

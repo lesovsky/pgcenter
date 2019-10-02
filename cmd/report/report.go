@@ -43,9 +43,7 @@ var (
 	showReplication bool   // Show stats from pg_stat_replication
 	showTables      bool   // Show stats from pg_stat_user_tables, pg_statio_user_tables
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
-	showVacuum      bool   // Show stats from pg_stat_progress_vacuum
-	showCluster     bool   // Show stats from pg_stat_progress_cluster
-	showCreateIndex bool   // Show stats from pg_stat_progress_create_index
+	showProgress    string // Show stats from pg_stat_progress_* stats
 	showStatements  string // Show stats from pg_stat_statements
 	showSizes       bool   // Show tables sizes
 	describe        bool   // Show description of requested stats view
@@ -55,17 +53,15 @@ var (
 		view string
 		ctx  stat.ContextUnit
 	}{
-		"activity":     {view: stat.ActivityView, ctx: stat.PgStatActivityUnit},
-		"sizes":        {view: stat.SizesView, ctx: stat.PgTablesSizesUnit},
-		"databases":    {view: stat.DatabaseView, ctx: stat.PgStatDatabaseUnit},
-		"functions":    {view: stat.FunctionsView, ctx: stat.PgStatFunctionsUnit},
-		"replication":  {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
-		"tables":       {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
-		"indexes":      {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
-		"vacuum":       {view: stat.ProgressVacuumView, ctx: stat.PgStatProgressVacuumUnit},
-		"cluster":      {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
-		"create-index": {view: stat.ProgressCreateIndexView, ctx: stat.PgStatProgressCreateIndexUnit},
-		"statements":   {view: "_STATEMENTS_"},
+		"activity":    {view: stat.ActivityView, ctx: stat.PgStatActivityUnit},
+		"sizes":       {view: stat.SizesView, ctx: stat.PgTablesSizesUnit},
+		"databases":   {view: stat.DatabaseView, ctx: stat.PgStatDatabaseUnit},
+		"functions":   {view: stat.FunctionsView, ctx: stat.PgStatFunctionsUnit},
+		"replication": {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
+		"tables":      {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
+		"indexes":     {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
+		"progress":    {view: "_PROGRESS_"},
+		"statements":  {view: "_STATEMENTS_"},
 	}
 	// statementsReports is the statements reports available for user's choice
 	statementsReports = map[string]struct {
@@ -78,6 +74,14 @@ var (
 		"t": {view: stat.StatementsTempView, ctx: stat.PgSSTempUnit},
 		"l": {view: stat.StatementsLocalView, ctx: stat.PgSSLocalUnit},
 	}
+	progressReports = map[string]struct {
+		view string
+		ctx  stat.ContextUnit
+	}{
+		"v": {view: stat.ProgressVacuumView, ctx: stat.PgStatProgressVacuumUnit},
+		"c": {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
+		"i": {view: stat.ProgressCreateIndexView, ctx: stat.PgStatProgressCreateIndexUnit},
+	}
 )
 
 func init() {
@@ -89,9 +93,7 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&showReplication, "replication", "R", false, "show pg_stat_replication stats")
 	CommandDefinition.Flags().BoolVarP(&showTables, "tables", "T", false, "show pg_stat_user_tables and pg_statio_user_tables stats")
 	CommandDefinition.Flags().BoolVarP(&showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes stats")
-	CommandDefinition.Flags().BoolVarP(&showVacuum, "vacuum", "V", false, "show pg_stat_progress_vacuum stats")
-	CommandDefinition.Flags().BoolVarP(&showCluster, "cluster", "P", false, "show pg_stat_progress_cluster stats")
-	CommandDefinition.Flags().BoolVarP(&showCreateIndex, "create-index", "O", false, "show pg_stat_progress_create_index stats")
+	CommandDefinition.Flags().StringVarP(&showProgress, "progress", "P", "", "show pg_stat_progress_* stats")
 	CommandDefinition.Flags().StringVarP(&showStatements, "statements", "X", "", "show pg_stat_statements stats")
 	CommandDefinition.Flags().StringVarP(&tsStart, "start", "s", "", "starting time of the report")
 	CommandDefinition.Flags().StringVarP(&tsEnd, "end", "e", "", "ending time of the report")
@@ -132,8 +134,15 @@ func preFlightSetup(c *cobra.Command, _ []string) {
 // selectReport selects appropriate type of the report depending on user's choice
 func selectReport(f *pflag.Flag) {
 	if b, ok := basicReports[f.Name]; ok {
-		if b.view == "_STATEMENTS_" {
+		switch b.view {
+		case "_STATEMENTS_":
 			if s, ok := statementsReports[f.Value.String()]; ok {
+				opts.ReportType = s.view
+				opts.Context = s.ctx
+				return
+			}
+		case "_PROGRESS_":
+			if s, ok := progressReports[f.Value.String()]; ok {
 				opts.ReportType = s.view
 				opts.Context = s.ctx
 				return
