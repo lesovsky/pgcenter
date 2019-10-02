@@ -16,6 +16,7 @@ func (o *RecordOptions) Setup(pginfo stat.PgInfo) {
 		stat.SizesView:             &stat.PgTablesSizesUnit,
 		stat.FunctionsView:         &stat.PgStatFunctionsUnit,
 		stat.VacuumView:            &stat.PgStatVacuumUnit,
+		stat.ProgressClusterView:   &stat.PgStatProgressClusterUnit,
 		stat.ActivityView:          &stat.PgStatActivityUnit,
 		stat.StatementsTimingView:  &stat.PgSSTimingUnit,
 		stat.StatementsGeneralView: &stat.PgSSGeneralUnit,

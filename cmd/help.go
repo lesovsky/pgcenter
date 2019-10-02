@@ -137,6 +137,7 @@ Report options:
   -R, --replication		show pg_stat_replication statistics
   -T, --tables			show pg_stat_user_tables statistics
   -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
+  -P, --cluster			show pg_stat_progress_cluster statistics
   -V, --vacuum			show pg_stat_progress_vacuum statistics
   -X, --statements [X]		show pg_stat_statements statistics, use additional selector to choose stats.
 				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io. 

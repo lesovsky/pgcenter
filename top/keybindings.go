@@ -39,6 +39,7 @@ func keybindings(g *gocui.Gui) error {
 		{"sysstat", 's', switchContextTo(stat.SizesView)},
 		{"sysstat", 'f', switchContextTo(stat.FunctionsView)},
 		{"sysstat", 'v', switchContextTo(stat.VacuumView)},
+		{"sysstat", 'p', switchContextTo(stat.ProgressClusterView)},
 		{"sysstat", 'a', switchContextTo(stat.ActivityView)},
 		{"sysstat", 'x', switchContextTo(stat.StatementsView)},
 		{"sysstat", 'Q', resetStat},

@@ -186,6 +186,28 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
 
+	// PgStatProgressClusterDescription is the detailed description of pg_stat_progress_cluster view
+	PgStatProgressClusterDescription = `Statistics about progress of cluster and vacuum full operations based on pg_stat_progress_cluster view:
+
+  column	origin			description
+- pid		pid			Process ID of this worker
+- xact_age*	xact_start		Current transaction's duration if active
+- datname	datname			Name of the database this worker is connected to
+- relation	relid			Name of the relation which is processed by this worker
+- index		cluster_index_relid	Name of the relation which is processed by this worker
+- state		state			Current overall state of this worker
+- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase		phase			Current processing phase of operation
+- t_size*	heap_blks_total		Total size of the table, in kB
+- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
+- tup_scanned	heap_tuples_scanned	Number of heap tuples scanned
+- tup_written	heap_tuples_written	Number of heap tuples written
+- query		query			Text of this workers's "query"
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
+
 	// PgStatStatementsTimingDescription is the detailed description of pg_stat_statements section about timing stats
 	PgStatStatementsTimingDescription = `Statements timing statistics based on pg_stat_statements:
 

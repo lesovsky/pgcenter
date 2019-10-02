@@ -44,6 +44,7 @@ var (
 	showTables      bool   // Show stats from pg_stat_user_tables, pg_statio_user_tables
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
 	showVacuum      bool   // Show stats from pg_stat_progress_vacuum
+	showCluster     bool   // Show stats from pg_stat_progress_cluster
 	showStatements  string // Show stats from pg_stat_statements
 	showSizes       bool   // Show tables sizes
 	describe        bool   // Show description of requested stats view
@@ -61,6 +62,7 @@ var (
 		"tables":      {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
 		"indexes":     {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
 		"vacuum":      {view: stat.VacuumView, ctx: stat.PgStatVacuumUnit},
+		"cluster":     {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
 		"statements":  {view: "_STATEMENTS_"},
 	}
 	// statementsReports is the statements reports available for user's choice
@@ -86,6 +88,7 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&showTables, "tables", "T", false, "show pg_stat_user_tables and pg_statio_user_tables stats")
 	CommandDefinition.Flags().BoolVarP(&showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes stats")
 	CommandDefinition.Flags().BoolVarP(&showVacuum, "vacuum", "V", false, "show pg_stat_progress_vacuum stats")
+	CommandDefinition.Flags().BoolVarP(&showCluster, "cluster", "P", false, "show pg_stat_progress_cluster stats")
 	CommandDefinition.Flags().StringVarP(&showStatements, "statements", "X", "", "show pg_stat_statements stats")
 	CommandDefinition.Flags().StringVarP(&tsStart, "start", "s", "", "starting time of the report")
 	CommandDefinition.Flags().StringVarP(&tsEnd, "end", "e", "", "ending time of the report")
@@ -224,6 +227,7 @@ func doDescribe() {
 		stat.FunctionsView:         stat.PgStatFunctionsDescription,
 		stat.SizesView:             stat.PgStatSizesDescription,
 		stat.VacuumView:            stat.PgStatVacuumDescription,
+		stat.ProgressClusterView:   stat.PgStatProgressClusterDescription,
 		stat.StatementsTimingView:  stat.PgStatStatementsTimingDescription,
 		stat.StatementsGeneralView: stat.PgStatStatementsGeneralDescription,
 		stat.StatementsIOView:      stat.PgStatStatementsIODescription,
