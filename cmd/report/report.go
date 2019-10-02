@@ -61,7 +61,7 @@ var (
 		"replication": {view: stat.ReplicationView, ctx: stat.PgStatReplicationUnit},
 		"tables":      {view: stat.TablesView, ctx: stat.PgStatTablesUnit},
 		"indexes":     {view: stat.IndexesView, ctx: stat.PgStatIndexesUnit},
-		"vacuum":      {view: stat.VacuumView, ctx: stat.PgStatVacuumUnit},
+		"vacuum":      {view: stat.ProgressVacuumView, ctx: stat.PgStatProgressVacuumUnit},
 		"cluster":     {view: stat.ProgressClusterView, ctx: stat.PgStatProgressClusterUnit},
 		"statements":  {view: "_STATEMENTS_"},
 	}
@@ -226,7 +226,7 @@ func doDescribe() {
 		stat.IndexesView:           stat.PgStatIndexesDescription,
 		stat.FunctionsView:         stat.PgStatFunctionsDescription,
 		stat.SizesView:             stat.PgStatSizesDescription,
-		stat.VacuumView:            stat.PgStatVacuumDescription,
+		stat.ProgressVacuumView:    stat.PgStatProgressVacuumDescription,
 		stat.ProgressClusterView:   stat.PgStatProgressClusterDescription,
 		stat.StatementsTimingView:  stat.PgStatStatementsTimingDescription,
 		stat.StatementsGeneralView: stat.PgStatStatementsGeneralDescription,

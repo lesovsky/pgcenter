@@ -46,7 +46,7 @@ var (
 		stat.IndexesView:           &stat.PgStatIndexesUnit,
 		stat.SizesView:             &stat.PgTablesSizesUnit,
 		stat.FunctionsView:         &stat.PgStatFunctionsUnit,
-		stat.VacuumView:            &stat.PgStatVacuumUnit,
+		stat.ProgressVacuumView:    &stat.PgStatProgressVacuumUnit,
 		stat.ProgressClusterView:   &stat.PgStatProgressClusterUnit,
 		stat.ActivityView:          &stat.PgStatActivityUnit,
 		stat.StatementsTimingView:  &stat.PgSSTimingUnit,
@@ -164,9 +164,9 @@ func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 		ctx.contextList[ctx.current.Name] = ctx.current
 
 		// Load new context unit (with settings) from the list
-		if c != stat.StatementsView {
-			ctx.current = ctx.contextList[c]
-		} else {
+		switch c {
+		case stat.StatementsView:
+			// fall through another switch and select appropriate pg_stat_statements stats
 			switch ctx.current.Name {
 			case stat.StatementsTimingView:
 				ctx.current = ctx.contextList[stat.StatementsGeneralView]
@@ -181,6 +181,18 @@ func switchContextTo(c string) func(g *gocui.Gui, v *gocui.View) error {
 			default:
 				ctx.current = ctx.contextList[stat.StatementsTimingView]
 			}
+		case stat.ProgressView:
+			// fall through another switch and select appropriate pg_stat_progress_* stats
+			switch ctx.current.Name {
+			case stat.ProgressVacuumView:
+				ctx.current = ctx.contextList[stat.ProgressClusterView]
+			case stat.ProgressClusterView:
+				ctx.current = ctx.contextList[stat.ProgressVacuumView]
+			default:
+				ctx.current = ctx.contextList[stat.ProgressVacuumView]
+			}
+		default:
+			ctx.current = ctx.contextList[c]
 		}
 
 		printCmdline(g, ctx.current.Msg)

@@ -26,9 +26,11 @@ const (
 	SizesView = "pg_stat_sizes"
 	// FunctionsView is the name of view with functions stats
 	FunctionsView = "pg_stat_user_functions"
-	// VacuumView is the name of view with (auto)vacuum stats
-	VacuumView = "pg_stat_progress_vacuum"
-	// ProgressClusterView is the name of view with cluster/vacuum full stats
+	// ProgressView is the name of pseudo-view with progress stats
+	ProgressView = "pg_stat_progress"
+	// ProgressVacuumView is the name of pg_stat_progress_vacuum view
+	ProgressVacuumView = "pg_stat_progress_vacuum"
+	// ProgressClusterView is the name of pg_stat_progress_cluster view
 	ProgressClusterView = "pg_stat_progress_cluster"
 	// ActivityView is the name of view with activity stats
 	ActivityView = "pg_stat_activity"

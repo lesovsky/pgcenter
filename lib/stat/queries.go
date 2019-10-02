@@ -299,9 +299,9 @@ round((self_time / greatest(calls, 1))::numeric(20,2), 4) AS avg_self_t
 FROM pg_stat_user_functions
 ORDER BY funcid DESC`
 
-	// PgStatVacuumQueryDefault is the default query for getting stats from pg_stat_progress_vacuum view
+	// PgStatProgressVacuumQueryDefault is the default query for getting stats from pg_stat_progress_vacuum view
 	// { Name: "pg_stat_vacuum", Query: common.PgStatVacuumQueryDefault, DiffIntvl: [2]int{10,11}, Ncols: 13, OrderKey: 0, OrderDesc: true }
-	PgStatVacuumQueryDefault = `SELECT
+	PgStatProgressVacuumQueryDefault = `SELECT
 a.pid,
 date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age,
 v.datname,

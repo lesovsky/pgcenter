@@ -164,8 +164,8 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`
 
-	// PgStatVacuumDescription is the detailed description of pg_stat_progress_vacuum view
-	PgStatVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
+	// PgStatProgressVacuumDescription is the detailed description of pg_stat_progress_vacuum view
+	PgStatProgressVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
 
   column	origin			description
 - pid		pid			Process ID of this worker

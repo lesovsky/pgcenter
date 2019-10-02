@@ -14,7 +14,7 @@ general actions:
     a,d,f,r     mode: 'a' activity, 'd' databases, 'f' functions, 'r' replication,
     s,t,i,v           's' tables sizes, 't' tables, 'i' indexes, 'v' vacuum progress,
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
-	p                 'p' pg_stat_progress_cluster switch
+	p                 'p' pg_stat_progress_* switch
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.

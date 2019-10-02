@@ -104,16 +104,16 @@ var (
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
-	PgStatVacuumUnit = ContextUnit{
-		Name:  VacuumView,
-		Query: PgStatVacuumQueryDefault,
+	PgStatProgressVacuumUnit = ContextUnit{
+		Name:  ProgressVacuumView,
+		Query: PgStatProgressVacuumQueryDefault,
 		//DiffIntvl: NoDiff,
 		DiffIntvl: [2]int{10, 11},
 		Ncols:     13,
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
-		Msg:       "Show vacuum statistics",
+		Msg:       "Show progress vacuum statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
