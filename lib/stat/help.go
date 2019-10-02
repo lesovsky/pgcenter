@@ -222,7 +222,7 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 - phase			phase				Current processing phase of operation
 - locker_pid		current_locker_pid		Process ID of the locker currently being waited for
 - lockers*		lockers_total,lockers_done	Total number of lockers to wait for, and number of lockers already waited for.
-- blks_total/done_%*	blocks_total,blocks_done	Total number of blocks to be processed and percent of already processed in the current phase, in kB
+- size_total/done_%*	blocks_total,blocks_done	Total size to be processed and percent of already processed in the current phase, in kB
 - tup_total/done_%*	tuples_total,tuples_done	Total number of tuples to be processed and percent of already processed in the current phase
 - parts_total/done_%*	partitions_total,partitions_done	Total number of partitions on which the index is to be created, and the number of partitions on which the index has been completed
 - query			query				Text of this workers's "query"

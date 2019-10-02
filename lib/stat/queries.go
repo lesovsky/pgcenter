@@ -354,7 +354,7 @@ coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting,
 p.phase,
 current_locker_pid AS locker_pid,
 lockers_total ||'/'|| lockers_done AS lockers,
-p.blocks_total * (SELECT current_setting('block_size')::int / 1024) ||'/'|| round(100 * p.blocks_done / greatest(p.blocks_total, 1), 2) AS "blks_total/done_%",
+p.blocks_total * (SELECT current_setting('block_size')::int / 1024) ||'/'|| round(100 * p.blocks_done / greatest(p.blocks_total, 1), 2) AS "size_total/done_%",
 p.tuples_total ||'/'|| round(100 * p.tuples_done / greatest(p.tuples_total, 1), 2) AS "tup_total/done_%",
 p.partitions_total ||'/'|| round(100 * p.partitions_done / greatest(p.partitions_total, 1), 2) AS "parts_total/done_%",
 a.query
