@@ -1,4 +1,6 @@
 pgcenter (0.6.2) unstable; urgency=low
+  * report: print header at the beginning of the output
+  * top/report: refactoring aligning
   * adjust header's styles of iostat/nicstat tabs in top utility
   * added support for pg_stat_database.checksum_failures (pg-12)
   * added support of pg_stat_progress_cluster and pg_stat_progress_create_index views
