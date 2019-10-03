@@ -14,8 +14,6 @@ addons:
 dist: bionic
 sudo: false
 
-script: make
-
 deploy:
   provider: script
   script: curl -sL https://git.io/goreleaser |bash
