@@ -150,8 +150,10 @@ func formatReport(d *stat.PGresult, opts *ReportOptions) {
 
 	// align values for printing, use dynamic aligning
 	if !opts.Context.Aligned {
-		d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true)
-		opts.Context.Aligned = true
+		err := d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true)
+		if err == nil {
+			opts.Context.Aligned = true
+		}
 	}
 }
 

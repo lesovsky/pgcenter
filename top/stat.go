@@ -165,8 +165,10 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !ctx.current.Aligned {
-		s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
-		ctx.current.Aligned = true
+		err := s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		if err == nil {
+			ctx.current.Aligned = true
+		}
 	}
 
 	// is filter required?
