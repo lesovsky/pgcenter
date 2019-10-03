@@ -10,27 +10,29 @@ builds:
       - linux
     goarch:
       - amd64
-nfpm:
-  name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
-  replacements:
-    amd64: x86_64
-    linux: Linux
-  homepage: https://pgcenter.org
-  maintainer: Alexey Lesovsky <lesovsky@gmail.com>
-  description: Command-line admin tool for observing and troubleshooting Postgres.
-  license: BSD-3
-  formats:
-    - deb
-    - rpm
-  bindir: /usr/bin
-archive:
-  replacements:
-    amd64: x86_64
-    linux: Linux
-  files:
-    - COPYRIGHT
-    - README.md
-    - doc/*
+nfpms:
+  -
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    replacements:
+      amd64: x86_64
+      linux: Linux
+    homepage: https://pgcenter.org
+    maintainer: Alexey Lesovsky <lesovsky@gmail.com>
+    description: Command-line admin tool for observing and troubleshooting Postgres.
+    license: BSD-3
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/bin
+archives:
+  - id: default
+    replacements:
+      amd64: x86_64
+      linux: Linux
+    files:
+      - COPYRIGHT
+      - README.md
+      - doc/*
 changelog:
   sort: asc
   filters:
