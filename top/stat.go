@@ -165,8 +165,10 @@ func printDbstat(v *gocui.View, s stat.Stat) {
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !ctx.current.Aligned {
-		s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
-		ctx.current.Aligned = true
+		err := s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		if err == nil {
+			ctx.current.Aligned = true
+		}
 	}
 
 	// is filter required?
@@ -258,7 +260,7 @@ func printStatData(v *gocui.View, s *stat.Stat, filter bool) {
 // Print iostat - block devices stats.
 func printIostat(v *gocui.View, s stat.Diskstats) {
 	// print header
-	fmt.Fprintf(v, "       \033[30;47mDevice:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
+	fmt.Fprintf(v, "\033[30;47m             Device:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
 
 	for i := 0; i < len(s); i++ {
 		// skip devices which never do IOs
@@ -267,7 +269,7 @@ func printIostat(v *gocui.View, s stat.Diskstats) {
 		}
 
 		// print stats
-		fmt.Fprintf(v, "%14s\t%10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
+		fmt.Fprintf(v, "%20s\t%10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
 			s[i].Device,
 			s[i].Rmerged, s[i].Wmerged,
 			s[i].Rcompleted, s[i].Wcompleted,
@@ -280,7 +282,7 @@ func printIostat(v *gocui.View, s stat.Diskstats) {
 // Print nicstat - network interfaces stat.
 func printNicstat(v *gocui.View, s stat.Netdevs) {
 	// print header
-	fmt.Fprintf(v, "    \033[30;47mInterface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
+	fmt.Fprintf(v, "\033[30;47m          Interface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
 
 	for i := 0; i < len(s); i++ {
 		// skip interfaces which never seen packets
@@ -289,7 +291,7 @@ func printNicstat(v *gocui.View, s stat.Netdevs) {
 		}
 
 		// print stats
-		fmt.Fprintf(v, "%14s%8.2f%8.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f\n",
+		fmt.Fprintf(v, "%20s%8.2f%8.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f\n",
 			s[i].Ifname,
 			s[i].Rbytes/1024/128, s[i].Tbytes/1024/128, // conversion to Mbps
 			s[i].Rpackets, s[i].Tpackets, s[i].Raverage, s[i].Taverage,

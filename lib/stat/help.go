@@ -164,8 +164,8 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW`
 
-	// PgStatVacuumDescription is the detailed description of pg_stat_progress_vacuum view
-	PgStatVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
+	// PgStatProgressVacuumDescription is the detailed description of pg_stat_progress_vacuum view
+	PgStatProgressVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
 
   column	origin			description
 - pid		pid			Process ID of this worker
@@ -173,19 +173,63 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 - datname	datname			Name of the database this worker is connected to
 - relation	relid			Name of the relation which is vacuumed by this worker
 - state		state			Current overall state of this worker
+- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - phase		phase			Current processing phase of vacuum
-- total*	heap_blks_total		Total size of the table, in kB
-- t_scanned*	heap_blks_scanned	Total amount of data scanned, in kB
-- t_vacuumed*	heap_blks_vacuumed	Total amount of data vacuumed, in kB
-- scanned	heap_blks_scanned	Amount of data scanned per second, in kB
-- vacuumed	heap_blks_vacuumed	Amount of data vacuumed per second, in kB
-- wait_etype	wait_event_type		The type of event for which the worker is waiting, if any
-- wait_event	wait_event		Wait event name if worker is currently waiting
+- t_size*	heap_blks_total		Total size of the table, in kB
+- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
+- t_vacuumed_%*	heap_blks_vacuumed	The percent of data vacuumed, in kB
+- scanned	heap_blks_scanned	Amount of data scanned per interval, in kB
+- vacuumed	heap_blks_vacuumed	Amount of data vacuumed per interval, in kB
 - query		query			Text of this workers's "query"
 
 * - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING`
+
+	// PgStatProgressClusterDescription is the detailed description of pg_stat_progress_cluster view
+	PgStatProgressClusterDescription = `Statistics about progress of cluster and vacuum full operations based on pg_stat_progress_cluster view:
+
+  column	origin			description
+- pid		pid			Process ID of this worker
+- xact_age*	xact_start		Current transaction's duration if active
+- datname	datname			Name of the database this worker is connected to
+- relation	relid			Name of the relation which is processed by this worker
+- index		cluster_index_relid	Name of the relation which is processed by this worker
+- state		state			Current overall state of this worker
+- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase		phase			Current processing phase of operation
+- t_size*	heap_blks_total		Total size of the table, in kB
+- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
+- tup_scanned	heap_tuples_scanned	Number of heap tuples scanned
+- tup_written	heap_tuples_written	Number of heap tuples written
+- query		query			Text of this workers's "query"
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING`
+
+	// PgStatProgressCreateIndexDescription is the detailed description of pg_stat_progress_cluster view
+	PgStatProgressCreateIndexDescription = `Statistics about progress of create index/reindex operations based on pg_stat_progress_create_index view:
+
+  column		origin				description
+- pid			pid				Process ID of this worker
+- xact_age*		xact_start			Current transaction's duration if active
+- datname		datname				Name of the database this worker is connected to
+- relation		relid				Name of the relation which is processed by this worker
+- index			cluster_index_relid		Name of the relation which is processed by this worker
+- state			state				Current overall state of this worker
+- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase			phase				Current processing phase of operation
+- locker_pid		current_locker_pid		Process ID of the locker currently being waited for
+- lockers*		lockers_total,lockers_done	Total number of lockers to wait for, and number of lockers already waited for.
+- size_total/done_%*	blocks_total,blocks_done	Total size to be processed and percent of already processed in the current phase, in kB
+- tup_total/done_%*	tuples_total,tuples_done	Total number of tuples to be processed and percent of already processed in the current phase
+- parts_total/done_%*	partitions_total,partitions_done	Total number of partitions on which the index is to be created, and the number of partitions on which the index has been completed
+- query			query				Text of this workers's "query"
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING`
 
 	// PgStatStatementsTimingDescription is the detailed description of pg_stat_statements section about timing stats
 	PgStatStatementsTimingDescription = `Statements timing statistics based on pg_stat_statements:

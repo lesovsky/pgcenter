@@ -126,8 +126,32 @@ FROM pg_prepared_xacts)`
 	PgStatementsQuery = `SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements`
 
 	// PgStatDatabaseQueryDefault is the default query for getting databases' stats from pg_stat_database view
-	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQueryDefault, DiffIntvl: [2]int{1,15}, Ncols: 17, OrderKey: 0, OrderDesc: true }
+	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQueryDefault, DiffIntvl: [2]int{1,16}, Ncols: 18, OrderKey: 0, OrderDesc: true }
 	PgStatDatabaseQueryDefault = `SELECT
+datname,
+coalesce(xact_commit, 0) AS commits,
+coalesce(xact_rollback, 0) AS rollbacks,
+coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads,
+coalesce(blks_hit, 0) AS hits,
+coalesce(tup_returned, 0) AS returned,
+coalesce(tup_fetched, 0) AS fetched,
+coalesce(tup_inserted, 0) AS inserts,
+coalesce(tup_updated, 0) AS updates,
+coalesce(tup_deleted, 0) AS deletes,
+coalesce(conflicts, 0) AS conflicts,
+coalesce(deadlocks, 0) AS deadlocks,
+coalesce(checksum_failures, 0) AS csum_fails,
+coalesce(temp_files, 0) AS temp_files,
+coalesce(temp_bytes, 0) AS temp_bytes,
+coalesce(blk_read_time, 0)::numeric(20,2) AS read_t,
+coalesce(blk_write_time, 0)::numeric(20,2) AS write_t,
+date_trunc('seconds', now() - stats_reset)::text AS stats_age
+FROM pg_stat_database
+ORDER BY datname DESC`
+
+	// PgStatDatabaseQuery11 is the query for getting databases' stats from pg_stat_database view for versions prior 12
+	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQuery11, DiffIntvl: [2]int{1,15}, Ncols: 17, OrderKey: 0, OrderDesc: true }
+	PgStatDatabaseQuery11 = `SELECT
 datname,
 coalesce(xact_commit, 0) AS commits,
 coalesce(xact_rollback, 0) AS rollbacks,
@@ -299,26 +323,68 @@ round((self_time / greatest(calls, 1))::numeric(20,2), 4) AS avg_self_t
 FROM pg_stat_user_functions
 ORDER BY funcid DESC`
 
-	// PgStatVacuumQueryDefault is the default query for getting stats from pg_stat_progress_vacuum view
-	// { Name: "pg_stat_vacuum", Query: common.PgStatVacuumQueryDefault, DiffIntvl: [2]int{9,10}, Ncols: 14, OrderKey: 0, OrderDesc: true }
-	PgStatVacuumQueryDefault = `SELECT
+	// PgStatProgressVacuumQueryDefault is the default query for getting stats from pg_stat_progress_vacuum view
+	// { Name: "pg_stat_vacuum", Query: common.PgStatVacuumQueryDefault, DiffIntvl: [2]int{10,11}, Ncols: 13, OrderKey: 0, OrderDesc: true }
+	PgStatProgressVacuumQueryDefault = `SELECT
 a.pid,
 date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age,
 v.datname,
 v.relid::regclass AS relation,
 a.state,
+coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting,
 v.phase,
-v.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS total,
-v.heap_blks_scanned * (SELECT current_setting('block_size')::int / 1024) AS t_scanned,
-v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024) AS t_vacuumed,
+v.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS t_size,
+round(100 * v.heap_blks_scanned / v.heap_blks_total, 2) AS "t_scanned_%",
+round(100 * v.heap_blks_vacuumed / v.heap_blks_total, 2) AS "t_vacuumed_%",
 coalesce(v.heap_blks_scanned * (SELECT current_setting('block_size')::int / 1024), 0) AS scanned,
 coalesce(v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024), 0) AS vacuumed,
-a.wait_event_type AS wait_etype,
-a.wait_event,
 a.query
 FROM pg_stat_progress_vacuum v
 RIGHT JOIN pg_stat_activity a ON v.pid = a.pid
 WHERE (a.query ~* '^autovacuum:' OR a.query ~* '^vacuum') AND a.pid <> pg_backend_pid()
+ORDER BY a.pid DESC`
+
+	// PgStatProgressClusterQueryDefault is the default query for getting stats from pg_stat_progress_cluster view
+	// { Name: "pg_stat_progress_cluster", Query: common.PgStatProgressClusterQueryDefault, DiffIntvl: [2]int{10,11}, Ncols: 13, OrderKey: 0, OrderDesc: true }
+	PgStatProgressClusterQueryDefault = `SELECT
+a.pid,
+date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age,
+p.datname,
+p.relid::regclass AS relation,
+p.cluster_index_relid::regclass AS index,
+a.state,
+coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting,
+p.phase,
+p.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS t_size,
+round(100 * p.heap_blks_scanned / greatest(p.heap_blks_total,1), 2) AS "scanned_%",
+coalesce(p.heap_tuples_scanned, 0) AS tup_scanned,
+coalesce(p.heap_tuples_written, 0) AS tup_written,
+a.query
+FROM pg_stat_progress_cluster p
+INNER JOIN pg_stat_activity a ON p.pid = a.pid
+WHERE a.pid <> pg_backend_pid()
+ORDER BY a.pid DESC`
+
+	// PgStatProgressCreateIndexQueryDefault is the default query for getting stats from pg_stat_progress_cluster view
+	// { Name: "pg_stat_progress_create_index", Query: common.PgStatProgressCreateIndexQueryDefault, DiffIntvl: [2]int{99,99}, Ncols: 14, OrderKey: 0, OrderDesc: true }
+	PgStatProgressCreateIndexQueryDefault = `SELECT
+a.pid,
+date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age,
+p.datname,
+p.relid::regclass AS relation,
+p.index_relid::regclass AS index,
+a.state,
+coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting,
+p.phase,
+current_locker_pid AS locker_pid,
+lockers_total ||'/'|| lockers_done AS lockers,
+p.blocks_total * (SELECT current_setting('block_size')::int / 1024) ||'/'|| round(100 * p.blocks_done / greatest(p.blocks_total, 1), 2) AS "size_total/done_%",
+p.tuples_total ||'/'|| round(100 * p.tuples_done / greatest(p.tuples_total, 1), 2) AS "tup_total/done_%",
+p.partitions_total ||'/'|| round(100 * p.partitions_done / greatest(p.partitions_total, 1), 2) AS "parts_total/done_%",
+a.query
+FROM pg_stat_progress_create_index p
+INNER JOIN pg_stat_activity a ON p.pid = a.pid
+WHERE a.pid <> pg_backend_pid()
 ORDER BY a.pid DESC`
 
 	// PgStatActivityQueryDefault is the default query for getting stats from pg_stat_activity view

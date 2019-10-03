@@ -38,15 +38,16 @@ func keybindings(g *gocui.Gui) error {
 		{"sysstat", 'i', switchContextTo(stat.IndexesView)},
 		{"sysstat", 's', switchContextTo(stat.SizesView)},
 		{"sysstat", 'f', switchContextTo(stat.FunctionsView)},
-		{"sysstat", 'v', switchContextTo(stat.VacuumView)},
+		{"sysstat", 'p', switchContextTo(stat.ProgressView)},
 		{"sysstat", 'a', switchContextTo(stat.ActivityView)},
 		{"sysstat", 'x', switchContextTo(stat.StatementsView)},
 		{"sysstat", 'Q', resetStat},
 		{"sysstat", 'E', menuOpen(menuConfStyle)},
 		{"sysstat", 'X', menuOpen(menuPgssStyle)},
+		{"sysstat", 'P', menuOpen(menuProgressStyle)},
 		{"sysstat", 'l', showPgLog},
 		{"sysstat", 'C', showPgConfig},
-		{"sysstat", 'p', runPsql},
+		{"sysstat", '~', runPsql},
 		{"sysstat", 'B', showAux(auxDiskstat)},
 		{"sysstat", 'N', showAux(auxNicstat)},
 		{"sysstat", 'L', showAux(auxLogtail)},
@@ -114,6 +115,12 @@ func quit(g *gocui.Gui, _ *gocui.View) error {
 	close(doUpdate)
 	close(doExit)
 	g.Close()
+
+	err := conn.Close()
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "ERROR: failed closing pgsql connection, ignoring")
+	}
+
 	os.Exit(0)
 	return gocui.ErrQuit
 }

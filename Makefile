@@ -6,10 +6,13 @@ SHAREDIR = ${PREFIX}/share
 MANDIR = ${SHAREDIR}/man/man1
 
 SOURCE = ${PROGRAM_NAME}.go
-COMMIT=$(shell git rev-parse HEAD)
+COMMIT=$(shell git rev-parse --short HEAD)
 BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
+TAG=$(shell git describe --tags |cut -d- -f1)
 
-LDFLAGS = -ldflags "-X main.COMMIT=${COMMIT} -X main.BRANCH=${BRANCH}"
+LDFLAGS = -ldflags "-X github.com/lesovsky/pgcenter/cmd.GitTag=${TAG} \
+-X github.com/lesovsky/pgcenter/cmd.GitCommit=${COMMIT} \
+-X github.com/lesovsky/pgcenter/cmd.GitBranch=${BRANCH}"
 
 DESTDIR ?=
 

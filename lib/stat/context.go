@@ -35,8 +35,8 @@ var (
 	PgStatDatabaseUnit = ContextUnit{
 		Name:      DatabaseView,
 		Query:     PgStatDatabaseQueryDefault,
-		DiffIntvl: [2]int{1, 15},
-		Ncols:     17,
+		DiffIntvl: [2]int{1, 16},
+		Ncols:     18,
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
@@ -104,16 +104,40 @@ var (
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
-	PgStatVacuumUnit = ContextUnit{
-		Name:  VacuumView,
-		Query: PgStatVacuumQueryDefault,
+	PgStatProgressVacuumUnit = ContextUnit{
+		Name:  ProgressVacuumView,
+		Query: PgStatProgressVacuumQueryDefault,
 		//DiffIntvl: NoDiff,
-		DiffIntvl: [2]int{9, 10},
+		DiffIntvl: [2]int{10, 11},
+		Ncols:     13,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show vacuum progress statistics",
+		Filters:   map[int]*regexp.Regexp{},
+	}
+	// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
+	PgStatProgressClusterUnit = ContextUnit{
+		Name:  ProgressClusterView,
+		Query: PgStatProgressClusterQueryDefault,
+		//DiffIntvl: NoDiff,
+		DiffIntvl: [2]int{10, 11},
+		Ncols:     13,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show cluster/vacuum full progress statistics",
+		Filters:   map[int]*regexp.Regexp{},
+	}
+	PgStatProgressCreateIndexUnit = ContextUnit{
+		Name:      ProgressCreateIndexView,
+		Query:     PgStatProgressCreateIndexQueryDefault,
+		DiffIntvl: NoDiff,
 		Ncols:     14,
 		OrderKey:  0,
 		OrderDesc: true,
 		ColsWidth: map[int]int{},
-		Msg:       "Show vacuum statistics",
+		Msg:       "Show create index/reindex progress statistics",
 		Filters:   map[int]*regexp.Regexp{},
 	}
 	// PgStatActivityUnit describes how to handle pg_stat_activity view
@@ -231,6 +255,14 @@ func (cl ContextList) AdjustQueries(pi PgInfo) {
 				} else {
 					// use defaults assigned in context unit
 				}
+			}
+		case DatabaseView:
+			switch {
+			// versions prior 12 don't have  checksum_failures column
+			case pi.PgVersionNum < 120000:
+				cl[c].Query = PgStatDatabaseQuery11
+				cl[c].Ncols = 17
+				cl[c].DiffIntvl = [2]int{1, 15}
 			}
 		}
 	}

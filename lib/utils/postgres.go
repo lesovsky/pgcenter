@@ -80,22 +80,32 @@ func PQconnectdb(c *Conninfo, connstr string) (conn *sql.DB, err error) {
 	for {
 		conn, err = sql.Open(dbDriver, connstr)
 		if err = PQstatus(conn); err != nil {
-			switch {
-			case err == pq.ErrSSLNotSupported:
-				// By default pq-driver tries to connect with SSL. So if SSL is not enabled on the other side - fix our connection string and try to reconnect
-				connstr = connstr + " sslmode=disable"
-			case err.(*pq.Error).Code == errCodeInvalidPassword:
-				fmt.Printf("Password for user %s: ", c.User)
-				bytePassword, err := terminal.ReadPassword(0)
-				if err != nil {
-					return nil, err
+			// Use type switch to understand kind of the error. Firstly handle libpq-related errors, and next all other.
+			switch v := err.(type) {
+			case *pq.Error:
+				if v.Code == errCodeInvalidPassword {
+					fmt.Printf("Password for user %s: ", c.User)
+					bytePassword, err := terminal.ReadPassword(0)
+					if err != nil {
+						return nil, err
+					}
+					connstr = fmt.Sprintf("%s password=%s ", connstr, string(bytePassword))
+					fmt.Println()
+				} else {
+					return nil, fmt.Errorf("failed connection establishing: %s", err)
 				}
-				connstr = fmt.Sprintf("%s password=%s ", connstr, string(bytePassword))
-				fmt.Println()
 			default:
-				return nil, fmt.Errorf("failed connection establishing: %s", err)
+				switch {
+				case err == pq.ErrSSLNotSupported:
+					// By default pq-driver tries to connect with SSL. So if SSL is not enabled on the other side - fix our connection string and try to reconnect
+					fmt.Println("SSL is not enabled on the server, connecting with sslmode=disable")
+					connstr = connstr + " sslmode=disable"
+				default:
+					return nil, fmt.Errorf("failed connection establishing: %s", err)
+				}
 			}
 		} else {
+			// connection successful
 			return conn, nil
 		}
 	}

@@ -26,8 +26,14 @@ const (
 	SizesView = "pg_stat_sizes"
 	// FunctionsView is the name of view with functions stats
 	FunctionsView = "pg_stat_user_functions"
-	// VacuumView is the name of view with (auto)vacuum stats
-	VacuumView = "pg_stat_progress_vacuum"
+	// ProgressView is the name of pseudo-view with progress stats
+	ProgressView = "pg_stat_progress"
+	// ProgressVacuumView is the name of pg_stat_progress_vacuum view
+	ProgressVacuumView = "pg_stat_progress_vacuum"
+	// ProgressClusterView is the name of pg_stat_progress_cluster view
+	ProgressClusterView = "pg_stat_progress_cluster"
+	// ProgressCreateIndexView is the name of pg_stat_progress_create_index view
+	ProgressCreateIndexView = "pg_stat_progress_create_index"
 	// ActivityView is the name of view with activity stats
 	ActivityView = "pg_stat_activity"
 	// StatementsView is the name of view with statements stats
@@ -426,19 +432,22 @@ func (r *PGresult) Sort(key int, desc bool) {
 }
 
 // SetAlign method aligns length of values depending of the columns width
-func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
+func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (err error) {
 	var lastColTruncLimit, lastColMaxWidth int
 	lastColTruncLimit = truncLimit
 	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 
+	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
+	if len(r.Result) == 0 {
+		for colidx, colname := range r.Cols { // walk per-column
+			widthes[colidx] = len(colname)
+		}
+		return fmt.Errorf("RESULT_NO_ROWS")
+	}
+
 	/* calculate max length of columns based on the longest value of the column */
 	var valuelen, colnamelen int
 	for colidx, colname := range r.Cols { // walk per-column
-		if len(r.Result) == 0 {
-			// no rows in result, set width using length of a column name
-			widthes[colidx] = len(colname)
-		}
-
 		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
 			valuelen = len(r.Result[rownum][colidx].String)
 			colnamelen = utils.Max(len(colname), colsWidthMin)
@@ -457,7 +466,11 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 				if dynamic {
 					widthes[colidx] = valuelen
 				} else {
-					widthes[colidx] = colnamelen
+					if valuelen > colnamelen*2 {
+						widthes[colidx] = utils.Min(valuelen, 32)
+					} else {
+						widthes[colidx] = colnamelen
+					}
 				}
 			// for last column set width using truncation limit
 			case colidx == r.Ncols-1:
@@ -482,6 +495,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) {
 			}
 		}
 	}
+	return nil
 }
 
 // aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length
@@ -494,7 +508,7 @@ func aligningIsLessThanColname(vlen, cnlen, width int) bool {
 	return vlen > 0 && vlen <= cnlen && vlen >= width
 }
 
-// aligningIsMoreThanColname isthe aligning helper: returns true if passed non-empty values, but for if its length longer than length of colnames
+// aligningIsMoreThanColname is the aligning helper: returns true if passed non-empty values, but for if its length longer than length of colnames
 func aligningIsMoreThanColname(vlen, cnlen, width, trunclim, colidx, cols int) bool {
 	return vlen > 0 && vlen > cnlen && vlen < trunclim && vlen >= width && colidx < cols-1
 }

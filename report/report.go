@@ -61,7 +61,7 @@ func RunMain(args []string, opts ReportOptions) {
 func doReport(r *tar.Reader, opts ReportOptions) error {
 	var prevStat, diffStat stat.PGresult
 	var prevTs time.Time
-	var linesPrinted int8
+	var linesPrinted int8 = repeatHeaderAfter // initial value means print header at the beginning of all output
 
 	// read files headers continuously, read stats files requested by user and skip others.
 	for {
@@ -150,14 +150,17 @@ func formatReport(d *stat.PGresult, opts *ReportOptions) {
 
 	// align values for printing, use dynamic aligning
 	if !opts.Context.Aligned {
-		d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true)
-		opts.Context.Aligned = true
+		err := d.SetAlign(opts.Context.ColsWidth, opts.TruncLimit, true)
+		if err == nil {
+			opts.Context.Aligned = true
+		}
 	}
 }
 
 // printStatHeader periodically prints names of stats columns
 func printStatHeader(printedNum int8, cols []string, opts ReportOptions) int8 {
-	if printedNum >= repeatHeaderAfter {
+
+	if printedNum >= repeatHeaderAfter && opts.Context.Aligned {
 		fmt.Printf("         ")
 		for i, name := range cols {
 			fmt.Printf("\033[%d;%dm%-*s\033[0m", 37, 1, opts.Context.ColsWidth[i]+2, name)
