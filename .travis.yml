@@ -1,6 +1,6 @@
 language: go
 go:
-  - "1.11.x"
+  - "1.13.x"
 
 env:
   global:
@@ -11,14 +11,14 @@ addons:
     packages:
     - rpm
 
-dist: trusty
+dist: bionic
 sudo: false
 
-script: env GO111MODULE=on go test ${gobuild_args} ./...
+script: make
 
 deploy:
   provider: script
-  script: curl -sL https://git.io/goreleaser |GO111MODULE=on bash
+  script: curl -sL https://git.io/goreleaser |bash
   skip_cleanup: true
   on:
     tags: true
