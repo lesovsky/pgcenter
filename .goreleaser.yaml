@@ -2,6 +2,7 @@ project_name: pgcenter
 before:
   hooks:
   - go mod download
+  - make clean
 builds:
   -
     id: "default"
