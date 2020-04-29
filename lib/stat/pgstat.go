@@ -434,13 +434,13 @@ func (r *PGresult) Sort(key int, desc bool) {
 // SetAlign method aligns length of values depending of the columns width
 func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (err error) {
 	var lastColTruncLimit, lastColMaxWidth int
-	lastColTruncLimit = truncLimit
+	lastColTruncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 
 	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
 	if len(r.Result) == 0 {
 		for colidx, colname := range r.Cols { // walk per-column
-			widthes[colidx] = len(colname)
+			widthes[colidx] = utils.Max(len(colname), colsTruncMinLimit)
 		}
 		return fmt.Errorf("RESULT_NO_ROWS")
 	}
@@ -449,7 +449,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 	var valuelen, colnamelen int
 	for colidx, colname := range r.Cols { // walk per-column
 		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
-			valuelen = len(r.Result[rownum][colidx].String)
+			valuelen = utils.Max(len(r.Result[rownum][colidx].String), colsTruncMinLimit)
 			colnamelen = utils.Max(len(colname), colsWidthMin)
 
 			switch {
