@@ -11,7 +11,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Root describes the CLI command of main profram
+// Root describes the CLI command of main program
 var Root = &cobra.Command{
 	Use:     programName,
 	Short:   "Admin tool for PostgreSQL",
@@ -20,9 +20,6 @@ var Root = &cobra.Command{
 }
 
 func init() {
-	// Use this in case when you want to make something in root 'pgcenter' command
-	//Root.Run = runRoot
-
 	Root.PersistentFlags().BoolP("help", "?", false, "show this help and exit")
 
 	// Setup help and versions templates for main program
