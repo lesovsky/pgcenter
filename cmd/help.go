@@ -65,7 +65,7 @@ Options:
 
   -P, --pid PID			backend PID to profile to
   -F, --freq FREQ		profile at this frequency (min 1, max 1000)
-  -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)	
+  -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)
 
 General options:
   -?, --help		show this help and exit
@@ -138,9 +138,9 @@ Report options:
   -T, --tables			show pg_stat_user_tables statistics
   -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
   -P, --progress [X]			show pg_stat_progress_* statistics, use additional selector to choose stats.
-				'v' - vacuum; 'c' - cluster; 'i' - create index. 
+				'v' - vacuum; 'c' - cluster; 'i' - create index.
   -X, --statements [X]		show pg_stat_statements statistics, use additional selector to choose stats.
-				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io. 
+				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io.
 
   -d, --describe		show statistics description, combined with one of the report options
 
@@ -160,35 +160,35 @@ func printMainHelp() string {
 		record.CommandDefinition.Short,
 		report.CommandDefinition.Short,
 		top.CommandDefinition.Short,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }
 
 func printConfigHelp() string {
 	return fmt.Sprintf(configHelpTemplate,
 		config.CommandDefinition.Long,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }
 
 func printProfileHelp() string {
 	return fmt.Sprintf(profileHelpTemplate,
 		profile.CommandDefinition.Long,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }
 
 func printTopHelp() string {
 	return fmt.Sprintf(topHelpTemplate,
 		top.CommandDefinition.Long,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }
 
 func printRecordHelp() string {
 	return fmt.Sprintf(recordHelpTemplate,
 		record.CommandDefinition.Long,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }
 
 func printReportHelp() string {
 	return fmt.Sprintf(reportHelpTemplate,
 		report.CommandDefinition.Long,
-		ProgramIssuesUrl)
+		programIssuesUrl)
 }

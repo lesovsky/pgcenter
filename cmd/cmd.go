@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
 	"github.com/lesovsky/pgcenter/cmd/profile"
 	"github.com/lesovsky/pgcenter/cmd/record"
@@ -14,7 +13,7 @@ import (
 
 // Root describes the CLI command of main profram
 var Root = &cobra.Command{
-	Use:     ProgramName,
+	Use:     programName,
 	Short:   "Admin tool for PostgreSQL",
 	Long:    "pgCenter is a command line admin tool for PostgreSQL.",
 	Version: "dummy", // use constants from version.go
@@ -59,10 +58,4 @@ func init() {
 	top.CommandDefinition.SetVersionTemplate(PrintVersion())
 	top.CommandDefinition.SetHelpTemplate(printTopHelp())
 	top.CommandDefinition.SetUsageTemplate(printTopHelp())
-}
-
-// Things executed in root 'pgcenter' command.
-func runRoot(cmd *cobra.Command, args []string) {
-	// debug purpose
-	fmt.Printf("%#v\n", args)
 }
