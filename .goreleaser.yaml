@@ -18,7 +18,7 @@ builds:
       - -X github.com/lesovsky/pgcenter/cmd.GitBranch=master
 nfpms:
   -
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     replacements:
       amd64: x86_64
       linux: Linux
