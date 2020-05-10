@@ -79,7 +79,7 @@ const (
         FROM pg_stat_statements_normalized p
         JOIN pg_roles a ON a.oid=p.userid
         JOIN pg_database d ON d.oid=p.dbid
-        WHERE TRUE AND left(md5(d.datname || a.rolname || left(p.query, 128)), 10) = $1
+        WHERE TRUE AND left(md5(p.dbid::text || p.userid || p.queryid), 10) = $1
         GROUP BY d.datname, a.rolname, query_normalized
     ),
     totals_readable AS (

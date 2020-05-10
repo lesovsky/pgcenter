@@ -3,7 +3,6 @@ module github.com/lesovsky/pgcenter
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
-	github.com/jmoiron/sqlx v1.2.0
 	github.com/jroimartin/gocui v0.4.0
 	github.com/lib/pq v1.0.0
 	github.com/mattn/go-runewidth v0.0.3 // indirect
