@@ -1,3 +1,11 @@
+pgcenter (0.6.5) unstable; urgency=low
+  * nothing important, removed old code, small refactoring and bugfixes
+  * top: fix 'G' hotkey when building query report
+
+pgcenter (0.6.4) unstable; urgency=low
+pgcenter (0.6.3) unstable; urgency=low
+  * nothing important, just attempts to fix CI errors
+
 pgcenter (0.6.2) unstable; urgency=low
   * report: print header at the beginning of the output
   * top/report: refactoring aligning
@@ -13,7 +21,7 @@ pgcenter (0.6.1) unstable; urgency=low
     - record: records complete length of pg_stat_statements.query (be careful, it might produce high-volume stats file)
     - record: add startup parameter for configuring truncation
     - report: can use '--truncate 0', for disabling truncation only for pg_stat_statements.query (might produce an "eyes-bleeding" output)
-  * reworked pg_stat_statements queries: 
+  * reworked pg_stat_statements queries:
     - remove unnecessary GROUP BY, ORDER BY and aggregations
     - simplify usage of regexp_replace()
     - use pg_get_userbyid() instead of joining pg_roles view
@@ -206,7 +214,7 @@ pgcenter (0.1.3) unstable; urgency=low
   * fix broken multiple connections when log_min_duration_statement issued.
   * remove DEFAULT_HOST, DEFAULT_PORT; use libpq default behaviour.
   * improve add_connection(): reset counters, remove unnecessary vars.
- 
+
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 28 Aug 2015 14:27:07 +0500
 
 pgcenter (0.1.2) unstable; urgency=low
@@ -269,5 +277,5 @@ pgcenter (0.1.2) unstable; urgency=low
   * Add console switching ability.
   * Add title (progname, current time), cpu usage, load average output.
   * Add ncurses, libpq.
- 
+
  -- Alexey Lesovsky <lesovsky@gmail.com>  Sun, 24 May 2015 22:37:07 +0500
