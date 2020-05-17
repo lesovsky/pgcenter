@@ -13,9 +13,9 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -X github.com/lesovsky/pgcenter/cmd.GitTag={{.Tag}}
-      - -X github.com/lesovsky/pgcenter/cmd.GitCommit={{.ShortCommit}}
-      - -X github.com/lesovsky/pgcenter/cmd.GitBranch=master
+      - -X github.com/lesovsky/pgcenter/cmd.gitTag={{.Tag}}
+      - -X github.com/lesovsky/pgcenter/cmd.gitCommit={{.ShortCommit}}
+      - -X github.com/lesovsky/pgcenter/cmd.gitBranch=master
 nfpms:
   -
     file_name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
