@@ -9,19 +9,27 @@ LDFLAGS = -ldflags "-X github.com/lesovsky/pgcenter/cmd.gitTag=${TAG} \
 -X github.com/lesovsky/pgcenter/cmd.gitCommit=${COMMIT} \
 -X github.com/lesovsky/pgcenter/cmd.gitBranch=${BRANCH}"
 
-.PHONY: all clean install uninstall
+.PHONY: help clean dep build install uninstall
 
-all: pgcenter
+.DEFAULT_GOAL := help
 
-pgcenter:
+help: ## Display this help screen.
+	@echo "Makefile available targets:"
+	@grep -h -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  * \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+
+clean: ## Clean build directory.
+	rm -f ./bin/${PROGRAM_NAME}
+	rmdir ./bin
+
+dep: ## Download the dependencies.
 	go mod download
-	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o ${PROGRAM_NAME} ${SOURCE}
 
-install:
-	install -pm 755 ${PROGRAM_NAME} /usr/bin/${PROGRAM_NAME}
+build: dep ## Build pgcenter executable.
+	mkdir -p ./bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o bin/${PROGRAM_NAME} ${SOURCE}
 
-clean:
-	rm -f ${PROGRAM_NAME}
+install: ## Install pgcenter executable into /usr/bin directory.
+	install -pm 755 bin/${PROGRAM_NAME} /usr/bin/${PROGRAM_NAME}
 
-uninstall:
+uninstall: ## Uninstall pgcenter executable from /usr/bin directory.
 	rm -f /usr/bin/${PROGRAM_NAME}

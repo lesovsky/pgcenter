@@ -1,7 +1,7 @@
 project_name: pgcenter
 before:
   hooks:
-  - go mod download
+  - make dep
   - make clean
 builds:
   -
