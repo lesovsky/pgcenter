@@ -6,11 +6,9 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/lesovsky/pgcenter/lib/utils"
-	"sync"
 )
 
 var (
-	wg       sync.WaitGroup
 	conninfo utils.Conninfo
 	conn     *sql.DB
 )

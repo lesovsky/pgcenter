@@ -5,6 +5,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"sync"
 	"time"
 )
 
@@ -22,6 +23,7 @@ func uiLoop() error {
 	var e ErrorRate
 	var errInterval time.Duration = 1 * time.Second
 	var errMaxcount int = 5
+	var wg sync.WaitGroup
 
 	for {
 		// init UI
@@ -43,7 +45,7 @@ func uiLoop() error {
 
 		// run stats loop, that reads and display stats
 		wg.Add(1)
-		go statLoop(g)
+		go statLoop(g, &wg)
 
 		// run UI loop, that handle UI events
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {

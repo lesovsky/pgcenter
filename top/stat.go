@@ -9,6 +9,7 @@ import (
 	"github.com/lib/pq"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 )
 
@@ -21,7 +22,7 @@ var (
 )
 
 // Main stat loop, which is refreshes with interval, gathers and display stats.
-func statLoop(g *gocui.Gui) {
+func statLoop(g *gocui.Gui, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for {
