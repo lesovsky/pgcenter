@@ -20,6 +20,6 @@ var (
 )
 
 // PrintVersion prints the name and version of this program
-func PrintVersion() string {
+func printVersion() string {
 	return fmt.Sprintf("%s %s %s-%s\n", programName, gitTag, gitCommit, gitBranch)
 }

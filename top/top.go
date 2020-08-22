@@ -4,7 +4,7 @@ package top
 
 import (
 	"database/sql"
-	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/utils"
 )
 
@@ -14,7 +14,7 @@ var (
 )
 
 // RunMain is the main entry point for 'pgcenter top' command
-func RunMain(args []string, c utils.Conninfo) {
+func RunMain(args []string, c utils.Conninfo, db *postgres.DB) error {
 	var err error
 
 	// Assign conninfo values from external struct into global one (it have to be available everywhere)
@@ -26,8 +26,8 @@ func RunMain(args []string, c utils.Conninfo) {
 	// Connect to Postgres
 	conn, err = utils.CreateConn(&conninfo)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-		return
+		//fmt.Printf("ERROR: %s\n", err.Error())
+		return err
 	}
 	defer conn.Close()
 
@@ -38,7 +38,8 @@ func RunMain(args []string, c utils.Conninfo) {
 	ctx.Setup(stats.PgInfo)
 
 	// Run UI
-	if err := uiLoop(); err != nil {
-		fmt.Println(err)
-	}
+	//if err := uiLoop(); err != nil {
+	//	fmt.Println(err)
+	//}
+	return uiLoop()
 }

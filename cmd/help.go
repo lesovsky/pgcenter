@@ -11,8 +11,8 @@ import (
 	top "github.com/lesovsky/pgcenter/cmd/top"
 )
 
-const (
-	mainHelpTemplate = `%s
+func printMainHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter [flags]
@@ -32,8 +32,18 @@ Flags:
 Use "pgcenter [command] --help" for more information about a command.
 
 Report bugs to %s
-`
-	configHelpTemplate = `%s
+`,
+		Root.Long,
+		config.CommandDefinition.Short,
+		profile.CommandDefinition.Short,
+		record.CommandDefinition.Short,
+		report.CommandDefinition.Short,
+		top.CommandDefinition.Short,
+		programIssuesUrl)
+}
+
+func printConfigHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter config [OPTIONS]... [DBNAME [USERNAME]]
@@ -51,8 +61,13 @@ General options:
       --version		show version information and exit
 
 Report bugs to %s
-`
-	profileHelpTemplate = `%s
+`,
+		config.CommandDefinition.Long,
+		programIssuesUrl)
+}
+
+func printProfileHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter profile [OPTIONS]... [DBNAME [USERNAME]]
@@ -72,8 +87,13 @@ General options:
       --version		show version information and exit
 
 Report bugs to %s
-`
-	topHelpTemplate = `%s
+`,
+		profile.CommandDefinition.Long,
+		programIssuesUrl)
+}
+
+func printTopHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter top [OPTIONS]... [DBNAME [USERNAME]]
@@ -89,8 +109,13 @@ General options:
       --version		show version information and exit
 
 Report bugs to %s
-`
-	recordHelpTemplate = `%s
+`,
+		top.CommandDefinition.Long,
+		programIssuesUrl)
+}
+
+func printRecordHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter record [OPTIONS]... [DBNAME [USERNAME]]
@@ -113,8 +138,13 @@ General options:
       --version		show version information and exit
 
 Report bugs to %s
-`
-	reportHelpTemplate = `%s
+`,
+		record.CommandDefinition.Long,
+		programIssuesUrl)
+}
+
+func printReportHelp() string {
+	return fmt.Sprintf(`%s
 
 Usage:
   pgcenter report [OPTIONS]...
@@ -149,46 +179,7 @@ General options:
       --version		show version information and exit
 
 Report bugs to %s
-`
-)
-
-func printMainHelp() string {
-	return fmt.Sprintf(mainHelpTemplate,
-		Root.Long,
-		config.CommandDefinition.Short,
-		profile.CommandDefinition.Short,
-		record.CommandDefinition.Short,
-		report.CommandDefinition.Short,
-		top.CommandDefinition.Short,
-		programIssuesUrl)
-}
-
-func printConfigHelp() string {
-	return fmt.Sprintf(configHelpTemplate,
-		config.CommandDefinition.Long,
-		programIssuesUrl)
-}
-
-func printProfileHelp() string {
-	return fmt.Sprintf(profileHelpTemplate,
-		profile.CommandDefinition.Long,
-		programIssuesUrl)
-}
-
-func printTopHelp() string {
-	return fmt.Sprintf(topHelpTemplate,
-		top.CommandDefinition.Long,
-		programIssuesUrl)
-}
-
-func printRecordHelp() string {
-	return fmt.Sprintf(recordHelpTemplate,
-		record.CommandDefinition.Long,
-		programIssuesUrl)
-}
-
-func printReportHelp() string {
-	return fmt.Sprintf(reportHelpTemplate,
+`,
 		report.CommandDefinition.Long,
 		programIssuesUrl)
 }
