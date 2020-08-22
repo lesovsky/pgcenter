@@ -12,7 +12,7 @@ const (
 	// PgGetSingleSettingQuery queries specified Postgres configuration setting
 	PgGetSingleSettingQuery = "SELECT current_setting($1)"
 	// PgGetVersionQuery queries Postgres versions
-	PgGetVersionQuery = "SELECT current_setting('server_version'),current_setting('server_version_num')"
+	PgGetVersionQuery = "SELECT current_setting('server_version'),current_setting('server_version_num')::int"
 	// PgGetRecoveryStatusQuery queries current Postgres recovery status
 	PgGetRecoveryStatusQuery = "SELECT pg_is_in_recovery()"
 	// PgGetUptimeQuery queries Postgres uptime

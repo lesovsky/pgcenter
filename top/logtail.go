@@ -43,11 +43,13 @@ func (l *postgresLogfile) ReOpen() error {
 		return err
 	}
 
-	l.Path = readLogPath()
+	// TODO: break this until removing replacing pgLog global var.
+	// l.Path = readLogPath()
+
 	return l.Open()
 }
 
-// Read methos reads logfile until required number of newlines aren't collected
+// Read methods reads logfile until required number of newlines aren't collected
 func (l *postgresLogfile) Read() ([]byte, error) {
 	var offset int64 = -1 // offset used for per-byte backward reading of the logfile
 	var position int64    // position within the logfile from which reading starts

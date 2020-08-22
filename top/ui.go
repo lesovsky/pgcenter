@@ -19,10 +19,10 @@ var (
 )
 
 // Create and run UI.
-func uiLoop() error {
+func uiLoop(app *app) error {
 	var e ErrorRate
-	var errInterval time.Duration = 1 * time.Second
-	var errMaxcount int = 5
+	var errInterval = 1 * time.Second
+	var errMaxcount = 5
 	var wg sync.WaitGroup
 
 	for {
@@ -32,20 +32,22 @@ func uiLoop() error {
 			return fmt.Errorf("FATAL: gui creating failed with %s.\n", err)
 		}
 
+		app.ui = g
+
 		// construct UI
-		g.SetManagerFunc(layout)
+		app.ui.SetManagerFunc(layout(app))
 
 		// setup key shortcuts and bindings
-		if err := keybindings(g); err != nil {
+		if err := keybindings(app); err != nil {
 			return fmt.Errorf("FATAL: %s.\n", err)
 		}
 
 		// initial read of stats
-		doWork(g)
+		doWork(app)
 
 		// run stats loop, that reads and display stats
 		wg.Add(1)
-		go statLoop(g, &wg)
+		go statLoop(app, &wg)
 
 		// run UI loop, that handle UI events
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -61,61 +63,63 @@ func uiLoop() error {
 }
 
 // Defines UI layout - views and their location.
-func layout(g *gocui.Gui) error {
-	maxX, maxY := g.Size()
+func layout(app *app) func(g *gocui.Gui) error {
+	return func(g *gocui.Gui) error {
+		maxX, maxY := app.ui.Size()
 
-	// Sysstat view
-	if v, err := g.SetView("sysstat", -1, -1, maxX-1/2, 4); err != nil {
-		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set sysstat view on layout failed: %s", err)
-		}
-		if _, err := g.SetCurrentView("sysstat"); err != nil {
-			return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
-		}
-		v.Frame = false
-	}
-
-	// Postgres activity view
-	if v, err := g.SetView("pgstat", maxX/2, -1, maxX-1, 4); err != nil {
-		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set pgstat view on layout failed: %s", err)
-		}
-		v.Frame = false
-	}
-
-	// Command line
-	if v, err := g.SetView("cmdline", -1, 3, maxX-1, 5); err != nil {
-		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set cmdline view on layout failed: %s", err)
-		}
-		// show saved error to user if any
-		if errSaved != nil {
-			printCmdline(g, "%s", errSaved)
-			errSaved = nil
-		}
-		v.Frame = false
-	}
-
-	// Postgres' stats view
-	if v, err := g.SetView("dbstat", -1, 4, maxX-1, maxY-1); err != nil {
-		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set dbstat view on layout failed: %s", err)
-		}
-		v.Frame = false
-	}
-
-	// Aux stats view
-	if ctx.aux > auxNone {
-		if v, err := g.SetView("aux", -1, 3*maxY/5-1, maxX-1, maxY-1); err != nil {
+		// Sysstat view
+		if v, err := app.ui.SetView("sysstat", -1, -1, maxX-1/2, 4); err != nil {
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set aux view on layout failed: %s", err)
+				return fmt.Errorf("set sysstat view on layout failed: %s", err)
 			}
-			fmt.Fprintln(v, "")
+			if _, err := app.ui.SetCurrentView("sysstat"); err != nil {
+				return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
+			}
 			v.Frame = false
 		}
-	}
 
-	return nil
+		// Postgres activity view
+		if v, err := app.ui.SetView("pgstat", maxX/2, -1, maxX-1, 4); err != nil {
+			if err != gocui.ErrUnknownView {
+				return fmt.Errorf("set pgstat view on layout failed: %s", err)
+			}
+			v.Frame = false
+		}
+
+		// Command line
+		if v, err := app.ui.SetView("cmdline", -1, 3, maxX-1, 5); err != nil {
+			if err != gocui.ErrUnknownView {
+				return fmt.Errorf("set cmdline view on layout failed: %s", err)
+			}
+			// show saved error to user if any
+			if errSaved != nil {
+				printCmdline(app.ui, "%s", errSaved)
+				errSaved = nil
+			}
+			v.Frame = false
+		}
+
+		// Postgres' stats view
+		if v, err := app.ui.SetView("dbstat", -1, 4, maxX-1, maxY-1); err != nil {
+			if err != gocui.ErrUnknownView {
+				return fmt.Errorf("set dbstat view on layout failed: %s", err)
+			}
+			v.Frame = false
+		}
+
+		// Aux stats view
+		if app.context.aux > auxNone {
+			if v, err := app.ui.SetView("aux", -1, 3*maxY/5-1, maxX-1, maxY-1); err != nil {
+				if err != gocui.ErrUnknownView {
+					return fmt.Errorf("set aux view on layout failed: %s", err)
+				}
+				fmt.Fprintln(v, "")
+				v.Frame = false
+			}
+		}
+
+		return nil
+	}
 }
 
 // Wrapper function for printing messages in cmdline.

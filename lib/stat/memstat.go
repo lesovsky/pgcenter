@@ -5,7 +5,7 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
 	"strconv"
@@ -36,11 +36,11 @@ type Meminfo struct {
 }
 
 // Read stats into container
-func (m *Meminfo) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
-	if isLocal {
+func (m *Meminfo) Read(db *postgres.DB, pgcAvail bool) {
+	if db.Local {
 		m.ReadLocal()
 	} else if pgcAvail {
-		m.ReadRemote(conn)
+		m.ReadRemote(db)
 	}
 }
 
@@ -93,8 +93,8 @@ func (m *Meminfo) ReadLocal() {
 }
 
 // ReadRemote reads stats from remote Postgres instance
-func (m *Meminfo) ReadRemote(conn *sql.DB) {
-	rows, err := conn.Query(pgProcMeminfoQuery)
+func (m *Meminfo) ReadRemote(db *postgres.DB) {
+	rows, err := db.Query(pgProcMeminfoQuery)
 	if err != nil {
 		return
 	} /* ignore errors, zero stat is ok for us */

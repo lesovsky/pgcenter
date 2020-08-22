@@ -6,8 +6,8 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -54,11 +54,11 @@ type Cpustat struct {
 }
 
 // Read method reads CPU raw stats
-func (s *CpuRawstat) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
-	if isLocal {
+func (s *CpuRawstat) Read(db *postgres.DB, pgcAvail bool) {
+	if db.Local {
 		s.ReadLocal()
 	} else if pgcAvail {
-		s.ReadRemote(conn)
+		s.ReadRemote(db)
 	}
 }
 
@@ -95,8 +95,8 @@ func (s *CpuRawstat) ReadLocal() {
 }
 
 // ReadRemote method reads CPU raw stats from Postgres instance
-func (s *CpuRawstat) ReadRemote(conn *sql.DB) {
-	conn.QueryRow(pgProcCpuStatQuery).Scan(&s.Entry, &s.User, &s.Nice, &s.Sys, &s.Idle,
+func (s *CpuRawstat) ReadRemote(db *postgres.DB) {
+	db.QueryRow(pgProcCpuStatQuery).Scan(&s.Entry, &s.User, &s.Nice, &s.Sys, &s.Idle,
 		&s.Iowait, &s.Irq, &s.Softirq, &s.Steal, &s.Guest, &s.GstNice)
 
 	s.Total = s.User + s.Nice + s.Sys + s.Idle + s.Iowait + s.Irq + s.Softirq + s.Steal + s.Guest

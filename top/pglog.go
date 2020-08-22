@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/jehiah/go-strftime"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/stat"
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
@@ -15,50 +16,52 @@ import (
 )
 
 // Open Postgres log in $PAGER program.
-func showPgLog(g *gocui.Gui, _ *gocui.View) error {
-	if !conninfo.ConnLocal {
-		printCmdline(g, "Show log is not supported for remote hosts")
+func showPgLog(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		if !db.Local {
+			printCmdline(g, "Show log is not supported for remote hosts")
+			return nil
+		}
+
+		var currentLogfile = readLogPath(db)
+		if currentLogfile == "" {
+			printCmdline(g, "Can't assemble absolute path to log file")
+			return nil
+		}
+
+		var pager string
+		if pager = os.Getenv("PAGER"); pager == "" {
+			pager = utils.DefaultPager
+		}
+
+		// exit from UI and stats loop... will restore it after $PAGER is closed.
+		doExit <- 1
+		g.Close()
+
+		cmd := exec.Command(pager, currentLogfile)
+		cmd.Stdout = os.Stdout
+
+		if err := cmd.Run(); err != nil {
+			// if external program fails, save error and show it to user in next UI iteration
+			errSaved = fmt.Errorf("failed to open %s: %s", currentLogfile, err)
+			return err
+		}
+
 		return nil
 	}
-
-	var currentLogfile = readLogPath()
-	if currentLogfile == "" {
-		printCmdline(g, "Can't assemble absolute path to log file")
-		return nil
-	}
-
-	var pager string
-	if pager = os.Getenv("PAGER"); pager == "" {
-		pager = utils.DefaultPager
-	}
-
-	// exit from UI and stats loop... will restore it after $PAGER is closed.
-	doExit <- 1
-	g.Close()
-
-	cmd := exec.Command(pager, currentLogfile)
-	cmd.Stdout = os.Stdout
-
-	if err := cmd.Run(); err != nil {
-		// if external program fails, save error and show it to user in next UI iteration
-		errSaved = fmt.Errorf("failed to open %s: %s", currentLogfile, err)
-		return err
-	}
-
-	return nil
 }
 
 // Get an absolute path of current Postgres log.
-func readLogPath() string {
+func readLogPath(db *postgres.DB) string {
 	var logfileRealpath, pgDatadir string
 
 	// An easiest way to get logfile is using pg_current_logfile() function, but it's available since PG 10.
-	conn.QueryRow(stat.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
+	db.QueryRow(stat.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
 
 	if logfileRealpath != "" {
 		// Even pg_current_logfile() might return relative path
 		if !strings.HasPrefix(logfileRealpath, "/") {
-			conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+			db.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
 			logfileRealpath = pgDatadir + "/" + logfileRealpath
 		}
 		return logfileRealpath
@@ -66,15 +69,15 @@ func readLogPath() string {
 
 	// if we're here, it means we are connected to old Postgres that has no pg_current_logfile() function (9.6 and older).
 	// Anyway, after September 2021 years, all Postgres 9.x will become EOL and code below could be deleted.
-	return lookupPostgresLogfile()
+	return lookupPostgresLogfile(db)
 }
 
 // lookupPostgresLogfiles tries to assemble in a hard way an absolute path to Postgres logfile
-func lookupPostgresLogfile() (absLogfilePath string) {
+func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
 	var pgDatadir, pgLogdir, pgLogfile, pgLogfileFallback string
-	conn.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
-	conn.QueryRow(stat.PgGetSingleSettingQuery, "log_directory").Scan(&pgLogdir)
-	conn.QueryRow(stat.PgGetSingleSettingQuery, "log_filename").Scan(&pgLogfile)
+	db.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+	db.QueryRow(stat.PgGetSingleSettingQuery, "log_directory").Scan(&pgLogdir)
+	db.QueryRow(stat.PgGetSingleSettingQuery, "log_filename").Scan(&pgLogfile)
 
 	if strings.HasPrefix(pgLogdir, "/") {
 		absLogfilePath = pgLogdir + "/" + pgLogfile // absolute path
@@ -90,7 +93,7 @@ func lookupPostgresLogfile() (absLogfilePath string) {
 	// the time when rotation occurred will be use. This use case is not covered here.
 	if strings.Contains(absLogfilePath, "%H%M%S") {
 		var pgStartTime string
-		conn.QueryRow(stat.PgPostmasterStartTimeQuery).Scan(&pgStartTime)
+		db.QueryRow(stat.PgPostmasterStartTimeQuery).Scan(&pgStartTime)
 		// rotated logfile, fallback to it in case when above isn't exist
 		pgLogfileFallback = strings.Replace(absLogfilePath, "%H%M%S", "000000", 1)
 		// logfile created today
@@ -99,7 +102,7 @@ func lookupPostgresLogfile() (absLogfilePath string) {
 
 	if strings.Contains(absLogfilePath, "%") {
 		var pgLogTz = "timezone"
-		conn.QueryRow(stat.PgGetSingleSettingQuery, pgLogTz).Scan(&pgLogTz)
+		db.QueryRow(stat.PgGetSingleSettingQuery, pgLogTz).Scan(&pgLogTz)
 
 		t := time.Now()
 		tz, _ := time.LoadLocation(pgLogTz)

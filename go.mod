@@ -2,6 +2,7 @@ module github.com/lesovsky/pgcenter
 
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
+	github.com/jackc/pgconn v1.6.4
 	github.com/jackc/pgx/v4 v4.8.1
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
 	github.com/jroimartin/gocui v0.4.0

@@ -5,8 +5,8 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
 	"math"
@@ -73,13 +73,13 @@ func (c *Nicstat) New(size int) {
 }
 
 // Read stats into container
-func (c Netdevs) Read(conn *sql.DB, isLocal bool, pgcAvail bool) error {
-	if isLocal {
+func (c Netdevs) Read(db *postgres.DB, pgcAvail bool) error {
+	if db.Local {
 		if err := c.ReadLocal(); err != nil {
 			return err
 		}
 	} else if pgcAvail {
-		c.ReadRemote(conn)
+		c.ReadRemote(db)
 	}
 
 	return nil
@@ -132,11 +132,11 @@ func (c Netdevs) ReadLocal() error {
 }
 
 // ReadRemote reads stats from remote Postgres instance
-func (c Netdevs) ReadRemote(conn *sql.DB) {
+func (c Netdevs) ReadRemote(db *postgres.DB) {
 	var uptime float64
-	conn.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
 
-	rows, err := conn.Query(pgProcNetdevQuery)
+	rows, err := db.Query(pgProcNetdevQuery)
 	if err != nil {
 		return
 	} /* ignore errors, zero stat is ok for us */
@@ -156,7 +156,7 @@ func (c Netdevs) ReadRemote(conn *sql.DB) {
 
 		ifs.Uptime = uptime
 		// Get interface's speed and duplex, perhaps it's too expensive to poll interface in every execution of the function.
-		conn.QueryRow(pgProcLinkSettingsQuery, ifs.Ifname).Scan(&ifs.Speed, &ifs.Duplex)
+		db.QueryRow(pgProcLinkSettingsQuery, ifs.Ifname).Scan(&ifs.Speed, &ifs.Duplex)
 
 		c[i] = ifs
 		i++

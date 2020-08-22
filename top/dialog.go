@@ -46,10 +46,10 @@ var (
 )
 
 // Open 'gocui' view for the dialog.
-func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
+func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// some types of actions allowed only in specifics stats contexts.
-		if (d > dialogFilter && d <= dialogChangeAge) && ctx.current.Name != stat.ActivityView {
+		if (d > dialogFilter && d <= dialogChangeAge) && app.context.current.Name != stat.ActivityView {
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
@@ -63,7 +63,7 @@ func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 			return nil
 		}
 
-		if d == dialogQueryReport && !strings.Contains(ctx.current.Name, stat.StatementsView) {
+		if d == dialogQueryReport && !strings.Contains(app.context.current.Name, stat.StatementsView) {
 			printCmdline(g, "Query report is allowed in pg_stat_statements tabs.")
 			return nil
 		}
@@ -97,37 +97,39 @@ func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 }
 
 // When gocui.KeyEnter is pressed in the end of user's input, depending on dialog type an appropriate handler should be started.
-func dialogFinish(g *gocui.Gui, v *gocui.View) error {
-	var answer string
+func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		var answer string
 
-	printCmdline(g, "")
+		printCmdline(g, "")
 
-	switch dialog {
-	case dialogPgReload:
-		doReload(g, v, answer)
-	case dialogFilter:
-		setFilter(g, v, answer)
-	case dialogCancelQuery:
-		killSingle(g, v, answer, "cancel")
-	case dialogTerminateBackend:
-		killSingle(g, v, answer, "terminate")
-	case dialogSetMask:
-		setBackendMask(g, v, answer)
-	case dialogCancelGroup:
-		killGroup(g, v, "cancel")
-	case dialogTerminateGroup:
-		killGroup(g, v, "terminate")
-	case dialogChangeAge:
-		changeQueryAge(g, v, answer)
-	case dialogQueryReport:
-		buildQueryReport(g, v, answer)
-	case dialogChangeRefresh:
-		changeRefresh(g, v, answer)
-	case dialogNone:
-		/* do nothing */
+		switch dialog {
+		case dialogPgReload:
+			doReload(g, v, app.db, answer)
+		case dialogFilter:
+			setFilter(g, v, answer, app.context)
+		case dialogCancelQuery:
+			killSingle(g, v, answer, app.db, "cancel")
+		case dialogTerminateBackend:
+			killSingle(g, v, answer, app.db, "terminate")
+		case dialogSetMask:
+			setBackendMask(g, v, answer)
+		case dialogCancelGroup:
+			killGroup(g, v, app, "cancel")
+		case dialogTerminateGroup:
+			killGroup(g, v, app, "terminate")
+		case dialogChangeAge:
+			changeQueryAge(g, v, answer, app.context)
+		case dialogQueryReport:
+			buildQueryReport(g, v, answer, app.db, app.doExit)
+		case dialogChangeRefresh:
+			changeRefresh(g, v, answer, &app.config, app.doUpdate)
+		case dialogNone:
+			/* do nothing */
+		}
+
+		return dialogClose(g, v)
 	}
-
-	return dialogClose(g, v)
 }
 
 // Finish dialog when user presses Esc to cancel.

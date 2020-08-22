@@ -5,6 +5,7 @@ package top
 import (
 	"database/sql"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/stat"
 	"strconv"
 	"strings"
@@ -23,7 +24,7 @@ var (
 )
 
 // Send signal to a single Postgres backend.
-func killSingle(g *gocui.Gui, v *gocui.View, answer string, mode string) {
+func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mode string) {
 	if mode != "cancel" && mode != "terminate" {
 		printCmdline(g, "Do nothing. Unknown mode (not cancel, nor terminate).") // should never be here
 		return
@@ -34,10 +35,10 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, mode string) {
 	switch mode {
 	case "cancel":
 		query = stat.PgCancelSingleQuery
-		answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogCancelQuery])
+		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogCancelQuery])
 	case "terminate":
 		query = stat.PgTerminateSingleQuery
-		answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogTerminateBackend])
+		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogTerminateBackend])
 	}
 	answer = strings.TrimSuffix(answer, "\n")
 
@@ -49,7 +50,7 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, mode string) {
 
 	var killed sql.NullBool
 
-	conn.QueryRow(query, pid).Scan(&killed)
+	db.QueryRow(query, pid).Scan(&killed)
 
 	if killed.Bool == true {
 		printCmdline(g, "Successful.")
@@ -59,8 +60,8 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, mode string) {
 }
 
 // Send signal to group of Postgres backends.
-func killGroup(g *gocui.Gui, _ *gocui.View, mode string) {
-	if ctx.current.Name != stat.ActivityView {
+func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
+	if app.context.current.Name != stat.ActivityView {
 		printCmdline(g, "Terminate or cancel backend allowed in pg_stat_activity.")
 		return
 	}
@@ -98,12 +99,12 @@ func killGroup(g *gocui.Gui, _ *gocui.View, mode string) {
 
 	for state, part := range states {
 		if (groupMask & state) != 0 {
-			ctx.sharedOptions.BackendState = part
-			if state == groupWaiting && stats.PgVersionNum < 90600 {
-				ctx.sharedOptions.BackendState = "waiting"
+			app.context.sharedOptions.BackendState = part
+			if state == groupWaiting && app.stats.PgVersionNum < 90600 {
+				app.context.sharedOptions.BackendState = "waiting"
 			}
-			query, _ = stat.PrepareQuery(template, ctx.sharedOptions)
-			err := conn.QueryRow(query).Scan(&killed)
+			query, _ = stat.PrepareQuery(template, app.context.sharedOptions)
+			err := app.db.QueryRow(query).Scan(&killed)
 			if err != nil {
 				printCmdline(g, "failed to send signal to backends: %s", err)
 			}

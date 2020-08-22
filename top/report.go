@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"database/sql"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"
@@ -142,7 +143,7 @@ query text (id: {{.QueryId}}):
 )
 
 // buildQueryReport queries statements stats, generate the report and shows it.
-func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
+func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, doExit chan int) {
 	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogQueryReport])
 	answer = strings.TrimSuffix(answer, "\n")
 
@@ -152,7 +153,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
 	}
 
 	var r report
-	err := conn.QueryRow(pgssReportQuery, answer).Scan(&r.AllTotalTime, &r.AllIoTime, &r.AllCpuTime,
+	err := db.QueryRow(pgssReportQuery, answer).Scan(&r.AllTotalTime, &r.AllIoTime, &r.AllCpuTime,
 		&r.AllTotalTimePct, &r.AllIoTimePct, &r.AllCpuTimePct,
 		&r.AllTotalQueries, &r.TotalTimePct, &r.IoTimePct, &r.CpuTimePct,
 		&r.AvgTotalTimePct, &r.AvgIoTimePct, &r.AvgCpuTimePct,
@@ -165,7 +166,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
 	}
 
 	r.QueryId = answer
-	if err := r.Print(g); err != nil {
+	if err := r.Print(g, doExit); err != nil {
 		printCmdline(g, "Failed to show query report.")
 	}
 
@@ -173,7 +174,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
 }
 
 // Print method prints report in $PAGER program.
-func (r *report) Print(g *gocui.Gui) error {
+func (r *report) Print(g *gocui.Gui, doExit chan int) error {
 	t := template.Must(template.New("query").Parse(reportTemplate))
 	buf := &bytes.Buffer{}
 	if err := t.Execute(buf, r); err != nil {

@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"github.com/jackc/pgx/v4"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"github.com/pkg/errors"
 	"sort"
@@ -87,6 +89,7 @@ type Pgstat struct {
 type PgInfo struct {
 	PgAlive               string /* is Postgres alive or not? */
 	PgVersionNum          uint   /* Postgres version in format XXYYZZ */
+	PgVersionNum2         int    /* Postgres version in format XXYYZZ */
 	PgVersion             string /* Postgres version in format X.Y.Z */
 	PgUptime              string /* Postgres uptime */
 	PgRecovery            string /* is Postgres master or standby? */
@@ -130,8 +133,8 @@ type PGresult struct {
 }
 
 // GetPgState gets Postgres connection status - is it alive or not?
-func GetPgState(conn *sql.DB) string {
-	err := utils.PQstatus(conn)
+func GetPgState(db *postgres.DB) string {
+	err := utils.PQstatusNew(db)
 	if err != nil {
 		return "failed"
 	}
@@ -139,8 +142,8 @@ func GetPgState(conn *sql.DB) string {
 }
 
 // Uptime method gets Postgres uptime
-func (s *Pgstat) Uptime(conn *sql.DB) {
-	if err := conn.QueryRow(PgGetUptimeQuery).Scan(&s.PgUptime); err != nil {
+func (s *Pgstat) Uptime(db *postgres.DB) {
+	if err := db.QueryRow(PgGetUptimeQuery).Scan(&s.PgUptime); err != nil {
 		s.PgUptime = "--:--:--"
 	}
 }
@@ -151,7 +154,6 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	conn.QueryRow(PgGetSingleSettingQuery, "track_commit_timestamp").Scan(&s.PgTrackCommitTs)
 	conn.QueryRow(PgGetSingleSettingQuery, "max_connections").Scan(&s.PgMaxConns)
 	conn.QueryRow(PgGetSingleSettingQuery, "autovacuum_max_workers").Scan(&s.PgAVMaxWorkers)
-	conn.QueryRow(PgGetSingleSettingQuery, "max_connections").Scan(&s.PgMaxConns)
 	conn.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
 
 	// Is pg_stat_statement available?
@@ -166,15 +168,49 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	}
 }
 
-// UpdatePgStatStatementsStatus method refreshes info about pg_stat_availability
+func (s *Pgstat) ReadPgInfoNew(db *postgres.DB) {
+	// TODO: add errors handling
+	db.QueryRow(PgGetVersionQuery).Scan(&s.PgVersion, &s.PgVersionNum)
+	db.QueryRow("SELECT current_setting('track_commit_timestamp')").Scan(&s.PgTrackCommitTs)
+	db.QueryRow("SELECT current_setting('max_connections')::int").Scan(&s.PgMaxConns)
+	db.QueryRow("SELECT current_setting('autovacuum_max_workers')::int").Scan(&s.PgAVMaxWorkers)
+	db.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
+
+	// Is pg_stat_statement available?
+	s.UpdatePgStatStatementsStatusNew(db)
+
+	// In case of remote Postgres we should to know remote CLK_TCK
+	if !db.Local {
+		s.IsPgcSchemaInstalledNew(db)
+		if s.PgcenterSchemaAvail {
+			db.QueryRow(PgProcSysTicksQuery).Scan(&SysTicks)
+		}
+	}
+}
+
+// UpdatePgStatStatementsStatus method refreshes info about pg_stat_statements
 func (s *Pgstat) UpdatePgStatStatementsStatus(conn *sql.DB) {
 	conn.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
+}
+
+func (s *Pgstat) UpdatePgStatStatementsStatusNew(db *postgres.DB) {
+	// TODO: add error handling
+	db.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
 }
 
 // IsPgcSchemaInstalled method checks pgcenter's stats schema existence
 func (s *Pgstat) IsPgcSchemaInstalled(conn *sql.DB) {
 	var avail bool
 	if err := conn.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {
+		// in case of error, just tells the schema is not available
+		s.PgcenterSchemaAvail = false
+	}
+	s.PgcenterSchemaAvail = avail
+}
+
+func (s *Pgstat) IsPgcSchemaInstalledNew(db *postgres.DB) {
+	var avail bool
+	if err := db.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {
 		// in case of error, just tells the schema is not available
 		s.PgcenterSchemaAvail = false
 	}
@@ -203,22 +239,22 @@ func (s *Pgstat) Reset() {
 }
 
 // GetPgstatActivity method collects Postgres' activity stats
-func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
+func (s *Pgstat) GetPgstatActivity(db *postgres.DB, refresh uint) {
 	// First of all check Postgres status: is it dead or alive?
 	// Remember the previous state of Postgres, if it's restored from 'failed' to 'ok', PgInfo have to be updated
 	// because of there are might be changed version, important GUCs, etc.
 	prevState := s.PgAlive
-	s.PgAlive = GetPgState(conn)
+	s.PgAlive = GetPgState(db)
 	if prevState == "failed" && s.PgAlive == "ok" {
-		s.ReadPgInfo(conn, isLocal)
+		s.ReadPgInfoNew(db)
 	} else if s.PgAlive == "failed" {
 		s.Reset()
 		return // No reasons to continue if Postgres is down
 	}
 
-	s.Uptime(conn)
+	s.Uptime(db)
 
-	conn.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
+	db.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.PgRecovery)
 
 	queryActivity := PgActivityQueryDefault
 	queryAutovac := PgAutovacQueryDefault
@@ -234,29 +270,29 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 		// use defaults
 	}
 
-	conn.QueryRow(queryActivity).Scan(
+	db.QueryRow(queryActivity).Scan(
 		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact,
 		&s.ConnActive, &s.ConnWaiting, &s.ConnOthers,
 		&s.ConnPrepared)
 
-	conn.QueryRow(queryAutovac).Scan(
+	db.QueryRow(queryAutovac).Scan(
 		&s.AVWorkers, &s.AVAntiwrap, &s.AVManual, &s.AVMaxTime)
 
 	// read pg_stat_statements only if it's available
 	if s.PgStatStatementsAvail == true {
-		conn.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
+		db.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
 		s.StmtPerSec = (s.CallsCurr - s.CallsPrev) / refresh
 		s.CallsPrev = s.CallsCurr
 	}
 
-	conn.QueryRow(PgActivityTimeQuery).Scan(
+	db.QueryRow(PgActivityTimeQuery).Scan(
 		&s.XactMaxTime, &s.PrepMaxTime)
 }
 
 // GetPgstatDiff method reads stat from pg_stat_* views, does diff with previous stats snapshot and sort final resulting stats.
-func (s *Pgstat) GetPgstatDiff(conn *sql.DB, query string, itv uint, interval [2]int, skey int, d bool, ukey int) error {
+func (s *Pgstat) GetPgstatDiff(db *postgres.DB, query string, itv uint, interval [2]int, skey int, d bool, ukey int) error {
 	// Read stat
-	if err := s.GetPgstatSample(conn, query); err != nil {
+	if err := s.GetPgstatSampleNew(db, query); err != nil {
 		return err
 	}
 
@@ -301,6 +337,23 @@ func (s *Pgstat) GetPgstatSample(conn *sql.DB, query string) error {
 	return nil
 }
 
+func (s *Pgstat) GetPgstatSampleNew(db *postgres.DB, query string) error {
+	s.CurrPGresult = PGresult{}
+	rows, err := db.Query(query)
+	// Queries' errors aren't critical for us, remember and show them to the user. Return after the error, because
+	// there is no reason to continue.
+	if err != nil {
+		s.CurrPGresult.Err = err
+		return nil
+	}
+
+	if err := s.CurrPGresult.New2(rows); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // New method parses a result of the query and creates PGresult struct
 func (r *PGresult) New(rs *sql.Rows) (err error) {
 	var container []sql.NullString
@@ -321,6 +374,44 @@ func (r *PGresult) New(rs *sql.Rows) (err error) {
 		}
 
 		err = rs.Scan(pointers...)
+		if err != nil {
+			r.Valid = false
+			return fmt.Errorf("failed to scan row: %s", err)
+		}
+
+		// Yes, it's better to avoid append() here, but we can't pre-allocate array of required size due to there is no
+		// simple way (built-in in db driver/package) to know how many rows are returned by query.
+		r.Result = append(r.Result, container)
+		r.Nrows++
+	}
+
+	// parsing successful
+	r.Valid = true
+	return nil
+}
+
+func (r *PGresult) New2(rows pgx.Rows) (err error) {
+	descs := rows.FieldDescriptions()
+	cols := make([]string, len(descs))
+	for i, desc := range descs {
+		cols[i] = string(desc.Name)
+	}
+
+	r.Cols = cols
+	r.Ncols = len(cols)
+
+	var container []sql.NullString
+	var pointers []interface{}
+
+	for rows.Next() {
+		pointers = make([]interface{}, r.Ncols)
+		container = make([]sql.NullString, r.Ncols)
+
+		for i := range pointers {
+			pointers[i] = &container[i]
+		}
+
+		err = rows.Scan(pointers...)
 		if err != nil {
 			r.Valid = false
 			return fmt.Errorf("failed to scan row: %s", err)

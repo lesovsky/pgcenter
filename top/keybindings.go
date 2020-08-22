@@ -20,64 +20,64 @@ type key struct {
 }
 
 // Setup key bindings and handlers.
-func keybindings(g *gocui.Gui) error {
+func keybindings(app *app) error {
 	var keys = []key{
-		{"", gocui.KeyCtrlC, quit},
-		{"", gocui.KeyCtrlQ, quit},
-		{"sysstat", 'q', quit},
-		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft},
-		{"sysstat", gocui.KeyArrowRight, orderKeyRight},
-		{"sysstat", gocui.KeyArrowUp, changeWidth(colsWidthIncr)},
-		{"sysstat", gocui.KeyArrowDown, changeWidth(colsWidthDecr)},
-		{"sysstat", '<', switchSortOrder},
-		{"sysstat", ',', toggleSysTables},
-		{"sysstat", 'I', toggleIdleConns},
-		{"sysstat", 'd', switchContextTo(stat.DatabaseView)},
-		{"sysstat", 'r', switchContextTo(stat.ReplicationView)},
-		{"sysstat", 't', switchContextTo(stat.TablesView)},
-		{"sysstat", 'i', switchContextTo(stat.IndexesView)},
-		{"sysstat", 's', switchContextTo(stat.SizesView)},
-		{"sysstat", 'f', switchContextTo(stat.FunctionsView)},
-		{"sysstat", 'p', switchContextTo(stat.ProgressView)},
-		{"sysstat", 'a', switchContextTo(stat.ActivityView)},
-		{"sysstat", 'x', switchContextTo(stat.StatementsView)},
-		{"sysstat", 'Q', resetStat},
-		{"sysstat", 'E', menuOpen(menuConfStyle)},
-		{"sysstat", 'X', menuOpen(menuPgssStyle)},
-		{"sysstat", 'P', menuOpen(menuProgressStyle)},
-		{"sysstat", 'l', showPgLog},
-		{"sysstat", 'C', showPgConfig},
-		{"sysstat", '~', runPsql},
-		{"sysstat", 'B', showAux(auxDiskstat)},
-		{"sysstat", 'N', showAux(auxNicstat)},
-		{"sysstat", 'L', showAux(auxLogtail)},
-		{"sysstat", 'R', dialogOpen(dialogPgReload)},
-		{"sysstat", '/', dialogOpen(dialogFilter)},
-		{"sysstat", '-', dialogOpen(dialogCancelQuery)},
-		{"sysstat", '_', dialogOpen(dialogTerminateBackend)},
-		{"sysstat", 'n', dialogOpen(dialogSetMask)},
+		{"", gocui.KeyCtrlC, quit(app)},
+		{"", gocui.KeyCtrlQ, quit(app)},
+		{"sysstat", 'q', quit(app)},
+		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft(app.context, app.doUpdate)},
+		{"sysstat", gocui.KeyArrowRight, orderKeyRight(app.context, app.doUpdate)},
+		{"sysstat", gocui.KeyArrowUp, changeWidth(app, colsWidthIncr)},
+		{"sysstat", gocui.KeyArrowDown, changeWidth(app, colsWidthDecr)},
+		{"sysstat", '<', switchSortOrder(app.context, app.doUpdate)},
+		{"sysstat", ',', toggleSysTables(app.context, app.doUpdate)},
+		{"sysstat", 'I', toggleIdleConns(app.context, app.doUpdate)},
+		{"sysstat", 'd', switchContextTo(app, stat.DatabaseView)},
+		{"sysstat", 'r', switchContextTo(app, stat.ReplicationView)},
+		{"sysstat", 't', switchContextTo(app, stat.TablesView)},
+		{"sysstat", 'i', switchContextTo(app, stat.IndexesView)},
+		{"sysstat", 's', switchContextTo(app, stat.SizesView)},
+		{"sysstat", 'f', switchContextTo(app, stat.FunctionsView)},
+		{"sysstat", 'p', switchContextTo(app, stat.ProgressView)},
+		{"sysstat", 'a', switchContextTo(app, stat.ActivityView)},
+		{"sysstat", 'x', switchContextTo(app, stat.StatementsView)},
+		{"sysstat", 'Q', resetStat(app.db)},
+		{"sysstat", 'E', menuOpen(menuConfStyle, false)},
+		{"sysstat", 'X', menuOpen(menuPgssStyle, app.stats.PgStatStatementsAvail)},
+		{"sysstat", 'P', menuOpen(menuProgressStyle, false)},
+		{"sysstat", 'l', showPgLog(app.db, app.doExit)},
+		{"sysstat", 'C', showPgConfig(app.db, app.doExit)},
+		{"sysstat", '~', runPsql(app.db, app.doExit)},
+		{"sysstat", 'B', showAux(app, auxDiskstat)},
+		{"sysstat", 'N', showAux(app, auxNicstat)},
+		{"sysstat", 'L', showAux(app, auxLogtail)},
+		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
+		{"sysstat", '/', dialogOpen(app, dialogFilter)},
+		{"sysstat", '-', dialogOpen(app, dialogCancelQuery)},
+		{"sysstat", '_', dialogOpen(app, dialogTerminateBackend)},
+		{"sysstat", 'n', dialogOpen(app, dialogSetMask)},
 		{"sysstat", 'm', showBackendMask},
-		{"sysstat", 'k', dialogOpen(dialogCancelGroup)},
-		{"sysstat", 'K', dialogOpen(dialogTerminateGroup)},
-		{"sysstat", 'A', dialogOpen(dialogChangeAge)},
-		{"sysstat", 'G', dialogOpen(dialogQueryReport)},
-		{"sysstat", 'z', dialogOpen(dialogChangeRefresh)},
+		{"sysstat", 'k', dialogOpen(app, dialogCancelGroup)},
+		{"sysstat", 'K', dialogOpen(app, dialogTerminateGroup)},
+		{"sysstat", 'A', dialogOpen(app, dialogChangeAge)},
+		{"sysstat", 'G', dialogOpen(app, dialogQueryReport)},
+		{"sysstat", 'z', dialogOpen(app, dialogChangeRefresh)},
 		{"dialog", gocui.KeyEsc, dialogCancel},
-		{"dialog", gocui.KeyEnter, dialogFinish},
+		{"dialog", gocui.KeyEnter, dialogFinish(app)},
 		{"menu", gocui.KeyEsc, menuClose},
 		{"menu", gocui.KeyArrowUp, moveCursor(moveUp)},
 		{"menu", gocui.KeyArrowDown, moveCursor(moveDown)},
-		{"menu", gocui.KeyEnter, menuSelect},
+		{"menu", gocui.KeyEnter, menuSelect(app)},
 		{"sysstat", 'h', showHelp},
 		{"sysstat", gocui.KeyF1, showHelp},
 		{"help", gocui.KeyEsc, closeHelp},
 		{"help", 'q', closeHelp},
 	}
 
-	g.InputEsc = true
+	app.ui.InputEsc = true
 
 	for _, k := range keys {
-		if err := g.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
+		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
 			return fmt.Errorf("ERROR: failed to setup keybindings: %s", err)
 		}
 	}
@@ -86,8 +86,8 @@ func keybindings(g *gocui.Gui) error {
 }
 
 // Change interval of stats refreshing.
-func changeRefresh(g *gocui.Gui, v *gocui.View, answer string) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogChangeRefresh])
+func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config, doUpdate chan int) {
+	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogChangeRefresh])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
@@ -106,21 +106,20 @@ func changeRefresh(g *gocui.Gui, v *gocui.View, answer string) {
 		return
 	}
 
-	refreshInterval = time.Duration(interval) * refreshMinGranularity
+	config.refreshInterval = time.Duration(interval) * config.minRefresh
 	doUpdate <- 1
 }
 
 // Quit program.
-func quit(g *gocui.Gui, _ *gocui.View) error {
-	close(doUpdate)
-	close(doExit)
-	g.Close()
+func quit(app *app) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		close(app.doUpdate)
+		close(app.doExit)
+		g.Close()
 
-	err := conn.Close()
-	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, "ERROR: failed closing pgsql connection, ignoring")
+		app.db.Close()
+
+		os.Exit(0) // TODO: this is a very dirty hack
+		return gocui.ErrQuit
 	}
-
-	os.Exit(0)
-	return gocui.ErrQuit
 }

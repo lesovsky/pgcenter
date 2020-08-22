@@ -13,98 +13,103 @@ import (
 	"time"
 )
 
-var (
-	stats                 stat.Stat               // container for stats
-	doExit                = make(chan int)        // graceful quit of program or goroutines
-	doUpdate              = make(chan int)        // force stat refresh/redraw (when context switched or something else)
-	refreshMinGranularity = 1 * time.Second       // min resolution of stats refreshing
-	refreshInterval       = refreshMinGranularity // default refreshing interval
-)
-
 // Main stat loop, which is refreshes with interval, gathers and display stats.
-func statLoop(g *gocui.Gui, wg *sync.WaitGroup) {
+func statLoop(app *app, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	for {
 		select {
-		case <-doExit:
+		case <-app.doExit:
 			return
-		case <-doUpdate:
+		case <-app.doUpdate:
 			// discard previous PGresult stats and re-read stats
-			stats.PrevPGresult.Valid = false
-			doWork(g)
-		case <-time.After(refreshInterval):
-			doWork(g)
+			app.stats.PrevPGresult.Valid = false
+			doWork(app)
+		case <-time.After(app.config.refreshInterval):
+			doWork(app)
 		}
 	}
 }
 
 // Read all required stats and print.
-func doWork(g *gocui.Gui) {
+func doWork(app *app) {
 	// Use approach with loop just in case if GetDbStat() returns error (for example, number of rows changed at
 	// stats' context switching, or similar). Due to this, don't wait refreshing timeout or incoming do_update signal,
 	// let start new iteration immediately.
 	// But what, if GetDbStat() start to return permanent errors, and loop becomes infinite?
 	for {
-		stats.GetSysStat(conn, conninfo.ConnLocal)
-		stats.GetPgstatActivity(conn, uint(refreshInterval/refreshMinGranularity), conninfo.ConnLocal)
-		getAuxStat(g)
+		app.stats.GetSysStat(app.db)
+		app.stats.GetPgstatActivity(app.db, uint(app.config.refreshInterval/app.config.minRefresh))
+		getAuxStat(app)
 
 		// Ignore errors in template parsing; if query is bogus, user will see appropriate syntax error instead of stats.
-		query, _ := stat.PrepareQuery(ctx.current.Query, ctx.sharedOptions)
-		if err := stats.GetPgstatDiff(conn, query, uint(refreshInterval/refreshMinGranularity), ctx.current.DiffIntvl, ctx.current.OrderKey, ctx.current.OrderDesc, ctx.current.UniqueKey); err != nil {
+		query, err := stat.PrepareQuery(app.context.current.Query, app.context.sharedOptions)
+		if err != nil {
+			fmt.Println("lessqq 1: ", err)
+			continue
+		}
+		if err := app.stats.GetPgstatDiff(
+			app.db,
+			query,
+			uint(app.config.refreshInterval/app.config.minRefresh),
+			app.context.current.DiffIntvl,
+			app.context.current.OrderKey,
+			app.context.current.OrderDesc,
+			app.context.current.UniqueKey,
+		); err != nil {
 			// If something is wrong, re-read stats immediately
+			fmt.Println("lessqq 2: ", err)
 			continue
 		}
 
 		// Reading of stats has been successful, escape from loop.
 		break
 	}
-	printAllStat(g, stats)
+	printAllStat(app)
 
 	// Check availability of pg_stat_statements if it's not available
-	if !stats.PgStatStatementsAvail {
-		stats.UpdatePgStatStatementsStatus(conn)
+	if !app.stats.PgStatStatementsAvail {
+		app.stats.UpdatePgStatStatementsStatusNew(app.db)
 	}
 }
 
 // Print all stats.
-func printAllStat(g *gocui.Gui, s stat.Stat) {
-	g.Update(func(g *gocui.Gui) error {
+func printAllStat(app *app) {
+	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {
 			return fmt.Errorf("Set focus on sysstat view failed: %s", err)
 		}
 		v.Clear()
-		printSysstat(v, s)
+		printSysstat(v, app.stats)
 
 		v, err = g.View("pgstat")
 		if err != nil {
 			return fmt.Errorf("Set focus on pgstat view failed: %s", err)
 		}
 		v.Clear()
-		printPgstat(v, s)
+		printPgstat(v, app.stats)
 
 		v, err = g.View("dbstat")
 		if err != nil {
 			return fmt.Errorf("Set focus on dbstat view failed: %s", err)
 		}
 		v.Clear()
-		printDbstat(v, s)
+		printDbstat(v, app)
 
-		if ctx.aux > auxNone {
+		if app.context.aux > auxNone {
 			v, err := g.View("aux")
 			if err != nil {
 				return fmt.Errorf("Set focus on aux view failed: %s", err)
 			}
 
-			switch ctx.aux {
+			switch app.context.aux {
 			case auxDiskstat:
 				v.Clear()
-				printIostat(v, stats.DiffDiskstats)
+				printIostat(v, app.stats.DiffDiskstats)
 			case auxNicstat:
 				v.Clear()
-				printNicstat(v, stats.DiffNetdevs)
+				printNicstat(v, app.stats.DiffNetdevs)
 			case auxLogtail:
 				// don't clear screen
 				printLogtail(g, v)
@@ -115,7 +120,7 @@ func printAllStat(g *gocui.Gui, s stat.Stat) {
 }
 
 // Print sysstat.
-func printSysstat(v *gocui.View, s stat.Stat) {
+func printSysstat(v *gocui.View, s *stat.Stat) {
 	/* line1: current time and load average */
 	fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
 		time.Now().Format("2006-01-02 15:04:05"),
@@ -135,11 +140,12 @@ func printSysstat(v *gocui.View, s stat.Stat) {
 }
 
 // Print stats about Postgres activity.
-func printPgstat(v *gocui.View, s stat.Stat) {
+func printPgstat(v *gocui.View, s *stat.Stat) {
 	/* line1: details of used connection, version, uptime and recovery status */
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
 		s.PgInfo.PgAlive,
-		conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
+		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
+		"dummy", "dummy", "dummy", "dummy",
 		s.PgInfo.PgVersion, s.PgInfo.PgUptime, s.PgInfo.PgRecovery)
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
 	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
@@ -156,30 +162,30 @@ func printPgstat(v *gocui.View, s stat.Stat) {
 }
 
 // Print stats from Postgres pg_stat_* views.
-func printDbstat(v *gocui.View, s stat.Stat) {
+func printDbstat(v *gocui.View, app *app) {
 	// If query fails, show the corresponding error and return.
-	if err, ok := s.CurrPGresult.Err.(*pq.Error); ok {
+	if err, ok := app.stats.CurrPGresult.Err.(*pq.Error); ok {
 		fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
-		s.CurrPGresult.Err = nil
+		app.stats.CurrPGresult.Err = nil
 		return
 	}
 
 	// configure aligning, use fixed aligning instead of dynamic
-	if !ctx.current.Aligned {
-		err := s.DiffPGresult.SetAlign(ctx.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+	if !app.context.current.Aligned {
+		err := app.stats.DiffPGresult.SetAlign(app.context.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
-			ctx.current.Aligned = true
+			app.context.current.Aligned = true
 		}
 	}
 
 	// is filter required?
-	var filter = isFilterRequired(ctx.current.Filters)
+	var filter = isFilterRequired(app.context.current.Filters)
 
 	/* print header - filtered column mark with star; ordered column make shadowed */
-	printStatHeader(v, &s)
+	printStatHeader(v, app)
 
 	// print data
-	printStatData(v, &s, filter)
+	printStatData(v, app, filter)
 }
 
 // Returns true if filtering is required
@@ -193,40 +199,40 @@ func isFilterRequired(f map[int]*regexp.Regexp) bool {
 }
 
 // Prints stats header - columns' names
-func printStatHeader(v *gocui.View, s *stat.Stat) {
+func printStatHeader(v *gocui.View, app *app) {
 	var pname string
-	for i := 0; i < s.CurrPGresult.Ncols; i++ {
-		name := s.CurrPGresult.Cols[i]
+	for i := 0; i < app.stats.CurrPGresult.Ncols; i++ {
+		name := app.stats.CurrPGresult.Cols[i]
 
 		// mark filtered column
-		if ctx.current.Filters[i] != nil && ctx.current.Filters[i].String() != "" {
+		if app.context.current.Filters[i] != nil && app.context.current.Filters[i].String() != "" {
 			pname = "*" + name
 		} else {
 			pname = name
 		}
 
 		/* mark ordered column with foreground color */
-		if i != ctx.current.OrderKey {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, ctx.current.ColsWidth[i]+2, pname)
+		if i != app.context.current.OrderKey {
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, app.context.current.ColsWidth[i]+2, pname)
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, ctx.current.ColsWidth[i]+2, pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, app.context.current.ColsWidth[i]+2, pname)
 		}
 	}
 	fmt.Fprintf(v, "\n")
 }
 
 // Prints stats data - content of stats views
-func printStatData(v *gocui.View, s *stat.Stat, filter bool) {
+func printStatData(v *gocui.View, app *app, filter bool) {
 	var doPrint bool
-	for colnum, rownum := 0, 0; rownum < s.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
+	for colnum, rownum := 0, 0; rownum < app.stats.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
 		// be optimistic, we want to print the row.
 		doPrint = true
 
 		// apply filters using regexp
 		if filter {
-			for i := 0; i < s.DiffPGresult.Ncols; i++ {
-				if ctx.current.Filters[i] != nil {
-					if ctx.current.Filters[i].MatchString(s.DiffPGresult.Result[rownum][i].String) {
+			for i := 0; i < app.stats.DiffPGresult.Ncols; i++ {
+				if app.context.current.Filters[i] != nil {
+					if app.context.current.Filters[i].MatchString(app.stats.DiffPGresult.Result[rownum][i].String) {
 						doPrint = true
 						break
 					} else {
@@ -237,18 +243,18 @@ func printStatData(v *gocui.View, s *stat.Stat, filter bool) {
 		}
 
 		// print values
-		for i := range s.DiffPGresult.Cols {
+		for i := range app.stats.DiffPGresult.Cols {
 			if doPrint {
 				// truncate values that longer than column width
-				valuelen := len(s.DiffPGresult.Result[rownum][colnum].String)
-				if valuelen > ctx.current.ColsWidth[i] {
-					width := ctx.current.ColsWidth[i]
+				valuelen := len(app.stats.DiffPGresult.Result[rownum][colnum].String)
+				if valuelen > app.context.current.ColsWidth[i] {
+					width := app.context.current.ColsWidth[i]
 					// truncate value up to column width and replace last character with '~' symbol
-					s.DiffPGresult.Result[rownum][colnum].String = s.DiffPGresult.Result[rownum][colnum].String[:width-1] + "~"
+					app.stats.DiffPGresult.Result[rownum][colnum].String = app.stats.DiffPGresult.Result[rownum][colnum].String[:width-1] + "~"
 				}
 
 				// print value
-				fmt.Fprintf(v, "%-*s", ctx.current.ColsWidth[i]+2, s.DiffPGresult.Result[rownum][colnum].String)
+				fmt.Fprintf(v, "%-*s", app.context.current.ColsWidth[i]+2, app.stats.DiffPGresult.Result[rownum][colnum].String)
 				colnum++
 			}
 		}

@@ -5,7 +5,7 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -24,11 +24,11 @@ type LoadAvg struct {
 }
 
 // Read stats into container
-func (la *LoadAvg) Read(conn *sql.DB, isLocal bool, pgcAvail bool) {
-	if isLocal {
+func (la *LoadAvg) Read(db *postgres.DB, pgcAvail bool) {
+	if db.Local {
 		la.ReadLocal()
 	} else if pgcAvail {
-		la.ReadRemote(conn)
+		la.ReadRemote(db)
 	}
 }
 
@@ -54,6 +54,6 @@ func (la *LoadAvg) ReadLocal() {
 }
 
 // ReadRemote reads stats from remote Postgres instance
-func (la *LoadAvg) ReadRemote(conn *sql.DB) {
-	conn.QueryRow(pgProcLoadAvgQuery).Scan(&la.One, &la.Five, &la.Fifteen)
+func (la *LoadAvg) ReadRemote(db *postgres.DB) {
+	db.QueryRow(pgProcLoadAvgQuery).Scan(&la.One, &la.Five, &la.Fifteen)
 }

@@ -5,8 +5,8 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
 )
@@ -63,13 +63,13 @@ func (c *Iostat) New(size int) {
 }
 
 // Read method reads stats from the source
-func (c Diskstats) Read(conn *sql.DB, isLocal bool, pgcAvail bool) error {
-	if isLocal {
+func (c Diskstats) Read(db *postgres.DB, pgcAvail bool) error {
+	if db.Local {
 		if err := c.ReadLocal(); err != nil {
 			return err
 		}
 	} else if pgcAvail {
-		c.ReadRemote(conn)
+		c.ReadRemote(db)
 	}
 
 	return nil
@@ -111,11 +111,11 @@ func (c Diskstats) ReadLocal() error {
 }
 
 // ReadRemote method reads stats from remote Postgres instance
-func (c Diskstats) ReadRemote(conn *sql.DB) {
+func (c Diskstats) ReadRemote(db *postgres.DB) {
 	var uptime float64
-	conn.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
 
-	rows, err := conn.Query(pgProcDiskstatsQuery)
+	rows, err := db.Query(pgProcDiskstatsQuery)
 	if err != nil {
 		return
 	} /* ignore errors, zero stat is ok for us */

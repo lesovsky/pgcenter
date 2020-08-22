@@ -5,8 +5,8 @@ package stat
 import (
 	"bufio"
 	"bytes"
-	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
 	"os/exec"
@@ -55,14 +55,14 @@ func init() {
 }
 
 // GetSysStat method read all required system stats. Ignore any errors during reading stat, just print zeroes
-func (s *Stat) GetSysStat(conn *sql.DB, isLocal bool) {
-	s.LoadAvg.Read(conn, isLocal, s.PgcenterSchemaAvail)
+func (s *Stat) GetSysStat(db *postgres.DB) {
+	s.LoadAvg.Read(db, s.PgcenterSchemaAvail)
 
-	s.CurrCpuSample.Read(conn, isLocal, s.PgcenterSchemaAvail)
+	s.CurrCpuSample.Read(db, s.PgcenterSchemaAvail)
 	s.CpuUsage.Diff(s.PrevCpuSample, s.CurrCpuSample)
 	s.PrevCpuSample = s.CurrCpuSample
 
-	s.Meminfo.Read(conn, isLocal, s.PgcenterSchemaAvail)
+	s.Meminfo.Read(db, s.PgcenterSchemaAvail)
 }
 
 // sValue routine calculates percent ratio of calculated metric within specified time interval
@@ -94,11 +94,11 @@ func uptime() (float64, error) {
 }
 
 // CountLines just count lines in specified source
-func CountLines(f string, conn *sql.DB, isLocal bool, pgcAvail bool) (int, error) {
-	if isLocal {
+func CountLines(f string, db *postgres.DB, pgcAvail bool) (int, error) {
+	if db.Local {
 		return CountLinesLocal(f)
 	} else if pgcAvail {
-		return CountLinesRemote(f, conn)
+		return CountLinesRemote(f, db)
 	}
 	return 0, nil
 }
@@ -133,17 +133,17 @@ func CountLinesLocal(f string) (int, error) {
 }
 
 // CountLinesRemote counts lines in Postgres instance
-func CountLinesRemote(f string, conn *sql.DB) (int, error) {
+func CountLinesRemote(f string, db *postgres.DB) (int, error) {
 	var count int
 
 	switch f {
 	case ProcDiskstats:
-		err := conn.QueryRow(pgProcCountDiskstatsQuery).Scan(&count)
+		err := db.QueryRow(pgProcCountDiskstatsQuery).Scan(&count)
 		if err != nil {
 			return 0, fmt.Errorf("failed to count rows: %s", err)
 		}
 	case ProcNetdevFile:
-		err := conn.QueryRow(pgProcCountNetdevQuery).Scan(&count)
+		err := db.QueryRow(pgProcCountNetdevQuery).Scan(&count)
 		if err != nil {
 			return 0, fmt.Errorf("failed to count rows: %s", err)
 		}

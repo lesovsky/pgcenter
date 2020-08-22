@@ -78,10 +78,10 @@ var (
 )
 
 // Open 'gocui' view object and display menu items depending on passed menu type.
-func menuOpen(m menuStyle) func(g *gocui.Gui, _ *gocui.View) error {
+func menuOpen(m menuStyle, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		// in case of opening menu for switching to pg_stat_statements and if pgss isn't available - it's unnecessary to open menu, just notify user and do nothing
-		if stats.PgStatStatementsAvail == false && m.menuType == menuPgss {
+		if !pgssAvail && m.menuType == menuPgss {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
 		}
@@ -107,50 +107,52 @@ func menuOpen(m menuStyle) func(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // When user made a choice, depending on menu type, run appropriate handler
-func menuSelect(g *gocui.Gui, v *gocui.View) error {
-	_, cy := v.Cursor() /* cy point to an index of the entry, use it to switch to a context */
+func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		_, cy := v.Cursor() /* cy point to an index of the entry, use it to switch to a context */
 
-	switch menu {
-	case menuPgss:
-		switch cy {
-		case 0:
-			switchContextToPgss(g, stat.StatementsTimingView)
-		case 1:
-			switchContextToPgss(g, stat.StatementsGeneralView)
-		case 2:
-			switchContextToPgss(g, stat.StatementsIOView)
-		case 3:
-			switchContextToPgss(g, stat.StatementsTempView)
-		case 4:
-			switchContextToPgss(g, stat.StatementsLocalView)
-		default:
-			switchContextToPgss(g, stat.StatementsTimingView)
+		switch menu {
+		case menuPgss:
+			switch cy {
+			case 0:
+				switchContextToPgss(app, stat.StatementsTimingView)
+			case 1:
+				switchContextToPgss(app, stat.StatementsGeneralView)
+			case 2:
+				switchContextToPgss(app, stat.StatementsIOView)
+			case 3:
+				switchContextToPgss(app, stat.StatementsTempView)
+			case 4:
+				switchContextToPgss(app, stat.StatementsLocalView)
+			default:
+				switchContextToPgss(app, stat.StatementsTimingView)
+			}
+		case menuProgress:
+			switch cy {
+			case 0:
+				switchContextToProgress(app, stat.ProgressVacuumView)
+			case 1:
+				switchContextToProgress(app, stat.ProgressClusterView)
+			case 2:
+				switchContextToProgress(app, stat.ProgressCreateIndexView)
+			}
+		case menuConf:
+			switch cy {
+			case 0:
+				editPgConfig(g, app.db, stat.GucMainConfFile, app.doExit)
+			case 1:
+				editPgConfig(g, app.db, stat.GucHbaFile, app.doExit)
+			case 2:
+				editPgConfig(g, app.db, stat.GucIdentFile, app.doExit)
+			case 3:
+				editPgConfig(g, app.db, stat.GucRecoveryFile, app.doExit)
+			}
+		case menuNone:
+			/* do nothing */
 		}
-	case menuProgress:
-		switch cy {
-		case 0:
-			switchContextToProgress(g, stat.ProgressVacuumView)
-		case 1:
-			switchContextToProgress(g, stat.ProgressClusterView)
-		case 2:
-			switchContextToProgress(g, stat.ProgressCreateIndexView)
-		}
-	case menuConf:
-		switch cy {
-		case 0:
-			editPgConfig(g, stat.GucMainConfFile)
-		case 1:
-			editPgConfig(g, stat.GucHbaFile)
-		case 2:
-			editPgConfig(g, stat.GucIdentFile)
-		case 3:
-			editPgConfig(g, stat.GucRecoveryFile)
-		}
-	case menuNone:
-		/* do nothing */
+
+		return menuClose(g, v)
 	}
-
-	return menuClose(g, v)
 }
 
 // Close 'gocui' view object when menu is closed

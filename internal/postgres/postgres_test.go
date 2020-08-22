@@ -2,11 +2,12 @@ package postgres
 
 import (
 	"fmt"
+	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
-func TestNewDB(t *testing.T) {
+func TestNewConfig(t *testing.T) {
 	var testcases = []struct {
 		name   string
 		valid  bool
@@ -29,7 +30,7 @@ func TestNewDB(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := NewDB(tc.host, tc.port, tc.user, tc.dbname)
+			got, err := NewConfig(tc.host, tc.port, tc.user, tc.dbname)
 			if tc.valid {
 				assert.NotNil(t, got)
 				assert.NoError(t, err)
@@ -37,6 +38,40 @@ func TestNewDB(t *testing.T) {
 				assert.Nil(t, got)
 				assert.Error(t, err)
 				fmt.Println(err)
+			}
+		})
+	}
+}
+
+func TestConnect(t *testing.T) {
+	var testcases = []struct {
+		name    string
+		connStr string
+		valid   bool
+	}{
+		{
+			name:    "available postgres",
+			connStr: "host=127.0.0.1 port=5432 user=postgres dbname=postgres",
+			valid:   true,
+		},
+		{
+			name:    "unavailable postgres",
+			connStr: "host=127.0.0.1 port=1 user=postgres dbname=postgres",
+			valid:   false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			config, err := pgx.ParseConfig(tc.connStr)
+			assert.NoError(t, err)
+
+			db, err := Connect(&Config{Config: config})
+			if tc.valid {
+				assert.NoError(t, err)
+				assert.NotNil(t, db)
+			} else {
+				assert.Error(t, err)
 			}
 		})
 	}

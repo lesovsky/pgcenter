@@ -5,7 +5,6 @@ package top
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/utils"
 	"github.com/lesovsky/pgcenter/top"
 	"github.com/spf13/cobra"
 )
@@ -32,12 +31,12 @@ var CommandDefinition = &cobra.Command{
 			opts.handleExtraArgs(args)
 		}
 
-		db, err := postgres.NewDB(opts.host, opts.port, opts.user, opts.dbname)
+		pgConfig, err := postgres.NewConfig(opts.host, opts.port, opts.user, opts.dbname)
 		if err != nil {
 			return err
 		}
 
-		return top.RunMain(args, utils.Conninfo{}, db)
+		return top.RunMain(pgConfig)
 	},
 }
 

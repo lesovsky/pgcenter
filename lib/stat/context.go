@@ -10,7 +10,9 @@
 
 package stat
 
-import "regexp"
+import (
+	"regexp"
+)
 
 // ContextUnit describes a single unit of stats context.
 type ContextUnit struct {

@@ -5,6 +5,7 @@ package utils
 import (
 	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lib/pq"
 	"golang.org/x/crypto/ssh/terminal"
 	"net"
@@ -200,6 +201,11 @@ func PQdb(c *sql.DB) (s string, err error) {
 
 // PQstatus returns connections status - just do 'SELECT 1' and return result - nil or err
 func PQstatus(c *sql.DB) error {
+	var s string
+	return c.QueryRow(PQstatusQuery).Scan(&s)
+}
+
+func PQstatusNew(c *postgres.DB) error {
 	var s string
 	return c.QueryRow(PQstatusQuery).Scan(&s)
 }
