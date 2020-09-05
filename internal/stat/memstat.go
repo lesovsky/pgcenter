@@ -8,12 +8,12 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 )
 
 const (
-	procMeminfoFile    = "/proc/meminfo"
 	pgProcMeminfoQuery = `SELECT metric, metric_value
 		FROM pgcenter.sys_proc_meminfo
 		WHERE metric IN ('MemTotal:','MemFree:','SwapTotal:','SwapFree:', 'Cached:','Dirty:','Writeback:','Buffers:','Slab:')
@@ -46,7 +46,7 @@ func (m *Meminfo) Read(db *postgres.DB, pgcAvail bool) {
 
 // ReadLocal reads stats from local 'procfs' filesystem
 func (m *Meminfo) ReadLocal() {
-	content, err := ioutil.ReadFile(procMeminfoFile)
+	content, err := ioutil.ReadFile("/proc/meminfo")
 	if err != nil {
 		return
 	}
@@ -132,4 +132,112 @@ func (m *Meminfo) ReadRemote(db *postgres.DB) {
 
 	m.MemUsed = m.MemTotal - m.MemFree - m.MemCached - m.MemBuffers - m.MemSlab
 	m.SwapUsed = m.SwapTotal - m.SwapFree
+}
+
+/* new */
+func readMeminfo(db *postgres.DB, schemaExists bool) (Meminfo, error) {
+	if db.Local {
+		return readMeminfoLocal("/proc/meminfo")
+	} else if schemaExists {
+		return readMeminfoRemote(db)
+	}
+
+	return Meminfo{}, nil
+}
+
+func readMeminfoLocal(statfile string) (Meminfo, error) {
+	var stat Meminfo
+
+	f, err := os.Open(statfile)
+	if err != nil {
+		return stat, err
+	}
+
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		fields := strings.Fields(line)
+		if len(fields) < 3 {
+			// TODO: log error to stderr
+			continue
+		}
+
+		value, err := strconv.ParseUint(fields[1], 10, 64)
+		if err != nil {
+			// TODO: log error to stderr
+			continue
+		}
+
+		switch fields[0] {
+		case "MemTotal:":
+			stat.MemTotal = value / 1024
+		case "MemFree:":
+			stat.MemFree = value / 1024
+		case "SwapTotal:":
+			stat.SwapTotal = value / 1024
+		case "SwapFree:":
+			stat.SwapFree = value / 1024
+		case "Cached:":
+			stat.MemCached = value / 1024
+		case "Dirty:":
+			stat.MemDirty = value / 1024
+		case "Writeback:":
+			stat.MemWriteback = value / 1024
+		case "Buffers:":
+			stat.MemBuffers = value / 1024
+		case "Slab:":
+			stat.MemSlab = value / 1024
+		}
+	}
+	stat.MemUsed = stat.MemTotal - stat.MemFree - stat.MemCached - stat.MemBuffers - stat.MemSlab
+	stat.SwapUsed = stat.SwapTotal - stat.SwapFree
+
+	return stat, scanner.Err()
+}
+
+func readMeminfoRemote(db *postgres.DB) (Meminfo, error) {
+	var stat Meminfo
+
+	rows, err := db.Query(pgProcMeminfoQuery)
+	if err != nil {
+		return stat, err
+	}
+	defer rows.Close()
+
+	var name string
+	var value uint64
+	for rows.Next() {
+		if err := rows.Scan(&name, &value); err != nil {
+			// TODO: log error to stderr
+			continue
+		}
+
+		switch name {
+		case "MemTotal:":
+			stat.MemTotal = value / 1024
+		case "MemFree:":
+			stat.MemFree = value / 1024
+		case "SwapTotal:":
+			stat.SwapTotal = value / 1024
+		case "SwapFree:":
+			stat.SwapFree = value / 1024
+		case "Cached:":
+			stat.MemCached = value / 1024
+		case "Dirty:":
+			stat.MemDirty = value / 1024
+		case "Writeback:":
+			stat.MemWriteback = value / 1024
+		case "Buffers:":
+			stat.MemBuffers = value / 1024
+		case "Slab:":
+			stat.MemSlab = value / 1024
+		}
+	}
+
+	stat.MemUsed = stat.MemTotal - stat.MemFree - stat.MemCached - stat.MemBuffers - stat.MemSlab
+	stat.SwapUsed = stat.SwapTotal - stat.SwapFree
+
+	return stat, rows.Err()
 }
