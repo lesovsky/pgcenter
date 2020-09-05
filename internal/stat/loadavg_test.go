@@ -7,7 +7,7 @@ import (
 )
 
 func Test_readLoadAverage(t *testing.T) {
-	conn, err := postgres.TestConnect()
+	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
 	// test "local" reading
@@ -50,7 +50,7 @@ func Test_readLoadAverageLocal(t *testing.T) {
 }
 
 func Test_readLoadAverageRemote(t *testing.T) {
-	conn, err := postgres.TestConnect()
+	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
 	got, err := readLoadAverageRemote(conn)

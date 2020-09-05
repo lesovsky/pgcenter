@@ -16,8 +16,8 @@ type Stat2 struct {
 
 //
 type System struct {
-	LoadAvg LoadAvg
-	//Cpuusage
+	LoadAvg
+	CpuStat
 	Meminfo
 }
 
@@ -25,8 +25,8 @@ type System struct {
 type Collector struct {
 	ticks        float64
 	schemaExists bool
-	prev         Stat2
-	curr         Stat2
+	prevCpuStat  CpuStat
+	currCpuStat  CpuStat
 }
 
 func NewCollector(db *postgres.DB) (*Collector, error) {
@@ -60,9 +60,26 @@ func (c *Collector) Update(db *postgres.DB) (Stat2, error) {
 		return Stat2{}, err
 	}
 
+	meminfo, err := readMeminfo(db, c.schemaExists)
+	if err != nil {
+		return Stat2{}, err
+	}
+
+	cpustat, err := readCpuStat(db, c.schemaExists)
+	if err != nil {
+		return Stat2{}, err
+	}
+
+	c.prevCpuStat = c.currCpuStat
+	c.currCpuStat = cpustat
+
+	cpuusage := countCpuUsage(c.prevCpuStat, c.currCpuStat, c.ticks)
+
 	return Stat2{
 		System{
 			LoadAvg: loadavg,
+			Meminfo: meminfo,
+			CpuStat: cpuusage,
 		},
 	}, nil
 }
