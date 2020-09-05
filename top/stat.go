@@ -5,7 +5,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/stat"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lib/pq"
 	"os"
 	"regexp"
@@ -45,7 +45,6 @@ func doWork(app *app) {
 		// Ignore errors in template parsing; if query is bogus, user will see appropriate syntax error instead of stats.
 		query, err := stat.PrepareQuery(app.config.view.Query, app.config.sharedOptions)
 		if err != nil {
-			fmt.Println("lessqq 1: ", err)
 			continue
 		}
 		if err := app.stats.GetPgstatDiff(
@@ -58,7 +57,6 @@ func doWork(app *app) {
 			app.config.view.UniqueKey,
 		); err != nil {
 			// If something is wrong, re-read stats immediately
-			fmt.Println("lessqq 2: ", err)
 			continue
 		}
 

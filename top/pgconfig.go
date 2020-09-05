@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/stat"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"

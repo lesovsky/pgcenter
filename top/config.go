@@ -4,8 +4,8 @@
 package top
 
 import (
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
-	"github.com/lesovsky/pgcenter/lib/stat"
 	"time"
 )
 

@@ -5,7 +5,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/stat"
+	"github.com/lesovsky/pgcenter/internal/stat"
 )
 
 // Type of the menu
