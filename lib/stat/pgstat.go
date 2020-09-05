@@ -456,7 +456,8 @@ func (r *PGresult) Diff(prev *PGresult, curr *PGresult, itv uint, interval [2]in
 					if l < interval[0] || l > interval[1] {
 						r.Result[i][l].String = curr.Result[i][l].String // don't diff, copy value as-is
 					} else {
-						if strings.Contains(curr.Result[i][l].String, ".") {
+						// Values with dots or in scientific notation consider as floats and integer otherwise.
+						if strings.Contains(curr.Result[i][l].String, ".") || strings.Contains(curr.Result[i][l].String, "e") {
 							cv, err := strconv.ParseFloat(curr.Result[i][l].String, 64)
 							if err != nil {
 								return fmt.Errorf("failed to convert to float [%d:%d]: %s", i, l, err)
