@@ -22,8 +22,8 @@ const (
 func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// Close 'view' if passed type of aux stats are already displayed
-		if app.context.aux == auxtype {
-			closeAuxView(g, v, app.context)
+		if app.config.aux == auxtype {
+			closeAuxView(g, v, app.config)
 			return nil
 		}
 
@@ -38,10 +38,10 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 			nlines, err := stat.CountLines(stat.ProcDiskstats, app.db, app.stats.PgcenterSchemaAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
-				closeAuxView(g, nil, app.context)
+				closeAuxView(g, nil, app.config)
 			}
 			app.stats.Iostat.New(nlines)
-			app.context.aux = auxtype
+			app.config.aux = auxtype
 			printCmdline(g, "Show diskstats")
 			app.doUpdate <- 1
 		case auxNicstat:
@@ -51,10 +51,10 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 			nlines, err := stat.CountLines(stat.ProcNetdevFile, app.db, app.stats.PgcenterSchemaAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
-				closeAuxView(g, nil, app.context)
+				closeAuxView(g, nil, app.config)
 			}
 			app.stats.Nicstat.New(nlines)
-			app.context.aux = auxtype
+			app.config.aux = auxtype
 			printCmdline(g, "Show nicstat")
 			app.doUpdate <- 1
 		case auxLogtail:
@@ -83,7 +83,7 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			app.context.aux = auxtype
+			app.config.aux = auxtype
 			printCmdline(g, "Show logtail")
 			app.doUpdate <- 1
 		}
@@ -94,12 +94,12 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 
 // Depending on current AUXTYPE read specific stats: Diskstat, Nicstat. Logtail AUXTYPE processed separately.
 func getAuxStat(app *app) {
-	switch app.context.aux {
+	switch app.config.aux {
 	case auxDiskstat:
 		ndev, err := stat.CountLines(stat.ProcDiskstats, app.db, app.stats.PgcenterSchemaAvail)
 		if err != nil {
 			printCmdline(app.ui, err.Error())
-			closeAuxView(app.ui, nil, app.context)
+			closeAuxView(app.ui, nil, app.config)
 		}
 		// If number of devices is changed, re-create stats container
 		if ndev != len(app.stats.CurrDiskstats) {
@@ -108,7 +108,7 @@ func getAuxStat(app *app) {
 		// Read stats
 		if err := app.stats.CurrDiskstats.Read(app.db, app.stats.PgcenterSchemaAvail); err != nil {
 			printCmdline(app.ui, err.Error())
-			closeAuxView(app.ui, nil, app.context)
+			closeAuxView(app.ui, nil, app.config)
 		} else {
 			app.stats.DiffDiskstats.Diff(app.stats.CurrDiskstats, app.stats.PrevDiskstats)
 			copy(app.stats.PrevDiskstats, app.stats.CurrDiskstats)
@@ -117,7 +117,7 @@ func getAuxStat(app *app) {
 		ndev, err := stat.CountLines(stat.ProcNetdevFile, app.db, app.stats.PgcenterSchemaAvail)
 		if err != nil {
 			printCmdline(app.ui, err.Error())
-			closeAuxView(app.ui, nil, app.context)
+			closeAuxView(app.ui, nil, app.config)
 		}
 		// If number of interfaces is changed, re-create stats container
 		if ndev != len(app.stats.CurrNetdevs) {
@@ -126,7 +126,7 @@ func getAuxStat(app *app) {
 		// Read stats
 		if err := app.stats.CurrNetdevs.Read(app.db, app.stats.PgcenterSchemaAvail); err != nil {
 			printCmdline(app.ui, err.Error())
-			closeAuxView(app.ui, nil, app.context)
+			closeAuxView(app.ui, nil, app.config)
 		} else {
 			app.stats.DiffNetdevs.Diff(app.stats.CurrNetdevs, app.stats.PrevNetdevs)
 			copy(app.stats.PrevNetdevs, app.stats.CurrNetdevs)
@@ -149,10 +149,10 @@ func openAuxView(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // Close 'gocui' object
-func closeAuxView(g *gocui.Gui, _ *gocui.View, context *context) error {
-	if context.aux > auxNone {
+func closeAuxView(g *gocui.Gui, _ *gocui.View, c *config) error {
+	if c.aux > auxNone {
 		g.DeleteView("aux")
-		context.aux = auxNone
+		c.aux = auxNone
 	}
 	return nil
 }

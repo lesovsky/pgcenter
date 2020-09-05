@@ -49,7 +49,7 @@ var (
 func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// some types of actions allowed only in specifics stats contexts.
-		if (d > dialogFilter && d <= dialogChangeAge) && app.context.current.Name != stat.ActivityView {
+		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != stat.ActivityView {
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
@@ -63,7 +63,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error 
 			return nil
 		}
 
-		if d == dialogQueryReport && !strings.Contains(app.context.current.Name, stat.StatementsView) {
+		if d == dialogQueryReport && !strings.Contains(app.config.view.Name, stat.StatementsView) {
 			printCmdline(g, "Query report is allowed in pg_stat_statements tabs.")
 			return nil
 		}
@@ -107,7 +107,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogPgReload:
 			doReload(g, v, app.db, answer)
 		case dialogFilter:
-			setFilter(g, v, answer, app.context)
+			setFilter(g, v, answer, app.config.view)
 		case dialogCancelQuery:
 			killSingle(g, v, answer, app.db, "cancel")
 		case dialogTerminateBackend:
@@ -119,11 +119,11 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogTerminateGroup:
 			killGroup(g, v, app, "terminate")
 		case dialogChangeAge:
-			changeQueryAge(g, v, answer, app.context)
+			changeQueryAge(g, v, answer, app.config)
 		case dialogQueryReport:
 			buildQueryReport(g, v, answer, app.db, app.doExit)
 		case dialogChangeRefresh:
-			changeRefresh(g, v, answer, &app.config, app.doUpdate)
+			changeRefresh(g, v, answer, app.config, app.doUpdate)
 		case dialogNone:
 			/* do nothing */
 		}

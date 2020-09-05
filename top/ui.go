@@ -108,7 +108,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Aux stats view
-		if app.context.aux > auxNone {
+		if app.config.aux > auxNone {
 			if v, err := app.ui.SetView("aux", -1, 3*maxY/5-1, maxX-1, maxY-1); err != nil {
 				if err != gocui.ErrUnknownView {
 					return fmt.Errorf("set aux view on layout failed: %s", err)

@@ -61,7 +61,7 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mod
 
 // Send signal to group of Postgres backends.
 func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
-	if app.context.current.Name != stat.ActivityView {
+	if app.config.view.Name != stat.ActivityView {
 		printCmdline(g, "Terminate or cancel backend allowed in pg_stat_activity.")
 		return
 	}
@@ -99,11 +99,11 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 
 	for state, part := range states {
 		if (groupMask & state) != 0 {
-			app.context.sharedOptions.BackendState = part
+			app.config.sharedOptions.BackendState = part
 			if state == groupWaiting && app.stats.PgVersionNum < 90600 {
-				app.context.sharedOptions.BackendState = "waiting"
+				app.config.sharedOptions.BackendState = "waiting"
 			}
-			query, _ = stat.PrepareQuery(template, app.context.sharedOptions)
+			query, _ = stat.PrepareQuery(template, app.config.sharedOptions)
 			err := app.db.QueryRow(query).Scan(&killed)
 			if err != nil {
 				printCmdline(g, "failed to send signal to backends: %s", err)

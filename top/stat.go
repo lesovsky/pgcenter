@@ -43,7 +43,7 @@ func doWork(app *app) {
 		getAuxStat(app)
 
 		// Ignore errors in template parsing; if query is bogus, user will see appropriate syntax error instead of stats.
-		query, err := stat.PrepareQuery(app.context.current.Query, app.context.sharedOptions)
+		query, err := stat.PrepareQuery(app.config.view.Query, app.config.sharedOptions)
 		if err != nil {
 			fmt.Println("lessqq 1: ", err)
 			continue
@@ -52,10 +52,10 @@ func doWork(app *app) {
 			app.db,
 			query,
 			uint(app.config.refreshInterval/app.config.minRefresh),
-			app.context.current.DiffIntvl,
-			app.context.current.OrderKey,
-			app.context.current.OrderDesc,
-			app.context.current.UniqueKey,
+			app.config.view.DiffIntvl,
+			app.config.view.OrderKey,
+			app.config.view.OrderDesc,
+			app.config.view.UniqueKey,
 		); err != nil {
 			// If something is wrong, re-read stats immediately
 			fmt.Println("lessqq 2: ", err)
@@ -97,13 +97,13 @@ func printAllStat(app *app) {
 		v.Clear()
 		printDbstat(v, app)
 
-		if app.context.aux > auxNone {
+		if app.config.aux > auxNone {
 			v, err := g.View("aux")
 			if err != nil {
 				return fmt.Errorf("Set focus on aux view failed: %s", err)
 			}
 
-			switch app.context.aux {
+			switch app.config.aux {
 			case auxDiskstat:
 				v.Clear()
 				printIostat(v, app.stats.DiffDiskstats)
@@ -171,15 +171,15 @@ func printDbstat(v *gocui.View, app *app) {
 	}
 
 	// configure aligning, use fixed aligning instead of dynamic
-	if !app.context.current.Aligned {
-		err := app.stats.DiffPGresult.SetAlign(app.context.current.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+	if !app.config.view.Aligned {
+		err := app.stats.DiffPGresult.SetAlign(app.config.view.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
-			app.context.current.Aligned = true
+			app.config.view.Aligned = true
 		}
 	}
 
 	// is filter required?
-	var filter = isFilterRequired(app.context.current.Filters)
+	var filter = isFilterRequired(app.config.view.Filters)
 
 	/* print header - filtered column mark with star; ordered column make shadowed */
 	printStatHeader(v, app)
@@ -205,17 +205,17 @@ func printStatHeader(v *gocui.View, app *app) {
 		name := app.stats.CurrPGresult.Cols[i]
 
 		// mark filtered column
-		if app.context.current.Filters[i] != nil && app.context.current.Filters[i].String() != "" {
+		if app.config.view.Filters[i] != nil && app.config.view.Filters[i].String() != "" {
 			pname = "*" + name
 		} else {
 			pname = name
 		}
 
 		/* mark ordered column with foreground color */
-		if i != app.context.current.OrderKey {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, app.context.current.ColsWidth[i]+2, pname)
+		if i != app.config.view.OrderKey {
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, app.config.view.ColsWidth[i]+2, pname)
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, app.context.current.ColsWidth[i]+2, pname)
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, app.config.view.ColsWidth[i]+2, pname)
 		}
 	}
 	fmt.Fprintf(v, "\n")
@@ -231,8 +231,8 @@ func printStatData(v *gocui.View, app *app, filter bool) {
 		// apply filters using regexp
 		if filter {
 			for i := 0; i < app.stats.DiffPGresult.Ncols; i++ {
-				if app.context.current.Filters[i] != nil {
-					if app.context.current.Filters[i].MatchString(app.stats.DiffPGresult.Result[rownum][i].String) {
+				if app.config.view.Filters[i] != nil {
+					if app.config.view.Filters[i].MatchString(app.stats.DiffPGresult.Result[rownum][i].String) {
 						doPrint = true
 						break
 					} else {
@@ -247,14 +247,14 @@ func printStatData(v *gocui.View, app *app, filter bool) {
 			if doPrint {
 				// truncate values that longer than column width
 				valuelen := len(app.stats.DiffPGresult.Result[rownum][colnum].String)
-				if valuelen > app.context.current.ColsWidth[i] {
-					width := app.context.current.ColsWidth[i]
+				if valuelen > app.config.view.ColsWidth[i] {
+					width := app.config.view.ColsWidth[i]
 					// truncate value up to column width and replace last character with '~' symbol
 					app.stats.DiffPGresult.Result[rownum][colnum].String = app.stats.DiffPGresult.Result[rownum][colnum].String[:width-1] + "~"
 				}
 
 				// print value
-				fmt.Fprintf(v, "%-*s", app.context.current.ColsWidth[i]+2, app.stats.DiffPGresult.Result[rownum][colnum].String)
+				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, app.stats.DiffPGresult.Result[rownum][colnum].String)
 				colnum++
 			}
 		}

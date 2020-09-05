@@ -115,26 +115,26 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case menuPgss:
 			switch cy {
 			case 0:
-				switchContextToPgss(app, stat.StatementsTimingView)
+				switchContextToPgss(app, "statements_timings")
 			case 1:
-				switchContextToPgss(app, stat.StatementsGeneralView)
+				switchContextToPgss(app, "statements_general")
 			case 2:
-				switchContextToPgss(app, stat.StatementsIOView)
+				switchContextToPgss(app, "statements_io")
 			case 3:
-				switchContextToPgss(app, stat.StatementsTempView)
+				switchContextToPgss(app, "statements_temp")
 			case 4:
-				switchContextToPgss(app, stat.StatementsLocalView)
+				switchContextToPgss(app, "statements_local")
 			default:
-				switchContextToPgss(app, stat.StatementsTimingView)
+				switchContextToPgss(app, "statements_timings")
 			}
 		case menuProgress:
 			switch cy {
 			case 0:
-				switchContextToProgress(app, stat.ProgressVacuumView)
+				switchContextToProgress(app, "progress_vacuum")
 			case 1:
-				switchContextToProgress(app, stat.ProgressClusterView)
+				switchContextToProgress(app, "progress_cluster")
 			case 2:
-				switchContextToProgress(app, stat.ProgressCreateIndexView)
+				switchContextToProgress(app, "progress_index")
 			}
 		case menuConf:
 			switch cy {

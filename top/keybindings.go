@@ -5,7 +5,6 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/stat"
 	"os"
 	"strconv"
 	"strings"
@@ -25,22 +24,22 @@ func keybindings(app *app) error {
 		{"", gocui.KeyCtrlC, quit(app)},
 		{"", gocui.KeyCtrlQ, quit(app)},
 		{"sysstat", 'q', quit(app)},
-		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft(app.context, app.doUpdate)},
-		{"sysstat", gocui.KeyArrowRight, orderKeyRight(app.context, app.doUpdate)},
+		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft(app.config.view, app.doUpdate)},
+		{"sysstat", gocui.KeyArrowRight, orderKeyRight(app.config.view, app.doUpdate)},
 		{"sysstat", gocui.KeyArrowUp, changeWidth(app, colsWidthIncr)},
 		{"sysstat", gocui.KeyArrowDown, changeWidth(app, colsWidthDecr)},
-		{"sysstat", '<', switchSortOrder(app.context, app.doUpdate)},
-		{"sysstat", ',', toggleSysTables(app.context, app.doUpdate)},
-		{"sysstat", 'I', toggleIdleConns(app.context, app.doUpdate)},
-		{"sysstat", 'd', switchContextTo(app, stat.DatabaseView)},
-		{"sysstat", 'r', switchContextTo(app, stat.ReplicationView)},
-		{"sysstat", 't', switchContextTo(app, stat.TablesView)},
-		{"sysstat", 'i', switchContextTo(app, stat.IndexesView)},
-		{"sysstat", 's', switchContextTo(app, stat.SizesView)},
-		{"sysstat", 'f', switchContextTo(app, stat.FunctionsView)},
-		{"sysstat", 'p', switchContextTo(app, stat.ProgressView)},
-		{"sysstat", 'a', switchContextTo(app, stat.ActivityView)},
-		{"sysstat", 'x', switchContextTo(app, stat.StatementsView)},
+		{"sysstat", '<', switchSortOrder(app.config.view, app.doUpdate)},
+		{"sysstat", ',', toggleSysTables(app.config, app.doUpdate)},
+		{"sysstat", 'I', toggleIdleConns(app.config, app.doUpdate)},
+		{"sysstat", 'd', switchContextTo(app, "databases")},
+		{"sysstat", 'r', switchContextTo(app, "replication")},
+		{"sysstat", 't', switchContextTo(app, "tables")},
+		{"sysstat", 'i', switchContextTo(app, "indexes")},
+		{"sysstat", 's', switchContextTo(app, "sizes")},
+		{"sysstat", 'f', switchContextTo(app, "functions")},
+		{"sysstat", 'p', switchContextTo(app, "progress")},
+		{"sysstat", 'a', switchContextTo(app, "activity")},
+		{"sysstat", 'x', switchContextTo(app, "statements")},
 		{"sysstat", 'Q', resetStat(app.db)},
 		{"sysstat", 'E', menuOpen(menuConfStyle, false)},
 		{"sysstat", 'X', menuOpen(menuPgssStyle, app.stats.PgStatStatementsAvail)},

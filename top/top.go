@@ -6,19 +6,11 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/lib/stat"
-	"time"
 )
-
-// 'top' program config.
-type config struct {
-	minRefresh      time.Duration
-	refreshInterval time.Duration
-}
 
 // app defines stuff required for application.
 type app struct {
-	config   config
-	context  *context
+	config   *config
 	ui       *gocui.Gui
 	db       *postgres.DB
 	stats    *stat.Stat
@@ -28,10 +20,7 @@ type app struct {
 
 // RunMain is the main entry point for 'pgcenter top' command
 func RunMain(dbConfig *postgres.Config) error {
-	config := config{
-		minRefresh:      1 * time.Second,
-		refreshInterval: 1 * time.Second,
-	}
+	config := newConfig()
 
 	// Connect to Postgres.
 	db, err := postgres.Connect(dbConfig)
@@ -40,10 +29,9 @@ func RunMain(dbConfig *postgres.Config) error {
 	}
 
 	app := &app{
-		config:  config,
-		context: &context{},
-		db:      db,
-		stats:   &stat.Stat{},
+		config: config,
+		db:     db,
+		stats:  &stat.Stat{},
 	}
 
 	defer db.Close()
@@ -60,33 +48,12 @@ func RunMain(dbConfig *postgres.Config) error {
 
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.
 func (app *app) Setup() {
-	app.context.contextList = stat.ContextList{
-		stat.DatabaseView:            &stat.PgStatDatabaseUnit,
-		stat.ReplicationView:         &stat.PgStatReplicationUnit,
-		stat.TablesView:              &stat.PgStatTablesUnit,
-		stat.IndexesView:             &stat.PgStatIndexesUnit,
-		stat.SizesView:               &stat.PgTablesSizesUnit,
-		stat.FunctionsView:           &stat.PgStatFunctionsUnit,
-		stat.ProgressVacuumView:      &stat.PgStatProgressVacuumUnit,
-		stat.ProgressClusterView:     &stat.PgStatProgressClusterUnit,
-		stat.ProgressCreateIndexView: &stat.PgStatProgressCreateIndexUnit,
-		stat.ActivityView:            &stat.PgStatActivityUnit,
-		stat.StatementsTimingView:    &stat.PgSSTimingUnit,
-		stat.StatementsGeneralView:   &stat.PgSSGeneralUnit,
-		stat.StatementsIOView:        &stat.PgSSIoUnit,
-		stat.StatementsTempView:      &stat.PgSSTempUnit,
-		stat.StatementsLocalView:     &stat.PgSSLocalUnit,
-	}
-
-	// Select default context unit
-	app.context.current = app.context.contextList[stat.ActivityView]
-
 	// Aux stats is not displayed by default
-	app.context.aux = auxNone
+	app.config.aux = auxNone
 
 	// Adjust queries depending on Postgres version
-	app.context.contextList.AdjustQueries(app.stats.PgInfo)
-	app.context.sharedOptions.Adjust(app.stats.PgInfo, "top")
+	app.config.views.Configure(app.stats.PgInfo.PgVersionNum, app.stats.PgInfo.PgTrackCommitTs)
+	app.config.sharedOptions.Adjust(app.stats.PgInfo, "top")
 
 	app.doExit = make(chan int)
 	app.doUpdate = make(chan int)
