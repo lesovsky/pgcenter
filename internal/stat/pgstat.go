@@ -16,40 +16,6 @@ import (
 )
 
 const (
-	// DatabaseView is the name of view with databases' stats
-	DatabaseView = "pg_stat_database"
-	// ReplicationView is the name of view with replication stats
-	ReplicationView = "pg_stat_replication"
-	// TablesView is the name of view with tables' stats, it's a simplified name for the views: pg_stat_*_tables and pg_statio_*_tables
-	TablesView = "pg_stat_tables"
-	// IndexesView is the name of view with indexes' stats, it's a simplified name for the views: pg_stat_*_indexes and pg_statio_*_indexes
-	IndexesView = "pg_stat_indexes"
-	// SizesView is the name of pseudo-view with tables' sizes stats
-	SizesView = "pg_stat_sizes"
-	// FunctionsView is the name of view with functions stats
-	FunctionsView = "pg_stat_user_functions"
-	// ProgressView is the name of pseudo-view with progress stats
-	ProgressView = "pg_stat_progress"
-	// ProgressVacuumView is the name of pg_stat_progress_vacuum view
-	ProgressVacuumView = "pg_stat_progress_vacuum"
-	// ProgressClusterView is the name of pg_stat_progress_cluster view
-	ProgressClusterView = "pg_stat_progress_cluster"
-	// ProgressCreateIndexView is the name of pg_stat_progress_create_index view
-	ProgressCreateIndexView = "pg_stat_progress_create_index"
-	// ActivityView is the name of view with activity stats
-	ActivityView = "pg_stat_activity"
-	// StatementsView is the name of view with statements stats
-	StatementsView = "pg_stat_statements"
-	// StatementsTimingView is the name of pseudo-view with statements' timing stats
-	StatementsTimingView = "pg_stat_statements_timing"
-	// StatementsGeneralView is the name of pseudo-view with statements' general stats
-	StatementsGeneralView = "pg_stat_statements_general"
-	// StatementsIOView is the name of pseudo-view with statements' buffers IO stats
-	StatementsIOView = "pg_stat_statements_io"
-	// StatementsTempView is the name of pseudo-view with statements' temp files IO stats
-	StatementsTempView = "pg_stat_statements_temp"
-	// StatementsLocalView is the name of pseudo-view with statements' local buffers IO stats
-	StatementsLocalView = "pg_stat_statements_local"
 	// colsTruncMinLimit is the  minimal allowed value for values truncation
 	colsTruncMinLimit = 1
 	// colsWidthMin is the base width for columns (used by default, if column name too short)

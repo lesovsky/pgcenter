@@ -61,7 +61,7 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mod
 
 // Send signal to group of Postgres backends.
 func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
-	if app.config.view.Name != stat.ActivityView {
+	if app.config.view.Name != "activity" {
 		printCmdline(g, "Terminate or cancel backend allowed in pg_stat_activity.")
 		return
 	}

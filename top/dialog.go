@@ -5,7 +5,6 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/internal/stat"
 	"strings"
 )
 
@@ -49,7 +48,7 @@ var (
 func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// some types of actions allowed only in specifics stats contexts.
-		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != stat.ActivityView {
+		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != "activity" {
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
@@ -63,7 +62,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error 
 			return nil
 		}
 
-		if d == dialogQueryReport && !strings.Contains(app.config.view.Name, stat.StatementsView) {
+		if d == dialogQueryReport && !strings.Contains(app.config.view.Name, "statements") {
 			printCmdline(g, "Query report is allowed in pg_stat_statements tabs.")
 			return nil
 		}
