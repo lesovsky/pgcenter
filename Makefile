@@ -24,6 +24,18 @@ clean: ## Clean build directory.
 dep: ## Download the dependencies.
 	go mod download
 
+#lint: ## Lint the source files
+#	golangci-lint run --timeout 5m -E golint -e '(struct field|type|method|func) [a-zA-Z`]+ should be [a-zA-Z`]+'
+#	gosec -quiet ./...
+
+test: dep ## Run tests
+	go test -race -timeout 300s -coverprofile=.test_coverage.txt ./... && \
+    	go tool cover -func=.test_coverage.txt | tail -n1 | awk '{print "Total test coverage: " $$3}'
+	@rm .test_coverage.txt
+
+race: dep ## Run data race detector
+	go test -race -short -timeout 300s -p 1 ./...
+
 build: dep ## Build pgcenter executable.
 	mkdir -p ./bin
 	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o bin/${PROGRAM_NAME} ${SOURCE}

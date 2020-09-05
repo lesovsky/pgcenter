@@ -145,7 +145,7 @@ func printPgstat(v *gocui.View, s *stat.Stat) {
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
 		s.PgInfo.PgAlive,
 		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
-		"dummy", "dummy", "dummy", "dummy",
+		"dummy", 0, "dummy", "dummy",
 		s.PgInfo.PgVersion, s.PgInfo.PgUptime, s.PgInfo.PgRecovery)
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
 	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
