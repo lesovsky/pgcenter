@@ -3,6 +3,7 @@
 package top
 
 import (
+	"context"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
@@ -43,7 +44,8 @@ func RunMain(dbConfig *postgres.Config) error {
 	app.Setup()
 
 	// Run terminal user interface.
-	return uiLoop(app)
+	//return uiLoop(app)
+	return mainLoop(context.TODO(), app)
 }
 
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.

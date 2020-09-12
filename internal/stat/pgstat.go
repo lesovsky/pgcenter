@@ -86,6 +86,11 @@ type PgActivityStat struct {
 	StmtPerSec   uint    /* current number of queries per second */
 	CallsCurr    uint    /* total number of queries: current value */
 	CallsPrev    uint    /* total number of queries: previous value */
+	/* lessqqmorepewpew: new fields added doing refactoring */
+	Uptime2   string /* двойка стоит потому что у типа есть метод с таким же именем, как только метод спилится, поле можно будет переименовать */
+	Recovery  string
+	Calls     uint /* замена для CallsCurr и CallsPrev */
+	CallsRate uint /* замена для StmtPerSec */
 }
 
 // PGresult is the container for basic Postgres stats collected from pg_stat_* views
@@ -114,7 +119,7 @@ func (s *Pgstat) Uptime(db *postgres.DB) {
 	}
 }
 
-// ReadPgInfo method gets some details about Postgres: version, GUCs, etc...
+// ReadPgInfo method gets some details about Postgres: version, GUCs, etc... /* DEPRECATED */
 func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	conn.QueryRow(PgGetVersionQuery).Scan(&s.PgVersion, &s.PgVersionNum)
 	conn.QueryRow(PgGetSingleSettingQuery, "track_commit_timestamp").Scan(&s.PgTrackCommitTs)
@@ -320,7 +325,7 @@ func (s *Pgstat) GetPgstatSampleNew(db *postgres.DB, query string) error {
 	return nil
 }
 
-// New method parses a result of the query and creates PGresult struct
+// New method parses a result of the query and creates PGresult struct /* lessqqmorepewpew: DEPRECATED */
 func (r *PGresult) New(rs *sql.Rows) (err error) {
 	var container []sql.NullString
 	var pointers []interface{}

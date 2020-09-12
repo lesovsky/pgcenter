@@ -11,7 +11,7 @@ import (
 //
 type Stat2 struct {
 	System
-	//Postgres
+	Pgstat
 }
 
 //
@@ -27,6 +27,8 @@ type Collector struct {
 	schemaExists bool
 	prevCpuStat  CpuStat
 	currCpuStat  CpuStat
+	prevPgStat   Pgstat
+	currPgStat   Pgstat
 }
 
 func NewCollector(db *postgres.DB) (*Collector, error) {
@@ -75,11 +77,20 @@ func (c *Collector) Update(db *postgres.DB) (Stat2, error) {
 
 	cpuusage := countCpuUsage(c.prevCpuStat, c.currCpuStat, c.ticks)
 
+	pgstat, err := collectPostgresStat(db, c.prevPgStat)
+	if err != nil {
+		return Stat2{}, err
+	}
+
+	c.prevPgStat = c.currPgStat
+	c.currPgStat = pgstat
+
 	return Stat2{
-		System{
+		System: System{
 			LoadAvg: loadavg,
 			Meminfo: meminfo,
 			CpuStat: cpuusage,
 		},
+		Pgstat: pgstat,
 	}, nil
 }

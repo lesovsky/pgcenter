@@ -3,8 +3,11 @@
 package top
 
 import (
+	"context"
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"sync"
 	"time"
 )
@@ -18,7 +21,7 @@ var (
 	cmdTimer *time.Timer // show cmdline's messages until timer is not expired
 )
 
-// Create and run UI.
+// Create and run UI. /* DEPRECATED */
 func uiLoop(app *app) error {
 	var e ErrorRate
 	var errInterval = 1 * time.Second
@@ -61,6 +64,139 @@ func uiLoop(app *app) error {
 		wg.Wait()
 	}
 }
+
+//
+func mainLoop(ctx context.Context, app *app) error {
+	// init UI
+	g, err := gocui.NewGui(gocui.OutputNormal)
+	if err != nil {
+		return fmt.Errorf("FATAL: gui creating failed with %s.\n", err)
+	}
+
+	app.ui = g
+
+	// construct UI
+	app.ui.SetManagerFunc(layout(app))
+
+	// setup key shortcuts and bindings
+	if err := keybindings(app); err != nil {
+		return fmt.Errorf("FATAL: %s.\n", err)
+	}
+
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		doWork2(ctx, app)
+		wg.Done()
+	}()
+
+	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
+		return err
+	}
+
+	wg.Wait()
+	return nil
+}
+
+func doWork2(ctx context.Context, app *app) {
+	// initial read of stats
+	var wg sync.WaitGroup
+	ch := make(chan stat.Stat2)
+
+	wg.Add(1)
+	go func() {
+		collectStat(ctx, ch, app.db)
+		close(ch)
+		wg.Done()
+	}()
+
+	for {
+		select {
+		case s := <-ch:
+			printStat(app, s)
+		case <-ctx.Done():
+			close(ch)
+			wg.Wait()
+			return
+		}
+	}
+}
+
+func collectStat(ctx context.Context, ch chan<- stat.Stat2, db *postgres.DB) {
+	c, err := stat.NewCollector(db)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var i int
+	for {
+		stats, err := c.Update(db)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			ch <- stats
+		}
+
+		ticker := time.NewTicker(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			ticker.Stop()
+			return
+		case <-ticker.C:
+			i++
+			continue
+		}
+	}
+}
+
+func printStat(app *app, s stat.Stat2) {
+	app.ui.Update(func(g *gocui.Gui) error {
+		v, err := g.View("sysstat")
+		if err != nil {
+			return fmt.Errorf("Set focus on sysstat view failed: %s", err)
+		}
+		v.Clear()
+		printSysstat2(v, s)
+
+		v, err = g.View("pgstat")
+		if err != nil {
+			return fmt.Errorf("Set focus on pgstat view failed: %s", err)
+		}
+		v.Clear()
+		printPgstat2(v, s)
+
+		v, err = g.View("dbstat")
+		if err != nil {
+			return fmt.Errorf("Set focus on dbstat view failed: %s", err)
+		}
+		v.Clear()
+		printDbstat2(v, app, s)
+
+		//if app.config.aux > auxNone {
+		//  v, err := g.View("aux")
+		//  if err != nil {
+		//    return fmt.Errorf("Set focus on aux view failed: %s", err)
+		//  }
+		//
+		//  switch app.config.aux {
+		//  case auxDiskstat:
+		//    v.Clear()
+		//    printIostat(v, app.stats.DiffDiskstats)
+		//  case auxNicstat:
+		//    v.Clear()
+		//    printNicstat(v, app.stats.DiffNetdevs)
+		//  case auxLogtail:
+		//    // don't clear screen
+		//    printLogtail(g, v)
+		//  }
+		//}
+		return nil
+	})
+}
+
+// END of new code **********************************************************
 
 // Defines UI layout - views and their location.
 func layout(app *app) func(g *gocui.Gui) error {

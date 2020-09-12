@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Main stat loop, which is refreshes with interval, gathers and display stats.
+// Main stat loop, which is refreshes with interval, gathers and display stats. /* DEPRECATED */
 func statLoop(app *app, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -117,7 +117,7 @@ func printAllStat(app *app) {
 	})
 }
 
-// Print sysstat.
+// Print sysstat. /* DEPRECATED */
 func printSysstat(v *gocui.View, s *stat.Stat) {
 	/* line1: current time and load average */
 	fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
@@ -137,7 +137,26 @@ func printSysstat(v *gocui.View, s *stat.Stat) {
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
 }
 
-// Print stats about Postgres activity.
+func printSysstat2(v *gocui.View, s stat.Stat2) {
+	/* line1: current time and load average */
+	fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
+		time.Now().Format("2006-01-02 15:04:05"),
+		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
+	/* line2: cpu usage */
+	fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
+		s.CpuStat.User, s.CpuStat.Sys, s.CpuStat.Nice, s.CpuStat.Idle,
+		s.CpuStat.Iowait, s.CpuStat.Irq, s.CpuStat.Softirq, s.CpuStat.Steal)
+	/* line3: memory usage */
+	fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
+		s.Meminfo.MemTotal, s.Meminfo.MemFree, s.Meminfo.MemUsed,
+		s.Meminfo.MemCached+s.Meminfo.MemBuffers+s.Meminfo.MemSlab)
+	/* line4: swap usage, dirty and writeback */
+	fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
+		s.Meminfo.SwapTotal, s.Meminfo.SwapFree, s.Meminfo.SwapUsed,
+		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
+}
+
+// Print stats about Postgres activity. /* lessqqmorepewpew: DEPRECATED */
 func printPgstat(v *gocui.View, s *stat.Stat) {
 	/* line1: details of used connection, version, uptime and recovery status */
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
@@ -159,7 +178,28 @@ func printPgstat(v *gocui.View, s *stat.Stat) {
 		s.PgActivityStat.StmtPerSec, s.PgActivityStat.StmtAvgTime, s.PgActivityStat.XactMaxTime, s.PgActivityStat.PrepMaxTime)
 }
 
-// Print stats from Postgres pg_stat_* views.
+func printPgstat2(v *gocui.View, s stat.Stat2) {
+	/* line1: details of used connection, version, uptime and recovery status */
+	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
+		s.PgInfo.PgAlive,
+		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
+		"dummy", 0, "dummy", "dummy",
+		s.PgInfo.PgVersion, s.Uptime2, s.Recovery)
+	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
+	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
+		s.PgActivityStat.ConnTotal, s.PgInfo.PgMaxConns, s.PgActivityStat.ConnPrepared, s.PgInfo.PgMaxPrepXacts,
+		s.PgActivityStat.ConnIdle, s.PgActivityStat.ConnIdleXact, s.PgActivityStat.ConnActive,
+		s.PgActivityStat.ConnWaiting, s.PgActivityStat.ConnOthers)
+	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
+	fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
+		s.PgActivityStat.AVWorkers, s.PgInfo.PgAVMaxWorkers,
+		s.PgActivityStat.AVManual, s.PgActivityStat.AVAntiwrap, s.PgActivityStat.AVMaxTime)
+	/* line4: current workload*/
+	fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
+		s.PgActivityStat.CallsRate, s.PgActivityStat.StmtAvgTime, s.PgActivityStat.XactMaxTime, s.PgActivityStat.PrepMaxTime)
+}
+
+// Print stats from Postgres pg_stat_* views. /* lessqqmorepewpew: DEPRECATED */
 func printDbstat(v *gocui.View, app *app) {
 	// If query fails, show the corresponding error and return.
 	if err, ok := app.stats.CurrPGresult.Err.(*pq.Error); ok {
@@ -186,6 +226,32 @@ func printDbstat(v *gocui.View, app *app) {
 	printStatData(v, app, filter)
 }
 
+func printDbstat2(v *gocui.View, app *app, s stat.Stat2) {
+	// If query fails, show the corresponding error and return.
+	if err, ok := s.CurrPGresult.Err.(*pq.Error); ok {
+		fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
+		s.CurrPGresult.Err = nil
+		return
+	}
+
+	// configure aligning, use fixed aligning instead of dynamic
+	if !app.config.view.Aligned {
+		err := s.DiffPGresult.SetAlign(app.config.view.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		if err == nil {
+			app.config.view.Aligned = true
+		}
+	}
+
+	// is filter required?
+	var filter = isFilterRequired(app.config.view.Filters)
+
+	/* print header - filtered column mark with star; ordered column make shadowed */
+	printStatHeader2(v, s, app)
+
+	// print data
+	printStatData2(v, s, app, filter)
+}
+
 // Returns true if filtering is required
 func isFilterRequired(f map[int]*regexp.Regexp) bool {
 	for _, v := range f {
@@ -196,7 +262,7 @@ func isFilterRequired(f map[int]*regexp.Regexp) bool {
 	return false
 }
 
-// Prints stats header - columns' names
+// Prints stats header - columns' names /* lessqqmorepewpew: DEPRECATED */
 func printStatHeader(v *gocui.View, app *app) {
 	var pname string
 	for i := 0; i < app.stats.CurrPGresult.Ncols; i++ {
@@ -219,7 +285,7 @@ func printStatHeader(v *gocui.View, app *app) {
 	fmt.Fprintf(v, "\n")
 }
 
-// Prints stats data - content of stats views
+// Prints stats data - content of stats views /* lessqqmorepewpew: DEPRECATED */
 func printStatData(v *gocui.View, app *app, filter bool) {
 	var doPrint bool
 	for colnum, rownum := 0, 0; rownum < app.stats.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
@@ -253,6 +319,70 @@ func printStatData(v *gocui.View, app *app, filter bool) {
 
 				// print value
 				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, app.stats.DiffPGresult.Result[rownum][colnum].String)
+				colnum++
+			}
+		}
+		if doPrint {
+			fmt.Fprintf(v, "\n")
+		}
+	}
+}
+
+func printStatHeader2(v *gocui.View, s stat.Stat2, app *app) {
+	var pname string
+	for i := 0; i < s.CurrPGresult.Ncols; i++ {
+		name := s.CurrPGresult.Cols[i]
+
+		// mark filtered column
+		if app.config.view.Filters[i] != nil && app.config.view.Filters[i].String() != "" {
+			pname = "*" + name
+		} else {
+			pname = name
+		}
+
+		/* mark ordered column with foreground color */
+		if i != app.config.view.OrderKey {
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, app.config.view.ColsWidth[i]+2, pname)
+		} else {
+			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, app.config.view.ColsWidth[i]+2, pname)
+		}
+	}
+	fmt.Fprintf(v, "\n")
+}
+
+func printStatData2(v *gocui.View, s stat.Stat2, app *app, filter bool) {
+	var doPrint bool
+	for colnum, rownum := 0, 0; rownum < s.DiffPGresult.Nrows; rownum, colnum = rownum+1, 0 {
+		// be optimistic, we want to print the row.
+		doPrint = true
+
+		// apply filters using regexp
+		if filter {
+			for i := 0; i < s.DiffPGresult.Ncols; i++ {
+				if app.config.view.Filters[i] != nil {
+					if app.config.view.Filters[i].MatchString(s.DiffPGresult.Result[rownum][i].String) {
+						doPrint = true
+						break
+					} else {
+						doPrint = false
+					}
+				}
+			}
+		}
+
+		// print values
+		for i := range s.DiffPGresult.Cols {
+			if doPrint {
+				// truncate values that longer than column width
+				valuelen := len(s.DiffPGresult.Result[rownum][colnum].String)
+				if valuelen > app.config.view.ColsWidth[i] {
+					width := app.config.view.ColsWidth[i]
+					// truncate value up to column width and replace last character with '~' symbol
+					s.DiffPGresult.Result[rownum][colnum].String = s.DiffPGresult.Result[rownum][colnum].String[:width-1] + "~"
+				}
+
+				// print value
+				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, s.DiffPGresult.Result[rownum][colnum].String)
 				colnum++
 			}
 		}
