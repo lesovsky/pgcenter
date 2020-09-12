@@ -28,17 +28,13 @@ func RunMain(dbConfig *postgres.Config) error {
 	if err != nil {
 		return err
 	}
+	defer db.Close()
 
 	app := &app{
 		config: config,
 		db:     db,
 		stats:  &stat.Stat{},
 	}
-
-	defer db.Close()
-
-	// Get necessary information about Postgres, such as version, recovery status, settings, etc.
-	app.stats.ReadPgInfoNew(db)
 
 	// Setup context - which kind of stats should be displayed
 	app.Setup()

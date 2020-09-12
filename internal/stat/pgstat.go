@@ -139,8 +139,8 @@ func (s *Pgstat) ReadPgInfo(conn *sql.DB, isLocal bool) {
 	}
 }
 
+// ReadPgInfoNew -- lessqqmorepewpew: DEPRECATED - successor is readPostgresProperties
 func (s *Pgstat) ReadPgInfoNew(db *postgres.DB) {
-	// TODO: add errors handling
 	db.QueryRow(PgGetVersionQuery).Scan(&s.PgVersion, &s.PgVersionNum)
 	db.QueryRow("SELECT current_setting('track_commit_timestamp')").Scan(&s.PgTrackCommitTs)
 	db.QueryRow("SELECT current_setting('max_connections')::int").Scan(&s.PgMaxConns)
@@ -159,17 +159,66 @@ func (s *Pgstat) ReadPgInfoNew(db *postgres.DB) {
 	}
 }
 
+//
+func readPostgresConfig(db *postgres.DB) (PgInfo, error) {
+	// TODO: add errors handling
+	props := PgInfo{}
+	db.QueryRow(PgGetVersionQuery).Scan(&props.PgVersion, &props.PgVersionNum)
+	db.QueryRow("SELECT current_setting('track_commit_timestamp')").Scan(&props.PgTrackCommitTs)
+	db.QueryRow("SELECT current_setting('max_connections')::int").Scan(&props.PgMaxConns)
+	db.QueryRow("SELECT current_setting('autovacuum_max_workers')::int").Scan(&props.PgAVMaxWorkers)
+	db.QueryRow(PgGetRecoveryStatusQuery).Scan(&props.PgRecovery)
+
+	// Is pg_stat_statement available?
+	props.PgStatStatementsAvail = isExtensionAvailable(db, "pg_stat_statements")
+
+	// In case of remote Postgres we should to know remote CLK_TCK
+	if !db.Local {
+		if isSchemaAvailable(db, "pgcenter") {
+			props.PgcenterSchemaAvail = true
+			db.QueryRow(PgProcSysTicksQuery).Scan(&SysTicks)
+		}
+	}
+
+	return props, nil
+}
+
 // UpdatePgStatStatementsStatus method refreshes info about pg_stat_statements
 func (s *Pgstat) UpdatePgStatStatementsStatus(conn *sql.DB) {
 	conn.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
 }
 
+// lessqqmorepewpew: DEPRECATED -- successor is isExtensionAvailable
 func (s *Pgstat) UpdatePgStatStatementsStatusNew(db *postgres.DB) {
-	// TODO: add error handling
 	db.QueryRow(PgCheckPGSSExists).Scan(&s.PgStatStatementsAvail)
 }
 
-// IsPgcSchemaInstalled method checks pgcenter's stats schema existence
+func isExtensionAvailable(db *postgres.DB, name string) bool {
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)", name).Scan(&exists)
+	if err != nil {
+		fmt.Println("failed to check extensions in pg_extension: ", err)
+		return false
+	}
+
+	// Return true if installed, and false if not.
+	return exists
+}
+
+//
+func isSchemaAvailable(db *postgres.DB, name string) bool {
+	var exists bool
+	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1))", name).Scan(&exists)
+	if err != nil {
+		fmt.Println("failed to check schema in information_schema: ", err)
+		return false
+	}
+
+	// Return true if installed, and false if not.
+	return exists
+}
+
+// IsPgcSchemaInstalled method checks pgcenter's stats schema existence; lessqqmorepewpew: DEPRECATED -- successor is isSchemaAvailable
 func (s *Pgstat) IsPgcSchemaInstalled(conn *sql.DB) {
 	var avail bool
 	if err := conn.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {
@@ -179,6 +228,7 @@ func (s *Pgstat) IsPgcSchemaInstalled(conn *sql.DB) {
 	s.PgcenterSchemaAvail = avail
 }
 
+// lessqqmorepewpew: DEPRECATED -- successor is isSchemaAvailable
 func (s *Pgstat) IsPgcSchemaInstalledNew(db *postgres.DB) {
 	var avail bool
 	if err := db.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&avail); err != nil {

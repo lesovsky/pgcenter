@@ -69,7 +69,6 @@ func mainLoop(ctx context.Context, app *app) error {
 }
 
 func doWork2(ctx context.Context, app *app) {
-	// initial read of stats
 	var wg sync.WaitGroup
 	ch := make(chan stat.Stat2)
 

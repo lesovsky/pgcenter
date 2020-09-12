@@ -23,12 +23,17 @@ type System struct {
 
 //
 type Collector struct {
+	config       Config
 	ticks        float64
 	schemaExists bool
 	prevCpuStat  CpuStat
 	currCpuStat  CpuStat
 	prevPgStat   Pgstat
 	currPgStat   Pgstat
+}
+
+type Config struct {
+	PgInfo // postgres variables and constants which are not changed in runtime (but might change between Postgres restarts)
 }
 
 func NewCollector(db *postgres.DB) (*Collector, error) {
@@ -50,7 +55,14 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 		}
 	}
 
+	// read Postgres properties
+	config, err := readPostgresConfig(db)
+	if err != nil {
+		return nil, fmt.Errorf("read postgres properties failed: %s", err)
+	}
+
 	return &Collector{
+		config:       Config{PgInfo: config},
 		ticks:        systicks,
 		schemaExists: exists,
 	}, nil
@@ -84,6 +96,8 @@ func (c *Collector) Update(db *postgres.DB) (Stat2, error) {
 
 	c.prevPgStat = c.currPgStat
 	c.currPgStat = pgstat
+
+	pgstat.PgInfo = c.config.PgInfo
 
 	return Stat2{
 		System: System{
