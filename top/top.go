@@ -43,8 +43,7 @@ func RunMain(dbConfig *postgres.Config) error {
 	// Setup context - which kind of stats should be displayed
 	app.Setup()
 
-	// Run terminal user interface.
-	//return uiLoop(app)
+	// Run application worker and UI.
 	return mainLoop(context.TODO(), app)
 }
 

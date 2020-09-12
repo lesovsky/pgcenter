@@ -21,13 +21,13 @@ var (
 	cmdTimer *time.Timer // show cmdline's messages until timer is not expired
 )
 
-// Create and run UI. /* DEPRECATED */
-func uiLoop(app *app) error {
+// mainLoop start application worker and UI loop.
+func mainLoop(ctx context.Context, app *app) error {
 	var e ErrorRate
 	var errInterval = 1 * time.Second
 	var errMaxcount = 5
-	var wg sync.WaitGroup
 
+	// Run in infinite loop - if UI crashes then reinitialize it.
 	for {
 		// init UI
 		g, err := gocui.NewGui(gocui.OutputNormal)
@@ -45,58 +45,27 @@ func uiLoop(app *app) error {
 			return fmt.Errorf("FATAL: %s.\n", err)
 		}
 
-		// initial read of stats
-		doWork(app)
+		var wg sync.WaitGroup
+		ctx, cancel := context.WithCancel(ctx)
 
-		// run stats loop, that reads and display stats
 		wg.Add(1)
-		go statLoop(app, &wg)
+		go func() {
+			doWork2(ctx, app)
+			wg.Done()
+		}()
 
-		// run UI loop, that handle UI events
+		// Run UI main loop.
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 			// check errors rate and quit if them too much - allow no more than 5 errors within 1 second
 			if err := e.Check(errInterval, errMaxcount); err != nil {
-				return fmt.Errorf("FATAL: gui main loop failed with %s (%d errors within %.0f seconds).", err, e.errCnt, e.timeElapsed.Seconds())
+				return fmt.Errorf("too many ui errors occurred: %s (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
 			}
-			// ignore errors if they are seldom - just rebuild UI
+			// If there are no too many errors just restart worker and UI.
+			cancel()
 		}
 
 		wg.Wait()
 	}
-}
-
-//
-func mainLoop(ctx context.Context, app *app) error {
-	// init UI
-	g, err := gocui.NewGui(gocui.OutputNormal)
-	if err != nil {
-		return fmt.Errorf("FATAL: gui creating failed with %s.\n", err)
-	}
-
-	app.ui = g
-
-	// construct UI
-	app.ui.SetManagerFunc(layout(app))
-
-	// setup key shortcuts and bindings
-	if err := keybindings(app); err != nil {
-		return fmt.Errorf("FATAL: %s.\n", err)
-	}
-
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		doWork2(ctx, app)
-		wg.Done()
-	}()
-
-	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-		return err
-	}
-
-	wg.Wait()
-	return nil
 }
 
 func doWork2(ctx context.Context, app *app) {
