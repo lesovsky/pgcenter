@@ -17,21 +17,13 @@ import (
 // Show Postgres config in $PAGER program
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		rows, err := db.Query(stat.PgGetConfigAllQuery)
+		res, err := stat.NewPGresult(db, stat.PgGetConfigAllQuery)
 		if err != nil {
 			printCmdline(g, err.Error())
 			return nil
 		}
-		defer rows.Close()
 
 		var buf bytes.Buffer
-		var res stat.PGresult
-
-		if err := res.New(rows); err != nil {
-			printCmdline(g, err.Error())
-			return nil
-		}
-
 		fmt.Fprintf(&buf, "PostgreSQL configuration:\n")
 		res.Fprint(&buf)
 

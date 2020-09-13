@@ -121,7 +121,7 @@ func printPgstat(v *gocui.View, s stat.Stat) {
 	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
 	fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.Activity.AVWorkers, s.Properties.GucAVMaxWorkers,
-		s.Activity.AVManual, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
+		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
 	/* line4: current workload*/
 	fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.Activity.CallsRate, s.Activity.StmtAvgTime, s.Activity.XactMaxTime, s.Activity.PrepMaxTime)
@@ -129,9 +129,9 @@ func printPgstat(v *gocui.View, s stat.Stat) {
 
 func printDbstat(v *gocui.View, app *app, s stat.Stat) {
 	// If query fails, show the corresponding error and return.
-	if err, ok := s.Curr.Err.(*pq.Error); ok {
+	if err, ok := s.Diff.Err.(*pq.Error); ok {
 		fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
-		s.Curr.Err = nil
+		s.Diff.Err = nil
 		return
 	}
 
@@ -165,8 +165,8 @@ func isFilterRequired(f map[int]*regexp.Regexp) bool {
 
 func printStatHeader(v *gocui.View, s stat.Stat, app *app) {
 	var pname string
-	for i := 0; i < s.Curr.Ncols; i++ {
-		name := s.Curr.Cols[i]
+	for i := 0; i < s.Diff.Ncols; i++ {
+		name := s.Diff.Cols[i]
 
 		// mark filtered column
 		if app.config.view.Filters[i] != nil && app.config.view.Filters[i].String() != "" {
