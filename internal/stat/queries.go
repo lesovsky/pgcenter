@@ -582,7 +582,7 @@ func PrepareQuery(s string, o Options) (string, error) {
 }
 
 // Adjust method used for adjusting query's options depending on Postgres version.
-func (o *Options) Adjust(pi PgInfo, util string) {
+func (o *Options) Adjust(props PostgresProperties, util string) {
 	// System tables and indexes aren't shown by default
 	o.ViewType = "user"
 	// Don't filter queries by age
@@ -594,16 +594,16 @@ func (o *Options) Adjust(pi PgInfo, util string) {
 	// 1. WAL-related functions have been renamed in Postgres 10, hence functions' names between 9.x and 10 are differ.
 	// 2. Depending on recovery status, for obtaining WAL location different functions have to be used.
 	switch {
-	case pi.PgVersionNum < 100000:
+	case props.VersionNum < 100000:
 		o.WalFunction1 = "pg_xlog_location_diff"
-		if pi.PgRecovery == "false" {
+		if props.Recovery == "false" {
 			o.WalFunction2 = "pg_current_xlog_location"
 		} else {
 			o.WalFunction2 = "pg_last_xlog_receive_location"
 		}
 	default:
 		o.WalFunction1 = "pg_wal_lsn_diff"
-		if pi.PgRecovery == "false" {
+		if props.Recovery == "false" {
 			o.WalFunction2 = "pg_current_wal_lsn"
 		} else {
 			o.WalFunction2 = "pg_last_wal_receive_lsn"

@@ -213,7 +213,7 @@ func New() Views {
 }
 
 // AdjustQueries performs adjusting of queries accordingly to Postgres version
-func (v Views) Configure(version uint, trackCommit string) {
+func (v Views) Configure(version int, trackCommit string) {
 	var track bool
 	if trackCommit == "on" {
 		track = true

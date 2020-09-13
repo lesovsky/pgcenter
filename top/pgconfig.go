@@ -27,7 +27,7 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 		var buf bytes.Buffer
 		var res stat.PGresult
 
-		if err := res.New2(rows); err != nil {
+		if err := res.New(rows); err != nil {
 			printCmdline(g, err.Error())
 			return nil
 		}

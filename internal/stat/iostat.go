@@ -141,6 +141,8 @@ func (c Diskstats) ReadRemote(db *postgres.DB) {
 
 // Diff method compares stats snapshots and creates delta
 func (c Diskstats) Diff(curr Diskstats, prev Diskstats) {
+	var ticks float64 = 100
+
 	for i := 0; i < len(curr); i++ {
 		// Skip inactive devices
 		if curr[i].Rcompleted+curr[i].Wcompleted == 0 {
@@ -151,7 +153,7 @@ func (c Diskstats) Diff(curr Diskstats, prev Diskstats) {
 		c[i].Device = curr[i].Device
 		c[i].Completed = curr[i].Rcompleted + curr[i].Wcompleted
 
-		c[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, SysTicks) / 10
+		c[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, ticks) / 10
 
 		if ((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted)) > 0 {
 			c[i].Await = ((curr[i].Rspent - prev[i].Rspent) + (curr[i].Wspent - prev[i].Wspent)) /
@@ -179,13 +181,13 @@ func (c Diskstats) Diff(curr Diskstats, prev Diskstats) {
 			c[i].Wawait = 0
 		}
 
-		c[i].Rmerged = sValue(prev[i].Rmerged, curr[i].Rmerged, itv, SysTicks)
-		c[i].Wmerged = sValue(prev[i].Wmerged, curr[i].Wmerged, itv, SysTicks)
-		c[i].Rcompleted = sValue(prev[i].Rcompleted, curr[i].Rcompleted, itv, SysTicks)
-		c[i].Wcompleted = sValue(prev[i].Wcompleted, curr[i].Wcompleted, itv, SysTicks)
-		c[i].Rsectors = sValue(prev[i].Rsectors, curr[i].Rsectors, itv, SysTicks) / 2048
-		c[i].Wsectors = sValue(prev[i].Wsectors, curr[i].Wsectors, itv, SysTicks) / 2048
-		c[i].Tweighted = sValue(prev[i].Tweighted, curr[i].Tweighted, itv, SysTicks) / 1000
+		c[i].Rmerged = sValue(prev[i].Rmerged, curr[i].Rmerged, itv, ticks)
+		c[i].Wmerged = sValue(prev[i].Wmerged, curr[i].Wmerged, itv, ticks)
+		c[i].Rcompleted = sValue(prev[i].Rcompleted, curr[i].Rcompleted, itv, ticks)
+		c[i].Wcompleted = sValue(prev[i].Wcompleted, curr[i].Wcompleted, itv, ticks)
+		c[i].Rsectors = sValue(prev[i].Rsectors, curr[i].Rsectors, itv, ticks) / 2048
+		c[i].Wsectors = sValue(prev[i].Wsectors, curr[i].Wsectors, itv, ticks) / 2048
+		c[i].Tweighted = sValue(prev[i].Tweighted, curr[i].Tweighted, itv, ticks) / 1000
 	}
 }
 

@@ -43,8 +43,8 @@ func orderKeyRight(v *view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.
 func changeWidth(app *app, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		var width int
-		cidx := app.config.view.OrderKey                                   // index of an active column
-		clen := len(app.stats.DiffPGresult.Cols[app.config.view.OrderKey]) // length of the column's name
+		cidx := app.config.view.OrderKey                           // index of an active column
+		clen := len(app.stats.Diff.Cols[app.config.view.OrderKey]) // length of the column's name
 
 		// set new width
 		switch d {
@@ -104,7 +104,7 @@ func setFilter(g *gocui.Gui, v *gocui.View, answer string, view *view.View) {
 func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// in case of switching to pg_stat_statements and it isn't available - keep current stats context
-		if app.stats.PgStatStatementsAvail == false && c == "statements" {
+		if app.stats.Properties.ExtPGSSAvail == false && c == "statements" {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
 		}

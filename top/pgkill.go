@@ -100,7 +100,7 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 	for state, part := range states {
 		if (groupMask & state) != 0 {
 			app.config.sharedOptions.BackendState = part
-			if state == groupWaiting && app.stats.PgVersionNum < 90600 {
+			if state == groupWaiting && app.stats.Properties.VersionNum < 90600 {
 				app.config.sharedOptions.BackendState = "waiting"
 			}
 			query, _ = stat.PrepareQuery(template, app.config.sharedOptions)

@@ -165,6 +165,8 @@ func (c Netdevs) ReadRemote(db *postgres.DB) {
 
 // Diff compares stats between two container and create delta
 func (c Netdevs) Diff(curr Netdevs, prev Netdevs) {
+	var ticks float64 = 100 // local implementation of SysTicks (GET_CLK) variable
+
 	for i := 0; i < len(curr); i++ {
 		// Skip inactive interfaces
 		if curr[i].Rpackets+curr[i].Tpackets == 0 {
@@ -173,14 +175,14 @@ func (c Netdevs) Diff(curr Netdevs, prev Netdevs) {
 
 		itv := curr[i].Uptime - prev[i].Uptime
 		c[i].Ifname = curr[i].Ifname
-		c[i].Rbytes = sValue(prev[i].Rbytes, curr[i].Rbytes, itv, SysTicks)
-		c[i].Tbytes = sValue(prev[i].Tbytes, curr[i].Tbytes, itv, SysTicks)
-		c[i].Rpackets = sValue(prev[i].Rpackets, curr[i].Rpackets, itv, SysTicks)
-		c[i].Tpackets = sValue(prev[i].Tpackets, curr[i].Tpackets, itv, SysTicks)
-		c[i].Rerrs = sValue(prev[i].Rerrs, curr[i].Rerrs, itv, SysTicks)
-		c[i].Terrs = sValue(prev[i].Terrs, curr[i].Terrs, itv, SysTicks)
-		c[i].Tcolls = sValue(prev[i].Tcolls, curr[i].Tcolls, itv, SysTicks)
-		c[i].Saturation = sValue(prev[i].Saturation, curr[i].Saturation, itv, SysTicks)
+		c[i].Rbytes = sValue(prev[i].Rbytes, curr[i].Rbytes, itv, ticks)
+		c[i].Tbytes = sValue(prev[i].Tbytes, curr[i].Tbytes, itv, ticks)
+		c[i].Rpackets = sValue(prev[i].Rpackets, curr[i].Rpackets, itv, ticks)
+		c[i].Tpackets = sValue(prev[i].Tpackets, curr[i].Tpackets, itv, ticks)
+		c[i].Rerrs = sValue(prev[i].Rerrs, curr[i].Rerrs, itv, ticks)
+		c[i].Terrs = sValue(prev[i].Terrs, curr[i].Terrs, itv, ticks)
+		c[i].Tcolls = sValue(prev[i].Tcolls, curr[i].Tcolls, itv, ticks)
+		c[i].Saturation = sValue(prev[i].Saturation, curr[i].Saturation, itv, ticks)
 
 		c[i].Speed = curr[i].Speed
 		c[i].Duplex = curr[i].Duplex

@@ -49,8 +49,8 @@ func (app *app) Setup() {
 	app.config.aux = auxNone
 
 	// Adjust queries depending on Postgres version
-	app.config.views.Configure(app.stats.PgInfo.PgVersionNum, app.stats.PgInfo.PgTrackCommitTs)
-	app.config.sharedOptions.Adjust(app.stats.PgInfo, "top")
+	app.config.views.Configure(app.stats.Properties.VersionNum, app.stats.Properties.GucTrackCommitTimestamp)
+	app.config.sharedOptions.Adjust(app.stats.Properties, "top")
 
 	app.doExit = make(chan int)
 	app.doUpdate = make(chan int)
