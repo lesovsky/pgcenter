@@ -111,7 +111,14 @@ func (c *Collector) Update(db *postgres.DB) (Stat, error) {
 	c.currPgStat = pgstat
 
 	// Copy Postgres properties to stats struct, they will be required later.
-	pgstat.Properties = c.config.PostgresProperties
+	c.currPgStat.Properties = c.config.PostgresProperties
+
+	/* lessqqmorepewpew: адский хардкод тут конечно, подстраиваемся под взятие pg_stat_activity статы */
+	//diff, err := calculateDelta(curr, prev.Curr, 1, [2]int{99, 99}, 0, true, 0)
+	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, [2]int{1, 16}, 0, true, 0)
+	if err != nil {
+		return Stat{}, err
+	}
 
 	return Stat{
 		System: System{
@@ -119,7 +126,11 @@ func (c *Collector) Update(db *postgres.DB) (Stat, error) {
 			Meminfo: meminfo,
 			CpuStat: cpuusage,
 		},
-		Pgstat: pgstat,
+		Pgstat: Pgstat{
+			Properties: c.currPgStat.Properties,
+			Activity:   c.currPgStat.Activity,
+			Result:     diff,
+		},
 	}, nil
 }
 

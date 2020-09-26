@@ -129,15 +129,15 @@ func printPgstat(v *gocui.View, s stat.Stat) {
 
 func printDbstat(v *gocui.View, app *app, s stat.Stat) {
 	// If query fails, show the corresponding error and return.
-	if err, ok := s.Diff.Err.(*pq.Error); ok {
+	if err, ok := s.Result.Err.(*pq.Error); ok {
 		fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
-		s.Diff.Err = nil
+		s.Result.Err = nil
 		return
 	}
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !app.config.view.Aligned {
-		err := s.Diff.SetAlign(app.config.view.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		err := s.Result.SetAlign(app.config.view.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
 			app.config.view.Aligned = true
 		}
@@ -165,8 +165,8 @@ func isFilterRequired(f map[int]*regexp.Regexp) bool {
 
 func printStatHeader(v *gocui.View, s stat.Stat, app *app) {
 	var pname string
-	for i := 0; i < s.Diff.Ncols; i++ {
-		name := s.Diff.Cols[i]
+	for i := 0; i < s.Result.Ncols; i++ {
+		name := s.Result.Cols[i]
 
 		// mark filtered column
 		if app.config.view.Filters[i] != nil && app.config.view.Filters[i].String() != "" {
@@ -187,15 +187,15 @@ func printStatHeader(v *gocui.View, s stat.Stat, app *app) {
 
 func printStatData(v *gocui.View, s stat.Stat, app *app, filter bool) {
 	var doPrint bool
-	for colnum, rownum := 0, 0; rownum < s.Diff.Nrows; rownum, colnum = rownum+1, 0 {
+	for colnum, rownum := 0, 0; rownum < s.Result.Nrows; rownum, colnum = rownum+1, 0 {
 		// be optimistic, we want to print the row.
 		doPrint = true
 
 		// apply filters using regexp
 		if filter {
-			for i := 0; i < s.Diff.Ncols; i++ {
+			for i := 0; i < s.Result.Ncols; i++ {
 				if app.config.view.Filters[i] != nil {
-					if app.config.view.Filters[i].MatchString(s.Diff.Result[rownum][i].String) {
+					if app.config.view.Filters[i].MatchString(s.Result.Values[rownum][i].String) {
 						doPrint = true
 						break
 					} else {
@@ -206,18 +206,18 @@ func printStatData(v *gocui.View, s stat.Stat, app *app, filter bool) {
 		}
 
 		// print values
-		for i := range s.Diff.Cols {
+		for i := range s.Result.Cols {
 			if doPrint {
 				// truncate values that longer than column width
-				valuelen := len(s.Diff.Result[rownum][colnum].String)
+				valuelen := len(s.Result.Values[rownum][colnum].String)
 				if valuelen > app.config.view.ColsWidth[i] {
 					width := app.config.view.ColsWidth[i]
 					// truncate value up to column width and replace last character with '~' symbol
-					s.Diff.Result[rownum][colnum].String = s.Diff.Result[rownum][colnum].String[:width-1] + "~"
+					s.Result.Values[rownum][colnum].String = s.Result.Values[rownum][colnum].String[:width-1] + "~"
 				}
 
 				// print value
-				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, s.Diff.Result[rownum][colnum].String)
+				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, s.Result.Values[rownum][colnum].String)
 				colnum++
 			}
 		}

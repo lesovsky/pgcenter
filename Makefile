@@ -40,6 +40,10 @@ build: dep ## Build pgcenter executable.
 	mkdir -p ./bin
 	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o bin/${PROGRAM_NAME} ${SOURCE}
 
+build-debug: dep ## Build pgcenter executable.
+	mkdir -p ./bin
+	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -gcflags="all=-N -l" -o bin/${PROGRAM_NAME} ${SOURCE}
+
 install: ## Install pgcenter executable into /usr/bin directory.
 	install -pm 755 bin/${PROGRAM_NAME} /usr/bin/${PROGRAM_NAME}
 

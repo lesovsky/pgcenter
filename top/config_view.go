@@ -43,8 +43,8 @@ func orderKeyRight(v *view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.
 func changeWidth(app *app, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		var width int
-		cidx := app.config.view.OrderKey                           // index of an active column
-		clen := len(app.stats.Diff.Cols[app.config.view.OrderKey]) // length of the column's name
+		cidx := app.config.view.OrderKey                             // index of an active column
+		clen := len(app.stats.Result.Cols[app.config.view.OrderKey]) // length of the column's name
 
 		// set new width
 		switch d {

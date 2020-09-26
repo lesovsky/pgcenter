@@ -33,9 +33,7 @@ const (
 type Pgstat struct {
 	Properties PostgresProperties
 	Activity   PostgresActivity
-	Curr       PGresult
-	Prev       PGresult
-	Diff       PGresult
+	Result     PGresult
 }
 
 func collectPostgresStat(db *postgres.DB, prev Pgstat) (Pgstat, error) {
@@ -44,38 +42,27 @@ func collectPostgresStat(db *postgres.DB, prev Pgstat) (Pgstat, error) {
 		return Pgstat{}, err
 	}
 
-	stats := Pgstat{
-		Activity: activity,
-		Prev:     prev.Curr,
-	}
-
 	opts := stat.Options{
 		ShowNoIdle:     true,
 		QueryAgeThresh: "00:00:00.0",
 	}
 
-	query, err := stat.PrepareQuery(stat.PgStatActivityQueryDefault, opts)
+	//query, err := stat.PrepareQuery(stat.PgStatActivityQueryDefault, opts)
+	query, err := stat.PrepareQuery(stat.PgStatDatabaseQueryDefault, opts)
 	if err != nil {
 		return Pgstat{}, err
 	}
 
 	// Read stat
-	curr, err := NewPGresult(db, query)
+	res, err := NewPGresult(db, query)
 	if err != nil {
 		return Pgstat{}, err
 	}
 
-	/* lessqqmorepewpew: адский хардкод тут конечно, подстраиваемся под взятие pg_stat_activity статы */
-	diff, err := calculateDelta(curr, prev.Curr, 1, [2]int{99, 99}, 0, true, 0)
-	if err != nil {
-		return Pgstat{}, err
-	}
-
-	stats.Diff = diff
-	//stats.Curr = curr
-	stats.Prev = curr
-
-	return stats, nil
+	return Pgstat{
+		Activity: activity,
+		Result:   res,
+	}, nil
 }
 
 // Activity describes Postgres' current activity stats
@@ -190,8 +177,8 @@ func readPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 
 // PGresult is the container for basic Postgres stats collected from pg_stat_* views
 type PGresult struct {
-	Result [][]sql.NullString /* values */
-	Cols   []string           /* list of columns' names*/
+	Values [][]sql.NullString /* values */
+	Cols   []string           /* list of columns' names */
 	Ncols  int                /* numbers of columns in Result */
 	Nrows  int                /* number of rows in Result */
 	Valid  bool               /* Used for result invalidations, on context switching for example */
@@ -247,7 +234,8 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 		Nrows:  nrows,
 		Ncols:  ncols,
 		Cols:   colnames,
-		Result: rowsStore,
+		Values: rowsStore,
+		Valid:  true,
 	}, nil
 }
 
@@ -265,7 +253,7 @@ func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, d 
 	if interval != [2]int{99, 99} {
 		delta, err = diff(curr, prev, itv, interval, ukey)
 		if err != nil {
-			return PGresult{}, fmt.Errorf("ERR_DIFF_CHANGED")
+			return PGresult{}, fmt.Errorf("ERR_DIFF_CHANGED: %s", err)
 		}
 	} else {
 		delta = curr
@@ -280,7 +268,7 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 	var diff PGresult
 	var found bool
 
-	diff.Result = make([][]sql.NullString, curr.Nrows)
+	diff.Values = make([][]sql.NullString, curr.Nrows)
 	diff.Cols = curr.Cols
 	diff.Ncols = len(curr.Cols)
 	diff.Nrows = curr.Nrows
@@ -289,12 +277,12 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 	// make diff between them. If target row is not found in 'previous' snapshot, no diff needed, hence append this row
 	// as-is into 'result' snapshot.
 	// Thus in the end, all rows that aren't exist in the 'current' snapshot, but exist in 'previous', will be skipped.
-	for i, cv := range curr.Result {
+	for i, cv := range curr.Values {
 		// Allocate container for target row and reset 'found' flag
-		diff.Result[i] = make([]sql.NullString, curr.Ncols)
+		diff.Values[i] = make([]sql.NullString, curr.Ncols)
 		found = false
 
-		for j, pv := range prev.Result {
+		for j, pv := range prev.Values {
 			if cv[ukey].String == pv[ukey].String {
 				// Row exists in both snapshots
 				found = true
@@ -302,29 +290,29 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 				// Do diff
 				for l := 0; l < curr.Ncols; l++ {
 					if l < interval[0] || l > interval[1] {
-						diff.Result[i][l].String = curr.Result[i][l].String // don't diff, copy value as-is
+						diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
 					} else {
 						// Values with dots or in scientific notation consider as floats and integer otherwise.
-						if strings.Contains(curr.Result[i][l].String, ".") || strings.Contains(curr.Result[i][l].String, "e") {
-							cv, err := strconv.ParseFloat(curr.Result[i][l].String, 64)
+						if strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
+							cv, err := strconv.ParseFloat(curr.Values[i][l].String, 64)
 							if err != nil {
 								return diff, fmt.Errorf("failed to convert to float [%d:%d]: %s", i, l, err)
 							}
-							pv, err := strconv.ParseFloat(prev.Result[j][l].String, 64)
+							pv, err := strconv.ParseFloat(prev.Values[j][l].String, 64)
 							if err != nil {
 								return diff, fmt.Errorf("failed to convert to float [%d:%d]: %s", j, l, err)
 							}
-							diff.Result[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
+							diff.Values[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
 						} else {
-							cv, err := strconv.ParseInt(curr.Result[i][l].String, 10, 64)
+							cv, err := strconv.ParseInt(curr.Values[i][l].String, 10, 64)
 							if err != nil {
 								return diff, fmt.Errorf("failed to convert to integer [%d:%d]: %s", i, l, err)
 							}
-							pv, err := strconv.ParseInt(prev.Result[j][l].String, 10, 64)
+							pv, err := strconv.ParseInt(prev.Values[j][l].String, 10, 64)
 							if err != nil {
 								return diff, fmt.Errorf("failed to convert to integer [%d:%d]: %s", j, l, err)
 							}
-							diff.Result[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
+							diff.Values[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
 						}
 					}
 				}
@@ -335,7 +323,7 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 		// End of the searching in 'previous' snapshot, if we reached here it means row not found and it simply should be added as is.
 		if found == false {
 			for l := 0; l < curr.Ncols; l++ {
-				diff.Result[i][l].String = curr.Result[i][l].String // don't diff, copy value as-is
+				diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
 			}
 		}
 	}
@@ -349,12 +337,12 @@ func (r *PGresult) sort(key int, desc bool) {
 		return /* nothing to sort */
 	}
 
-	_, err := strconv.ParseFloat(r.Result[0][key].String, 64)
+	_, err := strconv.ParseFloat(r.Values[0][key].String, 64)
 	if err == nil {
 		// value is numeric
-		sort.Slice(r.Result, func(i, j int) bool {
-			l, _ := strconv.ParseFloat(r.Result[i][key].String, 64)
-			r, _ := strconv.ParseFloat(r.Result[j][key].String, 64)
+		sort.Slice(r.Values, func(i, j int) bool {
+			l, _ := strconv.ParseFloat(r.Values[i][key].String, 64)
+			r, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
 			if desc {
 				return l > r /* desc order: 10 -> 0 */
 			}
@@ -362,11 +350,11 @@ func (r *PGresult) sort(key int, desc bool) {
 		})
 	} else {
 		// value is string
-		sort.Slice(r.Result, func(i, j int) bool {
+		sort.Slice(r.Values, func(i, j int) bool {
 			if desc {
-				return r.Result[i][key].String > r.Result[j][key].String /* desc order: 'z' -> 'a' */
+				return r.Values[i][key].String > r.Values[j][key].String /* desc order: 'z' -> 'a' */
 			}
-			return r.Result[i][key].String < r.Result[j][key].String /* asc order: 'a' -> 'z' */
+			return r.Values[i][key].String < r.Values[j][key].String /* asc order: 'a' -> 'z' */
 		})
 	}
 }
@@ -381,7 +369,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
 
 	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
-	if len(r.Result) == 0 {
+	if len(r.Values) == 0 {
 		for colidx, colname := range r.Cols { // walk per-column
 			widthes[colidx] = utils.Max(len(colname), colsTruncMinLimit)
 		}
@@ -391,8 +379,8 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 	/* calculate max length of columns based on the longest value of the column */
 	var valuelen, colnamelen int
 	for colidx, colname := range r.Cols { // walk per-column
-		for rownum := 0; rownum < len(r.Result); rownum++ { // walk through rows
-			valuelen = utils.Max(len(r.Result[rownum][colidx].String), colsTruncMinLimit)
+		for rownum := 0; rownum < len(r.Values); rownum++ { // walk through rows
+			valuelen = utils.Max(len(r.Values[rownum][colidx].String), colsTruncMinLimit)
 			colnamelen = utils.Max(len(colname), 8) // eight is a minimal colname length, if column name too short.
 
 			switch {
@@ -431,7 +419,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 
 			// for very long values, truncate value and set length limited by truncLimit value,
 			case valuelen >= truncLimit:
-				r.Result[rownum][colidx].String = r.Result[rownum][colidx].String[:truncLimit-1] + "~"
+				r.Values[rownum][colidx].String = r.Values[rownum][colidx].String[:truncLimit-1] + "~"
 				widthes[colidx] = truncLimit
 				//default:	// default case is used for debug purposes for catching cases that don't meet upper conditions
 				//	fmt.Printf("*** DEBUG %s -- %s, %d:%d:%d ***", colname, r.Result[rownum][colnum].String, widthes[colidx], colnamelen, valuelen)
@@ -467,8 +455,8 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 	widthMap := map[int]int{}
 	var valuelen int
 	for colnum := range r.Cols {
-		for rownum := 0; rownum < len(r.Result); rownum++ {
-			valuelen = len(r.Result[rownum][colnum].String)
+		for rownum := 0; rownum < len(r.Values); rownum++ {
+			valuelen = len(r.Values[rownum][colnum].String)
 			if valuelen > widthMap[colnum] {
 				widthMap[colnum] = valuelen
 			}
@@ -485,7 +473,7 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 	for colnum, rownum := 0, 0; rownum < r.Nrows; rownum, colnum = rownum+1, 0 {
 		for range r.Cols {
 			/* m[row][column] */
-			fmt.Fprintf(buf, "%-*s", widthMap[colnum]+2, r.Result[rownum][colnum].String)
+			fmt.Fprintf(buf, "%-*s", widthMap[colnum]+2, r.Values[rownum][colnum].String)
 			colnum++
 		}
 		fmt.Fprintf(buf, "\n")
