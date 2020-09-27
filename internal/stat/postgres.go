@@ -296,21 +296,21 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 						if strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
 							cv, err := strconv.ParseFloat(curr.Values[i][l].String, 64)
 							if err != nil {
-								return diff, fmt.Errorf("failed to convert to float [%d:%d]: %s", i, l, err)
+								return diff, fmt.Errorf("failed to convert curr to float [%d:%d]: %s", i, l, err)
 							}
 							pv, err := strconv.ParseFloat(prev.Values[j][l].String, 64)
 							if err != nil {
-								return diff, fmt.Errorf("failed to convert to float [%d:%d]: %s", j, l, err)
+								return diff, fmt.Errorf("failed to convert prev to float [%d:%d]: %s", j, l, err)
 							}
 							diff.Values[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
 						} else {
 							cv, err := strconv.ParseInt(curr.Values[i][l].String, 10, 64)
 							if err != nil {
-								return diff, fmt.Errorf("failed to convert to integer [%d:%d]: %s", i, l, err)
+								return diff, fmt.Errorf("failed to convert curr to integer [%d:%d]: %s", i, l, err)
 							}
 							pv, err := strconv.ParseInt(prev.Values[j][l].String, 10, 64)
 							if err != nil {
-								return diff, fmt.Errorf("failed to convert to integer [%d:%d]: %s", j, l, err)
+								return diff, fmt.Errorf("failed to convert prev to integer [%d:%d]: %s", j, l, err)
 							}
 							diff.Values[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
 						}

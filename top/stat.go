@@ -21,11 +21,19 @@ func collectStat(ctx context.Context, ch chan<- stat.Stat, db *postgres.DB) {
 		return
 	}
 
-	var i int
+	// Run first update to prefill "previous" snapshot.
+	_, err = c.Update(db)
+	if err != nil {
+		fmt.Println(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Collect stat in loop and send it to stat channel.
 	for {
 		stats, err := c.Update(db)
 		if err != nil {
 			fmt.Println(err)
+			continue
 		} else {
 			ch <- stats
 		}
@@ -36,7 +44,6 @@ func collectStat(ctx context.Context, ch chan<- stat.Stat, db *postgres.DB) {
 			ticker.Stop()
 			return
 		case <-ticker.C:
-			i++
 			continue
 		}
 	}
