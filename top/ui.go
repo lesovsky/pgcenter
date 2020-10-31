@@ -47,13 +47,14 @@ func mainLoop(ctx context.Context, app *app) error {
 		var wg sync.WaitGroup
 		ctx, cancel := context.WithCancel(ctx)
 
+		// Run backend workers which collect and print stats.
 		wg.Add(1)
 		go func() {
 			doWork(ctx, app)
 			wg.Done()
 		}()
 
-		// Run UI main loop.
+		// Run UI management loop.
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 			// check errors rate and quit if them too much - allow no more than 5 errors within 1 second
 			if err := e.Check(errInterval, errMaxcount); err != nil {

@@ -14,7 +14,7 @@ type app struct {
 	config   *config
 	ui       *gocui.Gui
 	db       *postgres.DB
-	stats    *stat.Stat
+	stats    *stat.Stat // TODO: в конечном счете от этой структуры следует избавиться т.к. стата берется из спец. стат горутины (см. collectStat)
 	doExit   chan int
 	doUpdate chan int
 }
@@ -39,11 +39,12 @@ func RunMain(dbConfig *postgres.Config) error {
 	// Setup context - which kind of stats should be displayed
 	app.Setup()
 
-	// Run application worker and UI.
+	// Run application workers and UI.
 	return mainLoop(context.TODO(), app)
 }
 
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.
+// TODO: чтение из stats это потенциальный data race (т.к. stats заполняется другой горутиной)
 func (app *app) Setup() {
 	// Aux stats is not displayed by default
 	app.config.aux = auxNone
