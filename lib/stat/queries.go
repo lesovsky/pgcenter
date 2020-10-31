@@ -123,7 +123,8 @@ WHERE (query !~* '^autovacuum:' AND query !~* '^vacuum') AND pid <> pg_backend_p
 FROM pg_prepared_xacts)`
 
 	// PgStatementsQuery queries general stats from pg_stat_statements
-	PgStatementsQuery = `SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements`
+	PgStatementsQuery12     = `SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements`
+	PgStatementsQueryLatest = `SELECT (sum(total_exec_time+total_plan_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements`
 
 	// PgStatDatabaseQueryDefault is the default query for getting databases' stats from pg_stat_database view
 	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQueryDefault, DiffIntvl: [2]int{1,16}, Ncols: 18, OrderKey: 0, OrderDesc: true }

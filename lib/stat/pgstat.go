@@ -222,6 +222,7 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 
 	queryActivity := PgActivityQueryDefault
 	queryAutovac := PgAutovacQueryDefault
+	queryStatementsRate := PgStatementsQueryLatest
 	switch {
 	case s.PgVersionNum < 90400:
 		queryActivity = PgActivityQueryBefore94
@@ -230,6 +231,8 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 		queryActivity = PgActivityQueryBefore96
 	case s.PgVersionNum < 100000:
 		queryActivity = PgActivityQueryBefore10
+	case s.PgVersionNum < 130000:
+		queryStatementsRate = PgStatementsQuery12
 	default:
 		// use defaults
 	}
@@ -244,7 +247,7 @@ func (s *Pgstat) GetPgstatActivity(conn *sql.DB, refresh uint, isLocal bool) {
 
 	// read pg_stat_statements only if it's available
 	if s.PgStatStatementsAvail == true {
-		conn.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.CallsCurr)
+		conn.QueryRow(queryStatementsRate).Scan(&s.StmtAvgTime, &s.CallsCurr)
 		s.StmtPerSec = (s.CallsCurr - s.CallsPrev) / refresh
 		s.CallsPrev = s.CallsCurr
 	}

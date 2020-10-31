@@ -1,3 +1,6 @@
+pgcenter (0.6.6) unstable; urgency=low
+  * adjust query for getting statements rate, accordingly to v13.
+
 pgcenter (0.6.5) unstable; urgency=low
   * nothing important, removed old code, small refactoring and bugfixes
   * top: fix 'G' hotkey when building query report
