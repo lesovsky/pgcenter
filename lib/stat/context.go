@@ -264,6 +264,11 @@ func (cl ContextList) AdjustQueries(pi PgInfo) {
 				cl[c].Ncols = 17
 				cl[c].DiffIntvl = [2]int{1, 15}
 			}
+		case StatementsTimingView:
+			switch {
+			case pi.PgVersionNum < 130000:
+				cl[c].Query = PgStatStatementsTimingQuery12
+			}
 		}
 	}
 }

@@ -472,9 +472,9 @@ ORDER BY pid DESC`
 	// Some notes about pg_stat_statements-related queries:
 	// 1. regexp_replace() removes extra spaces, tabs and newlines from queries
 
-	// PgStatStatementsTimingQueryDefault is the default query for getting timings stats from pg_stat_statements view
+	// PgStatStatementsTimingQuery12 is the query for getting timings stats from pg_stat_statements view for PG 12 and older.
 	// { Name: "pg_stat_statements_timing", Query: common.PgStatStatementsTimingQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
-	PgStatStatementsTimingQueryDefault = `SELECT
+	PgStatStatementsTimingQuery12 = `SELECT
 pg_get_userbyid(p.userid) AS user,
 d.datname AS database,
 date_trunc('seconds', round(p.total_time) / 1000 * '1 second'::interval)::text AS t_all_t,
@@ -490,6 +490,25 @@ left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
 regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
 FROM pg_stat_statements p
 JOIN pg_database d ON d.oid=p.dbid`
+
+	// PgStatStatementsTimingQueryDefault is the default query for getting timings stats from pg_stat_statements view
+	// { Name: "pg_stat_statements_timing", Query: common.PgStatStatementsTimingQueryDefault, DiffIntvl: [2]int{6,10}, Ncols: 13, OrderKey: 0, OrderDesc: true }
+	PgStatStatementsTimingQueryDefault = `SELECT
+pg_get_userbyid(p.userid) AS user,
+d.datname AS database,
+date_trunc('seconds', round(p.total_exec_time+p.total_plan_time) / 1000 * '1 second'::interval)::text AS t_all_t,
+date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS t_read_t,
+date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS t_write_t,
+date_trunc('seconds', round((p.total_exec_time + p.total_plan_time) - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS t_cpu_t,
+round(p.total_exec_time + p.total_plan_time) AS all_t,
+round(p.blk_read_time) AS read_t,
+round(p.blk_write_time) AS write_t,
+round((p.total_exec_time + p.total_plan_time) - (p.blk_read_time + p.blk_write_time)) AS cpu_t,
+p.calls AS calls,
+left(md5(p.dbid::text || p.userid || p.queryid), 10) AS queryid,
+regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query
+FROM pg_stat_statements p
+JOIN pg_database d ON d.oid=p.dbid;`
 
 	// PgStatStatementsGeneralQueryDefault is the default query for getting general stats from pg_stat_statements
 	// { Name: "pg_stat_statements_general", Query: common.PgStatStatementsGeneralQueryDefault, DiffIntvl: [2]int{4,5}, Ncols: 8, OrderKey: 0, OrderDesc: true }

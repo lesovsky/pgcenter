@@ -1,5 +1,6 @@
 pgcenter (0.6.6) unstable; urgency=low
   * adjust query for getting statements rate, accordingly to v13.
+  * adjust query for getting statements timings accordingly to v13. Exec and Plan times from pg_stat_statements are accounted together.
 
 pgcenter (0.6.5) unstable; urgency=low
   * nothing important, removed old code, small refactoring and bugfixes
