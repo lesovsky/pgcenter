@@ -87,3 +87,8 @@ func (db *DB) Close() {
 		fmt.Printf("close connection failed: %s; ignore", err)
 	}
 }
+
+func (db *DB) PQstatus() error {
+	var s string
+	return db.QueryRow("SELECT 1").Scan(&s)
+}

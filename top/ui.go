@@ -85,7 +85,7 @@ func doWork(ctx context.Context, app *app) {
 	for {
 		select {
 		case s := <-statCh:
-			printStat(app, s)
+			printStat(app, s, app.postgresProps)
 		case <-ctx.Done():
 			close(statCh)
 			wg.Wait()

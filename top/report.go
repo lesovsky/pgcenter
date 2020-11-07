@@ -7,7 +7,6 @@ import (
 	"database/sql"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"
 	"strings"
@@ -183,7 +182,7 @@ func (r *report) Print(g *gocui.Gui, doExit chan int) error {
 
 	var pager string
 	if pager = os.Getenv("PAGER"); pager == "" {
-		pager = utils.DefaultPager
+		pager = "less"
 	}
 
 	// Exit from UI, will restore it after $PAGER is closed.

@@ -69,7 +69,7 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 	}
 
 	// read Postgres properties
-	props, err := readPostgresProperties(db)
+	props, err := ReadPostgresProperties(db)
 	if err != nil {
 		return nil, fmt.Errorf("read postgres properties failed: %s", err)
 	}
@@ -117,9 +117,6 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	c.prevPgStat = c.currPgStat
 	c.currPgStat = pgstat
 
-	// Copy Postgres properties to stats struct, they will be required later.
-	c.currPgStat.Properties = c.config.PostgresProperties
-
 	//
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
 	if err != nil {
@@ -133,9 +130,8 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 			CpuStat: cpuusage,
 		},
 		Pgstat: Pgstat{
-			Properties: c.currPgStat.Properties,
-			Activity:   c.currPgStat.Activity,
-			Result:     diff,
+			Activity: c.currPgStat.Activity,
+			Result:   diff,
 		},
 	}, nil
 }

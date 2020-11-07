@@ -35,7 +35,7 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountDevices(stat.ProcDiskstats, app.db, app.stats.Properties.SchemaPgcenterAvail)
+			nlines, err := stat.CountDevices(stat.ProcDiskstats, app.db, app.postgresProps.SchemaPgcenterAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil, app.config)
@@ -48,7 +48,7 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 			if err := openAuxView(g, v); err != nil {
 				return err
 			}
-			nlines, err := stat.CountDevices(stat.ProcNetdevFile, app.db, app.stats.Properties.SchemaPgcenterAvail)
+			nlines, err := stat.CountDevices(stat.ProcNetdevFile, app.db, app.postgresProps.SchemaPgcenterAvail)
 			if err != nil {
 				printCmdline(g, err.Error())
 				closeAuxView(g, nil, app.config)
@@ -96,7 +96,7 @@ func showAux(app *app, auxtype auxType) func(g *gocui.Gui, _ *gocui.View) error 
 func getAuxStat(app *app) {
 	switch app.config.aux {
 	case auxDiskstat:
-		ndev, err := stat.CountDevices(stat.ProcDiskstats, app.db, app.stats.Properties.SchemaPgcenterAvail)
+		ndev, err := stat.CountDevices(stat.ProcDiskstats, app.db, app.postgresProps.SchemaPgcenterAvail)
 		if err != nil {
 			printCmdline(app.ui, err.Error())
 			closeAuxView(app.ui, nil, app.config)
@@ -106,7 +106,7 @@ func getAuxStat(app *app) {
 			app.stats.Iostat.New(ndev)
 		}
 		// Read stats
-		if err := app.stats.CurrDiskstats.Read(app.db, app.stats.Properties.SchemaPgcenterAvail); err != nil {
+		if err := app.stats.CurrDiskstats.Read(app.db, app.postgresProps.SchemaPgcenterAvail); err != nil {
 			printCmdline(app.ui, err.Error())
 			closeAuxView(app.ui, nil, app.config)
 		} else {
@@ -114,7 +114,7 @@ func getAuxStat(app *app) {
 			copy(app.stats.PrevDiskstats, app.stats.CurrDiskstats)
 		}
 	case auxNicstat:
-		ndev, err := stat.CountDevices(stat.ProcNetdevFile, app.db, app.stats.Properties.SchemaPgcenterAvail)
+		ndev, err := stat.CountDevices(stat.ProcNetdevFile, app.db, app.postgresProps.SchemaPgcenterAvail)
 		if err != nil {
 			printCmdline(app.ui, err.Error())
 			closeAuxView(app.ui, nil, app.config)
@@ -124,7 +124,7 @@ func getAuxStat(app *app) {
 			app.stats.Nicstat.New(ndev)
 		}
 		// Read stats
-		if err := app.stats.CurrNetdevs.Read(app.db, app.stats.Properties.SchemaPgcenterAvail); err != nil {
+		if err := app.stats.CurrNetdevs.Read(app.db, app.postgresProps.SchemaPgcenterAvail); err != nil {
 			printCmdline(app.ui, err.Error())
 			closeAuxView(app.ui, nil, app.config)
 		} else {

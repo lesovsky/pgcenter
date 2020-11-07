@@ -42,7 +42,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'x', switchContextTo(app, "statements")},
 		{"sysstat", 'Q', resetStat(app.db)},
 		{"sysstat", 'E', menuOpen(menuConfStyle, false)},
-		{"sysstat", 'X', menuOpen(menuPgssStyle, app.stats.Properties.ExtPGSSAvail)},
+		{"sysstat", 'X', menuOpen(menuPgssStyle, app.postgresProps.ExtPGSSAvail)},
 		{"sysstat", 'P', menuOpen(menuProgressStyle, false)},
 		{"sysstat", 'l', showPgLog(app.db, app.doExit)},
 		{"sysstat", 'C', showPgConfig(app.db, app.doExit)},

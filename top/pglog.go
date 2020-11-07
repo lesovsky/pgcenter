@@ -8,7 +8,6 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
-	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"
 	"strings"
@@ -31,7 +30,7 @@ func showPgLog(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.Vie
 
 		var pager string
 		if pager = os.Getenv("PAGER"); pager == "" {
-			pager = utils.DefaultPager
+			pager = "less"
 		}
 
 		// exit from UI and stats loop... will restore it after $PAGER is closed.

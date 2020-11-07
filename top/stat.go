@@ -59,7 +59,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	}
 }
 
-func printStat(app *app, s stat.Stat) {
+func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {
@@ -73,7 +73,7 @@ func printStat(app *app, s stat.Stat) {
 			return fmt.Errorf("Set focus on pgstat view failed: %s", err)
 		}
 		v.Clear()
-		printPgstat(v, s)
+		printPgstat(v, s, props)
 
 		v, err = g.View("dbstat")
 		if err != nil {
@@ -123,21 +123,21 @@ func printSysstat(v *gocui.View, s stat.Stat) {
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
 }
 
-func printPgstat(v *gocui.View, s stat.Stat) {
+func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties) {
 	/* line1: details of used connection, version, uptime and recovery status */
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
-		s.Properties.State,
+		props.State,
 		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
 		"dummy", 0, "dummy", "dummy",
-		s.Properties.Version, s.Activity.Uptime, s.Properties.Recovery)
+		props.Version, s.Activity.Uptime, props.Recovery)
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
 	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
-		s.Activity.ConnTotal, s.Properties.GucMaxConnections, s.Activity.ConnPrepared, s.Properties.GucMaxPrepXacts,
+		s.Activity.ConnTotal, props.GucMaxConnections, s.Activity.ConnPrepared, props.GucMaxPrepXacts,
 		s.Activity.ConnIdle, s.Activity.ConnIdleXact, s.Activity.ConnActive,
 		s.Activity.ConnWaiting, s.Activity.ConnOthers)
 	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
 	fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
-		s.Activity.AVWorkers, s.Properties.GucAVMaxWorkers,
+		s.Activity.AVWorkers, props.GucAVMaxWorkers,
 		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
 	/* line4: current workload*/
 	fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",

@@ -104,7 +104,7 @@ func setFilter(g *gocui.Gui, v *gocui.View, answer string, view *view.View) {
 func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// in case of switching to pg_stat_statements and it isn't available - keep current stats context
-		if app.stats.Properties.ExtPGSSAvail == false && c == "statements" {
+		if app.postgresProps.ExtPGSSAvail == false && c == "statements" {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
 		}

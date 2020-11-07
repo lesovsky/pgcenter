@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
+	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/utils"
-	"log"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"text/template"
-	"time"
 )
 
 const (
@@ -34,8 +31,6 @@ const (
 
 // Pgstat is the container for all collected Postgres stats
 type Pgstat struct {
-	Properties PostgresProperties // TODO: эта структура должны быть вынесена из Pgstat, т.к. Pgstat это переменчивая
-	//   структура и постоянно меняется, Properties в свою очередь более-менее постоянная.
 	Activity PostgresActivity
 	Result   PGresult
 }
@@ -49,15 +44,6 @@ func collectPostgresStat(db *postgres.DB, queryTmpl string, prev Pgstat) (Pgstat
 	opts := Options{
 		ShowNoIdle:     true,
 		QueryAgeThresh: "00:00:00.0",
-	}
-
-	f, err := os.OpenFile("/tmp/pgcenter.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Println(err)
-	}
-	defer f.Close()
-	if _, err := f.WriteString(fmt.Sprintf("%s: %v\n\n", time.Now(), queryTmpl)); err != nil {
-		log.Println(err)
 	}
 
 	query, err := prepareQuery(queryTmpl, opts)
@@ -163,7 +149,7 @@ type PostgresProperties struct {
 	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
 }
 
-func readPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
+func ReadPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	// TODO: add errors handling
 	props := PostgresProperties{}
 	db.QueryRow(PgGetVersionQuery).Scan(&props.Version, &props.VersionNum)
@@ -377,13 +363,13 @@ func (r *PGresult) sort(key int, desc bool) {
 //   частью какой-то отдельной подкоманды. В общем есть над чем подумать.
 func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (err error) {
 	var lastColTruncLimit, lastColMaxWidth int
-	lastColTruncLimit = utils.Max(truncLimit, colsTruncMinLimit)
-	truncLimit = utils.Max(truncLimit, colsTruncMinLimit)
+	lastColTruncLimit = math.Max(truncLimit, colsTruncMinLimit)
+	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
 
 	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
 	if len(r.Values) == 0 {
 		for colidx, colname := range r.Cols { // walk per-column
-			widthes[colidx] = utils.Max(len(colname), colsTruncMinLimit)
+			widthes[colidx] = math.Max(len(colname), colsTruncMinLimit)
 		}
 		return fmt.Errorf("RESULT_NO_ROWS")
 	}
@@ -392,8 +378,8 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 	var valuelen, colnamelen int
 	for colidx, colname := range r.Cols { // walk per-column
 		for rownum := 0; rownum < len(r.Values); rownum++ { // walk through rows
-			valuelen = utils.Max(len(r.Values[rownum][colidx].String), colsTruncMinLimit)
-			colnamelen = utils.Max(len(colname), 8) // eight is a minimal colname length, if column name too short.
+			valuelen = math.Max(len(r.Values[rownum][colidx].String), colsTruncMinLimit)
+			colnamelen = math.Max(len(colname), 8) // eight is a minimal colname length, if column name too short.
 
 			switch {
 			// if value is empty, e.g. NULL - set width based on colname length
@@ -410,7 +396,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 					widthes[colidx] = valuelen
 				} else {
 					if valuelen > colnamelen*2 {
-						widthes[colidx] = utils.Min(valuelen, 32)
+						widthes[colidx] = math.Min(valuelen, 32)
 					} else {
 						widthes[colidx] = colnamelen
 					}
@@ -496,7 +482,7 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 
 // getPgState gets Postgres connection status - is it alive or not?
 func getPgState(db *postgres.DB) string {
-	err := utils.PQstatusNew(db)
+	err := db.PQstatus()
 	if err != nil {
 		return "failed"
 	}

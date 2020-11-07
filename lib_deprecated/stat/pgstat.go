@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v4"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/utils"
+	"github.com/lesovsky/pgcenter/lib_deprecated/utils"
 	"github.com/pkg/errors"
 	"sort"
 	"strconv"

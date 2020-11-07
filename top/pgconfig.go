@@ -8,7 +8,6 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
-	"github.com/lesovsky/pgcenter/lib/utils"
 	"os"
 	"os/exec"
 	"strings"
@@ -29,7 +28,7 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 
 		var pager string
 		if pager = os.Getenv("PAGER"); pager == "" {
-			pager = utils.DefaultPager
+			pager = "less"
 		}
 
 		// Exit from UI and stats loop... will restore it after $PAGER is closed.
@@ -68,7 +67,7 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, n string, doExit chan int) erro
 
 	var editor string
 	if editor = os.Getenv("EDITOR"); editor == "" {
-		editor = utils.DefaultEditor
+		editor = "vi"
 	}
 
 	// Exit from UI and stats loop... will restore it after $EDITOR is closed.
