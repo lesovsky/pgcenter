@@ -8,21 +8,25 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/lib/pq"
 	"os"
 	"regexp"
 	"time"
 )
 
-func collectStat(ctx context.Context, ch chan<- stat.Stat, db *postgres.DB) {
+func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, viewCh <-chan view.View) {
 	c, err := stat.NewCollector(db)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
+	// Get current view.
+	v := <-viewCh
+
 	// Run first update to prefill "previous" snapshot.
-	_, err = c.Update(db)
+	_, err = c.Update(db, v)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -30,16 +34,22 @@ func collectStat(ctx context.Context, ch chan<- stat.Stat, db *postgres.DB) {
 
 	// Collect stat in loop and send it to stat channel.
 	for {
-		stats, err := c.Update(db)
+		stats, err := c.Update(db, v)
 		if err != nil {
 			fmt.Println(err)
 			continue
 		} else {
-			ch <- stats
+			statCh <- stats
 		}
 
 		ticker := time.NewTicker(1 * time.Second)
 		select {
+		case nv := <-viewCh:
+			// If view has been updated, stop ticker and refresh UI.
+			v = nv
+			ticker.Stop()
+			c.Reset()
+			continue
 		case <-ctx.Done():
 			ticker.Stop()
 			return

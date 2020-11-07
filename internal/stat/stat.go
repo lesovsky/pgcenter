@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/view"
 	"io"
 	"io/ioutil"
 	"os/exec"
@@ -81,7 +82,13 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 	}, nil
 }
 
-func (c *Collector) Update(db *postgres.DB) (Stat, error) {
+// Reset ...
+func (c *Collector) Reset() {
+	c.prevPgStat = Pgstat{}
+}
+
+// Update ...
+func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	loadavg, err := readLoadAverage(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
 		return Stat{}, err
@@ -102,7 +109,7 @@ func (c *Collector) Update(db *postgres.DB) (Stat, error) {
 
 	cpuusage := countCpuUsage(c.prevCpuStat, c.currCpuStat, c.config.ticks)
 
-	pgstat, err := collectPostgresStat(db, c.prevPgStat)
+	pgstat, err := collectPostgresStat(db, view.Query, c.prevPgStat)
 	if err != nil {
 		return Stat{}, err
 	}
@@ -113,9 +120,8 @@ func (c *Collector) Update(db *postgres.DB) (Stat, error) {
 	// Copy Postgres properties to stats struct, they will be required later.
 	c.currPgStat.Properties = c.config.PostgresProperties
 
-	/* lessqqmorepewpew: адский хардкод тут конечно, подстраиваемся под взятие pg_stat_activity статы */
-	//diff, err := calculateDelta(curr, prev.Curr, 1, [2]int{99, 99}, 0, true, 0)
-	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, [2]int{1, 16}, 0, true, 0)
+	//
+	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
 	if err != nil {
 		return Stat{}, err
 	}

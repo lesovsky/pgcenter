@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/lib/stat"
 	"github.com/lesovsky/pgcenter/lib/utils"
+	"log"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"text/template"
+	"time"
 )
 
 const (
@@ -31,24 +34,33 @@ const (
 
 // Pgstat is the container for all collected Postgres stats
 type Pgstat struct {
-	Properties PostgresProperties
-	Activity   PostgresActivity
-	Result     PGresult
+	Properties PostgresProperties // TODO: эта структура должны быть вынесена из Pgstat, т.к. Pgstat это переменчивая
+	//   структура и постоянно меняется, Properties в свою очередь более-менее постоянная.
+	Activity PostgresActivity
+	Result   PGresult
 }
 
-func collectPostgresStat(db *postgres.DB, prev Pgstat) (Pgstat, error) {
+func collectPostgresStat(db *postgres.DB, queryTmpl string, prev Pgstat) (Pgstat, error) {
 	activity, err := collectActivityStat(db, prev)
 	if err != nil {
 		return Pgstat{}, err
 	}
 
-	opts := stat.Options{
+	opts := Options{
 		ShowNoIdle:     true,
 		QueryAgeThresh: "00:00:00.0",
 	}
 
-	//query, err := stat.PrepareQuery(stat.PgStatActivityQueryDefault, opts)
-	query, err := stat.PrepareQuery(stat.PgStatDatabaseQueryDefault, opts)
+	f, err := os.OpenFile("/tmp/pgcenter.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(fmt.Sprintf("%s: %v\n\n", time.Now(), queryTmpl)); err != nil {
+		log.Println(err)
+	}
+
+	query, err := prepareQuery(queryTmpl, opts)
 	if err != nil {
 		return Pgstat{}, err
 	}
@@ -514,4 +526,14 @@ func isSchemaAvailable(db *postgres.DB, name string) bool {
 
 	// Return true if installed, and false if not.
 	return exists
+}
+
+func prepareQuery(s string, o Options) (string, error) {
+	t := template.Must(template.New("query").Parse(s))
+	buf := &bytes.Buffer{}
+	if err := t.Execute(buf, o); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }

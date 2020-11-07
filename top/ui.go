@@ -70,21 +70,24 @@ func mainLoop(ctx context.Context, app *app) error {
 
 func doWork(ctx context.Context, app *app) {
 	var wg sync.WaitGroup
-	ch := make(chan stat.Stat)
+	statCh := make(chan stat.Stat)
 
 	wg.Add(1)
 	go func() {
-		collectStat(ctx, ch, app.db)
-		close(ch)
+		collectStat(ctx, app.db, statCh, app.config.viewCh)
+		close(statCh)
 		wg.Done()
 	}()
 
+	// default is databases view
+	app.config.viewCh <- *app.config.views["databases"]
+
 	for {
 		select {
-		case s := <-ch:
+		case s := <-statCh:
 			printStat(app, s)
 		case <-ctx.Done():
-			close(ch)
+			close(statCh)
 			wg.Wait()
 			return
 		}

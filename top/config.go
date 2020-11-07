@@ -21,6 +21,8 @@ type config struct {
 	//
 	sharedOptions stat.Options // Queries' settings that depends on Postgres version
 	aux           auxType      // Type of current auxiliary stats
+	//
+	viewCh chan view.View
 }
 
 func newConfig() *config {
@@ -31,5 +33,6 @@ func newConfig() *config {
 		refreshInterval: 1 * time.Second,
 		views:           views,
 		view:            views["activity"],
+		viewCh:          make(chan view.View),
 	}
 }

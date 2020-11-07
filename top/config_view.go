@@ -146,6 +146,8 @@ func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error
 			app.config.view = app.config.views[c]
 		}
 
+		app.config.viewCh <- *app.config.view
+
 		printCmdline(g, app.config.view.Msg)
 
 		app.doUpdate <- 1
