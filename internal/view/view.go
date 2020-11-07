@@ -97,9 +97,8 @@ func New() Views {
 		},
 		// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
 		"progress_vacuum": {
-			Name:  "progress_vacuum",
-			Query: query.PgStatProgressVacuumQueryDefault,
-			//DiffIntvl: NoDiff,
+			Name:      "progress_vacuum",
+			Query:     query.PgStatProgressVacuumQueryDefault,
 			DiffIntvl: [2]int{10, 11},
 			Ncols:     13,
 			OrderKey:  0,
@@ -110,9 +109,8 @@ func New() Views {
 		},
 		// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
 		"progress_cluster": {
-			Name:  "progress_cluster",
-			Query: query.PgStatProgressClusterQueryDefault,
-			//DiffIntvl: NoDiff,
+			Name:      "progress_cluster",
+			Query:     query.PgStatProgressClusterQueryDefault,
 			DiffIntvl: [2]int{10, 11},
 			Ncols:     13,
 			OrderKey:  0,
@@ -124,7 +122,7 @@ func New() Views {
 		"progress_index": {
 			Name:      "progress_index",
 			Query:     query.PgStatProgressCreateIndexQueryDefault,
-			DiffIntvl: [2]int{},
+			DiffIntvl: [2]int{0, 0},
 			Ncols:     14,
 			OrderKey:  0,
 			OrderDesc: true,
@@ -136,7 +134,7 @@ func New() Views {
 		"activity": {
 			Name:      "activity",
 			Query:     query.PgStatActivityQueryDefault,
-			DiffIntvl: [2]int{},
+			DiffIntvl: [2]int{0, 0},
 			Ncols:     14,
 			OrderKey:  0,
 			OrderDesc: true,

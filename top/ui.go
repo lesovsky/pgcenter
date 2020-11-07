@@ -84,6 +84,8 @@ func doWork(ctx context.Context, app *app) {
 
 	for {
 		select {
+		case <-app.doUpdate:
+			continue
 		case s := <-statCh:
 			printStat(app, s, app.postgresProps)
 		case <-ctx.Done():

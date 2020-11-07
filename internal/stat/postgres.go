@@ -248,7 +248,7 @@ func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, d 
 	var err error
 
 	// Diff previous and current stats snapshot
-	if interval != [2]int{99, 99} {
+	if interval != [2]int{0, 0} {
 		delta, err = diff(curr, prev, itv, interval, ukey)
 		if err != nil {
 			return PGresult{}, fmt.Errorf("ERR_DIFF_CHANGED: %s", err)

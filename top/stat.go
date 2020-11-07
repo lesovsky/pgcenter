@@ -10,6 +10,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/lib/pq"
+	"log"
 	"os"
 	"regexp"
 	"time"
@@ -42,13 +43,19 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			statCh <- stats
 		}
 
+		// Waiting for events until refresh interval expired.
 		ticker := time.NewTicker(1 * time.Second)
 		select {
-		case nv := <-viewCh:
-			// If view has been updated, stop ticker and refresh UI.
-			v = nv
+		case v = <-viewCh:
+			// If view has been updated, stop ticker and re-initialize stats.
 			ticker.Stop()
+
 			c.Reset()
+			_, err = c.Update(db, v)
+			if err != nil {
+				fmt.Println(err)
+			}
+
 			continue
 		case <-ctx.Done():
 			ticker.Stop()
@@ -61,6 +68,16 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 
 func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	app.ui.Update(func(g *gocui.Gui) error {
+		f, err := os.OpenFile("/tmp/pgcenter.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Println(err)
+		}
+		defer f.Close()
+
+		if _, err := f.WriteString(fmt.Sprintln(time.Now())); err != nil {
+			log.Println(err)
+		}
+
 		v, err := g.View("sysstat")
 		if err != nil {
 			return fmt.Errorf("Set focus on sysstat view failed: %s", err)

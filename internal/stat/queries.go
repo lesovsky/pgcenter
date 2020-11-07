@@ -558,8 +558,6 @@ FROM pg_stat_statements p
 JOIN pg_database d ON d.oid=p.dbid`
 )
 
-var NoDiff = [2]int{99, 99}
-
 // Options contains queries' settings that used depending on user preferences.
 type Options struct {
 	ViewType       string // Show stats including system tables/indexes
