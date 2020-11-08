@@ -265,6 +265,12 @@ func (v Views) Configure(version int, trackCommit string) {
 				view.DiffIntvl = [2]int{1, 15}
 				v[k] = view
 			}
+		case "statements_timings":
+			switch {
+			case version < 130000:
+				view.Query = query.PgStatStatementsTimingQuery12
+				v[k] = view
+			}
 		}
 	}
 }

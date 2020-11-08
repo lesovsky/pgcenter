@@ -87,6 +87,7 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 // Reset ...
 func (c *Collector) Reset() {
 	c.prevPgStat = Pgstat{}
+	c.currPgStat = Pgstat{}
 }
 
 // Update ...
