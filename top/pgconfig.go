@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"os"
 	"os/exec"
@@ -16,7 +17,7 @@ import (
 // Show Postgres config in $PAGER program
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		res, err := stat.NewPGresult(db, stat.PgGetConfigAllQuery)
+		res, err := stat.NewPGresult(db, query.PgGetConfigAllQuery)
 		if err != nil {
 			printCmdline(g, err.Error())
 			return nil
@@ -58,10 +59,10 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, n string, doExit chan int) erro
 	var configFile string
 
 	if n != stat.GucRecoveryFile {
-		db.QueryRow(stat.PgGetSingleSettingQuery, n).Scan(&configFile)
+		db.QueryRow(query.PgGetSingleSettingQuery, n).Scan(&configFile)
 	} else {
 		var dataDirectory string
-		db.QueryRow(stat.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&dataDirectory)
+		db.QueryRow(query.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&dataDirectory)
 		configFile = dataDirectory + "/" + n
 	}
 

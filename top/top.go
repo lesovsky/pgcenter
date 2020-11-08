@@ -6,6 +6,7 @@ import (
 	"context"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 )
 
@@ -58,12 +59,21 @@ func (app *app) Setup() error {
 		return err
 	}
 
-	app.postgresProps = props
-
 	// Adjust queries depending on Postgres version
-	app.config.views.Configure(app.postgresProps.VersionNum, app.postgresProps.GucTrackCommitTimestamp)
-	app.config.sharedOptions.Adjust(app.postgresProps, "top")
+	app.config.views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
+	app.config.queryOptions.Adjust(props.VersionNum, props.Recovery, "top")
 
+	// Compile query text from templates using previously adjusted query options.
+	for k, v := range app.config.views {
+		q, err := query.PrepareQuery(v.Query, app.config.queryOptions)
+		if err != nil {
+			return err
+		}
+		v.Query = q
+		app.config.views[k] = v
+	}
+
+	app.postgresProps = props
 	app.doExit = make(chan int)
 	app.doUpdate = make(chan int)
 

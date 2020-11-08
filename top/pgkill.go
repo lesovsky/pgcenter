@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"strconv"
 	"strings"
 )
@@ -30,14 +30,14 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mod
 		return
 	}
 
-	var query string
+	var q string
 
 	switch mode {
 	case "cancel":
-		query = stat.PgCancelSingleQuery
+		q = query.PgCancelSingleQuery
 		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogCancelQuery])
 	case "terminate":
-		query = stat.PgTerminateSingleQuery
+		q = query.PgTerminateSingleQuery
 		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogTerminateBackend])
 	}
 	answer = strings.TrimSuffix(answer, "\n")
@@ -50,7 +50,7 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mod
 
 	var killed sql.NullBool
 
-	db.QueryRow(query, pid).Scan(&killed)
+	db.QueryRow(q, pid).Scan(&killed)
 
 	if killed.Bool == true {
 		printCmdline(g, "Successful.")
@@ -76,16 +76,16 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 		return
 	}
 
-	var template, query string
+	var template, q string
 	var killed sql.NullInt64
 	var killedTotal int64
 
 	// Select kill function: pg_cancel_backend or pg_terminate_backend
 	switch mode {
 	case "cancel":
-		template = stat.PgCancelGroupQuery
+		template = query.PgCancelGroupQuery
 	case "terminate":
-		template = stat.PgTerminateGroupQuery
+		template = query.PgTerminateGroupQuery
 	}
 
 	/* advanced mode */
@@ -99,12 +99,12 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 
 	for state, part := range states {
 		if (groupMask & state) != 0 {
-			app.config.sharedOptions.BackendState = part
+			app.config.queryOptions.BackendState = part
 			if state == groupWaiting && app.postgresProps.VersionNum < 90600 {
-				app.config.sharedOptions.BackendState = "waiting"
+				app.config.queryOptions.BackendState = "waiting"
 			}
-			query, _ = stat.PrepareQuery(template, app.config.sharedOptions)
-			err := app.db.QueryRow(query).Scan(&killed)
+			q, _ = query.PrepareQuery(template, app.config.queryOptions)
+			err := app.db.QueryRow(q).Scan(&killed)
 			if err != nil {
 				printCmdline(g, "failed to send signal to backends: %s", err)
 			}

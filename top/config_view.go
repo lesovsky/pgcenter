@@ -16,7 +16,7 @@ const (
 	colsWidthStep = 4   // minimal step of changing column's width, 1 is too boring and 4 looks good
 )
 
-func orderKeyLeft(v *view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
+func orderKeyLeft(v view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		v.OrderKey--
 		if v.OrderKey < 0 {
@@ -28,7 +28,7 @@ func orderKeyLeft(v *view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.V
 }
 
 // Switch sort order to right column
-func orderKeyRight(v *view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
+func orderKeyRight(v view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		v.OrderKey++
 		if v.OrderKey >= v.Ncols {
@@ -72,7 +72,7 @@ func changeWidth(app *app, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 }
 
 // Switch sort order direction between descend and ascend
-func switchSortOrder(v *view.View, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func switchSortOrder(v view.View, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		v.OrderDesc = !v.OrderDesc
 		printCmdline(g, "Switch sort order")
@@ -82,7 +82,7 @@ func switchSortOrder(v *view.View, doUpdate chan int) func(g *gocui.Gui, _ *gocu
 }
 
 // Set filter pattern for current column
-func setFilter(g *gocui.Gui, v *gocui.View, answer string, view *view.View) {
+func setFilter(g *gocui.Gui, v *gocui.View, answer string, view view.View) {
 	var err error
 
 	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogFilter])
@@ -146,7 +146,7 @@ func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error
 			app.config.view = app.config.views[c]
 		}
 
-		app.config.viewCh <- *app.config.view
+		app.config.viewCh <- app.config.view
 
 		printCmdline(g, app.config.view.Msg)
 
@@ -184,15 +184,15 @@ func switchContextToProgress(app *app, c string) {
 // A toggle to show system tables stats
 func toggleSysTables(c *config, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		switch c.sharedOptions.ViewType {
+		switch c.queryOptions.ViewType {
 		case "user":
-			c.sharedOptions.ViewType = "all"
+			c.queryOptions.ViewType = "all"
 			printCmdline(g, "Show system tables: on")
 		case "all":
-			c.sharedOptions.ViewType = "user"
+			c.queryOptions.ViewType = "user"
 			printCmdline(g, "Show system tables: off")
 		default: // never should be here, but paranoia check
-			c.sharedOptions.ViewType = "user"
+			c.queryOptions.ViewType = "user"
 			printCmdline(g, "Show system tables: on")
 		}
 
@@ -208,7 +208,7 @@ func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, c *config) {
 
 	if answer == "" {
 		printCmdline(g, "Reset to default - 00:00:00.")
-		c.sharedOptions.QueryAgeThresh = "00:00:00"
+		c.queryOptions.QueryAgeThresh = "00:00:00"
 		return
 	}
 
@@ -221,15 +221,15 @@ func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, c *config) {
 		return
 	}
 
-	c.sharedOptions.QueryAgeThresh = answer
+	c.queryOptions.QueryAgeThresh = answer
 }
 
 // A toggle to show 'idle' connections (pg_stat_activity only)
 func toggleIdleConns(c *config, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		c.sharedOptions.ShowNoIdle = !c.sharedOptions.ShowNoIdle
+		c.queryOptions.ShowNoIdle = !c.queryOptions.ShowNoIdle
 
-		if c.sharedOptions.ShowNoIdle {
+		if c.queryOptions.ShowNoIdle {
 			printCmdline(g, "Show idle connections: off.")
 		} else {
 			printCmdline(g, "Show idle connections: on.")

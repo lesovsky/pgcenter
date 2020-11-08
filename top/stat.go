@@ -10,7 +10,6 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/lib/pq"
-	"log"
 	"os"
 	"regexp"
 	"time"
@@ -68,16 +67,6 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 
 func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	app.ui.Update(func(g *gocui.Gui) error {
-		f, err := os.OpenFile("/tmp/pgcenter.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		if err != nil {
-			log.Println(err)
-		}
-		defer f.Close()
-
-		if _, err := f.WriteString(fmt.Sprintln(time.Now())); err != nil {
-			log.Println(err)
-		}
-
 		v, err := g.View("sysstat")
 		if err != nil {
 			return fmt.Errorf("Set focus on sysstat view failed: %s", err)
@@ -171,8 +160,9 @@ func printDbstat(v *gocui.View, app *app, s stat.Stat) {
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !app.config.view.Aligned {
-		err := s.Result.SetAlign(app.config.view.ColsWidth, 1000, false) // we don't want truncate lines here, so just use high limit
+		widthes, err := s.Result.SetAlign(1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
+			app.config.view.ColsWidth = widthes
 			app.config.view.Aligned = true
 		}
 	}

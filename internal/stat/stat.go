@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"io"
 	"io/ioutil"
@@ -61,9 +62,10 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 	}
 
 	// In case of remote DB, check pgcenter schema exists. In case of error, just consider the schema is not exist.
+	// TODO: we have a function for checking schema existence see isSchemaAvailable
 	var exists bool
 	if !db.Local {
-		if err := db.QueryRow(PgCheckPgcenterSchemaQuery).Scan(&exists); err != nil {
+		if err := db.QueryRow(query.PgCheckPgcenterSchemaQuery).Scan(&exists); err != nil {
 			exists = false
 		}
 	}

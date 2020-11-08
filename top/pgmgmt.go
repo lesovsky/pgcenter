@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -17,14 +17,14 @@ import (
 
 // Performs reload of Postgres config files.
 func doReload(g *gocui.Gui, v *gocui.View, db *postgres.DB, answer string) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogPgReload])
+	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogPgReload])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	switch answer {
 	case "y":
 		var status sql.NullBool
 
-		db.QueryRow(stat.PgReloadConfQuery).Scan(&status)
+		db.QueryRow(query.PgReloadConfQuery).Scan(&status)
 		if status.Bool {
 			printCmdline(g, "Reload issued.")
 		} else {
@@ -43,11 +43,11 @@ func resetStat(db *postgres.DB) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		var msg string = "Reset statistics."
 
-		_, err := db.Exec(stat.PgResetStats)
+		_, err := db.Exec(query.PgResetStats)
 		if err != nil {
 			msg = fmt.Sprintf("Reset statistics failed: %s", err)
 		}
-		_, err = db.Exec(stat.PgResetPgss)
+		_, err = db.Exec(query.PgResetPgss)
 		if err != nil {
 			msg = fmt.Sprintf("Reset pg_stat_statements statistics failed: %s", err)
 		}

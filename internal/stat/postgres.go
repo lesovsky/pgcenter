@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"sort"
 	"strconv"
 	"strings"
-	"text/template"
 )
 
 const (
@@ -35,18 +35,8 @@ type Pgstat struct {
 	Result   PGresult
 }
 
-func collectPostgresStat(db *postgres.DB, queryTmpl string, prev Pgstat) (Pgstat, error) {
+func collectPostgresStat(db *postgres.DB, query string, prev Pgstat) (Pgstat, error) {
 	activity, err := collectActivityStat(db, prev)
-	if err != nil {
-		return Pgstat{}, err
-	}
-
-	opts := Options{
-		ShowNoIdle:     true,
-		QueryAgeThresh: "00:00:00.0",
-	}
-
-	query, err := prepareQuery(queryTmpl, opts)
 	if err != nil {
 		return Pgstat{}, err
 	}
@@ -91,14 +81,14 @@ func collectActivityStat(db *postgres.DB, prev Pgstat) (PostgresActivity, error)
 		return s, fmt.Errorf("postgres state is not ok")
 	}
 
-	if err := db.QueryRow(PgGetUptimeQuery).Scan(&s.Uptime); err != nil {
+	if err := db.QueryRow(query.PgGetUptimeQuery).Scan(&s.Uptime); err != nil {
 		s.Uptime = "--:--:--"
 	}
 
-	db.QueryRow(PgGetRecoveryStatusQuery).Scan(&s.Recovery)
+	db.QueryRow(query.PgGetRecoveryStatusQuery).Scan(&s.Recovery)
 
-	queryActivity := PgActivityQueryDefault
-	queryAutovac := PgAutovacQueryDefault
+	queryActivity := query.PgActivityQueryDefault
+	queryAutovac := query.PgAutovacQueryDefault
 
 	/* lessqqmorepewpew: доделать выбор запроса в зависимости от версии */
 	//switch {
@@ -124,11 +114,11 @@ func collectActivityStat(db *postgres.DB, prev Pgstat) (PostgresActivity, error)
 	//if s.PgStatStatementsAvail == true {
 	/* lessqqmorepewpew: пока временно предполагаем что pg_stat_statements установлена в базе и наш интервал всегда 1 секунда */
 	if true {
-		db.QueryRow(PgStatementsQuery).Scan(&s.StmtAvgTime, &s.Calls)
+		db.QueryRow(query.PgStatementsQuery).Scan(&s.StmtAvgTime, &s.Calls)
 		s.CallsRate = (s.Calls - prev.Activity.Calls) / 1
 	}
 
-	db.QueryRow(PgActivityTimeQuery).Scan(&s.XactMaxTime, &s.PrepMaxTime)
+	db.QueryRow(query.PgActivityTimeQuery).Scan(&s.XactMaxTime, &s.PrepMaxTime)
 
 	return s, nil
 }
@@ -152,11 +142,11 @@ type PostgresProperties struct {
 func ReadPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	// TODO: add errors handling
 	props := PostgresProperties{}
-	db.QueryRow(PgGetVersionQuery).Scan(&props.Version, &props.VersionNum)
+	db.QueryRow(query.PgGetVersionQuery).Scan(&props.Version, &props.VersionNum)
 	db.QueryRow("SELECT current_setting('track_commit_timestamp')").Scan(&props.GucTrackCommitTimestamp)
 	db.QueryRow("SELECT current_setting('max_connections')::int").Scan(&props.GucMaxConnections)
 	db.QueryRow("SELECT current_setting('autovacuum_max_workers')::int").Scan(&props.GucAVMaxWorkers)
-	db.QueryRow(PgGetRecoveryStatusQuery).Scan(&props.Recovery)
+	db.QueryRow(query.PgGetRecoveryStatusQuery).Scan(&props.Recovery)
 	db.QueryRow("select extract(epoch from pg_postmaster_start_time())").Scan(&props.StartTime)
 
 	// Is pg_stat_statement available?
@@ -361,17 +351,18 @@ func (r *PGresult) sort(key int, desc bool) {
 // TODO: выравнивание не относится к статистике, а к её внешнему виду при выводе этой статистики, по идее оно должно
 //   уехать куда-то из этого места. Но само выравнивание используется в нескольких под-командах, поэтому оно не может быть
 //   частью какой-то отдельной подкоманды. В общем есть над чем подумать.
-func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (err error) {
+func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, error) {
 	var lastColTruncLimit, lastColMaxWidth int
 	lastColTruncLimit = math.Max(truncLimit, colsTruncMinLimit)
 	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
+	widthes := make(map[int]int)
 
 	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
 	if len(r.Values) == 0 {
 		for colidx, colname := range r.Cols { // walk per-column
 			widthes[colidx] = math.Max(len(colname), colsTruncMinLimit)
 		}
-		return fmt.Errorf("RESULT_NO_ROWS")
+		return widthes, nil
 	}
 
 	/* calculate max length of columns based on the longest value of the column */
@@ -424,7 +415,7 @@ func (r *PGresult) SetAlign(widthes map[int]int, truncLimit int, dynamic bool) (
 			}
 		}
 	}
-	return nil
+	return widthes, nil
 }
 
 // aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length
@@ -504,7 +495,7 @@ func isExtensionAvailable(db *postgres.DB, name string) bool {
 //
 func isSchemaAvailable(db *postgres.DB, name string) bool {
 	var exists bool
-	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1))", name).Scan(&exists)
+	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", name).Scan(&exists)
 	if err != nil {
 		fmt.Println("failed to check schema in information_schema: ", err)
 		return false
@@ -512,14 +503,4 @@ func isSchemaAvailable(db *postgres.DB, name string) bool {
 
 	// Return true if installed, and false if not.
 	return exists
-}
-
-func prepareQuery(s string, o Options) (string, error) {
-	t := template.Must(template.New("query").Parse(s))
-	buf := &bytes.Buffer{}
-	if err := t.Execute(buf, o); err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }

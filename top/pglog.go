@@ -7,7 +7,7 @@ import (
 	"github.com/jehiah/go-strftime"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"os"
 	"os/exec"
 	"strings"
@@ -55,12 +55,12 @@ func readLogPath(db *postgres.DB) string {
 	var logfileRealpath, pgDatadir string
 
 	// An easiest way to get logfile is using pg_current_logfile() function, but it's available since PG 10.
-	db.QueryRow(stat.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
+	db.QueryRow(query.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
 
 	if logfileRealpath != "" {
 		// Even pg_current_logfile() might return relative path
 		if !strings.HasPrefix(logfileRealpath, "/") {
-			db.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+			db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
 			logfileRealpath = pgDatadir + "/" + logfileRealpath
 		}
 		return logfileRealpath
@@ -74,9 +74,9 @@ func readLogPath(db *postgres.DB) string {
 // lookupPostgresLogfiles tries to assemble in a hard way an absolute path to Postgres logfile
 func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
 	var pgDatadir, pgLogdir, pgLogfile, pgLogfileFallback string
-	db.QueryRow(stat.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
-	db.QueryRow(stat.PgGetSingleSettingQuery, "log_directory").Scan(&pgLogdir)
-	db.QueryRow(stat.PgGetSingleSettingQuery, "log_filename").Scan(&pgLogfile)
+	db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
+	db.QueryRow(query.PgGetSingleSettingQuery, "log_directory").Scan(&pgLogdir)
+	db.QueryRow(query.PgGetSingleSettingQuery, "log_filename").Scan(&pgLogfile)
 
 	if strings.HasPrefix(pgLogdir, "/") {
 		absLogfilePath = pgLogdir + "/" + pgLogfile // absolute path
@@ -92,7 +92,7 @@ func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
 	// the time when rotation occurred will be use. This use case is not covered here.
 	if strings.Contains(absLogfilePath, "%H%M%S") {
 		var pgStartTime string
-		db.QueryRow(stat.PgPostmasterStartTimeQuery).Scan(&pgStartTime)
+		db.QueryRow(query.PgPostmasterStartTimeQuery).Scan(&pgStartTime)
 		// rotated logfile, fallback to it in case when above isn't exist
 		pgLogfileFallback = strings.Replace(absLogfilePath, "%H%M%S", "000000", 1)
 		// logfile created today
@@ -101,7 +101,7 @@ func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
 
 	if strings.Contains(absLogfilePath, "%") {
 		var pgLogTz = "timezone"
-		db.QueryRow(stat.PgGetSingleSettingQuery, pgLogTz).Scan(&pgLogTz)
+		db.QueryRow(query.PgGetSingleSettingQuery, pgLogTz).Scan(&pgLogTz)
 
 		t := time.Now()
 		tz, _ := time.LoadLocation(pgLogTz)

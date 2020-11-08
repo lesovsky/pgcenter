@@ -79,8 +79,8 @@ func doWork(ctx context.Context, app *app) {
 		wg.Done()
 	}()
 
-	// default is databases view
-	app.config.viewCh <- *app.config.views["databases"]
+	// send default view stats collector goroutine
+	app.config.viewCh <- app.config.view
 
 	for {
 		select {

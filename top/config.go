@@ -4,7 +4,7 @@
 package top
 
 import (
-	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"time"
 )
@@ -15,12 +15,13 @@ type config struct {
 	minRefresh time.Duration
 	// refreshInterval is a current refresh interval.
 	refreshInterval time.Duration
-	//
-	view  *view.View
+	// active view
+	view view.View
+	// list of all available views
 	views view.Views
 	//
-	sharedOptions stat.Options // Queries' settings that depends on Postgres version
-	aux           auxType      // Type of current auxiliary stats
+	queryOptions query.Options // Queries' settings that depends on Postgres version
+	aux          auxType       // Type of current auxiliary stats
 	//
 	viewCh chan view.View
 }
@@ -32,7 +33,7 @@ func newConfig() *config {
 		minRefresh:      1 * time.Second,
 		refreshInterval: 1 * time.Second,
 		views:           views,
-		view:            views["activity"],
+		view:            views["databases"],
 		viewCh:          make(chan view.View),
 	}
 }

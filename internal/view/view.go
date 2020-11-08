@@ -21,10 +21,10 @@ type View struct {
 }
 
 // Views is a list of all used context units.
-type Views map[string]*View
+type Views map[string]View
 
 func New() Views {
-	return map[string]*View{
+	return map[string]View{
 		"databases": {
 			Name:      "databases",
 			Query:     query.PgStatDatabaseQueryDefault,
