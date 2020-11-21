@@ -105,8 +105,11 @@ func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config) {
 		return
 	}
 
+	// Set refresh interval, send it to stats channel and reset interval in the view.
+	// Refresh interval should not be saved as a per-view setting. It's used as a setting for stats goroutine.
 	config.view.Refresh = time.Duration(interval) * time.Second
 	config.viewCh <- config.view
+	config.view.Refresh = 0
 }
 
 // Quit program.

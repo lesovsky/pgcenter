@@ -50,7 +50,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 		select {
 		case v = <-viewCh:
 			// Update refresh interval if it is changed.
-			if refresh != v.Refresh {
+			if refresh != v.Refresh && v.Refresh > 0 {
 				refresh = v.Refresh
 				continue
 			}

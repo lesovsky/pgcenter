@@ -79,8 +79,12 @@ func doWork(ctx context.Context, app *app) {
 		wg.Done()
 	}()
 
-	// send default view stats collector goroutine
+	// Send default view and default refresh interval to stats collector goroutine.
+	app.config.view.Refresh = time.Second
 	app.config.viewCh <- app.config.view
+
+	// Reset refresh interval, it should not be saved as per-view setting.
+	app.config.view.Refresh = 0
 
 	for {
 		select {
