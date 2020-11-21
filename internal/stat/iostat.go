@@ -14,7 +14,7 @@ import (
 // Diskstat is the container for storing stats per single block device
 type Diskstat struct {
 	/* diskstats basic */
-	Major, Minor int     // 1 - major number; 2 - minor mumber
+	Major, Minor int     // 1 - major number; 2 - minor number
 	Device       string  // 3 - device name
 	Rcompleted   float64 // 4 - reads completed successfully
 	Rmerged      float64 // 5 - reads merged

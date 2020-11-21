@@ -351,7 +351,7 @@ func (r *PGresult) sort(key int, desc bool) {
 // TODO: выравнивание не относится к статистике, а к её внешнему виду при выводе этой статистики, по идее оно должно
 //   уехать куда-то из этого места. Но само выравнивание используется в нескольких под-командах, поэтому оно не может быть
 //   частью какой-то отдельной подкоманды. В общем есть над чем подумать.
-func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, error) {
+func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, []string, error) {
 	var lastColTruncLimit, lastColMaxWidth int
 	lastColTruncLimit = math.Max(truncLimit, colsTruncMinLimit)
 	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
@@ -362,7 +362,7 @@ func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, error) {
 		for colidx, colname := range r.Cols { // walk per-column
 			widthes[colidx] = math.Max(len(colname), colsTruncMinLimit)
 		}
-		return widthes, nil
+		return widthes, r.Cols, nil
 	}
 
 	/* calculate max length of columns based on the longest value of the column */
@@ -415,7 +415,7 @@ func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, error) {
 			}
 		}
 	}
-	return widthes, nil
+	return widthes, r.Cols, nil
 }
 
 // aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length

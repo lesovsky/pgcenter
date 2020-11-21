@@ -10,6 +10,7 @@ type View struct {
 	Name      string                 // Context name
 	Query     string                 // Query used by default
 	DiffIntvl [2]int                 // Columns interval for diff
+	Cols      []string               // Columns names
 	Ncols     int                    // Number of columns returned by query, used as a right border for OrderKey
 	OrderKey  int                    // Number of column used for order
 	OrderDesc bool                   // Order direction: descending (true) or ascending (false)

@@ -160,8 +160,9 @@ func printDbstat(v *gocui.View, app *app, s stat.Stat) {
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !app.config.view.Aligned {
-		widthes, err := s.Result.SetAlign(1000, false) // we don't want truncate lines here, so just use high limit
+		widthes, cols, err := s.Result.SetAlign(1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
+			app.config.view.Cols = cols
 			app.config.view.ColsWidth = widthes
 			app.config.view.Aligned = true
 		}

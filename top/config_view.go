@@ -16,44 +16,48 @@ const (
 	colsWidthStep = 4   // minimal step of changing column's width, 1 is too boring and 4 looks good
 )
 
-func orderKeyLeft(v view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
+// orderKeyLeft handles 'KeyArrowLeft' button and switches sort order to left column.
+func orderKeyLeft(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
-		v.OrderKey--
-		if v.OrderKey < 0 {
-			v.OrderKey = v.Ncols - 1
+		config.view.OrderKey--
+		if config.view.OrderKey < 0 {
+			config.view.OrderKey = config.view.Ncols - 1
 		}
-		doUpdate <- 1
+
+		config.viewCh <- config.view
 		return nil
 	}
 }
 
-// Switch sort order to right column
-func orderKeyRight(v view.View, doUpdate chan int) func(_ *gocui.Gui, _ *gocui.View) error {
+// orderKeyRight handles 'KeyArrowRight' button and switches sort order to right column.
+func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
-		v.OrderKey++
-		if v.OrderKey >= v.Ncols {
-			v.OrderKey = 0
+		config.view.OrderKey++
+		if config.view.OrderKey >= config.view.Ncols {
+			config.view.OrderKey = 0
 		}
-		doUpdate <- 1
+
+		config.viewCh <- config.view
 		return nil
 	}
 }
 
 // Increase or decrease width of an active column
-func changeWidth(app *app, d int) func(_ *gocui.Gui, _ *gocui.View) error {
+func changeWidth(config *config, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		var width int
-		cidx := app.config.view.OrderKey                             // index of an active column
-		clen := len(app.stats.Result.Cols[app.config.view.OrderKey]) // length of the column's name
+		cidx := config.view.OrderKey // index of an active column
+		//clen := len(app.stats.Result.Cols[app.config.view.OrderKey]) // length of the column's name
+		clen := len(config.view.Cols[config.view.OrderKey])
 
 		// set new width
 		switch d {
 		case colsWidthIncr:
-			width = app.config.view.ColsWidth[cidx] + colsWidthStep
+			width = config.view.ColsWidth[cidx] + colsWidthStep
 		case colsWidthDecr:
-			width = app.config.view.ColsWidth[cidx] - colsWidthStep
+			width = config.view.ColsWidth[cidx] - colsWidthStep
 		default:
-			width = app.config.view.ColsWidth[cidx] // should never be here.
+			width = config.view.ColsWidth[cidx] // should never be here.
 		}
 
 		// new width should not be less than column's name or longer than defined limit
@@ -64,19 +68,21 @@ func changeWidth(app *app, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 			width = colsWidthMax
 		}
 
-		app.config.view.ColsWidth[cidx] = width
+		config.view.ColsWidth[cidx] = width
 
-		app.doUpdate <- 1
+		config.viewCh <- config.view
+		//app.doUpdate <- 1
 		return nil
 	}
 }
 
-// Switch sort order direction between descend and ascend
-func switchSortOrder(v view.View, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
+// switchSortOrder handles switching sort order of active column from descend to ascend and vice versa.
+func switchSortOrder(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		v.OrderDesc = !v.OrderDesc
+		config.view.OrderDesc = !config.view.OrderDesc
 		printCmdline(g, "Switch sort order")
-		doUpdate <- 1
+
+		config.viewCh <- config.view
 		return nil
 	}
 }
