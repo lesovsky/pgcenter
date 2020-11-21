@@ -171,46 +171,66 @@ func viewSwitchHandler(config *config, c string) {
 }
 
 // A toggle to show system tables stats
-func toggleSysTables(c *config, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		switch c.queryOptions.ViewType {
-		case "user":
-			c.queryOptions.ViewType = "all"
-			printCmdline(g, "Show system tables: on")
-		case "all":
-			c.queryOptions.ViewType = "user"
-			printCmdline(g, "Show system tables: off")
-		default: // never should be here, but paranoia check
-			c.queryOptions.ViewType = "user"
-			printCmdline(g, "Show system tables: on")
+		name := config.view.Name
+		if name != "tables" && name != "indexes" && name != "sizes" {
+			return nil
 		}
 
-		doUpdate <- 1
+		switch config.queryOptions.ViewType {
+		case "user":
+			config.queryOptions.ViewType = "all"
+		case "all":
+			config.queryOptions.ViewType = "user"
+		default: // never should be here, but paranoia check
+			config.queryOptions.ViewType = "user"
+		}
+
+		for _, t := range []string{"tables", "indexes", "sizes"} {
+			q, err := query.PrepareQuery(config.views[t].QueryTmpl, config.queryOptions)
+			if err != nil {
+				return err
+			}
+			v := config.views[t]
+			v.Query = q
+			config.views[t] = v
+		}
+
+		config.view = config.views[name]
+		config.viewCh <- config.view
+
+		printCmdline(g, "Show relations: "+config.queryOptions.ViewType)
 		return nil
 	}
 }
 
 // Change age threshold for queries and transactions (pg_stat_activity only)
-func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, c *config) {
+func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, config *config) {
 	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogChangeAge])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
 		printCmdline(g, "Reset to default - 00:00:00.")
-		c.queryOptions.QueryAgeThresh = "00:00:00"
+		config.queryOptions.QueryAgeThresh = "00:00:00"
+	} else {
+		var hour, min, sec, msec int
+		n, err := fmt.Sscanf(answer, "%d:%d:%d.%d", &hour, &min, &sec, &msec)
+		if (n < 3 && err != nil) || ((hour > 23) || (min > 59) || (sec > 59) || (msec > 999999)) {
+			printCmdline(g, "Nothing to do. Invalid input.")
+			return
+		}
+		config.queryOptions.QueryAgeThresh = answer
+	}
+
+	q, err := query.PrepareQuery(config.view.QueryTmpl, config.queryOptions)
+	if err != nil {
+		printCmdline(g, "Nothing to do. Failed: ", err.Error())
 		return
 	}
 
-	var hour, min, sec, msec int
-
-	n, err := fmt.Sscanf(answer, "%d:%d:%d.%d", &hour, &min, &sec, &msec)
-
-	if n < 3 && err != nil || ((hour > 23) || (min > 59) || (sec > 59) || (msec > 999999)) {
-		printCmdline(g, "Nothing to do. Failed read or invalid value.")
-		return
-	}
-
-	c.queryOptions.QueryAgeThresh = answer
+	config.view.Query = q
+	config.viewCh <- config.view
 }
 
 // A toggle to show 'idle' connections (pg_stat_activity only)
