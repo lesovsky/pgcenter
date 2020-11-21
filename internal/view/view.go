@@ -3,6 +3,7 @@ package view
 import (
 	"github.com/lesovsky/pgcenter/internal/query"
 	"regexp"
+	"time"
 )
 
 // View describes how stats received from Postgres should be displayed.
@@ -20,6 +21,7 @@ type View struct {
 	Aligned   bool                   // Is aligning calculated?
 	Msg       string                 // Show this text in Cmdline when switching to this unit
 	Filters   map[int]*regexp.Regexp // Storage for filter patterns: key is the column index, value - regexp pattern
+	Refresh   time.Duration          // Number of seconds between update view.
 }
 
 // Views is a list of all used context units.

@@ -85,7 +85,7 @@ func keybindings(app *app) error {
 }
 
 // Change interval of stats refreshing.
-func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config, doUpdate chan int) {
+func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config) {
 	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogChangeRefresh])
 	answer = strings.TrimSuffix(answer, "\n")
 
@@ -105,8 +105,8 @@ func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config, d
 		return
 	}
 
-	config.refreshInterval = time.Duration(interval) * config.minRefresh
-	doUpdate <- 1
+	config.view.Refresh = time.Duration(interval) * time.Second
+	config.viewCh <- config.view
 }
 
 // Quit program.

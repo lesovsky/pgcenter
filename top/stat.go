@@ -32,6 +32,9 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	}
 	time.Sleep(100 * time.Millisecond)
 
+	// Set refresh interval from received view.
+	refresh := v.Refresh
+
 	// Collect stat in loop and send it to stat channel.
 	for {
 		stats, err := c.Update(db, v)
@@ -43,9 +46,15 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 		}
 
 		// Waiting for events until refresh interval expired.
-		ticker := time.NewTicker(1 * time.Second)
+		ticker := time.NewTicker(refresh)
 		select {
 		case v = <-viewCh:
+			// Update refresh interval if it is changed.
+			if refresh != v.Refresh {
+				refresh = v.Refresh
+				continue
+			}
+
 			// If view has been updated, stop ticker and re-initialize stats.
 			ticker.Stop()
 

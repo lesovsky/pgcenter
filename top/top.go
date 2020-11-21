@@ -8,6 +8,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
+	"time"
 )
 
 // app defines stuff required for application.
@@ -73,8 +74,9 @@ func (app *app) Setup() error {
 		app.config.views[k] = v
 	}
 
-	// Set default view.
+	// Set default view and default refresh interval to 1 (second).
 	app.config.view = app.config.views["databases"]
+	app.config.view.Refresh = time.Second
 
 	app.postgresProps = props
 	app.doExit = make(chan int)
