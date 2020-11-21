@@ -46,9 +46,8 @@ func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 func changeWidth(config *config, d int) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		var width int
-		cidx := config.view.OrderKey // index of an active column
-		//clen := len(app.stats.Result.Cols[app.config.view.OrderKey]) // length of the column's name
-		clen := len(config.view.Cols[config.view.OrderKey])
+		cidx := config.view.OrderKey                        // index of an active column
+		clen := len(config.view.Cols[config.view.OrderKey]) // length of the column's name
 
 		// set new width
 		switch d {
@@ -71,7 +70,6 @@ func changeWidth(config *config, d int) func(_ *gocui.Gui, _ *gocui.View) error 
 		config.view.ColsWidth[cidx] = width
 
 		config.viewCh <- config.view
-		//app.doUpdate <- 1
 		return nil
 	}
 }
@@ -105,6 +103,8 @@ func setFilter(g *gocui.Gui, v *gocui.View, answer string, view view.View) {
 		}
 	}
 }
+
+// TODO: имеет смысл switchContextTo переписать так чтобы под капотом оно вызывало viewSwitchHandler.
 
 // Switch from context unit to another one
 func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error {
@@ -161,30 +161,12 @@ func switchContextTo(app *app, c string) func(g *gocui.Gui, v *gocui.View) error
 	}
 }
 
-// TODO: looks like these two functions below are redundant, their code is the same - possibly they should be replaced with switchContextTo() function
-
-// Switch pg_stat_statements context units
-func switchContextToPgss(app *app, c string) {
-	// Save current context unit with its settings into context list
-	app.config.views[app.config.view.Name] = app.config.view
-
-	// Load new context unit (with settings) from the list
-	app.config.view = app.config.views[c]
-
-	printCmdline(app.ui, app.config.view.Msg)
-	app.doUpdate <- 1
-}
-
-// Switch pg_stat_progress_* context units
-func switchContextToProgress(app *app, c string) {
-	// Save current context unit with its settings into context list
-	app.config.views[app.config.view.Name] = app.config.view
-
-	// Load new context unit (with settings) from the list
-	app.config.view = app.config.views[c]
-
-	printCmdline(app.ui, app.config.view.Msg)
-	app.doUpdate <- 1
+// viewSwitchHandler switch current view to specified.
+func viewSwitchHandler(config *config, c string) {
+	// Save current active view, select target pg_stat_statements view and send it to channel.
+	config.views[config.view.Name] = config.view
+	config.view = config.views[c]
+	config.viewCh <- config.view
 }
 
 // A toggle to show system tables stats

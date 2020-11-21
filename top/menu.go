@@ -80,7 +80,7 @@ var (
 // Open 'gocui' view object and display menu items depending on passed menu type.
 func menuOpen(m menuStyle, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		// in case of opening menu for switching to pg_stat_statements and if pgss isn't available - it's unnecessary to open menu, just notify user and do nothing
+		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
 		if !pgssAvail && m.menuType == menuPgss {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
@@ -115,27 +115,29 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case menuPgss:
 			switch cy {
 			case 0:
-				switchContextToPgss(app, "statements_timings")
+				viewSwitchHandler(app.config, "statements_timings")
 			case 1:
-				switchContextToPgss(app, "statements_general")
+				viewSwitchHandler(app.config, "statements_general")
 			case 2:
-				switchContextToPgss(app, "statements_io")
+				viewSwitchHandler(app.config, "statements_io")
 			case 3:
-				switchContextToPgss(app, "statements_temp")
+				viewSwitchHandler(app.config, "statements_temp")
 			case 4:
-				switchContextToPgss(app, "statements_local")
+				viewSwitchHandler(app.config, "statements_local")
 			default:
-				switchContextToPgss(app, "statements_timings")
+				viewSwitchHandler(app.config, "statements_timings")
 			}
+			printCmdline(app.ui, app.config.view.Msg)
 		case menuProgress:
 			switch cy {
 			case 0:
-				switchContextToProgress(app, "progress_vacuum")
+				viewSwitchHandler(app.config, "progress_vacuum")
 			case 1:
-				switchContextToProgress(app, "progress_cluster")
+				viewSwitchHandler(app.config, "progress_cluster")
 			case 2:
-				switchContextToProgress(app, "progress_index")
+				viewSwitchHandler(app.config, "progress_index")
 			}
+			printCmdline(app.ui, app.config.view.Msg)
 		case menuConf:
 			switch cy {
 			case 0:
