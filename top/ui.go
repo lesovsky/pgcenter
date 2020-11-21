@@ -84,6 +84,9 @@ func doWork(ctx context.Context, app *app) {
 
 	for {
 		select {
+		case <-app.doExit:
+			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
+			return
 		case <-app.doUpdate:
 			continue
 		case s := <-statCh:

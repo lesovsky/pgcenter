@@ -14,7 +14,7 @@ import (
 	"strings"
 )
 
-// Show Postgres config in $PAGER program
+// showPgConfig gets Postgres settings and show it in $PAGER program.
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		res, err := stat.NewPGresult(db, query.PgGetConfigAllQuery)
