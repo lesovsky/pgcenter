@@ -3,6 +3,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"regexp"
 	"strings"
@@ -191,7 +192,7 @@ func toggleSysTables(c *config, doUpdate chan int) func(g *gocui.Gui, _ *gocui.V
 
 // Change age threshold for queries and transactions (pg_stat_activity only)
 func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, c *config) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogChangeAge])
+	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogChangeAge])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
@@ -213,17 +214,29 @@ func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, c *config) {
 }
 
 // A toggle to show 'idle' connections (pg_stat_activity only)
-func toggleIdleConns(c *config, doUpdate chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		c.queryOptions.ShowNoIdle = !c.queryOptions.ShowNoIdle
+		if config.view.Name != "activity" {
+			return nil
+		}
 
-		if c.queryOptions.ShowNoIdle {
+		config.queryOptions.ShowNoIdle = !config.queryOptions.ShowNoIdle
+
+		q, err := query.PrepareQuery(config.view.QueryTmpl, config.queryOptions)
+		if err != nil {
+			return err
+		}
+
+		config.view.Query = q
+		config.viewCh <- config.view
+
+		if config.queryOptions.ShowNoIdle {
 			printCmdline(g, "Show idle connections: off.")
 		} else {
 			printCmdline(g, "Show idle connections: on.")
 		}
 
-		doUpdate <- 1
+		//doUpdate <- 1
 		return nil
 	}
 }

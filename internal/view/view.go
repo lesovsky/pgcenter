@@ -7,8 +7,9 @@ import (
 
 // View describes how stats received from Postgres should be displayed.
 type View struct {
-	Name      string                 // Context name
-	Query     string                 // Query used by default
+	Name      string                 // View name
+	QueryTmpl string                 // Query template used for making particular query.
+	Query     string                 // Query based on template and runtime options.
 	DiffIntvl [2]int                 // Columns interval for diff
 	Cols      []string               // Columns names
 	Ncols     int                    // Number of columns returned by query, used as a right border for OrderKey
@@ -28,7 +29,7 @@ func New() Views {
 	return map[string]View{
 		"databases": {
 			Name:      "databases",
-			Query:     query.PgStatDatabaseQueryDefault,
+			QueryTmpl: query.PgStatDatabaseQueryDefault,
 			DiffIntvl: [2]int{1, 16},
 			Ncols:     18,
 			OrderKey:  0,
@@ -39,7 +40,7 @@ func New() Views {
 		},
 		"replication": {
 			Name:      "replication",
-			Query:     query.PgStatReplicationQueryDefault,
+			QueryTmpl: query.PgStatReplicationQueryDefault,
 			DiffIntvl: [2]int{6, 6},
 			Ncols:     15,
 			OrderKey:  0,
@@ -51,7 +52,7 @@ func New() Views {
 		// PgStatTablesUnit describes how to handle pg_stat_all_tables and pg_statio_all_tables views
 		"tables": {
 			Name:      "tables",
-			Query:     query.PgStatTablesQueryDefault,
+			QueryTmpl: query.PgStatTablesQueryDefault,
 			DiffIntvl: [2]int{1, 18},
 			Ncols:     19,
 			OrderKey:  0,
@@ -63,7 +64,7 @@ func New() Views {
 		// PgStatIndexesUnit describes how to handle pg_stat_all_indexes and pg_statio_all_indexes views
 		"indexes": {
 			Name:      "indexes",
-			Query:     query.PgStatIndexesQueryDefault,
+			QueryTmpl: query.PgStatIndexesQueryDefault,
 			DiffIntvl: [2]int{1, 5},
 			Ncols:     6,
 			OrderKey:  0,
@@ -75,7 +76,7 @@ func New() Views {
 		// PgTablesSizesUnit describes how to handle statistics about tables sizes
 		"sizes": {
 			Name:      "sizes",
-			Query:     query.PgTablesSizesQueryDefault,
+			QueryTmpl: query.PgTablesSizesQueryDefault,
 			DiffIntvl: [2]int{4, 6},
 			Ncols:     7,
 			OrderKey:  0,
@@ -87,7 +88,7 @@ func New() Views {
 		// PgStatFunctionsUnit describes how to handle pg_stat_user_functions view
 		"functions": {
 			Name:      "functions",
-			Query:     query.PgStatFunctionsQueryDefault,
+			QueryTmpl: query.PgStatFunctionsQueryDefault,
 			DiffIntvl: [2]int{3, 3},
 			Ncols:     8,
 			OrderKey:  0,
@@ -99,7 +100,7 @@ func New() Views {
 		// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
 		"progress_vacuum": {
 			Name:      "progress_vacuum",
-			Query:     query.PgStatProgressVacuumQueryDefault,
+			QueryTmpl: query.PgStatProgressVacuumQueryDefault,
 			DiffIntvl: [2]int{10, 11},
 			Ncols:     13,
 			OrderKey:  0,
@@ -111,7 +112,7 @@ func New() Views {
 		// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
 		"progress_cluster": {
 			Name:      "progress_cluster",
-			Query:     query.PgStatProgressClusterQueryDefault,
+			QueryTmpl: query.PgStatProgressClusterQueryDefault,
 			DiffIntvl: [2]int{10, 11},
 			Ncols:     13,
 			OrderKey:  0,
@@ -122,7 +123,7 @@ func New() Views {
 		},
 		"progress_index": {
 			Name:      "progress_index",
-			Query:     query.PgStatProgressCreateIndexQueryDefault,
+			QueryTmpl: query.PgStatProgressCreateIndexQueryDefault,
 			DiffIntvl: [2]int{0, 0},
 			Ncols:     14,
 			OrderKey:  0,
@@ -134,7 +135,7 @@ func New() Views {
 		// PgStatActivityUnit describes how to handle pg_stat_activity view
 		"activity": {
 			Name:      "activity",
-			Query:     query.PgStatActivityQueryDefault,
+			QueryTmpl: query.PgStatActivityQueryDefault,
 			DiffIntvl: [2]int{0, 0},
 			Ncols:     14,
 			OrderKey:  0,
@@ -146,7 +147,7 @@ func New() Views {
 		// PgSSTimingUnit describes how to handle pg_stat_statements view with timing stats
 		"statements_timings": {
 			Name:      "statements_timings",
-			Query:     query.PgStatStatementsTimingQueryDefault,
+			QueryTmpl: query.PgStatStatementsTimingQueryDefault,
 			DiffIntvl: [2]int{6, 10},
 			Ncols:     13,
 			OrderKey:  0,
@@ -159,7 +160,7 @@ func New() Views {
 		// PgSSGeneralUnit describes how to handle pg_stat_statements view with general stats
 		"statements_general": {
 			Name:      "statements_general",
-			Query:     query.PgStatStatementsGeneralQueryDefault,
+			QueryTmpl: query.PgStatStatementsGeneralQueryDefault,
 			DiffIntvl: [2]int{4, 5},
 			Ncols:     8,
 			OrderKey:  0,
@@ -172,7 +173,7 @@ func New() Views {
 		// PgSSIoUnit describes how to handle pg_stat_statements view with stats related to buffers IO
 		"statements_io": {
 			Name:      "statements_io",
-			Query:     query.PgStatStatementsIoQueryDefault,
+			QueryTmpl: query.PgStatStatementsIoQueryDefault,
 			DiffIntvl: [2]int{6, 10},
 			Ncols:     13,
 			OrderKey:  0,
@@ -185,7 +186,7 @@ func New() Views {
 		// PgSSTempUnit describes how to handle pg_stat_statements view with stats related to temp files IO
 		"statements_temp": {
 			Name:      "statements_temp",
-			Query:     query.PgStatStatementsTempQueryDefault,
+			QueryTmpl: query.PgStatStatementsTempQueryDefault,
 			DiffIntvl: [2]int{4, 6},
 			Ncols:     9,
 			OrderKey:  0,
@@ -198,7 +199,7 @@ func New() Views {
 		// PgSSLocalUnit describes how to handle pg_stat_statements view with stats related to local buffers IO
 		"statements_local": {
 			Name:      "statements_local",
-			Query:     query.PgStatStatementsLocalQueryDefault,
+			QueryTmpl: query.PgStatStatementsLocalQueryDefault,
 			DiffIntvl: [2]int{6, 10},
 			Ncols:     13,
 			OrderKey:  0,
@@ -222,11 +223,11 @@ func (v Views) Configure(version int, trackCommit string) {
 		case "activity":
 			switch {
 			case version < 90600:
-				view.Query = query.PgStatActivityQuery95
+				view.QueryTmpl = query.PgStatActivityQuery95
 				view.Ncols = 12
 				v[k] = view
 			case version < 100000:
-				view.Query = query.PgStatActivityQuery96
+				view.QueryTmpl = query.PgStatActivityQuery96
 				view.Ncols = 13
 				v[k] = view
 			}
@@ -234,23 +235,23 @@ func (v Views) Configure(version int, trackCommit string) {
 			switch {
 			case version < 90500:
 				// Use query for 9.6 but with no 'track_commit_timestamp' fields
-				view.Query = query.PgStatReplicationQuery96
+				view.QueryTmpl = query.PgStatReplicationQuery96
 				view.Ncols = 12
 				v[k] = view
 			case version < 100000:
 				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 9.6
 				if track {
-					view.Query = query.PgStatReplicationQuery96Extended
+					view.QueryTmpl = query.PgStatReplicationQuery96Extended
 					view.Ncols = 14
 				} else {
-					view.Query = query.PgStatReplicationQuery96
+					view.QueryTmpl = query.PgStatReplicationQuery96
 					view.Ncols = 12
 				}
 				v[k] = view
 			default:
 				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 10 and above
 				if track {
-					view.Query = query.PgStatReplicationQueryExtended
+					view.QueryTmpl = query.PgStatReplicationQueryExtended
 					view.Ncols = 17
 				} else {
 					// use defaults assigned in context unit
@@ -261,7 +262,7 @@ func (v Views) Configure(version int, trackCommit string) {
 			switch {
 			// versions prior 12 don't have  checksum_failures column
 			case version < 120000:
-				view.Query = query.PgStatDatabaseQuery11
+				view.QueryTmpl = query.PgStatDatabaseQuery11
 				view.Ncols = 17
 				view.DiffIntvl = [2]int{1, 15}
 				v[k] = view
@@ -269,7 +270,7 @@ func (v Views) Configure(version int, trackCommit string) {
 		case "statements_timings":
 			switch {
 			case version < 130000:
-				view.Query = query.PgStatStatementsTimingQuery12
+				view.QueryTmpl = query.PgStatStatementsTimingQuery12
 				v[k] = view
 			}
 		}

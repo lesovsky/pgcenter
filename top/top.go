@@ -65,13 +65,16 @@ func (app *app) Setup() error {
 
 	// Compile query text from templates using previously adjusted query options.
 	for k, v := range app.config.views {
-		q, err := query.PrepareQuery(v.Query, app.config.queryOptions)
+		q, err := query.PrepareQuery(v.QueryTmpl, app.config.queryOptions)
 		if err != nil {
 			return err
 		}
 		v.Query = q
 		app.config.views[k] = v
 	}
+
+	// Set default view.
+	app.config.view = app.config.views["databases"]
 
 	app.postgresProps = props
 	app.doExit = make(chan int)

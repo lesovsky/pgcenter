@@ -33,7 +33,6 @@ func newConfig() *config {
 		minRefresh:      1 * time.Second,
 		refreshInterval: 1 * time.Second,
 		views:           views,
-		view:            views["databases"],
 		viewCh:          make(chan view.View),
 	}
 }

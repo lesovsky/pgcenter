@@ -30,7 +30,7 @@ func keybindings(app *app) error {
 		{"sysstat", gocui.KeyArrowDown, changeWidth(app.config, colsWidthDecr)},
 		{"sysstat", '<', switchSortOrder(app.config)},
 		{"sysstat", ',', toggleSysTables(app.config, app.doUpdate)},
-		{"sysstat", 'I', toggleIdleConns(app.config, app.doUpdate)},
+		{"sysstat", 'I', toggleIdleConns(app.config)},
 		{"sysstat", 'd', switchContextTo(app, "databases")},
 		{"sysstat", 'r', switchContextTo(app, "replication")},
 		{"sysstat", 't', switchContextTo(app, "tables")},
