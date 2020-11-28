@@ -24,7 +24,7 @@ const (
 	// collect flags specifies what kind of extra stats should be collected.
 	CollectNone = iota
 	CollectDiskstats
-	collectNicstat
+	CollectNetdev
 )
 
 // Stat
@@ -39,7 +39,7 @@ type System struct {
 	Meminfo
 	CpuStat
 	Diskstats
-	Nicstat /* not refactored yet */
+	Netdevs
 }
 
 // Collector
@@ -52,6 +52,9 @@ type Collector struct {
 	//
 	prevDiskstats Diskstats
 	currDiskstats Diskstats
+	//
+	prevNetdevs Netdevs
+	currNetdevs Netdevs
 	//
 	prevPgStat Pgstat
 	currPgStat Pgstat
@@ -130,9 +133,16 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 
 	// Collect extra stats if required.
 	var diskstats Diskstats
+	var netdevs Netdevs
+
 	switch c.config.collectExtra {
 	case CollectDiskstats:
 		diskstats, err = c.collectDiskstats(db)
+		if err != nil {
+			return Stat{}, err
+		}
+	case CollectNetdev:
+		netdevs, err = c.collectNetdevs(db)
 		if err != nil {
 			return Stat{}, err
 		}
@@ -159,6 +169,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 			Meminfo:   meminfo,
 			CpuStat:   cpuusage,
 			Diskstats: diskstats,
+			Netdevs:   netdevs,
 		},
 		Pgstat: Pgstat{
 			Activity: c.currPgStat.Activity,
@@ -188,6 +199,26 @@ func (c *Collector) collectDiskstats(db *postgres.DB) (Diskstats, error) {
 	}
 
 	usage := countDiskstatsUsage(c.prevDiskstats, c.currDiskstats, c.config.ticks)
+
+	return usage, nil
+}
+
+// collectNetdevs ...
+func (c *Collector) collectNetdevs(db *postgres.DB) (Netdevs, error) {
+	stats, err := readNetdevs(db, c.config.SchemaPgcenterAvail)
+	if err != nil {
+		return nil, err
+	}
+
+	c.prevNetdevs = c.currNetdevs
+	c.currNetdevs = stats
+
+	// If number of network devices changed just replace previous snapshot with current one and continue.
+	if len(c.prevNetdevs) != len(c.currNetdevs) {
+		c.prevNetdevs = c.currNetdevs
+	}
+
+	usage := countNetdevsUsage(c.prevNetdevs, c.currNetdevs, c.config.ticks)
 
 	return usage, nil
 }

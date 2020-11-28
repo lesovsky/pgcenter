@@ -117,9 +117,9 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			case stat.CollectDiskstats:
 				v.Clear()
 				printIostat(v, s.Diskstats)
-				//case auxNicstat:
-				//  v.Clear()
-				//  printNicstat(v, app.stats.DiffNetdevs)
+			case stat.CollectNetdev:
+				v.Clear()
+				printNetdev(v, s.Netdevs)
 				//case auxLogtail:
 				//  // don't clear screen
 				//  printLogtail(g, v)
@@ -294,7 +294,7 @@ func printIostat(v *gocui.View, s stat.Diskstats) {
 }
 
 // Print nicstat - network interfaces stat.
-func printNicstat(v *gocui.View, s stat.Netdevs) {
+func printNetdev(v *gocui.View, s stat.Netdevs) {
 	// print header
 	fmt.Fprintf(v, "\033[30;47m          Interface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
 

@@ -29,19 +29,17 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, _ *gocui.View) error {
 			app.config.viewCh <- app.config.view
 
 			printCmdline(g, "Show diskstats")
-			//case auxNicstat:
-			//	if err := openAuxView(g, v); err != nil {
-			//		return err
-			//	}
-			//	nlines, err := stat.CountDevices(stat.ProcNetdevFile, app.db, app.postgresProps.SchemaPgcenterAvail)
-			//	if err != nil {
-			//		printCmdline(g, err.Error())
-			//		closeAuxView(g, nil, app.config)
-			//	}
-			//	app.stats.Nicstat.New(nlines)
-			//	app.config.aux = auxtype
-			//	printCmdline(g, "Show nicstat")
-			//	app.doUpdate <- 1
+		case stat.CollectNetdev:
+			if err := openExtraView(g, v); err != nil {
+				return err
+			}
+			for _, v := range app.config.views {
+				v.ShowExtra = stat.CollectNetdev
+			}
+			app.config.view.ShowExtra = stat.CollectNetdev
+			app.config.viewCh <- app.config.view
+
+			printCmdline(g, "Show netdev")
 			//case auxLogtail:
 			//	if !app.db.Local {
 			//		printCmdline(g, "Log tail is not supported for remote hosts")

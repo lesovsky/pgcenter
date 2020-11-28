@@ -38,13 +38,6 @@ type Diskstat struct {
 // Diskstats is the container for all stats related to all block devices
 type Diskstats []Diskstat
 
-// Iostat is the container for previous, current and delta snapshots of stats
-type Iostat struct {
-	CurrDiskstats Diskstats
-	PrevDiskstats Diskstats
-	DiffDiskstats Diskstats
-}
-
 const (
 	// ProcDiskstats provides IO statistics of block devices. For more details refer to Linux kernel's Documentation/iostats.txt.
 	ProcDiskstats = "/proc/diskstats"
@@ -87,7 +80,7 @@ func readDiskstatsLocal(statfile string) (Diskstats, error) {
 			&d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
 			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
 		if err != nil {
-			return nil, fmt.Errorf("failed to scan data from %s", ProcDiskstats)
+			return nil, fmt.Errorf("%s bad content", statfile)
 		}
 
 		// skip pseudo block devices.
@@ -126,6 +119,12 @@ func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
 		if err != nil {
 			return nil, err
+		}
+
+		// skip pseudo block devices.
+		re := regexp.MustCompile(`^(ram|loop|fd)`)
+		if re.MatchString(d.Device) {
+			continue
 		}
 
 		d.Uptime = uptime
