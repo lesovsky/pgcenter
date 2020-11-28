@@ -20,34 +20,47 @@ const (
 		(seconds_total * pgcenter.get_sys_clk_ticks()) +
 		((seconds_total - floor(seconds_total)) * pgcenter.get_sys_clk_ticks() / 100)
 		FROM pgcenter.sys_proc_uptime`
+
+	// collect flags specifies what kind of extra stats should be collected.
+	CollectNone = iota
+	CollectDiskstats
+	collectNicstat
 )
 
+// Stat
 type Stat struct {
 	System
 	Pgstat
-	Iostat  /* not refactored yet */
+}
+
+// System
+type System struct {
+	LoadAvg
+	Meminfo
+	CpuStat
+	Diskstats
 	Nicstat /* not refactored yet */
 }
 
-//
-type System struct {
-	LoadAvg
-	CpuStat
-	Meminfo
-}
-
-//
+// Collector
 type Collector struct {
-	config      Config
+	//
+	config Config
+	//
 	prevCpuStat CpuStat
 	currCpuStat CpuStat
-	prevPgStat  Pgstat
-	currPgStat  Pgstat
+	//
+	prevDiskstats Diskstats
+	currDiskstats Diskstats
+	//
+	prevPgStat Pgstat
+	currPgStat Pgstat
 }
 
 type Config struct {
 	ticks              float64 // value of system setting CLK_TCK
-	PostgresProperties         // postgres variables and constants which are not changed in runtime (but might change between Postgres restarts)
+	collectExtra       int
+	PostgresProperties // postgres variables and constants which are not changed in runtime (but might change between Postgres restarts)
 }
 
 func NewCollector(db *postgres.DB) (*Collector, error) {
@@ -92,16 +105,19 @@ func (c *Collector) Reset() {
 
 // Update ...
 func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
+	// Collect load average stats.
 	loadavg, err := readLoadAverage(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
 		return Stat{}, err
 	}
 
+	// Collect memory/swap usage stats.
 	meminfo, err := readMeminfo(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
 		return Stat{}, err
 	}
 
+	// Collect CPU usage stats
 	cpustat, err := readCpuStat(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
 		return Stat{}, err
@@ -112,6 +128,17 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 
 	cpuusage := countCpuUsage(c.prevCpuStat, c.currCpuStat, c.config.ticks)
 
+	// Collect extra stats if required.
+	var diskstats Diskstats
+	switch c.config.collectExtra {
+	case CollectDiskstats:
+		diskstats, err = c.collectDiskstats(db)
+		if err != nil {
+			return Stat{}, err
+		}
+	}
+
+	// Collect Postgres stats.
 	pgstat, err := collectPostgresStat(db, view.Query, c.prevPgStat)
 	if err != nil {
 		return Stat{}, err
@@ -120,7 +147,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	c.prevPgStat = c.currPgStat
 	c.currPgStat = pgstat
 
-	//
+	// Compare previous and current Postgres stats snapshots and calculate delta.
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
 	if err != nil {
 		return Stat{}, err
@@ -128,9 +155,10 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 
 	return Stat{
 		System: System{
-			LoadAvg: loadavg,
-			Meminfo: meminfo,
-			CpuStat: cpuusage,
+			LoadAvg:   loadavg,
+			Meminfo:   meminfo,
+			CpuStat:   cpuusage,
+			Diskstats: diskstats,
 		},
 		Pgstat: Pgstat{
 			Activity: c.currPgStat.Activity,
@@ -139,7 +167,32 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	}, nil
 }
 
-// sValue routine calculates percent ratio of calculated metric within specified time interval
+// ToggleCollectExtra ...
+func (c *Collector) ToggleCollectExtra(e int) {
+	c.config.collectExtra = e
+}
+
+// collectDiskstats ...
+func (c *Collector) collectDiskstats(db *postgres.DB) (Diskstats, error) {
+	stats, err := readDiskstats(db, c.config.SchemaPgcenterAvail)
+	if err != nil {
+		return nil, err
+	}
+
+	c.prevDiskstats = c.currDiskstats
+	c.currDiskstats = stats
+
+	// If number of block devices changed just replace previous snapshot with current one and continue.
+	if len(c.prevDiskstats) != len(c.currDiskstats) {
+		c.prevDiskstats = c.currDiskstats
+	}
+
+	usage := countDiskstatsUsage(c.prevDiskstats, c.currDiskstats, c.config.ticks)
+
+	return usage, nil
+}
+
+// sValue calculates percent ratio of calculated metric within specified time interval
 func sValue(prev, curr, itv, ticks float64) float64 {
 	if curr > prev {
 		return (curr - prev) / itv * ticks

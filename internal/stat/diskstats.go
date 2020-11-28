@@ -1,14 +1,11 @@
-// Stuff related to diskstats which is located at /proc/diskstats.
-
 package stat
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"io"
-	"io/ioutil"
+	"os"
+	"regexp"
 )
 
 // Diskstat is the container for storing stats per single block device
@@ -55,155 +52,143 @@ const (
 	pgProcDiskstatsQuery = "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
 )
 
-// New creates a stats container of specified size
-func (c *Iostat) New(size int) {
-	c.CurrDiskstats = make(Diskstats, size)
-	c.PrevDiskstats = make(Diskstats, size)
-	c.DiffDiskstats = make(Diskstats, size)
-}
-
-// Read method reads stats from the source
-func (c Diskstats) Read(db *postgres.DB, pgcAvail bool) error {
+func readDiskstats(db *postgres.DB, schemaExists bool) (Diskstats, error) {
 	if db.Local {
-		if err := c.ReadLocal(); err != nil {
-			return err
-		}
-	} else if pgcAvail {
-		c.ReadRemote(db)
+		return readDiskstatsLocal("/proc/diskstats")
+	} else if schemaExists {
+		return readDiskstatsRemote(db)
 	}
 
-	return nil
+	return Diskstats{}, nil
 }
 
-// ReadLocal method reads stats from local 'procfs' filesystem
-func (c Diskstats) ReadLocal() error {
-	content, err := ioutil.ReadFile(ProcDiskstats)
+func readDiskstatsLocal(statfile string) (Diskstats, error) {
+	var stat Diskstats
+	f, err := os.Open(statfile)
 	if err != nil {
-		return fmt.Errorf("failed to read %s", ProcDiskstats)
+		return stat, err
 	}
-	reader := bufio.NewReader(bytes.NewBuffer(content))
 
 	uptime, err := uptime()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for i := 0; i < len(c); i++ {
-		line, _, err := reader.ReadLine()
-		if err == io.EOF {
-			break
-		}
-		var ios = Diskstat{}
 
-		_, err = fmt.Sscan(string(line),
-			&ios.Major, &ios.Minor, &ios.Device,
-			&ios.Rcompleted, &ios.Rmerged, &ios.Rsectors, &ios.Rspent,
-			&ios.Wcompleted, &ios.Wmerged, &ios.Wsectors, &ios.Wspent,
-			&ios.Ioinprogress, &ios.Tspent, &ios.Tweighted)
+	scanner := bufio.NewScanner(f)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		var d = Diskstat{}
+
+		// TODO: add support for recent diskstats format.
+		_, err = fmt.Sscan(line,
+			&d.Major, &d.Minor, &d.Device,
+			&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent,
+			&d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
+			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
 		if err != nil {
-			return fmt.Errorf("failed to scan data from %s", ProcDiskstats)
+			return nil, fmt.Errorf("failed to scan data from %s", ProcDiskstats)
 		}
 
-		ios.Uptime = uptime
-		c[i] = ios
+		// skip pseudo block devices.
+		re := regexp.MustCompile(`^(ram|loop|fd)`)
+		if re.MatchString(d.Device) {
+			continue
+		}
+
+		d.Uptime = uptime
+		stat = append(stat, d)
 	}
 
-	return nil
+	return stat, nil
 }
 
-// ReadRemote method reads stats from remote Postgres instance
-func (c Diskstats) ReadRemote(db *postgres.DB) {
+func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
+	var stat Diskstats
 	var uptime float64
-	db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	err := db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	if err != nil {
+		return nil, err
+	}
 
 	rows, err := db.Query(pgProcDiskstatsQuery)
 	if err != nil {
-		return
-	} /* ignore errors, zero stat is ok for us */
+		return nil, err
+	}
 	defer rows.Close()
 
-	var i int
 	for rows.Next() {
-		var ios = Diskstat{}
+		var d = Diskstat{}
 
-		err := rows.Scan(&ios.Major, &ios.Minor, &ios.Device,
-			&ios.Rcompleted, &ios.Rmerged, &ios.Rsectors, &ios.Rspent,
-			&ios.Wcompleted, &ios.Wmerged, &ios.Wsectors, &ios.Wspent,
-			&ios.Ioinprogress, &ios.Tspent, &ios.Tweighted)
+		err := rows.Scan(&d.Major, &d.Minor, &d.Device,
+			&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent,
+			&d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
+			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
 		if err != nil {
-			return
+			return nil, err
 		}
 
-		ios.Uptime = uptime
-		c[i] = ios
-		i++
+		d.Uptime = uptime
+		stat = append(stat, d)
 	}
+
+	return stat, nil
 }
 
-// Diff method compares stats snapshots and creates delta
-func (c Diskstats) Diff(curr Diskstats, prev Diskstats) {
-	var ticks float64 = 100
+func countDiskstatsUsage(prev Diskstats, curr Diskstats, ticks float64) Diskstats {
+	if len(curr) != len(prev) {
+		// TODO: make possible to diff snapshots with different number of devices.
+		return nil
+	}
+
+	stat := make([]Diskstat, len(curr))
 
 	for i := 0; i < len(curr); i++ {
-		// Skip inactive devices
+		// Skip inactive devices.
 		if curr[i].Rcompleted+curr[i].Wcompleted == 0 {
 			continue
 		}
 
 		itv := curr[i].Uptime - prev[i].Uptime
-		c[i].Device = curr[i].Device
-		c[i].Completed = curr[i].Rcompleted + curr[i].Wcompleted
+		stat[i].Device = curr[i].Device
+		stat[i].Completed = curr[i].Rcompleted + curr[i].Wcompleted
 
-		c[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, ticks) / 10
+		stat[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, ticks) / 10
 
 		if ((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted)) > 0 {
-			c[i].Await = ((curr[i].Rspent - prev[i].Rspent) + (curr[i].Wspent - prev[i].Wspent)) /
+			stat[i].Await = ((curr[i].Rspent - prev[i].Rspent) + (curr[i].Wspent - prev[i].Wspent)) /
 				((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted))
 		} else {
-			c[i].Await = 0
+			stat[i].Await = 0
 		}
 
 		if ((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted)) > 0 {
-			c[i].Arqsz = ((curr[i].Rsectors - prev[i].Rsectors) + (curr[i].Wsectors - prev[i].Wsectors)) /
+			stat[i].Arqsz = ((curr[i].Rsectors - prev[i].Rsectors) + (curr[i].Wsectors - prev[i].Wsectors)) /
 				((curr[i].Rcompleted + curr[i].Wcompleted) - (prev[i].Rcompleted + prev[i].Wcompleted))
 		} else {
-			c[i].Arqsz = 0
+			stat[i].Arqsz = 0
 		}
 
 		if (curr[i].Rcompleted - prev[i].Rcompleted) > 0 {
-			c[i].Rawait = (curr[i].Rspent - prev[i].Rspent) / (curr[i].Rcompleted - prev[i].Rcompleted)
+			stat[i].Rawait = (curr[i].Rspent - prev[i].Rspent) / (curr[i].Rcompleted - prev[i].Rcompleted)
 		} else {
-			c[i].Rawait = 0
+			stat[i].Rawait = 0
 		}
 
 		if (curr[i].Wcompleted - prev[i].Wcompleted) > 0 {
-			c[i].Wawait = (curr[i].Wspent - prev[i].Wspent) / (curr[i].Wcompleted - prev[i].Wcompleted)
+			stat[i].Wawait = (curr[i].Wspent - prev[i].Wspent) / (curr[i].Wcompleted - prev[i].Wcompleted)
 		} else {
-			c[i].Wawait = 0
+			stat[i].Wawait = 0
 		}
 
-		c[i].Rmerged = sValue(prev[i].Rmerged, curr[i].Rmerged, itv, ticks)
-		c[i].Wmerged = sValue(prev[i].Wmerged, curr[i].Wmerged, itv, ticks)
-		c[i].Rcompleted = sValue(prev[i].Rcompleted, curr[i].Rcompleted, itv, ticks)
-		c[i].Wcompleted = sValue(prev[i].Wcompleted, curr[i].Wcompleted, itv, ticks)
-		c[i].Rsectors = sValue(prev[i].Rsectors, curr[i].Rsectors, itv, ticks) / 2048
-		c[i].Wsectors = sValue(prev[i].Wsectors, curr[i].Wsectors, itv, ticks) / 2048
-		c[i].Tweighted = sValue(prev[i].Tweighted, curr[i].Tweighted, itv, ticks) / 1000
+		stat[i].Rmerged = sValue(prev[i].Rmerged, curr[i].Rmerged, itv, ticks)
+		stat[i].Wmerged = sValue(prev[i].Wmerged, curr[i].Wmerged, itv, ticks)
+		stat[i].Rcompleted = sValue(prev[i].Rcompleted, curr[i].Rcompleted, itv, ticks)
+		stat[i].Wcompleted = sValue(prev[i].Wcompleted, curr[i].Wcompleted, itv, ticks)
+		stat[i].Rsectors = sValue(prev[i].Rsectors, curr[i].Rsectors, itv, ticks) / 2048
+		stat[i].Wsectors = sValue(prev[i].Wsectors, curr[i].Wsectors, itv, ticks) / 2048
+		stat[i].Tweighted = sValue(prev[i].Tweighted, curr[i].Tweighted, itv, ticks) / 1000
 	}
-}
 
-// Print method prints IO stats
-func (c Diskstats) Print() {
-	for i := 0; i < len(c); i++ {
-		if c[i].Completed == 0 {
-			continue
-		}
-
-		fmt.Printf("%6s\t\t%8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f %8.2f\n",
-			c[i].Device,
-			c[i].Rmerged, c[i].Wmerged,
-			c[i].Rcompleted, c[i].Wcompleted,
-			c[i].Rsectors, c[i].Wsectors, c[i].Arqsz, c[i].Tweighted,
-			c[i].Await, c[i].Rawait, c[i].Wawait,
-			c[i].Util)
-	}
+	return stat
 }

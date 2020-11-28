@@ -5,6 +5,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"os"
 	"strconv"
 	"strings"
@@ -47,9 +48,9 @@ func keybindings(app *app) error {
 		{"sysstat", 'l', showPgLog(app.db, app.doExit)},
 		{"sysstat", 'C', showPgConfig(app.db, app.doExit)},
 		{"sysstat", '~', runPsql(app.db, app.doExit)},
-		{"sysstat", 'B', showAux(app, auxDiskstat)},
-		{"sysstat", 'N', showAux(app, auxNicstat)},
-		{"sysstat", 'L', showAux(app, auxLogtail)},
+		{"sysstat", 'B', showExtra(app, stat.CollectDiskstats)},
+		{"sysstat", 'N', showExtra(app, stat.CollectNone)},
+		{"sysstat", 'L', showExtra(app, stat.CollectNone)},
 		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
 		{"sysstat", '/', dialogOpen(app, dialogFilter)},
 		{"sysstat", '-', dialogOpen(app, dialogCancelQuery)},

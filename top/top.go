@@ -16,9 +16,8 @@ type app struct {
 	config        *config
 	ui            *gocui.Gui
 	db            *postgres.DB
-	stats         *stat.Stat // TODO: в конечном счете от этой структуры следует избавиться т.к. стата берется из спец. стат горутины (см. collectStat)
-	doExit        chan int
-	doUpdate      chan int
+	doExit        chan int // TODO: следует переименовать в uiExit, т.к. используется для выхода из UI при запуске less/pager/psql утилит.
+	doUpdate      chan int // TODO: бесполезная штука, надо удалить.
 }
 
 // RunMain is the main entry point for 'pgcenter top' command
@@ -35,7 +34,6 @@ func RunMain(dbConfig *postgres.Config) error {
 	app := &app{
 		config: config,
 		db:     db,
-		stats:  &stat.Stat{},
 	}
 
 	// Setup context - which kind of stats should be displayed
@@ -50,9 +48,6 @@ func RunMain(dbConfig *postgres.Config) error {
 
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.
 func (app *app) Setup() error {
-	// Aux stats is not displayed by default
-	app.config.aux = auxNone
-
 	// Read details about Postgres
 	props, err := stat.ReadPostgresProperties(app.db)
 	if err != nil {

@@ -22,6 +22,7 @@ type View struct {
 	Msg       string                 // Show this text in Cmdline when switching to this unit
 	Filters   map[int]*regexp.Regexp // Storage for filter patterns: key is the column index, value - regexp pattern
 	Refresh   time.Duration          // Number of seconds between update view.
+	ShowExtra int                    // Specifies extra stats should be enabled on the view.
 }
 
 // Views is a list of all used context units.

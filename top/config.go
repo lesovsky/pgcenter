@@ -16,7 +16,6 @@ type config struct {
 	views view.Views
 	//
 	queryOptions query.Options // Queries' settings that depends on Postgres version
-	aux          auxType       // Type of current auxiliary stats
 	//
 	viewCh chan view.View
 }

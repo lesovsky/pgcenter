@@ -35,6 +35,9 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Set refresh interval from received view.
 	refresh := v.Refresh
 
+	// Set settings related to extra stats.
+	extra := v.ShowExtra
+
 	// Collect stat in loop and send it to stat channel.
 	for {
 		stats, err := c.Update(db, v)
@@ -52,6 +55,13 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			// Update refresh interval if it is changed.
 			if refresh != v.Refresh && v.Refresh > 0 {
 				refresh = v.Refresh
+				continue
+			}
+
+			// Update settings related to collecting extra stats (enable, disable or switch)
+			if extra != v.ShowExtra {
+				extra = v.ShowExtra
+				c.ToggleCollectExtra(extra)
 				continue
 			}
 
@@ -97,24 +107,24 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 		v.Clear()
 		printDbstat(v, app, s)
 
-		//if app.config.aux > auxNone {
-		//  v, err := g.View("aux")
-		//  if err != nil {
-		//    return fmt.Errorf("Set focus on aux view failed: %s", err)
-		//  }
-		//
-		//  switch app.config.aux {
-		//  case auxDiskstat:
-		//    v.Clear()
-		//    printIostat(v, app.stats.DiffDiskstats)
-		//  case auxNicstat:
-		//    v.Clear()
-		//    printNicstat(v, app.stats.DiffNetdevs)
-		//  case auxLogtail:
-		//    // don't clear screen
-		//    printLogtail(g, v)
-		//  }
-		//}
+		if app.config.view.ShowExtra > stat.CollectNone {
+			v, err := g.View("aux")
+			if err != nil {
+				return fmt.Errorf("Set focus on aux view failed: %s", err)
+			}
+
+			switch app.config.view.ShowExtra {
+			case stat.CollectDiskstats:
+				v.Clear()
+				printIostat(v, s.Diskstats)
+				//case auxNicstat:
+				//  v.Clear()
+				//  printNicstat(v, app.stats.DiffNetdevs)
+				//case auxLogtail:
+				//  // don't clear screen
+				//  printLogtail(g, v)
+			}
+		}
 		return nil
 	})
 }
