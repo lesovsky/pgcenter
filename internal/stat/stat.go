@@ -25,6 +25,7 @@ const (
 	CollectNone = iota
 	CollectDiskstats
 	CollectNetdev
+	CollectLogtail
 )
 
 // Stat

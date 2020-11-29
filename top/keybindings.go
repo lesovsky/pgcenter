@@ -50,7 +50,7 @@ func keybindings(app *app) error {
 		{"sysstat", '~', runPsql(app.db, app.doExit)},
 		{"sysstat", 'B', showExtra(app, stat.CollectDiskstats)},
 		{"sysstat", 'N', showExtra(app, stat.CollectNetdev)},
-		{"sysstat", 'L', showExtra(app, stat.CollectNone)},
+		{"sysstat", 'L', showExtra(app, stat.CollectLogtail)},
 		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
 		{"sysstat", '/', dialogOpen(app, dialogFilter)},
 		{"sysstat", '-', dialogOpen(app, dialogCancelQuery)},

@@ -5,6 +5,7 @@ package top
 
 import (
 	"github.com/lesovsky/pgcenter/internal/query"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 )
 
@@ -18,6 +19,8 @@ type config struct {
 	queryOptions query.Options // Queries' settings that depends on Postgres version
 	//
 	viewCh chan view.View
+	//
+	logtail stat.Logfile
 }
 
 func newConfig() *config {

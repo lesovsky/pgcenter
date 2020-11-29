@@ -105,7 +105,7 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			return fmt.Errorf("Set focus on dbstat view failed: %s", err)
 		}
 		v.Clear()
-		printDbstat(v, app, s)
+		printDbstat(v, app, s) // TODO: насколько тут большая необходимость в передаче 'app' ?
 
 		if app.config.view.ShowExtra > stat.CollectNone {
 			v, err := g.View("aux")
@@ -120,9 +120,26 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			case stat.CollectNetdev:
 				v.Clear()
 				printNetdev(v, s.Netdevs)
-				//case auxLogtail:
-				//  // don't clear screen
-				//  printLogtail(g, v)
+			case stat.CollectLogtail:
+				size, buf, err := readLogfileRecent(v, app.config.logtail)
+				if err != nil {
+					printCmdline(g, "Tail Postgres log failed: %s", err)
+					return err
+				}
+
+				if size < app.config.logtail.Size {
+					v.Clear()
+					err := app.config.logtail.Reopen(app.db)
+					if err != nil {
+						printCmdline(g, "Tail Postgres log failed: %s", err)
+						return err
+					}
+				}
+
+				// Update info about logfile size.
+				app.config.logtail.Size = size
+
+				printLogtail(v, app.config.logtail.Path, buf)
 			}
 		}
 		return nil
@@ -153,6 +170,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties) {
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
 		props.State,
 		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
+		// TODO: remove 'dummy' values
 		"dummy", 0, "dummy", "dummy",
 		props.Version, s.Activity.Uptime, props.Recovery)
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
@@ -314,51 +332,41 @@ func printNetdev(v *gocui.View, s stat.Netdevs) {
 	}
 }
 
-// Print logtail - last lines of Postgres log
-func printLogtail(g *gocui.Gui, v *gocui.View) {
-	// pgCenter builds multiline log-records into a single one and truncates resulting line to screen's length. But
-	// it's possible to print them completely with v.Wrap = true. But with v.Wrap and v.Autoscroll, it's possible to
-	// solve all issues - just read a quite big amount of logs, and limit this amount by size of the view - all
-	// unneeded log records will be outside of the screen, thus user will see real tail of the logfile. But this approach
-	// can't to be used, because the log-file path has to printed in the beginning, before log records.
-	// Logfile path can be moved to the view's title, but in this case the view frame will be drawn.
-
+// readLogfileRecent reads necessary number of recent lines in logfile and return them.
+func readLogfileRecent(v *gocui.View, logfile stat.Logfile) (int64, []byte, error) {
+	// Calculate necessary number of lines and buffer size depending on size available screen.
 	x, y := v.Size()
-	pgLog.LinesLimit = y - 1  // size of tail in lines
-	pgLog.Bufsize = x * y * 2 // max size of used buffer -- don't need to read log more than that amount
+	linesLimit := y - 1  // available number of lines
+	bufsize := x * y * 2 // max size of used buffer - don't need to read log more than that amount
 
-	info, err := os.Stat(pgLog.Path)
+	info, err := os.Stat(logfile.Path)
 	if err != nil {
-		printCmdline(g, "Failed to stat logfile: %s", err)
-		return
+		return 0, nil, err
 	}
 
-	// Update screen only if logfile is changed
-	if info.Size() > pgLog.Size {
+	// Do nothing if logfile is not changed or empty.
+	if info.Size() == logfile.Size || info.Size() == 0 {
+		return info.Size(), nil, nil
+	}
+
+	// Read the log for necessary number of lines or until bufsize reached.
+	buf, err := logfile.Read(linesLimit, bufsize)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	// return the log's size and buffer content
+	return info.Size(), buf, nil
+}
+
+// Print logtail - last lines of Postgres log
+func printLogtail(v *gocui.View, path string, buf []byte) {
+	if len(string(buf)) > 0 {
 		// clear view's content and read the log
 		v.Clear()
-		buf, err := pgLog.Read()
-		if err != nil {
-			printCmdline(g, "Failed to read logfile: %s", err)
-			return
-		}
 
-		// print the log's path and file name and log's latest lines
-		if len(string(buf)) > 0 {
-			fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", pgLog.Path)
-			fmt.Fprintf(v, "%s", string(buf))
-		}
-		// remember log's size
-		pgLog.Size = info.Size()
-	} else if info.Size() < pgLog.Size {
-		// size is less than it was - perhaps logfile is truncated and rotated
-		v.Clear()
-		err := pgLog.ReOpen()
-		if err != nil {
-			printCmdline(g, "Failed to reopen logfile: %s", err)
-			return
-		}
-		pgLog.Size = info.Size()
+		fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", path)
+		fmt.Fprintf(v, "%s", string(buf))
 	}
 
 	return
