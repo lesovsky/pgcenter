@@ -51,11 +51,10 @@ func readCpuStatLocal(statfile string) (CpuStat, error) {
 
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
-			//log.Debugf("/proc/stat bad line; skip")
 			continue
 		}
 
-		// Looking only for total stat. We're not interested in per-CPU stats.
+		// Looking only for total stat, skip per-CPU stats.
 		if parts[0] != "cpu" {
 			continue
 		}
@@ -67,10 +66,10 @@ func readCpuStatLocal(statfile string) (CpuStat, error) {
 		)
 
 		if err != nil && err != io.EOF {
-			return stat, fmt.Errorf("parse %s (cpu) failed: %s", line, err)
+			return stat, fmt.Errorf("%s bad content: %s", statfile, err)
 		}
 		if count != 11 {
-			return stat, fmt.Errorf("parse %s (cpu) failed: insufficient elements parsed", line)
+			return stat, fmt.Errorf("%s bad content: not enough fields in '%s'", statfile, line)
 		}
 
 		stat.Total = stat.User + stat.Nice + stat.Sys + stat.Idle + stat.Iowait + stat.Irq + stat.Softirq + stat.Steal + stat.Guest

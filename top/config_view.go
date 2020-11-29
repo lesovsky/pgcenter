@@ -225,7 +225,7 @@ func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, config *config) 
 
 	q, err := query.PrepareQuery(config.view.QueryTmpl, config.queryOptions)
 	if err != nil {
-		printCmdline(g, "Nothing to do. Failed: ", err.Error())
+		printCmdline(g, "Nothing to do. Failed: %s", err.Error())
 		return
 	}
 

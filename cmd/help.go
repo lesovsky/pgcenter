@@ -34,6 +34,7 @@ Report bugs to %s
 		//profile.CommandDefinition.Short,
 		//record.CommandDefinition.Short,
 		//report.CommandDefinition.Short,
+		"dummy", "dummy", "dummy", "dummy", // TODO: remove dummy values
 		top.CommandDefinition.Short,
 		programIssuesUrl)
 }

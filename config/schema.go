@@ -61,23 +61,27 @@ package config
 //	$$;`
 //
 //	// Name: sys_proc_diskstats; Type: VIEW; Schema: pgcenter
-//	createView1Sql = `CREATE VIEW pgcenter.sys_proc_diskstats AS
-// 	SELECT get_proc_stats.col0 AS maj,
-//    	get_proc_stats.col1 AS min,
-//    	get_proc_stats.col2 AS dev,
-//    	get_proc_stats.col3 AS reads,
-//    	get_proc_stats.col4 AS rmerges,
-//    	get_proc_stats.col5 AS rsects,
-//    	get_proc_stats.col6 AS rspent,
-//    	get_proc_stats.col7 AS writes,
-//    	get_proc_stats.col8 AS wmerges,
-//    	get_proc_stats.col9 AS wsects,
-//    	get_proc_stats.col10 AS wspent,
-//    	get_proc_stats.col11 AS inprog,
-//    	get_proc_stats.col12 AS spent,
-//    	get_proc_stats.col13 AS weighted
-//   	FROM pgcenter.get_proc_stats('/proc/diskstats'::character varying, ' '::character varying, ''::character varying, 0)
-//   	AS (col0 integer, col1 integer, col2 character varying, col3 bigint, col4 bigint, col5 bigint, col6 bigint, col7 bigint, col8 bigint, col9 bigint, col10 bigint, col11 bigint, col12 bigint, col13 bigint);`
+//	createView1Sql = `CREATE VIEW pgcenter.sys_proc_diskstats as SELECT get_proc_stats.col0 AS maj,
+//    get_proc_stats.col1 AS min,
+//    get_proc_stats.col2 AS dev,
+//    get_proc_stats.col3 AS reads,
+//    get_proc_stats.col4 AS rmerges,
+//    get_proc_stats.col5 AS rsects,
+//    get_proc_stats.col6 AS rspent,
+//    get_proc_stats.col7 AS writes,
+//    get_proc_stats.col8 AS wmerges,
+//    get_proc_stats.col9 AS wsects,
+//    get_proc_stats.col10 AS wspent,
+//    get_proc_stats.col11 AS inprog,
+//    get_proc_stats.col12 AS spent,
+//    get_proc_stats.col13 AS weighted,
+//    coalesce(get_proc_stats.col14, 0) as discards,
+//    coalesce(get_proc_stats.col15, 0) as dmerges,
+//    coalesce(get_proc_stats.col16, 0) as dsectors,
+//    coalesce(get_proc_stats.col17, 0) as dspent,
+//    coalesce(get_proc_stats.col18, 0) as flushes,
+//    coalesce(get_proc_stats.col19, 0) as fspent
+//   FROM pgcenter.get_proc_stats('/proc/diskstats'::character varying, ' '::character varying, ''::character varying, 0) get_proc_stats(col0 integer, col1 integer, col2 character varying, col3 float, col4 float, col5 float, col6 float, col7 float, col8 float, col9 float, col10 float, col11 float, col12 float, col13 float, col14 float, col15 float, col16 float, col17 float, col18 float, col19 float);`
 //
 //	// Name: sys_proc_loadavg; Type: VIEW; Schema: pgcenter
 //	createView2Sql = `CREATE VIEW pgcenter.sys_proc_loadavg AS

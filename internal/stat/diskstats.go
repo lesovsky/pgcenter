@@ -6,11 +6,13 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"os"
 	"regexp"
+	"strings"
 )
 
-// Diskstat is the container for storing stats per single block device
+// Diskstat describes IO statistics for single device based on /proc/diskstats.
+// See details https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
 type Diskstat struct {
-	/* diskstats basic */
+	/* basic */
 	Major, Minor int     // 1 - major number; 2 - minor number
 	Device       string  // 3 - device name
 	Rcompleted   float64 // 4 - reads completed successfully
@@ -24,7 +26,13 @@ type Diskstat struct {
 	Ioinprogress float64 // 12 - I/Os currently in progress
 	Tspent       float64 // 13 - time spent doing I/Os (ms)
 	Tweighted    float64 // 14 - weighted time spent doing I/Os (ms)
-	/* diskstats advanced */
+	Dcompleted   float64 // 15 - discards completed successfully
+	Dmerged      float64 //	16 - discards merged
+	Dsectors     float64 //	17 - sectors discarded
+	Dspent       float64 //	18 - time spent discarding
+	Fcompleted   float64 // 19 - flush requests completed successfully
+	Fspent       float64 // 20 - time spent flushing
+	/* advanced */
 	Uptime    float64 // system uptime, used for interval calculation
 	Completed float64 // reads and writes completed
 	Rawait    float64 // average time (in milliseconds) for read requests issued to the device to be served. This includes the time spent by the requests in queue and the time spent servicing them.
@@ -71,16 +79,42 @@ func readDiskstatsLocal(statfile string) (Diskstats, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		values := strings.Fields(line)
+
+		// Linux kernel <= 4.18 have 14 columns, 4.18+ have 18, 5.5+ have 20 columns
+		// for details see https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats)
+		if len(values) != 14 && len(values) != 18 && len(values) != 20 {
+			return nil, fmt.Errorf("%s bad content: unknown file format, wrong number of columns in line: %s", statfile, line)
+		}
+
 		var d = Diskstat{}
 
-		// TODO: add support for recent diskstats format.
-		_, err = fmt.Sscan(line,
-			&d.Major, &d.Minor, &d.Device,
-			&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent,
-			&d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
-			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
+		switch len(values) {
+		case 14:
+			_, err = fmt.Sscan(line,
+				&d.Major, &d.Minor, &d.Device,
+				&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent, &d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
+				&d.Ioinprogress, &d.Tspent, &d.Tweighted,
+			)
+		case 18:
+			_, err = fmt.Sscan(line,
+				&d.Major, &d.Minor, &d.Device,
+				&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent, &d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
+				&d.Ioinprogress, &d.Tspent, &d.Tweighted, &d.Dcompleted, &d.Dmerged, &d.Dsectors, &d.Dspent,
+			)
+		case 20:
+			_, err = fmt.Sscan(line,
+				&d.Major, &d.Minor, &d.Device,
+				&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent, &d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
+				&d.Ioinprogress, &d.Tspent, &d.Tweighted, &d.Dcompleted, &d.Dmerged, &d.Dsectors, &d.Dspent,
+				&d.Fcompleted, &d.Fspent,
+			)
+		default:
+			// should not be here, but anyway check for that
+			err = fmt.Errorf("unknown file format, wrong number of columns in line: %s", line)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("%s bad content", statfile)
+			return nil, fmt.Errorf("%s bad content: %w", statfile, err)
 		}
 
 		// skip pseudo block devices.
@@ -116,7 +150,9 @@ func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 		err := rows.Scan(&d.Major, &d.Minor, &d.Device,
 			&d.Rcompleted, &d.Rmerged, &d.Rsectors, &d.Rspent,
 			&d.Wcompleted, &d.Wmerged, &d.Wsectors, &d.Wspent,
-			&d.Ioinprogress, &d.Tspent, &d.Tweighted)
+			&d.Ioinprogress, &d.Tspent, &d.Tweighted,
+			&d.Dcompleted, &d.Dmerged, &d.Dsectors, &d.Dspent,
+			&d.Fcompleted, &d.Fspent)
 		if err != nil {
 			return nil, err
 		}
@@ -148,8 +184,11 @@ func countDiskstatsUsage(prev Diskstats, curr Diskstats, ticks float64) Diskstat
 			continue
 		}
 
-		itv := curr[i].Uptime - prev[i].Uptime
+		stat[i].Major = curr[i].Major
+		stat[i].Minor = curr[i].Minor
 		stat[i].Device = curr[i].Device
+		itv := curr[i].Uptime - prev[i].Uptime
+
 		stat[i].Completed = curr[i].Rcompleted + curr[i].Wcompleted
 
 		stat[i].Util = sValue(prev[i].Tspent, curr[i].Tspent, itv, ticks) / 10
