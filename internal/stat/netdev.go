@@ -9,13 +9,14 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strings"
 )
 
 // Netdev is the container for stats related to a single network interface
 type Netdev struct {
 	Ifname string /* interface name */
-	Speed  uint32 /* interface network speed */
-	Duplex uint8  /* interface duplex */
+	Speed  int64  /* interface network speed */
+	Duplex int64  /* interface duplex */
 	// receive
 	Rbytes      float64 /* total number of received bytes */
 	Rpackets    float64 /* total number of received packets */
@@ -86,10 +87,15 @@ func readNetdevsLocal(statfile string) (Netdevs, error) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
+		values := strings.Fields(line)
+
+		if len(values) != 17 {
+			return nil, fmt.Errorf("%s bad content: unknown file format, wrong number of columns in line: %s", statfile, line)
+		}
 
 		var n = Netdev{}
 
-		_, err = fmt.Sscanln(string(line),
+		_, err = fmt.Sscanln(line,
 			&n.Ifname,
 			&n.Rbytes, &n.Rpackets, &n.Rerrs, &n.Rdrop, &n.Rfifo, &n.Rframe, &n.Rcompressed, &n.Rmulticast,
 			&n.Tbytes, &n.Tpackets, &n.Terrs, &n.Tdrop, &n.Tfifo, &n.Tcolls, &n.Tcarrier, &n.Tcompressed)
@@ -103,12 +109,13 @@ func readNetdevsLocal(statfile string) (Netdevs, error) {
 			continue
 		}
 
+		n.Ifname = strings.TrimRight(n.Ifname, ":")
 		n.Saturation = n.Rerrs + n.Rdrop + n.Tdrop + n.Tfifo + n.Tcolls + n.Tcarrier
-
 		n.Uptime = uptime
 
-		// Get interface's speed and duplex, perhaps it's too expensive to poll interface in every execution of the function.
-		n.Speed, n.Duplex, _ = GetLinkSettings(n.Ifname) /* use zeros if errors */
+		// Get interface's speed and duplex
+		// TODO: perhaps it's too expensive to poll interface in every execution of the function.
+		n.Speed, n.Duplex, _ = GetLinkSettings(n.Ifname) /* ignore errors, just use zeros if any */
 
 		stat = append(stat, n)
 	}
@@ -117,9 +124,11 @@ func readNetdevsLocal(statfile string) (Netdevs, error) {
 }
 
 func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
-	var stat Netdevs
 	var uptime float64
-	db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	err := db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
+	if err != nil {
+		return nil, err
+	}
 
 	rows, err := db.Query(pgProcNetdevQuery)
 	if err != nil {
@@ -127,6 +136,7 @@ func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 	}
 	defer rows.Close()
 
+	var stat Netdevs
 	var dummy string
 	for rows.Next() {
 		var n = Netdev{}
@@ -144,14 +154,16 @@ func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 		}
 
 		n.Uptime = uptime
+		stat = append(stat, n)
+	}
 
-		// Get interface's speed and duplex, perhaps it's too expensive to poll interface in every execution of the function.
-		err = db.QueryRow(pgProcLinkSettingsQuery, n.Ifname).Scan(&n.Speed, &n.Duplex)
+	// Get interface's speed and duplex
+	// TODO: perhaps it's too expensive to poll interface in every execution of the function.
+	for i := range stat {
+		err = db.QueryRow(pgProcLinkSettingsQuery, stat[i].Ifname).Scan(&stat[i].Speed, &stat[i].Duplex)
 		if err != nil {
 			return nil, err
 		}
-
-		stat = append(stat, n)
 	}
 
 	return stat, nil

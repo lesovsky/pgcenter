@@ -69,7 +69,7 @@ const (
 )
 
 // GetLinkSettings asks network interface settings using ethtool
-func GetLinkSettings(ifname string) (uint32, uint8, error) {
+func GetLinkSettings(ifname string) (int64, int64, error) {
 	e, err := NewEthtool()
 	if err != nil {
 		return 0, 0, fmt.Errorf("new ethtool failed: %s", err)
@@ -96,7 +96,7 @@ func GetLinkSettings(ifname string) (uint32, uint8, error) {
 
 	//var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
 
-	return uint32(ecmd.Speed) * 1000000, ecmd.Duplex, nil
+	return int64(ecmd.Speed) * 1000000, int64(ecmd.Duplex), nil
 }
 
 // NewEthtool opens communication channel for ethtool

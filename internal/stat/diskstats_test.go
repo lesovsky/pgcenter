@@ -28,7 +28,6 @@ func Test_readDiskstats(t *testing.T) {
 	assert.Equal(t, len(got), 0)
 }
 
-//
 func Test_readDiskstatsLocal(t *testing.T) {
 	testcases := []struct {
 		statfile string

@@ -131,7 +131,6 @@ func readDiskstatsLocal(statfile string) (Diskstats, error) {
 }
 
 func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
-	var stat Diskstats
 	var uptime float64
 	err := db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
 	if err != nil {
@@ -144,6 +143,7 @@ func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 	}
 	defer rows.Close()
 
+	var stat Diskstats
 	for rows.Next() {
 		var d = Diskstat{}
 

@@ -103,25 +103,25 @@ package config
 //
 //	// Name: sys_proc_netdev; Type: VIEW; Schema: pgcenter
 //	createView4Sql = `CREATE VIEW pgcenter.sys_proc_netdev AS
-// 	SELECT get_proc_stats.col0 AS iface,
-//    	get_proc_stats.col1 AS recv_bytes,
-//    	get_proc_stats.col2 AS recv_pckts,
-//    	get_proc_stats.col3 AS recv_err,
-//    	get_proc_stats.col4 AS recv_drop,
-//    	get_proc_stats.col5 AS recv_fifo,
-//    	get_proc_stats.col6 AS recv_frame,
-//		get_proc_stats.col7 AS recv_cmpr,
-//		get_proc_stats.col8 AS recv_mcast,
-//		get_proc_stats.col9 AS sent_bytes,
-//		get_proc_stats.col10 AS sent_pckts,
-//		get_proc_stats.col11 AS sent_err,
-//		get_proc_stats.col12 AS sent_drop,
-//		get_proc_stats.col13 AS sent_fifo,
-//		get_proc_stats.col14 AS sent_colls,
-//		get_proc_stats.col15 AS sent_carrier,
-//		get_proc_stats.col16 AS sent_cmpr
-//   	FROM pgcenter.get_proc_stats('/proc/net/dev'::character varying, ' '::character varying, ''::character varying, 2)
-//   	AS (col0 character varying, col1 bigint, col2 bigint, col3 bigint, col4 bigint, col5 bigint, col6 bigint, col7 bigint, col8 bigint, col9 bigint, col10 bigint, col11 bigint, col12 bigint, col13 bigint, col14 bigint, col15 bigint, col16 bigint);`
+//SELECT get_proc_stats.col0 AS iface,
+//get_proc_stats.col1 AS recv_bytes,
+//get_proc_stats.col2 AS recv_pckts,
+//get_proc_stats.col3 AS recv_err,
+//get_proc_stats.col4 AS recv_drop,
+//get_proc_stats.col5 AS recv_fifo,
+//get_proc_stats.col6 AS recv_frame,
+//get_proc_stats.col7 AS recv_cmpr,
+//get_proc_stats.col8 AS recv_mcast,
+//get_proc_stats.col9 AS sent_bytes,
+//get_proc_stats.col10 AS sent_pckts,
+//get_proc_stats.col11 AS sent_err,
+//get_proc_stats.col12 AS sent_drop,
+//get_proc_stats.col13 AS sent_fifo,
+//get_proc_stats.col14 AS sent_colls,
+//get_proc_stats.col15 AS sent_carrier,
+//get_proc_stats.col16 AS sent_cmpr
+//FROM pgcenter.get_proc_stats('/proc/net/dev'::character varying, ' '::character varying, ''::character varying, 2)
+//AS (col0 character varying, col1 float, col2 float, col3 float, col4 float, col5 float, col6 float, col7 float, col8 float, col9 float, col10 float, col11 float, col12 float, col13 float, col14 float, col15 float, col16 float)`
 //
 //	// Name: sys_proc_stat; Type: VIEW; Schema: pgcenter
 //	createView5Sql = `CREATE VIEW pgcenter.sys_proc_stat AS
