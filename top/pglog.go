@@ -12,16 +12,16 @@ import (
 )
 
 // Open Postgres log in $PAGER program.
-func showPgLog(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func showPgLog(db *postgres.DB, version int, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		if !db.Local {
 			printCmdline(g, "Show log is not supported for remote hosts")
 			return nil
 		}
 
-		currentLogfile := stat.ReadLogPath(db)
-		if currentLogfile == "" {
-			printCmdline(g, "Can't assemble absolute path to log file")
+		logfile, err := stat.GetPostgresCurrentLogfile(db, version)
+		if err != nil {
+			printCmdline(g, "Can't get path to log file")
 			return nil
 		}
 
@@ -30,16 +30,16 @@ func showPgLog(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.Vie
 			pager = "less"
 		}
 
-		// exit from UI and stats loop... will restore it after $PAGER is closed.
+		// Exit from UI and stats loop. Restore it after $PAGER is closed.
 		doExit <- 1
 		g.Close()
 
-		cmd := exec.Command(pager, currentLogfile)
+		cmd := exec.Command(pager, logfile)
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {
 			// if external program fails, save error and show it to user in next UI iteration
-			errSaved = fmt.Errorf("failed to open %s: %s", currentLogfile, err)
+			errSaved = fmt.Errorf("open %s failed: %s", logfile, err)
 			return err
 		}
 

@@ -1,6 +1,7 @@
 package stat
 
 import (
+	"fmt"
 	"github.com/jehiah/go-strftime"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
@@ -34,13 +35,17 @@ func (l *Logfile) Close() error {
 }
 
 // ReOpen closes log file and open it again in case of rotate.
-func (l *Logfile) Reopen(db *postgres.DB) error {
+func (l *Logfile) Reopen(db *postgres.DB, version int) error {
 	if err := l.Close(); err != nil {
 		return err
 	}
 
 	// Update path on case if it changed. (What are cases when it is required?)
-	l.Path = ReadLogPath(db)
+	logfile, err := GetPostgresCurrentLogfile(db, version)
+	if err != nil {
+		return err
+	}
+	l.Path = logfile
 
 	return l.Open()
 }
@@ -97,37 +102,60 @@ func (l *Logfile) Read(linesLimit int, bufsize int) ([]byte, error) {
 }
 
 // Get an absolute path of current Postgres log.
-func ReadLogPath(db *postgres.DB) string {
-	var logfileRealpath, pgDatadir string
-
-	// An easiest way to get logfile is using pg_current_logfile() function, but it's available since PG 10.
-	db.QueryRow(query.PgGetCurrentLogfileQuery).Scan(&logfileRealpath)
-
-	if logfileRealpath != "" {
-		// Even pg_current_logfile() might return relative path
-		if !strings.HasPrefix(logfileRealpath, "/") {
-			db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
-			logfileRealpath = pgDatadir + "/" + logfileRealpath
+func GetPostgresCurrentLogfile(db *postgres.DB, version int) (string, error) {
+	// Postgres 10 has pg_current_logfile() function which is easies way to get current logfile path.
+	var logfile string
+	var err error
+	if version >= 100000 {
+		err := db.QueryRow(query.PgGetCurrentLogfileQuery).Scan(&logfile)
+		if err != nil {
+			return "", err
 		}
-		return logfileRealpath
+	} else {
+		// Old Postgres versions have no pg_current_logfile() function, try to use more complicated way to get logfile.
+		logfile, err = lookupPostgresLogfile(db)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	// if we're here, it means we are connected to old Postgres that has no pg_current_logfile() function (9.6 and older).
-	// Anyway, after November 2021, all Postgres 9.x will become EOL and code below could be deleted.
-	return lookupPostgresLogfile(db)
+	if logfile == "" {
+		return "", fmt.Errorf("failed to get logfile path: empty response")
+	}
+
+	// Handle relative paths.
+	var datadir string
+	if !strings.HasPrefix(logfile, "/") {
+		err := db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&datadir)
+		if err != nil {
+			return "", err
+		}
+		logfile = datadir + "/" + logfile
+	}
+
+	return logfile, nil
 }
 
 // lookupPostgresLogfiles tries to assemble in a hard way an absolute path to Postgres logfile
-func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
-	var pgDatadir, pgLogdir, pgLogfile, pgLogfileFallback string
-	db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&pgDatadir)
-	db.QueryRow(query.PgGetSingleSettingQuery, "log_directory").Scan(&pgLogdir)
-	db.QueryRow(query.PgGetSingleSettingQuery, "log_filename").Scan(&pgLogfile)
+func lookupPostgresLogfile(db *postgres.DB) (string, error) {
+	var datadir, logdir, logfilename, startTime, timezone string
+	q := "select current_setting('data_directory') as data_directory, current_setting('log_directory') as log_directory, current_setting('log_filename') as log_filename, to_char(pg_postmaster_start_time(), 'HH24MISS') as start_time, current_setting('timezone') as timezone"
+	if err := db.QueryRow(q).Scan(&datadir, &logdir, &logfilename, &startTime, &timezone); err != nil {
+		return "", err
+	}
 
-	if strings.HasPrefix(pgLogdir, "/") {
-		absLogfilePath = pgLogdir + "/" + pgLogfile // absolute path
+	return assemblePostgresLogfile(datadir, logdir, logfilename, startTime, timezone), nil
+}
+
+//
+func assemblePostgresLogfile(datadir, logdir, logfilename, startTime, timezone string) string {
+	var logfile string
+
+	// Handle relative value of log directory.
+	if strings.HasPrefix(logdir, "/") {
+		logfile = logdir + "/" + logfilename // log directory is an absolute path
 	} else {
-		absLogfilePath = pgDatadir + "/" + pgLogdir + "/" + pgLogfile // relative to DATADIR path
+		logfile = datadir + "/" + logdir + "/" + logfilename // log directory is a relative to DATADIR path
 	}
 
 	// If log_filename GUC contains %H%M%S part (Ubuntu-style default), it has to be replaced to timestamp of Postgres startup time.
@@ -136,29 +164,27 @@ func lookupPostgresLogfile(db *postgres.DB) (absLogfilePath string) {
 	// different variations of that: %H_%M_%S, %H-%M-%S or similar, and code below will not work.
 	// Also things becomes a bit tricky if logfile rotated through pg_rotate_logfile(), hence instead of Postgres startup time
 	// the time when rotation occurred will be use. This use case is not covered here.
-	if strings.Contains(absLogfilePath, "%H%M%S") {
-		var pgStartTime string
-		db.QueryRow(query.PgPostmasterStartTimeQuery).Scan(&pgStartTime)
-		// rotated logfile, fallback to it in case when above isn't exist
-		pgLogfileFallback = strings.Replace(absLogfilePath, "%H%M%S", "000000", 1)
-		// logfile created today
-		absLogfilePath = strings.Replace(absLogfilePath, "%H%M%S", pgStartTime, 1)
-	}
 
-	if strings.Contains(absLogfilePath, "%") {
-		var pgLogTz = "timezone"
-		db.QueryRow(query.PgGetSingleSettingQuery, pgLogTz).Scan(&pgLogTz)
-
+	if strings.Contains(logfile, "%") {
 		t := time.Now()
-		tz, _ := time.LoadLocation(pgLogTz)
+		tz, _ := time.LoadLocation(timezone)
 		t = t.In(tz)
-		absLogfilePath = strftime.Format(absLogfilePath, t)
 
-		// check the logfile exists, if not -- use fallback name.
-		if _, err := os.Stat(absLogfilePath); err != nil {
-			absLogfilePath = strftime.Format(pgLogfileFallback, t)
+		var logfileFallback string
+		if strings.Contains(logfile, "%H%M%S") {
+			logfile, logfileFallback = strings.Replace(logfile, "%H%M%S", startTime, 1), strings.Replace(logfile, "%H%M%S", "000000", 1)
+		} else {
+			logfile, logfileFallback = strftime.Format(logfile, t), ""
+		}
+
+		// check the logfile or fallback logfiles exist.
+		if _, err := os.Stat(logfile); err != nil {
+			logfile = logfileFallback
+			if _, err := os.Stat(logfile); err != nil {
+				logfile = "" // neither logfile, nor fallback logfile exists, return empty string.
+			}
 		}
 	}
 
-	return absLogfilePath
+	return logfile
 }

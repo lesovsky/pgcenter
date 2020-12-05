@@ -129,7 +129,7 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 
 				if size < app.config.logtail.Size {
 					v.Clear()
-					err := app.config.logtail.Reopen(app.db)
+					err := app.config.logtail.Reopen(app.db, app.postgresProps.VersionNum)
 					if err != nil {
 						printCmdline(g, "Tail Postgres log failed: %s", err)
 						return err

@@ -90,6 +90,7 @@ func doWork(ctx context.Context, app *app) {
 		select {
 		case <-app.doExit:
 			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
+			// TODO: does stat goroutine gracefully exits here?
 			return
 		case <-app.doUpdate:
 			continue

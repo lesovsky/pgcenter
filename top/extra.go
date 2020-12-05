@@ -49,8 +49,12 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 				return nil
 			}
 
+			logfile, err := stat.GetPostgresCurrentLogfile(app.db, app.postgresProps.VersionNum)
+			if err != nil {
+				return err
+			}
+			app.config.logtail.Path = logfile
 			app.config.logtail.Size = 0
-			app.config.logtail.Path = stat.ReadLogPath(app.db)
 
 			// Check the logfile isn't an empty
 			if info, err := os.Stat(app.config.logtail.Path); err == nil && info.Size() == 0 {
