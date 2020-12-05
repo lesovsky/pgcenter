@@ -115,7 +115,7 @@ func readNetdevsLocal(statfile string) (Netdevs, error) {
 
 		// Get interface's speed and duplex
 		// TODO: perhaps it's too expensive to poll interface in every execution of the function.
-		n.Speed, n.Duplex, _ = GetLinkSettings(n.Ifname) /* ignore errors, just use zeros if any */
+		n.Speed, n.Duplex, _ = getLinkSettings(n.Ifname) /* ignore errors, just use zeros if any */
 
 		stat = append(stat, n)
 	}

@@ -9,13 +9,28 @@ import (
 	"unsafe"
 )
 
-// Ethtool describes ethtool communication channel
-type Ethtool struct {
+// ethtool describes ethtool communication channel
+type ethtool struct {
 	fd int
 }
 
+// newEthtool opens communication channel for ethtool.
+func newEthtool() (*ethtool, error) {
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open socket: %s", err)
+	}
+
+	return &ethtool{fd: fd}, nil
+}
+
+// close method closes ethtool communication channel.
+func (e *ethtool) close() {
+	_ = syscall.Close(e.fd) // ignore errors
+}
+
 // EthtoolCmd describes deprecated ethtool_cmd{} C struct used for managing link control and status. DEPRECATED struct
-type EthtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
+type ethtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 	Cmd           uint32 // Command number = %ETHTOOL_GSET or %ETHTOOL_SSET
 	Supported     uint32 // Bitmask of %SUPPORTED_* flags for the link modes and features
 	Advertising   uint32 // Bitmask of %ADVERTISED_* flags for the link modes and features
@@ -36,7 +51,7 @@ type EthtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 }
 
 // EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct
-type EthtoolLinkSettings struct {
+type ethtoolLinkSettings struct {
 	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
 	Speed               uint32 // Link speed (Mbps)
 	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
@@ -53,6 +68,7 @@ type EthtoolLinkSettings struct {
 	LinkModeMasks       [0]uint32 // -- origin 'link_mode_masks'
 }
 
+//
 type ifreq struct {
 	ifrName [ifNameSize]byte
 	ifrData uintptr
@@ -68,50 +84,30 @@ const (
 	duplexUnknown        = 255
 )
 
-// GetLinkSettings asks network interface settings using ethtool
-func GetLinkSettings(ifname string) (int64, int64, error) {
-	e, err := NewEthtool()
+// getLinkSettings asks network interface settings using ethtool.
+func getLinkSettings(ifname string) (int64, int64, error) {
+	e, err := newEthtool()
 	if err != nil {
 		return 0, 0, fmt.Errorf("new ethtool failed: %s", err)
 	}
-	defer e.Close()
+	defer e.close()
 
-	ecmd := EthtoolCmd{
-		Cmd: ethtoolGset,
-	}
+	ecmd := ethtoolCmd{Cmd: ethtoolGset}
 
 	var name [ifNameSize]byte
-	copy(name[:], []byte(ifname))
+	copy(name[:], ifname)
 
 	ifr := ifreq{
 		ifrName: name,
 		ifrData: uintptr(unsafe.Pointer(&ecmd)),
 	}
 
-	_, _, ep := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd),
-		siocEthtool, uintptr(unsafe.Pointer(&ifr)))
+	_, _, ep := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd), siocEthtool, uintptr(unsafe.Pointer(&ifr)))
 	if ep != 0 {
-		return 0, 0, fmt.Errorf("ioctl failed: %s", syscall.Errno(ep))
+		return 0, 0, fmt.Errorf("ioctl failed: %s", ep)
 	}
 
 	//var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
 
 	return int64(ecmd.Speed) * 1000000, int64(ecmd.Duplex), nil
-}
-
-// NewEthtool opens communication channel for ethtool
-func NewEthtool() (*Ethtool, error) {
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open socket: %s", err)
-	}
-
-	return &Ethtool{
-		fd: int(fd),
-	}, nil
-}
-
-// Close method closes ethtool communication channel
-func (e *Ethtool) Close() {
-	syscall.Close(e.fd)
 }
