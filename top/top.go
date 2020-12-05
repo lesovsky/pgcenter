@@ -49,7 +49,7 @@ func RunMain(dbConfig *postgres.Config) error {
 // Initial setup of the context. Set defaults and override settings which depends on Postgres version, recovery status, etc.
 func (app *app) Setup() error {
 	// Read details about Postgres
-	props, err := stat.ReadPostgresProperties(app.db)
+	props, err := stat.GetPostgresProperties(app.db)
 	if err != nil {
 		return err
 	}

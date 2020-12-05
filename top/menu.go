@@ -5,7 +5,6 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/internal/stat"
 )
 
 // Type of the menu
@@ -141,13 +140,13 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case menuConf:
 			switch cy {
 			case 0:
-				editPgConfig(g, app.db, stat.GucMainConfFile, app.doExit)
+				editPgConfig(g, app.db, gucMainConfFile, app.doExit)
 			case 1:
-				editPgConfig(g, app.db, stat.GucHbaFile, app.doExit)
+				editPgConfig(g, app.db, gucHbaFile, app.doExit)
 			case 2:
-				editPgConfig(g, app.db, stat.GucIdentFile, app.doExit)
+				editPgConfig(g, app.db, gucIdentFile, app.doExit)
 			case 3:
-				editPgConfig(g, app.db, stat.GucRecoveryFile, app.doExit)
+				editPgConfig(g, app.db, gucRecoveryFile, app.doExit)
 			}
 		case menuNone:
 			/* do nothing */

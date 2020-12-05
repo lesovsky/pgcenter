@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -30,6 +31,91 @@ func newTestPGresult() PGresult {
 			},
 		},
 	}
+}
+
+func Test_collectPostgresStat(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+
+	prev := Pgstat{Activity: Activity{Calls: 0}}
+
+	version := 1000000 // suppose to use PG 100.0
+	got, err := collectPostgresStat(conn, version, true, 1, query.PgStatDatabaseQueryDefault, prev)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", got.Activity.State)
+	assert.Greater(t, got.Result.Nrows, 0)
+
+	// testing with already closed conn
+	conn.Close()
+	_, err = collectPostgresStat(conn, 0, true, 1, "SELECT qq", prev)
+	assert.Error(t, err)
+}
+
+func Test_collectActivityStat(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+
+	prev := Pgstat{Activity: Activity{Calls: 0}}
+
+	version := 1000000 // suppose to use PG 100.0
+	got, err := collectActivityStat(conn, version, true, 1, prev)
+	assert.NoError(t, err)
+	assert.Equal(t, "ok", got.State)
+	assert.NotEqual(t, "", got.Uptime)
+	assert.NotEqual(t, "", got.Recovery)
+	assert.NotEqual(t, "", got.Recovery)
+	assert.Greater(t, got.ConnTotal+got.ConnIdle+got.ConnIdleXact+got.ConnActive+got.ConnWaiting+got.ConnOthers+got.ConnPrepared, 0)
+	assert.NotEqual(t, 0, got.StmtAvgTime)
+	assert.NotEqual(t, 0, got.Calls)
+	assert.NotEqual(t, 0, got.CallsRate)
+
+	// testing with already closed conn
+	conn.Close()
+	_, err = collectActivityStat(conn, 0, true, 1, prev)
+	assert.Error(t, err)
+}
+
+func Test_selectActivityQueries(t *testing.T) {
+	testcases := []struct {
+		version        int
+		wantActivity   string
+		wantAutovacuum string
+	}{
+		{version: 90300, wantActivity: query.SelectActivityPG94, wantAutovacuum: query.SelectAutovacuumPG94},
+		{version: 90500, wantActivity: query.SelectActivityPG96, wantAutovacuum: query.SelectAutovacuumDefault},
+		{version: 90600, wantActivity: query.SelectActivityPG10, wantAutovacuum: query.SelectAutovacuumDefault},
+		{version: 100000, wantActivity: query.SelectActivityDefault, wantAutovacuum: query.SelectAutovacuumDefault},
+		{version: 110000, wantActivity: query.SelectActivityDefault, wantAutovacuum: query.SelectAutovacuumDefault},
+	}
+
+	for _, tc := range testcases {
+		got1, got2 := selectActivityQueries(tc.version)
+		assert.Equal(t, tc.wantActivity, got1)
+		assert.Equal(t, tc.wantAutovacuum, got2)
+	}
+}
+
+func TestGetPostgresProperties(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+
+	conn.Local = false // set conn as non-local
+
+	got, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+	assert.NotEqual(t, "", got.Version)
+	assert.NotEqual(t, 0, got.VersionNum)
+	assert.NotEqual(t, "", got.GucTrackCommitTimestamp)
+	assert.NotEqual(t, 0, got.GucMaxConnections)
+	assert.NotEqual(t, 0, got.GucAVMaxWorkers)
+	assert.NotEqual(t, "", got.Recovery)
+	assert.NotEqual(t, "", got.StartTime)
+	assert.NotEqual(t, 0, got.SysTicks)
+
+	// testing with already closed conn
+	conn.Close()
+	_, err = GetPostgresProperties(conn)
+	assert.Error(t, err)
 }
 
 func TestNewPGresult(t *testing.T) {

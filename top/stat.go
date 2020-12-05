@@ -169,7 +169,7 @@ func printSysstat(v *gocui.View, s stat.Stat) {
 func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties) {
 	/* line1: details of used connection, version, uptime and recovery status */
 	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
-		props.State,
+		s.Activity.State,
 		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
 		// TODO: remove 'dummy' values
 		"dummy", 0, "dummy", "dummy",

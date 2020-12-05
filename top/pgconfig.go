@@ -14,6 +14,19 @@ import (
 	"strings"
 )
 
+const (
+	// gucMainConfFile is the name of GUC which stores Postgres config file location
+	gucMainConfFile = "config_file"
+	// gucHbaFile is the name of GUC which stores Postgres HBA file location
+	gucHbaFile = "hba_file"
+	// gucIdentFile is the name of GUC which stores ident file location
+	gucIdentFile = "ident_file"
+	// gucRecoveryFile is the name of pseudo-GUC which stores recovery settings location
+	gucRecoveryFile = "recovery.conf"
+	// gucDataDir is the name of GUC which stores data directory location
+	gucDataDir = "data_directory"
+)
+
 // showPgConfig gets Postgres settings and show it in $PAGER program.
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
@@ -58,11 +71,11 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, n string, doExit chan int) erro
 
 	var configFile string
 
-	if n != stat.GucRecoveryFile {
+	if n != gucRecoveryFile {
 		db.QueryRow(query.PgGetSingleSettingQuery, n).Scan(&configFile)
 	} else {
 		var dataDirectory string
-		db.QueryRow(query.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&dataDirectory)
+		db.QueryRow(query.PgGetSingleSettingQuery, gucDataDir).Scan(&dataDirectory)
 		configFile = dataDirectory + "/" + n
 	}
 

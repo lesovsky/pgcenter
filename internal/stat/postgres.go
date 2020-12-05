@@ -11,29 +11,14 @@ import (
 	"strings"
 )
 
-const (
-	// GucMainConfFile is the name of GUC which stores Postgres config file location
-	GucMainConfFile = "config_file"
-	// GucHbaFile is the name of GUC which stores Postgres HBA file location
-	GucHbaFile = "hba_file"
-	// GucIdentFile is the name of GUC which stores ident file location
-	GucIdentFile = "ident_file"
-	// GucRecoveryFile is the name of pseudo-GUC which stores recovery settings location
-	GucRecoveryFile = "recovery.conf"
-	// GucDataDir is the name of GUC which stores data directory location
-	GucDataDir = "data_directory"
-	// PgProcSysTicksQuery queries system timer's frequency from Postgres instance
-	PgProcSysTicksQuery = "SELECT pgcenter.get_sys_clk_ticks()"
-)
-
-// Pgstat is the container for all collected Postgres stats
+// Pgstat is the container for collected Postgres stats
 type Pgstat struct {
-	Activity PostgresActivity
+	Activity Activity
 	Result   PGresult
 }
 
-func collectPostgresStat(db *postgres.DB, query string, prev Pgstat) (Pgstat, error) {
-	activity, err := collectActivityStat(db, prev)
+func collectPostgresStat(db *postgres.DB, version int, pgss bool, itv int, query string, prev Pgstat) (Pgstat, error) {
+	activity, err := collectActivityStat(db, version, pgss, itv, prev)
 	if err != nil {
 		return Pgstat{}, err
 	}
@@ -50,79 +35,98 @@ func collectPostgresStat(db *postgres.DB, query string, prev Pgstat) (Pgstat, er
 	}, nil
 }
 
-// Activity describes Postgres' current activity stats
-type PostgresActivity struct {
-	ConnTotal    int     /* total number of connections */
-	ConnIdle     int     /* number of idle connections */
-	ConnIdleXact int     /* number of idle transactions */
-	ConnActive   int     /* number of active connections */
-	ConnWaiting  int     /* number of waiting backends */
-	ConnOthers   int     /* connections with misc. states */
-	ConnPrepared int     /* number of prepared transactions */
-	AVWorkers    int     /* number of regular autovacuum workers */
-	AVAntiwrap   int     /* number of antiwraparound vacuum workers */
-	AVUser       int     /* number of vacuums started by user */
-	XactMaxTime  string  /* duration of the longest running xact or query */
-	PrepMaxTime  string  /* duration of the longest running prepared xact */
-	AVMaxTime    string  /* duration of the longest (auto)vacuum */
-	StmtAvgTime  float32 /* average duration of queries */
-	Uptime       string
-	Recovery     string
-	Calls        int /* замена для CallsCurr и CallsPrev */
-	CallsRate    int /* замена для StmtPerSec */
+// Activity describes Postgres' current activity stats.
+type Activity struct {
+	State        string  // state of Postgres - up or down
+	ConnTotal    int     // total number of connections
+	ConnIdle     int     // number of idle connections
+	ConnIdleXact int     // number of idle transactions
+	ConnActive   int     // number of active connections
+	ConnWaiting  int     // number of waiting backends
+	ConnOthers   int     // connections with misc. states
+	ConnPrepared int     // number of prepared transactions
+	AVWorkers    int     // number of regular autovacuum workers
+	AVAntiwrap   int     // number of antiwraparound vacuum workers
+	AVUser       int     // number of vacuums started by user
+	XactMaxTime  string  // duration of the longest running xact or query
+	PrepMaxTime  string  // duration of the longest running prepared xact
+	AVMaxTime    string  // duration of the longest (auto)vacuum
+	StmtAvgTime  float32 // average duration of queries
+	Uptime       string  // Postgres uptime (since start)
+	Recovery     string  // Postgres recovery state
+	Calls        int     // Number of calls
+	CallsRate    int     // Number of calls per refresh interval
 }
 
-func collectActivityStat(db *postgres.DB, prev Pgstat) (PostgresActivity, error) {
-	s := PostgresActivity{}
+// collectActivityStat collects Postgres runtime activity about connected clients and workload.
+func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev Pgstat) (Activity, error) {
+	var s Activity
 	if !isPostgresUp(db) {
+		s.State = "down"
 		return s, fmt.Errorf("postgres down")
 	}
 
-	if err := db.QueryRow(query.PgGetUptimeQuery).Scan(&s.Uptime); err != nil {
+	if err := db.QueryRow(query.GetUptime).Scan(&s.Uptime); err != nil {
 		s.Uptime = "--:--:--"
 	}
 
-	db.QueryRow(query.PgGetRecoveryStatusQuery).Scan(&s.Recovery)
-
-	queryActivity := query.PgActivityQueryDefault
-	queryAutovac := query.PgAutovacQueryDefault
-
-	/* lessqqmorepewpew: доделать выбор запроса в зависимости от версии */
-	//switch {
-	//case s.PgVersionNum < 90400:
-	//  queryActivity = PgActivityQueryBefore94
-	//  queryAutovac = PgAutovacQueryBefore94
-	//case s.PgVersionNum < 90600:
-	//  queryActivity = PgActivityQueryBefore96
-	//case s.PgVersionNum < 100000:
-	//  queryActivity = PgActivityQueryBefore10
-	//default:
-	//  // use defaults
-	//}
-
-	db.QueryRow(queryActivity).Scan(
-		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact,
-		&s.ConnActive, &s.ConnWaiting, &s.ConnOthers,
-		&s.ConnPrepared)
-
-	db.QueryRow(queryAutovac).Scan(&s.AVWorkers, &s.AVAntiwrap, &s.AVUser, &s.AVMaxTime)
-
-	// read pg_stat_statements only if it's available
-	//if s.PgStatStatementsAvail == true {
-	/* lessqqmorepewpew: пока временно предполагаем что pg_stat_statements установлена в базе и наш интервал всегда 1 секунда */
-	if true {
-		db.QueryRow(query.PgStatementsQuery).Scan(&s.StmtAvgTime, &s.Calls)
-		s.CallsRate = (s.Calls - prev.Activity.Calls) / 1
+	if err := db.QueryRow(query.GetRecoveryStatus).Scan(&s.Recovery); err != nil {
+		return s, err
 	}
 
-	db.QueryRow(query.PgActivityTimeQuery).Scan(&s.XactMaxTime, &s.PrepMaxTime)
+	// Depending on Postgres version select proper queries.
+	queryActivity, queryAutovacuum := selectActivityQueries(version)
 
+	err := db.QueryRow(queryActivity).Scan(
+		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact, &s.ConnActive, &s.ConnWaiting, &s.ConnOthers, &s.ConnPrepared)
+	if err != nil {
+		return s, err
+	}
+
+	err = db.QueryRow(queryAutovacuum).Scan(&s.AVWorkers, &s.AVAntiwrap, &s.AVUser, &s.AVMaxTime)
+	if err != nil {
+		return s, err
+	}
+
+	// read pg_stat_statements only if it's available
+	if pgss {
+		err := db.QueryRow(query.SelectActivityStatements).Scan(&s.StmtAvgTime, &s.Calls)
+		if err != nil {
+			return s, err
+		}
+		s.CallsRate = (s.Calls - prev.Activity.Calls) / itv
+	}
+
+	err = db.QueryRow(query.SelectActivityTimes).Scan(&s.XactMaxTime, &s.PrepMaxTime)
+	if err != nil {
+		return s, err
+	}
+
+	s.State = "ok"
 	return s, nil
+}
+
+// selectActivityQueries return proper versions of activity queries depending on Postgres version.
+func selectActivityQueries(version int) (string, string) {
+	queryActivity := query.SelectActivityDefault
+	queryAutovacuum := query.SelectAutovacuumDefault
+	switch {
+	case version < 90400:
+		queryActivity = query.SelectActivityPG94
+		queryAutovacuum = query.SelectAutovacuumPG94
+	case version < 90600:
+		queryActivity = query.SelectActivityPG96
+	case version < 100000:
+		queryActivity = query.SelectActivityPG10
+	default:
+		// use defaults
+	}
+
+	return queryActivity, queryAutovacuum
 }
 
 // PostgresProperties is the container for details about Postgres
 type PostgresProperties struct {
-	State                   string  // state of Postgres - up or down
 	VersionNum              int     // Numeric representation of Postgres version, e.g. XXYYZZ
 	Version                 string  // String representation of Postgres version, e.g. X.Y.Z
 	StartTime               float64 // Postgres start time
@@ -136,15 +140,21 @@ type PostgresProperties struct {
 	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
 }
 
-func ReadPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
-	// TODO: add errors handling
+// GetPostgresProperties queries necessary properties from Postgres about it.
+func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	props := PostgresProperties{}
-	db.QueryRow(query.PgGetVersionQuery).Scan(&props.Version, &props.VersionNum)
-	db.QueryRow("SELECT current_setting('track_commit_timestamp')").Scan(&props.GucTrackCommitTimestamp)
-	db.QueryRow("SELECT current_setting('max_connections')::int").Scan(&props.GucMaxConnections)
-	db.QueryRow("SELECT current_setting('autovacuum_max_workers')::int").Scan(&props.GucAVMaxWorkers)
-	db.QueryRow(query.PgGetRecoveryStatusQuery).Scan(&props.Recovery)
-	db.QueryRow("select extract(epoch from pg_postmaster_start_time())").Scan(&props.StartTime)
+	err := db.QueryRow(query.SelectCommonProperties).Scan(
+		&props.Version,
+		&props.VersionNum,
+		&props.GucTrackCommitTimestamp,
+		&props.GucMaxConnections,
+		&props.GucAVMaxWorkers,
+		&props.Recovery,
+		&props.StartTime,
+	)
+	if err != nil {
+		return PostgresProperties{}, err
+	}
 
 	// Is pg_stat_statement available?
 	props.ExtPGSSAvail = isExtensionExists(db, "pg_stat_statements")
@@ -153,7 +163,10 @@ func ReadPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	if !db.Local {
 		if isSchemaExists(db, "pgcenter") {
 			props.SchemaPgcenterAvail = true
-			db.QueryRow(PgProcSysTicksQuery).Scan(&props.SysTicks)
+			err := db.QueryRow(query.SelectRemoteProcSysTicksQuery).Scan(&props.SysTicks)
+			if err != nil {
+				return PostgresProperties{}, err
+			}
 		}
 	}
 
@@ -280,7 +293,7 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 						diff.Values[i][l].Valid = curr.Values[i][l].Valid
 					} else {
 						// Values with dots or in scientific notation consider as floats and integer otherwise.
-						if strings.Contains(prev.Values[i][l].String, ".") || strings.Contains(prev.Values[i][l].String, "e") ||
+						if strings.Contains(prev.Values[j][l].String, ".") || strings.Contains(prev.Values[j][l].String, "e") ||
 							strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
 							cv, err := strconv.ParseFloat(curr.Values[i][l].String, 64)
 							if err != nil {

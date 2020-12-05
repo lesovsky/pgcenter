@@ -88,7 +88,7 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 	}
 
 	// read Postgres properties
-	props, err := ReadPostgresProperties(db)
+	props, err := GetPostgresProperties(db)
 	if err != nil {
 		return nil, fmt.Errorf("read postgres properties failed: %s", err)
 	}
@@ -150,7 +150,8 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	}
 
 	// Collect Postgres stats.
-	pgstat, err := collectPostgresStat(db, view.Query, c.prevPgStat)
+	// TODO: interval is hardcoded
+	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSAvail, 1, view.Query, c.prevPgStat)
 	if err != nil {
 		return Stat{}, err
 	}
@@ -159,6 +160,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 	c.currPgStat = pgstat
 
 	// Compare previous and current Postgres stats snapshots and calculate delta.
+	// TODO: interval is hardcoded
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, 1, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
 	if err != nil {
 		return Stat{}, err
