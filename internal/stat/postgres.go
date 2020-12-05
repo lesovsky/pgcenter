@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"database/sql"
 	"fmt"
-	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"sort"
@@ -13,8 +12,6 @@ import (
 )
 
 const (
-	// colsTruncMinLimit is the  minimal allowed value for values truncation
-	colsTruncMinLimit = 1
 	// GucMainConfFile is the name of GUC which stores Postgres config file location
 	GucMainConfFile = "config_file"
 	// GucHbaFile is the name of GUC which stores Postgres HBA file location
@@ -77,8 +74,8 @@ type PostgresActivity struct {
 
 func collectActivityStat(db *postgres.DB, prev Pgstat) (PostgresActivity, error) {
 	s := PostgresActivity{}
-	if state := getPgState(db); state != "ok" {
-		return s, fmt.Errorf("postgres state is not ok")
+	if !isPostgresUp(db) {
+		return s, fmt.Errorf("postgres down")
 	}
 
 	if err := db.QueryRow(query.PgGetUptimeQuery).Scan(&s.Uptime); err != nil {
@@ -150,11 +147,11 @@ func ReadPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	db.QueryRow("select extract(epoch from pg_postmaster_start_time())").Scan(&props.StartTime)
 
 	// Is pg_stat_statement available?
-	props.ExtPGSSAvail = isExtensionAvailable(db, "pg_stat_statements")
+	props.ExtPGSSAvail = isExtensionExists(db, "pg_stat_statements")
 
 	// In case of remote Postgres we should to know remote CLK_TCK
 	if !db.Local {
-		if isSchemaAvailable(db, "pgcenter") {
+		if isSchemaExists(db, "pgcenter") {
 			props.SchemaPgcenterAvail = true
 			db.QueryRow(PgProcSysTicksQuery).Scan(&props.SysTicks)
 		}
@@ -203,7 +200,7 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 
 		err = rows.Scan(pointers...)
 		if err != nil {
-			//log.Warnf("skip collecting stats: %s", err) // TODO: add error notification
+			//log.Warnf("skip collecting stats: %s", err) // TODO: add error handling and notification
 			continue
 		}
 		rowsStore = append(rowsStore, values)
@@ -228,7 +225,7 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 }
 
 // calculateDelta produces differential PGresult based on current and previous snapshots
-func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, d bool, ukey int) (PGresult, error) {
+func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
 	// Make prev snapshot using current snap, at startup or at context switching
 	if !prev.Valid {
 		return curr, nil
@@ -241,17 +238,18 @@ func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, d 
 	if interval != [2]int{0, 0} {
 		delta, err = diff(curr, prev, itv, interval, ukey)
 		if err != nil {
-			return PGresult{}, fmt.Errorf("ERR_DIFF_CHANGED: %s", err)
+			return PGresult{}, fmt.Errorf("diff failed: %s", err)
 		}
 	} else {
 		delta = curr
 	}
 
-	delta.sort(skey, d)
+	delta.sort(skey, desc)
 
 	return delta, nil
 }
 
+// diff compares two PGresult values and produces new differential PGresult.
 func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PGresult, error) {
 	var diff PGresult
 	var found bool
@@ -279,9 +277,11 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 				for l := 0; l < curr.Ncols; l++ {
 					if l < interval[0] || l > interval[1] {
 						diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
+						diff.Values[i][l].Valid = curr.Values[i][l].Valid
 					} else {
 						// Values with dots or in scientific notation consider as floats and integer otherwise.
-						if strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
+						if strings.Contains(prev.Values[i][l].String, ".") || strings.Contains(prev.Values[i][l].String, "e") ||
+							strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
 							cv, err := strconv.ParseFloat(curr.Values[i][l].String, 64)
 							if err != nil {
 								return diff, fmt.Errorf("failed to convert curr to float [%d:%d]: %s", i, l, err)
@@ -291,6 +291,7 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 								return diff, fmt.Errorf("failed to convert prev to float [%d:%d]: %s", j, l, err)
 							}
 							diff.Values[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
+							diff.Values[i][l].Valid = true
 						} else {
 							cv, err := strconv.ParseInt(curr.Values[i][l].String, 10, 64)
 							if err != nil {
@@ -301,6 +302,7 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 								return diff, fmt.Errorf("failed to convert prev to integer [%d:%d]: %s", j, l, err)
 							}
 							diff.Values[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
+							diff.Values[i][l].Valid = true
 						}
 					}
 				}
@@ -312,14 +314,16 @@ func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PG
 		if found == false {
 			for l := 0; l < curr.Ncols; l++ {
 				diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
+				diff.Values[i][l].Valid = curr.Values[i][l].Valid
 			}
 		}
 	}
 
+	diff.Valid = true
 	return diff, nil
 }
 
-// Sort method does stats sorting using predetermined order key
+// sort performs sorting of PGresult using order key and order.
 func (r *PGresult) sort(key int, desc bool) {
 	if r.Nrows == 0 {
 		return /* nothing to sort */
@@ -329,6 +333,7 @@ func (r *PGresult) sort(key int, desc bool) {
 	if err == nil {
 		// value is numeric
 		sort.Slice(r.Values, func(i, j int) bool {
+			// TODO: handle errors
 			l, _ := strconv.ParseFloat(r.Values[i][key].String, 64)
 			r, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
 			if desc {
@@ -347,99 +352,8 @@ func (r *PGresult) sort(key int, desc bool) {
 	}
 }
 
-// SetAlign method aligns length of values depending of the columns width
-// TODO: выравнивание не относится к статистике, а к её внешнему виду при выводе этой статистики, по идее оно должно
-//   уехать куда-то из этого места. Но само выравнивание используется в нескольких под-командах, поэтому оно не может быть
-//   частью какой-то отдельной подкоманды. В общем есть над чем подумать.
-func (r *PGresult) SetAlign(truncLimit int, dynamic bool) (map[int]int, []string, error) {
-	var lastColTruncLimit, lastColMaxWidth int
-	lastColTruncLimit = math.Max(truncLimit, colsTruncMinLimit)
-	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
-	widthes := make(map[int]int)
-
-	// no rows in result, set width using length of a column name and return with error (because not aligned using result's values)
-	if len(r.Values) == 0 {
-		for colidx, colname := range r.Cols { // walk per-column
-			widthes[colidx] = math.Max(len(colname), colsTruncMinLimit)
-		}
-		return widthes, r.Cols, nil
-	}
-
-	/* calculate max length of columns based on the longest value of the column */
-	var valuelen, colnamelen int
-	for colidx, colname := range r.Cols { // walk per-column
-		for rownum := 0; rownum < len(r.Values); rownum++ { // walk through rows
-			valuelen = math.Max(len(r.Values[rownum][colidx].String), colsTruncMinLimit)
-			colnamelen = math.Max(len(colname), 8) // eight is a minimal colname length, if column name too short.
-
-			switch {
-			// if value is empty, e.g. NULL - set width based on colname length
-			case aligningIsValueEmpty(valuelen, colnamelen, widthes[colidx]):
-				widthes[colidx] = colnamelen
-			// for non-empty values, but for those whose length less than length of colnames, use length based on length of column name, but no longer than already set
-			case aligningIsLessThanColname(valuelen, colnamelen, widthes[colidx]):
-				widthes[colidx] = colnamelen
-			// for non-empty values, but for those whose length longer than length of colnames, use length based on length of value, but no longer than already set
-			case aligningIsMoreThanColname(valuelen, colnamelen, widthes[colidx], truncLimit, colidx, r.Ncols):
-				// dynamic aligning is used in 'report' when you can't adjust width on the fly
-				// fixed aligning is used in 'top' because it's quite uncomfortable when width is changing constantly
-				if dynamic {
-					widthes[colidx] = valuelen
-				} else {
-					if valuelen > colnamelen*2 {
-						widthes[colidx] = math.Min(valuelen, 32)
-					} else {
-						widthes[colidx] = colnamelen
-					}
-				}
-			// for last column set width using truncation limit
-			case colidx == r.Ncols-1:
-				// if truncation disabled, use width of the longest value, otherwise use the user-defined truncation limit
-				if lastColTruncLimit == 0 {
-					if lastColMaxWidth < valuelen {
-						lastColMaxWidth = valuelen
-					}
-					widthes[colidx] = lastColMaxWidth
-				} else {
-					widthes[colidx] = truncLimit
-				}
-			// do nothing if length of value or column is less (or equal) than already specified width
-			case aligningIsLengthLessOrEqualWidth(valuelen, colnamelen, widthes[colidx]):
-
-			// for very long values, truncate value and set length limited by truncLimit value,
-			case valuelen >= truncLimit:
-				r.Values[rownum][colidx].String = r.Values[rownum][colidx].String[:truncLimit-1] + "~"
-				widthes[colidx] = truncLimit
-				//default:	// default case is used for debug purposes for catching cases that don't meet upper conditions
-				//	fmt.Printf("*** DEBUG %s -- %s, %d:%d:%d ***", colname, r.Result[rownum][colnum].String, widthes[colidx], colnamelen, valuelen)
-			}
-		}
-	}
-	return widthes, r.Cols, nil
-}
-
-// aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length
-func aligningIsValueEmpty(vlen, cnlen, width int) bool {
-	return vlen == 0 && cnlen >= width
-}
-
-// aligningIsLessThanColname is the aligning helper: returns true if passed non-empty values, but if its length less than length of colnames
-func aligningIsLessThanColname(vlen, cnlen, width int) bool {
-	return vlen > 0 && vlen <= cnlen && vlen >= width
-}
-
-// aligningIsMoreThanColname is the aligning helper: returns true if passed non-empty values, but for if its length longer than length of colnames
-func aligningIsMoreThanColname(vlen, cnlen, width, trunclim, colidx, cols int) bool {
-	return vlen > 0 && vlen > cnlen && vlen < trunclim && vlen >= width && colidx < cols-1
-}
-
-// aligningIsLengthLessOrEqualWidth is the aligning helper: returns true if length of value or column is less (or equal) than already specified width
-func aligningIsLengthLessOrEqualWidth(vlen, cnlen, width int) bool {
-	return vlen <= width && cnlen <= width
-}
-
-// Fprint method print content of PGresult container to buffer
-func (r *PGresult) Fprint(buf *bytes.Buffer) {
+// Fprint method prints content of PGresult container to buffer.
+func (r *PGresult) Fprint(buf *bytes.Buffer) error {
 	// do simple ad-hoc aligning for current PGresult, do align using the longest value in the column
 	widthMap := map[int]int{}
 	var valuelen int
@@ -454,53 +368,67 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) {
 
 	/* print header */
 	for colidx, colname := range r.Cols {
-		fmt.Fprintf(buf, "%-*s", widthMap[colidx]+2, colname)
+		_, err := fmt.Fprintf(buf, "%-*s", widthMap[colidx]+2, colname)
+		if err != nil {
+			return err
+		}
 	}
-	fmt.Fprintf(buf, "\n\n")
+	_, err := fmt.Fprintf(buf, "\n\n")
+	if err != nil {
+		return err
+	}
 
 	/* print data to buffer */
 	for colnum, rownum := 0, 0; rownum < r.Nrows; rownum, colnum = rownum+1, 0 {
 		for range r.Cols {
 			/* m[row][column] */
-			fmt.Fprintf(buf, "%-*s", widthMap[colnum]+2, r.Values[rownum][colnum].String)
+			_, err := fmt.Fprintf(buf, "%-*s", widthMap[colnum]+2, r.Values[rownum][colnum].String)
+			if err != nil {
+				return err
+			}
 			colnum++
 		}
-		fmt.Fprintf(buf, "\n")
+		_, err := fmt.Fprintf(buf, "\n")
+		if err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-/* routines */
-
-// getPgState gets Postgres connection status - is it alive or not?
-func getPgState(db *postgres.DB) string {
+// isPostgresUp gets Postgres connection status - is it up or down?
+func isPostgresUp(db *postgres.DB) bool {
+	up := true
 	err := db.PQstatus()
 	if err != nil {
-		return "failed"
+		up = false
 	}
-	return "ok"
+	return up
 }
 
-func isExtensionAvailable(db *postgres.DB, name string) bool {
+// isExtensionExists returns 'true' if requested extension exists in the database, and 'false' if not.
+func isExtensionExists(db *postgres.DB, name string) bool {
 	var exists bool
-	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)", name).Scan(&exists)
+	err := db.QueryRow(query.CheckExtensionExists, name).Scan(&exists)
 	if err != nil {
-		fmt.Println("failed to check extensions in pg_extension: ", err)
-		return false
+		// TODO: enable when proper logging will be implemented
+		//fmt.Println("failed to check extensions in pg_extension: ", err)
+		exists = false
 	}
 
-	// Return true if installed, and false if not.
 	return exists
 }
 
-//
-func isSchemaAvailable(db *postgres.DB, name string) bool {
+// isSchemaExists returns 'true' if requested schema exists in the database, and 'false' if not.
+func isSchemaExists(db *postgres.DB, name string) bool {
 	var exists bool
-	err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)", name).Scan(&exists)
+	err := db.QueryRow(query.CheckSchemaExists, name).Scan(&exists)
 	if err != nil {
-		fmt.Println("failed to check schema in information_schema: ", err)
-		return false
+		// TODO: enable when proper logging will be implemented
+		//fmt.Println("failed to check schema in information_schema: ", err)
+		exists = false
 	}
 
-	// Return true if installed, and false if not.
 	return exists
 }

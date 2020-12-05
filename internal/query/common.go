@@ -1,6 +1,8 @@
 package query
 
 const (
+	// TODO: remove Pg prefix and Query suffix. It's unnecessary because it used like query.Pg...Query:
+	//   1) all queries are Postgres-related; 2) 'query.' already points to query package;
 	// PgGetSingleSettingQuery queries specified Postgres configuration setting
 	PgGetSingleSettingQuery = "SELECT current_setting($1)"
 	// PgGetVersionQuery queries Postgres versions
@@ -13,6 +15,10 @@ const (
 	PgCheckPGSSExists = "SELECT EXISTS (SELECT 1 FROM information_schema.views WHERE table_name = 'pg_stat_statements')"
 	// PgCheckPgcenterSchemaQuery checks existence of pgcenter's stats schema
 	PgCheckPgcenterSchemaQuery = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = 'pgcenter')"
+	// CheckSchemaExists checks schema exists in the database.
+	CheckSchemaExists = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)"
+	// CheckExtensionExists checks extension is installed in the database.
+	CheckExtensionExists = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)"
 	// PgGetConfigAllQuery queries current Postgres configuration
 	PgGetConfigAllQuery = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 	// PgGetCurrentLogfileQuery queries current Postgres logfile

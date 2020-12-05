@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
@@ -197,7 +198,7 @@ func printDbstat(v *gocui.View, app *app, s stat.Stat) {
 
 	// configure aligning, use fixed aligning instead of dynamic
 	if !app.config.view.Aligned {
-		widthes, cols, err := s.Result.SetAlign(1000, false) // we don't want truncate lines here, so just use high limit
+		widthes, cols, err := align.SetAlign(s.Result, 1000, false) // we don't want truncate lines here, so just use high limit
 		if err == nil {
 			app.config.view.Cols = cols
 			app.config.view.ColsWidth = widthes
