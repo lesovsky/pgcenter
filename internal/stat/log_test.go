@@ -29,9 +29,10 @@ func TestLogfile(t *testing.T) {
 	assert.Error(t, l.Open())
 }
 
-func TestReadLogPath(t *testing.T) {
+func TestGetPostgresCurrentLogfile(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	// Test PG96 and older
 	logfile, err := GetPostgresCurrentLogfile(conn, 96000)
@@ -47,6 +48,7 @@ func TestReadLogPath(t *testing.T) {
 func Test_lookupPostgresLogfile(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	s, err := lookupPostgresLogfile(conn)
 	assert.NoError(t, err)
