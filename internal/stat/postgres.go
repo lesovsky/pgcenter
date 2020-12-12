@@ -238,7 +238,7 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 }
 
 // calculateDelta produces differential PGresult based on current and previous snapshots
-func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
+func calculateDelta(curr, prev PGresult, itv int, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
 	// Make prev snapshot using current snap, at startup or at context switching
 	if !prev.Valid {
 		return curr, nil
@@ -263,7 +263,7 @@ func calculateDelta(curr, prev PGresult, itv uint, interval [2]int, skey int, de
 }
 
 // diff compares two PGresult values and produces new differential PGresult.
-func diff(curr PGresult, prev PGresult, itv uint, interval [2]int, ukey int) (PGresult, error) {
+func diff(curr PGresult, prev PGresult, itv int, interval [2]int, ukey int) (PGresult, error) {
 	var diff PGresult
 	var found bool
 

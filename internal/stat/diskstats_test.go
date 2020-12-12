@@ -10,25 +10,33 @@ func Test_readDiskstats(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
+	ticks, err := getSysticksLocal()
+	assert.NoError(t, err)
+	assert.NotEqual(t, float64(0), ticks)
+
 	// test "local" reading
 	conn.Local = true
-	got, err := readDiskstats(conn, false)
+	got, err := readDiskstats(conn, Config{ticks: ticks, PostgresProperties: PostgresProperties{SchemaPgcenterAvail: false}})
 	assert.NoError(t, err)
 	assert.Greater(t, len(got), 0)
 
 	// test "remote" reading
 	conn.Local = false
-	got, err = readDiskstats(conn, true)
+	got, err = readDiskstats(conn, Config{PostgresProperties: PostgresProperties{SchemaPgcenterAvail: true}})
 	assert.NoError(t, err)
 	assert.Greater(t, len(got), 0)
 
 	// test "remote", but when schema is not available
-	got, err = readDiskstats(conn, false)
+	got, err = readDiskstats(conn, Config{PostgresProperties: PostgresProperties{SchemaPgcenterAvail: false}})
 	assert.NoError(t, err)
 	assert.Equal(t, len(got), 0)
 }
 
 func Test_readDiskstatsLocal(t *testing.T) {
+	ticks, err := getSysticksLocal()
+	assert.NoError(t, err)
+	assert.NotEqual(t, float64(0), ticks)
+
 	testcases := []struct {
 		statfile string
 		valid    bool
@@ -99,7 +107,7 @@ func Test_readDiskstatsLocal(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		got, err := readDiskstatsLocal(tc.statfile)
+		got, err := readDiskstatsLocal(tc.statfile, ticks)
 		if tc.valid {
 			// as a workaround copy Uptime value from 'got' because it's read from real /proc/stat.
 			for i := range got {
@@ -133,10 +141,14 @@ func Test_readDiskstatsRemote(t *testing.T) {
 }
 
 func Test_countDiskstatsUsage(t *testing.T) {
-	prev, err := readDiskstatsLocal("testdata/proc/diskstats.v2.golden")
+	ticks, err := getSysticksLocal()
+	assert.NoError(t, err)
+	assert.NotEqual(t, float64(0), ticks)
+
+	prev, err := readDiskstatsLocal("testdata/proc/diskstats.v2.golden", ticks)
 	assert.NoError(t, err)
 
-	curr, err := readDiskstatsLocal("testdata/proc/diskstats.v2.2.golden")
+	curr, err := readDiskstatsLocal("testdata/proc/diskstats.v2.2.golden", ticks)
 	assert.NoError(t, err)
 
 	// as a workaround copy Uptime value from 'got' because it's read from real /proc/stat.

@@ -47,30 +47,28 @@ type Diskstat struct {
 type Diskstats []Diskstat
 
 const (
-	// ProcDiskstats provides IO statistics of block devices. For more details refer to Linux kernel's Documentation/iostats.txt.
-	ProcDiskstats = "/proc/diskstats"
 	// pgProcDiskstatsQuery is the SQL for retrieving IO stats from Postgres instance
 	pgProcDiskstatsQuery = "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
 )
 
-func readDiskstats(db *postgres.DB, schemaExists bool) (Diskstats, error) {
+func readDiskstats(db *postgres.DB, config Config) (Diskstats, error) {
 	if db.Local {
-		return readDiskstatsLocal("/proc/diskstats")
-	} else if schemaExists {
+		return readDiskstatsLocal("/proc/diskstats", config.ticks)
+	} else if config.SchemaPgcenterAvail {
 		return readDiskstatsRemote(db)
 	}
 
 	return Diskstats{}, nil
 }
 
-func readDiskstatsLocal(statfile string) (Diskstats, error) {
+func readDiskstatsLocal(statfile string, ticks float64) (Diskstats, error) {
 	var stat Diskstats
 	f, err := os.Open(statfile)
 	if err != nil {
 		return stat, err
 	}
 
-	uptime, err := uptime()
+	uptime, err := readUptimeLocal("/proc/uptime", ticks)
 	if err != nil {
 		return nil, err
 	}

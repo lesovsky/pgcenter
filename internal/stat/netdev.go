@@ -50,32 +50,30 @@ type Netdev struct {
 type Netdevs []Netdev
 
 const (
-	// ProcNetdevFile is the location of network interfaces statistics in 'procfs' filesystem
-	ProcNetdevFile = "/proc/net/dev"
 	// pgProcLinkSettingsQuery quering network interfaces' details from Postgres instance
 	pgProcLinkSettingsQuery = "SELECT speed::bigint * 1000000, duplex::bigint FROM pgcenter.get_netdev_link_settings($1);"
 	// pgProcNetdevQuery queries network interfaces stats from Postgres instance
 	pgProcNetdevQuery = "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
 )
 
-func readNetdevs(db *postgres.DB, schemaExists bool) (Netdevs, error) {
+func readNetdevs(db *postgres.DB, config Config) (Netdevs, error) {
 	if db.Local {
-		return readNetdevsLocal("/proc/net/dev")
-	} else if schemaExists {
+		return readNetdevsLocal("/proc/net/dev", config.ticks)
+	} else if config.SchemaPgcenterAvail {
 		return readNetdevsRemote(db)
 	}
 
 	return Netdevs{}, nil
 }
 
-func readNetdevsLocal(statfile string) (Netdevs, error) {
+func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 	var stat Netdevs
 	f, err := os.Open(statfile)
 	if err != nil {
 		return stat, err
 	}
 
-	uptime, err := uptime()
+	uptime, err := readUptimeLocal("/proc/uptime", ticks)
 	if err != nil {
 		return nil, err
 	}
