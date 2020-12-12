@@ -26,22 +26,22 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Get current view.
 	v := <-viewCh
 
+	// Set refresh interval from received view.
+	refresh := v.Refresh
+
 	// Run first update to prefill "previous" snapshot.
-	_, err = c.Update(db, v)
+	_, err = c.Update(db, v, refresh)
 	if err != nil {
 		fmt.Println(err)
 	}
 	time.Sleep(100 * time.Millisecond)
-
-	// Set refresh interval from received view.
-	refresh := v.Refresh
 
 	// Set settings related to extra stats.
 	extra := v.ShowExtra
 
 	// Collect stat in loop and send it to stat channel.
 	for {
-		stats, err := c.Update(db, v)
+		stats, err := c.Update(db, v, refresh)
 		if err != nil {
 			fmt.Println(err)
 			continue
@@ -70,7 +70,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			ticker.Stop()
 
 			c.Reset()
-			_, err = c.Update(db, v)
+			_, err = c.Update(db, v, refresh)
 			if err != nil {
 				fmt.Println(err)
 			}

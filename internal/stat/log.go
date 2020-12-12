@@ -50,7 +50,7 @@ func (l *Logfile) Reopen(db *postgres.DB, version int) error {
 	return l.Open()
 }
 
-// Read methods reads logfile until required number of newlines aren't collected
+// Read reads logfile until required number of newlines aren't collected
 func (l *Logfile) Read(linesLimit int, bufsize int) ([]byte, error) {
 	var offset int64 = -1 // offset used for per-byte backward reading of the logfile
 	var position int64    // position within the logfile from which reading starts
@@ -101,7 +101,7 @@ func (l *Logfile) Read(linesLimit int, bufsize int) ([]byte, error) {
 	return buf, nil
 }
 
-// Get an absolute path of current Postgres log.
+// GetPostgresCurrentLogfile returns an absolute path of current Postgres log.
 func GetPostgresCurrentLogfile(db *postgres.DB, version int) (string, error) {
 	// Postgres 10 has pg_current_logfile() function which is easies way to get current logfile path.
 	var logfile string
@@ -136,7 +136,7 @@ func GetPostgresCurrentLogfile(db *postgres.DB, version int) (string, error) {
 	return logfile, nil
 }
 
-// lookupPostgresLogfiles tries to assemble in a hard way an absolute path to Postgres logfile
+// lookupPostgresLogfiles returns path to logfile assembled using other paths.
 func lookupPostgresLogfile(db *postgres.DB) (string, error) {
 	var datadir, logdir, logfilename, startTime, timezone string
 	q := "select current_setting('data_directory') as data_directory, current_setting('log_directory') as log_directory, current_setting('log_filename') as log_filename, to_char(pg_postmaster_start_time(), 'HH24MISS') as start_time, current_setting('timezone') as timezone"
@@ -147,7 +147,7 @@ func lookupPostgresLogfile(db *postgres.DB) (string, error) {
 	return assemblePostgresLogfile(datadir, logdir, logfilename, startTime, timezone), nil
 }
 
-//
+// assemblePostgresLogfile tries to assemble path to logfile in a hard way without using Postgres builtin current_logfile().
 func assemblePostgresLogfile(datadir, logdir, logfilename, startTime, timezone string) string {
 	var logfile string
 

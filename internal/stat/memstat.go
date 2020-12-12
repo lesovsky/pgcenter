@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-// Meminfo is the container for memory/swap usage stats
+// Meminfo describes memory/swap stats based on /proc/meminfo.
 type Meminfo struct {
 	MemTotal     uint64
 	MemFree      uint64
@@ -25,6 +25,7 @@ type Meminfo struct {
 	MemSlab      uint64
 }
 
+// readMeminfo returns memory/swap stats based on type of passed DB connection.
 func readMeminfo(db *postgres.DB, schemaExists bool) (Meminfo, error) {
 	if db.Local {
 		return readMeminfoLocal("/proc/meminfo")
@@ -35,6 +36,7 @@ func readMeminfo(db *postgres.DB, schemaExists bool) (Meminfo, error) {
 	return Meminfo{}, nil
 }
 
+// readMeminfoLocal returns memory/swap stats read from local proc file.
 func readMeminfoLocal(statfile string) (Meminfo, error) {
 	var stat Meminfo
 
@@ -87,6 +89,7 @@ func readMeminfoLocal(statfile string) (Meminfo, error) {
 	return stat, scanner.Err()
 }
 
+// readMeminfoRemote returns memory/swap stats from SQL stats schema.
 func readMeminfoRemote(db *postgres.DB) (Meminfo, error) {
 	var stat Meminfo
 

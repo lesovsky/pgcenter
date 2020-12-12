@@ -11,12 +11,13 @@ import (
 	"strings"
 )
 
-// Pgstat is the container for collected Postgres stats
+// Pgstat describes collected Postgres stats.
 type Pgstat struct {
 	Activity Activity
 	Result   PGresult
 }
 
+// collectPostgresStat collect Postgres activity stats and stats returned by passed query.
 func collectPostgresStat(db *postgres.DB, version int, pgss bool, itv int, query string, prev Pgstat) (Pgstat, error) {
 	activity, err := collectActivityStat(db, version, pgss, itv, prev)
 	if err != nil {
@@ -183,6 +184,7 @@ type PGresult struct {
 	Err    error              /* Error returned by query, if any */
 }
 
+// NewPGresult does query and wraps returned result into PGresult.
 func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 	rows, err := db.Query(query)
 	if err != nil {
@@ -237,7 +239,7 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 	}, nil
 }
 
-// calculateDelta produces differential PGresult based on current and previous snapshots
+// calculateDelta compares two PGresult structs and returns ordered delta PGresult.
 func calculateDelta(curr, prev PGresult, itv int, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
 	// Make prev snapshot using current snap, at startup or at context switching
 	if !prev.Valid {
@@ -365,7 +367,7 @@ func (r *PGresult) sort(key int, desc bool) {
 	}
 }
 
-// Fprint method prints content of PGresult container to buffer.
+// Fprint prints content of PGresult container to buffer.
 func (r *PGresult) Fprint(buf *bytes.Buffer) error {
 	// do simple ad-hoc aligning for current PGresult, do align using the longest value in the column
 	widthMap := map[int]int{}

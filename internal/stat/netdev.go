@@ -12,7 +12,14 @@ import (
 	"strings"
 )
 
-// Netdev is the container for stats related to a single network interface
+const (
+	// pgProcLinkSettingsQuery quering network interfaces' details from Postgres instance
+	pgProcLinkSettingsQuery = "SELECT speed::bigint * 1000000, duplex::bigint FROM pgcenter.get_netdev_link_settings($1);"
+	// pgProcNetdevQuery queries network interfaces stats from Postgres instance
+	pgProcNetdevQuery = "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
+)
+
+// Netdev describes network interfaces stats based on /proc/net/dev proc file.
 type Netdev struct {
 	Ifname string /* interface name */
 	Speed  int64  /* interface network speed */
@@ -35,7 +42,7 @@ type Netdev struct {
 	Tcolls      float64 /* total number of detected collisions */
 	Tcarrier    float64 /* total number of carrier losses */
 	Tcompressed float64 /* total number of received multicast packets */
-	// enhanced
+	// extended stats
 	Packets     float64 /* total number of received or transmitted packets */
 	Raverage    float64 /* average size of received packets */
 	Taverage    float64 /* average size of transmitted packets */
@@ -49,13 +56,7 @@ type Netdev struct {
 // Netdevs is the container for all stats of all network interfaces
 type Netdevs []Netdev
 
-const (
-	// pgProcLinkSettingsQuery quering network interfaces' details from Postgres instance
-	pgProcLinkSettingsQuery = "SELECT speed::bigint * 1000000, duplex::bigint FROM pgcenter.get_netdev_link_settings($1);"
-	// pgProcNetdevQuery queries network interfaces stats from Postgres instance
-	pgProcNetdevQuery = "SELECT left(iface,-1),* FROM pgcenter.sys_proc_netdev ORDER BY iface"
-)
-
+// readNetdevs returns network interfaces stats based on type of passed DB connection.
 func readNetdevs(db *postgres.DB, config Config) (Netdevs, error) {
 	if db.Local {
 		return readNetdevsLocal("/proc/net/dev", config.ticks)
@@ -66,6 +67,7 @@ func readNetdevs(db *postgres.DB, config Config) (Netdevs, error) {
 	return Netdevs{}, nil
 }
 
+// readNetdevsLocal returns network interfaces stats read from local proc file.
 func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 	var stat Netdevs
 	f, err := os.Open(statfile)
@@ -113,6 +115,7 @@ func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 
 		// Get interface's speed and duplex
 		// TODO: perhaps it's too expensive to poll interface in every execution of the function.
+		// TODO: log errors.
 		n.Speed, n.Duplex, _ = getLinkSettings(n.Ifname) /* ignore errors, just use zeros if any */
 
 		stat = append(stat, n)
@@ -121,6 +124,7 @@ func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 	return stat, nil
 }
 
+// readNetdevsRemote returns network interfaces stats from SQL stats schema.
 func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 	var uptime float64
 	err := db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
@@ -167,6 +171,7 @@ func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 	return stat, nil
 }
 
+// countNetdevsUsage compares two network interfaces stats snapshots and return usage stats over time interval.
 func countNetdevsUsage(prev Netdevs, curr Netdevs, ticks float64) Netdevs {
 	if len(curr) != len(prev) {
 		// TODO: make possible to diff snapshots with different number of devices.

@@ -99,7 +99,7 @@ func (c *Collector) Reset() {
 }
 
 // Update ...
-func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
+func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duration) (Stat, error) {
 	// Collect load average stats.
 	loadavg, err := readLoadAverage(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
@@ -140,7 +140,8 @@ func (c *Collector) Update(db *postgres.DB, view view.View) (Stat, error) {
 		}
 	}
 
-	itv := int(view.Refresh / time.Second)
+	// Take refresh interval from view
+	itv := int(refresh / time.Second)
 
 	// Collect Postgres stats.
 	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSAvail, itv, view.Query, c.prevPgStat)

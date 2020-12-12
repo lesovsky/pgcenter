@@ -9,12 +9,22 @@ import (
 	"unsafe"
 )
 
-// ethtool describes ethtool communication channel
+const (
+	ethtoolGset          = 0x00000001 /* get settings -- DEPRECATED */
+	ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
+	ifNameSize           = 16         /* maximum size of an interface name */
+	siocEthtool          = 0x8946     /* ioctl ethtool request */
+	duplexHalf           = 0
+	duplexFull           = 1
+	duplexUnknown        = 255
+)
+
+// ethtool describes communication channel used for getting interface properties.
 type ethtool struct {
 	fd int
 }
 
-// newEthtool opens communication channel for ethtool.
+// newEthtool opens communication channel.
 func newEthtool() (*ethtool, error) {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
 	if err != nil {
@@ -24,12 +34,12 @@ func newEthtool() (*ethtool, error) {
 	return &ethtool{fd: fd}, nil
 }
 
-// close method closes ethtool communication channel.
+// close closes communication channel.
 func (e *ethtool) close() {
 	_ = syscall.Close(e.fd) // ignore errors
 }
 
-// EthtoolCmd describes deprecated ethtool_cmd{} C struct used for managing link control and status. DEPRECATED struct
+// ethtoolCmd describes deprecated ethtool_cmd{} C struct used for managing link control and status. DEPRECATED struct
 type ethtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 	Cmd           uint32 // Command number = %ETHTOOL_GSET or %ETHTOOL_SSET
 	Supported     uint32 // Bitmask of %SUPPORTED_* flags for the link modes and features
@@ -68,23 +78,13 @@ type ethtoolLinkSettings struct {
 	LinkModeMasks       [0]uint32 // -- origin 'link_mode_masks'
 }
 
-//
+// ifreq describes ethtool request about specific network interface.
 type ifreq struct {
 	ifrName [ifNameSize]byte
 	ifrData uintptr
 }
 
-const (
-	ethtoolGset          = 0x00000001 /* get settings -- DEPRECATED */
-	ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
-	ifNameSize           = 16         /* maximum size of an interface name */
-	siocEthtool          = 0x8946     /* ioctl ethtool request */
-	duplexHalf           = 0
-	duplexFull           = 1
-	duplexUnknown        = 255
-)
-
-// getLinkSettings asks network interface settings using ethtool.
+// getLinkSettings return network interface settings using ethtool communication.
 func getLinkSettings(ifname string) (int64, int64, error) {
 	e, err := newEthtool()
 	if err != nil {

@@ -10,13 +10,14 @@ import (
 	"strings"
 )
 
-// LoadAvg is the container for 'load average' stats
+// LoadAvg describes 'load average' stats based on /proc/loadavg.
 type LoadAvg struct {
 	One     float64
 	Five    float64
 	Fifteen float64
 }
 
+// readLoadAverage returns load average stats based on type of passed DB connection.
 func readLoadAverage(db *postgres.DB, schemaExists bool) (LoadAvg, error) {
 	if db.Local {
 		return readLoadAverageLocal("/proc/loadavg")
@@ -27,6 +28,7 @@ func readLoadAverage(db *postgres.DB, schemaExists bool) (LoadAvg, error) {
 	return LoadAvg{}, nil
 }
 
+// readLoadAverageLocal returns load average stats read from local proc file.
 func readLoadAverageLocal(statfile string) (LoadAvg, error) {
 	var stat LoadAvg
 
@@ -54,7 +56,7 @@ func readLoadAverageLocal(statfile string) (LoadAvg, error) {
 	return stat, nil
 }
 
-//
+// readLoadAverageRemote returns load average stats from SQL stats schema.
 func readLoadAverageRemote(db *postgres.DB) (LoadAvg, error) {
 	var stat LoadAvg
 	err := db.QueryRow("SELECT min1, min5, min15 FROM pgcenter.sys_proc_loadavg").Scan(&stat.One, &stat.Five, &stat.Fifteen)

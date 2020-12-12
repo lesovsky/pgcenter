@@ -2,7 +2,6 @@
 
 package stat
 
-/* Struct for raw stat data read from file/sql sources */
 import (
 	"bufio"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"strings"
 )
 
+// CpuStat describes CPU statistics based on /proc/stat.
 type CpuStat struct {
 	Entry   string
 	User    float64
@@ -27,6 +27,7 @@ type CpuStat struct {
 	Total   float64
 }
 
+// readCpuStat returns CPU stats based on type of passed DB connection.
 func readCpuStat(db *postgres.DB, schemaExists bool) (CpuStat, error) {
 	if db.Local {
 		return readCpuStatLocal("/proc/stat")
@@ -37,6 +38,7 @@ func readCpuStat(db *postgres.DB, schemaExists bool) (CpuStat, error) {
 	return CpuStat{}, nil
 }
 
+// readCpuStatLocal returns CPU stats read from local proc file.
 func readCpuStatLocal(statfile string) (CpuStat, error) {
 	var stat CpuStat
 	f, err := os.Open(statfile)
@@ -81,6 +83,7 @@ func readCpuStatLocal(statfile string) (CpuStat, error) {
 	return stat, scanner.Err()
 }
 
+// readCpuStatRemote returns CPU stats from SQL stats schema.
 func readCpuStatRemote(db *postgres.DB) (CpuStat, error) {
 	var stat CpuStat
 	q := `SELECT cpu,us_time::numeric,ni_time::numeric,sy_time::numeric,id_time::numeric,wa_time::numeric,hi_time::numeric,si_time::numeric,st_time::numeric,quest_time::numeric,guest_ni_time::numeric FROM pgcenter.sys_proc_stat WHERE cpu = 'cpu'`
@@ -95,6 +98,7 @@ func readCpuStatRemote(db *postgres.DB) (CpuStat, error) {
 	return stat, nil
 }
 
+// countCpuUsage compares CPU stats snapshots and returns CPU usage stats over time interval.
 func countCpuUsage(prev CpuStat, curr CpuStat, ticks float64) CpuStat {
 	var stat CpuStat
 	itv := curr.Total - prev.Total

@@ -61,7 +61,7 @@ func TestCollector_Update(t *testing.T) {
 	assert.NotNil(t, c)
 	c.config.collectExtra = CollectDiskstats
 
-	stat, err := c.Update(conn, views["activity"])
+	stat, err := c.Update(conn, views["activity"], time.Second)
 	assert.NoError(t, err)
 	assert.NotNil(t, stat)
 

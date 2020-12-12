@@ -9,7 +9,12 @@ import (
 	"strings"
 )
 
-// Diskstat describes IO statistics for single device based on /proc/diskstats.
+const (
+	// pgProcDiskstatsQuery is the SQL for retrieving IO stats from Postgres instance
+	pgProcDiskstatsQuery = "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
+)
+
+// Diskstat describes pre-device IO statistics based on /proc/diskstats.
 // See details https://www.kernel.org/doc/Documentation/ABI/testing/procfs-diskstats
 type Diskstat struct {
 	/* basic */
@@ -32,25 +37,32 @@ type Diskstat struct {
 	Dspent       float64 //	18 - time spent discarding
 	Fcompleted   float64 // 19 - flush requests completed successfully
 	Fspent       float64 // 20 - time spent flushing
-	/* advanced */
-	Uptime    float64 // system uptime, used for interval calculation
-	Completed float64 // reads and writes completed
-	Rawait    float64 // average time (in milliseconds) for read requests issued to the device to be served. This includes the time spent by the requests in queue and the time spent servicing them.
-	Wawait    float64 // average time (in milliseconds) for write requests issued to the device to be served. This includes the time spent by the requests in queue and the time spent servicing them.
-	Await     float64 // average time (in milliseconds) for I/O requests issued to the device to be served. This includes the time spent by the requests in queue and the time spent servicing them.
-	Arqsz     float64 // average size (in sectors) of the requests that were issued to the device.
-	Util      float64 // percentage of elapsed time during which I/O requests were issued to the device (bandwidth utilization for the device). Device saturation occurs when this value is close to 100% for devices serving requests serially.
-	// But for devices serving requests in parallel, such as RAID arrays and modern SSDs, this number does not reflect their performance limits.
+	/* extended, based on basic */
+	// System uptime, used for usage calculation.
+	Uptime float64
+	// Total number of completed read and write requests.
+	Completed float64
+	// Average time (ms) of read requests issued to the device to be served.
+	// This includes the time spent by the requests in queue and the time spent servicing them.
+	Rawait float64
+	// Average time (ms) of write requests issued to the device to be served.
+	// This includes the time spent by the requests in queue and the time spent servicing them.
+	Wawait float64
+	// Average time (in ms) of read/write requests issued to the device to be served.
+	// This includes the time spent by the requests in queue and the time spent servicing them.
+	Await float64
+	// Average size (in sectors) of the requests that were issued to the device.
+	Arqsz float64
+	// Percentage of elapsed time during which I/O requests were issued to the device (bandwidth utilization for the device).
+	// Device saturation occurs when this value is close to 100% for devices serving requests sequentially. For devices
+	// serving requests concurrently, such as RAID/SSD/NVMe, this number does not reflect its performance limits.
+	Util float64
 }
 
-// Diskstats is the container for all stats related to all block devices
+// Diskstats is the container for all stats related to all block devices.
 type Diskstats []Diskstat
 
-const (
-	// pgProcDiskstatsQuery is the SQL for retrieving IO stats from Postgres instance
-	pgProcDiskstatsQuery = "SELECT * FROM pgcenter.sys_proc_diskstats ORDER BY (maj,min)"
-)
-
+// readDiskstats returns block devices stats depending on type of passed DB connection.
 func readDiskstats(db *postgres.DB, config Config) (Diskstats, error) {
 	if db.Local {
 		return readDiskstatsLocal("/proc/diskstats", config.ticks)
@@ -61,6 +73,7 @@ func readDiskstats(db *postgres.DB, config Config) (Diskstats, error) {
 	return Diskstats{}, nil
 }
 
+// readDiskstatsLocal return block devices stats read from local proc file.
 func readDiskstatsLocal(statfile string, ticks float64) (Diskstats, error) {
 	var stat Diskstats
 	f, err := os.Open(statfile)
@@ -128,6 +141,7 @@ func readDiskstatsLocal(statfile string, ticks float64) (Diskstats, error) {
 	return stat, nil
 }
 
+// readDiskstatsRemote returns block devices stats from SQL stats schema.
 func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 	var uptime float64
 	err := db.QueryRow(pgProcUptimeQuery).Scan(&uptime)
@@ -168,6 +182,7 @@ func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 	return stat, nil
 }
 
+// countDiskstatsUsage compares block devices stats snapshots and returns devices usage stats over time interval.
 func countDiskstatsUsage(prev Diskstats, curr Diskstats, ticks float64) Diskstats {
 	if len(curr) != len(prev) {
 		// TODO: make possible to diff snapshots with different number of devices.
