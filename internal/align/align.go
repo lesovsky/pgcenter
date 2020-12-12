@@ -12,8 +12,8 @@ const (
 
 // SetAlign method aligns length of values depending of the columns width
 func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []string, error) {
-	var lastColTruncLimit, lastColMaxWidth int
-	lastColTruncLimit = math.Max(truncLimit, colsTruncMinLimit)
+	lastColMaxWidthDefault := 8
+	lastColTruncLimit := math.Max(truncLimit, colsTruncMinLimit)
 	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
 	widthes := make(map[int]int)
 
@@ -29,13 +29,13 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 	var valuelen, colnamelen int
 	for colidx, colname := range r.Cols { // walk per-column
 		for rownum := 0; rownum < len(r.Values); rownum++ { // walk through rows
+			// Minimum possible value length is 1 (colsTruncMinLimit)
 			valuelen = math.Max(len(r.Values[rownum][colidx].String), colsTruncMinLimit)
+
+			// Minimum possible length for columns is 8
 			colnamelen = math.Max(len(colname), 8) // eight is a minimal colname length, if column name too short.
 
 			switch {
-			// if value is empty, e.g. NULL - set width based on colname length
-			case aligningIsValueEmpty(valuelen, colnamelen, widthes[colidx]):
-				widthes[colidx] = colnamelen
 			// for non-empty values, but for those whose length less than length of colnames, use length based on length of column name, but no longer than already set
 			case aligningIsLessThanColname(valuelen, colnamelen, widthes[colidx]):
 				widthes[colidx] = colnamelen
@@ -55,11 +55,11 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 			// for last column set width using truncation limit
 			case colidx == r.Ncols-1:
 				// if truncation disabled, use width of the longest value, otherwise use the user-defined truncation limit
-				if lastColTruncLimit == 0 {
-					if lastColMaxWidth < valuelen {
-						lastColMaxWidth = valuelen
+				if lastColTruncLimit == colsTruncMinLimit {
+					if lastColMaxWidthDefault < valuelen {
+						lastColMaxWidthDefault = valuelen
 					}
-					widthes[colidx] = lastColMaxWidth
+					widthes[colidx] = lastColMaxWidthDefault
 				} else {
 					widthes[colidx] = truncLimit
 				}
@@ -78,17 +78,12 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 	return widthes, r.Cols, nil
 }
 
-// aligningIsValueEmpty is the aligning helper: return true if value is empty, e.g. NULL - set width based on colname length
-func aligningIsValueEmpty(vlen, cnlen, width int) bool {
-	return vlen == 0 && cnlen >= width
-}
-
 // aligningIsLessThanColname is the aligning helper: returns true if passed non-empty values, but if its length less than length of colnames
 func aligningIsLessThanColname(vlen, cnlen, width int) bool {
 	return vlen > 0 && vlen <= cnlen && vlen >= width
 }
 
-// aligningIsMoreThanColname is the aligning helper: returns true if passed non-empty values, but for if its length longer than length of colnames
+// aligningIsMoreThanColname is the aligning helper: returns true if passed non-empty values, but if its length longer than length of colnames
 func aligningIsMoreThanColname(vlen, cnlen, width, trunclim, colidx, cols int) bool {
 	return vlen > 0 && vlen > cnlen && vlen < trunclim && vlen >= width && colidx < cols-1
 }
