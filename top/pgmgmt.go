@@ -24,7 +24,7 @@ func doReload(g *gocui.Gui, v *gocui.View, db *postgres.DB, answer string) {
 	case "y":
 		var status sql.NullBool
 
-		db.QueryRow(query.PgReloadConfQuery).Scan(&status)
+		db.QueryRow(query.ExecReloadConf).Scan(&status)
 		if status.Bool {
 			printCmdline(g, "Reload issued.")
 		} else {
@@ -43,11 +43,11 @@ func resetStat(db *postgres.DB) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		var msg string = "Reset statistics."
 
-		_, err := db.Exec(query.PgResetStats)
+		_, err := db.Exec(query.ExecResetStats)
 		if err != nil {
 			msg = fmt.Sprintf("Reset statistics failed: %s", err)
 		}
-		_, err = db.Exec(query.PgResetPgss)
+		_, err = db.Exec(query.ExecResetPgStatStatements)
 		if err != nil {
 			msg = fmt.Sprintf("Reset pg_stat_statements statistics failed: %s", err)
 		}

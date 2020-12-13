@@ -40,7 +40,7 @@ func Test_collectPostgresStat(t *testing.T) {
 	prev := Pgstat{Activity: Activity{Calls: 0}}
 
 	version := 1000000 // suppose to use PG 100.0
-	got, err := collectPostgresStat(conn, version, true, 1, query.PgStatDatabaseQueryDefault, prev)
+	got, err := collectPostgresStat(conn, version, true, 1, query.PgStatDatabaseDefault, prev)
 	assert.NoError(t, err)
 	assert.Equal(t, "ok", got.Activity.State)
 	assert.Greater(t, got.Result.Nrows, 0)

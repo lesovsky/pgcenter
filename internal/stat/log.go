@@ -107,7 +107,7 @@ func GetPostgresCurrentLogfile(db *postgres.DB, version int) (string, error) {
 	var logfile string
 	var err error
 	if version >= 100000 {
-		err := db.QueryRow(query.PgGetCurrentLogfileQuery).Scan(&logfile)
+		err := db.QueryRow(query.GetCurrentLogfile).Scan(&logfile)
 		if err != nil {
 			return "", err
 		}
@@ -126,7 +126,7 @@ func GetPostgresCurrentLogfile(db *postgres.DB, version int) (string, error) {
 	// Handle relative paths.
 	var datadir string
 	if !strings.HasPrefix(logfile, "/") {
-		err := db.QueryRow(query.PgGetSingleSettingQuery, "data_directory").Scan(&datadir)
+		err := db.QueryRow(query.GetSetting, "data_directory").Scan(&datadir)
 		if err != nil {
 			return "", err
 		}

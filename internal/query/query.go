@@ -18,9 +18,9 @@ type Options struct {
 	PgSSQueryLenFn string // Specify exact func to truncating query
 }
 
-// PrepareQuery transforms query's template to a particular query
-func PrepareQuery(s string, o Options) (string, error) {
-	t := template.Must(template.New("query").Parse(s))
+// Format transforms query's template to a particular query.
+func Format(tmpl string, o Options) (string, error) {
+	t := template.Must(template.New("query").Parse(tmpl))
 	buf := &bytes.Buffer{}
 	if err := t.Execute(buf, o); err != nil {
 		return "", err
@@ -30,7 +30,7 @@ func PrepareQuery(s string, o Options) (string, error) {
 }
 
 // Adjust method used for adjusting query's options depending on Postgres version.
-func (o *Options) Adjust(version int, recovery string, util string) {
+func (o *Options) Configure(version int, recovery string, util string) {
 	// System tables and indexes aren't shown by default
 	o.ViewType = "user"
 	// Don't filter queries by age
@@ -65,7 +65,7 @@ func (o *Options) Adjust(version int, recovery string, util string) {
 		o.PgSSQueryLenFn = "left(p.query, 256)"
 	case "record":
 		// in case of record program we want to record full length of the query, if user doesn't specified exact length
-		if o.PgSSQueryLen != 0 {
+		if o.PgSSQueryLen > 0 {
 			o.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", o.PgSSQueryLen)
 		} else {
 			o.PgSSQueryLenFn = "p.query"

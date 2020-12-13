@@ -34,7 +34,7 @@ func TestCollector_Update(t *testing.T) {
 	views := view.Views{
 		"activity": {
 			Name:      "activity",
-			QueryTmpl: query.PgStatActivityQueryDefault,
+			QueryTmpl: query.PgStatActivityDefault,
 			DiffIntvl: [2]int{0, 0},
 			Ncols:     14,
 			OrderKey:  0,
@@ -48,9 +48,9 @@ func TestCollector_Update(t *testing.T) {
 	opts := query.Options{}
 
 	views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
-	opts.Adjust(props.VersionNum, props.Recovery, "top")
+	opts.Configure(props.VersionNum, props.Recovery, "top")
 	for k, v := range views {
-		q, err := query.PrepareQuery(views["activity"].QueryTmpl, opts)
+		q, err := query.Format(views["activity"].QueryTmpl, opts)
 		assert.NoError(t, err)
 		v.Query = q
 		views[k] = v

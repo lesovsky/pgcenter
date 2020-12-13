@@ -56,11 +56,11 @@ func (app *app) Setup() error {
 
 	// Adjust queries depending on Postgres version
 	app.config.views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
-	app.config.queryOptions.Adjust(props.VersionNum, props.Recovery, "top")
+	app.config.queryOptions.Configure(props.VersionNum, props.Recovery, "top")
 
 	// Compile query text from templates using previously adjusted query options.
 	for k, v := range app.config.views {
-		q, err := query.PrepareQuery(v.QueryTmpl, app.config.queryOptions)
+		q, err := query.Format(v.QueryTmpl, app.config.queryOptions)
 		if err != nil {
 			return err
 		}

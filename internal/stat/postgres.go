@@ -164,7 +164,7 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	if !db.Local {
 		if isSchemaExists(db, "pgcenter") {
 			props.SchemaPgcenterAvail = true
-			err := db.QueryRow(query.SelectRemoteProcSysTicksQuery).Scan(&props.SysTicks)
+			err := db.QueryRow(query.SelectRemoteProcSysTicks).Scan(&props.SysTicks)
 			if err != nil {
 				return PostgresProperties{}, err
 			}

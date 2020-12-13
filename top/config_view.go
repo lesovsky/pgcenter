@@ -188,7 +188,7 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		for _, t := range []string{"tables", "indexes", "sizes"} {
-			q, err := query.PrepareQuery(config.views[t].QueryTmpl, config.queryOptions)
+			q, err := query.Format(config.views[t].QueryTmpl, config.queryOptions)
 			if err != nil {
 				return err
 			}
@@ -223,7 +223,7 @@ func changeQueryAge(g *gocui.Gui, v *gocui.View, answer string, config *config) 
 		config.queryOptions.QueryAgeThresh = answer
 	}
 
-	q, err := query.PrepareQuery(config.view.QueryTmpl, config.queryOptions)
+	q, err := query.Format(config.view.QueryTmpl, config.queryOptions)
 	if err != nil {
 		printCmdline(g, "Nothing to do. Failed: %s", err.Error())
 		return
@@ -242,7 +242,7 @@ func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 
 		config.queryOptions.ShowNoIdle = !config.queryOptions.ShowNoIdle
 
-		q, err := query.PrepareQuery(config.view.QueryTmpl, config.queryOptions)
+		q, err := query.Format(config.view.QueryTmpl, config.queryOptions)
 		if err != nil {
 			return err
 		}

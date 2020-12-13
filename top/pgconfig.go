@@ -30,7 +30,7 @@ const (
 // showPgConfig gets Postgres settings and show it in $PAGER program.
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		res, err := stat.NewPGresult(db, query.PgGetConfigAllQuery)
+		res, err := stat.NewPGresult(db, query.GetAllSettings)
 		if err != nil {
 			printCmdline(g, err.Error())
 			return nil
@@ -72,10 +72,10 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, n string, doExit chan int) erro
 	var configFile string
 
 	if n != gucRecoveryFile {
-		db.QueryRow(query.PgGetSingleSettingQuery, n).Scan(&configFile)
+		db.QueryRow(query.GetSetting, n).Scan(&configFile)
 	} else {
 		var dataDirectory string
-		db.QueryRow(query.PgGetSingleSettingQuery, gucDataDir).Scan(&dataDirectory)
+		db.QueryRow(query.GetSetting, gucDataDir).Scan(&dataDirectory)
 		configFile = dataDirectory + "/" + n
 	}
 

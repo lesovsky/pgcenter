@@ -34,10 +34,10 @@ func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mod
 
 	switch mode {
 	case "cancel":
-		q = query.PgCancelSingleQuery
+		q = query.ExecCancelQuery
 		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogCancelQuery])
 	case "terminate":
-		q = query.PgTerminateSingleQuery
+		q = query.ExecTerminateBackend
 		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogTerminateBackend])
 	}
 	answer = strings.TrimSuffix(answer, "\n")
@@ -83,9 +83,9 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 	// Select kill function: pg_cancel_backend or pg_terminate_backend
 	switch mode {
 	case "cancel":
-		template = query.PgCancelGroupQuery
+		template = query.ExecCancelQueryGroup
 	case "terminate":
-		template = query.PgTerminateGroupQuery
+		template = query.ExecTerminateBackendGroup
 	}
 
 	/* advanced mode */
@@ -103,7 +103,7 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 			if state == groupWaiting && app.postgresProps.VersionNum < 90600 {
 				app.config.queryOptions.BackendState = "waiting"
 			}
-			q, _ = query.PrepareQuery(template, app.config.queryOptions)
+			q, _ = query.Format(template, app.config.queryOptions)
 			err := app.db.QueryRow(q).Scan(&killed)
 			if err != nil {
 				printCmdline(g, "failed to send signal to backends: %s", err)
