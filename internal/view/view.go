@@ -14,13 +14,13 @@ type View struct {
 	DiffIntvl [2]int                 // Columns interval for diff
 	Cols      []string               // Columns names
 	Ncols     int                    // Number of columns returned by query, used as a right border for OrderKey
-	OrderKey  int                    // Number of column used for order
+	OrderKey  int                    // Index of column used for order
 	OrderDesc bool                   // Order direction: descending (true) or ascending (false)
-	UniqueKey int                    // Unique key that used on rows comparing when building diffs, by default it's zero which is OK in almost all contexts
-	ColsWidth map[int]int            // Set width for columns and control an aligning
-	Aligned   bool                   // Is aligning calculated?
-	Msg       string                 // Show this text in Cmdline when switching to this unit
-	Filters   map[int]*regexp.Regexp // Storage for filter patterns: key is the column index, value - regexp pattern
+	UniqueKey int                    // index of column used as unique key when comparing rows during diffs, by default it's zero which is OK in almost all views
+	ColsWidth map[int]int            // Width used for columns and control an aligning
+	Aligned   bool                   // Flag shows aligning is calculated or not
+	Msg       string                 // Show this text in Cmdline when switching to this view
+	Filters   map[int]*regexp.Regexp // Filter patterns: key is the column index, value - regexp pattern
 	Refresh   time.Duration          // Number of seconds between update view.
 	ShowExtra int                    // Specifies extra stats should be enabled on the view.
 }
@@ -52,7 +52,6 @@ func New() Views {
 			Msg:       "Show replication statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatTablesUnit describes how to handle pg_stat_all_tables and pg_statio_all_tables views
 		"tables": {
 			Name:      "tables",
 			QueryTmpl: query.PgStatTablesDefault,
@@ -64,7 +63,6 @@ func New() Views {
 			Msg:       "Show tables statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatIndexesUnit describes how to handle pg_stat_all_indexes and pg_statio_all_indexes views
 		"indexes": {
 			Name:      "indexes",
 			QueryTmpl: query.PgStatIndexesDefault,
@@ -76,7 +74,6 @@ func New() Views {
 			Msg:       "Show indexes statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgTablesSizesUnit describes how to handle statistics about tables sizes
 		"sizes": {
 			Name:      "sizes",
 			QueryTmpl: query.PgTablesSizesDefault,
@@ -88,7 +85,6 @@ func New() Views {
 			Msg:       "Show tables sizes statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatFunctionsUnit describes how to handle pg_stat_user_functions view
 		"functions": {
 			Name:      "functions",
 			QueryTmpl: query.PgStatFunctionsDefault,
@@ -100,7 +96,6 @@ func New() Views {
 			Msg:       "Show functions statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatVacuumUnit describes how to handle pg_stat_progress_vacuum view
 		"progress_vacuum": {
 			Name:      "progress_vacuum",
 			QueryTmpl: query.PgStatProgressVacuumDefault,
@@ -112,7 +107,6 @@ func New() Views {
 			Msg:       "Show vacuum progress statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatProgressClusterUnit describes how to handle pg_stat_progress_cluster view
 		"progress_cluster": {
 			Name:      "progress_cluster",
 			QueryTmpl: query.PgStatProgressClusterDefault,
@@ -135,7 +129,6 @@ func New() Views {
 			Msg:       "Show create index/reindex progress statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgStatActivityUnit describes how to handle pg_stat_activity view
 		"activity": {
 			Name:      "activity",
 			QueryTmpl: query.PgStatActivityDefault,
@@ -147,7 +140,6 @@ func New() Views {
 			Msg:       "Show activity statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgSSTimingUnit describes how to handle pg_stat_statements view with timing stats
 		"statements_timings": {
 			Name:      "statements_timings",
 			QueryTmpl: query.PgStatStatementsTimingDefault,
@@ -160,7 +152,6 @@ func New() Views {
 			Msg:       "Show statements timings statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgSSGeneralUnit describes how to handle pg_stat_statements view with general stats
 		"statements_general": {
 			Name:      "statements_general",
 			QueryTmpl: query.PgStatStatementsGeneralDefault,
@@ -173,7 +164,6 @@ func New() Views {
 			Msg:       "Show statements general statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgSSIoUnit describes how to handle pg_stat_statements view with stats related to buffers IO
 		"statements_io": {
 			Name:      "statements_io",
 			QueryTmpl: query.PgStatStatementsIoDefault,
@@ -186,7 +176,6 @@ func New() Views {
 			Msg:       "Show statements IO statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgSSTempUnit describes how to handle pg_stat_statements view with stats related to temp files IO
 		"statements_temp": {
 			Name:      "statements_temp",
 			QueryTmpl: query.PgStatStatementsTempDefault,
@@ -199,7 +188,6 @@ func New() Views {
 			Msg:       "Show statements temp files statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		// PgSSLocalUnit describes how to handle pg_stat_statements view with stats related to local buffers IO
 		"statements_local": {
 			Name:      "statements_local",
 			QueryTmpl: query.PgStatStatementsLocalDefault,
