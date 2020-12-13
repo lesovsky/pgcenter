@@ -51,12 +51,12 @@ func TestConnect(t *testing.T) {
 	}{
 		{
 			name:    "available postgres",
-			connStr: "host=127.0.0.1 port=5432 user=postgres dbname=postgres",
+			connStr: "host=127.0.0.1 port=5432 user=postgres dbname=pgcenter_fixtures",
 			valid:   true,
 		},
 		{
 			name:    "unavailable postgres",
-			connStr: "host=127.0.0.1 port=1 user=postgres dbname=postgres",
+			connStr: "host=127.0.0.1 port=1 user=postgres dbname=pgcenter_fixtures",
 			valid:   false,
 		},
 	}
@@ -75,4 +75,27 @@ func TestConnect(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestDB_ALL(t *testing.T) {
+	conn, err := NewTestConnect()
+	assert.NoError(t, err)
+
+	assert.NoError(t, conn.PQstatus())
+
+	tag, err := conn.Exec("SELECT count(*) FROM pg_class")
+	assert.NoError(t, err)
+	assert.NotEqual(t, "", tag.String())
+
+	var count int
+	err = conn.QueryRow("SELECT count(*) FROM pg_class").Scan(&count)
+	assert.NoError(t, err)
+	assert.NotEqual(t, 0, count)
+
+	rows, err := conn.Query("SELECT relname FROM pg_class")
+	assert.NoError(t, err)
+	assert.NotNil(t, rows)
+	rows.Close()
+
+	conn.Close()
 }
