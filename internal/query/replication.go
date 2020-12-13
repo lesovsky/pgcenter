@@ -31,7 +31,7 @@ const (
 		"date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
-	// PgStatReplication96 is the query for getting replication stats from versions prior 9.6
+	// PgStatReplication96 is the query for getting replication stats from versions for 9.6 and older
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQuery96, DiffIntvl: [2]int{6,6}, Ncols: 12, OrderKey: 0, OrderDesc: true }
 	PgStatReplication96 = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
 		"state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS wal, " +
@@ -42,7 +42,7 @@ const (
 		"({{.WalFunction1}}({{.WalFunction2}}(),replay_location))::bigint / 1024 AS total_lag " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
-	// PgStatReplication96Extended is the extended query for getting replication stats from versions prior 9.6
+	// PgStatReplication96Extended is the extended query for getting replication stats for 9.6 and older
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQuery96Extended, DiffIntvl: [2]int{6,6}, Ncols: 14, OrderKey: 0, OrderDesc: true }
 	PgStatReplication96Extended = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
 		"state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS wal, " +

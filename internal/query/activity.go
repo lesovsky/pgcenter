@@ -16,7 +16,7 @@ const (
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"AND state != 'idle' {{ end }} ORDER BY pid DESC"
 
-	// PgStatActivity96 queries for getting stats from pg_stat_activity view for versions prior 9.6
+	// PgStatActivity96 queries for getting stats from pg_stat_activity view for versions 9.6.*
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery96, DiffIntvl: [2]int{99,99}, Ncols: 13, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
 	PgStatActivity96 = "SELECT pid, client_addr AS cl_addr, client_port AS cl_port, datname, " +
@@ -30,7 +30,7 @@ const (
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"AND state != 'idle' {{ end }} ORDER BY pid DESC"
 
-	// PgStatActivity95 queries activity stats from pg_stat_activity view from versions prior 9.5
+	// PgStatActivity95 queries activity stats from pg_stat_activity view from versions for 9.5.* and later
 	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery95, DiffIntvl: [2]int{99,99}, Ncols: 12, OrderKey: 0, OrderDesc: true }
 	// regexp_replace() removes extra spaces, tabs and newlines from queries
 	PgStatActivity95 = "SELECT pid, client_addr AS cl_addr, client_port AS cl_port, datname, " +
