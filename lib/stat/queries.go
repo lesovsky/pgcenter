@@ -407,8 +407,8 @@ date_trunc('seconds', clock_timestamp() - query_start)::text AS query_age,
 date_trunc('seconds', clock_timestamp() - state_change)::text AS change_age,
 regexp_replace(
 regexp_replace(query,
-E'( |\t)+', ' ', 'g'),
-E'\n', '', 'g') AS query
+E'\n', ' ', 'g'),
+E'( |\t)+', ' ', 'g') AS query
 FROM pg_stat_activity
 {{ if .ShowNoIdle }}
 WHERE ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
@@ -434,8 +434,8 @@ date_trunc('seconds', clock_timestamp() - query_start)::text AS query_age,
 date_trunc('seconds', clock_timestamp() - state_change)::text AS change_age,
 regexp_replace(
 regexp_replace(query,
-E'( |\t)+', ' ', 'g'),
-E'\n', '', 'g') AS query
+E'\n', ' ', 'g'),
+E'( |\t)+', ' ', 'g') AS query
 FROM pg_stat_activity
 {{ if .ShowNoIdle }}
 WHERE ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
@@ -460,8 +460,8 @@ date_trunc('seconds', clock_timestamp() - query_start)::text AS query_age,
 date_trunc('seconds', clock_timestamp() - state_change)::text AS change_age,
 regexp_replace(
 regexp_replace(query,
-E'( |\t)+', ' ', 'g'),
-E'\n', '', 'g') AS query
+E'\n', ' ', 'g'),
+E'( |\t)+', ' ', 'g') AS query
 FROM pg_stat_activity
 {{ if .ShowNoIdle }}
 WHERE ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
