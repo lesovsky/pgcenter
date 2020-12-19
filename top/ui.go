@@ -166,6 +166,12 @@ func layout(app *app) func(g *gocui.Gui) error {
 
 // Wrapper function for printing messages in cmdline.
 func printCmdline(g *gocui.Gui, format string, s ...interface{}) {
+	// Do nothing if Gui is not defined.
+	if g == nil {
+		//fmt.Printf(format, s...)
+		return
+	}
+
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("cmdline")
 		if err != nil {

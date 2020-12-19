@@ -106,7 +106,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogPgReload:
 			doReload(g, v, app.db, answer)
 		case dialogFilter:
-			setFilter(g, v, answer, app.config.view)
+			setFilter(g, v.Buffer(), app.config.view)
 		case dialogCancelQuery:
 			killSingle(g, v, answer, app.db, "cancel")
 		case dialogTerminateBackend:
@@ -118,7 +118,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogTerminateGroup:
 			killGroup(g, v, app, "terminate")
 		case dialogChangeAge:
-			changeQueryAge(g, v, answer, app.config)
+			changeQueryAge(g, v.Buffer(), app.config)
 		case dialogQueryReport:
 			buildQueryReport(g, v, answer, app.db, app.doExit)
 		case dialogChangeRefresh:

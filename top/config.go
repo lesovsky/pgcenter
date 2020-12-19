@@ -9,20 +9,16 @@ import (
 	"github.com/lesovsky/pgcenter/internal/view"
 )
 
-// 'top' program config.
+// config defines 'top' program runtime configuration.
 type config struct {
-	// active view
-	view view.View
-	// list of all available views
-	views view.Views
-	//
-	queryOptions query.Options // Queries' settings that depends on Postgres version
-	//
-	viewCh chan view.View
-	//
-	logtail stat.Logfile
+	view         view.View      // Current active view.
+	views        view.Views     // List of all available views.
+	queryOptions query.Options  // Queries' settings that might depend on Postgres version.
+	viewCh       chan view.View // Channel used for passing view settings to stats goroutine.
+	logtail      stat.Logfile   // Logfile used for working with Postgres log file.
 }
 
+// newConfig creates 'top' initial configuration.
 func newConfig() *config {
 	views := view.New()
 
