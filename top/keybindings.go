@@ -7,9 +7,6 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 // Key represents particular key, a view where it should work and associated function.
@@ -83,34 +80,6 @@ func keybindings(app *app) error {
 	}
 
 	return nil
-}
-
-// Change interval of stats refreshing.
-func changeRefresh(g *gocui.Gui, v *gocui.View, answer string, config *config) {
-	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogChangeRefresh])
-	answer = strings.TrimSuffix(answer, "\n")
-
-	if answer == "" {
-		printCmdline(g, "Do nothing. Empty input.")
-		return
-	}
-
-	interval, _ := strconv.Atoi(answer)
-
-	switch {
-	case interval < 1:
-		printCmdline(g, "Should not be less than 1 second.")
-		return
-	case interval > 300:
-		printCmdline(g, "Should not be more than 300 seconds.")
-		return
-	}
-
-	// Set refresh interval, send it to stats channel and reset interval in the view.
-	// Refresh interval should not be saved as a per-view setting. It's used as a setting for stats goroutine.
-	config.view.Refresh = time.Duration(interval) * time.Second
-	config.viewCh <- config.view
-	config.view.Refresh = 0
 }
 
 // Quit program.

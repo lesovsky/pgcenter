@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
+	"time"
 )
 
 func Test_orderKeyLeft(t *testing.T) {
@@ -389,6 +390,38 @@ func Test_toggleIdleConns(t *testing.T) {
 	fn := toggleIdleConns(config)
 	assert.NoError(t, fn(nil, nil))
 	assert.True(t, config.queryOptions.ShowNoIdle) // is not changed
+
+	close(config.viewCh)
+}
+
+func Test_changeRefresh(t *testing.T) {
+	config := newConfig()
+	config.view = config.views["activity"]
+	wg := sync.WaitGroup{}
+
+	buf := bytes.NewBuffer([]byte{})
+	_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+"5")
+	assert.NoError(t, err)
+
+	wg.Add(1)
+	go func() {
+		v := <-config.viewCh
+		assert.Equal(t, v.Refresh, 5*time.Second)
+		wg.Done()
+	}()
+
+	changeRefresh(nil, buf.String(), config)
+	wg.Wait()
+
+	// test invalid input
+	for _, in := range []string{"", "a", "-1", "0", "0.5", "301"} {
+		config.view.Refresh = 1 * time.Second
+		buf := bytes.NewBuffer([]byte{})
+		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+in)
+		assert.NoError(t, err)
+		changeRefresh(nil, buf.String(), config)
+		assert.Equal(t, 1*time.Second, config.view.Refresh) // should not be 0
+	}
 
 	close(config.viewCh)
 }

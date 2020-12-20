@@ -7,7 +7,9 @@ import (
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -245,4 +247,32 @@ func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 
 		return nil
 	}
+}
+
+// changeRefresh changes current refresh interval.
+func changeRefresh(g *gocui.Gui, buf string, config *config) {
+	answer := strings.TrimPrefix(buf, dialogPrompts[dialogChangeRefresh])
+	answer = strings.TrimSuffix(answer, "\n")
+
+	if answer == "" {
+		printCmdline(g, "Do nothing. Empty input.")
+		return
+	}
+
+	interval, err := strconv.Atoi(answer)
+	if err != nil {
+		printCmdline(g, "Do nothing. Invalid input.")
+		return
+	}
+
+	if interval < 1 || interval > 300 {
+		printCmdline(g, "Value should be between 1 and 300.")
+		return
+	}
+
+	// Set refresh interval, send it to stats channel and reset interval in the view.
+	// Refresh interval should not be saved as a per-view setting. It's used as a setting for stats goroutine.
+	config.view.Refresh = time.Duration(interval) * time.Second
+	config.viewCh <- config.view
+	config.view.Refresh = 0
 }
