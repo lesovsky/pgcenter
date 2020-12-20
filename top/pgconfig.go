@@ -1,5 +1,3 @@
-// Stuff related to Postgres config files such as displaying, editing, etc.
-
 package top
 
 import (
@@ -27,7 +25,7 @@ const (
 	gucDataDir = "data_directory"
 )
 
-// showPgConfig gets Postgres settings and show it in $PAGER program.
+// showPgConfig fetches Postgres configuration settings and opens it in $PAGER program.
 func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		res, err := stat.NewPGresult(db, query.GetAllSettings)
@@ -37,8 +35,15 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 		}
 
 		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "PostgreSQL configuration:\n")
-		res.Fprint(&buf)
+		if _, err := fmt.Fprintf(&buf, "PostgreSQL configuration:\n"); err != nil {
+			printCmdline(g, "print string to buffer failed: %s", err)
+			return nil
+		}
+
+		if err := res.Fprint(&buf); err != nil {
+			printCmdline(g, "print string to buffer failed: %s", err)
+			return nil
+		}
 
 		var pager string
 		if pager = os.Getenv("PAGER"); pager == "" {
@@ -62,21 +67,26 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 	}
 }
 
-// Open specified configuration file in $EDITOR program
-func editPgConfig(g *gocui.Gui, db *postgres.DB, n string, doExit chan int) error {
+// editPgConfig opens specified configuration file in $EDITOR program.
+func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, doExit chan int) error {
 	if !db.Local {
 		printCmdline(g, "Edit config is not supported for remote hosts")
 		return nil
 	}
 
 	var configFile string
-
-	if n != gucRecoveryFile {
-		db.QueryRow(query.GetSetting, n).Scan(&configFile)
+	if filename != gucRecoveryFile {
+		if err := db.QueryRow(query.GetSetting, filename).Scan(&configFile); err != nil {
+			printCmdline(g, "scan failed: %s", err)
+			return nil
+		}
 	} else {
 		var dataDirectory string
-		db.QueryRow(query.GetSetting, gucDataDir).Scan(&dataDirectory)
-		configFile = dataDirectory + "/" + n
+		if err := db.QueryRow(query.GetSetting, gucDataDir).Scan(&dataDirectory); err != nil {
+			printCmdline(g, "scan failed: %s", err)
+			return nil
+		}
+		configFile = dataDirectory + "/" + filename
 	}
 
 	var editor string
