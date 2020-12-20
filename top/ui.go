@@ -22,7 +22,7 @@ var (
 
 // mainLoop start application worker and UI loop.
 func mainLoop(ctx context.Context, app *app) error {
-	var e ErrorRate
+	var e errorRate
 	var errInterval = 1 * time.Second
 	var errMaxcount = 5
 
@@ -57,7 +57,7 @@ func mainLoop(ctx context.Context, app *app) error {
 		// Run UI management loop.
 		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 			// check errors rate and quit if them too much - allow no more than 5 errors within 1 second
-			if err := e.Check(errInterval, errMaxcount); err != nil {
+			if err := e.check(errInterval, errMaxcount); err != nil {
 				return fmt.Errorf("too many ui errors occurred: %s (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
 			}
 			// If there are no too many errors just restart worker and UI.
