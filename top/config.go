@@ -16,6 +16,7 @@ type config struct {
 	queryOptions query.Options  // Queries' settings that might depend on Postgres version.
 	viewCh       chan view.View // Channel used for passing view settings to stats goroutine.
 	logtail      stat.Logfile   // Logfile used for working with Postgres log file.
+	dialog       dialogType     // Remember current user-started dialog, used for selecting needed dialog handler.
 }
 
 // newConfig creates 'top' initial configuration.

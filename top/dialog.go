@@ -26,7 +26,8 @@ const (
 )
 
 var (
-	// There is a prompt for every dialog.
+	// dialogPrompts defines prompts for user-requested actions.
+	// This is read-only and should not be changed during runtime.
 	dialogPrompts = map[dialogType]string{
 		dialogPgReload:         "Reload configuration files (y/n): ",
 		dialogFilter:           "Set filter: ",
@@ -39,12 +40,9 @@ var (
 		dialogQueryReport:      "Enter the queryid: ",
 		dialogChangeRefresh:    "Change refresh (min 1, max 300) to ",
 	}
-
-	// Variable-transporter, function which check user's input, uses this variable to select appropriate handler. Depending on dialog type, select appropriate function.
-	dialog dialogType
 )
 
-// Open 'gocui' view for the dialog.
+// dialogOpen opens view for the dialog.
 func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// some types of actions allowed only in specifics stats contexts.
@@ -89,7 +87,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error 
 			}
 
 			// Remember the type of an opened dialog. It will be required when the dialog will be finished.
-			dialog = d
+			app.config.dialog = d
 		}
 		return nil
 	}
@@ -102,7 +100,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 
 		printCmdline(g, "")
 
-		switch dialog {
+		switch app.config.dialog {
 		case dialogPgReload:
 			doReload(g, v, app.db, answer)
 		case dialogFilter:
@@ -132,11 +130,12 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 }
 
 // Finish dialog when user presses Esc to cancel.
-func dialogCancel(g *gocui.Gui, v *gocui.View) error {
-	dialog = dialogNone
-	printCmdline(g, "Do nothing. Operation canceled.")
-
-	return dialogClose(g, v)
+func dialogCancel(app *app) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		app.config.dialog = dialogNone
+		printCmdline(g, "Do nothing. Operation canceled.")
+		return dialogClose(g, v)
+	}
 }
 
 // Close 'gocui' view object related to dialog.

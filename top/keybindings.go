@@ -62,7 +62,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'A', dialogOpen(app, dialogChangeAge)},
 		{"sysstat", 'G', dialogOpen(app, dialogQueryReport)},
 		{"sysstat", 'z', dialogOpen(app, dialogChangeRefresh)},
-		{"dialog", gocui.KeyEsc, dialogCancel},
+		{"dialog", gocui.KeyEsc, dialogCancel(app)},
 		{"dialog", gocui.KeyEnter, dialogFinish(app)},
 		{"menu", gocui.KeyEsc, menuClose},
 		{"menu", gocui.KeyArrowUp, moveCursor(moveUp)},
