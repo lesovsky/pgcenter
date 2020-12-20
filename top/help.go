@@ -44,22 +44,21 @@ Type 'q' or 'Esc' to continue.`
 // showHelp opens fullscreen view with built-in help.
 func showHelp(g *gocui.Gui, _ *gocui.View) error {
 	maxX, maxY := g.Size()
-	v, err := g.SetView("help", -1, -1, maxX-1, maxY-1)
-	if v == nil {
-		return fmt.Errorf("set 'help' view on layout failed: %s", err)
+	if v, err := g.SetView("help", -1, -1, maxX-1, maxY-1); err != nil {
+		if err != gocui.ErrUnknownView {
+			return fmt.Errorf("set 'help' view on layout failed: %s", err)
+		}
+
+		v.Frame = false
+		_, err = fmt.Fprintf(v, helpTemplate)
+		if err != nil {
+			return fmt.Errorf("print on 'help' view failed: %s", err)
+		}
+
+		if _, err := g.SetCurrentView("help"); err != nil {
+			return fmt.Errorf("set 'help' view as current on layout failed: %s", err)
+		}
 	}
-
-	v.Frame = false
-
-	_, err = fmt.Fprintf(v, helpTemplate)
-	if err != nil {
-		return fmt.Errorf("print 'help' failed: %s", err)
-	}
-
-	if _, err := g.SetCurrentView("help"); err != nil {
-		return fmt.Errorf("set 'help' view as current on layout failed: %s", err)
-	}
-
 	return nil
 }
 
