@@ -1,5 +1,3 @@
-// Menus used in case when user should make a choice from the list of similar items.
-
 package top
 
 import (
@@ -7,99 +5,104 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-// Type of the menu
+// menuType defines a type of the used menu.
 type menuType int
 
-// Direction of user choice
+// direction defines direction of user choice in the used menu.
 type direction int
 
-// Particular menu types
 const (
-	menuNone menuType = iota
-	menuPgss
-	menuProgress
-	menuConf
+	// Available menu types.
+	menuNone     menuType = iota // no active menu
+	menuPgss                     // menu with pg_stat_statements stats
+	menuProgress                 // menu with pg_stat_progress_* stats
+	menuConf                     // menu with configuration files
+
+	// Directions allowed when working with menu.
+	moveUp   direction = iota // move up
+	moveDown                  // move down
 )
 
-// Directions - user allowed to move up and down.
-const (
-	moveUp direction = iota
-	moveDown
-)
-
-// Describes menu and its details
+// menuStyle describes menu properties.
 type menuStyle struct {
-	menuType           // Type of a menu
-	menuTitle string   // Title
-	menuItems []string // List of items
+	menuType          // Type of a menu
+	title    string   // Title
+	items    []string // List of items
 }
 
-var (
-	// pg_stat_statements menu
-	menuPgssStyle = menuStyle{
-		menuType:  menuPgss,
-		menuTitle: " Choose pg_stat_statements mode (Enter to choose, Esc to exit): ",
-		menuItems: []string{
-			" pg_stat_statements timings",
-			" pg_stat_statements general",
-			" pg_stat_statements input/output",
-			" pg_stat_statements temp files input/output",
-			" pg_stat_statements temp tables (local) input/output",
-		},
+// selectMenuStyle returns selected menuStyle properties.
+func selectMenuStyle(t menuType) menuStyle {
+	var s menuStyle
+
+	switch t {
+	case menuPgss:
+		s = menuStyle{
+			menuType: menuPgss,
+			title:    " Choose pg_stat_statements mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_statements timings",
+				" pg_stat_statements general",
+				" pg_stat_statements input/output",
+				" pg_stat_statements temp files input/output",
+				" pg_stat_statements temp tables (local) input/output",
+			},
+		}
+	case menuProgress:
+		s = menuStyle{
+			menuType: menuProgress,
+			title:    " Choose pg_stat_progress_* view (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_progress_vacuum",
+				" pg_stat_progress_cluster",
+				" pg_stat_progress_create_index",
+			},
+		}
+	case menuConf:
+		s = menuStyle{
+			menuType: menuConf,
+			title:    " Edit configuration file (Enter to edit, Esc to exit): ",
+			items: []string{
+				" postgresql.conf",
+				" pg_hba.conf",
+				" pg_ident.conf",
+				" recovery.conf",
+			},
+		}
+	default:
+		s = menuStyle{
+			menuType: menuNone,
+		}
 	}
 
-	// pg_stat_progress_* menu
-	menuProgressStyle = menuStyle{
-		menuType:  menuProgress,
-		menuTitle: " Choose pg_stat_progress_* view (Enter to choose, Esc to exit): ",
-		menuItems: []string{
-			" pg_stat_progress_vacuum",
-			" pg_stat_progress_cluster",
-			" pg_stat_progress_create_index",
-		},
-	}
+	return s
+}
 
-	// edit configuration files
-	menuConfStyle = menuStyle{
-		menuType:  menuConf,
-		menuTitle: " Edit configuration file (Enter to edit, Esc to exit): ",
-		menuItems: []string{
-			" postgresql.conf",
-			" pg_hba.conf",
-			" pg_ident.conf",
-			" recovery.conf",
-		},
-	}
-
-	// Variable-transporter, function which check user's choice, uses this variable to select appropriate handler. Depending on menu type, select appropriate function.
-	menu  menuType
-	items []string
-)
-
-// Open 'gocui' view object and display menu items depending on passed menu type.
-func menuOpen(m menuStyle, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
+// menuOpen opens UI view object for menu.
+func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		s := selectMenuStyle(m)
+
 		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
-		if !pgssAvail && m.menuType == menuPgss {
+		if !pgssAvail && s.menuType == menuPgss {
 			printCmdline(g, msgPgStatStatementsUnavailable)
 			return nil
 		}
 
-		v, err := g.SetView("menu", 0, 5, 72, 6+len(m.menuItems))
+		v, err := g.SetView("menu", 0, 5, 72, 6+len(s.items))
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
-			v.Title = m.menuTitle
+			v.Title = s.title
 		}
 		if _, err := g.SetCurrentView("menu"); err != nil {
 			return err
 		}
 
-		menu = m.menuType
-		items = m.menuItems
+		menuDraw(v, s.items)
 
-		menuDraw(v)
+		// Save menu properties in config.
+		config.menu = s
 
 		return nil
 	}
@@ -110,7 +113,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		_, cy := v.Cursor() /* cy point to an index of the entry, use it to switch to a context */
 
-		switch menu {
+		switch app.config.menu.menuType {
 		case menuPgss:
 			switch cy {
 			case 0:
@@ -152,6 +155,8 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			/* do nothing */
 		}
 
+		// When menu item has been selected, close menu and reset menu properties from config.
+		app.config.menu = selectMenuStyle(menuNone)
 		return menuClose(g, v)
 	}
 }
@@ -168,10 +173,10 @@ func menuClose(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func menuDraw(v *gocui.View) {
+func menuDraw(v *gocui.View, items []string) {
 	_, cy := v.Cursor()
 	v.Clear()
-	/* print menu items */
+	// print menu items
 	for i, item := range items {
 		if i == cy {
 			fmt.Fprintln(v, "\033[30;47m"+item+"\033[0m")
@@ -182,17 +187,17 @@ func menuDraw(v *gocui.View) {
 }
 
 // Move cursor to one item up or down.
-func moveCursor(d direction) func(g *gocui.Gui, v *gocui.View) error {
+func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		if v != nil {
 			cx, cy := v.Cursor()
 			switch d {
 			case moveDown:
 				v.SetCursor(cx, cy+1) /* errors don't make sense here */
-				menuDraw(v)
+				menuDraw(v, config.menu.items)
 			case moveUp:
 				v.SetCursor(cx, cy-1) /* errors don't make sense here */
-				menuDraw(v)
+				menuDraw(v, config.menu.items)
 			}
 		}
 		return nil

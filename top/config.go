@@ -17,6 +17,7 @@ type config struct {
 	viewCh       chan view.View // Channel used for passing view settings to stats goroutine.
 	logtail      stat.Logfile   // Logfile used for working with Postgres log file.
 	dialog       dialogType     // Remember current user-started dialog, used for selecting needed dialog handler.
+	menu         menuStyle      // When working with menus, keep properties of the menu.
 }
 
 // newConfig creates 'top' initial configuration.
