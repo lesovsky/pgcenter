@@ -50,50 +50,57 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error 
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
-				msg = "Terminate or cancel backend is allowed in pg_stat_activity tab."
+				msg = "Terminate backends or cancel queries allowed in pg_stat_activity view only."
 			case dialogSetMask:
-				msg = "State mask setup is allowed in pg_stat_activity tab."
+				msg = "State mask setup allowed in pg_stat_activity view only."
 			case dialogChangeAge:
-				msg = "Changing queries' min age is allowed in pg_stat_activity tab."
+				msg = "Changing queries age threshold allowed in pg_stat_activity view only."
 			}
 			printCmdline(g, msg)
 			return nil
 		}
 
 		if d == dialogQueryReport && !strings.Contains(app.config.view.Name, "statements") {
-			printCmdline(g, "Query report is allowed in pg_stat_statements tabs.")
+			printCmdline(g, "Query reports allowed in pg_stat_statements views only.")
 			return nil
 		}
 
 		maxX, _ := g.Size()
-		// Open one-line editable view, print a propmt and set cursor after it.
-		if v, err := g.SetView("dialog", len(dialogPrompts[d])-1, 3, maxX-1, 5); err != nil {
+		// Create one-line editable view, print a prompt and set cursor after it.
+		v, err := g.SetView("dialog", len(dialogPrompts[d])-1, 3, maxX-1, 5)
+		if err != nil {
+			// gocui.ErrUnknownView is OK it means a new view has been created, continue if it happens.
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dialog view on layout failed: %s", err)
 			}
-
-			p, err := g.View("cmdline")
-			if err != nil {
-				return fmt.Errorf("Set focus on cmdline view failed: %s", err)
-			}
-			fmt.Fprintf(p, dialogPrompts[d])
-
-			g.Cursor = true
-			v.Editable = true
-			v.Frame = false
-
-			if _, err := g.SetCurrentView("dialog"); err != nil {
-				return fmt.Errorf("set dialog view as current on layout failed: %s", err)
-			}
-
-			// Remember the type of an opened dialog. It will be required when the dialog will be finished.
-			app.config.dialog = d
 		}
+
+		p, err := g.View("cmdline")
+		if err != nil {
+			return fmt.Errorf("set focus on cmdline view failed: %s", err)
+		}
+
+		_, err = fmt.Fprintf(p, dialogPrompts[d])
+		if err != nil {
+			return fmt.Errorf("print to cmdline view failed: %s", err)
+		}
+
+		g.Cursor = true
+		v.Editable = true
+		v.Frame = false
+
+		if _, err := g.SetCurrentView("dialog"); err != nil {
+			return fmt.Errorf("set dialog view as current on layout failed: %s", err)
+		}
+
+		// Remember the type of an opened dialog. It will be required when the dialog will be finished.
+		app.config.dialog = d
+
 		return nil
 	}
 }
 
-// When gocui.KeyEnter is pressed in the end of user's input, depending on dialog type an appropriate handler should be started.
+// dialogFinish runs proper handler after user submits its dialog input.
 func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		var answer string
@@ -129,7 +136,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	}
 }
 
-// Finish dialog when user presses Esc to cancel.
+// dialogCancel reset dialog state when user cancels input.
 func dialogCancel(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		app.config.dialog = dialogNone
@@ -138,13 +145,21 @@ func dialogCancel(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	}
 }
 
-// Close 'gocui' view object related to dialog.
+// dialogClose destroys UI view object related to dialog.
 func dialogClose(g *gocui.Gui, v *gocui.View) error {
 	g.Cursor = false
 	v.Clear()
-	g.DeleteView("dialog")
-	if _, err := g.SetCurrentView("sysstat"); err != nil {
+
+	err := g.DeleteView("dialog")
+	if err != nil {
+		return fmt.Errorf("deleting dialog view failed: %s", err)
+	}
+
+	// Switch focus from destroyed 'dialog' view to 'sysstat'.
+	_, err = g.SetCurrentView("sysstat")
+	if err != nil {
 		return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
 	}
+
 	return nil
 }
