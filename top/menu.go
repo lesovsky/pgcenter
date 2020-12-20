@@ -77,7 +77,7 @@ func selectMenuStyle(t menuType) menuStyle {
 	return s
 }
 
-// menuOpen opens UI view object for menu.
+// menuOpen selects menu requested menu properties and opens UI view object for menu.
 func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		s := selectMenuStyle(m)
@@ -108,10 +108,11 @@ func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *
 	}
 }
 
-// When user made a choice, depending on menu type, run appropriate handler
+// menuSelect run appropriate handler depending on user choice.
 func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		_, cy := v.Cursor() /* cy point to an index of the entry, use it to switch to a context */
+		// 'cy' points to an index of the selected menu item, use it to switch to a context.
+		_, cy := v.Cursor()
 
 		switch app.config.menu.menuType {
 		case menuPgss:
@@ -143,25 +144,33 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case menuConf:
 			switch cy {
 			case 0:
-				editPgConfig(g, app.db, gucMainConfFile, app.doExit)
+				if err := editPgConfig(g, app.db, gucMainConfFile, app.doExit); err != nil {
+					return err
+				}
 			case 1:
-				editPgConfig(g, app.db, gucHbaFile, app.doExit)
+				if err := editPgConfig(g, app.db, gucHbaFile, app.doExit); err != nil {
+					return err
+				}
 			case 2:
-				editPgConfig(g, app.db, gucIdentFile, app.doExit)
+				if err := editPgConfig(g, app.db, gucIdentFile, app.doExit); err != nil {
+					return err
+				}
 			case 3:
-				editPgConfig(g, app.db, gucRecoveryFile, app.doExit)
+				if err := editPgConfig(g, app.db, gucRecoveryFile, app.doExit); err != nil {
+					return err
+				}
 			}
 		case menuNone:
 			/* do nothing */
 		}
 
-		// When menu item has been selected, close menu and reset menu properties from config.
+		// When menu item has been submitted by user, close menu and reset menu properties in the config.
 		app.config.menu = selectMenuStyle(menuNone)
 		return menuClose(g, v)
 	}
 }
 
-// Close 'gocui' view object when menu is closed
+// menuClose destroys UI view object and return focus to 'sysstat' view.
 func menuClose(g *gocui.Gui, v *gocui.View) error {
 	if err := g.DeleteView("menu"); err != nil {
 		return err
@@ -173,30 +182,45 @@ func menuClose(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+// menuDraw draws passed items in the menu.
 func menuDraw(v *gocui.View, items []string) {
 	_, cy := v.Cursor()
 	v.Clear()
 	// print menu items
 	for i, item := range items {
 		if i == cy {
-			fmt.Fprintln(v, "\033[30;47m"+item+"\033[0m")
+			_, err := fmt.Fprintln(v, "\033[30;47m"+item+"\033[0m")
+			if err != nil {
+				// TODO: add logging
+				return
+			}
 		} else {
-			fmt.Fprintln(v, item)
+			_, err := fmt.Fprintln(v, item)
+			if err != nil {
+				// TODO: add logging
+				return
+			}
 		}
 	}
 }
 
-// Move cursor to one item up or down.
+// moveCursor handles user input in the menu.
 func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		if v != nil {
 			cx, cy := v.Cursor()
 			switch d {
 			case moveDown:
-				v.SetCursor(cx, cy+1) /* errors don't make sense here */
+				err := v.SetCursor(cx, cy+1) /* errors don't make sense here */
+				if err != nil {
+					// TODO: add logging
+				}
 				menuDraw(v, config.menu.items)
 			case moveUp:
-				v.SetCursor(cx, cy-1) /* errors don't make sense here */
+				err := v.SetCursor(cx, cy-1) /* errors don't make sense here */
+				if err != nil {
+					// TODO: add logging
+				}
 				menuDraw(v, config.menu.items)
 			}
 		}
