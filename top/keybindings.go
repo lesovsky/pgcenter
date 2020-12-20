@@ -1,22 +1,19 @@
-// Define key bindings.
-
 package top
 
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/stat"
-	"os"
 )
 
-// Key represents particular key, a view where it should work and associated function.
+// Key represents binding between key button and handler should be running when user presses the button.
 type key struct {
 	viewname string
 	key      interface{}
 	handler  func(g *gocui.Gui, v *gocui.View) error
 }
 
-// Setup key bindings and handlers.
+// keybindings set up key bindings with handlers.
 func keybindings(app *app) error {
 	var keys = []key{
 		{"", gocui.KeyCtrlC, quit(app)},
@@ -75,23 +72,9 @@ func keybindings(app *app) error {
 
 	for _, k := range keys {
 		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
-			return fmt.Errorf("ERROR: failed to setup keybindings: %s", err)
+			return fmt.Errorf("setup keybindings failed: %s", err)
 		}
 	}
 
 	return nil
-}
-
-// Quit program.
-func quit(app *app) func(g *gocui.Gui, _ *gocui.View) error {
-	return func(g *gocui.Gui, _ *gocui.View) error {
-		close(app.doUpdate)
-		close(app.doExit)
-		g.Close()
-
-		app.db.Close()
-
-		os.Exit(0) // TODO: this is a very dirty hack
-		return gocui.ErrQuit
-	}
 }

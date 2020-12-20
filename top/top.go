@@ -8,6 +8,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
+	"os"
 )
 
 // app defines stuff required for application.
@@ -76,4 +77,19 @@ func (app *app) Setup() error {
 	app.doUpdate = make(chan int)
 
 	return nil
+}
+
+// quit handles program quit.
+// TODO: может имеет смысл оформить как метод?
+func quit(app *app) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		close(app.doUpdate)
+		close(app.doExit)
+		g.Close()
+
+		app.db.Close()
+
+		os.Exit(0) // TODO: this is a very dirty hack
+		return gocui.ErrQuit
+	}
 }

@@ -41,7 +41,7 @@ func mainLoop(ctx context.Context, app *app) error {
 
 		// setup key shortcuts and bindings
 		if err := keybindings(app); err != nil {
-			return fmt.Errorf("FATAL: %s.\n", err)
+			return err
 		}
 
 		var wg sync.WaitGroup
