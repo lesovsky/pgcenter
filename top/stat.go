@@ -109,9 +109,9 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 		printDbstat(v, app, s) // TODO: насколько тут большая необходимость в передаче 'app' ?
 
 		if app.config.view.ShowExtra > stat.CollectNone {
-			v, err := g.View("aux")
+			v, err := g.View("extra")
 			if err != nil {
-				return fmt.Errorf("Set focus on aux view failed: %s", err)
+				return fmt.Errorf("set focus on extra view failed: %s", err)
 			}
 
 			switch app.config.view.ShowExtra {

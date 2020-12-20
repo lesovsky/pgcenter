@@ -21,7 +21,7 @@ general actions:
     ~                 start psql session.
     l                 open log file with pager.
 
-aux stats actions:
+extra stats actions:
     B,N,L       'B' diskstat, 'N' nicstat, 'L' logtail.
 
 activity actions:
