@@ -36,9 +36,7 @@ func showPgLog(db *postgres.DB, version int, uiExit chan int) func(g *gocui.Gui,
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {
-			// If external program fails, save error and show it to user in next UI iteration.
-			errSaved = fmt.Errorf("open %s failed: %s", logfile, err)
-			return err
+			return fmt.Errorf("open %s failed: %s", logfile, err)
 		}
 
 		return nil

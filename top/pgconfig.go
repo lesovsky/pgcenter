@@ -59,11 +59,10 @@ func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {
-			// If external program fails, save error and show it to user in next UI iteration
-			errSaved = err
+			return fmt.Errorf("run pager failed: %s", err)
 		}
 
-		return err
+		return nil
 	}
 }
 
@@ -103,9 +102,7 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, uiExit chan in
 	cmd.Stdout = os.Stdout
 
 	if err := cmd.Run(); err != nil {
-		// If external program fails, save error and show it to user in next UI iteration
-		errSaved = err
-		return err
+		return fmt.Errorf("run editor failed: %s", err)
 	}
 
 	return nil

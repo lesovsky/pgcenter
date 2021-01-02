@@ -16,7 +16,6 @@ const (
 )
 
 var (
-	errSaved error       // keep error during program lifecycle
 	cmdTimer *time.Timer // show cmdline's messages until timer is not expired
 )
 
@@ -60,6 +59,9 @@ func mainLoop(ctx context.Context, app *app) error {
 				cancel()
 				return nil
 			}
+
+			// remember error, will show it to user in cmdLine
+			app.uiError = err
 
 			// check errors rate - quit if them too much (allow no more than 5 errors within 1 second)
 			if err := e.check(1*time.Second, 5); err != nil {
@@ -115,7 +117,13 @@ func layout(app *app) func(g *gocui.Gui) error {
 	return func(g *gocui.Gui) error {
 		maxX, maxY := app.ui.Size()
 
-		// Sysstat view
+		// Screen dimensions could be equal to zero after executing external programs like pager/editor/psql.
+		// Just return empty error and allow UI manager to redraw screen at next loop iteration.
+		if maxX == 0 || maxY == 0 {
+			return fmt.Errorf("")
+		}
+
+		// Sysstat view.
 		if v, err := app.ui.SetView("sysstat", -1, -1, maxX-1/2, 4); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set sysstat view on layout failed: %s", err)
@@ -126,42 +134,45 @@ func layout(app *app) func(g *gocui.Gui) error {
 			v.Frame = false
 		}
 
-		// Postgres activity view
-		if v, err := app.ui.SetView("pgstat", maxX/2, -1, maxX-1, 4); err != nil {
+		// Postgres activity view.
+		if v, err := app.ui.SetView("pgstat", maxX/2, -1, maxX, 4); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set pgstat view on layout failed: %s", err)
 			}
 			v.Frame = false
 		}
 
-		// Command line
-		if v, err := app.ui.SetView("cmdline", -1, 3, maxX-1, 5); err != nil {
+		// Command line.
+		if v, err := app.ui.SetView("cmdline", -1, 3, maxX, 5); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set cmdline view on layout failed: %s", err)
 			}
 			// show saved error to user if any
-			if errSaved != nil {
-				printCmdline(app.ui, "%s", errSaved)
-				errSaved = nil
+			if app.uiError != nil {
+				printCmdline(app.ui, "%s", app.uiError)
+				app.uiError = nil
 			}
 			v.Frame = false
 		}
 
-		// Postgres' stats view
-		if v, err := app.ui.SetView("dbstat", -1, 4, maxX-1, maxY-1); err != nil {
+		// Postgres main stats view.
+		if v, err := app.ui.SetView("dbstat", -1, 4, maxX, maxY-1); err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dbstat view on layout failed: %s", err)
 			}
 			v.Frame = false
 		}
 
-		// Aux stats view
+		// Extra stats view.
 		if app.config.view.ShowExtra > stat.CollectNone {
-			if v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX-1, maxY-1); err != nil {
+			if v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY-1); err != nil {
 				if err != gocui.ErrUnknownView {
 					return fmt.Errorf("set extra view on layout failed: %s", err)
 				}
-				fmt.Fprintln(v, "")
+				_, err := fmt.Fprintln(v, "")
+				if err != nil {
+					return fmt.Errorf("print extra stats failed: %s", err)
+				}
 				v.Frame = false
 			}
 		}
@@ -174,14 +185,13 @@ func layout(app *app) func(g *gocui.Gui) error {
 func printCmdline(g *gocui.Gui, format string, s ...interface{}) {
 	// Do nothing if Gui is not defined.
 	if g == nil {
-		//fmt.Printf(format, s...)
 		return
 	}
 
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("cmdline")
 		if err != nil {
-			return fmt.Errorf("Set focus on cmdline view failed: %s", err)
+			return fmt.Errorf("set focus on cmdline view failed: %s", err)
 		}
 		v.Clear()
 		fmt.Fprintf(v, format, s...)

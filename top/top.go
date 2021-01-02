@@ -34,11 +34,12 @@ func RunMain(dbConfig *postgres.Config) error {
 
 // app defines application and all necessary dependencies.
 type app struct {
-	postgresProps stat.PostgresProperties
-	config        *config
-	ui            *gocui.Gui
-	db            *postgres.DB
-	uiExit        chan int
+	config        *config                 // runtime configuration.
+	ui            *gocui.Gui              // UI instance.
+	uiExit        chan int                // used for signaling when to need exiting from UI.
+	uiError       error                   // hold error occurred during executing UI.
+	db            *postgres.DB            // connection to Postgres.
+	postgresProps stat.PostgresProperties // TODO: rename to dbProperties
 }
 
 // newApp creates new application instance.

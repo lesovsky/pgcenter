@@ -3,6 +3,7 @@ package top
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"os"
@@ -192,9 +193,7 @@ func (r *report) Print(g *gocui.Gui, uiExit chan int) error {
 	cmd.Stdout = os.Stdout
 
 	if err := cmd.Run(); err != nil {
-		// If external program fails, save error and show it to user in next UI iteration
-		errSaved = err
-		return err
+		return fmt.Errorf("run pager failed: %s", err)
 	}
 
 	return nil

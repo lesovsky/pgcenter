@@ -81,9 +81,7 @@ func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View)
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			// if external program fails, save error and show it to user in next UI iteration
-			errSaved = err
-			return err
+			return fmt.Errorf("run psql failed: %s", err)
 		}
 
 		return nil
