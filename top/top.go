@@ -29,7 +29,7 @@ func RunMain(dbConfig *postgres.Config) error {
 	}
 
 	// Run application workers and UI.
-	return mainLoop(context.TODO(), app)
+	return mainLoop(context.Background(), app)
 }
 
 // app defines application and all necessary dependencies.
@@ -39,7 +39,7 @@ type app struct {
 	uiExit        chan int                // used for signaling when to need exiting from UI.
 	uiError       error                   // hold error occurred during executing UI.
 	db            *postgres.DB            // connection to Postgres.
-	postgresProps stat.PostgresProperties // TODO: rename to dbProperties
+	postgresProps stat.PostgresProperties // properties of Postgres to which connected to.
 }
 
 // newApp creates new application instance.

@@ -11,15 +11,7 @@ import (
 	"time"
 )
 
-const (
-	msgPgStatStatementsUnavailable = "NOTICE: pg_stat_statements is not available in this database"
-)
-
-var (
-	cmdTimer *time.Timer // show cmdline's messages until timer is not expired
-)
-
-// mainLoop start application worker and UI loop.
+// mainLoop starts application worker and UI loop.
 func mainLoop(ctx context.Context, app *app) error {
 	var e errorRate
 
@@ -70,7 +62,7 @@ func mainLoop(ctx context.Context, app *app) error {
 			}
 		}
 
-		// If there are no too many errors just restart worker and UI.
+		// If there are too few errors, just restart worker and UI.
 		cancel()
 
 		// Wait until doWork() finish.
@@ -100,7 +92,6 @@ func doWork(ctx context.Context, app *app) {
 		select {
 		case <-app.uiExit:
 			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
-			// TODO: does stat goroutine gracefully exits here?
 			return
 		case s := <-statCh:
 			printStat(app, s, app.postgresProps)
@@ -112,7 +103,7 @@ func doWork(ctx context.Context, app *app) {
 	}
 }
 
-// Defines UI layout - views and their location.
+// layout defines UI layout - set of screen areas and their locations.
 func layout(app *app) func(g *gocui.Gui) error {
 	return func(g *gocui.Gui) error {
 		maxX, maxY := app.ui.Size()
@@ -124,26 +115,33 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Sysstat view.
-		if v, err := app.ui.SetView("sysstat", -1, -1, maxX-1/2, 4); err != nil {
+		v, err := app.ui.SetView("sysstat", -1, -1, maxX-1/2, 4)
+		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set sysstat view on layout failed: %s", err)
 			}
 			if _, err := app.ui.SetCurrentView("sysstat"); err != nil {
 				return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
 			}
+		}
+		if v != nil {
 			v.Frame = false
 		}
 
 		// Postgres activity view.
-		if v, err := app.ui.SetView("pgstat", maxX/2, -1, maxX, 4); err != nil {
+		v, err = app.ui.SetView("pgstat", maxX/2, -1, maxX, 4)
+		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set pgstat view on layout failed: %s", err)
 			}
+		}
+		if v != nil {
 			v.Frame = false
 		}
 
 		// Command line.
-		if v, err := app.ui.SetView("cmdline", -1, 3, maxX, 5); err != nil {
+		v, err = app.ui.SetView("cmdline", -1, 3, maxX, 5)
+		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set cmdline view on layout failed: %s", err)
 			}
@@ -152,20 +150,26 @@ func layout(app *app) func(g *gocui.Gui) error {
 				printCmdline(app.ui, "%s", app.uiError)
 				app.uiError = nil
 			}
+		}
+		if v != nil {
 			v.Frame = false
 		}
 
 		// Postgres main stats view.
-		if v, err := app.ui.SetView("dbstat", -1, 4, maxX, maxY-1); err != nil {
+		v, err = app.ui.SetView("dbstat", -1, 4, maxX, maxY-1)
+		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dbstat view on layout failed: %s", err)
 			}
+		}
+		if v != nil {
 			v.Frame = false
 		}
 
 		// Extra stats view.
 		if app.config.view.ShowExtra > stat.CollectNone {
-			if v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY-1); err != nil {
+			v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY-1)
+			if err != nil {
 				if err != gocui.ErrUnknownView {
 					return fmt.Errorf("set extra view on layout failed: %s", err)
 				}
@@ -173,6 +177,8 @@ func layout(app *app) func(g *gocui.Gui) error {
 				if err != nil {
 					return fmt.Errorf("print extra stats failed: %s", err)
 				}
+			}
+			if v != nil {
 				v.Frame = false
 			}
 		}
@@ -181,7 +187,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 	}
 }
 
-// Wrapper function for printing messages in cmdline.
+// printCmdline prints formatted message on cmdline.
 func printCmdline(g *gocui.Gui, format string, s ...interface{}) {
 	// Do nothing if Gui is not defined.
 	if g == nil {
@@ -191,22 +197,20 @@ func printCmdline(g *gocui.Gui, format string, s ...interface{}) {
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("cmdline")
 		if err != nil {
-			return fmt.Errorf("set focus on cmdline view failed: %s", err)
+			return fmt.Errorf("set focus on cmdline failed: %s", err)
 		}
 		v.Clear()
-		fmt.Fprintf(v, format, s...)
+		_, err = fmt.Fprintf(v, format, s...)
+		if err != nil {
+			return fmt.Errorf("print on cmdline failed: %s", err)
+		}
 
-		// Clear the message after 1 second. Use timer here because it helps to show message a constant time and avoid blinking.
+		// Clear the message after 2 seconds.
 		if format != "" {
-			// When user pushes buttons quickly and messages should be displayed a constant period of time, in that case
-			// if there is a non-expired timer, refresh it (just stop existing and create new one)
-			if cmdTimer != nil {
-				cmdTimer.Stop()
-			}
-			cmdTimer = time.NewTimer(time.Second)
+			t := time.NewTimer(2 * time.Second)
 			go func() {
-				<-cmdTimer.C
-				printCmdline(g, "") // timer expired - wipe message.
+				<-t.C
+				v.Clear()
 			}()
 		}
 

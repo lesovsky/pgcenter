@@ -84,7 +84,7 @@ func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *
 
 		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
 		if !pgssAvail && s.menuType == menuPgss {
-			printCmdline(g, msgPgStatStatementsUnavailable)
+			printCmdline(g, "NOTICE: pg_stat_statements is not available in this database")
 			return nil
 		}
 
