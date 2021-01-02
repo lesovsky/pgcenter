@@ -1,5 +1,3 @@
-// Stuff related to work with Postgres log.
-
 package top
 
 import (
@@ -11,7 +9,7 @@ import (
 	"os/exec"
 )
 
-// Open Postgres log in $PAGER program.
+// showPgLog opens Postgres log in $PAGER program.
 func showPgLog(db *postgres.DB, version int, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		if !db.Local {
@@ -38,7 +36,7 @@ func showPgLog(db *postgres.DB, version int, doExit chan int) func(g *gocui.Gui,
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {
-			// if external program fails, save error and show it to user in next UI iteration
+			// If external program fails, save error and show it to user in next UI iteration.
 			errSaved = fmt.Errorf("open %s failed: %s", logfile, err)
 			return err
 		}

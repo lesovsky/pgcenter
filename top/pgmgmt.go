@@ -1,5 +1,3 @@
-// Stuff related to Postgres management functions.
-
 package top
 
 import (
@@ -15,16 +13,19 @@ import (
 	"strings"
 )
 
-// Performs reload of Postgres config files.
-func doReload(g *gocui.Gui, v *gocui.View, db *postgres.DB, answer string) {
-	answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogPgReload])
+// doReload performs reload of Postgres service by executing pg_reload_conf().
+func doReload(g *gocui.Gui, buf string, db *postgres.DB) error {
+	answer := strings.TrimPrefix(buf, dialogPrompts[dialogPgReload])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	switch answer {
 	case "y":
 		var status sql.NullBool
 
-		db.QueryRow(query.ExecReloadConf).Scan(&status)
+		err := db.QueryRow(query.ExecReloadConf).Scan(&status)
+		if err != nil {
+			printCmdline(g, "Reload failed: %s", err)
+		}
 		if status.Bool {
 			printCmdline(g, "Reload issued.")
 		} else {
@@ -35,18 +36,23 @@ func doReload(g *gocui.Gui, v *gocui.View, db *postgres.DB, answer string) {
 	default:
 		printCmdline(g, "Do nothing. Unknown answer.")
 	}
+
+	return nil
 }
 
-// Reset pg_stat_* statistics counters. Reset statistics that belongs to current database and pg_stat_statements stats.
+// resetStat resets Postgres stats counters.
+// Reset statistics that belongs to current database and pg_stat_statements stats.
 // Don't reset shared stats, such as bgwriter/archiver.
 func resetStat(db *postgres.DB) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		var msg string = "Reset statistics."
+		msg := "Reset statistics."
 
 		_, err := db.Exec(query.ExecResetStats)
 		if err != nil {
 			msg = fmt.Sprintf("Reset statistics failed: %s", err)
 		}
+
+		// TODO: if pg_stat_statements is not installed, this will fail.
 		_, err = db.Exec(query.ExecResetPgStatStatements)
 		if err != nil {
 			msg = fmt.Sprintf("Reset pg_stat_statements statistics failed: %s", err)
@@ -58,10 +64,10 @@ func resetStat(db *postgres.DB) func(g *gocui.Gui, _ *gocui.View) error {
 	}
 }
 
-// Run psql session to the database using current connection's settings
+// runPsql starts psql session to the current connected database.
 func runPsql(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		// Ignore interrupts in pgCenter, because Ctrl+C in psql interrupts pgCenter
+		// Ignore interrupts in pgCenter, because Ctrl+C in psql interrupts pgCenter.
 		signal.Ignore(os.Interrupt)
 
 		// exit from UI and stats loop... will restore it after psql is closed.

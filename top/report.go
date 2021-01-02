@@ -1,5 +1,3 @@
-// Stuff related to query reporting.
-
 package top
 
 import (
@@ -142,13 +140,13 @@ query text (id: {{.QueryId}}):
 )
 
 // buildQueryReport queries statements stats, generate the report and shows it.
-func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, doExit chan int) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogQueryReport])
+func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, doExit chan int) error {
+	answer := strings.TrimPrefix(buf, dialogPrompts[dialogQueryReport])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
 		printCmdline(g, "Do nothing.")
-		return
+		return nil
 	}
 
 	var r report
@@ -161,7 +159,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string, db *postgres.D
 
 	if err == sql.ErrNoRows {
 		printCmdline(g, "No stats for such queryid.")
-		return
+		return nil
 	}
 
 	r.QueryId = answer
@@ -169,7 +167,7 @@ func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string, db *postgres.D
 		printCmdline(g, "Failed to show query report.")
 	}
 
-	return
+	return nil
 }
 
 // Print method prints report in $PAGER program.

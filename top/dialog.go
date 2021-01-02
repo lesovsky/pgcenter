@@ -108,10 +108,11 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		printCmdline(g, "")
 
 		// TODO: refactor functions to return value and not use gocui object inside
+		//   Most of the should return error/success response which should be printed to user.
 
 		switch app.config.dialog {
 		case dialogPgReload:
-			doReload(g, v, app.db, answer)
+			_ = doReload(g, v.Buffer(), app.db)
 		case dialogFilter:
 			setFilter(g, v.Buffer(), app.config.view)
 		case dialogCancelQuery:
@@ -127,7 +128,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogChangeAge:
 			changeQueryAge(g, v.Buffer(), app.config)
 		case dialogQueryReport:
-			buildQueryReport(g, v, answer, app.db, app.doExit)
+			_ = buildQueryReport(g, answer, app.db, app.doExit)
 		case dialogChangeRefresh:
 			changeRefresh(g, v.Buffer(), app.config)
 		case dialogNone:
