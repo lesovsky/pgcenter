@@ -87,8 +87,9 @@ func openExtraView(g *gocui.Gui, _ *gocui.View) error {
 
 // closeExtraView updates configuration and closes view with extra stats.
 func closeExtraView(g *gocui.Gui, _ *gocui.View, c *config) error {
-	for _, v := range c.views {
+	for k, v := range c.views {
 		v.ShowExtra = stat.CollectNone
+		c.views[k] = v
 	}
 	c.view.ShowExtra = stat.CollectNone
 	c.viewCh <- c.view
