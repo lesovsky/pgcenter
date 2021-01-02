@@ -18,6 +18,7 @@ type config struct {
 	logtail      stat.Logfile   // Logfile used for working with Postgres log file.
 	dialog       dialogType     // Remember current user-started dialog, used for selecting needed dialog handler.
 	menu         menuStyle      // When working with menus, keep properties of the menu.
+	procMask     int            // Process mask used for selecting group of process.
 }
 
 // newConfig creates 'top' initial configuration.

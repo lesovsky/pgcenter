@@ -3,7 +3,7 @@
 package top
 
 import (
-	"database/sql"
+	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
@@ -19,68 +19,59 @@ const (
 	groupOthers
 )
 
-var (
-	groupMask int
-)
-
-// Send signal to a single Postgres backend.
-func killSingle(g *gocui.Gui, v *gocui.View, answer string, db *postgres.DB, mode string) {
+// killSingle sends cancel or terminate signal to a single Postgres backend.
+func killSingle(db *postgres.DB, mode string, buf string) error {
 	if mode != "cancel" && mode != "terminate" {
-		printCmdline(g, "Do nothing. Unknown mode (not cancel, nor terminate).") // should never be here
-		return
+		return fmt.Errorf("invalid input")
 	}
 
-	var q string
+	var q, answer string
 
 	switch mode {
 	case "cancel":
 		q = query.ExecCancelQuery
-		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogCancelQuery])
+		answer = strings.TrimPrefix(buf, dialogPrompts[dialogCancelQuery])
 	case "terminate":
 		q = query.ExecTerminateBackend
-		answer = strings.TrimPrefix(v.Buffer(), dialogPrompts[dialogTerminateBackend])
+		answer = strings.TrimPrefix(buf, dialogPrompts[dialogTerminateBackend])
 	}
 	answer = strings.TrimSuffix(answer, "\n")
 
 	pid, err := strconv.Atoi(answer)
 	if err != nil {
-		printCmdline(g, "Do nothing. Unacceptable integer.")
-		return
+		return err
 	}
 
-	var killed sql.NullBool
-
-	db.QueryRow(q, pid).Scan(&killed)
-
-	if killed.Bool == true {
-		printCmdline(g, "Successful.")
-	} else {
-		printCmdline(g, "Failed.")
+	_, err = db.Exec(q, pid)
+	if err != nil {
+		return err
 	}
+
+	return nil
 }
 
-// Send signal to group of Postgres backends.
-func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
+// killGroup sends cancel or terminate signal to group of Postgres backends.
+func killGroup(app *app, mode string) (string, error) {
 	if app.config.view.Name != "activity" {
-		printCmdline(g, "Terminate or cancel backend allowed in pg_stat_activity.")
-		return
+		return "Terminate or cancel backend allowed in pg_stat_activity.", nil
 	}
 
-	if groupMask == 0 {
-		printCmdline(g, "Do nothing. The mask is empty.")
-		return
+	mask := app.config.procMask
+
+	if mask == 0 {
+		return "Do nothing. The mask is empty.", nil
 	}
 
 	if mode != "cancel" && mode != "terminate" {
-		printCmdline(g, "Do nothing. Unknown mode (not cancel, nor terminate).") // should never be here
-		return
+		return "Do nothing. Unknown mode (not cancel, nor terminate).", nil
 	}
 
-	var template, q string
-	var killed sql.NullInt64
-	var killedTotal int64
+	var (
+		template, q               string
+		signalled, signalledTotal int64
+	)
 
-	// Select kill function: pg_cancel_backend or pg_terminate_backend
+	// Select signal function: pg_cancel_backend or pg_terminate_backend.
 	switch mode {
 	case "cancel":
 		template = query.ExecCancelQueryGroup
@@ -88,7 +79,7 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 		template = query.ExecTerminateBackendGroup
 	}
 
-	/* advanced mode */
+	// states defines SQL expression conditions necessary for selecting group of target processes.
 	var states = map[int]string{
 		groupIdle:     "state = 'idle'",
 		groupIdleXact: "state IN ('idle in transaction (aborted)', 'idle in transaction')",
@@ -97,77 +88,85 @@ func killGroup(g *gocui.Gui, _ *gocui.View, app *app, mode string) {
 		groupOthers:   "state IN ('fastpath function call', 'disabled')",
 	}
 
+	// Walk through the states, if state is in the mask then send signal to that group of process.
 	for state, part := range states {
-		if (groupMask & state) != 0 {
+		if (mask & state) != 0 {
 			app.config.queryOptions.BackendState = part
 			if state == groupWaiting && app.postgresProps.VersionNum < 90600 {
 				app.config.queryOptions.BackendState = "waiting"
 			}
 			q, _ = query.Format(template, app.config.queryOptions)
-			err := app.db.QueryRow(q).Scan(&killed)
+			err := app.db.QueryRow(q).Scan(&signalled)
 			if err != nil {
-				printCmdline(g, "failed to send signal to backends: %s", err)
+				return "", err
 			}
 
-			killedTotal += killed.Int64
+			signalledTotal += signalled
 		}
 	}
 
+	var msg string
 	switch mode {
 	case "cancel":
-		printCmdline(g, "Cancelled "+strconv.FormatInt(killedTotal, 10)+" queries.")
+		msg = "Cancelled " + strconv.FormatInt(signalledTotal, 10) + " queries."
 	case "terminate":
-		printCmdline(g, "Terminated "+strconv.FormatInt(killedTotal, 10)+" backends.")
+		msg = "Terminated " + strconv.FormatInt(signalledTotal, 10) + " backends."
 	}
+
+	return msg, nil
 }
 
-func setBackendMask(g *gocui.Gui, v *gocui.View, answer string) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogSetMask])
+// setProcMask
+func setProcMask(_ *gocui.Gui, buf string, config *config) {
+	answer := strings.TrimPrefix(buf, dialogPrompts[dialogSetMask])
 	answer = strings.TrimSuffix(answer, "\n")
 
-	// clear previous mask
-	groupMask = 0
+	// Reset existing mask.
+	config.procMask = 0
 
 	for _, ch := range answer {
 		switch string(ch) {
 		case "i":
-			groupMask |= groupIdle
+			config.procMask |= groupIdle
 		case "x":
-			groupMask |= groupIdleXact
+			config.procMask |= groupIdleXact
 		case "a":
-			groupMask |= groupActive
+			config.procMask |= groupActive
 		case "w":
-			groupMask |= groupWaiting
+			config.procMask |= groupWaiting
 		case "o":
-			groupMask |= groupOthers
+			config.procMask |= groupOthers
 		}
 	}
 
-	showBackendMask(g, v)
+	showProcMask(config.procMask)
 }
 
-func showBackendMask(g *gocui.Gui, v *gocui.View) error {
-	ct := "Mask: "
-	if groupMask == 0 {
-		ct += "empty "
-	}
-	if (groupMask & groupIdle) != 0 {
-		ct += "idle "
-	}
-	if (groupMask & groupIdleXact) != 0 {
-		ct += "idle_xact "
-	}
-	if (groupMask & groupActive) != 0 {
-		ct += "active "
-	}
-	if (groupMask & groupWaiting) != 0 {
-		ct += "waiting "
-	}
-	if (groupMask & groupOthers) != 0 {
-		ct += "others "
-	}
+// showProcMask
+func showProcMask(mask int) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		ct := "Mask: "
+		if mask == 0 {
+			ct += "empty "
+		}
+		if (mask & groupIdle) != 0 {
+			ct += "idle "
+		}
+		if (mask & groupIdleXact) != 0 {
+			ct += "idle_xact "
+		}
+		if (mask & groupActive) != 0 {
+			ct += "active "
+		}
+		if (mask & groupWaiting) != 0 {
+			ct += "waiting "
+		}
+		if (mask & groupOthers) != 0 {
+			ct += "others "
+		}
 
-	printCmdline(g, ct)
+		printCmdline(g, ct)
 
-	return nil
+		return nil
+	}
 }

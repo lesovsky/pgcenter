@@ -107,21 +107,23 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 
 		printCmdline(g, "")
 
+		// TODO: refactor functions to return value and not use gocui object inside
+
 		switch app.config.dialog {
 		case dialogPgReload:
 			doReload(g, v, app.db, answer)
 		case dialogFilter:
 			setFilter(g, v.Buffer(), app.config.view)
 		case dialogCancelQuery:
-			killSingle(g, v, answer, app.db, "cancel")
+			_ = killSingle(app.db, "cancel", v.Buffer())
 		case dialogTerminateBackend:
-			killSingle(g, v, answer, app.db, "terminate")
+			_ = killSingle(app.db, "terminate", v.Buffer())
 		case dialogSetMask:
-			setBackendMask(g, v, answer)
+			setProcMask(g, v.Buffer(), app.config)
 		case dialogCancelGroup:
-			killGroup(g, v, app, "cancel")
+			_, _ = killGroup(app, "cancel")
 		case dialogTerminateGroup:
-			killGroup(g, v, app, "terminate")
+			_, _ = killGroup(app, "terminate")
 		case dialogChangeAge:
 			changeQueryAge(g, v.Buffer(), app.config)
 		case dialogQueryReport:
