@@ -16,9 +16,9 @@ type key struct {
 // keybindings set up key bindings with handlers.
 func keybindings(app *app) error {
 	var keys = []key{
-		{"", gocui.KeyCtrlC, quit(app)},
-		{"", gocui.KeyCtrlQ, quit(app)},
-		{"sysstat", 'q', quit(app)},
+		{"", gocui.KeyCtrlC, app.quit()},
+		{"", gocui.KeyCtrlQ, app.quit()},
+		{"sysstat", 'q', app.quit()},
 		{"sysstat", gocui.KeyArrowLeft, orderKeyLeft(app.config)},
 		{"sysstat", gocui.KeyArrowRight, orderKeyRight(app.config)},
 		{"sysstat", gocui.KeyArrowUp, increaseWidth(app.config)},
@@ -39,9 +39,9 @@ func keybindings(app *app) error {
 		{"sysstat", 'E', menuOpen(menuConf, app.config, false)},
 		{"sysstat", 'X', menuOpen(menuPgss, app.config, app.postgresProps.ExtPGSSAvail)},
 		{"sysstat", 'P', menuOpen(menuProgress, app.config, false)},
-		{"sysstat", 'l', showPgLog(app.db, app.postgresProps.VersionNum, app.doExit)},
-		{"sysstat", 'C', showPgConfig(app.db, app.doExit)},
-		{"sysstat", '~', runPsql(app.db, app.doExit)},
+		{"sysstat", 'l', showPgLog(app.db, app.postgresProps.VersionNum, app.uiExit)},
+		{"sysstat", 'C', showPgConfig(app.db, app.uiExit)},
+		{"sysstat", '~', runPsql(app.db, app.uiExit)},
 		{"sysstat", 'B', showExtra(app, stat.CollectDiskstats)},
 		{"sysstat", 'N', showExtra(app, stat.CollectNetdev)},
 		{"sysstat", 'L', showExtra(app, stat.CollectLogtail)},

@@ -65,13 +65,13 @@ func resetStat(db *postgres.DB) func(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // runPsql starts psql session to the current connected database.
-func runPsql(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		// Ignore interrupts in pgCenter, because Ctrl+C in psql interrupts pgCenter.
 		signal.Ignore(os.Interrupt)
 
 		// exit from UI and stats loop... will restore it after psql is closed.
-		doExit <- 1
+		uiExit <- 1
 		g.Close()
 		cmd := exec.Command("psql",
 			"-h", db.Config.Host, "-p", strconv.Itoa(int(db.Config.Port)),

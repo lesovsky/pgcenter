@@ -144,19 +144,19 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case menuConf:
 			switch cy {
 			case 0:
-				if err := editPgConfig(g, app.db, gucMainConfFile, app.doExit); err != nil {
+				if err := editPgConfig(g, app.db, gucMainConfFile, app.uiExit); err != nil {
 					return err
 				}
 			case 1:
-				if err := editPgConfig(g, app.db, gucHbaFile, app.doExit); err != nil {
+				if err := editPgConfig(g, app.db, gucHbaFile, app.uiExit); err != nil {
 					return err
 				}
 			case 2:
-				if err := editPgConfig(g, app.db, gucIdentFile, app.doExit); err != nil {
+				if err := editPgConfig(g, app.db, gucIdentFile, app.uiExit); err != nil {
 					return err
 				}
 			case 3:
-				if err := editPgConfig(g, app.db, gucRecoveryFile, app.doExit); err != nil {
+				if err := editPgConfig(g, app.db, gucRecoveryFile, app.uiExit); err != nil {
 					return err
 				}
 			}

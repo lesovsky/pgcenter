@@ -140,7 +140,7 @@ query text (id: {{.QueryId}}):
 )
 
 // buildQueryReport queries statements stats, generate the report and shows it.
-func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, doExit chan int) error {
+func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, uiExit chan int) error {
 	answer := strings.TrimPrefix(buf, dialogPrompts[dialogQueryReport])
 	answer = strings.TrimSuffix(answer, "\n")
 
@@ -163,7 +163,7 @@ func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, doExit chan int
 	}
 
 	r.QueryId = answer
-	if err := r.Print(g, doExit); err != nil {
+	if err := r.Print(g, uiExit); err != nil {
 		printCmdline(g, "Failed to show query report.")
 	}
 
@@ -171,7 +171,7 @@ func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, doExit chan int
 }
 
 // Print method prints report in $PAGER program.
-func (r *report) Print(g *gocui.Gui, doExit chan int) error {
+func (r *report) Print(g *gocui.Gui, uiExit chan int) error {
 	t := template.Must(template.New("query").Parse(reportTemplate))
 	buf := &bytes.Buffer{}
 	if err := t.Execute(buf, r); err != nil {
@@ -184,7 +184,7 @@ func (r *report) Print(g *gocui.Gui, doExit chan int) error {
 	}
 
 	// Exit from UI, will restore it after $PAGER is closed.
-	doExit <- 1
+	uiExit <- 1
 	g.Close()
 
 	cmd := exec.Command(pager)

@@ -26,7 +26,7 @@ const (
 )
 
 // showPgConfig fetches Postgres configuration settings and opens it in $PAGER program.
-func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		res, err := stat.NewPGresult(db, query.GetAllSettings)
 		if err != nil {
@@ -51,7 +51,7 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 		}
 
 		// Exit from UI and stats loop... will restore it after $PAGER is closed.
-		doExit <- 1
+		uiExit <- 1
 		g.Close()
 
 		cmd := exec.Command(pager)
@@ -68,7 +68,7 @@ func showPgConfig(db *postgres.DB, doExit chan int) func(g *gocui.Gui, _ *gocui.
 }
 
 // editPgConfig opens specified configuration file in $EDITOR program.
-func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, doExit chan int) error {
+func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, uiExit chan int) error {
 	if !db.Local {
 		printCmdline(g, "Edit config is not supported for remote hosts")
 		return nil
@@ -95,7 +95,7 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, doExit chan in
 	}
 
 	// Exit from UI and stats loop... will restore it after $EDITOR is closed.
-	doExit <- 1
+	uiExit <- 1
 	g.Close()
 
 	cmd := exec.Command(editor, configFile)

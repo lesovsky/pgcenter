@@ -128,7 +128,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogChangeAge:
 			changeQueryAge(g, v.Buffer(), app.config)
 		case dialogQueryReport:
-			_ = buildQueryReport(g, answer, app.db, app.doExit)
+			_ = buildQueryReport(g, answer, app.db, app.uiExit)
 		case dialogChangeRefresh:
 			changeRefresh(g, v.Buffer(), app.config)
 		case dialogNone:

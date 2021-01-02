@@ -23,23 +23,21 @@ var (
 // mainLoop start application worker and UI loop.
 func mainLoop(ctx context.Context, app *app) error {
 	var e errorRate
-	var errInterval = 1 * time.Second
-	var errMaxcount = 5
 
 	// Run in infinite loop - if UI crashes then reinitialize it.
 	for {
-		// init UI
+		// Init UI
 		g, err := gocui.NewGui(gocui.OutputNormal)
 		if err != nil {
-			return fmt.Errorf("FATAL: gui creating failed with %s.\n", err)
+			return fmt.Errorf("create UI failed: %s", err)
 		}
 
 		app.ui = g
 
-		// construct UI
+		// Setup UI layout.
 		app.ui.SetManagerFunc(layout(app))
 
-		// setup key shortcuts and bindings
+		// Setup keybindings.
 		if err := keybindings(app); err != nil {
 			return err
 		}
@@ -55,15 +53,25 @@ func mainLoop(ctx context.Context, app *app) error {
 		}()
 
 		// Run UI management loop.
-		if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
-			// check errors rate and quit if them too much - allow no more than 5 errors within 1 second
-			if err := e.check(errInterval, errMaxcount); err != nil {
-				return fmt.Errorf("too many ui errors occurred: %s (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
+		err = g.MainLoop()
+		if err != nil {
+			// quit received.
+			if err == gocui.ErrQuit {
+				cancel()
+				return nil
 			}
-			// If there are no too many errors just restart worker and UI.
-			cancel()
+
+			// check errors rate - quit if them too much (allow no more than 5 errors within 1 second)
+			if err := e.check(1*time.Second, 5); err != nil {
+				cancel()
+				return fmt.Errorf("too many UI errors occurred: %s (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
+			}
 		}
 
+		// If there are no too many errors just restart worker and UI.
+		cancel()
+
+		// Wait until doWork() finish.
 		wg.Wait()
 	}
 }
@@ -88,12 +96,10 @@ func doWork(ctx context.Context, app *app) {
 
 	for {
 		select {
-		case <-app.doExit:
+		case <-app.uiExit:
 			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
 			// TODO: does stat goroutine gracefully exits here?
 			return
-		case <-app.doUpdate:
-			continue
 		case s := <-statCh:
 			printStat(app, s, app.postgresProps)
 		case <-ctx.Done():

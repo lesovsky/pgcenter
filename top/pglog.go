@@ -10,7 +10,7 @@ import (
 )
 
 // showPgLog opens Postgres log in $PAGER program.
-func showPgLog(db *postgres.DB, version int, doExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+func showPgLog(db *postgres.DB, version int, uiExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		if !db.Local {
 			printCmdline(g, "Show log is not supported for remote hosts")
@@ -29,7 +29,7 @@ func showPgLog(db *postgres.DB, version int, doExit chan int) func(g *gocui.Gui,
 		}
 
 		// Exit from UI and stats loop. Restore it after $PAGER is closed.
-		doExit <- 1
+		uiExit <- 1
 		g.Close()
 
 		cmd := exec.Command(pager, logfile)
