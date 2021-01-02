@@ -216,7 +216,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	//   2. постоянная манипуляция с массивами на каждой итерации печати хоть и дешева здесь, но наверное избыточна.
 	pgprops := []string{db.Config.Host, strconv.Itoa(int(db.Config.Port)), db.Config.User, db.Config.Database, props.Version}
 	for i, v := range pgprops {
-		if len(pgprops[i]) >= 16 {
+		if len(pgprops[i]) >= 20 {
 			pgprops[i] = v[0:15] + "~"
 		}
 	}
