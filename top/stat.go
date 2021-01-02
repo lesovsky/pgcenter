@@ -1,5 +1,3 @@
-// Stuff related to gathering, processing and displaying stats.
-
 package top
 
 import (
@@ -13,9 +11,11 @@ import (
 	"github.com/lib/pq"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 )
 
+// collectStat
 func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, viewCh <-chan view.View) {
 	c, err := stat.NewCollector(db)
 	if err != nil {
@@ -34,6 +34,9 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	if err != nil {
 		fmt.Println(err)
 	}
+
+	// Wait a bit, to allow Postgres counters increments. Also we don't want to wait for
+	// the whole refresh interval - it looks like program freezes at start.
 	time.Sleep(100 * time.Millisecond)
 
 	// Set settings related to extra stats.
@@ -41,6 +44,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 
 	// Collect stat in loop and send it to stat channel.
 	for {
+		// Collect stats.
 		stats, err := c.Update(db, v, refresh)
 		if err != nil {
 			fmt.Println(err)
@@ -49,7 +53,8 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			statCh <- stats
 		}
 
-		// Waiting for events until refresh interval expired.
+		// Waiting for receiving new view until refresh interval expired. When new view has been received, use its
+		// settings to adjust collector's behavior.
 		ticker := time.NewTicker(refresh)
 		select {
 		case v = <-viewCh:
@@ -66,7 +71,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 				continue
 			}
 
-			// If view has been updated, stop ticker and re-initialize stats.
+			// When view has been updated, stop the ticker and re-initialize stats.
 			ticker.Stop()
 
 			c.Reset()
@@ -85,28 +90,38 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	}
 }
 
+// printStat prints collected stats in UI.
 func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {
-			return fmt.Errorf("Set focus on sysstat view failed: %s", err)
+			return fmt.Errorf("set focus on sysstat view failed: %s", err)
 		}
 		v.Clear()
-		printSysstat(v, s)
+		err = printSysstat(v, s)
+		if err != nil {
+			return fmt.Errorf("print sysstat failed: %s", err)
+		}
 
 		v, err = g.View("pgstat")
 		if err != nil {
-			return fmt.Errorf("Set focus on pgstat view failed: %s", err)
+			return fmt.Errorf("set focus on pgstat view failed: %s", err)
 		}
 		v.Clear()
-		printPgstat(v, s, props)
+		err = printPgstat(v, s, props, app.db)
+		if err != nil {
+			return fmt.Errorf("print summary postgres stat failed: %s", err)
+		}
 
 		v, err = g.View("dbstat")
 		if err != nil {
-			return fmt.Errorf("Set focus on dbstat view failed: %s", err)
+			return fmt.Errorf("set focus on dbstat view failed: %s", err)
 		}
 		v.Clear()
-		printDbstat(v, app, s) // TODO: насколько тут большая необходимость в передаче 'app' ?
+		err = printDbstat(v, app.config, s)
+		if err != nil {
+			return fmt.Errorf("print main postgres stat failed: %s", err)
+		}
 
 		if app.config.view.ShowExtra > stat.CollectNone {
 			v, err := g.View("extra")
@@ -117,10 +132,16 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			switch app.config.view.ShowExtra {
 			case stat.CollectDiskstats:
 				v.Clear()
-				printIostat(v, s.Diskstats)
+				err := printIostat(v, s.Diskstats)
+				if err != nil {
+					return err
+				}
 			case stat.CollectNetdev:
 				v.Clear()
-				printNetdev(v, s.Netdevs)
+				err := printNetdev(v, s.Netdevs)
+				if err != nil {
+					return err
+				}
 			case stat.CollectLogtail:
 				size, buf, err := readLogfileRecent(v, app.config.logtail)
 				if err != nil {
@@ -140,115 +161,180 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 				// Update info about logfile size.
 				app.config.logtail.Size = size
 
-				printLogtail(v, app.config.logtail.Path, buf)
+				err = printLogtail(v, app.config.logtail.Path, buf)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	})
 }
 
-func printSysstat(v *gocui.View, s stat.Stat) {
+// printSysstat prints system stats on UI.
+func printSysstat(v *gocui.View, s stat.Stat) error {
+	var err error
+
 	/* line1: current time and load average */
-	fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
+	_, err = fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
+
 	/* line2: cpu usage */
-	fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
+	_, err = fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
 		s.CpuStat.User, s.CpuStat.Sys, s.CpuStat.Nice, s.CpuStat.Idle,
 		s.CpuStat.Iowait, s.CpuStat.Irq, s.CpuStat.Softirq, s.CpuStat.Steal)
+	if err != nil {
+		return err
+	}
+
 	/* line3: memory usage */
-	fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
+	_, err = fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
 		s.Meminfo.MemTotal, s.Meminfo.MemFree, s.Meminfo.MemUsed,
 		s.Meminfo.MemCached+s.Meminfo.MemBuffers+s.Meminfo.MemSlab)
+	if err != nil {
+		return err
+	}
+
 	/* line4: swap usage, dirty and writeback */
-	fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
+	_, err = fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
 		s.Meminfo.SwapTotal, s.Meminfo.SwapFree, s.Meminfo.SwapUsed,
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties) {
+// printPgstat prints summary Postgres stats on UI.
+func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *postgres.DB) error {
+	var err error
+
+	// TODO: логику вытаскивания параметров подключения нужно переместить из функции.
+	//   1. функция предназначена для "только" печати.
+	//   2. постоянная манипуляция с массивами на каждой итерации печати хоть и дешева здесь, но наверное избыточна.
+	pgprops := []string{db.Config.Host, strconv.Itoa(int(db.Config.Port)), db.Config.User, db.Config.Database, props.Version}
+	for i, v := range pgprops {
+		if len(pgprops[i]) >= 16 {
+			pgprops[i] = v[0:15] + "~"
+		}
+	}
+
+	// If database is empty, use database name as a user name.
+	if pgprops[3] == "" {
+		pgprops[3] = pgprops[2]
+	}
+
 	/* line1: details of used connection, version, uptime and recovery status */
-	fmt.Fprintf(v, "state [%s]: %.16s:%d %.16s@%.16s (ver: %s, up %s, recovery: %.1s)\n",
-		s.Activity.State,
-		//conninfo.Host, conninfo.Port, conninfo.User, conninfo.Dbname,
-		// TODO: remove 'dummy' values
-		"dummy", 0, "dummy", "dummy",
-		props.Version, s.Activity.Uptime, props.Recovery)
+	_, err = fmt.Fprintf(v,
+		"state [%s]: %s:%s %s@%s (ver: %s, up %s, recovery: %.1s)\n",
+		s.Activity.State, pgprops[0], pgprops[1], pgprops[2], pgprops[3], pgprops[4], s.Activity.Uptime, props.Recovery,
+	)
+	if err != nil {
+		return err
+	}
+
 	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
-	fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
+	_, err = fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
 		s.Activity.ConnTotal, props.GucMaxConnections, s.Activity.ConnPrepared, props.GucMaxPrepXacts,
 		s.Activity.ConnIdle, s.Activity.ConnIdleXact, s.Activity.ConnActive,
 		s.Activity.ConnWaiting, s.Activity.ConnOthers)
+	if err != nil {
+		return err
+	}
+
 	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
-	fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
+	_, err = fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.Activity.AVWorkers, props.GucAVMaxWorkers,
 		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
+	if err != nil {
+		return err
+	}
+
 	/* line4: current workload*/
-	fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
+	_, err = fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.Activity.CallsRate, s.Activity.StmtAvgTime, s.Activity.XactMaxTime, s.Activity.PrepMaxTime)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func printDbstat(v *gocui.View, app *app, s stat.Stat) {
-	// If query fails, show the corresponding error and return.
+// printDbstat prints main Postgres stats on UI.
+func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
+	// If query fails, print the corresponding query error and return.
 	if err, ok := s.Result.Err.(*pq.Error); ok {
-		fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
+		_, err := fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
+		if err != nil {
+			return err
+		}
 		s.Result.Err = nil
-		return
+		return nil
 	}
 
-	// configure aligning, use fixed aligning instead of dynamic
-	if !app.config.view.Aligned {
-		widthes, cols, err := align.SetAlign(s.Result, 1000, false) // we don't want truncate lines here, so just use high limit
+	// Align values within columns, use fixed aligning instead of dynamic.
+	if !config.view.Aligned {
+		widthes, cols, err := align.SetAlign(s.Result, 1000, false) // use high limit (1000) to avoid truncating last value.
 		if err == nil {
-			app.config.view.Cols = cols
-			app.config.view.ColsWidth = widthes
-			app.config.view.Aligned = true
+			config.view.Cols = cols
+			config.view.ColsWidth = widthes
+			config.view.Aligned = true
 		}
 	}
 
-	// is filter required?
-	var filter = isFilterRequired(app.config.view.Filters)
-
-	/* print header - filtered column mark with star; ordered column make shadowed */
-	printStatHeader(v, s, app)
-
-	// print data
-	printStatData(v, s, app, filter)
-}
-
-// Returns true if filtering is required
-func isFilterRequired(f map[int]*regexp.Regexp) bool {
-	for _, v := range f {
-		if v != nil {
-			return true
-		}
+	// Print header.
+	err := printStatHeader(v, s, config)
+	if err != nil {
+		return err
 	}
-	return false
+
+	// Print data.
+	err = printStatData(v, s, config, isFilterRequired(config.view.Filters))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func printStatHeader(v *gocui.View, s stat.Stat, app *app) {
+// printStatHeader prints stats header.
+func printStatHeader(v *gocui.View, s stat.Stat, config *config) error {
 	var pname string
 	for i := 0; i < s.Result.Ncols; i++ {
 		name := s.Result.Cols[i]
 
 		// mark filtered column
-		if app.config.view.Filters[i] != nil && app.config.view.Filters[i].String() != "" {
+		if config.view.Filters[i] != nil && config.view.Filters[i].String() != "" {
 			pname = "*" + name
 		} else {
 			pname = name
 		}
 
-		/* mark ordered column with foreground color */
-		if i != app.config.view.OrderKey {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, app.config.view.ColsWidth[i]+2, pname)
+		// mark ordered column with foreground color
+		if i != config.view.OrderKey {
+			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, config.view.ColsWidth[i]+2, pname)
+			if err != nil {
+				return err
+			}
 		} else {
-			fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, app.config.view.ColsWidth[i]+2, pname)
+			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, config.view.ColsWidth[i]+2, pname)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	fmt.Fprintf(v, "\n")
+	_, err := fmt.Fprintf(v, "\n")
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func printStatData(v *gocui.View, s stat.Stat, app *app, filter bool) {
+// printStatData prints stats data.
+func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) error {
 	var doPrint bool
 	for colnum, rownum := 0, 0; rownum < s.Result.Nrows; rownum, colnum = rownum+1, 0 {
 		// be optimistic, we want to print the row.
@@ -257,8 +343,8 @@ func printStatData(v *gocui.View, s stat.Stat, app *app, filter bool) {
 		// apply filters using regexp
 		if filter {
 			for i := 0; i < s.Result.Ncols; i++ {
-				if app.config.view.Filters[i] != nil {
-					if app.config.view.Filters[i].MatchString(s.Result.Values[rownum][i].String) {
+				if config.view.Filters[i] != nil {
+					if config.view.Filters[i].MatchString(s.Result.Values[rownum][i].String) {
 						doPrint = true
 						break
 					} else {
@@ -273,27 +359,38 @@ func printStatData(v *gocui.View, s stat.Stat, app *app, filter bool) {
 			if doPrint {
 				// truncate values that longer than column width
 				valuelen := len(s.Result.Values[rownum][colnum].String)
-				if valuelen > app.config.view.ColsWidth[i] {
-					width := app.config.view.ColsWidth[i]
+				if valuelen > config.view.ColsWidth[i] {
+					width := config.view.ColsWidth[i]
 					// truncate value up to column width and replace last character with '~' symbol
 					s.Result.Values[rownum][colnum].String = s.Result.Values[rownum][colnum].String[:width-1] + "~"
 				}
 
 				// print value
-				fmt.Fprintf(v, "%-*s", app.config.view.ColsWidth[i]+2, s.Result.Values[rownum][colnum].String)
+				_, err := fmt.Fprintf(v, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][colnum].String)
+				if err != nil {
+					return err
+				}
 				colnum++
 			}
 		}
 		if doPrint {
-			fmt.Fprintf(v, "\n")
+			_, err := fmt.Fprintf(v, "\n")
+			if err != nil {
+				return err
+			}
 		}
 	}
+
+	return nil
 }
 
-// Print iostat - block devices stats.
-func printIostat(v *gocui.View, s stat.Diskstats) {
+// printIostat prints extra 'iostat' - block IO devices stats.
+func printIostat(v *gocui.View, s stat.Diskstats) error {
 	// print header
-	fmt.Fprintf(v, "\033[30;47m             Device:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
+	_, err := fmt.Fprintf(v, "\033[30;47m             Device:     rrqm/s     wrqm/s        r/s        w/s      rMB/s      wMB/s   avgrq-sz   avgqu-sz      await    r_await    w_await      %%util\033[0m\n")
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(s); i++ {
 		// skip devices which never do IOs
@@ -302,20 +399,26 @@ func printIostat(v *gocui.View, s stat.Diskstats) {
 		}
 
 		// print stats
-		fmt.Fprintf(v, "%20s\t%10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
+		_, err := fmt.Fprintf(v, "%20s\t%10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f %10.2f\n",
 			s[i].Device,
-			s[i].Rmerged, s[i].Wmerged,
-			s[i].Rcompleted, s[i].Wcompleted,
+			s[i].Rmerged, s[i].Wmerged, s[i].Rcompleted, s[i].Wcompleted,
 			s[i].Rsectors, s[i].Wsectors, s[i].Arqsz, s[i].Tweighted,
-			s[i].Await, s[i].Rawait, s[i].Wawait,
-			s[i].Util)
+			s[i].Await, s[i].Rawait, s[i].Wawait, s[i].Util,
+		)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-// Print nicstat - network interfaces stat.
-func printNetdev(v *gocui.View, s stat.Netdevs) {
+// printNetdev prints 'nicstat' stats - network interfaces stats.
+func printNetdev(v *gocui.View, s stat.Netdevs) error {
 	// print header
-	fmt.Fprintf(v, "\033[30;47m          Interface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
+	_, err := fmt.Fprintf(v, "\033[30;47m          Interface:   rMbps   wMbps    rPk/s    wPk/s     rAvs     wAvs     IErr     OErr     Coll      Sat   %%rUtil   %%wUtil    %%Util\033[0m\n")
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(s); i++ {
 		// skip interfaces which never seen packets
@@ -324,13 +427,18 @@ func printNetdev(v *gocui.View, s stat.Netdevs) {
 		}
 
 		// print stats
-		fmt.Fprintf(v, "%20s%8.2f%8.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f\n",
+		_, err := fmt.Fprintf(v, "%20s%8.2f%8.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f%9.2f\n",
 			s[i].Ifname,
 			s[i].Rbytes/1024/128, s[i].Tbytes/1024/128, // conversion to Mbps
 			s[i].Rpackets, s[i].Tpackets, s[i].Raverage, s[i].Taverage,
 			s[i].Rerrs, s[i].Terrs, s[i].Tcolls,
-			s[i].Saturation, s[i].Rutil, s[i].Tutil, s[i].Utilization)
+			s[i].Saturation, s[i].Rutil, s[i].Tutil, s[i].Utilization,
+		)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // readLogfileRecent reads necessary number of recent lines in logfile and return them.
@@ -360,15 +468,31 @@ func readLogfileRecent(v *gocui.View, logfile stat.Logfile) (int64, []byte, erro
 	return info.Size(), buf, nil
 }
 
-// Print logtail - last lines of Postgres log
-func printLogtail(v *gocui.View, path string, buf []byte) {
+// printLogtail prints 'logtail' - last lines of Postgres log.
+func printLogtail(v *gocui.View, path string, buf []byte) error {
 	if len(string(buf)) > 0 {
 		// clear view's content and read the log
 		v.Clear()
 
-		fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", path)
-		fmt.Fprintf(v, "%s", string(buf))
+		_, err := fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", path)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(v, "%s", string(buf))
+		if err != nil {
+			return err
+		}
 	}
 
-	return
+	return nil
+}
+
+// isFilterRequired returns true if at least one filter regexp is specified.
+func isFilterRequired(f map[int]*regexp.Regexp) bool {
+	for _, v := range f {
+		if v != nil {
+			return true
+		}
+	}
+	return false
 }
