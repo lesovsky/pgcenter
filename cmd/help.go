@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/lesovsky/pgcenter/cmd/config"
 	top "github.com/lesovsky/pgcenter/cmd/top"
 )
 
@@ -30,38 +31,37 @@ Use "pgcenter [command] --help" for more information about a command.
 Report bugs to %s
 `,
 		Root.Long,
-		//config.CommandDefinition.Short,
+		config.CommandDefinition.Short,
 		//profile.CommandDefinition.Short,
 		//record.CommandDefinition.Short,
 		//report.CommandDefinition.Short,
-		"dummy", "dummy", "dummy", "dummy", // TODO: remove dummy values
+		"dummy", "dummy", "dummy", // TODO: remove dummy values
 		top.CommandDefinition.Short,
 		programIssuesUrl)
 }
 
-//func printConfigHelp() string {
-//	return fmt.Sprintf(`%s
-//
-//Usage:
-//  pgcenter config [OPTIONS]... [DBNAME [USERNAME]]
-//
-//Options:
-//  -i, --install			install pgcenter's stats schema
-//  -u, --uninstall		uninstall pgcenter's stats schema
-//  -d, --dbname DBNAME		database name to connect to
-//  -h, --host HOSTNAME		database server host or socket directory.
-//  -p, --port PORT		database server port (default 5432)
-//  -U, --username USERNAME	database user name
-//
-//General options:
-//  -?, --help		show this help and exit
-//      --version		show version information and exit
-//
-//Report bugs to %s
-//`,
-//		config.CommandDefinition.Long,
-//		programIssuesUrl)
-//}
+func printConfigHelp() string {
+	return fmt.Sprintf(`%s
+
+Usage:
+  pgcenter config [OPTIONS]... [DBNAME [USERNAME]]
+
+Options:
+  -i, --install			install pgcenter's stats schema
+  -u, --uninstall		uninstall pgcenter's stats schema
+  -d, --dbname DBNAME		database name to connect to
+  -h, --host HOSTNAME		database server host or socket directory.
+  -p, --port PORT		database server port (default 5432)
+  -U, --username USERNAME	database user name
+
+General options:
+  -?, --help		show this help and exit
+
+Report bugs to %s
+`,
+		config.CommandDefinition.Long,
+		programIssuesUrl)
+}
 
 //func printProfileHelp() string {
 //	return fmt.Sprintf(`%s
@@ -103,7 +103,6 @@ Options:
 
 General options:
   -?, --help		show this help and exit
-      --version		show version information and exit
 
 Report bugs to %s
 `,

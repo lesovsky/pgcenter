@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"github.com/lesovsky/pgcenter/cmd/config"
 	"github.com/lesovsky/pgcenter/cmd/top"
 	"github.com/spf13/cobra"
 )
@@ -12,7 +13,7 @@ var Root = &cobra.Command{
 	Use:     programName,
 	Short:   "Admin tool for PostgreSQL",
 	Long:    "pgCenter is a command line admin tool for PostgreSQL.",
-	Version: "dummy", // use constants from version.go
+	Version: printVersion(), // use constants from version.go
 }
 
 func init() {
@@ -23,10 +24,10 @@ func init() {
 	Root.SetHelpTemplate(printMainHelp())
 
 	// Setup 'config' sub-command
-	//Root.AddCommand(config.CommandDefinition)
-	//config.CommandDefinition.SetVersionTemplate(printVersion())
-	//config.CommandDefinition.SetHelpTemplate(printConfigHelp())
-	//config.CommandDefinition.SetUsageTemplate(printConfigHelp())
+	Root.AddCommand(config.CommandDefinition)
+	config.CommandDefinition.SetVersionTemplate(printVersion())
+	config.CommandDefinition.SetHelpTemplate(printConfigHelp())
+	config.CommandDefinition.SetUsageTemplate(printConfigHelp())
 
 	// Setup 'profile' sub-command
 	//Root.AddCommand(profile.CommandDefinition)
