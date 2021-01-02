@@ -9,6 +9,7 @@ import (
 func Test_readCpuStat(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	// test "local" reading
 	conn.Local = true

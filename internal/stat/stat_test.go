@@ -27,6 +27,7 @@ func TestNewCollector(t *testing.T) {
 func TestCollector_Update(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	props, err := GetPostgresProperties(conn)
 	assert.NoError(t, err)
@@ -78,6 +79,7 @@ func TestCollector_Update(t *testing.T) {
 func TestCollector_collectDiskstats(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	c, err := NewCollector(conn)
 	assert.NoError(t, err)
@@ -92,6 +94,7 @@ func TestCollector_collectDiskstats(t *testing.T) {
 func TestCollector_collectNetdevs(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	c, err := NewCollector(conn)
 	assert.NoError(t, err)

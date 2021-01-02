@@ -70,6 +70,7 @@ func TestConnect(t *testing.T) {
 			if tc.valid {
 				assert.NoError(t, err)
 				assert.NotNil(t, db)
+				db.Close()
 			} else {
 				assert.Error(t, err)
 			}

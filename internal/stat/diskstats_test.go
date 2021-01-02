@@ -9,6 +9,7 @@ import (
 func Test_readDiskstats(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
+	defer conn.Close()
 
 	ticks, err := getSysticksLocal()
 	assert.NoError(t, err)

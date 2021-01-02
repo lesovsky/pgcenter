@@ -13,6 +13,7 @@ func Test_newApp(t *testing.T) {
 
 	config := newConfig()
 	assert.NotNil(t, newApp(conn, config))
+	defer conn.Close()
 }
 
 func Test_app_setup(t *testing.T) {
