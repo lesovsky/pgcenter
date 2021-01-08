@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
+	"github.com/lesovsky/pgcenter/cmd/record"
 	top "github.com/lesovsky/pgcenter/cmd/top"
 )
 
@@ -33,9 +34,10 @@ Report bugs to %s
 		Root.Long,
 		config.CommandDefinition.Short,
 		//profile.CommandDefinition.Short,
-		//record.CommandDefinition.Short,
+		"dummy",
+		record.CommandDefinition.Short,
 		//report.CommandDefinition.Short,
-		"dummy", "dummy", "dummy", // TODO: remove dummy values
+		"dummy", // TODO: remove dummy values
 		top.CommandDefinition.Short,
 		programIssuesUrl)
 }
@@ -110,34 +112,33 @@ Report bugs to %s
 		programIssuesUrl)
 }
 
-//func printRecordHelp() string {
-//	return fmt.Sprintf(`%s
-//
-//Usage:
-//  pgcenter record [OPTIONS]... [DBNAME [USERNAME]]
-//
-//Options:
-//  -d, --dbname DBNAME		database name to connect to
-//  -h, --host HOSTNAME		database server host or socket directory.
-//  -p, --port PORT		database server port (default 5432)
-//  -U, --username USERNAME	database user name
-//
-//  -i, --interval DURATION	polling interval (default: 1s)
-//  -c, --count INT		number of stats samples to collect
-//  -f, --file FILENAME		file name where statistics to write to (default: pgcenter.stat.tar)
-//  -a, --append			append statistics to file, instead of creating a new file
-//  -t, --truncate INT		maximum query length to record (default: 0, no limit)
-//  -1, --oneshot			append single statistics snapshot and exit (alias for --append --interval 0 --count 1)
-//
-//General options:
-//  -?, --help		show this help and exit
-//      --version		show version information and exit
-//
-//Report bugs to %s
-//`,
-//		record.CommandDefinition.Long,
-//		programIssuesUrl)
-//}
+func printRecordHelp() string {
+	return fmt.Sprintf(`%s
+
+Usage:
+ pgcenter record [OPTIONS]... [DBNAME [USERNAME]]
+
+Options:
+ -d, --dbname DBNAME		database name to connect to
+ -h, --host HOSTNAME		database server host or socket directory.
+ -p, --port PORT		database server port (default 5432)
+ -U, --username USERNAME	database user name
+
+ -i, --interval DURATION	polling interval (default: 1s)
+ -c, --count INT		number of stats samples to collect
+ -f, --file FILENAME		file name where statistics to write to (default: pgcenter.stat.tar)
+ -a, --append			append statistics to file, instead of creating a new file
+ -t, --truncate INT		maximum query length to record (default: 0, no limit)
+ -1, --oneshot			append single statistics snapshot and exit (alias for --append --interval 0 --count 1)
+
+General options:
+ -?, --help		show this help and exit
+
+Report bugs to %s
+`,
+		record.CommandDefinition.Long,
+		programIssuesUrl)
+}
 
 //func printReportHelp() string {
 //	return fmt.Sprintf(`%s

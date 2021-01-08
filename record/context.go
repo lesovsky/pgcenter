@@ -2,6 +2,7 @@
 
 package record
 
+//
 //import (
 //	"github.com/lesovsky/pgcenter/lib/stat"
 //)
