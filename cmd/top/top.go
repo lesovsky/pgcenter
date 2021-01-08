@@ -10,26 +10,28 @@ import (
 
 var (
 	opts postgres.ConnectionOptions
+
+	// CommandDefinition defines 'top' sub-command.
+	CommandDefinition = &cobra.Command{
+		Use:   "top",
+		Short: "top-like stats viewer.",
+		Long:  `'pgcenter top' is the top-like stats viewer.`,
+		RunE: func(command *cobra.Command, args []string) error {
+			// Parse extra arguments.
+			if len(args) > 0 {
+				opts.ParseExtraArgs(args)
+			}
+
+			// Create connection config.
+			pgConfig, err := postgres.NewConfig(opts.Host, opts.Port, opts.User, opts.Dbname)
+			if err != nil {
+				return err
+			}
+
+			return top.RunMain(pgConfig)
+		},
+	}
 )
-
-// CommandDefinition is the definition of 'top' CLI sub-command
-var CommandDefinition = &cobra.Command{
-	Use:   "top",
-	Short: "top-like stats viewer.",
-	Long:  `'pgcenter top' is the top-like stats viewer.`,
-	RunE: func(command *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			opts.ParseExtraArgs(args)
-		}
-
-		pgConfig, err := postgres.NewConfig(opts.Host, opts.Port, opts.User, opts.Dbname)
-		if err != nil {
-			return err
-		}
-
-		return top.RunMain(pgConfig)
-	},
-}
 
 // Parse user passed parameters values and arguments.
 func init() {

@@ -12,38 +12,37 @@ import (
 var (
 	localOptions options
 	connOptions  postgres.ConnectionOptions
+
+	// CommandDefinition defines 'config' sub-command.
+	CommandDefinition = &cobra.Command{
+		Use:   "config",
+		Short: "installs or uninstalls pgcenter stats schema to Postgres.",
+		Long:  `'pgcenter config' installs or uninstalls pgcenter stats schema to Postgres.`,
+		RunE: func(command *cobra.Command, args []string) error {
+			// Parse extra arguments.
+			if len(args) > 0 {
+				connOptions.ParseExtraArgs(args)
+			}
+
+			// Create connection config.
+			pgConfig, err := postgres.NewConfig(connOptions.Host, connOptions.Port, connOptions.User, connOptions.Dbname)
+			if err != nil {
+				return err
+			}
+
+			// Validate local options.
+			err = localOptions.validate()
+			if err != nil {
+				return err
+			}
+
+			// Select runtime mode.
+			mode := localOptions.mode()
+
+			return config.RunMain(pgConfig, mode)
+		},
+	}
 )
-
-// CommandDefinition is the definition of 'config' CLI sub-command
-var CommandDefinition = &cobra.Command{
-	Use:   "config",
-	Short: "installs or uninstalls pgcenter stats schema to Postgres.",
-	Long:  `'pgcenter config' installs or uninstalls pgcenter stats schema to Postgres.`,
-	RunE: func(command *cobra.Command, args []string) error {
-		// Parse extra arguments.
-		if len(args) > 0 {
-			connOptions.ParseExtraArgs(args)
-		}
-
-		// Create connection config.
-		pgConfig, err := postgres.NewConfig(connOptions.Host, connOptions.Port, connOptions.User, connOptions.Dbname)
-		if err != nil {
-			return err
-		}
-
-		// Validate local options.
-		err = localOptions.validate()
-		if err != nil {
-			return err
-		}
-
-		// Select runtime mode.
-		mode := localOptions.mode()
-
-		// Run main.
-		return config.RunMain(pgConfig, mode)
-	},
-}
 
 func init() {
 	CommandDefinition.Flags().StringVarP(&connOptions.Host, "host", "h", "", "database server host or socket directory")

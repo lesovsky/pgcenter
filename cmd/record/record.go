@@ -14,12 +14,13 @@ var (
 	connOptions   postgres.ConnectionOptions
 	oneshot       bool
 
-	// CommandDefinition is the definition of 'record' CLI sub-command
+	// CommandDefinition defines 'record' sub-command.
 	CommandDefinition = &cobra.Command{
 		Use:   "record",
 		Short: "record stats to file.",
 		Long:  `'pgcenter record' connects to PostgreSQL and collects stats into local file.`,
 		RunE: func(command *cobra.Command, args []string) error {
+			// Convert 'oneshot' to set of options.
 			if oneshot {
 				recordOptions.AppendFile = true
 				recordOptions.Count = 1
