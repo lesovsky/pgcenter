@@ -1,4 +1,4 @@
-// 'pgcenter record' - collects Postgres statistics and write it to file.
+// 'pgcenter record' - collects Postgres statistics and record to persistent store.
 
 package record
 
@@ -14,7 +14,7 @@ import (
 
 // Config defines config container for configuring 'pgcenter record'.
 type Config struct {
-	Interval     time.Duration // Statistics collecting interval
+	Interval     time.Duration // Statistics recording interval
 	Count        int           // Number of statistics snapshot to record
 	OutputFile   string        // File where statistics will be saved
 	TruncateFile bool          // Truncate a file before beginning
@@ -42,10 +42,10 @@ func RunMain(dbConfig *postgres.Config, config Config) error {
 
 // app defines 'pgcenter record' runtime dependencies.
 type app struct {
-	config    Config
-	dbConfig  *postgres.Config
-	views     view.Views
-	collector collector
+	config   Config
+	dbConfig *postgres.Config
+	views    view.Views
+	recorder recorder
 }
 
 // newApp creates new 'pgcenter record' app.
@@ -78,8 +78,8 @@ func (app *app) setup() error {
 
 	app.views = views
 
-	// Create tar collector.
-	app.collector = newTarCollector(tarConfig{
+	// Create tar recorder.
+	app.recorder = newTarRecorder(tarConfig{
 		filename: app.config.OutputFile,
 		truncate: app.config.TruncateFile,
 	})
@@ -98,22 +98,22 @@ func (app *app) record(doQuit chan os.Signal) error {
 
 	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
 	for i := count; i > 0; i-- {
-		err := app.collector.open()
+		err := app.recorder.open()
 		if err != nil {
 			return err
 		}
 
-		stats, err := app.collector.collect(app.dbConfig, app.views)
+		stats, err := app.recorder.collect(app.dbConfig, app.views)
 		if err != nil {
 			return err
 		}
 
-		err = app.collector.write(stats)
+		err = app.recorder.write(stats)
 		if err != nil {
 			return err
 		}
 
-		err = app.collector.close()
+		err = app.recorder.close()
 		if err != nil {
 			return err
 		}
@@ -124,7 +124,7 @@ func (app *app) record(doQuit chan os.Signal) error {
 		case <-doQuit:
 			t.Stop()
 
-			err = app.collector.close()
+			err = app.recorder.close()
 			if err != nil {
 				fmt.Println(err)
 			}

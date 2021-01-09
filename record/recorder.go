@@ -13,31 +13,31 @@ import (
 	"time"
 )
 
-// collector defines a way of how to collect and store collected stats.
-type collector interface {
+// recorder defines a way of how to record and store collected stats.
+type recorder interface {
 	open() error
 	collect(dbConfig *postgres.Config, views view.Views) (map[string]stat.PGresult, error)
 	write(map[string]stat.PGresult) error
 	close() error
 }
 
-// tarConfig defines configuration needed for creating tar collector.
+// tarConfig defines configuration needed for creating tar recorder.
 type tarConfig struct {
 	filename string
 	truncate bool
 }
 
-// tarCollector implement collector interface.
+// tarRecorder implement recorder interface.
 // This implementation collects Postgres stats and stores it in .json files packed into .tar archive.
-type tarCollector struct {
+type tarRecorder struct {
 	config    tarConfig
 	file      *os.File
 	fileFlags int
 	writer    *tar.Writer
 }
 
-// newTarCollector creates new collector.
-func newTarCollector(c tarConfig) collector {
+// newTarRecorder creates new recorder.
+func newTarRecorder(c tarConfig) recorder {
 	var flags int
 	if c.truncate {
 		flags = os.O_CREATE | os.O_RDWR | os.O_TRUNC
@@ -45,14 +45,14 @@ func newTarCollector(c tarConfig) collector {
 		flags = os.O_CREATE | os.O_RDWR
 	}
 
-	return &tarCollector{
+	return &tarRecorder{
 		config:    c,
 		fileFlags: flags,
 	}
 }
 
 // open method opens tar archive.
-func (c *tarCollector) open() error {
+func (c *tarRecorder) open() error {
 	f, err := os.OpenFile(filepath.Clean(c.config.filename), c.fileFlags, 0640)
 	if err != nil {
 		return err
@@ -91,7 +91,7 @@ func (c *tarCollector) open() error {
 }
 
 // collect connects to Postgres, collects and returns stats data.
-func (c *tarCollector) collect(dbConfig *postgres.Config, views view.Views) (map[string]stat.PGresult, error) {
+func (c *tarRecorder) collect(dbConfig *postgres.Config, views view.Views) (map[string]stat.PGresult, error) {
 	db, err := postgres.Connect(dbConfig)
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (c *tarCollector) collect(dbConfig *postgres.Config, views view.Views) (map
 }
 
 // write accepts stats data and writes it into tar archive.
-func (c *tarCollector) write(stats map[string]stat.PGresult) error {
+func (c *tarRecorder) write(stats map[string]stat.PGresult) error {
 	for name, v := range stats {
 		data, err := json.Marshal(v)
 		if err != nil {
@@ -134,8 +134,8 @@ func (c *tarCollector) write(stats map[string]stat.PGresult) error {
 	return nil
 }
 
-// close closes collector's file and tar writer descriptors.
-func (c *tarCollector) close() error {
+// close closes recorder's file and tar writer descriptors.
+func (c *tarRecorder) close() error {
 	if c.writer != nil {
 		err := c.writer.Close()
 		if err != nil {

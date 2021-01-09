@@ -26,7 +26,7 @@ func Test_app_setup(t *testing.T) {
 	for _, v := range app.views {
 		assert.NotEqual(t, "", v.Query) // view's queries must not be empty (must be created using templates)
 	}
-	assert.NotNil(t, app.collector)
+	assert.NotNil(t, app.recorder)
 }
 
 func Test_app_record(t *testing.T) {

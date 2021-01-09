@@ -14,18 +14,18 @@ import (
 	"testing"
 )
 
-func Test_tarCollector_open_close(t *testing.T) {
-	tc := newTarCollector(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: true})
+func Test_tarRecorder_open_close(t *testing.T) {
+	tc := newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: true})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.close())
 
-	tc = newTarCollector(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: false})
+	tc = newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: false})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.close())
 }
 
-func Test_tarCollector_collect(t *testing.T) {
-	tc := newTarCollector(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar"})
+func Test_tarRecorder(t *testing.T) {
+	tc := newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar"})
 	assert.NoError(t, tc.open())
 
 	// create and configure views
@@ -51,7 +51,7 @@ func Test_tarCollector_collect(t *testing.T) {
 	assert.NoError(t, tc.close())
 }
 
-func Test_tarCollector_write(t *testing.T) {
+func Test_tarRecorder_write(t *testing.T) {
 	stats := map[string]stat.PGresult{
 		"pgcenter_record_testing": {
 			Valid: true, Ncols: 2, Nrows: 4, Cols: []string{"col1", "col2"},
@@ -67,7 +67,7 @@ func Test_tarCollector_write(t *testing.T) {
 	filename := "/tmp/pgcenter-record-testing.stat.tar"
 
 	// Write testdata.
-	tc := newTarCollector(tarConfig{filename: filename, truncate: true})
+	tc := newTarRecorder(tarConfig{filename: filename, truncate: true})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.write(stats))
 	assert.NoError(t, tc.close())
