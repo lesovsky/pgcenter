@@ -14,25 +14,70 @@ func TestNew(t *testing.T) {
 func TestViews_Configure(t *testing.T) {
 	testcases := []struct {
 		version     int
+		recovery    string
 		trackCommit string
+		app         string
 	}{
-		{version: 130000, trackCommit: "on"},
-		{version: 130000, trackCommit: "off"},
-		{version: 120000, trackCommit: "on"},
-		{version: 120000, trackCommit: "off"},
-		{version: 110000, trackCommit: "on"},
-		{version: 110000, trackCommit: "off"},
-		{version: 90600, trackCommit: "on"},
-		{version: 90600, trackCommit: "off"},
-		{version: 90500, trackCommit: "on"},
-		{version: 90500, trackCommit: "off"},
-		{version: 90400, trackCommit: "on"},
-		{version: 90400, trackCommit: "off"},
+		// v13 matrix
+		{version: 130000, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 130000, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 130000, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 130000, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 130000, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 130000, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 130000, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 130000, recovery: "t", trackCommit: "off", app: "record"},
+		// v12 matrix
+		{version: 120000, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 120000, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 120000, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 120000, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 120000, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 120000, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 120000, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 120000, recovery: "t", trackCommit: "off", app: "record"},
+		// v11 matrix
+		{version: 110000, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 110000, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 110000, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 110000, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 110000, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 110000, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 110000, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 110000, recovery: "t", trackCommit: "off", app: "record"},
+		// v9.6 matrix
+		{version: 90600, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 90600, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 90600, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 90600, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 90600, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 90600, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 90600, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 90600, recovery: "t", trackCommit: "off", app: "record"},
+		// v9.5 matrix
+		{version: 90500, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 90500, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 90500, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 90500, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 90500, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 90500, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 90500, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 90500, recovery: "t", trackCommit: "off", app: "record"},
+		// v9.4 matrix
+		{version: 90400, recovery: "f", trackCommit: "on", app: "top"},
+		{version: 90400, recovery: "f", trackCommit: "on", app: "record"},
+		{version: 90400, recovery: "f", trackCommit: "off", app: "top"},
+		{version: 90400, recovery: "f", trackCommit: "off", app: "record"},
+		{version: 90400, recovery: "t", trackCommit: "on", app: "top"},
+		{version: 90400, recovery: "t", trackCommit: "on", app: "record"},
+		{version: 90400, recovery: "t", trackCommit: "off", app: "top"},
+		{version: 90400, recovery: "t", trackCommit: "off", app: "record"},
 	}
 
 	for _, tc := range testcases {
 		views := New()
-		views.Configure(tc.version, tc.trackCommit)
+		err := views.Configure(tc.version, tc.recovery, tc.trackCommit, tc.app)
+		assert.NoError(t, err)
 
 		switch tc.version {
 		case 130000:
@@ -76,6 +121,10 @@ func TestViews_Configure(t *testing.T) {
 		case 90400:
 			assert.Equal(t, query.PgStatReplication96, views["replication"].QueryTmpl)
 			assert.Equal(t, 12, views["activity"].Ncols)
+		}
+
+		for _, v := range views {
+			assert.NotEqual(t, "", v.Query)
 		}
 	}
 }

@@ -30,7 +30,10 @@ func Test_tarCollector_collect(t *testing.T) {
 
 	// create and configure views
 	db, err := postgres.NewTestConnect()
-	views, err := configureViews(db, view.New())
+	props, err := stat.GetPostgresProperties(db)
+	assert.NoError(t, err)
+	views := view.New()
+	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "record"))
 	db.Close()
 
 	// create postgres config

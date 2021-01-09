@@ -5,7 +5,6 @@ package record
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
@@ -65,7 +64,18 @@ func (app *app) setup() error {
 	}
 	defer db.Close()
 
-	views, err := configureViews(db, view.New())
+	props, err := stat.GetPostgresProperties(db)
+	if err != nil {
+		return err
+	}
+
+	// Create and configure stats views depending on running Postgres.
+	views := view.New()
+	err = views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "record")
+	if err != nil {
+		return err
+	}
+
 	app.views = views
 
 	// Create tar collector.
@@ -123,31 +133,4 @@ func (app *app) record(doQuit chan os.Signal) error {
 	}
 
 	return nil
-}
-
-// configureViews create necessary stats views depending on Postgres settings and version.
-// TODO: should be moved into 'view' package
-func configureViews(db *postgres.DB, views view.Views) (view.Views, error) {
-	props, err := stat.GetPostgresProperties(db)
-	if err != nil {
-		return nil, err
-	}
-
-	// Setup recordOptions - adjust queries for used Postgres version.
-	views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
-
-	queryOptions := query.Options{}
-	queryOptions.Configure(props.VersionNum, props.Recovery, "record")
-
-	// Compile query texts from templates using previously adjusted query options.
-	for k, v := range views {
-		q, err := query.Format(v.QueryTmpl, queryOptions)
-		if err != nil {
-			return nil, err
-		}
-		v.Query = q
-		views[k] = v
-	}
-
-	return views, nil
 }

@@ -6,7 +6,6 @@ import (
 	"context"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 )
 
@@ -58,18 +57,10 @@ func (app *app) setup() error {
 		return err
 	}
 
-	// Select proper queries depending on Postgres version and settings.
-	app.config.views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
-	app.config.queryOptions.Configure(props.VersionNum, props.Recovery, "top")
-
-	// Compile query texts from templates using previously adjusted query options.
-	for k, v := range app.config.views {
-		q, err := query.Format(v.QueryTmpl, app.config.queryOptions)
-		if err != nil {
-			return err
-		}
-		v.Query = q
-		app.config.views[k] = v
+	// Create and configure stats views depending on running Postgres.
+	err = app.config.views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "top")
+	if err != nil {
+		return err
 	}
 
 	// Set default view.

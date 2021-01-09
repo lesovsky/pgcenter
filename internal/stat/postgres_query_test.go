@@ -3,7 +3,6 @@ package stat
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
-	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -361,18 +360,12 @@ func Test_StatQueries(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("%s/%d", tc.viewname, tc.version), func(t *testing.T) {
 			views := view.New()
-			views.Configure(tc.version, tc.trackCommit)
-
-			opts := query.Options{}
-			opts.Configure(tc.version, "f", "top")
-
-			q, err := query.Format(views[tc.viewname].QueryTmpl, opts)
-			assert.NoError(t, err)
+			assert.NoError(t, views.Configure(tc.version, "f", tc.trackCommit, "top"))
 
 			conn, err := postgres.NewTestConnectVersion(tc.version)
 			assert.NoError(t, err)
 
-			res, err := NewPGresult(conn, q)
+			res, err := NewPGresult(conn, views[tc.viewname].Query)
 			assert.NoError(t, err)
 			assert.Equal(t, tc.want, res.Cols)
 

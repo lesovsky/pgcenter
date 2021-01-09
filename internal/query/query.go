@@ -38,7 +38,7 @@ func (o *Options) Configure(version int, recovery string, util string) {
 	// Don't show idle clients and background workers
 	o.ShowNoIdle = true
 
-	// Select proper WAL functions
+	// Select proper WAL functions:
 	// 1. WAL-related functions have been renamed in Postgres 10, hence functions' names between 9.x and 10 are differ.
 	// 2. Depending on recovery status, for obtaining WAL location different functions have to be used.
 	switch {
@@ -58,13 +58,15 @@ func (o *Options) Configure(version int, recovery string, util string) {
 		}
 	}
 
-	// Queries settings that are specific for particular utilities
+	// Define queries parameters specific for particular utilities.
 	switch util {
 	case "top":
-		// we want truncate query length of pg_stat_statements.query, because it make no sense to process full query when sizes of user's screen is limited
+		// For 'pgcenter top' truncate pg_stat_statements.query length, because it make no sense
+		// to process full query when sizes of user's screen is limited.
 		o.PgSSQueryLenFn = "left(p.query, 256)"
 	case "record":
-		// in case of record program we want to record full length of the query, if user doesn't specified exact length
+		// For 'pgcenter record' record full length of the pg_stat_statements.query,
+		// except when user doesn't specified exact length.
 		if o.PgSSQueryLen > 0 {
 			o.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", o.PgSSQueryLen)
 		} else {

@@ -28,6 +28,7 @@ type View struct {
 // Views is a list of all used context units.
 type Views map[string]View
 
+// New returns set of predefined views.
 func New() Views {
 	return map[string]View{
 		"databases": {
@@ -203,10 +204,10 @@ func New() Views {
 	}
 }
 
-// Configure performs adjusting of queries accordingly to Postgres version
-func (v Views) Configure(version int, trackCommit string) {
+// Configure performs adjusting of queries accordingly to Postgres version.
+func (v Views) Configure(version int, recovery string, gucTrackCommitXactTimestamp string, app string) error {
 	var track bool
-	if trackCommit == "on" {
+	if gucTrackCommitXactTimestamp == "on" {
 		track = true
 	}
 	for k, view := range v {
@@ -225,12 +226,12 @@ func (v Views) Configure(version int, trackCommit string) {
 		case "replication":
 			switch {
 			case version < 90500:
-				// Use query for 9.6 but with no 'track_commit_timestamp' fields
+				// Use query for 9.6 but with no 'track_commit_timestamp' fields.
 				view.QueryTmpl = query.PgStatReplication96
 				view.Ncols = 12
 				v[k] = view
 			case version < 100000:
-				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 9.6
+				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 9.6.
 				if track {
 					view.QueryTmpl = query.PgStatReplication96Extended
 					view.Ncols = 14
@@ -240,7 +241,7 @@ func (v Views) Configure(version int, trackCommit string) {
 				}
 				v[k] = view
 			default:
-				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 10 and above
+				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 10 and above.
 				if track {
 					view.QueryTmpl = query.PgStatReplicationExtended
 					view.Ncols = 17
@@ -251,7 +252,7 @@ func (v Views) Configure(version int, trackCommit string) {
 			}
 		case "databases":
 			switch {
-			// versions prior 12 don't have  checksum_failures column
+			// Versions prior 12 don't have 'checksum_failures' column.
 			case version < 120000:
 				view.QueryTmpl = query.PgStatDatabase11
 				view.Ncols = 17
@@ -266,4 +267,19 @@ func (v Views) Configure(version int, trackCommit string) {
 			}
 		}
 	}
+
+	opts := query.Options{}
+	opts.Configure(version, recovery, app)
+
+	// Build query texts based on templates.
+	for k, view := range v {
+		q, err := query.Format(view.QueryTmpl, opts)
+		if err != nil {
+			return err
+		}
+		view.Query = q
+		v[k] = view
+	}
+
+	return nil
 }

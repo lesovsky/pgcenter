@@ -46,16 +46,7 @@ func TestCollector_Update(t *testing.T) {
 			Refresh:   1 * time.Second,
 		},
 	}
-	opts := query.Options{}
-
-	views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
-	opts.Configure(props.VersionNum, props.Recovery, "top")
-	for k, v := range views {
-		q, err := query.Format(views["activity"].QueryTmpl, opts)
-		assert.NoError(t, err)
-		v.Query = q
-		views[k] = v
-	}
+	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "top"))
 
 	c, err := NewCollector(conn)
 	assert.NoError(t, err)
