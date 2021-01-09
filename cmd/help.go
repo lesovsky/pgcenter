@@ -124,12 +124,12 @@ Options:
  -p, --port PORT		database server port (default 5432)
  -U, --username USERNAME	database user name
 
- -i, --interval DURATION	polling interval (default: 1s)
- -c, --count INT		number of stats samples to collect
+ -i, --interval DURATION	statistics recording interval (default: 1s)
+ -c, --count INT		number of statistics samples to record
  -f, --file FILENAME		file name where statistics to write to (default: pgcenter.stat.tar)
- -a, --append			append statistics to file, instead of creating a new file
- -t, --truncate INT		maximum query length to record (default: 0, no limit)
- -1, --oneshot			append single statistics snapshot and exit (alias for --append --interval 0 --count 1)
+ -t, --truncate			truncate statistics file, before starting (defailt: false)
+ -s, --strlimit INT		maximum query length to record (default: 0, no limit)
+ -1, --oneshot			append single statistics snapshot and exit (alias for --interval 0 --count 1)
 
 General options:
  -?, --help		show this help and exit

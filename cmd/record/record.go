@@ -24,7 +24,7 @@ var (
 			if oneshot {
 				recordOptions.TruncateFile = false
 				recordOptions.Count = 1
-				recordOptions.Interval = 0
+				recordOptions.Interval = time.Millisecond // interval must not be zero - ticker will panic.
 			}
 
 			// Parse extra arguments.
@@ -50,10 +50,10 @@ func init() {
 	CommandDefinition.Flags().IntVarP(&connOptions.Port, "port", "p", 5432, "database server port")
 	CommandDefinition.Flags().StringVarP(&connOptions.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&connOptions.Dbname, "dbname", "d", "", "database name to connect to")
-	CommandDefinition.Flags().DurationVarP(&recordOptions.Interval, "interval", "i", 1*time.Second, "polling interval (default: 1 second)")
-	CommandDefinition.Flags().IntVarP(&recordOptions.Count, "count", "c", -1, "number of stats samples to collect")
-	CommandDefinition.Flags().StringVarP(&recordOptions.OutputFile, "file", "f", defaultRecordFile, "file where stats are saved")
-	CommandDefinition.Flags().BoolVarP(&recordOptions.TruncateFile, "truncate", "t", false, "append statistics to a file, instead of creating a new one")
+	CommandDefinition.Flags().DurationVarP(&recordOptions.Interval, "interval", "i", 1*time.Second, "statistics recording interval (default: 1 second)")
+	CommandDefinition.Flags().IntVarP(&recordOptions.Count, "count", "c", -1, "number of statistics samples to record")
+	CommandDefinition.Flags().StringVarP(&recordOptions.OutputFile, "file", "f", defaultRecordFile, "file where statistics are saved")
+	CommandDefinition.Flags().BoolVarP(&recordOptions.TruncateFile, "truncate", "t", false, "truncate statistics file, before starting (default: false)")
 	CommandDefinition.Flags().IntVarP(&recordOptions.StringLimit, "strlimit", "s", 0, "maximum query length to record (default: 0, no limit)")
 	CommandDefinition.Flags().BoolVarP(&oneshot, "oneshot", "1", false, "append single statistics snapshot to file and exit")
 }
