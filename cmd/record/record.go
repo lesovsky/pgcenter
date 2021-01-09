@@ -22,7 +22,7 @@ var (
 		RunE: func(command *cobra.Command, args []string) error {
 			// Convert 'oneshot' to set of options.
 			if oneshot {
-				recordOptions.AppendFile = true
+				recordOptions.TruncateFile = false
 				recordOptions.Count = 1
 				recordOptions.Interval = 0
 			}
@@ -51,9 +51,9 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&connOptions.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&connOptions.Dbname, "dbname", "d", "", "database name to connect to")
 	CommandDefinition.Flags().DurationVarP(&recordOptions.Interval, "interval", "i", 1*time.Second, "polling interval (default: 1 second)")
-	CommandDefinition.Flags().Int32VarP(&recordOptions.Count, "count", "c", -1, "number of stats samples to collect")
+	CommandDefinition.Flags().IntVarP(&recordOptions.Count, "count", "c", -1, "number of stats samples to collect")
 	CommandDefinition.Flags().StringVarP(&recordOptions.OutputFile, "file", "f", defaultRecordFile, "file where stats are saved")
-	CommandDefinition.Flags().BoolVarP(&recordOptions.AppendFile, "append", "a", false, "append statistics to a file, instead of creating a new one")
-	CommandDefinition.Flags().IntVarP(&recordOptions.TruncLimit, "truncate", "t", 0, "maximum query length to record (default: 0, no limit)")
+	CommandDefinition.Flags().BoolVarP(&recordOptions.TruncateFile, "truncate", "t", false, "append statistics to a file, instead of creating a new one")
+	CommandDefinition.Flags().IntVarP(&recordOptions.StringLimit, "strlimit", "s", 0, "maximum query length to record (default: 0, no limit)")
 	CommandDefinition.Flags().BoolVarP(&oneshot, "oneshot", "1", false, "append single statistics snapshot to file and exit")
 }
