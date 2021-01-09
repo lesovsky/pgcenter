@@ -1,4 +1,4 @@
-// Code related to 'pgcenter record' command
+// 'pgcenter record' - collects Postgres statistics and write it to file.
 
 package record
 
@@ -16,8 +16,8 @@ import (
 	"time"
 )
 
-// RecordOptions is the container for recorder settings
-type Options struct {
+// Config defines config container for configuring 'pgcenter record'.
+type Config struct {
 	Interval   time.Duration // Statistics collecting interval
 	Count      int32         // Number of statistics snapshot to record
 	OutputFile string        // File where statistics will be saved
@@ -26,31 +26,28 @@ type Options struct {
 }
 
 // RunMain is the 'pgcenter record' main entry point.
-func RunMain(dbConfig *postgres.Config, opts Options) error {
-	var err error
-	fmt.Printf("INFO: recording to %s\n", opts.OutputFile)
+func RunMain(dbConfig *postgres.Config, config Config) error {
+	app := newApp(config, dbConfig)
 
-	// Setup connection to Postgres
-	db, err := postgres.Connect(dbConfig)
+	err := app.setup()
 	if err != nil {
 		return err
 	}
-	defer db.Close()
 
 	// Open file for statistics
 	var flags int
-	if opts.AppendFile {
+	if config.AppendFile {
 		flags = os.O_CREATE | os.O_RDWR
 	} else {
 		flags = os.O_CREATE | os.O_RDWR | os.O_TRUNC
 	}
 
-	f, err := os.OpenFile(opts.OutputFile, flags, 0640)
+	f, err := os.OpenFile(config.OutputFile, flags, 0640)
 	if err != nil {
 		return err
 	}
 
-	if opts.AppendFile {
+	if config.AppendFile {
 		_, err = f.Seek(0, io.SeekEnd)
 		if err != nil {
 			return err
@@ -63,6 +60,8 @@ func RunMain(dbConfig *postgres.Config, opts Options) error {
 			fmt.Printf("closing file failed: %s, ignore it", err)
 		}
 	}()
+
+	fmt.Printf("INFO: recording to %s\n", config.OutputFile)
 
 	// Initialize tar writer
 	tw := tar.NewWriter(f)
@@ -77,6 +76,34 @@ func RunMain(dbConfig *postgres.Config, opts Options) error {
 	doQuit := make(chan os.Signal, 1)
 	signal.Notify(doQuit, os.Interrupt)
 
+	// Run recording loop
+	return app.record(tw, doQuit)
+}
+
+// app defines 'pgcenter record' runtime dependencies.
+type app struct {
+	config   Config
+	dbConfig *postgres.Config
+	views    view.Views
+}
+
+// newApp creates new 'pgcenter record' app.
+func newApp(config Config, dbConfig *postgres.Config) *app {
+	return &app{
+		config:   config,
+		dbConfig: dbConfig,
+		views:    view.New(),
+	}
+}
+
+// setup configures necessary queries depending on Postgres version.
+func (app *app) setup() error {
+	db, err := postgres.Connect(app.dbConfig)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
 	// Get necessary information about Postgres: version, recovery status, settings, etc.
 	props, err := stat.GetPostgresProperties(db)
 	if err != nil {
@@ -84,38 +111,42 @@ func RunMain(dbConfig *postgres.Config, opts Options) error {
 	}
 
 	// Setup recordOptions - adjust queries for used Postgres version
-	views := view.New()
-	views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
+	app.views.Configure(props.VersionNum, props.GucTrackCommitTimestamp)
 
 	queryOptions := query.Options{}
-	queryOptions.Configure(props.VersionNum, props.Recovery, "top")
+	queryOptions.Configure(props.VersionNum, props.Recovery, "record")
 
 	// Compile query texts from templates using previously adjusted query options.
-	for k, v := range views {
+	for k, v := range app.views {
 		q, err := query.Format(v.QueryTmpl, queryOptions)
 		if err != nil {
 			return err
 		}
 		v.Query = q
-		views[k] = v
+		app.views[k] = v
 	}
 
-	// Run recording loop
-	return recordLoop(tw, db, views, opts, doQuit)
+	return nil
 }
 
-// Record stats with an interval
-func recordLoop(w *tar.Writer, db *postgres.DB, views view.Views, opts Options, doQuit chan os.Signal) error {
+// record collects statistics and stores into file.
+func (app *app) record(w *tar.Writer, doQuit chan os.Signal) error {
+	var (
+		count    = app.config.Count
+		interval = app.config.Interval
+	)
+
 	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
-	for i := opts.Count; i != 0; i-- {
-		if err := doWork(w, db, views); err != nil {
+	for i := count; i != 0; i-- {
+		if err := collectStat(w, app.dbConfig, app.views); err != nil {
 			return err
 		}
 
 		select {
-		case <-time.After(opts.Interval):
+		case <-time.After(interval):
 			break
 		case <-doQuit:
+			// TODO: close tar writer, file gracefully
 			return fmt.Errorf("interrupt")
 		}
 	}
@@ -123,9 +154,14 @@ func recordLoop(w *tar.Writer, db *postgres.DB, views view.Views, opts Options, 
 	return nil
 }
 
-// Read stats from Postgres and write it to a file
-func doWork(w *tar.Writer, db *postgres.DB, views view.Views) error {
+// collectStat connects to Postgres, queries stats and write it to tar file.
+func collectStat(w *tar.Writer, dbConfig *postgres.Config, views view.Views) error {
 	now := time.Now()
+
+	db, err := postgres.Connect(dbConfig)
+	if err != nil {
+		return err
+	}
 
 	// loop over available contexts
 	for k, v := range views {
@@ -136,14 +172,15 @@ func doWork(w *tar.Writer, db *postgres.DB, views view.Views) error {
 
 		// write stats to a file
 		name := fmt.Sprintf("%s.%s.json", k, now.Format("20060102T150405"))
-		if err := writeToTar(w, res, name); err != nil {
+		err = writeToTar(w, res, name)
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Write statistics to a tar-file
+// writeToTar marshals statistics into JSON and write it to a tar file.
 func writeToTar(w *tar.Writer, object interface{}, name string) error {
 	data, err := json.Marshal(object)
 	if err != nil {

@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	recordOptions record.Options
+	recordOptions record.Config
 	connOptions   postgres.ConnectionOptions
 	oneshot       bool
 
