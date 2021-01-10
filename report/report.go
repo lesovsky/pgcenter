@@ -2,63 +2,61 @@
 
 package report
 
-//import (
-//	"archive/tar"
-//	"encoding/json"
-//	"fmt"
-//	"github.com/lesovsky/pgcenter/lib/stat"
-//	"io"
-//	"log"
-//	"os"
-//	"regexp"
-//	"strings"
-//	"time"
-//)
-//
-//// ReportOptions contains settings of the requested report
-//type ReportOptions struct {
-//	InputFile     string
-//	TsStart       time.Time
-//	TsEnd         time.Time
-//	OrderColName  string
-//	OrderDesc     bool
-//	FilterColName string
-//	Regexp        *regexp.Regexp
-//	TruncLimit    int
-//	RowLimit      int
-//	ReportType    string
-//	Context       stat.ContextUnit
-//	Interval      time.Duration
-//}
-//
-//const (
-//	repeatHeaderAfter = 20
-//	ascFlag           = "+"
-//)
-//
-//// RunMain is the main entry point for 'pgcenter report' sub-command
-//func RunMain(args []string, opts ReportOptions) {
-//	f, err := os.Open(opts.InputFile)
-//	if err != nil {
-//		log.Fatalf("ERROR: failed to open file: %s\n", err)
-//	}
-//	defer f.Close()
-//
-//	fmt.Printf("INFO: reading from %s\n", opts.InputFile)
-//	fmt.Printf("INFO: report %s\n", opts.ReportType)
-//	fmt.Printf("INFO: start from: %s, end at: %s, delta interval: %s\n", opts.TsStart, opts.TsEnd, opts.Interval.String())
-//
-//	// initialize tar reader
-//	tr := tar.NewReader(f)
-//
-//	// report loop
-//	if err := doReport(tr, opts); err != nil {
-//		log.Fatalln(err)
-//	}
-//}
-//
-//// Read statistics file and create a report based on report settings
-//func doReport(r *tar.Reader, opts ReportOptions) error {
+import (
+	//"archive/tar"
+	//"encoding/json"
+	"fmt"
+	//"github.com/lesovsky/pgcenter/internal/stat"
+	//"io"
+	"log"
+	"os"
+	"regexp"
+	//"strings"
+	"time"
+)
+
+// Options contains settings of the requested report
+type Options struct {
+	InputFile     string
+	TsStart       time.Time
+	TsEnd         time.Time
+	OrderColName  string
+	OrderDesc     bool
+	FilterColName string
+	FilterRE      *regexp.Regexp
+	TruncLimit    int
+	RowLimit      int
+	ReportType    string
+	Interval      time.Duration
+}
+
+const (
+	repeatHeaderAfter = 20
+	ascFlag           = "+"
+)
+
+// RunMain is the main entry point for 'pgcenter report' sub-command
+func RunMain(opts Options) error {
+	f, err := os.Open(opts.InputFile)
+	if err != nil {
+		log.Fatalf("ERROR: failed to open file: %s\n", err)
+	}
+	defer f.Close()
+
+	fmt.Printf("INFO: reading from %s\n", opts.InputFile)
+	fmt.Printf("INFO: report %s\n", opts.ReportType)
+	fmt.Printf("INFO: start from: %s, end at: %s, delta interval: %s\n", opts.TsStart, opts.TsEnd, opts.Interval.String())
+
+	// initialize tar reader
+	//tr := tar.NewReader(f)
+
+	// report loop
+	//return doReport(tr, opts)
+	return nil
+}
+
+// Read statistics file and create a report based on report settings
+//func doReport(r *tar.Reader, opts Options) error {
 //	var prevStat, diffStat stat.PGresult
 //	var prevTs time.Time
 //	var linesPrinted int8 = repeatHeaderAfter // initial value means print header at the beginning of all output
@@ -143,7 +141,7 @@ package report
 //}
 //
 //// formatReport does report formatting - sort and aligning
-//func formatReport(d *stat.PGresult, opts *ReportOptions) {
+//func formatReport(d *stat.PGresult, opts *Options) {
 //	if opts.OrderColName != "" {
 //		doSort(d, opts)
 //	}
@@ -158,7 +156,7 @@ package report
 //}
 //
 //// printStatHeader periodically prints names of stats columns
-//func printStatHeader(printedNum int8, cols []string, opts ReportOptions) int8 {
+//func printStatHeader(printedNum int8, cols []string, opts Options) int8 {
 //
 //	if printedNum >= repeatHeaderAfter && opts.Context.Aligned {
 //		fmt.Printf("         ")
@@ -172,7 +170,7 @@ package report
 //}
 //
 //// printReport prints given stats
-//func printStatReport(d *stat.PGresult, opts ReportOptions, ts time.Time) (printedNum int8) {
+//func printStatReport(d *stat.PGresult, opts Options, ts time.Time) (printedNum int8) {
 //	// print stats values
 //	var printFirst = true // every first line in the snapshot should begin with timestamp when stats were taken
 //	var linesPrinted int  // count lines printed per snapshot (for limiting purposes)
@@ -188,7 +186,7 @@ package report
 //			doPrint = false
 //			for idx, colname := range d.Cols {
 //				if colname == opts.FilterColName {
-//					if opts.Regexp.MatchString(d.Result[rownum][idx].String) {
+//					if opts.Regexp.MatchString(d.Values[rownum][idx].String) {
 //						doPrint = true // value matched, so print the whole row
 //						break
 //					}
@@ -207,18 +205,18 @@ package report
 //
 //			for i := range d.Cols {
 //				// truncate values that longer than column width
-//				valuelen := len(d.Result[rownum][colnum].String)
+//				valuelen := len(d.Values[rownum][colnum].String)
 //				if valuelen > opts.Context.ColsWidth[i] {
 //					width := opts.Context.ColsWidth[i]
 //					// truncate value up to column width and replace last character with '~' symbol
-//					d.Result[rownum][colnum].String = d.Result[rownum][colnum].String[:width-1] + "~"
+//					d.Values[rownum][colnum].String = d.Values[rownum][colnum].String[:width-1] + "~"
 //				}
 //
 //				// last col with no truncation of not specified otherwise
 //				if i != len(d.Cols)-1 {
-//					fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, d.Result[rownum][colnum].String)
+//					fmt.Printf("%-*s", opts.Context.ColsWidth[i]+2, d.Values[rownum][colnum].String)
 //				} else {
-//					fmt.Printf("%s", d.Result[rownum][colnum].String)
+//					fmt.Printf("%s", d.Values[rownum][colnum].String)
 //				}
 //
 //				colnum++
@@ -238,7 +236,7 @@ package report
 //}
 //
 //// Perform sort of statistics based on column requested by user
-//func doSort(stat *stat.PGresult, opts *ReportOptions) {
+//func doSort(stat *stat.PGresult, opts *Options) {
 //	var sortKey int
 //
 //	// set ascending order if required

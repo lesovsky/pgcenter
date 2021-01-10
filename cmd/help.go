@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
 	"github.com/lesovsky/pgcenter/cmd/record"
+	"github.com/lesovsky/pgcenter/cmd/report"
 	top "github.com/lesovsky/pgcenter/cmd/top"
 )
 
@@ -34,10 +35,9 @@ Report bugs to %s
 		Root.Long,
 		config.CommandDefinition.Short,
 		//profile.CommandDefinition.Short,
-		"dummy",
-		record.CommandDefinition.Short,
-		//report.CommandDefinition.Short,
 		"dummy", // TODO: remove dummy values
+		record.CommandDefinition.Short,
+		report.CommandDefinition.Short,
 		top.CommandDefinition.Short,
 		programIssuesUrl)
 }
@@ -140,43 +140,43 @@ Report bugs to %s
 		programIssuesUrl)
 }
 
-//func printReportHelp() string {
-//	return fmt.Sprintf(`%s
-//
-//Usage:
-//  pgcenter report [OPTIONS]...
-//
-//Options:
-//  -f, --file FILE		read stats from file (default: pgcenter.stat.tar)
-//  -s, --start TIMESTAMP		starting time of the report (format: [YYYYMMDD-]HHMMSS)
-//  -e, --end TIMESTAMP		ending time of the report (format: [YYYYMMDD-]HHMMSS)
-//  -o, --order COLNAME		order values by column (default descending, use '+' sign before a column name for ascending order)
-//  -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
-//  -l, --limit INT		print only limited number of rows per sample (default: unlimited)
-//  -t, --truncate INT		maximum string size to print (default: 32, 0 disables truncate)
-//  -i, --interval DURATION	delta interval (default: 1s)
-//
-//Report options:
-//  -A, --activity		show pg_stat_activity statistics
-//  -S, --sizes			show statistics about tables sizes
-//  -D, --databases		show pg_stat_database statistics
-//  -F, --functions		show pg_stat_user_functions statistics
-//  -R, --replication		show pg_stat_replication statistics
-//  -T, --tables			show pg_stat_user_tables statistics
-//  -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
-//  -P, --progress [X]			show pg_stat_progress_* statistics, use additional selector to choose stats.
-//				'v' - vacuum; 'c' - cluster; 'i' - create index.
-//  -X, --statements [X]		show pg_stat_statements statistics, use additional selector to choose stats.
-//				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io.
-//
-//  -d, --describe		show statistics description, combined with one of the report options
-//
-//General options:
-//  -?, --help		show this help and exit
-//      --version		show version information and exit
-//
-//Report bugs to %s
-//`,
-//		report.CommandDefinition.Long,
-//		programIssuesUrl)
-//}
+func printReportHelp() string {
+	return fmt.Sprintf(`%s
+
+Usage:
+ pgcenter report [OPTIONS]...
+
+Options:
+ -f, --file FILE		read stats from file (default: pgcenter.stat.tar)
+ -s, --start TIMESTAMP		starting time of the report (format: [YYYYMMDD-]HHMMSS)
+ -e, --end TIMESTAMP		ending time of the report (format: [YYYYMMDD-]HHMMSS)
+ -o, --order COLNAME		order values by column (default descending, use '+' sign before a column name for ascending order)
+ -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
+ -l, --limit INT		print only limited number of rows per sample (default: unlimited)
+ -t, --truncate INT		maximum string size to print (default: 32, 0 disables truncate)
+ -i, --interval DURATION	delta interval (default: 1s)
+
+Report options:
+ -A, --activity		show pg_stat_activity statistics
+ -S, --sizes			show statistics about tables sizes
+ -D, --databases		show pg_stat_database statistics
+ -F, --functions		show pg_stat_user_functions statistics
+ -R, --replication		show pg_stat_replication statistics
+ -T, --tables			show pg_stat_user_tables statistics
+ -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
+ -P, --progress [X]			show pg_stat_progress_* statistics, use additional selector to choose stats.
+				'v' - vacuum; 'c' - cluster; 'i' - create index.
+ -X, --statements [X]		show pg_stat_statements statistics, use additional selector to choose stats.
+				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io.
+
+ -d, --describe		show statistics description, combined with one of the report options
+
+General options:
+ -?, --help		show this help and exit
+     --version		show version information and exit
+
+Report bugs to %s
+`,
+		report.CommandDefinition.Long,
+		programIssuesUrl)
+}
