@@ -11,6 +11,7 @@ const (
 )
 
 // SetAlign method aligns length of values depending of the columns width
+// TODO: function doesn't produce errors, so it could be removed from retlist.
 func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []string, error) {
 	lastColMaxWidthDefault := 8
 	lastColTruncLimit := math.Max(truncLimit, colsTruncMinLimit)

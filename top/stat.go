@@ -277,6 +277,7 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	// Align values within columns, use fixed aligning instead of dynamic.
 	if !config.view.Aligned {
 		widthes, cols, err := align.SetAlign(s.Result, 1000, false) // use high limit (1000) to avoid truncating last value.
+		// TODO: err is ignored.
 		if err == nil {
 			config.view.Cols = cols
 			config.view.ColsWidth = widthes

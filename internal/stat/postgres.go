@@ -239,6 +239,11 @@ func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
 	}, nil
 }
 
+// Compare is public wrapper around calculateDelta.
+func Compare(curr, prev PGresult, itv int, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
+	return calculateDelta(curr, prev, itv, interval, skey, desc, ukey)
+}
+
 // calculateDelta compares two PGresult structs and returns ordered delta PGresult.
 func calculateDelta(curr, prev PGresult, itv int, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
 	// Make prev snapshot using current snap, at startup or at context switching
