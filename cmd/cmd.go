@@ -12,10 +12,12 @@ import (
 
 // Root describes the CLI command of main program
 var Root = &cobra.Command{
-	Use:     programName,
-	Short:   "Admin tool for PostgreSQL",
-	Long:    "pgCenter is a command line admin tool for PostgreSQL.",
-	Version: printVersion(), // use constants from version.go
+	Use:           programName,
+	Short:         "Admin tool for PostgreSQL",
+	Long:          "pgCenter is a command line admin tool for PostgreSQL.",
+	SilenceUsage:  true,
+	SilenceErrors: true,
+	Version:       printVersion(), // use constants from version.go
 }
 
 func init() {
