@@ -57,7 +57,10 @@ func Test_selectReport(t *testing.T) {
 	}
 }
 
-func Test_seReportInterval(t *testing.T) {
+// TODO: very weak test-suite
+//   1. в интервалах с открытым концом нет проверки что таймстемп находится около now()
+//   2. нет проверки на таймзоны, что не вылазит какой-то UTC, т.к. предполагается что всегда работаем в local tz
+func Test_setReportInterval(t *testing.T) {
 	layout := "20060102-150405"
 
 	// open start/end

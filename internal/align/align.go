@@ -11,8 +11,7 @@ const (
 )
 
 // SetAlign method aligns length of values depending of the columns width
-// TODO: function doesn't produce errors, so it could be removed from retlist.
-func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []string, error) {
+func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []string) {
 	lastColMaxWidthDefault := 8
 	lastColTruncLimit := math.Max(truncLimit, colsTruncMinLimit)
 	truncLimit = math.Max(truncLimit, colsTruncMinLimit)
@@ -23,7 +22,7 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 		for colidx, colname := range r.Cols { // walk per-column
 			widthes[colidx] = math.Max(len(colname), colsTruncMinLimit)
 		}
-		return widthes, r.Cols, nil
+		return widthes, r.Cols
 	}
 
 	/* calculate max length of columns based on the longest value of the column */
@@ -76,7 +75,7 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 			}
 		}
 	}
-	return widthes, r.Cols, nil
+	return widthes, r.Cols
 }
 
 // aligningIsLessThanColname is the aligning helper: returns true if passed non-empty values, but if its length less than length of colnames

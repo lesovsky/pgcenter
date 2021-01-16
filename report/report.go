@@ -183,10 +183,7 @@ func formatReport(d *stat.PGresult, view *view.View, c *Config) {
 
 	// align values for printing, use dynamic aligning
 	if !view.Aligned {
-		widthes, cols, err := align.SetAlign(*d, c.TruncLimit, true)
-		if err != nil {
-			fmt.Println(err)
-		}
+		widthes, cols := align.SetAlign(*d, c.TruncLimit, true)
 		view.ColsWidth = widthes
 		view.Cols = cols
 		view.Aligned = true

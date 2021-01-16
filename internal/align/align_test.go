@@ -99,8 +99,7 @@ func TestSetAlign(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		widthes, cols, err := SetAlign(tc.res, tc.limit, tc.dynamic)
-		assert.NoError(t, err)
+		widthes, cols := SetAlign(tc.res, tc.limit, tc.dynamic)
 		assert.Equal(t, tc.wantwidthes, widthes)
 		assert.Equal(t, tc.wantcols, cols)
 	}
