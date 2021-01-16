@@ -18,7 +18,7 @@ import (
 )
 
 // Options contains settings of the requested report
-type Options struct {
+type Config struct {
 	InputFile     string
 	TsStart       time.Time
 	TsEnd         time.Time
@@ -38,33 +38,56 @@ const (
 )
 
 // RunMain is the main entry point for 'pgcenter report' sub-command
-func RunMain(opts Options) error {
-	f, err := os.Open(opts.InputFile)
+func RunMain(c Config) error {
+	app := newApp(c)
+
+	f, err := os.Open(c.InputFile)
 	if err != nil {
 		log.Fatalf("ERROR: failed to open file: %s\n", err)
 	}
 	defer f.Close()
 
-	fmt.Printf("INFO: reading from %s\n", opts.InputFile)
-	fmt.Printf("INFO: report %s\n", opts.ReportType)
-	fmt.Printf("INFO: start from: %s, end at: %s, delta interval: %s\n", opts.TsStart, opts.TsEnd, opts.Interval.String())
-
-	views := view.New()
-	v := views[opts.ReportType]
+	fmt.Printf("INFO: reading from %s\n", c.InputFile)
+	fmt.Printf("INFO: report %s\n", c.ReportType)
+	fmt.Printf(
+		"INFO: start from: %s, to: %s, with interval: %s\n",
+		c.TsStart.Format("2006-01-02 15:04:05 MST"),
+		c.TsEnd.Format("2006-01-02 15:04:05 MST"),
+		c.Interval.String(),
+	)
 
 	// initialize tar reader
 	tr := tar.NewReader(f)
 
-	// report loop
-	return doReport(tr, v, opts)
-	return nil
+	// do report
+	return app.doReport(tr)
+}
+
+// app defines 'pgcenter record' runtime dependencies.
+type app struct {
+	config Config
+	view   view.View
+}
+
+// newApp creates new 'pgcenter record' app.
+func newApp(config Config) *app {
+	views := view.New()
+	v := views[config.ReportType]
+
+	return &app{
+		config: config,
+		view:   v,
+	}
 }
 
 // Read statistics file and create a report based on report settings
-func doReport(r *tar.Reader, view view.View, opts Options) error {
+func (app *app) doReport(r *tar.Reader) error {
 	var prevStat, diffStat stat.PGresult
 	var prevTs time.Time
 	var linesPrinted int8 = repeatHeaderAfter // initial value means print header at the beginning of all output
+
+	c := app.config
+	v := app.view
 
 	// read files headers continuously, read stats files requested by user and skip others.
 	for {
@@ -76,20 +99,25 @@ func doReport(r *tar.Reader, view view.View, opts Options) error {
 		}
 
 		// check stats filename, skip files if their names doesn't contain name of requested statistics
-		if !strings.Contains(hdr.Name, opts.ReportType) {
+		if !strings.Contains(hdr.Name, c.ReportType) {
 			continue
 		}
 
-		// calculate timestamp when stats were recorded
-		layout := "20060102T150405"
 		s := strings.Split(hdr.Name, ".")
-		currTs, err := time.Parse(layout, s[1])
+		if len(s) != 3 {
+			fmt.Printf("bad file name format %s, skip", hdr.Name)
+			continue
+		}
+
+		// Calculate timestamp when stats were recorded, parse timestamp considering it is in local timezone.
+		zone, _ := time.Now().Zone()
+		currTs, err := time.Parse("20060102T150405-07", s[1]+zone)
 		if err != nil {
 			return fmt.Errorf("failed to parse timestamp from filename %s: %s", hdr.Name, err)
 		}
 
 		// skip snapshots if they're outside of the requested time interval
-		if !(currTs.After(opts.TsStart) && currTs.Before(opts.TsEnd)) {
+		if currTs.Before(c.TsStart) || currTs.After(c.TsEnd) {
 			continue
 		}
 
@@ -114,14 +142,14 @@ func doReport(r *tar.Reader, view view.View, opts Options) error {
 
 		// calculate time interval
 		interval := currTs.Sub(prevTs)
-		if opts.Interval > interval {
+		if c.Interval > interval {
 			fmt.Println("WARNING: specified interval too long, adjusting it to an interval equal between current and previous statistics snapshots")
-			opts.Interval = interval
+			c.Interval = interval
 		}
 
 		// calculate delta between current and previous stats snapshots
-		if view.DiffIntvl != [2]int{0, 0} {
-			res, err := stat.Compare(prevStat, currStat, int(interval/opts.Interval), view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
+		if v.DiffIntvl != [2]int{0, 0} {
+			res, err := stat.Compare(currStat, prevStat, int(interval/c.Interval), v.DiffIntvl, v.OrderKey, v.OrderDesc, v.UniqueKey)
 			if err != nil {
 				return fmt.Errorf("failed diff on %s: %s", hdr.Name, err)
 			}
@@ -135,27 +163,27 @@ func doReport(r *tar.Reader, view view.View, opts Options) error {
 		prevTs = currTs
 
 		// formatting  the report
-		formatReport(&diffStat, &view, &opts)
+		formatReport(&diffStat, &v, &c)
 
 		// print header after every Nth lines
-		linesPrinted = printStatHeader(linesPrinted, view, diffStat.Cols, opts)
+		linesPrinted = printStatHeader(linesPrinted, v, diffStat.Cols)
 
 		// print the stats - calculated delta between previous and current stats snapshots
-		linesPrinted += printStatReport(&diffStat, view, opts, currTs)
+		linesPrinted += printStatReport(&diffStat, v, c, currTs)
 	} //end for
 
 	return nil
 }
 
 // formatReport does report formatting - sort and aligning
-func formatReport(d *stat.PGresult, view *view.View, opts *Options) {
-	if opts.OrderColName != "" {
-		doSort(d, opts)
+func formatReport(d *stat.PGresult, view *view.View, c *Config) {
+	if c.OrderColName != "" {
+		doSort(d, c)
 	}
 
 	// align values for printing, use dynamic aligning
 	if !view.Aligned {
-		widthes, cols, err := align.SetAlign(*d, opts.TruncLimit, true)
+		widthes, cols, err := align.SetAlign(*d, c.TruncLimit, true)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -166,7 +194,7 @@ func formatReport(d *stat.PGresult, view *view.View, opts *Options) {
 }
 
 // printStatHeader periodically prints names of stats columns
-func printStatHeader(printedNum int8, view view.View, cols []string, opts Options) int8 {
+func printStatHeader(printedNum int8, view view.View, cols []string) int8 {
 
 	if printedNum >= repeatHeaderAfter && view.Aligned {
 		fmt.Printf("         ")
@@ -180,7 +208,7 @@ func printStatHeader(printedNum int8, view view.View, cols []string, opts Option
 }
 
 // printReport prints given stats
-func printStatReport(d *stat.PGresult, view view.View, opts Options, ts time.Time) (printedNum int8) {
+func printStatReport(d *stat.PGresult, view view.View, c Config, ts time.Time) (printedNum int8) {
 	// print stats values
 	var printFirst = true // every first line in the snapshot should begin with timestamp when stats were taken
 	var linesPrinted int  // count lines printed per snapshot (for limiting purposes)
@@ -191,12 +219,12 @@ func printStatReport(d *stat.PGresult, view view.View, opts Options, ts time.Tim
 
 		// if filtering (grep) is enabled, a target column should be found and check values
 		// if value doesn't match, skip it and proceed to next row
-		if opts.FilterColName != "" {
+		if c.FilterColName != "" {
 			// if filter enabled, use pessimistic approach and considering the value will not match
 			doPrint = false
 			for idx, colname := range d.Cols {
-				if colname == opts.FilterColName {
-					if opts.FilterRE.MatchString(d.Values[rownum][idx].String) {
+				if colname == c.FilterColName {
+					if c.FilterRE.MatchString(d.Values[rownum][idx].String) {
 						doPrint = true // value matched, so print the whole row
 						break
 					}
@@ -236,7 +264,7 @@ func printStatReport(d *stat.PGresult, view view.View, opts Options, ts time.Tim
 			printedNum++
 
 			// check number of printed lines, if limit is reached skip remaining rows and proceed to a next stats file
-			if linesPrinted++; opts.RowLimit > 0 && linesPrinted >= opts.RowLimit {
+			if linesPrinted++; c.RowLimit > 0 && linesPrinted >= c.RowLimit {
 				break
 			}
 		} // end if
@@ -247,7 +275,7 @@ func printStatReport(d *stat.PGresult, view view.View, opts Options, ts time.Tim
 
 // Perform sort of statistics based on column requested by user
 // TODO: refactor sort to configure in cmd package instead of in-place sorting.
-func doSort(stat *stat.PGresult, opts *Options) {
+func doSort(stat *stat.PGresult, c *Config) {
 	//var sortKey int
 	//
 	//// set ascending order if required

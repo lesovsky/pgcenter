@@ -77,32 +77,37 @@ func init() {
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
-func (opts options) validate() (report.Options, error) {
+func (opts options) validate() (report.Config, error) {
 	// Select report type
 	r := selectReport(opts)
 	if r == "" {
-		return report.Options{}, fmt.Errorf("report type is not specified, quit")
+		return report.Config{}, fmt.Errorf("report type is not specified, quit")
 	}
 
 	// Define report start/end interval.
-	tsStart, tsEnd, err := selectReportInterval(opts.tsStart, opts.tsEnd)
+	tsStart, tsEnd, err := setReportInterval(opts.tsStart, opts.tsEnd)
 	if err != nil {
-		return report.Options{}, err
+		return report.Config{}, err
 	}
 
 	// Compile regexp if specified.
 	colname, re, err := parseFilterString(opts.filter)
 	if err != nil {
-		return report.Options{}, err
+		return report.Config{}, err
 	}
 
-	return report.Options{
-		ReportType:    r,
+	return report.Config{
+		InputFile:     opts.inputFile,
 		TsStart:       tsStart,
 		TsEnd:         tsEnd,
+		OrderColName:  opts.orderColName,
 		OrderDesc:     true,
 		FilterColName: colname,
 		FilterRE:      re,
+		TruncLimit:    opts.strLimit,
+		RowLimit:      opts.rowLimit,
+		ReportType:    r,
+		Interval:      opts.interval,
 	}, nil
 }
 
@@ -150,8 +155,8 @@ func selectReport(opts options) string {
 	return ""
 }
 
-// selectReportInterval validates start and end times for report and returns start/end time.Time.
-func selectReportInterval(tsStartStr, tsEndStr string) (time.Time, time.Time, error) {
+// setReportInterval validates start and end times for report and returns start/end time.Time.
+func setReportInterval(tsStartStr, tsEndStr string) (time.Time, time.Time, error) {
 	layout := "20060102-150405" // default layout includes date and time
 
 	// Processing report start timestamp.

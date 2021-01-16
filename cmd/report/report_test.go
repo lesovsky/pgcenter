@@ -10,7 +10,7 @@ func Test_options_validate(t *testing.T) {
 	testcases := []struct {
 		valid bool
 		opts  options
-		want  report.Options
+		want  report.Config
 	}{
 		{valid: true, opts: options{showActivity: true, tsStart: "20210101-120000", tsEnd: "20210101-130000"}},
 		{valid: false, opts: options{tsStart: "20210101-120000", tsEnd: "20210101-130000"}}, // no report type specified
@@ -57,47 +57,47 @@ func Test_selectReport(t *testing.T) {
 	}
 }
 
-func Test_selectReportInterval(t *testing.T) {
+func Test_seReportInterval(t *testing.T) {
 	layout := "20060102-150405"
 
 	// open start/end
-	start, end, err := selectReportInterval("", "")
+	start, end, err := setReportInterval("", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "00010101-000000", start.Format(layout))
 	assert.NotEqual(t, "00010101-000000", end.Format(layout))
 
 	// open start, valid end
-	start, end, err = selectReportInterval("", "20210110-130000")
+	start, end, err = setReportInterval("", "20210110-130000")
 	assert.NoError(t, err)
 	assert.Equal(t, "00010101-000000", start.Format(layout))
 	assert.Equal(t, "20210110-130000", end.Format(layout))
 
 	// valid start, open end
-	start, end, err = selectReportInterval("20210110-120000", "")
+	start, end, err = setReportInterval("20210110-120000", "")
 	assert.NoError(t, err)
 	assert.Equal(t, "20210110-120000", start.Format(layout))
 	assert.NotEqual(t, "00010101-000000", end.Format(layout))
 
 	// valid start, valid end
-	start, end, err = selectReportInterval("20210110-120000", "20210110-130000")
+	start, end, err = setReportInterval("20210110-120000", "20210110-130000")
 	assert.NoError(t, err)
 	assert.Equal(t, "20210110-120000", start.Format(layout))
 	assert.Equal(t, "20210110-130000", end.Format(layout))
 
 	// valid start (no date), open end
-	start, end, err = selectReportInterval("120000", "")
+	start, end, err = setReportInterval("120000", "")
 	assert.NoError(t, err)
 	assert.NotEqual(t, "00010101-000000", start.Format(layout))
 	assert.NotEqual(t, "00010101-000000", end.Format(layout))
 
 	// open start, valid end (no date)
-	start, end, err = selectReportInterval("", "130000")
+	start, end, err = setReportInterval("", "130000")
 	assert.NoError(t, err)
 	assert.Equal(t, "00010101-000000", start.Format(layout))
 	assert.NotEqual(t, "00010101-000000", end.Format(layout))
 
 	// valid start (no date), valid end (no date)
-	start, end, err = selectReportInterval("120000", "130000")
+	start, end, err = setReportInterval("120000", "130000")
 	assert.NoError(t, err)
 	assert.NotEqual(t, "00010101-000000", start.Format(layout))
 	assert.NotEqual(t, "00010101-000000", end.Format(layout))
@@ -127,7 +127,7 @@ func Test_selectReportInterval(t *testing.T) {
 		{start: "invalid", end: "invalid"},
 	}
 	for _, tc := range testcases {
-		_, _, err := selectReportInterval(tc.start, tc.end)
+		_, _, err := setReportInterval(tc.start, tc.end)
 		assert.Error(t, err)
 	}
 }
