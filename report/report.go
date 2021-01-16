@@ -67,6 +67,7 @@ func RunMain(c Config) error {
 type app struct {
 	config Config
 	view   view.View
+	writer io.Writer
 }
 
 // newApp creates new 'pgcenter record' app.
@@ -77,6 +78,7 @@ func newApp(config Config) *app {
 	return &app{
 		config: config,
 		view:   v,
+		writer: os.Stdout,
 	}
 }
 
@@ -84,7 +86,7 @@ func newApp(config Config) *app {
 func (app *app) doReport(r *tar.Reader) error {
 	var prevStat, diffStat stat.PGresult
 	var prevTs time.Time
-	var linesPrinted int8 = repeatHeaderAfter // initial value means print header at the beginning of all output
+	var linesPrinted = repeatHeaderAfter // initial value means print header at the beginning of all output
 
 	c := app.config
 	v := app.view
@@ -163,20 +165,28 @@ func (app *app) doReport(r *tar.Reader) error {
 		prevTs = currTs
 
 		// formatting  the report
-		formatReport(&diffStat, &v, &c)
+		formatReport(&diffStat, &v, c)
 
 		// print header after every Nth lines
-		linesPrinted = printStatHeader(linesPrinted, v, diffStat.Cols)
+		linesPrinted, err = printStatHeader(app.writer, linesPrinted, v)
+		if err != nil {
+			return err
+		}
 
 		// print the stats - calculated delta between previous and current stats snapshots
-		linesPrinted += printStatReport(&diffStat, v, c, currTs)
+		//linesPrinted += printStatReport(&diffStat, v, c, currTs)
+		n, err := printStatReport(app.writer, &diffStat, v, c, currTs)
+		if err != nil {
+			return err
+		}
+		linesPrinted += n
 	} //end for
 
 	return nil
 }
 
 // formatReport does report formatting - sort and aligning
-func formatReport(d *stat.PGresult, view *view.View, c *Config) {
+func formatReport(d *stat.PGresult, view *view.View, c Config) {
 	if c.OrderColName != "" {
 		doSort(d, c)
 	}
@@ -191,27 +201,35 @@ func formatReport(d *stat.PGresult, view *view.View, c *Config) {
 }
 
 // printStatHeader periodically prints names of stats columns
-func printStatHeader(printedNum int8, view view.View, cols []string) int8 {
-
-	if printedNum >= repeatHeaderAfter && view.Aligned {
-		fmt.Printf("         ")
-		for i, name := range cols {
-			fmt.Printf("\033[%d;%dm%-*s\033[0m", 37, 1, view.ColsWidth[i]+2, name)
-		}
-		fmt.Printf("\n")
-		return 0
+func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
+	if printedNum < repeatHeaderAfter || !v.Aligned {
+		return printedNum, nil
 	}
-	return printedNum
+
+	fmt.Printf("         ")
+	for i, name := range v.Cols {
+		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 37, 1, v.ColsWidth[i]+2, name)
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	_, err := fmt.Fprintf(w, "\n")
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
 }
 
-// printReport prints given stats
-func printStatReport(d *stat.PGresult, view view.View, c Config, ts time.Time) (printedNum int8) {
+// printStatReport prints given stats
+func printStatReport(w io.Writer, res *stat.PGresult, view view.View, c Config, ts time.Time) (int, error) {
 	// print stats values
 	var printFirst = true // every first line in the snapshot should begin with timestamp when stats were taken
 	var linesPrinted int  // count lines printed per snapshot (for limiting purposes)
+	var printedNum int
 
 	// loop through the rows, check for filtered values and print if values are satisfied
-	for colnum, rownum := 0, 0; rownum < d.Nrows; rownum, colnum = rownum+1, 0 {
+	for colnum, rownum := 0, 0; rownum < res.Nrows; rownum, colnum = rownum+1, 0 {
 		var doPrint = true // assume the filtering is disabled by default and row should be printed
 
 		// if filtering (grep) is enabled, a target column should be found and check values
@@ -219,9 +237,9 @@ func printStatReport(d *stat.PGresult, view view.View, c Config, ts time.Time) (
 		if c.FilterColName != "" {
 			// if filter enabled, use pessimistic approach and considering the value will not match
 			doPrint = false
-			for idx, colname := range d.Cols {
+			for idx, colname := range res.Cols {
 				if colname == c.FilterColName {
-					if c.FilterRE.MatchString(d.Values[rownum][idx].String) {
+					if c.FilterRE.MatchString(res.Values[rownum][idx].String) {
 						doPrint = true // value matched, so print the whole row
 						break
 					}
@@ -232,32 +250,47 @@ func printStatReport(d *stat.PGresult, view view.View, c Config, ts time.Time) (
 		// print the row
 		if doPrint {
 			if printFirst {
-				fmt.Printf("%s ", ts.Format("15:04:05"))
+				_, err := fmt.Fprintf(w, "%s ", ts.Format("15:04:05"))
+				if err != nil {
+					return 0, err
+				}
 				printFirst = false
 			} else {
-				fmt.Printf("         ")
+				_, err := fmt.Fprintf(w, "         ")
+				if err != nil {
+					return 0, err
+				}
 			}
 
-			for i := range d.Cols {
+			for i := range res.Cols {
 				// truncate values that longer than column width
-				valuelen := len(d.Values[rownum][colnum].String)
+				valuelen := len(res.Values[rownum][colnum].String)
 				if valuelen > view.ColsWidth[i] {
 					width := view.ColsWidth[i]
 					// truncate value up to column width and replace last character with '~' symbol
-					d.Values[rownum][colnum].String = d.Values[rownum][colnum].String[:width-1] + "~"
+					res.Values[rownum][colnum].String = res.Values[rownum][colnum].String[:width-1] + "~"
 				}
 
 				// last col with no truncation of not specified otherwise
-				if i != len(d.Cols)-1 {
-					fmt.Printf("%-*s", view.ColsWidth[i]+2, d.Values[rownum][colnum].String)
+				if i != len(res.Cols)-1 {
+					_, err := fmt.Fprintf(w, "%-*s", view.ColsWidth[i]+2, res.Values[rownum][colnum].String)
+					if err != nil {
+						return 0, err
+					}
 				} else {
-					fmt.Printf("%s", d.Values[rownum][colnum].String)
+					_, err := fmt.Fprintf(w, "%s", res.Values[rownum][colnum].String)
+					if err != nil {
+						return 0, err
+					}
 				}
 
 				colnum++
 			}
 
-			fmt.Printf("\n")
+			_, err := fmt.Fprintf(w, "\n")
+			if err != nil {
+				return 0, err
+			}
 			printedNum++
 
 			// check number of printed lines, if limit is reached skip remaining rows and proceed to a next stats file
@@ -267,12 +300,12 @@ func printStatReport(d *stat.PGresult, view view.View, c Config, ts time.Time) (
 		} // end if
 	} // end for
 
-	return printedNum
+	return printedNum, nil
 }
 
 // Perform sort of statistics based on column requested by user
 // TODO: refactor sort to configure in cmd package instead of in-place sorting.
-func doSort(stat *stat.PGresult, c *Config) {
+func doSort(stat *stat.PGresult, c Config) {
 	//var sortKey int
 	//
 	//// set ascending order if required
