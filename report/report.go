@@ -1,5 +1,3 @@
-// Code related to 'pgcenter record' command
-
 package report
 
 import (
@@ -10,7 +8,6 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"io"
-	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -34,7 +31,6 @@ type Config struct {
 
 const (
 	repeatHeaderAfter = 20
-	ascFlag           = "+"
 )
 
 // RunMain is the main entry point for 'pgcenter report' sub-command
@@ -43,7 +39,7 @@ func RunMain(c Config) error {
 
 	f, err := os.Open(c.InputFile)
 	if err != nil {
-		log.Fatalf("ERROR: failed to open file: %s\n", err)
+		return err
 	}
 	defer f.Close()
 
@@ -84,9 +80,10 @@ func newApp(config Config) *app {
 
 // Read statistics file and create a report based on report settings
 func (app *app) doReport(r *tar.Reader) error {
-	var prevStat, diffStat stat.PGresult
+	var prevStat stat.PGresult
 	var prevTs time.Time
 	var linesPrinted = repeatHeaderAfter // initial value means print header at the beginning of all output
+	var orderConfigured = false          // flag tells about order is not configured.
 
 	c := app.config
 	v := app.view
@@ -97,75 +94,59 @@ func (app *app) doReport(r *tar.Reader) error {
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return fmt.Errorf("failed to advance position within tar file: %s", err)
+			return fmt.Errorf("advance read position failed: %s", err)
 		}
 
-		// check stats filename, skip files if their names doesn't contain name of requested statistics
-		if !strings.Contains(hdr.Name, c.ReportType) {
-			continue
-		}
-
-		s := strings.Split(hdr.Name, ".")
-		if len(s) != 3 {
-			fmt.Printf("bad file name format %s, skip", hdr.Name)
-			continue
-		}
-
-		// Calculate timestamp when stats were recorded, parse timestamp considering it is in local timezone.
-		zone, _ := time.Now().Zone()
-		currTs, err := time.Parse("20060102T150405-07", s[1]+zone)
+		// Check filename - it has valid format and corresponds to requested report type.
+		err = isFilenameOK(hdr.Name, c.ReportType)
 		if err != nil {
-			return fmt.Errorf("failed to parse timestamp from filename %s: %s", hdr.Name, err)
-		}
-
-		// skip snapshots if they're outside of the requested time interval
-		if currTs.Before(c.TsStart) || currTs.After(c.TsEnd) {
 			continue
 		}
 
-		// read stats to a buffer
-		data := make([]byte, hdr.Size)
-		if _, err := io.ReadFull(r, data); err != nil {
-			return fmt.Errorf("failed to read stat from %s: %s", hdr.Name, err)
+		// Check timestamp in filename, is it correct and is in requested report interval.
+		ts, err := isFilenameTimestampOK(hdr.Name, c.TsStart, c.TsEnd)
+		if err != nil {
+			continue
 		}
 
-		// initialize an empty struct and unmarshal data from the buffer
-		currStat := stat.PGresult{}
-		if err = json.Unmarshal(data, &currStat); err != nil {
-			return fmt.Errorf("break on %s: failed to unmarshal data from buffer: %s", hdr.Name, err)
+		// Read stats from file.
+		currStat, err := readFileStat(r, hdr.Size)
+		if err != nil {
+			return err
 		}
 
-		// if previous stats snapshot is not defined, copy current to previous (when reading first snapshot at startup, for example)
+		// if previous stats snapshot is not defined, copy current to previous.
+		// Usually this occurs when reading first stat sample at startup.
 		if prevStat.Valid != true {
 			prevStat = currStat
-			prevTs = currTs
+			prevTs = ts
 			continue
 		}
 
-		// calculate time interval
-		interval := currTs.Sub(prevTs)
+		// Calculate time interval.
+		interval := ts.Sub(prevTs)
 		if c.Interval > interval {
 			fmt.Println("WARNING: specified interval too long, adjusting it to an interval equal between current and previous statistics snapshots")
 			c.Interval = interval
 		}
 
-		// calculate delta between current and previous stats snapshots
-		if v.DiffIntvl != [2]int{0, 0} {
-			res, err := stat.Compare(currStat, prevStat, int(interval/c.Interval), v.DiffIntvl, v.OrderKey, v.OrderDesc, v.UniqueKey)
-			if err != nil {
-				return fmt.Errorf("failed diff on %s: %s", hdr.Name, err)
+		// When first data read, list of columns is known and it is possible to set up order.
+		if c.OrderColName != "" && !orderConfigured {
+			if idx, ok := getColumnIndex(currStat.Cols, c.OrderColName); ok {
+				v.OrderKey = idx
+				v.OrderDesc = c.OrderDesc
+				orderConfigured = true
 			}
-			diffStat = res
-		} else {
-			diffStat = currStat
 		}
 
-		// when diff done and previous snapshot is not needed, replace it with current snapshot
-		prevStat = currStat
-		prevTs = currTs
+		// Calculate delta between current and previous stats snapshots.
+		diffStat, err := countDiff(currStat, prevStat, int(interval/c.Interval), v)
+		if err != nil {
+			return err
+		}
 
-		// formatting  the report
-		formatReport(&diffStat, &v, c)
+		// Format the stat
+		formatStatSample(&diffStat, &v, c)
 
 		// print header after every Nth lines
 		linesPrinted, err = printStatHeader(app.writer, linesPrinted, v)
@@ -174,30 +155,121 @@ func (app *app) doReport(r *tar.Reader) error {
 		}
 
 		// print the stats - calculated delta between previous and current stats snapshots
-		//linesPrinted += printStatReport(&diffStat, v, c, currTs)
-		n, err := printStatReport(app.writer, &diffStat, v, c, currTs)
+		n, err := printStatReport(app.writer, &diffStat, v, c, ts)
 		if err != nil {
 			return err
 		}
 		linesPrinted += n
+
+		// Swap previous with current
+		prevStat = currStat
+		prevTs = ts
 	} //end for
 
 	return nil
 }
 
-// formatReport does report formatting - sort and aligning
-func formatReport(d *stat.PGresult, view *view.View, c Config) {
-	if c.OrderColName != "" {
-		doSort(d, c)
+//
+func isFilenameOK(name string, report string) error {
+	s := strings.Split(name, ".")
+
+	// File name should be in the format: 'report_type.timestamp.json'
+	if len(s) != 3 {
+		return fmt.Errorf("bad file name format %s, skip", name)
+	}
+
+	// Is filename correspond to user-requested report?
+	if s[0] != report {
+		return fmt.Errorf("skip sample")
+	}
+
+	return nil
+}
+
+// isFilenameTimestampOK validates that timestamp in filename is valid and is in interval.
+func isFilenameTimestampOK(name string, start, end time.Time) (time.Time, error) {
+	s := strings.Split(name, ".")
+
+	// File name should be in the format: 'report_type.timestamp.json'
+	if len(s) != 3 {
+		return time.Time{}, fmt.Errorf("bad file name format %s, skip", name)
+	}
+
+	// Calculate timestamp when stats were recorded, parse timestamp considering it is in local timezone.
+	zone, _ := time.Now().Zone()
+	ts, err := time.Parse("20060102T150405-07", s[1]+zone)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// skip snapshots if they're outside of the requested time interval
+	if ts.Before(start) || ts.After(end) {
+		return time.Time{}, fmt.Errorf("out of the requested interval")
+	}
+
+	return ts, nil
+}
+
+// readFileStat reads content of tar file, unmarshal data and return stat object.
+func readFileStat(r *tar.Reader, bufsz int64) (stat.PGresult, error) {
+	data := make([]byte, bufsz)
+
+	if _, err := io.ReadFull(r, data); err != nil {
+		return stat.PGresult{}, err
+	}
+
+	// initialize an empty struct and unmarshal data from the buffer
+	res := stat.PGresult{}
+	err := json.Unmarshal(data, &res)
+	if err != nil {
+		return stat.PGresult{}, err
+	}
+
+	return res, nil
+}
+
+// countDiff compares two stat samples and produce differential sample.
+func countDiff(curr, prev stat.PGresult, interval int, v view.View) (stat.PGresult, error) {
+	var diff stat.PGresult
+
+	if v.DiffIntvl != [2]int{0, 0} {
+		res, err := stat.Compare(curr, prev, interval, v.DiffIntvl, v.OrderKey, v.OrderDesc, v.UniqueKey)
+		if err != nil {
+			return stat.PGresult{}, err
+		}
+		diff = res
+	} else {
+		diff = curr
+	}
+
+	return diff, nil
+}
+
+// getColumnIndex return index of specified column in set of columns.
+func getColumnIndex(cols []string, colname string) (int, bool) {
+	if colname == "" {
+		return -1, false
+	}
+
+	for i, val := range cols {
+		if val == colname {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
+// formatStatSample does formatting of stat sample.
+func formatStatSample(d *stat.PGresult, view *view.View, c Config) {
+	if view.Aligned {
+		return
 	}
 
 	// align values for printing, use dynamic aligning
-	if !view.Aligned {
-		widthes, cols := align.SetAlign(*d, c.TruncLimit, true)
-		view.ColsWidth = widthes
-		view.Cols = cols
-		view.Aligned = true
-	}
+	widthes, cols := align.SetAlign(*d, c.TruncLimit, true)
+	view.ColsWidth = widthes
+	view.Cols = cols
+	view.Aligned = true
 }
 
 // printStatHeader periodically prints names of stats columns
@@ -206,7 +278,11 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 		return printedNum, nil
 	}
 
-	fmt.Printf("         ")
+	_, err := fmt.Fprintf(w, "         ")
+	if err != nil {
+		return 0, err
+	}
+
 	for i, name := range v.Cols {
 		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 37, 1, v.ColsWidth[i]+2, name)
 		if err != nil {
@@ -214,7 +290,7 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 		}
 	}
 
-	_, err := fmt.Fprintf(w, "\n")
+	_, err = fmt.Fprintf(w, "\n")
 	if err != nil {
 		return 0, err
 	}
@@ -301,28 +377,4 @@ func printStatReport(w io.Writer, res *stat.PGresult, view view.View, c Config, 
 	} // end for
 
 	return printedNum, nil
-}
-
-// Perform sort of statistics based on column requested by user
-// TODO: refactor sort to configure in cmd package instead of in-place sorting.
-func doSort(stat *stat.PGresult, c Config) {
-	//var sortKey int
-	//
-	//// set ascending order if required
-	//if opts.OrderColName[0] == ascFlag[0] {
-	//	opts.OrderDesc = false // set to Asc
-	//	opts.OrderColName = strings.TrimLeft(opts.OrderColName, ascFlag)
-	//}
-	//
-	//for k, v := range stat.Cols {
-	//	if v == opts.OrderColName {
-	//		sortKey = k
-	//		break
-	//	}
-	//}
-
-	// --- sort already performed in stat.Compare() method.
-
-	// use descending order by default
-	//stat.Sort(sortKey, opts.OrderDesc)
 }

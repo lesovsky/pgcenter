@@ -28,6 +28,8 @@ type options struct {
 
 	inputFile    string        // Input file with statistics
 	orderColName string        // Name of the column used for sorting
+	orderDesc    bool          // Specify to use descendant order
+	orderAsc     bool          // Specify to use ascendant order
 	rowLimit     int           // Number of rows per timestamp
 	strLimit     int           // Trim all strings longer than this limit
 	interval     time.Duration // Interval between statistics
@@ -55,7 +57,9 @@ var (
 
 func init() {
 	CommandDefinition.Flags().StringVarP(&opts.inputFile, "file", "f", "pgcenter.stat.tar", "read stats from file")
-	CommandDefinition.Flags().StringVarP(&opts.orderColName, "order", "o", "", "order values by column (desc by default)")
+	CommandDefinition.Flags().StringVarP(&opts.orderColName, "order", "o", "", "sort values by column using descendant order")
+	CommandDefinition.Flags().BoolVarP(&opts.orderDesc, "desc", "", true, "sort values by column using descendant order")
+	CommandDefinition.Flags().BoolVarP(&opts.orderAsc, "asc", "", false, "sort values by column using ascendant order")
 	CommandDefinition.Flags().IntVarP(&opts.rowLimit, "limit", "l", 0, "print only limited number of rows per sample")
 	CommandDefinition.Flags().IntVarP(&opts.strLimit, "strlimit", "t", 32, "maximum string size for long lines to print (default: 32)")
 	CommandDefinition.Flags().DurationVarP(&opts.interval, "interval", "i", 1*time.Second, "delta interval (default: 1s)")
@@ -96,12 +100,18 @@ func (opts options) validate() (report.Config, error) {
 		return report.Config{}, err
 	}
 
+	// Define order settings.
+	desc := opts.orderDesc
+	if opts.orderAsc {
+		desc = false
+	}
+
 	return report.Config{
 		InputFile:     opts.inputFile,
 		TsStart:       tsStart,
 		TsEnd:         tsEnd,
 		OrderColName:  opts.orderColName,
-		OrderDesc:     true,
+		OrderDesc:     desc,
 		FilterColName: colname,
 		FilterRE:      re,
 		TruncLimit:    opts.strLimit,
