@@ -27,6 +27,7 @@ type Config struct {
 	RowLimit      int
 	ReportType    string
 	Interval      time.Duration
+	Describe      bool
 }
 
 const (
@@ -36,6 +37,10 @@ const (
 // RunMain is the main entry point for 'pgcenter report' sub-command
 func RunMain(c Config) error {
 	app := newApp(c)
+
+	if c.Describe {
+		return describeReport(app.writer, c.ReportType)
+	}
 
 	f, err := os.Open(c.InputFile)
 	if err != nil {
@@ -377,4 +382,39 @@ func printStatReport(w io.Writer, res *stat.PGresult, view view.View, c Config, 
 	} // end for
 
 	return printedNum, nil
+}
+
+// doDescribe shows detailed description of the requested stats
+func describeReport(w io.Writer, report string) error {
+	m := map[string]string{
+		"databases":          pgStatDatabaseDescription,
+		"activity":           pgStatActivityDescription,
+		"replication":        pgStatReplicationDescription,
+		"tables":             pgStatTablesDescription,
+		"indexes":            pgStatIndexesDescription,
+		"functions":          pgStatFunctionsDescription,
+		"sizes":              pgStatSizesDescription,
+		"progress_vacuum":    pgStatProgressVacuumDescription,
+		"progress_cluster":   pgStatProgressClusterDescription,
+		"progress_index":     pgStatProgressCreateIndexDescription,
+		"statements_timing":  pgStatStatementsTimingDescription,
+		"statements_general": pgStatStatementsGeneralDescription,
+		"statements_io":      pgStatStatementsIODescription,
+		"statements_local":   pgStatStatementsTempDescription,
+		"statements_temp":    pgStatStatementsLocalDescription,
+	}
+
+	if description, ok := m[report]; ok {
+		_, err := fmt.Fprint(w, description)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := fmt.Fprint(w, "unknown description requested")
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

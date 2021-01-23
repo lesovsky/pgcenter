@@ -321,3 +321,36 @@ func Test_printStatReport(t *testing.T) {
 	assert.NoError(t, f.Close())
 	assert.NoError(t, os.Remove(fname))
 }
+
+func Test_describeReport(t *testing.T) {
+	testcases := []struct {
+		report string
+		want   string
+	}{
+		{report: "databases", want: pgStatDatabaseDescription},
+		{report: "activity", want: pgStatActivityDescription},
+		{report: "replication", want: pgStatReplicationDescription},
+		{report: "tables", want: pgStatTablesDescription},
+		{report: "indexes", want: pgStatIndexesDescription},
+		{report: "functions", want: pgStatFunctionsDescription},
+		{report: "sizes", want: pgStatSizesDescription},
+		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
+		{report: "progress_cluster", want: pgStatProgressClusterDescription},
+		{report: "progress_index", want: pgStatProgressCreateIndexDescription},
+		{report: "statements_timing", want: pgStatStatementsTimingDescription},
+		{report: "statements_general", want: pgStatStatementsGeneralDescription},
+		{report: "statements_io", want: pgStatStatementsIODescription},
+		{report: "statements_local", want: pgStatStatementsTempDescription},
+		{report: "statements_temp", want: pgStatStatementsLocalDescription},
+		{report: "invalid", want: "unknown description requested"},
+	}
+
+	for _, tc := range testcases {
+		var buf bytes.Buffer
+
+		err := describeReport(&buf, tc.report)
+		assert.NoError(t, err)
+		assert.Equal(t, tc.want, buf.String())
+	}
+
+}

@@ -33,11 +33,11 @@ type options struct {
 	rowLimit     int           // Number of rows per timestamp
 	strLimit     int           // Trim all strings longer than this limit
 	interval     time.Duration // Interval between statistics
+	describe     bool          // Describe stats fields
 }
 
 var (
-	opts     options
-	describe bool // Show description of requested stats view
+	opts options
 
 	// CommandDefinition is the definition of 'report' CLI sub-command
 	CommandDefinition = &cobra.Command{
@@ -77,7 +77,7 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&opts.tsEnd, "end", "e", "", "ending time of the report")
 	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
 
-	CommandDefinition.Flags().BoolVarP(&describe, "describe", "d", false, "describe columns of specified statistics")
+	CommandDefinition.Flags().BoolVarP(&opts.describe, "describe", "d", false, "describe columns of specified statistics")
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
@@ -118,6 +118,7 @@ func (opts options) validate() (report.Config, error) {
 		RowLimit:      opts.rowLimit,
 		ReportType:    r,
 		Interval:      opts.interval,
+		Describe:      opts.describe,
 	}, nil
 }
 
@@ -237,32 +238,4 @@ func parseFilterString(filter string) (string, *regexp.Regexp, error) {
 	}
 
 	return colname, re, nil
-}
-
-// doDescribe shows detailed description of the requested stats
-func doDescribe() {
-	return
-	//var m = map[string]string{
-	//	stat.DatabaseView:            stat.PgStatDatabaseDescription,
-	//	stat.ActivityView:            stat.PgStatActivityDescription,
-	//	stat.ReplicationView:         stat.PgStatReplicationDescription,
-	//	stat.TablesView:              stat.PgStatTablesDescription,
-	//	stat.IndexesView:             stat.PgStatIndexesDescription,
-	//	stat.FunctionsView:           stat.PgStatFunctionsDescription,
-	//	stat.SizesView:               stat.PgStatSizesDescription,
-	//	stat.ProgressVacuumView:      stat.PgStatProgressVacuumDescription,
-	//	stat.ProgressClusterView:     stat.PgStatProgressClusterDescription,
-	//	stat.ProgressCreateIndexView: stat.PgStatProgressCreateIndexDescription,
-	//	stat.StatementsTimingView:    stat.PgStatStatementsTimingDescription,
-	//	stat.StatementsGeneralView:   stat.PgStatStatementsGeneralDescription,
-	//	stat.StatementsIOView:        stat.PgStatStatementsIODescription,
-	//	stat.StatementsTempView:      stat.PgStatStatementsTempDescription,
-	//	stat.StatementsLocalView:     stat.PgStatStatementsLocalDescription,
-	//}
-	//
-	//if description, ok := m[opts.ReportType]; ok {
-	//	fmt.Println(description)
-	//} else {
-	//	fmt.Println("Unknown description requested")
-	//}
 }
