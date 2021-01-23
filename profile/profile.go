@@ -2,81 +2,77 @@
 
 package profile
 
-//import (
-//	"database/sql"
-//	"fmt"
-//	"github.com/lesovsky/pgcenter/lib/utils"
-//	"os"
-//	"os/signal"
-//	"sort"
-//	"syscall"
-//	"time"
-//)
-//
-//// auxiliary struct for sorting map
-//type waitEvent struct {
-//	waitEventName  string
-//	waitEventValue float64
-//}
-//
-//// A slice of wait_events that implements sort.Interface to sort by values
-//type waitEventsList []waitEvent
-//
-//// TraceStat describes data retrieved from Postgres' pg_stat_activity view
-//type TraceStat struct {
-//	queryDurationSec sql.NullFloat64
-//	stateChangeTime  sql.NullString
-//	state            sql.NullString
-//	waitEntry        sql.NullString
-//	queryText        sql.NullString
-//}
-//
-//// TraceOptions defines program's configuration options
-//type TraceOptions struct {
-//	Pid      int           // PID of profiled backend
-//	Interval time.Duration // Profiling interval
-//	Strsize  int           // Limit length for query string
-//}
-//
-//var (
-//	query = `SELECT
-//				extract(epoch from clock_timestamp() - query_start) AS query_duration,
-//				date_trunc('milliseconds', state_change) AS state_change_time,
-//				state AS state,
-//				wait_event_type ||'.'|| wait_event AS wait_entry,
-//				query
-//			FROM pg_stat_activity WHERE pid = $1 /* pgcenter profile */`
-//
-//	waitEventDurations = make(map[string]float64) // wait events and its durations
-//	waitEventPercents  = make(map[string]float64) // wait events and its percent ratios
-//
-//	signalChan = make(chan os.Signal, 1)
-//	exitChan   = make(chan int)
-//)
-//
-//// RunMain is the main entry point for 'pgcenter profile' command
-//func RunMain(args []string, conninfo utils.Conninfo, opts TraceOptions) {
-//	signal.Notify(signalChan, syscall.SIGINT)
-//
-//	// Handle extra arguments passed
-//	utils.HandleExtraArgs(args, &conninfo)
-//
-//	// Connect to Postgres
-//	conn, err := utils.CreateConn(&conninfo)
-//	if err != nil {
-//		fmt.Printf("ERROR: %s\n", err.Error())
-//		return
-//	}
-//	defer conn.Close()
-//
-//	go profileLoop(conn, opts)
-//	go checkSignal()
-//
-//	<-exitChan
-//}
-//
-//// Main profiling loop
-//func profileLoop(conn *sql.DB, opts TraceOptions) {
+import (
+	"database/sql"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+)
+
+// auxiliary struct for sorting map
+type waitEvent struct {
+	waitEventName  string
+	waitEventValue float64
+}
+
+// A slice of wait_events that implements sort.Interface to sort by values
+type waitEventsList []waitEvent
+
+// TraceStat describes data retrieved from Postgres' pg_stat_activity view
+type TraceStat struct {
+	queryDurationSec sql.NullFloat64
+	stateChangeTime  sql.NullString
+	state            sql.NullString
+	waitEntry        sql.NullString
+	queryText        sql.NullString
+}
+
+// Options defines program's configuration options
+type Config struct {
+	Pid       int // PID of profiled backend
+	Frequency time.Duration
+	Strsize   int // Limit length for query string
+}
+
+var (
+	query = `SELECT
+				extract(epoch from clock_timestamp() - query_start) AS query_duration,
+				date_trunc('milliseconds', state_change) AS state_change_time,
+				state AS state,
+				wait_event_type ||'.'|| wait_event AS wait_entry,
+				query
+			FROM pg_stat_activity WHERE pid = $1 /* pgcenter profile */`
+
+	waitEventDurations = make(map[string]float64) // wait events and its durations
+	waitEventPercents  = make(map[string]float64) // wait events and its percent ratios
+
+	signalChan = make(chan os.Signal, 1)
+	exitChan   = make(chan int)
+)
+
+// RunMain is the main entry point for 'pgcenter profile' command
+func RunMain(dbConfig *postgres.Config, config Config) error {
+	signal.Notify(signalChan, syscall.SIGINT)
+
+	// Connect to Postgres
+	conn, err := postgres.Connect(dbConfig)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	//go profileLoop(conn, opts)
+	//go checkSignal()
+
+	//<-exitChan
+
+	return nil
+}
+
+// Main profiling loop
+//func profileLoop(conn *sql.DB, opts Config) {
 //	prev, curr := TraceStat{}, TraceStat{}
 //	startup := true
 //

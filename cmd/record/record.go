@@ -17,7 +17,7 @@ var (
 	// CommandDefinition defines 'record' sub-command.
 	CommandDefinition = &cobra.Command{
 		Use:   "record",
-		Short: "record stats to file.",
+		Short: "record stats to file",
 		Long:  `'pgcenter record' connects to PostgreSQL and collects stats into local file.`,
 		RunE: func(command *cobra.Command, args []string) error {
 			// Convert 'oneshot' to set of options.

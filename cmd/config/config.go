@@ -16,7 +16,7 @@ var (
 	// CommandDefinition defines 'config' sub-command.
 	CommandDefinition = &cobra.Command{
 		Use:   "config",
-		Short: "installs or uninstalls pgcenter stats schema to Postgres.",
+		Short: "installs or uninstalls pgcenter stats schema to Postgres",
 		Long:  `'pgcenter config' installs or uninstalls pgcenter stats schema to Postgres.`,
 		RunE: func(command *cobra.Command, args []string) error {
 			// Parse extra arguments.

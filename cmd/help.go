@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/cmd/config"
+	"github.com/lesovsky/pgcenter/cmd/profile"
 	"github.com/lesovsky/pgcenter/cmd/record"
 	"github.com/lesovsky/pgcenter/cmd/report"
 	top "github.com/lesovsky/pgcenter/cmd/top"
@@ -30,12 +31,11 @@ Flags:
 
 Use "pgcenter [command] --help" for more information about a command.
 
-Report bugs to %s
+Report bugs to <%s>.
 `,
 		Root.Long,
 		config.CommandDefinition.Short,
-		//profile.CommandDefinition.Short,
-		"dummy", // TODO: remove dummy values
+		profile.CommandDefinition.Short,
 		record.CommandDefinition.Short,
 		report.CommandDefinition.Short,
 		top.CommandDefinition.Short,
@@ -52,44 +52,43 @@ Options:
   -i, --install			install pgcenter's stats schema
   -u, --uninstall		uninstall pgcenter's stats schema
   -d, --dbname DBNAME		database name to connect to
-  -h, --host HOSTNAME		database server host or socket directory.
+  -h, --host HOSTNAME		database server host or socket directory
   -p, --port PORT		database server port (default 5432)
   -U, --username USERNAME	database user name
 
 General options:
   -?, --help		show this help and exit
 
-Report bugs to %s
+Report bugs to <%s>.
 `,
 		config.CommandDefinition.Long,
 		programIssuesUrl)
 }
 
-//func printProfileHelp() string {
-//	return fmt.Sprintf(`%s
-//
-//Usage:
-//  pgcenter profile [OPTIONS]... [DBNAME [USERNAME]]
-//
-//Options:
-//  -d, --dbname DBNAME		database name to connect to
-//  -h, --host HOSTNAME		database server host or socket directory.
-//  -p, --port PORT		database server port (default 5432)
-//  -U, --username USERNAME	database user name
-//
-//  -P, --pid PID			backend PID to profile to
-//  -F, --freq FREQ		profile at this frequency (min 1, max 1000)
-//  -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)
-//
-//General options:
-//  -?, --help		show this help and exit
-//      --version		show version information and exit
-//
-//Report bugs to %s
-//`,
-//		profile.CommandDefinition.Long,
-//		programIssuesUrl)
-//}
+func printProfileHelp() string {
+	return fmt.Sprintf(`%s
+
+Usage:
+ pgcenter profile [OPTIONS]... [DBNAME [USERNAME]]
+
+Options:
+ -d, --dbname DBNAME		database name to connect to
+ -h, --host HOSTNAME		database server host or socket directory
+ -p, --port PORT		database server port (default 5432)
+ -U, --username USERNAME	database user name
+
+ -P, --pid PID			backend PID to profile to
+ -F, --freq FREQ		profile at this frequency (min 1, max 1000)
+ -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)
+
+General options:
+ -?, --help		show this help and exit
+
+Report bugs to <%s>.
+`,
+		profile.CommandDefinition.Long,
+		programIssuesUrl)
+}
 
 func printTopHelp() string {
 	return fmt.Sprintf(`%s
@@ -99,14 +98,14 @@ Usage:
 
 Options:
   -d, --dbname DBNAME		database name to connect to
-  -h, --host HOSTNAME		database server host or socket directory.
+  -h, --host HOSTNAME		database server host or socket directory
   -p, --port PORT		database server port (default 5432)
   -U, --username USERNAME	database user name
 
 General options:
   -?, --help		show this help and exit
 
-Report bugs to %s
+Report bugs to <%s>.
 `,
 		top.CommandDefinition.Long,
 		programIssuesUrl)
@@ -120,7 +119,7 @@ Usage:
 
 Options:
  -d, --dbname DBNAME		database name to connect to
- -h, --host HOSTNAME		database server host or socket directory.
+ -h, --host HOSTNAME		database server host or socket directory
  -p, --port PORT		database server port (default 5432)
  -U, --username USERNAME	database user name
 
@@ -134,7 +133,7 @@ Options:
 General options:
  -?, --help		show this help and exit
 
-Report bugs to %s
+Report bugs to <%s>.
 `,
 		record.CommandDefinition.Long,
 		programIssuesUrl)
@@ -156,10 +155,10 @@ Options:
  -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
  -l, --limit INT		print only limited number of rows per sample (default: unlimited)
  -t, --strlimit INT		maximum string size to print (default: 32, 0 disables truncate)
- -r, --rate DURATION	statistics changes rate interval (default: 1s)
+ -r, --rate DURATION		statistics changes rate interval (default: 1s)
 
 Report options:
- -A, --activity		show pg_stat_activity statistics
+ -A, --activity			show pg_stat_activity statistics
  -R, --replication		show pg_stat_replication statistics
  
  -D, --databases		show pg_stat_database statistics
@@ -167,17 +166,17 @@ Report options:
  -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
- -X, --statements [X]		show pg_stat_statements statistics, use additional selector to choose stats.
-				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io.
- -P, --progress [X]			show pg_stat_progress_* statistics, use additional selector to choose stats.
-				'v' - vacuum; 'c' - cluster; 'i' - create index.
+ -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats
+				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io
+ -P, --progress SELECTOR	show pg_stat_progress_* statistics, use additional selector to choose stats
+				'v' - vacuum; 'c' - cluster; 'i' - create index
 
- -d, --describe		show statistics description, combined with one of the report options
+ -d, --describe			show statistics description, combined with one of the report options
 
 General options:
  -?, --help		show this help and exit
 
-Report bugs to %s
+Report bugs to <%s>.
 `,
 		report.CommandDefinition.Long,
 		programIssuesUrl)
