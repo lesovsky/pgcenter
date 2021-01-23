@@ -14,8 +14,10 @@ import (
 	"time"
 )
 
-// Options contains settings of the requested report
+// Config contains application settings.
 type Config struct {
+	Describe      bool
+	ReportType    string
 	InputFile     string
 	TsStart       time.Time
 	TsEnd         time.Time
@@ -23,44 +25,48 @@ type Config struct {
 	OrderDesc     bool
 	FilterColName string
 	FilterRE      *regexp.Regexp
-	TruncLimit    int
 	RowLimit      int
-	ReportType    string
-	Interval      time.Duration
-	Describe      bool
+	TruncLimit    int
+	Rate          time.Duration
 }
 
 const (
+	// repeatHeaderAfter defines number of lines after which header should be printed again.
 	repeatHeaderAfter = 20
 )
 
-// RunMain is the main entry point for 'pgcenter report' sub-command
+// RunMain is the main entry point for 'pgcenter report' sub-command.
 func RunMain(c Config) error {
 	app := newApp(c)
 
+	// Print report description if requested.
 	if c.Describe {
 		return describeReport(app.writer, c.ReportType)
 	}
 
+	// Open file with statistics.
 	f, err := os.Open(c.InputFile)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
-	fmt.Printf("INFO: reading from %s\n", c.InputFile)
-	fmt.Printf("INFO: report %s\n", c.ReportType)
-	fmt.Printf(
-		"INFO: start from: %s, to: %s, with interval: %s\n",
-		c.TsStart.Format("2006-01-02 15:04:05 MST"),
-		c.TsEnd.Format("2006-01-02 15:04:05 MST"),
-		c.Interval.String(),
-	)
+	defer func() {
+		err := f.Close()
+		if err != nil {
+			fmt.Printf("close file descriptor failed: %s, ignore", err)
+		}
+	}()
 
-	// initialize tar reader
+	// Print report header.
+	err = printReportHeader(app.writer, app.config)
+	if err != nil {
+		return err
+	}
+
+	// Initialize tar reader.
 	tr := tar.NewReader(f)
 
-	// do report
+	// Start printing report.
 	return app.doReport(tr)
 }
 
@@ -130,9 +136,16 @@ func (app *app) doReport(r *tar.Reader) error {
 
 		// Calculate time interval.
 		interval := ts.Sub(prevTs)
-		if c.Interval > interval {
-			fmt.Println("WARNING: specified interval too long, adjusting it to an interval equal between current and previous statistics snapshots")
-			c.Interval = interval
+		if c.Rate > interval {
+			_, err := fmt.Fprintf(
+				app.writer,
+				"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s",
+				interval.String(),
+			)
+			if err != nil {
+				return err
+			}
+			c.Rate = interval
 		}
 
 		// When first data read, list of columns is known and it is possible to set up order.
@@ -145,7 +158,7 @@ func (app *app) doReport(r *tar.Reader) error {
 		}
 
 		// Calculate delta between current and previous stats snapshots.
-		diffStat, err := countDiff(currStat, prevStat, int(interval/c.Interval), v)
+		diffStat, err := countDiff(currStat, prevStat, int(interval/c.Rate), v)
 		if err != nil {
 			return err
 		}
@@ -160,7 +173,7 @@ func (app *app) doReport(r *tar.Reader) error {
 		}
 
 		// print the stats - calculated delta between previous and current stats snapshots
-		n, err := printStatReport(app.writer, &diffStat, v, c, ts)
+		n, err := printStatSample(app.writer, &diffStat, v, c, ts)
 		if err != nil {
 			return err
 		}
@@ -174,7 +187,7 @@ func (app *app) doReport(r *tar.Reader) error {
 	return nil
 }
 
-//
+// isFilenameOK checks filename format.
 func isFilenameOK(name string, report string) error {
 	s := strings.Split(name, ".")
 
@@ -277,6 +290,26 @@ func formatStatSample(d *stat.PGresult, view *view.View, c Config) {
 	view.Aligned = true
 }
 
+// printReportHeader prints report header.
+func printReportHeader(w io.Writer, c Config) error {
+	tmpl := "INFO: reading from %s\n" +
+		"INFO: report %s\n" +
+		"INFO: start from: %s, to: %s, with rate: %s\n"
+	msg := fmt.Sprintf(tmpl,
+		c.InputFile,
+		c.ReportType,
+		c.TsStart.Format("2006-01-02 15:04:05 MST"),
+		c.TsEnd.Format("2006-01-02 15:04:05 MST"),
+		c.Rate.String(),
+	)
+
+	_, err := fmt.Fprint(w, msg)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // printStatHeader periodically prints names of stats columns
 func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 	if printedNum < repeatHeaderAfter || !v.Aligned {
@@ -302,8 +335,8 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 	return 0, nil
 }
 
-// printStatReport prints given stats
-func printStatReport(w io.Writer, res *stat.PGresult, view view.View, c Config, ts time.Time) (int, error) {
+// printStatSample prints given stats
+func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, ts time.Time) (int, error) {
 	// print stats values
 	var printFirst = true // every first line in the snapshot should begin with timestamp when stats were taken
 	var linesPrinted int  // count lines printed per snapshot (for limiting purposes)

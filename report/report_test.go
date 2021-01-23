@@ -222,6 +222,30 @@ func Test_formatStatSample(t *testing.T) {
 	assert.NotNil(t, v.Cols)
 }
 
+func Test_printReportHeader(t *testing.T) {
+	tsStart, err := time.Parse("2006-01-02 15:04:05 -07", "2021-01-18 05:00:00 +05")
+	assert.NoError(t, err)
+	tsEnd, err := time.Parse("2006-01-02 15:04:05 -07", "2021-01-18 06:00:00 +05")
+	assert.NoError(t, err)
+
+	c := Config{
+		InputFile:  "test_example.stat.tar",
+		ReportType: "test_example",
+		TsStart:    tsStart,
+		TsEnd:      tsEnd,
+		Rate:       time.Second,
+	}
+
+	want := `INFO: reading from test_example.stat.tar
+INFO: report test_example
+INFO: start from: 2021-01-18 05:00:00 +05, to: 2021-01-18 06:00:00 +05, with rate: 1s
+`
+
+	var buf bytes.Buffer
+	assert.NoError(t, printReportHeader(&buf, c))
+	assert.Equal(t, want, buf.String())
+}
+
 func Test_printStatHeader(t *testing.T) {
 	res := &stat.PGresult{
 		Valid: true, Ncols: 18, Nrows: 0,
@@ -255,7 +279,7 @@ func Test_printStatHeader(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-func Test_printStatReport(t *testing.T) {
+func Test_printStatSample(t *testing.T) {
 	res := &stat.PGresult{
 		Valid: true,
 		Ncols: 18,
@@ -298,7 +322,7 @@ func Test_printStatReport(t *testing.T) {
 	fname := f.Name()
 
 	// print report
-	n, err := printStatReport(f, res, v, Config{}, time.Time{})
+	n, err := printStatSample(f, res, v, Config{}, time.Time{})
 	assert.NoError(t, err)
 	assert.Equal(t, 2, n)
 

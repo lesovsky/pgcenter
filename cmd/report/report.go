@@ -13,27 +13,27 @@ import (
 
 // options defines all user-requested startup options.
 type options struct {
+	describe bool // Describe stats fields
+
 	showActivity    bool   // Show stats from pg_stat_activity
 	showReplication bool   // Show stats from pg_stat_replication
 	showDatabases   bool   // Show stats from pg_stat_database
 	showTables      bool   // Show stats from pg_stat_user_tables, pg_statio_user_tables
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
-	showFunctions   bool   // Show stats from pg_stat_user_functions
 	showSizes       bool   // Show tables sizes
+	showFunctions   bool   // Show stats from pg_stat_user_functions
 	showStatements  string // Show stats from pg_stat_statements
 	showProgress    string // Show stats from pg_stat_progress_* stats
 
-	tsStart, tsEnd string // Show stats within an interval
-	filter         string // Perform filtering
-
-	inputFile    string        // Input file with statistics
-	orderColName string        // Name of the column used for sorting
-	orderDesc    bool          // Specify to use descendant order
-	orderAsc     bool          // Specify to use ascendant order
-	rowLimit     int           // Number of rows per timestamp
-	strLimit     int           // Trim all strings longer than this limit
-	interval     time.Duration // Interval between statistics
-	describe     bool          // Describe stats fields
+	inputFile      string        // Input file with statistics
+	tsStart, tsEnd string        // Show stats within an interval
+	orderColName   string        // Name of the column used for sorting
+	orderDesc      bool          // Specify to use descendant order
+	orderAsc       bool          // Specify to use ascendant order
+	filter         string        // Perform filtering
+	rowLimit       int           // Number of rows per timestamp
+	strLimit       int           // Trim all strings longer than this limit
+	rate           time.Duration // Stats rate
 }
 
 var (
@@ -56,28 +56,27 @@ var (
 )
 
 func init() {
+	CommandDefinition.Flags().BoolVarP(&opts.describe, "describe", "d", false, "describe columns of specified statistics")
+	CommandDefinition.Flags().BoolVarP(&opts.showActivity, "activity", "A", false, "show pg_stat_activity report")
+	CommandDefinition.Flags().BoolVarP(&opts.showReplication, "replication", "R", false, "show pg_stat_replication report")
+	CommandDefinition.Flags().BoolVarP(&opts.showDatabases, "databases", "D", false, "show pg_stat_database report")
+	CommandDefinition.Flags().BoolVarP(&opts.showTables, "tables", "T", false, "show pg_stat_user_tables and pg_statio_user_tables report")
+	CommandDefinition.Flags().BoolVarP(&opts.showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes report")
+	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
+	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
+	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
+	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
+
 	CommandDefinition.Flags().StringVarP(&opts.inputFile, "file", "f", "pgcenter.stat.tar", "read stats from file")
+	CommandDefinition.Flags().StringVarP(&opts.tsStart, "start", "s", "", "starting time of the report")
+	CommandDefinition.Flags().StringVarP(&opts.tsEnd, "end", "e", "", "ending time of the report")
 	CommandDefinition.Flags().StringVarP(&opts.orderColName, "order", "o", "", "sort values by column using descendant order")
 	CommandDefinition.Flags().BoolVarP(&opts.orderDesc, "desc", "", true, "sort values by column using descendant order")
 	CommandDefinition.Flags().BoolVarP(&opts.orderAsc, "asc", "", false, "sort values by column using ascendant order")
+	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
 	CommandDefinition.Flags().IntVarP(&opts.rowLimit, "limit", "l", 0, "print only limited number of rows per sample")
 	CommandDefinition.Flags().IntVarP(&opts.strLimit, "strlimit", "t", 32, "maximum string size for long lines to print (default: 32)")
-	CommandDefinition.Flags().DurationVarP(&opts.interval, "interval", "i", 1*time.Second, "delta interval (default: 1s)")
-
-	CommandDefinition.Flags().BoolVarP(&opts.showActivity, "activity", "A", false, "show pg_stat_activity report")
-	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
-	CommandDefinition.Flags().BoolVarP(&opts.showDatabases, "databases", "D", false, "show pg_stat_database report")
-	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
-	CommandDefinition.Flags().BoolVarP(&opts.showReplication, "replication", "R", false, "show pg_stat_replication report")
-	CommandDefinition.Flags().BoolVarP(&opts.showTables, "tables", "T", false, "show pg_stat_user_tables and pg_statio_user_tables report")
-	CommandDefinition.Flags().BoolVarP(&opts.showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes report")
-	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
-	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
-	CommandDefinition.Flags().StringVarP(&opts.tsStart, "start", "s", "", "starting time of the report")
-	CommandDefinition.Flags().StringVarP(&opts.tsEnd, "end", "e", "", "ending time of the report")
-	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
-
-	CommandDefinition.Flags().BoolVarP(&opts.describe, "describe", "d", false, "describe columns of specified statistics")
+	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "i", 1*time.Second, "statistics changes rate interval (default: 1s)")
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
@@ -107,6 +106,8 @@ func (opts options) validate() (report.Config, error) {
 	}
 
 	return report.Config{
+		Describe:      opts.describe,
+		ReportType:    r,
 		InputFile:     opts.inputFile,
 		TsStart:       tsStart,
 		TsEnd:         tsEnd,
@@ -114,11 +115,9 @@ func (opts options) validate() (report.Config, error) {
 		OrderDesc:     desc,
 		FilterColName: colname,
 		FilterRE:      re,
-		TruncLimit:    opts.strLimit,
 		RowLimit:      opts.rowLimit,
-		ReportType:    r,
-		Interval:      opts.interval,
-		Describe:      opts.describe,
+		TruncLimit:    opts.strLimit,
+		Rate:          opts.rate,
 	}, nil
 }
 
