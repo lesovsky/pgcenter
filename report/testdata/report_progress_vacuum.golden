@@ -1,0 +1,8 @@
+         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation  [0m[37;1mstate     [0m[37;1mwaiting        [0m[37;1mphase     [0m[37;1mt_size    [0m[37;1mt_scanned_%  [0m[37;1mt_vacuumed_%  [0m[37;1mscanned   [0m[37;1mvacuumed  [0m[37;1mquery                             [0m
+15:31:24 3365734   00:00:06                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
+15:31:25 3365734   00:00:07                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
+15:31:26 3365734   00:00:08                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
+15:31:27 3365734   00:00:09                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
+15:31:28 3365734   00:00:10  pgbench   pgbench~  active    f              scannin~  711008    1000e-2      0e-2          78096     0         vacuum pgbench_accounts
+15:31:29 3365734   00:00:11  pgbench   pgbench~  active    LWLock.WALWr~  scannin~  711008    1900e-2      0e-2          62480     0         vacuum pgbench_accounts
+15:31:30 3365907   00:00:00                      active    IO.WALSync                                                    0         0         autovacuum: VACUUM ANALYZE publ~

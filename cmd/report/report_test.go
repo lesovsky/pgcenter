@@ -4,6 +4,7 @@ import (
 	"github.com/lesovsky/pgcenter/report"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 func Test_options_validate(t *testing.T) {
@@ -12,10 +13,10 @@ func Test_options_validate(t *testing.T) {
 		opts  options
 		want  report.Config
 	}{
-		{valid: true, opts: options{showActivity: true, tsStart: "20210101-120000", tsEnd: "20210101-130000"}},
-		{valid: false, opts: options{tsStart: "20210101-120000", tsEnd: "20210101-130000"}}, // no report type specified
-		{valid: false, opts: options{showActivity: true, tsStart: "20210132"}},              // invalid report start timestamp
-		{valid: false, opts: options{showActivity: true, filter: `colname:"["`}},            // invalid regexp
+		{valid: true, opts: options{showActivity: true, tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00"}},
+		{valid: false, opts: options{tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00"}}, // no report type specified
+		{valid: false, opts: options{showActivity: true, tsStart: "2021-01-32"}},                    // invalid report start timestamp
+		{valid: false, opts: options{showActivity: true, filter: `colname:"["`}},                    // invalid regexp
 	}
 
 	for _, tc := range testcases {
@@ -57,81 +58,117 @@ func Test_selectReport(t *testing.T) {
 	}
 }
 
-// TODO: very weak test-suite
-//   1. в интервалах с открытым концом нет проверки что таймстемп находится около now()
-//   2. нет проверки на таймзоны, что не вылазит какой-то UTC, т.к. предполагается что всегда работаем в local tz
 func Test_setReportInterval(t *testing.T) {
-	layout := "20060102-150405"
-
-	// open start/end
-	start, end, err := setReportInterval("", "")
-	assert.NoError(t, err)
-	assert.Equal(t, "00010101-000000", start.Format(layout))
-	assert.NotEqual(t, "00010101-000000", end.Format(layout))
-
-	// open start, valid end
-	start, end, err = setReportInterval("", "20210110-130000")
-	assert.NoError(t, err)
-	assert.Equal(t, "00010101-000000", start.Format(layout))
-	assert.Equal(t, "20210110-130000", end.Format(layout))
-
-	// valid start, open end
-	start, end, err = setReportInterval("20210110-120000", "")
-	assert.NoError(t, err)
-	assert.Equal(t, "20210110-120000", start.Format(layout))
-	assert.NotEqual(t, "00010101-000000", end.Format(layout))
-
-	// valid start, valid end
-	start, end, err = setReportInterval("20210110-120000", "20210110-130000")
-	assert.NoError(t, err)
-	assert.Equal(t, "20210110-120000", start.Format(layout))
-	assert.Equal(t, "20210110-130000", end.Format(layout))
-
-	// valid start (no date), open end
-	start, end, err = setReportInterval("120000", "")
-	assert.NoError(t, err)
-	assert.NotEqual(t, "00010101-000000", start.Format(layout))
-	assert.NotEqual(t, "00010101-000000", end.Format(layout))
-
-	// open start, valid end (no date)
-	start, end, err = setReportInterval("", "130000")
-	assert.NoError(t, err)
-	assert.Equal(t, "00010101-000000", start.Format(layout))
-	assert.NotEqual(t, "00010101-000000", end.Format(layout))
-
-	// valid start (no date), valid end (no date)
-	start, end, err = setReportInterval("120000", "130000")
-	assert.NoError(t, err)
-	assert.NotEqual(t, "00010101-000000", start.Format(layout))
-	assert.NotEqual(t, "00010101-000000", end.Format(layout))
-
 	testcases := []struct {
-		start string
-		end   string
+		valid     bool
+		start     string
+		end       string
+		startWant string
+		endWant   string
 	}{
-		{start: "241011", end: ""},
-		{start: "126011", end: ""},
-		{start: "121060", end: ""},
-		{start: "", end: "241011"},
-		{start: "", end: "126011"},
-		{start: "", end: "121060"},
-		{start: "20211301-1200000", end: ""},
-		{start: "20210132-1200000", end: ""},
-		{start: "", end: "20211301-1200000"},
-		{start: "", end: "20210132-1200000"},
-		{start: "20210101-", end: ""},
-		{start: "20210101", end: ""}, // TODO: date with no time should be valid
-		{start: "-120000", end: ""},
-		{start: "", end: "20210101-"},
-		{start: "", end: "20210101"}, // TODO: date with no time should be valid
-		{start: "", end: "-130000"},
-		{start: "invalid", end: ""},
-		{start: "", end: "invalid"},
-		{start: "invalid", end: "invalid"},
+		// both full start, end time
+		{valid: true, start: "2021-01-23 10:11:12", end: "2021-01-23 11:12:13", startWant: "2021-01-23 10:11:12", endWant: "2021-01-23 11:12:13"},
+		// empty start time
+		{valid: true, start: "", end: "2021-01-23 11:12:13", startWant: "0001-01-01 00:00:00", endWant: "2021-01-23 11:12:13"},
+		// no times
+		{valid: true, start: "2021-01-23", end: "2021-01-24", startWant: "2021-01-23 00:00:00", endWant: "2021-01-24 00:00:00"},
+		// no dates
+		{valid: true, start: "10:11:12", end: "11:12:13", startWant: "2021-01-23 10:11:12", endWant: "2021-01-23 11:12:13"},
+		// invalid input
+		{valid: false, start: "2021-01-23 10:11:60"},
+		{valid: false, end: "2021-01-23 10:11:60"},
 	}
+
 	for _, tc := range testcases {
-		_, _, err := setReportInterval(tc.start, tc.end)
-		assert.Error(t, err)
+		start, end, err := setReportInterval(tc.start, tc.end)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.startWant, start.Format("2006-01-02 15:04:05"))
+			assert.Equal(t, tc.endWant, end.Format("2006-01-02 15:04:05"))
+		} else {
+			assert.Error(t, err)
+		}
+	}
+
+	// test with empty start/end time
+	s, e, err := setReportInterval("", "")
+	assert.NoError(t, err)
+	assert.Equal(t, "0001-01-01 00:00:00", s.Format("2006-01-02 15:04:05"))
+	assert.WithinDuration(t, time.Now(), e, 5*time.Second)
+}
+
+func Test_parseTimestamp(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		in    string
+		want  string
+	}{
+		{valid: true, in: "2021-01-23 05:10:20", want: "2021-01-23 05:10:20"}, // full timestamp
+		{valid: true, in: "2021-01-23", want: "2021-01-23 00:00:00"},          // date with no time
+		{valid: true, in: "12:11:30", want: "2021-01-23 12:11:30"},            // time with no date
+		{valid: false, in: "2021-01-23 12:11:30 garbage"},                     // time with no date
+		{valid: false, in: "2021-01-32"},
+		{valid: false, in: "2021-00-23"},
+		{valid: false, in: "2021-13-23"},
+		{valid: false, in: "12:11:60"},
+		{valid: false, in: "12:60:30"},
+		{valid: false, in: "24:11:30"},
+		{valid: false, in: "invalid"},
+		{valid: false, in: "2021-01-"},
+		{valid: false, in: "2021-01"},
+		{valid: false, in: "2021-"},
+		{valid: false, in: "2021"},
+		{valid: false, in: "12:11:"},
+		{valid: false, in: "12:11"},
+		{valid: false, in: "12:"},
+		{valid: false, in: "12"},
+		{valid: false, in: ""},
+	}
+
+	for _, tc := range testcases {
+		got, err := parseTimestamp(tc.in)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got.Format("2006-01-02 15:04:05"))
+		} else {
+			assert.Error(t, err)
+		}
+	}
+}
+
+func Test_parseTimepart(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		in    string
+		want  string
+	}{
+		{valid: true, in: "2021-01-23", want: "2021-01-23 00:00:00"}, // date with no time
+		{valid: true, in: "12:11:30", want: "2021-01-23 12:11:30"},   // time with no date
+		{valid: false, in: "2021-01-32"},
+		{valid: false, in: "2021-00-23"},
+		{valid: false, in: "2021-13-23"},
+		{valid: false, in: "12:11:60"},
+		{valid: false, in: "12:60:30"},
+		{valid: false, in: "24:11:30"},
+		{valid: false, in: "invalid"},
+		{valid: false, in: "2021-01-"},
+		{valid: false, in: "2021-01"},
+		{valid: false, in: "2021-"},
+		{valid: false, in: "2021"},
+		{valid: false, in: "12:11:"},
+		{valid: false, in: "12:11"},
+		{valid: false, in: "12:"},
+		{valid: false, in: "12"},
+	}
+
+	for _, tc := range testcases {
+		got, err := parseTimepart(tc.in)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got.Format("2006-01-02 15:04:05"))
+		} else {
+			assert.Error(t, err)
+		}
 	}
 }
 

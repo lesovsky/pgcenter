@@ -70,7 +70,7 @@ func RunMain(c Config) error {
 	return app.doReport(tr)
 }
 
-// app defines 'pgcenter record' runtime dependencies.
+// app defines application container with runtime dependencies.
 type app struct {
 	config Config
 	view   view.View
@@ -139,7 +139,7 @@ func (app *app) doReport(r *tar.Reader) error {
 		if c.Rate > interval {
 			_, err := fmt.Fprintf(
 				app.writer,
-				"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s",
+				"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s\n",
 				interval.String(),
 			)
 			if err != nil {
@@ -214,8 +214,7 @@ func isFilenameTimestampOK(name string, start, end time.Time) (time.Time, error)
 	}
 
 	// Calculate timestamp when stats were recorded, parse timestamp considering it is in local timezone.
-	zone, _ := time.Now().Zone()
-	ts, err := time.Parse("20060102T150405-07", s[1]+zone)
+	ts, err := time.ParseInLocation("20060102T150405", s[1], time.Now().Location())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -250,14 +249,9 @@ func readFileStat(r *tar.Reader, bufsz int64) (stat.PGresult, error) {
 func countDiff(curr, prev stat.PGresult, interval int, v view.View) (stat.PGresult, error) {
 	var diff stat.PGresult
 
-	if v.DiffIntvl != [2]int{0, 0} {
-		res, err := stat.Compare(curr, prev, interval, v.DiffIntvl, v.OrderKey, v.OrderDesc, v.UniqueKey)
-		if err != nil {
-			return stat.PGresult{}, err
-		}
-		diff = res
-	} else {
-		diff = curr
+	diff, err := stat.Compare(curr, prev, interval, v.DiffIntvl, v.OrderKey, v.OrderDesc, v.UniqueKey)
+	if err != nil {
+		return stat.PGresult{}, err
 	}
 
 	return diff, nil
@@ -430,7 +424,7 @@ func describeReport(w io.Writer, report string) error {
 		"progress_vacuum":    pgStatProgressVacuumDescription,
 		"progress_cluster":   pgStatProgressClusterDescription,
 		"progress_index":     pgStatProgressCreateIndexDescription,
-		"statements_timing":  pgStatStatementsTimingDescription,
+		"statements_timings": pgStatStatementsTimingsDescription,
 		"statements_general": pgStatStatementsGeneralDescription,
 		"statements_io":      pgStatStatementsIODescription,
 		"statements_local":   pgStatStatementsTempDescription,

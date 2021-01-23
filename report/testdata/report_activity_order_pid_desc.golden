@@ -1,0 +1,7 @@
+         [37;1mpid       [0m[37;1mcl_addr   [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname   [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event  [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age  [0m[37;1mchange_age  [0m[37;1mquery                             [0m
+15:31:27 3365868             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  Lock        relation    active    00:00:09  00:00:09   00:00:09    vacuum pgbench_accounts
+         3365716             -1        pgbench   lesovsky  psql      client backend  Lock        virtualxid  active    00:00:10  00:00:10   00:00:10    create index CONCURRENTLY pgben~
+         3365697             -1        pgbench   lesovsky  psql      client backend  LWLock      WALWrite    active    00:00:10  00:00:10   00:00:10    cluster pgbench_accounts using ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:10  00:00:10   00:00:10    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:10  00:00:10   00:00:10    UPDATE pgbench_accounts SET aba~

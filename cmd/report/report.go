@@ -76,7 +76,7 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
 	CommandDefinition.Flags().IntVarP(&opts.rowLimit, "limit", "l", 0, "print only limited number of rows per sample")
 	CommandDefinition.Flags().IntVarP(&opts.strLimit, "strlimit", "t", 32, "maximum string size for long lines to print (default: 32)")
-	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "i", 1*time.Second, "statistics changes rate interval (default: 1s)")
+	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "r", 1*time.Second, "statistics changes rate interval (default: 1s)")
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
@@ -165,57 +165,87 @@ func selectReport(opts options) string {
 	return ""
 }
 
-// setReportInterval validates start and end times for report and returns start/end time.Time.
+// setReportInterval
 func setReportInterval(tsStartStr, tsEndStr string) (time.Time, time.Time, error) {
-	layout := "20060102-150405" // default layout includes date and time
+	var tsStart, tsEnd time.Time
+	var err error
 
-	// Processing report start timestamp.
-	// if user specified start time, try to split timestamp to date and time, if date not found use today-date.
-	// if start time is not specified, default value will be used - 0001-01-01 00:00:00
-	var tsStart time.Time
+	// Parse start time string
 	if tsStartStr != "" {
-		tsStartParts := strings.Split(tsStartStr, "-")
-
-		// only time specified without date - prepend timestamp with today
-		if len(tsStartParts) == 1 {
-			tsStartStr = fmt.Sprint(time.Now().Format("20060102") + "-" + tsStartStr)
-		}
-
-		// prepare start time for report program
-		parsedStart, err := time.Parse(layout, tsStartStr)
+		tsStart, err = parseTimestamp(tsStartStr)
 		if err != nil {
 			return time.Time{}, time.Time{}, err
 		}
-		tsStart = parsedStart
 	} else {
-		// by default use "zero" which equals to 0001-01-01 00:00:00
-		tsStart = time.Time{}
+		tsStart, err = time.ParseInLocation("2006-01-02 15:04:05", "0001-01-01 00:00:00", time.Now().Location())
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
 	}
 
-	// Processing report end timestamp.
-	// if user specified end time, try to split timestamp to date and time, if date not found use today-date.
-	// Use current date and time (now) if end time is not specified
-	var tsEnd time.Time
+	// Parse end time string
 	if tsEndStr != "" {
-		tsEndParts := strings.Split(tsEndStr, "-")
-
-		// only time specified without date - prepend with today date
-		if len(tsEndParts) == 1 {
-			tsEndStr = fmt.Sprint(time.Now().Format("20060102") + "-" + tsEndStr)
-		}
-
-		// prepare end time for report program
-		parsedEnd, err := time.Parse(layout, tsEndStr)
+		tsEnd, err = parseTimestamp(tsEndStr)
 		if err != nil {
 			return time.Time{}, time.Time{}, err
 		}
-		tsEnd = parsedEnd
 	} else {
-		// use now() as default
 		tsEnd = time.Now()
 	}
 
 	return tsStart, tsEnd, nil
+}
+
+// parseTimestamp parses timestamp string and returns time.Time
+func parseTimestamp(ts string) (time.Time, error) {
+	if ts == "" {
+		return time.Time{}, fmt.Errorf("empty timestamp")
+	}
+
+	parts := strings.Split(ts, " ")
+
+	switch len(parts) {
+	case 1:
+		t, err := parseTimepart(parts[0])
+		if err != nil {
+			return time.Time{}, err
+		}
+		return t, nil
+	case 2:
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", ts, time.Now().Location())
+		if err != nil {
+			return time.Time{}, err
+		}
+		return t, nil
+	default:
+		return time.Time{}, fmt.Errorf("bad timestamp")
+	}
+}
+
+// parseTimepart parses string considered as date or time and return local timestamp. Time with no date considered as today.
+func parseTimepart(s string) (time.Time, error) {
+	loc := time.Now().Location()
+
+	if parts := strings.Split(s, "-"); len(parts) == 3 {
+		d, err := time.ParseInLocation("2006-01-02", s, loc)
+		if err != nil {
+			return time.Time{}, err
+		}
+
+		return d, nil
+	}
+
+	if parts := strings.Split(s, ":"); len(parts) == 3 {
+		today := time.Now().Format("2006-01-02")
+		t, err := time.ParseInLocation("2006-01-02 15:04:05", fmt.Sprintf("%s %s", today, s), loc)
+		if err != nil {
+			return time.Time{}, err
+		}
+
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("invalid date/time: %s", s)
 }
 
 // parseFilterString parses and defines filtering options. Split a value entered by user to column name and filter pattern.

@@ -241,8 +241,8 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING
 `
 
-	// pgStatStatementsTimingDescription is the detailed description of pg_stat_statements section about timing stats
-	pgStatStatementsTimingDescription = `Statements timing statistics based on pg_stat_statements:
+	// pgStatStatementsTimingsDescription is the detailed description of pg_stat_statements section about timing stats
+	pgStatStatementsTimingsDescription = `Statements timing statistics based on pg_stat_statements:
 
   column	origin			description
 - user		rolname			Name of of user who executed the statement

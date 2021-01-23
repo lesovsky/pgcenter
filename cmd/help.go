@@ -156,7 +156,7 @@ Options:
  -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
  -l, --limit INT		print only limited number of rows per sample (default: unlimited)
  -t, --strlimit INT		maximum string size to print (default: 32, 0 disables truncate)
- -i, --rate DURATION	statistics changes rate interval (default: 1s)
+ -r, --rate DURATION	statistics changes rate interval (default: 1s)
 
 Report options:
  -A, --activity		show pg_stat_activity statistics

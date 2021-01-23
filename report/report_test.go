@@ -12,9 +12,151 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 )
+
+func Test_app_doReport(t *testing.T) {
+	testcases := []struct {
+		start    string
+		end      string
+		config   Config
+		wantFile string
+	}{
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_activity.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "replication", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_replication.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "databases", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_databases.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "tables", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_tables.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "indexes", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_indexes.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "sizes", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_sizes.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "functions", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_functions.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_timings", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_timings.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_general", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_general.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_io", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_io.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_local", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_local.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_temp", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_temp.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "progress_vacuum", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_progress_vacuum.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "progress_cluster", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_progress_cluster.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "progress_index", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_progress_index.golden",
+		},
+		{ // start, end times within report interval
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_activity_start_end.golden",
+		},
+		{ // start, end times within report interval, set order by pid (desc)
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: true, TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_activity_order_pid_desc.golden",
+		},
+		{ // start, end times within report interval, set order by pid (asc)
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: false, TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_activity_order_pid_asc.golden",
+		},
+		{ // start, end times within report interval, grep by query:UPDATE
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "activity", FilterColName: "query", FilterRE: regexp.MustCompile("UPDATE"), TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_activity_grep.golden",
+		},
+		{ // start, end times within report interval, limit by number of rows
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_timings_limit.golden",
+		},
+		{ // start, end times within report interval, limit by number of rows, string limit
+			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 64, Rate: time.Second},
+			wantFile: "testdata/report_statements_timings_limit_truncate.golden",
+		},
+	}
+
+	for _, tc := range testcases {
+		ts, err := time.ParseInLocation("2006-01-02 15:04:05", tc.start, time.Now().Location())
+		assert.NoError(t, err)
+		te, err := time.ParseInLocation("2006-01-02 15:04:05", tc.end, time.Now().Location())
+		assert.NoError(t, err)
+
+		tc.config.TsStart = ts
+		tc.config.TsEnd = te
+
+		app := newApp(tc.config)
+		var buf bytes.Buffer
+		app.writer = &buf
+
+		f, err := os.Open("testdata/pgcenter.stat.golden.tar")
+		assert.NoError(t, err)
+		tr := tar.NewReader(f)
+
+		err = app.doReport(tr)
+		assert.NoError(t, err)
+
+		want, err := ioutil.ReadFile(tc.wantFile)
+		assert.NoError(t, err)
+
+		assert.Equal(t, string(want), buf.String())
+	}
+}
 
 func Test_isFilenameOK(t *testing.T) {
 	testcases := []struct {
@@ -51,13 +193,13 @@ func Test_isFilenameTimestampOK(t *testing.T) {
 		{valid: false, name: "databases.20210116T140630.json", start: "13:30:00", end: "14:00:00", want: "20210116 14:06:30"},
 	}
 
-	zone, _ := time.Now().Zone()
+	loc := time.Now().Location()
 
 	for _, tc := range testcases {
-		start, err := time.Parse("20060102 15:04:05 -07", fmt.Sprintf("20210116 %s %s", tc.start, zone))
+		start, err := time.ParseInLocation("20060102 15:04:05", fmt.Sprintf("20210116 %s", tc.start), loc)
 		assert.NoError(t, err)
 
-		end, err := time.Parse("20060102 15:04:05 -07", fmt.Sprintf("20210116 %s %s", tc.end, zone))
+		end, err := time.ParseInLocation("20060102 15:04:05", fmt.Sprintf("20210116 %s", tc.end), loc)
 		assert.NoError(t, err)
 
 		got, err := isFilenameTimestampOK(tc.name, start, end)
@@ -361,7 +503,7 @@ func Test_describeReport(t *testing.T) {
 		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
 		{report: "progress_cluster", want: pgStatProgressClusterDescription},
 		{report: "progress_index", want: pgStatProgressCreateIndexDescription},
-		{report: "statements_timing", want: pgStatStatementsTimingDescription},
+		{report: "statements_timings", want: pgStatStatementsTimingsDescription},
 		{report: "statements_general", want: pgStatStatementsGeneralDescription},
 		{report: "statements_io", want: pgStatStatementsIODescription},
 		{report: "statements_local", want: pgStatStatementsTempDescription},
