@@ -29,12 +29,9 @@ dep: ## Download the dependencies.
 #	gosec -quiet ./...
 
 test: dep ## Run tests
-	go test -race -timeout 300s -coverprofile=.test_coverage.txt ./... && \
+	go test -race -p 1 -timeout 300s -coverprofile=.test_coverage.txt ./... && \
     	go tool cover -func=.test_coverage.txt | tail -n1 | awk '{print "Total test coverage: " $$3}'
 	@rm .test_coverage.txt
-
-race: dep ## Run data race detector
-	go test -race -short -timeout 300s -p 1 ./...
 
 build: dep ## Build pgcenter executable.
 	mkdir -p ./bin
