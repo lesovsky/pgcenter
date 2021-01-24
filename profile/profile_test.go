@@ -23,14 +23,25 @@ func Test_profileLoop(t *testing.T) {
 
 	// go sleep in profiled connection
 	go func() {
+		// waiting for to start profiling
+		time.Sleep(time.Second)
+
+		// run query 1
 		_, err = target.Exec("SELECT 1, pg_sleep(1)")
 		assert.NoError(t, err)
 
+		// immediately run query 2
 		_, err = target.Exec("SELECT 2, pg_sleep(1)")
 		assert.NoError(t, err)
 
+		// be idle for a bit
+		time.Sleep(200 * time.Millisecond)
+
+		// run query 3
 		_, err = target.Exec("SELECT 3, pg_sleep(1)")
 		assert.NoError(t, err)
+
+		// close DB connection - profiler will exit.
 		target.Close()
 	}()
 
@@ -40,11 +51,11 @@ func Test_profileLoop(t *testing.T) {
 	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Profiling process %d with 50ms sampling", pid))
 	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 1, pg_sleep(1)")
 	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 2, pg_sleep(1)")
+	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 3, pg_sleep(1)")
 	assert.Contains(t, buf.String(), "Timeout.PgSleep")
 	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Stop profiling, process with pid %d doesn't exist (no rows in result set)", pid))
-	fmt.Println(buf.String())
+	//fmt.Println(buf.String())
 	db.Close()
-
 }
 
 func Test_getProfileSnapshot(t *testing.T) {

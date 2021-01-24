@@ -76,8 +76,7 @@ func newStatsStore() stats {
 
 // profileLoop profiles and prints profiling results.
 func profileLoop(w io.Writer, conn *postgres.DB, cfg Config, doQuit chan os.Signal) error {
-	prev := profileStat{}
-	startup := true
+	var prev profileStat
 	s := newStatsStore()
 
 	_, err := fmt.Fprintf(w, "LOG: Profiling process %d with %s sampling\n", cfg.Pid, cfg.Frequency)
@@ -106,48 +105,39 @@ func profileLoop(w io.Writer, conn *postgres.DB, cfg Config, doQuit chan os.Sign
 			return profileErr
 		}
 
-		// Start collecting stats immediately if query is already running, otherwise waiting for query starts.
-		if startup {
-			if curr.state == "active" {
-				err := printHeader(w, curr, cfg.Strsize)
-				if err != nil {
-					return err
-				}
-				s = countWaitings(s, curr, prev)
+		switch {
+		case prev.state != "active" && curr.state == "active":
+			// !active -> active - a query has been started - begin to count stats.
+			err := printHeader(w, curr, cfg.Strsize)
+			if err != nil {
+				return err
 			}
-
-			startup = false
+			s = countWaitings(s, curr, profileStat{})
 			prev = curr
-			continue
-		}
-
-		// Backend's query start is changed, it means new query has been started of finished
-		if curr.changeStateTime != prev.changeStateTime {
-			// transition to active state -- query started -- reset stats and print header with query text
-			if curr.state == "active" {
-				s = resetCounters(s)
-				err := printHeader(w, curr, cfg.Strsize)
-				if err != nil {
-					return err
-				}
-			}
-			// transition from active state -- query finished -- print collected stats and reset it
-			if prev.state == "active" {
-				err := printStat(w, s)
-				if err != nil {
-					return err
-				}
-				s = resetCounters(s)
-			}
-		} else {
-			// otherwise just count stats
+		case prev.state == "active" && curr.state == "active" && prev.changeStateTime == curr.changeStateTime:
+			// active -> active - query continues executing - continue to count stats.
 			s = countWaitings(s, curr, prev)
+			prev = curr
+		case prev.state == "active" && curr.state == "active" && prev.changeStateTime != curr.changeStateTime:
+			// active -> active (new) - a new query has been started - print stat for previous query, count new stats.
+			err := printStat(w, s)
+			if err != nil {
+				return err
+			}
+			s = resetCounters(s)
+			s = countWaitings(s, curr, profileStat{})
+			prev = profileStat{}
+		case prev.state == "active" && curr.state != "active":
+			// active -> idle - query has been finished, but no new query started - print stat, waiting for new query.
+			err := printStat(w, s)
+			if err != nil {
+				return err
+			}
+			s = resetCounters(s)
+			prev = profileStat{}
 		}
 
-		// copy current stats snapshot to previous
-		prev = curr
-
-		// wait until ticker ticks
+		// Wait ticker ticks.
 		select {
 		case <-t.C:
 			continue
