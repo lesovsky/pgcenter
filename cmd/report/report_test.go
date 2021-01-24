@@ -59,6 +59,8 @@ func Test_selectReport(t *testing.T) {
 }
 
 func Test_setReportInterval(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+
 	testcases := []struct {
 		valid     bool
 		start     string
@@ -73,7 +75,7 @@ func Test_setReportInterval(t *testing.T) {
 		// no times
 		{valid: true, start: "2021-01-23", end: "2021-01-24", startWant: "2021-01-23 00:00:00", endWant: "2021-01-24 00:00:00"},
 		// no dates
-		{valid: true, start: "10:11:12", end: "11:12:13", startWant: "2021-01-23 10:11:12", endWant: "2021-01-23 11:12:13"},
+		{valid: true, start: "10:11:12", end: "11:12:13", startWant: today + " 10:11:12", endWant: today + " 11:12:13"},
 		// invalid input
 		{valid: false, start: "2021-01-23 10:11:60"},
 		{valid: false, end: "2021-01-23 10:11:60"},
@@ -98,6 +100,8 @@ func Test_setReportInterval(t *testing.T) {
 }
 
 func Test_parseTimestamp(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+
 	testcases := []struct {
 		valid bool
 		in    string
@@ -105,7 +109,7 @@ func Test_parseTimestamp(t *testing.T) {
 	}{
 		{valid: true, in: "2021-01-23 05:10:20", want: "2021-01-23 05:10:20"}, // full timestamp
 		{valid: true, in: "2021-01-23", want: "2021-01-23 00:00:00"},          // date with no time
-		{valid: true, in: "12:11:30", want: "2021-01-23 12:11:30"},            // time with no date
+		{valid: true, in: "12:11:30", want: today + " 12:11:30"},              // time with no date
 		{valid: false, in: "2021-01-23 12:11:30 garbage"},                     // time with no date
 		{valid: false, in: "2021-01-32"},
 		{valid: false, in: "2021-00-23"},
@@ -137,13 +141,15 @@ func Test_parseTimestamp(t *testing.T) {
 }
 
 func Test_parseTimepart(t *testing.T) {
+	today := time.Now().Format("2006-01-02")
+
 	testcases := []struct {
 		valid bool
 		in    string
 		want  string
 	}{
 		{valid: true, in: "2021-01-23", want: "2021-01-23 00:00:00"}, // date with no time
-		{valid: true, in: "12:11:30", want: "2021-01-23 12:11:30"},   // time with no date
+		{valid: true, in: "12:11:30", want: today + " 12:11:30"},     // time with no date
 		{valid: false, in: "2021-01-32"},
 		{valid: false, in: "2021-00-23"},
 		{valid: false, in: "2021-13-23"},
