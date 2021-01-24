@@ -78,7 +78,7 @@ Options:
  -U, --username USERNAME	database user name
 
  -P, --pid PID			backend PID to profile to
- -F, --freq FREQ		profile at this frequency (min 1, max 1000)
+ -F, --freq FREQ		profile at this frequency (default: 100ms, min: 1ms, max: 1s)
  -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)
 
 General options:
