@@ -13,8 +13,8 @@ func Test_StatFunctionsQueries(t *testing.T) {
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_user_functions/%d", version), func(t *testing.T) {
 			tmpl := PgStatFunctionsDefault
-			opts := Options{}
-			opts.Configure(version, "f", "top")
+
+			opts := NewOptions(version, "f", 0, "top")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

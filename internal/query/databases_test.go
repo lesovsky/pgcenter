@@ -37,8 +37,7 @@ func Test_StatDatabaseQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_database/%d", version), func(t *testing.T) {
 			tmpl, _, _ := SelectStatDatabaseQuery(version)
 
-			opts := Options{}
-			opts.Configure(version, "f", "top")
+			opts := NewOptions(version, "f", 0, "top")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

@@ -32,8 +32,7 @@ func Test_StatActivityQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_activity/%d", version), func(t *testing.T) {
 			tmpl, _ := SelectStatActivityQuery(version)
 
-			opts := Options{}
-			opts.Configure(version, "f", "top")
+			opts := NewOptions(version, "f", 0, "top")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

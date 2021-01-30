@@ -18,6 +18,60 @@ type Options struct {
 	PgSSQueryLenFn string // Specify exact func to truncating query
 }
 
+// NewOptions creates query options used for queries customization depending on Postgres version and other important settings.
+func NewOptions(version int, recovery string, querylen int, util string) Options {
+	opts := Options{
+		ViewType:       "user",       // System tables and indexes aren't shown by default
+		QueryAgeThresh: "00:00:00.0", // Don't filter queries by age
+		ShowNoIdle:     true,         // Don't show idle clients and background workers
+		PgSSQueryLen:   querylen,
+	}
+
+	opts.WalFunction1, opts.WalFunction2 = selectWalFunctions(version, recovery)
+
+	// Define queries parameters specific for particular utilities.
+	switch util {
+	case "top":
+		// For 'pgcenter top' truncate pg_stat_statements.query length, because it make no sense
+		// to process full query when sizes of user's screen is limited.
+		opts.PgSSQueryLenFn = "left(p.query, 256)"
+	case "record":
+		// For 'pgcenter record' record full length of the pg_stat_statements.query,
+		// except when user doesn't specified exact length.
+		if opts.PgSSQueryLen > 0 {
+			opts.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", querylen)
+		} else {
+			opts.PgSSQueryLenFn = "p.query"
+		}
+	}
+
+	return opts
+}
+
+// selectWalFunctions returns proper function names for getting WAL locations.
+// 1. WAL-related functions have been renamed in Postgres 10, hence functions' names between 9.x and 10 are differ.
+// 2. Depending on recovery status, for obtaining WAL location different functions have to be used.
+func selectWalFunctions(version int, recovery string) (string, string) {
+	var fn1, fn2 string
+	switch {
+	case version < 100000:
+		fn1 = "pg_xlog_location_diff"
+		if recovery == "f" {
+			fn2 = "pg_current_xlog_location"
+		} else {
+			fn2 = "pg_last_xlog_receive_location"
+		}
+	default:
+		fn1 = "pg_wal_lsn_diff"
+		if recovery == "f" {
+			fn2 = "pg_current_wal_lsn"
+		} else {
+			fn2 = "pg_last_wal_receive_lsn"
+		}
+	}
+	return fn1, fn2
+}
+
 // Format transforms query's template to a particular query.
 func Format(tmpl string, o Options) (string, error) {
 	t := template.Must(template.New("query").Parse(tmpl))
@@ -27,50 +81,4 @@ func Format(tmpl string, o Options) (string, error) {
 	}
 
 	return buf.String(), nil
-}
-
-// Adjust method used for adjusting query's options depending on Postgres version.
-func (o *Options) Configure(version int, recovery string, util string) {
-	// System tables and indexes aren't shown by default
-	o.ViewType = "user"
-	// Don't filter queries by age
-	o.QueryAgeThresh = "00:00:00.0"
-	// Don't show idle clients and background workers
-	o.ShowNoIdle = true
-
-	// Select proper WAL functions:
-	// 1. WAL-related functions have been renamed in Postgres 10, hence functions' names between 9.x and 10 are differ.
-	// 2. Depending on recovery status, for obtaining WAL location different functions have to be used.
-	switch {
-	case version < 100000:
-		o.WalFunction1 = "pg_xlog_location_diff"
-		if recovery == "f" {
-			o.WalFunction2 = "pg_current_xlog_location"
-		} else {
-			o.WalFunction2 = "pg_last_xlog_receive_location"
-		}
-	default:
-		o.WalFunction1 = "pg_wal_lsn_diff"
-		if recovery == "f" {
-			o.WalFunction2 = "pg_current_wal_lsn"
-		} else {
-			o.WalFunction2 = "pg_last_wal_receive_lsn"
-		}
-	}
-
-	// Define queries parameters specific for particular utilities.
-	switch util {
-	case "top":
-		// For 'pgcenter top' truncate pg_stat_statements.query length, because it make no sense
-		// to process full query when sizes of user's screen is limited.
-		o.PgSSQueryLenFn = "left(p.query, 256)"
-	case "record":
-		// For 'pgcenter record' record full length of the pg_stat_statements.query,
-		// except when user doesn't specified exact length.
-		if o.PgSSQueryLen > 0 {
-			o.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", o.PgSSQueryLen)
-		} else {
-			o.PgSSQueryLenFn = "p.query"
-		}
-	}
 }

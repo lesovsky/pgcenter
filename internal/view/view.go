@@ -227,8 +227,7 @@ func (v Views) Configure(version int, recovery string, gucTrackCommitXactTimesta
 		}
 	}
 
-	opts := query.Options{}
-	opts.Configure(version, recovery, app)
+	opts := query.NewOptions(version, recovery, 0, app)
 
 	// Build query texts based on templates.
 	for k, view := range v {

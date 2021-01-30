@@ -52,13 +52,11 @@ func TestOptions_Configure(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		opts := Options{}
-		opts.Configure(tc.version, tc.recovery, tc.program)
+		opts := NewOptions(tc.version, tc.recovery, 0, tc.program)
 		assert.Equal(t, tc.want, opts)
 	}
 
-	opts := Options{PgSSQueryLen: 123}
-	opts.Configure(130000, "f", "record")
+	opts := NewOptions(130000, "f", 123, "record")
 	assert.Equal(
 		t, Options{
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
@@ -66,4 +64,32 @@ func TestOptions_Configure(t *testing.T) {
 		},
 		opts,
 	)
+}
+
+func Test_selectWalFunctions(t *testing.T) {
+	testcases := []struct {
+		version  int
+		recovery string
+		want1    string
+		want2    string
+	}{
+		{version: 90500, recovery: "f", want1: "pg_xlog_location_diff", want2: "pg_current_xlog_location"},
+		{version: 90500, recovery: "t", want1: "pg_xlog_location_diff", want2: "pg_last_xlog_receive_location"},
+		{version: 90600, recovery: "f", want1: "pg_xlog_location_diff", want2: "pg_current_xlog_location"},
+		{version: 90600, recovery: "t", want1: "pg_xlog_location_diff", want2: "pg_last_xlog_receive_location"},
+		{version: 100000, recovery: "f", want1: "pg_wal_lsn_diff", want2: "pg_current_wal_lsn"},
+		{version: 100000, recovery: "t", want1: "pg_wal_lsn_diff", want2: "pg_last_wal_receive_lsn"},
+		{version: 110000, recovery: "f", want1: "pg_wal_lsn_diff", want2: "pg_current_wal_lsn"},
+		{version: 110000, recovery: "t", want1: "pg_wal_lsn_diff", want2: "pg_last_wal_receive_lsn"},
+		{version: 120000, recovery: "f", want1: "pg_wal_lsn_diff", want2: "pg_current_wal_lsn"},
+		{version: 120000, recovery: "t", want1: "pg_wal_lsn_diff", want2: "pg_last_wal_receive_lsn"},
+		{version: 130000, recovery: "f", want1: "pg_wal_lsn_diff", want2: "pg_current_wal_lsn"},
+		{version: 130000, recovery: "t", want1: "pg_wal_lsn_diff", want2: "pg_last_wal_receive_lsn"},
+	}
+
+	for _, tc := range testcases {
+		fn1, fn2 := selectWalFunctions(tc.version, tc.recovery)
+		assert.Equal(t, tc.want1, fn1)
+		assert.Equal(t, tc.want2, fn2)
+	}
 }

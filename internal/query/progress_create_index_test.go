@@ -14,8 +14,7 @@ func Test_StatProgressCreateIndexQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_progress_create_index/%d", version), func(t *testing.T) {
 			tmpl := PgStatProgressCreateIndexDefault
 
-			opts := Options{}
-			opts.Configure(version, "f", "top")
+			opts := NewOptions(version, "f", 0, "top")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 
