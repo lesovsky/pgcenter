@@ -147,8 +147,8 @@ Usage:
 
 Options:
  -f, --file FILE		read stats from file (default: pgcenter.stat.tar)
- -s, --start TIMESTAMP		starting time of the report (format: [YYYYMMDD-]HHMMSS)
- -e, --end TIMESTAMP		ending time of the report (format: [YYYYMMDD-]HHMMSS)
+ -s, --start TIMESTAMP		starting time of the report (format: [YYYY-MM-DD] HH:MM:SS)
+ -e, --end TIMESTAMP		ending time of the report (format: [YYYY-MM-DD] HH:MM:SS)
  -o, --order COLNAME		order values by column
      --desc			use descendant order (default)
      --asc			use ascendant order
