@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -45,7 +46,13 @@ func NewConfig(host string, port int, user string, dbname string) (Config, error
 		return Config{}, err
 	}
 
+	// use PreferSimpleProtocol disables implicit prepared statement usage and enable compatibility with Pgbouncer.
 	pgConfig.PreferSimpleProtocol = true
+
+	// process PGOPTIONS explicitly, because used jackc/pgx driver supports a limited set of libpq environment variables.
+	if options := os.Getenv("PGOPTIONS"); options != "" {
+		pgConfig.RuntimeParams["options"] = options
+	}
 
 	return Config{
 		Config: pgConfig,

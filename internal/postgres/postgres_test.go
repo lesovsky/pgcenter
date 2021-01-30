@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jackc/pgx/v4"
 	"github.com/stretchr/testify/assert"
+	"os"
 	"testing"
 )
 
@@ -40,6 +41,55 @@ func TestNewConfig(t *testing.T) {
 				fmt.Println(err)
 			}
 		})
+	}
+}
+
+func TestNewConfig_LibPQ_Env(t *testing.T) {
+	testcases := []struct {
+		envvar      string
+		envvalue    string
+		host        string
+		port        int
+		user        string
+		dbname      string
+		wantHost    string
+		wantPort    int
+		wantUser    string
+		wantDbname  string
+		wantOptions string
+	}{
+		{
+			envvar: "PGHOST", envvalue: "1.2.3.4", host: "", port: 5432, user: "test", dbname: "testdb",
+			wantHost: "1.2.3.4", wantPort: 5432, wantUser: "test", wantDbname: "testdb",
+		},
+		{
+			envvar: "PGPORT", envvalue: "1122", host: "127.0.0.1", port: 1122, user: "test", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 1122, wantUser: "test", wantDbname: "testdb",
+		},
+		{
+			envvar: "PGUSER", envvalue: "example", host: "127.0.0.1", port: 5432, user: "", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "example", wantDbname: "testdb",
+		},
+		{
+			envvar: "PGDATABASE", envvalue: "example_db", host: "127.0.0.1", port: 5432, user: "test", dbname: "",
+			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "test", wantDbname: "example_db",
+		},
+		{
+			envvar: "PGOPTIONS", envvalue: "-c work_mem=100MB", host: "127.0.0.1", port: 5432, user: "test", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "test", wantDbname: "testdb", wantOptions: "-c work_mem=100MB",
+		},
+	}
+
+	for _, tc := range testcases {
+		assert.NoError(t, os.Setenv(tc.envvar, tc.envvalue))
+
+		got, err := NewConfig(tc.host, tc.port, tc.user, tc.dbname)
+		assert.NoError(t, err)
+		assert.Equal(t, tc.wantHost, got.Config.Host)
+		assert.Equal(t, tc.wantPort, int(got.Config.Port))
+		assert.Equal(t, tc.wantUser, got.Config.User)
+		assert.Equal(t, tc.wantDbname, got.Config.Database)
+		assert.Equal(t, tc.wantOptions, got.Config.RuntimeParams["options"])
 	}
 }
 

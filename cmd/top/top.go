@@ -36,7 +36,7 @@ var (
 // Parse user passed parameters values and arguments.
 func init() {
 	CommandDefinition.Flags().StringVarP(&opts.Host, "host", "h", "", "database server host or socket directory")
-	CommandDefinition.Flags().IntVarP(&opts.Port, "port", "p", 5432, "database server port")
+	CommandDefinition.Flags().IntVarP(&opts.Port, "port", "p", 0, "database server port")
 	CommandDefinition.Flags().StringVarP(&opts.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&opts.Dbname, "dbname", "d", "", "database name to connect to")
 }
