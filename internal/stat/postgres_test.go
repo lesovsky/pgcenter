@@ -75,26 +75,6 @@ func Test_collectActivityStat(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func Test_selectActivityQueries(t *testing.T) {
-	testcases := []struct {
-		version        int
-		wantActivity   string
-		wantAutovacuum string
-	}{
-		{version: 90300, wantActivity: query.SelectActivityPG94, wantAutovacuum: query.SelectAutovacuumPG94},
-		{version: 90500, wantActivity: query.SelectActivityPG96, wantAutovacuum: query.SelectAutovacuumDefault},
-		{version: 90600, wantActivity: query.SelectActivityPG10, wantAutovacuum: query.SelectAutovacuumDefault},
-		{version: 100000, wantActivity: query.SelectActivityDefault, wantAutovacuum: query.SelectAutovacuumDefault},
-		{version: 110000, wantActivity: query.SelectActivityDefault, wantAutovacuum: query.SelectAutovacuumDefault},
-	}
-
-	for _, tc := range testcases {
-		got1, got2 := selectActivityQueries(tc.version)
-		assert.Equal(t, tc.wantActivity, got1)
-		assert.Equal(t, tc.wantAutovacuum, got2)
-	}
-}
-
 func TestGetPostgresProperties(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)

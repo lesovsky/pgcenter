@@ -85,7 +85,8 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 	}
 
 	// Depending on Postgres version select proper queries.
-	queryActivity, queryAutovacuum := selectActivityQueries(version)
+	queryActivity := query.SelectActivityActivityQuery(version)
+	queryAutovacuum := query.SelectActivityAutovacuumQuery(version)
 
 	err = db.QueryRow(queryActivity).Scan(
 		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact, &s.ConnActive, &s.ConnWaiting, &s.ConnOthers, &s.ConnPrepared)
@@ -115,25 +116,6 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 
 	s.State = "ok"
 	return s, nil
-}
-
-// selectActivityQueries return proper versions of activity queries depending on Postgres version.
-func selectActivityQueries(version int) (string, string) {
-	queryActivity := query.SelectActivityDefault
-	queryAutovacuum := query.SelectAutovacuumDefault
-	switch {
-	case version < 90400:
-		queryActivity = query.SelectActivityPG94
-		queryAutovacuum = query.SelectAutovacuumPG94
-	case version < 90600:
-		queryActivity = query.SelectActivityPG96
-	case version < 100000:
-		queryActivity = query.SelectActivityPG10
-	default:
-		// use defaults
-	}
-
-	return queryActivity, queryAutovacuum
 }
 
 // PostgresProperties is the container for details about Postgres

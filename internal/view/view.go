@@ -213,58 +213,17 @@ func (v Views) Configure(version int, recovery string, gucTrackCommitXactTimesta
 	for k, view := range v {
 		switch k {
 		case "activity":
-			switch {
-			case version < 90600:
-				view.QueryTmpl = query.PgStatActivity95
-				view.Ncols = 12
-				v[k] = view
-			case version < 100000:
-				view.QueryTmpl = query.PgStatActivity96
-				view.Ncols = 13
-				v[k] = view
-			}
+			view.QueryTmpl, view.Ncols = query.SelectStatActivityQuery(version)
+			v[k] = view
 		case "replication":
-			switch {
-			case version < 90500:
-				// Use query for 9.6 but with no 'track_commit_timestamp' fields.
-				view.QueryTmpl = query.PgStatReplication96
-				view.Ncols = 12
-				v[k] = view
-			case version < 100000:
-				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 9.6.
-				if track {
-					view.QueryTmpl = query.PgStatReplication96Extended
-					view.Ncols = 14
-				} else {
-					view.QueryTmpl = query.PgStatReplication96
-					view.Ncols = 12
-				}
-				v[k] = view
-			default:
-				// Check is 'track_commit_timestamp' enabled or not and use corresponding query for 10 and above.
-				if track {
-					view.QueryTmpl = query.PgStatReplicationExtended
-					view.Ncols = 17
-				} else {
-					// use defaults assigned in context unit
-				}
-				v[k] = view
-			}
+			view.QueryTmpl, view.Ncols = query.SelectStatReplicationQuery(version, track)
+			v[k] = view
 		case "databases":
-			switch {
-			// Versions prior 12 don't have 'checksum_failures' column.
-			case version < 120000:
-				view.QueryTmpl = query.PgStatDatabase11
-				view.Ncols = 17
-				view.DiffIntvl = [2]int{1, 15}
-				v[k] = view
-			}
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseQuery(version)
+			v[k] = view
 		case "statements_timings":
-			switch {
-			case version < 130000:
-				view.QueryTmpl = query.PgStatStatementsTiming12
-				v[k] = view
-			}
+			view.QueryTmpl = query.SelectStatStatementsTimingQuery(version)
+			v[k] = view
 		}
 	}
 

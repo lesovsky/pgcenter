@@ -31,7 +31,7 @@ const (
 		"date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
-	// PgStatReplication96 is the query for getting replication stats from versions for 9.6 and older
+	// PgStatReplication96 is the query for getting replication stats from versions for 9.5 and older
 	// { Name: "pg_stat_replication", Query: common.PgStatReplicationQuery96, DiffIntvl: [2]int{6,6}, Ncols: 12, OrderKey: 0, OrderDesc: true }
 	PgStatReplication96 = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
 		"state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS wal, " +
@@ -55,3 +55,18 @@ const (
 		"date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
 )
+
+func SelectStatReplicationQuery(version int, track bool) (string, int) {
+	switch {
+	case version < 100000:
+		if track {
+			return PgStatReplication96Extended, 14
+		}
+		return PgStatReplication96, 12
+	default:
+		if track {
+			return PgStatReplicationExtended, 17
+		}
+		return PgStatReplicationDefault, 15
+	}
+}

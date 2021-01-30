@@ -94,7 +94,7 @@ func TestViews_Configure(t *testing.T) {
 			} else {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
-			assert.Equal(t, query.PgStatStatementsTiming12, views["statements_timings"].QueryTmpl)
+			assert.Equal(t, query.PgStatStatementsTimingPG12, views["statements_timings"].QueryTmpl)
 		case 110000:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplicationExtended, views["replication"].QueryTmpl)
@@ -102,7 +102,7 @@ func TestViews_Configure(t *testing.T) {
 			} else {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
-			assert.Equal(t, query.PgStatDatabase11, views["databases"].QueryTmpl)
+			assert.Equal(t, query.PgStatDatabasePG11, views["databases"].QueryTmpl)
 			assert.Equal(t, 17, views["databases"].Ncols)
 			assert.Equal(t, [2]int{1, 15}, views["databases"].DiffIntvl)
 		case 90600:
@@ -117,9 +117,6 @@ func TestViews_Configure(t *testing.T) {
 			assert.Equal(t, 13, views["activity"].Ncols)
 		case 90500:
 			assert.Equal(t, query.PgStatActivity95, views["activity"].QueryTmpl)
-			assert.Equal(t, 12, views["activity"].Ncols)
-		case 90400:
-			assert.Equal(t, query.PgStatReplication96, views["replication"].QueryTmpl)
 			assert.Equal(t, 12, views["activity"].Ncols)
 		}
 

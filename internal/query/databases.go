@@ -16,9 +16,9 @@ const (
 		"date_trunc('seconds', now() - stats_reset)::text AS stats_age " +
 		"FROM pg_stat_database ORDER BY datname DESC"
 
-	// PgStatDatabase11 is the query for getting databases' stats from pg_stat_database view for versions 12 and older.
+	// PgStatDatabasePG11 is the query for getting databases' stats from pg_stat_database view for versions 11 and older.
 	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQuery11, DiffIntvl: [2]int{1,15}, Ncols: 17, OrderKey: 0, OrderDesc: true }
-	PgStatDatabase11 = "SELECT datname, " +
+	PgStatDatabasePG11 = "SELECT datname, " +
 		"coalesce(xact_commit, 0) AS commits, coalesce(xact_rollback, 0) AS rollbacks, " +
 		"coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads, " +
 		"coalesce(blks_hit, 0) AS hits, coalesce(tup_returned, 0) AS returned, " +
@@ -31,3 +31,12 @@ const (
 		"date_trunc('seconds', now() - stats_reset)::text AS stats_age " +
 		"FROM pg_stat_database ORDER BY datname DESC"
 )
+
+func SelectStatDatabaseQuery(version int) (string, int, [2]int) {
+	switch {
+	case version < 120000:
+		return PgStatDatabasePG11, 17, [2]int{1, 15}
+	default:
+		return PgStatDatabaseDefault, 18, [2]int{1, 16}
+	}
+}

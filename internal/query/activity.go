@@ -44,3 +44,14 @@ const (
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"
 )
+
+func SelectStatActivityQuery(version int) (string, int) {
+	switch {
+	case version < 90600:
+		return PgStatActivity95, 12
+	case version < 100000:
+		return PgStatActivity96, 13
+	default:
+		return PgStatActivityDefault, 14
+	}
+}

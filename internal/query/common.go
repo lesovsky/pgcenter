@@ -39,6 +39,7 @@ const (
 	ExecResetPgStatStatements = "SELECT pg_stat_statements_reset()"
 
 	// SelectCommonProperties used for getting Postgres settings necessary during pgcenter runtime.
+	//   Notes: track_commit_timestamp introduced in 9.5
 	SelectCommonProperties = "SELECT current_setting('server_version'), current_setting('server_version_num')::int, " +
 		"current_setting('track_commit_timestamp'), " +
 		"current_setting('max_connections')::int, " +
@@ -47,6 +48,7 @@ const (
 		"extract(epoch from pg_postmaster_start_time())"
 
 	// SelectActivityDefault is the default query for getting stats about connected clients from pg_stat_activity
+	//   Postgres 10: The 'backend_type' has been introduced.
 	SelectActivityDefault = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
 		"count(*) FILTER (WHERE state = 'idle') AS idle, " +
 		"count(*) FILTER (WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')) AS idle_in_xact, " +
@@ -56,8 +58,9 @@ const (
 		"(SELECT count(*) FROM pg_prepared_xacts) AS total_prepared " +
 		"FROM pg_stat_activity WHERE backend_type = 'client backend'"
 
-	// SelectActivityPG10 queries activity stats about connected clients for versions prior 10. The 'backend_type' has been introduced in 10.
-	SelectActivityPG10 = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
+	// SelectActivityPG96 queries activity stats about connected clients for versions 9.6 and earlier. The 'backend_type' has been introduced in 10.
+	//   Postgres 9.6: wait_events have been introduced.
+	SelectActivityPG96 = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
 		"count(*) FILTER (WHERE state = 'idle') AS idle, " +
 		"count(*) FILTER (WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')) AS idle_in_xact, " +
 		"count(*) FILTER (WHERE state = 'active') AS active, " +
@@ -66,8 +69,9 @@ const (
 		"(SELECT count(*) FROM pg_prepared_xacts) AS total_prepared " +
 		"FROM pg_stat_activity"
 
-	// SelectActivityPG96 queries stats activity about connected clients for versions prior 9.6. There wait_events have been introduced in 9.6.
-	SelectActivityPG96 = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
+	// SelectActivityPG95 queries stats activity about connected clients for versions 9.5 and earlier.
+	//   Postgres 9.4: 'FILTER (WHERE ...)' has been introduced.
+	SelectActivityPG95 = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
 		"count(*) FILTER (WHERE state = 'idle') AS idle, " +
 		"count(*) FILTER (WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')) AS idle_in_xact, " +
 		"count(*) FILTER (WHERE state = 'active') AS active, " +
@@ -76,8 +80,8 @@ const (
 		"(SELECT count(*) FROM pg_prepared_xacts) AS total_prepared " +
 		"FROM pg_stat_activity"
 
-	// SelectActivityPG94 queries stats activity about connected clients for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced in 9.4.
-	SelectActivityPG94 = "WITH pgsa AS (SELECT * FROM pg_stat_activity) SELECT " +
+	// SelectActivityPG93 queries stats activity about connected clients for versions 9.3 and earlier.
+	SelectActivityPG93 = "WITH pgsa AS (SELECT * FROM pg_stat_activity) SELECT " +
 		"(SELECT count(*) FROM pgsa) AS total, " +
 		"(SELECT count(*) FROM pgsa WHERE state = 'idle') AS idle, " +
 		"(SELECT count(*) FROM pgsa WHERE state IN ('idle in transaction', 'idle in transaction (aborted)')) AS idle_in_xact, " +
@@ -87,14 +91,15 @@ const (
 		"(SELECT count(*) FROM pg_prepared_xacts) AS total_prepared"
 
 	// SelectAutovacuumDefault is the default query for getting stats about autovacuum activity from pg_stat_activity
+	//   Postgres 9.4: 'FILTER (WHERE ...)' has been introduced.
 	SelectAutovacuumDefault = "SELECT count(*) FILTER (WHERE query ~* '^autovacuum:') AS av_workers, " +
 		"count(*) FILTER (WHERE query ~* '^autovacuum:.*to prevent wraparound') AS av_wrap, " +
 		"count(*) FILTER (WHERE query ~* '^vacuum' AND state != 'idle') AS v_manual, " +
 		"coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS av_maxtime " +
 		"FROM pg_stat_activity WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid()"
 
-	// SelectAutovacuumPG94 queries stats about autovacuum activity for versions prior 9.4. There 'FILTER (WHERE ...)' has been introduced.
-	SelectAutovacuumPG94 = "WITH pgsa AS (SELECT * FROM pg_stat_activity) SELECT " +
+	// SelectAutovacuumPG93 queries stats about autovacuum activity for versions 9.3 and earlier.
+	SelectAutovacuumPG93 = "WITH pgsa AS (SELECT * FROM pg_stat_activity) SELECT " +
 		"(SELECT count(*) FROM pgsa WHERE query ~* '^autovacuum:' AND pid <> pg_backend_pid()) AS av_workers, " +
 		"(SELECT count(*) FROM pgsa WHERE query ~* '^autovacuum:.*to prevent wraparound' AND pid <> pg_backend_pid()) AS av_wrap, " +
 		"(SELECT count(*) FROM pgsa WHERE query ~* '^vacuum' AND pid <> pg_backend_pid()) AS v_manual, " +
@@ -108,6 +113,7 @@ const (
 		"FROM pg_prepared_xacts)"
 
 	// SelectActivityStatements queries general stats from pg_stat_statements
+	//   Postgres 13: total_time replaced to total_exec_time, total_plan_time.
 	SelectActivityStatementsPG12   = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 	SelectActivityStatementsLatest = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 
@@ -115,6 +121,31 @@ const (
 	SelectRemoteProcSysTicks = "SELECT pgcenter.get_sys_clk_ticks()::float"
 )
 
+// SelectActivityActivityQuery returns activity main query depending on used version.
+func SelectActivityActivityQuery(version int) string {
+	switch {
+	case version < 90400:
+		return SelectActivityPG93
+	case version < 90600:
+		return SelectActivityPG95
+	case version < 100000:
+		return SelectActivityPG96
+	default:
+		return SelectActivityDefault
+	}
+}
+
+// SelectActivityAutovacuumQuery returns autovacuum activity query depending on used version.
+func SelectActivityAutovacuumQuery(version int) string {
+	switch {
+	case version < 90400:
+		return SelectAutovacuumPG93
+	default:
+		return SelectAutovacuumDefault
+	}
+}
+
+// SelectActivityStatementsQuery returns statements activity query depending on used version.
 func SelectActivityStatementsQuery(version int) string {
 	switch {
 	case version < 130000:
