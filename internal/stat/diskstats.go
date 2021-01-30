@@ -80,6 +80,9 @@ func readDiskstatsLocal(statfile string, ticks float64) (Diskstats, error) {
 	if err != nil {
 		return stat, err
 	}
+	defer func() {
+		_ = f.Close()
+	}()
 
 	uptime, err := readUptimeLocal("/proc/uptime", ticks)
 	if err != nil {

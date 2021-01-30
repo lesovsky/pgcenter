@@ -12,6 +12,13 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		// Close 'view' if passed type of extra stats are already displayed
 		if app.config.view.ShowExtra == extra {
+			if extra == stat.CollectLogtail {
+				err := app.config.logtail.Close()
+				if err != nil {
+					return err
+				}
+			}
+
 			return closeExtraView(g, v, app.config)
 		}
 

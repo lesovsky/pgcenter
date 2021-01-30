@@ -44,6 +44,9 @@ func readMeminfoLocal(statfile string) (Meminfo, error) {
 	if err != nil {
 		return stat, err
 	}
+	defer func() {
+		_ = f.Close()
+	}()
 
 	scanner := bufio.NewScanner(f)
 
