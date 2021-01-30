@@ -26,7 +26,7 @@ func TestNewConfig(t *testing.T) {
 		{name: "no user/dbname", valid: true, host: "127.0.0.1", port: 5432},
 		{name: "all empty", valid: true},
 		{name: "unix socket", valid: true, host: "/var/run/postgresql"},
-		{name: "test", valid: false, host: "test, test"},
+		{name: "invalid", valid: false, host: "invalid, invalid"},
 	}
 
 	for _, tc := range testcases {

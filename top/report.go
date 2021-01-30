@@ -2,8 +2,8 @@ package top
 
 import (
 	"bytes"
-	"database/sql"
 	"fmt"
+	"github.com/jackc/pgx/v4"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"os"
@@ -158,7 +158,7 @@ func buildQueryReport(g *gocui.Gui, buf string, db *postgres.DB, uiExit chan int
 		&r.TotalTime, &r.AvgTotalTime, &r.AvgCpuTime, &r.AvgIoTime, &r.Calls, &r.CallPct, &r.Rows, &r.RowsPct,
 		&r.Dbname, &r.Username, &r.Query)
 
-	if err == sql.ErrNoRows {
+	if err == pgx.ErrNoRows {
 		printCmdline(g, "No stats for such queryid.")
 		return nil
 	}
