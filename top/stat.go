@@ -209,34 +209,13 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 
 // printPgstat prints summary Postgres stats on UI.
 func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *postgres.DB) error {
-	var err error
-
-	// TODO: логику вытаскивания параметров подключения нужно переместить из функции.
-	//   1. функция предназначена для "только" печати.
-	//   2. постоянная манипуляция с массивами на каждой итерации печати хоть и дешева здесь, но наверное избыточна.
-	cfg := db.Config.Config
-	pgprops := []string{cfg.Host, strconv.Itoa(int(cfg.Port)), cfg.User, cfg.Database, props.Version}
-	for i, v := range pgprops {
-		if len(pgprops[i]) >= 20 {
-			pgprops[i] = v[0:15] + "~"
-		}
-	}
-
-	// If database is empty, use database name as a user name.
-	if pgprops[3] == "" {
-		pgprops[3] = pgprops[2]
-	}
-
-	/* line1: details of used connection, version, uptime and recovery status */
-	_, err = fmt.Fprintf(v,
-		"state [%s]: %s:%s %s@%s (ver: %s, up %s, recovery: %.1s)\n",
-		s.Activity.State, pgprops[0], pgprops[1], pgprops[2], pgprops[3], pgprops[4], s.Activity.Uptime, props.Recovery,
-	)
+	// line1: details of used connection, version, uptime and recovery status
+	_, err := fmt.Fprintln(v, formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery))
 	if err != nil {
 		return err
 	}
 
-	/* line2: current state of connections: total, idle, idle xacts, active, waiting, others */
+	// line2: current state of connections: total, idle, idle xacts, active, waiting, others
 	_, err = fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
 		s.Activity.ConnTotal, props.GucMaxConnections, s.Activity.ConnPrepared, props.GucMaxPrepXacts,
 		s.Activity.ConnIdle, s.Activity.ConnIdleXact, s.Activity.ConnActive,
@@ -245,7 +224,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 		return err
 	}
 
-	/* line3: current state of autovacuum: number of workers, antiwraparound, manual vacuums and time of oldest vacuum */
+	// line3: current state of autovacuum: number of workers, anti-wraparound, manual vacuums and time of oldest vacuum
 	_, err = fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.Activity.AVWorkers, props.GucAVMaxWorkers,
 		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
@@ -253,7 +232,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 		return err
 	}
 
-	/* line4: current workload*/
+	// line4: current workload
 	_, err = fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.Activity.CallsRate, s.Activity.StmtAvgTime, s.Activity.XactMaxTime, s.Activity.PrepMaxTime)
 	if err != nil {
@@ -261,6 +240,26 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	}
 
 	return nil
+}
+
+// formatInfoString combines connection's and general Postgres properties and provides info string.
+func formatInfoString(cfg postgres.Config, state, version, uptime, recovery string) string {
+	props := []string{cfg.Config.Host, strconv.Itoa(int(cfg.Config.Port)), cfg.Config.User, cfg.Config.Database, version}
+	for i, v := range props {
+		if len(props[i]) >= 20 {
+			props[i] = v[0:15] + "~"
+		}
+	}
+
+	// If database is empty, use database name as a user name.
+	if props[3] == "" {
+		props[3] = props[2]
+	}
+
+	return fmt.Sprintf(
+		"state [%s]: %s:%s %s@%s (ver: %s, up %s, recovery: %.1s)",
+		state, props[0], props[1], props[2], props[3], props[4], uptime, recovery,
+	)
 }
 
 // printDbstat prints main Postgres stats on UI.
