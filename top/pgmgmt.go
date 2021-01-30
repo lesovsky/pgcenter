@@ -73,9 +73,12 @@ func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View)
 		// exit from UI and stats loop... will restore it after psql is closed.
 		uiExit <- 1
 		g.Close()
+
+		cfg := db.Config.Config
+
 		cmd := exec.Command("psql",
-			"-h", db.Config.Host, "-p", strconv.Itoa(int(db.Config.Port)),
-			"-U", db.Config.User, "-d", db.Config.Database)
+			"-h", cfg.Host, "-p", strconv.Itoa(int(cfg.Port)),
+			"-U", cfg.User, "-d", cfg.Database)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

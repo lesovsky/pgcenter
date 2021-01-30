@@ -16,7 +16,7 @@ type Config struct {
 
 // DB describes connection settings to Postgres specified by user.
 type DB struct {
-	Config *pgx.ConnConfig
+	Config Config
 	Conn   *pgx.Conn
 	Local  bool // is Postgres running on localhost?
 }
@@ -60,7 +60,7 @@ func Connect(config Config) (*DB, error) {
 	}
 
 	return &DB{
-		Config: config.Config,
+		Config: config,
 		Conn:   conn,
 		Local:  strings.HasPrefix(config.Config.Host, "/"),
 	}, nil
@@ -68,11 +68,7 @@ func Connect(config Config) (*DB, error) {
 
 // Reconnect reconnects to Postgres using existing config and swaps failed DB connection.
 func Reconnect(db *DB) error {
-	cfg, err := NewConfig(db.Config.Host, int(db.Config.Port), db.Config.User, db.Config.Database)
-	if err != nil {
-		return err
-	}
-	newdb, err := Connect(cfg)
+	newdb, err := Connect(db.Config)
 	if err != nil {
 		return err
 	}
