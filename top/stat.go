@@ -26,6 +26,9 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Get current view.
 	v := <-viewCh
 
+	// Enable collecting of extra stats if it's specified in the view.
+	c.ToggleCollectExtra(v.ShowExtra)
+
 	// Set refresh interval from received view.
 	refresh := v.Refresh
 
