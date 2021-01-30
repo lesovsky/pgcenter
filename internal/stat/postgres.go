@@ -177,12 +177,15 @@ type PGresult struct {
 
 // NewPGresult does query and wraps returned result into PGresult.
 func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
+	if query == "" {
+		return PGresult{}, fmt.Errorf("no query defined")
+	}
+
 	rows, err := db.Query(query)
 	if err != nil {
 		return PGresult{}, err
 	}
 
-	// Generic variables describe properties of query result.
 	var (
 		descs = rows.FieldDescriptions()
 		ncols = len(descs)

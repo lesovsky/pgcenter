@@ -115,6 +115,10 @@ func TestNewPGresult(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, want, got)
 
+	// testing empty query
+	_, err = NewPGresult(conn, "")
+	assert.Error(t, err)
+
 	// testing with already closed conn
 	conn.Close()
 	_, err = NewPGresult(conn, "SELECT 1")
