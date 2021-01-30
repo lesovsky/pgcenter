@@ -100,7 +100,8 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 
 	// read pg_stat_statements only if it's available
 	if pgss {
-		err := db.QueryRow(query.SelectActivityStatements).Scan(&s.StmtAvgTime, &s.Calls)
+		q := query.SelectActivityStatementsQuery(version)
+		err := db.QueryRow(q).Scan(&s.StmtAvgTime, &s.Calls)
 		if err != nil {
 			return s, err
 		}

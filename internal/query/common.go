@@ -108,8 +108,18 @@ const (
 		"FROM pg_prepared_xacts)"
 
 	// SelectActivityStatements queries general stats from pg_stat_statements
-	SelectActivityStatements = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+	SelectActivityStatementsPG12   = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+	SelectActivityStatementsLatest = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
 
 	// SelectRemoteProcSysTicks queries system timer's frequency from Postgres instance
 	SelectRemoteProcSysTicks = "SELECT pgcenter.get_sys_clk_ticks()::float"
 )
+
+func SelectActivityStatementsQuery(version int) string {
+	switch {
+	case version < 130000:
+		return SelectActivityStatementsPG12
+	default:
+		return SelectActivityStatementsLatest
+	}
+}
