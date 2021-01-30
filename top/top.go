@@ -10,7 +10,7 @@ import (
 )
 
 // RunMain is the main entry point for 'pgcenter top' command
-func RunMain(dbConfig *postgres.Config) error {
+func RunMain(dbConfig postgres.Config) error {
 	// Connect to Postgres.
 	db, err := postgres.Connect(dbConfig)
 	if err != nil {

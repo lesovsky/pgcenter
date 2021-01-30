@@ -22,7 +22,7 @@ type Config struct {
 }
 
 // RunMain is the 'pgcenter record' main entry point.
-func RunMain(dbConfig *postgres.Config, config Config) error {
+func RunMain(dbConfig postgres.Config, config Config) error {
 	app := newApp(config, dbConfig)
 
 	err := app.setup()
@@ -43,13 +43,13 @@ func RunMain(dbConfig *postgres.Config, config Config) error {
 // app defines 'pgcenter record' runtime dependencies.
 type app struct {
 	config   Config
-	dbConfig *postgres.Config
+	dbConfig postgres.Config
 	views    view.Views
 	recorder recorder
 }
 
 // newApp creates new 'pgcenter record' app.
-func newApp(config Config, dbConfig *postgres.Config) *app {
+func newApp(config Config, dbConfig postgres.Config) *app {
 	return &app{
 		config:   config,
 		dbConfig: dbConfig,

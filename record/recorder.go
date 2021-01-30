@@ -16,7 +16,7 @@ import (
 // recorder defines a way of how to record and store collected stats.
 type recorder interface {
 	open() error
-	collect(dbConfig *postgres.Config, views view.Views) (map[string]stat.PGresult, error)
+	collect(dbConfig postgres.Config, views view.Views) (map[string]stat.PGresult, error)
 	write(map[string]stat.PGresult) error
 	close() error
 }
@@ -91,7 +91,7 @@ func (c *tarRecorder) open() error {
 }
 
 // collect connects to Postgres, collects and returns stats data.
-func (c *tarRecorder) collect(dbConfig *postgres.Config, views view.Views) (map[string]stat.PGresult, error) {
+func (c *tarRecorder) collect(dbConfig postgres.Config, views view.Views) (map[string]stat.PGresult, error) {
 	db, err := postgres.Connect(dbConfig)
 	if err != nil {
 		return nil, err

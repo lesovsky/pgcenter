@@ -45,7 +45,7 @@ type Config struct {
 }
 
 // RunMain is the main entry point for 'pgcenter profile' command
-func RunMain(dbConfig *postgres.Config, config Config) error {
+func RunMain(dbConfig postgres.Config, config Config) error {
 	// Connect to Postgres
 	conn, err := postgres.Connect(dbConfig)
 	if err != nil {

@@ -22,7 +22,7 @@ type DB struct {
 }
 
 // NewConfig checks connection parameters passed by user, assembles connection string and creates config.
-func NewConfig(host string, port int, user string, dbname string) (*Config, error) {
+func NewConfig(host string, port int, user string, dbname string) (Config, error) {
 	var connStr string
 	if host != "" {
 		connStr = "host=" + host
@@ -42,18 +42,18 @@ func NewConfig(host string, port int, user string, dbname string) (*Config, erro
 	// pgx.ParseConfig produces config for connecting to Postgres even from empty string.
 	pgConfig, err := pgx.ParseConfig(connStr)
 	if err != nil {
-		return nil, err
+		return Config{}, err
 	}
 
 	pgConfig.PreferSimpleProtocol = true
 
-	return &Config{
+	return Config{
 		Config: pgConfig,
 	}, nil
 }
 
 // Connect connects to Postgres using provided config and returns DB object.
-func Connect(config *Config) (*DB, error) {
+func Connect(config Config) (*DB, error) {
 	conn, err := pgx.ConnectConfig(context.TODO(), config.Config)
 	if err != nil {
 		return nil, err

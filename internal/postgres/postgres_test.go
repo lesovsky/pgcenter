@@ -32,10 +32,10 @@ func TestNewConfig(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := NewConfig(tc.host, tc.port, tc.user, tc.dbname)
 			if tc.valid {
-				assert.NotNil(t, got)
+				assert.NotEqual(t, Config{}, got)
 				assert.NoError(t, err)
 			} else {
-				assert.Nil(t, got)
+				assert.Equal(t, Config{}, got)
 				assert.Error(t, err)
 				fmt.Println(err)
 			}
@@ -66,7 +66,7 @@ func TestConnect(t *testing.T) {
 			config, err := pgx.ParseConfig(tc.connStr)
 			assert.NoError(t, err)
 
-			db, err := Connect(&Config{Config: config})
+			db, err := Connect(Config{Config: config})
 			if tc.valid {
 				assert.NoError(t, err)
 				assert.NotNil(t, db)

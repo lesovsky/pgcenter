@@ -14,7 +14,7 @@ const (
 )
 
 // RunMain is the main entry point for 'pgcenter config' command.
-func RunMain(dbConfig *postgres.Config, mode int) error {
+func RunMain(dbConfig postgres.Config, mode int) error {
 	db, err := postgres.Connect(dbConfig)
 	if err != nil {
 		return err
