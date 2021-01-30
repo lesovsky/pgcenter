@@ -78,6 +78,31 @@ func TestConnect(t *testing.T) {
 	}
 }
 
+func TestReconnect(t *testing.T) {
+	c1, err := NewTestConnect()
+	assert.NoError(t, err)
+
+	c2, err := NewTestConnect()
+	assert.NoError(t, err)
+
+	var pid int
+	assert.NoError(t, c1.QueryRow("SELECT pg_backend_pid()").Scan(&pid))
+
+	_, err = c2.Exec("SELECT pg_terminate_backend($1)", pid)
+	assert.NoError(t, err)
+
+	err = c1.PQstatus()
+	assert.Error(t, err)
+
+	err = Reconnect(c1)
+	assert.NoError(t, err)
+	assert.NoError(t, c1.QueryRow("SELECT pg_backend_pid()").Scan(&pid))
+	assert.Greater(t, pid, 0)
+
+	c1.Close()
+	c2.Close()
+}
+
 func TestDB_ALL(t *testing.T) {
 	conn, err := NewTestConnect()
 	assert.NoError(t, err)

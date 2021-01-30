@@ -33,6 +33,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	_, err = c.Update(db, v, refresh)
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
 
 	// Wait a bit, to allow Postgres counters increments. Also we don't want to wait for
@@ -45,13 +46,15 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Collect stat in loop and send it to stat channel.
 	for {
 		// Collect stats.
-		stats, err := c.Update(db, v, refresh)
-		if err != nil {
-			fmt.Println(err)
-			continue
-		} else {
-			statCh <- stats
-		}
+		stats, _ := c.Update(db, v, refresh)
+		// TODO: на данный момент ошибка пишется в stdout и это портит все если произошел обрыв соединения.
+		//   Поэтому пока все закоментировано - работаем дальше и просто показываем пустой layout
+		//if err != nil {
+		//	fmt.Println(err)
+		//} else {
+		//	statCh <- stats
+		//}
+		statCh <- stats
 
 		// Waiting for receiving new view until refresh interval expired. When new view has been received, use its
 		// settings to adjust collector's behavior.

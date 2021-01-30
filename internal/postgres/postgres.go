@@ -66,6 +66,22 @@ func Connect(config Config) (*DB, error) {
 	}, nil
 }
 
+// Reconnect reconnects to Postgres using existing config and swaps failed DB connection.
+func Reconnect(db *DB) error {
+	cfg, err := NewConfig(db.Config.Host, int(db.Config.Port), db.Config.User, db.Config.Database)
+	if err != nil {
+		return err
+	}
+	newdb, err := Connect(cfg)
+	if err != nil {
+		return err
+	}
+
+	*db = *newdb
+
+	return nil
+}
+
 // Exec is a wrapper over pgx.Exec.
 func (db *DB) Exec(query string, args ...interface{}) (pgconn.CommandTag, error) {
 	return db.Conn.Exec(context.TODO(), query, args...)

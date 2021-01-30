@@ -319,18 +319,6 @@ func TestPGresult_Fprint(t *testing.T) {
 
 }
 
-func Test_isPostgresUp(t *testing.T) {
-	conn, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
-
-	// test with proper connection
-	assert.True(t, isPostgresUp(conn))
-
-	// test with already closed connection
-	conn.Close()
-	assert.False(t, isPostgresUp(conn))
-}
-
 func Test_isExtensionExists(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)

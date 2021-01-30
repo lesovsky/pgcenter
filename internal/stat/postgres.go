@@ -62,9 +62,14 @@ type Activity struct {
 // collectActivityStat collects Postgres runtime activity about connected clients and workload.
 func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev Pgstat) (Activity, error) {
 	var s Activity
-	if !isPostgresUp(db) {
-		s.State = "down"
-		return s, fmt.Errorf("postgres down")
+
+	err := db.PQstatus()
+	if err != nil {
+		err = postgres.Reconnect(db)
+		if err != nil {
+			s.State = "down"
+			return s, err
+		}
 	}
 
 	if err := db.QueryRow(query.GetUptime).Scan(&s.Uptime); err != nil {
@@ -78,7 +83,7 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 	// Depending on Postgres version select proper queries.
 	queryActivity, queryAutovacuum := selectActivityQueries(version)
 
-	err := db.QueryRow(queryActivity).Scan(
+	err = db.QueryRow(queryActivity).Scan(
 		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact, &s.ConnActive, &s.ConnWaiting, &s.ConnOthers, &s.ConnPrepared)
 	if err != nil {
 		return s, err
@@ -415,16 +420,6 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) error {
 	}
 
 	return nil
-}
-
-// isPostgresUp gets Postgres connection status - is it up or down?
-func isPostgresUp(db *postgres.DB) bool {
-	up := true
-	err := db.PQstatus()
-	if err != nil {
-		up = false
-	}
-	return up
 }
 
 // isExtensionExists returns 'true' if requested extension exists in the database, and 'false' if not.
