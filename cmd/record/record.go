@@ -1,4 +1,4 @@
-// Entry point for 'pgcenter record' command
+// Entry point for 'pgcenter record' command.
 
 package record
 
@@ -10,9 +10,9 @@ import (
 )
 
 var (
-	recordOptions record.Config
-	connOptions   postgres.ConnectionOptions
-	oneshot       bool
+	recordConfig record.Config
+	connOptions  postgres.ConnectionOptions
+	oneshot      bool
 
 	// CommandDefinition defines 'record' sub-command.
 	CommandDefinition = &cobra.Command{
@@ -22,9 +22,9 @@ var (
 		RunE: func(command *cobra.Command, args []string) error {
 			// Convert 'oneshot' to set of options.
 			if oneshot {
-				recordOptions.TruncateFile = false
-				recordOptions.Count = 1
-				recordOptions.Interval = time.Millisecond // interval must not be zero - ticker will panic.
+				recordConfig.TruncateFile = false
+				recordConfig.Count = 1
+				recordConfig.Interval = time.Millisecond // interval must not be zero - ticker will panic.
 			}
 
 			// Parse extra arguments.
@@ -38,7 +38,7 @@ var (
 				return err
 			}
 
-			return record.RunMain(pgConfig, recordOptions)
+			return record.RunMain(pgConfig, recordConfig)
 		},
 	}
 )
@@ -50,10 +50,10 @@ func init() {
 	CommandDefinition.Flags().IntVarP(&connOptions.Port, "port", "p", 5432, "database server port")
 	CommandDefinition.Flags().StringVarP(&connOptions.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&connOptions.Dbname, "dbname", "d", "", "database name to connect to")
-	CommandDefinition.Flags().DurationVarP(&recordOptions.Interval, "interval", "i", 1*time.Second, "statistics recording interval (default: 1 second)")
-	CommandDefinition.Flags().IntVarP(&recordOptions.Count, "count", "c", -1, "number of statistics samples to record")
-	CommandDefinition.Flags().StringVarP(&recordOptions.OutputFile, "file", "f", defaultRecordFile, "file where statistics are saved")
-	CommandDefinition.Flags().BoolVarP(&recordOptions.TruncateFile, "truncate", "t", false, "truncate statistics file, before starting (default: false)")
-	CommandDefinition.Flags().IntVarP(&recordOptions.StringLimit, "strlimit", "s", 0, "maximum query length to record (default: 0, no limit)")
+	CommandDefinition.Flags().DurationVarP(&recordConfig.Interval, "interval", "i", 1*time.Second, "statistics recording interval (default: 1 second)")
+	CommandDefinition.Flags().IntVarP(&recordConfig.Count, "count", "c", -1, "number of statistics samples to record")
+	CommandDefinition.Flags().StringVarP(&recordConfig.OutputFile, "file", "f", defaultRecordFile, "file where statistics are saved")
+	CommandDefinition.Flags().BoolVarP(&recordConfig.TruncateFile, "truncate", "t", false, "truncate statistics file, before starting (default: false)")
+	CommandDefinition.Flags().IntVarP(&recordConfig.StringLimit, "strlimit", "s", 0, "maximum query length to record (default: 0, no limit)")
 	CommandDefinition.Flags().BoolVarP(&oneshot, "oneshot", "1", false, "append single statistics snapshot to file and exit")
 }

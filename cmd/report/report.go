@@ -1,4 +1,4 @@
-// Entry point for 'pgcenter report' command
+// Entry point for 'pgcenter report' command.
 
 package report
 
@@ -165,7 +165,7 @@ func selectReport(opts options) string {
 	return ""
 }
 
-// setReportInterval
+// setReportInterval parses user-defined timestamp and returns start/end time.Times for report.
 func setReportInterval(tsStartStr, tsEndStr string) (time.Time, time.Time, error) {
 	var tsStart, tsEnd time.Time
 	var err error

@@ -1,4 +1,4 @@
-// Entry point for 'pgcenter profile' command
+// Entry point for 'pgcenter profile' command.
 
 package profile
 

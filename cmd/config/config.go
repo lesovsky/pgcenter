@@ -1,4 +1,4 @@
-//  Entry point for 'pgcenter config' command
+// Entry point for 'pgcenter config' command.
 
 package config
 

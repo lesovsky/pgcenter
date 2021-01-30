@@ -1,4 +1,4 @@
-// Entry point for 'pgcenter top' command
+// Entry point for 'pgcenter top' command.
 
 package top
 
