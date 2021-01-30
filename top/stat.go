@@ -3,12 +3,12 @@ package top
 import (
 	"context"
 	"fmt"
+	"github.com/jackc/pgconn"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
-	"github.com/lib/pq"
 	"os"
 	"regexp"
 	"strconv"
@@ -46,14 +46,10 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Collect stat in loop and send it to stat channel.
 	for {
 		// Collect stats.
-		stats, _ := c.Update(db, v, refresh)
-		// TODO: на данный момент ошибка пишется в stdout и это портит все если произошел обрыв соединения.
-		//   Поэтому пока все закоментировано - работаем дальше и просто показываем пустой layout
-		//if err != nil {
-		//	fmt.Println(err)
-		//} else {
-		//	statCh <- stats
-		//}
+		stats, err := c.Update(db, v, refresh)
+		if err != nil {
+			stats.Error = err
+		}
 		statCh <- stats
 
 		// Waiting for receiving new view until refresh interval expired. When new view has been received, use its
@@ -80,7 +76,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			c.Reset()
 			_, err = c.Update(db, v, refresh)
 			if err != nil {
-				fmt.Println(err)
+				statCh <- stat.Stat{Error: err}
 			}
 
 			continue
@@ -121,6 +117,7 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			return fmt.Errorf("set focus on dbstat view failed: %s", err)
 		}
 		v.Clear()
+
 		err = printDbstat(v, app.config, s)
 		if err != nil {
 			return fmt.Errorf("print main postgres stat failed: %s", err)
@@ -268,13 +265,13 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 
 // printDbstat prints main Postgres stats on UI.
 func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
-	// If query fails, print the corresponding query error and return.
-	if err, ok := s.Result.Err.(*pq.Error); ok {
+	// If reading stats failed, print the error occurred and return.
+	if err, ok := s.Error.(*pgconn.PgError); ok {
 		_, err := fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
 		if err != nil {
 			return err
 		}
-		s.Result.Err = nil
+		s.Error = nil
 		return nil
 	}
 

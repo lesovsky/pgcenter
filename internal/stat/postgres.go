@@ -19,21 +19,25 @@ type Pgstat struct {
 
 // collectPostgresStat collect Postgres activity stats and stats returned by passed query.
 func collectPostgresStat(db *postgres.DB, version int, pgss bool, itv int, query string, prev Pgstat) (Pgstat, error) {
+	var pgstat Pgstat
+
 	activity, err := collectActivityStat(db, version, pgss, itv, prev)
 	if err != nil {
-		return Pgstat{}, err
+		pgstat.Activity = activity
+		return pgstat, err
 	}
+
+	pgstat.Activity = activity
 
 	// Read stat
 	res, err := NewPGresult(db, query)
 	if err != nil {
-		return Pgstat{}, err
+		return pgstat, err
 	}
 
-	return Pgstat{
-		Activity: activity,
-		Result:   res,
-	}, nil
+	pgstat.Result = res
+
+	return pgstat, nil
 }
 
 // Activity describes Postgres' current activity stats.
@@ -186,7 +190,6 @@ type PGresult struct {
 	Ncols  int                /* numbers of columns in Result */
 	Nrows  int                /* number of rows in Result */
 	Valid  bool               /* Used for result invalidations, on context switching for example */
-	Err    error              /* Error returned by query, if any */
 }
 
 // NewPGresult does query and wraps returned result into PGresult.

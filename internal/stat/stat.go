@@ -28,10 +28,11 @@ const (
 	CollectLogtail
 )
 
-// Stat
+// Stat defines all stats collected during single reading.
 type Stat struct {
-	System
-	Pgstat
+	System       // system-related stats
+	Pgstat       // postgres-related stats
+	Error  error // error occurred during reading stats
 }
 
 // System
@@ -100,28 +101,33 @@ func (c *Collector) Reset() {
 
 // Update ...
 func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duration) (Stat, error) {
+	var s Stat
+
 	// Collect load average stats.
 	loadavg, err := readLoadAverage(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
-		return Stat{}, err
+		return s, err
 	}
+
+	s.LoadAvg = loadavg
 
 	// Collect memory/swap usage stats.
 	meminfo, err := readMeminfo(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
-		return Stat{}, err
+		return s, err
 	}
+
+	s.Meminfo = meminfo
 
 	// Collect CPU usage stats
 	cpustat, err := readCpuStat(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
-		return Stat{}, err
+		return s, err
 	}
 
 	c.prevCpuStat = c.currCpuStat
 	c.currCpuStat = cpustat
-
-	cpuusage := countCpuUsage(c.prevCpuStat, c.currCpuStat, c.config.ticks)
+	s.CpuStat = countCpuUsage(c.prevCpuStat, c.currCpuStat, c.config.ticks)
 
 	// Collect extra stats if required.
 	var diskstats Diskstats
@@ -131,13 +137,15 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	case CollectDiskstats:
 		diskstats, err = c.collectDiskstats(db)
 		if err != nil {
-			return Stat{}, err
+			return s, err
 		}
+		s.Diskstats = diskstats
 	case CollectNetdev:
 		netdevs, err = c.collectNetdevs(db)
 		if err != nil {
-			return Stat{}, err
+			return s, err
 		}
+		s.Netdevs = netdevs
 	}
 
 	// Take refresh interval from view
@@ -146,8 +154,11 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	// Collect Postgres stats.
 	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSAvail, itv, view.Query, c.prevPgStat)
 	if err != nil {
-		return Stat{}, err
+		s.Pgstat.Activity = pgstat.Activity
+		return s, err
 	}
+
+	s.Pgstat.Activity = pgstat.Activity
 
 	c.prevPgStat = c.currPgStat
 	c.currPgStat = pgstat
@@ -155,22 +166,12 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	// Compare previous and current Postgres stats snapshots and calculate delta.
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, itv, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
 	if err != nil {
-		return Stat{}, err
+		return s, err
 	}
 
-	return Stat{
-		System: System{
-			LoadAvg:   loadavg,
-			Meminfo:   meminfo,
-			CpuStat:   cpuusage,
-			Diskstats: diskstats,
-			Netdevs:   netdevs,
-		},
-		Pgstat: Pgstat{
-			Activity: c.currPgStat.Activity,
-			Result:   diff,
-		},
-	}, nil
+	s.Pgstat.Result = diff
+
+	return s, nil
 }
 
 // ToggleCollectExtra ...

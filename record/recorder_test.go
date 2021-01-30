@@ -44,7 +44,6 @@ func Test_tarRecorder(t *testing.T) {
 
 	// check all stats have filled columns
 	for _, s := range stats {
-		assert.NoError(t, s.Err)
 		assert.Greater(t, len(s.Cols), 0)
 	}
 
