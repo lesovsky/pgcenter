@@ -1,13 +1,10 @@
 PROGRAM_NAME = pgcenter
 
-SOURCE = ${PROGRAM_NAME}.go
 COMMIT=$(shell git rev-parse --short HEAD)
 BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 TAG=$(shell git describe --tags |cut -d- -f1)
 
-LDFLAGS = -ldflags "-X github.com/lesovsky/pgcenter/cmd.gitTag=${TAG} \
--X github.com/lesovsky/pgcenter/cmd.gitCommit=${COMMIT} \
--X github.com/lesovsky/pgcenter/cmd.gitBranch=${BRANCH}"
+LDFLAGS = -ldflags "-X main.gitTag=${TAG} -X main.gitCommit=${COMMIT} -X main.gitBranch=${BRANCH}"
 
 .PHONY: help clean dep build install uninstall
 
@@ -35,11 +32,7 @@ test: dep ## Run tests
 
 build: dep ## Build pgcenter executable.
 	mkdir -p ./bin
-	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o bin/${PROGRAM_NAME} ${SOURCE}
-
-build-debug: dep ## Build pgcenter executable.
-	mkdir -p ./bin
-	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -gcflags="all=-N -l" -o bin/${PROGRAM_NAME} ${SOURCE}
+	CGO_ENABLED=0 GOOS=linux GOARCH=${GOARCH} go build ${LDFLAGS} -o bin/${PROGRAM_NAME} ./cmd
 
 install: ## Install pgcenter executable into /usr/bin directory.
 	install -pm 755 bin/${PROGRAM_NAME} /usr/bin/${PROGRAM_NAME}

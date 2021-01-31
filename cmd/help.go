@@ -1,6 +1,6 @@
 // Help templates
 
-package cmd
+package main
 
 import (
 	"fmt"
@@ -33,7 +33,7 @@ Use "pgcenter [command] --help" for more information about a command.
 
 Report bugs to <%s>.
 `,
-		Root.Long,
+		pgcenter.Long,
 		config.CommandDefinition.Short,
 		profile.CommandDefinition.Short,
 		record.CommandDefinition.Short,

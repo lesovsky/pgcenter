@@ -1,6 +1,6 @@
 // Stuff related to program versions, releases, etc.
 
-package cmd
+package main
 
 import (
 	"fmt"
