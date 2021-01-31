@@ -76,7 +76,7 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
 	CommandDefinition.Flags().IntVarP(&opts.rowLimit, "limit", "l", 0, "print only limited number of rows per sample")
 	CommandDefinition.Flags().IntVarP(&opts.strLimit, "strlimit", "t", 32, "maximum string size for long lines to print (default: 32)")
-	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "r", 1*time.Second, "statistics changes rate interval (default: 1s)")
+	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "r", time.Second, "statistics changes rate interval (default: 1s)")
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
@@ -85,6 +85,11 @@ func (opts options) validate() (report.Config, error) {
 	r := selectReport(opts)
 	if r == "" {
 		return report.Config{}, fmt.Errorf("report type is not specified, quit")
+	}
+
+	if opts.rate < time.Second {
+		fmt.Println("INFO: round rate interval to minimum allowed 1 second.")
+		opts.rate = time.Second
 	}
 
 	// Define report start/end interval.

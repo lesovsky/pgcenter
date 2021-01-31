@@ -13,10 +13,11 @@ func Test_options_validate(t *testing.T) {
 		opts  options
 		want  report.Config
 	}{
-		{valid: true, opts: options{showActivity: true, tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00"}},
-		{valid: false, opts: options{tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00"}}, // no report type specified
-		{valid: false, opts: options{showActivity: true, tsStart: "2021-01-32"}},                    // invalid report start timestamp
-		{valid: false, opts: options{showActivity: true, filter: `colname:"["`}},                    // invalid regexp
+		{valid: true, opts: options{showActivity: true, tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00", rate: time.Second}},
+		{valid: true, opts: options{showActivity: true, tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00", rate: 0}},
+		{valid: false, opts: options{tsStart: "2021-01-01 12:00:00", tsEnd: "2021-01-01 13:00:00", rate: time.Second}}, // no report type specified
+		{valid: false, opts: options{showActivity: true, tsStart: "2021-01-32", rate: time.Second}},                    // invalid report start timestamp
+		{valid: false, opts: options{showActivity: true, filter: `colname:"["`, rate: time.Second}},                    // invalid regexp
 	}
 
 	for _, tc := range testcases {
