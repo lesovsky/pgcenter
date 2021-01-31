@@ -19,7 +19,7 @@ type Options struct {
 }
 
 // NewOptions creates query options used for queries customization depending on Postgres version and other important settings.
-func NewOptions(version int, recovery string, querylen int, util string) Options {
+func NewOptions(version int, recovery string, querylen int) Options {
 	opts := Options{
 		ViewType:       "user",       // System tables and indexes aren't shown by default
 		QueryAgeThresh: "00:00:00.0", // Don't filter queries by age
@@ -29,20 +29,11 @@ func NewOptions(version int, recovery string, querylen int, util string) Options
 
 	opts.WalFunction1, opts.WalFunction2 = selectWalFunctions(version, recovery)
 
-	// Define queries parameters specific for particular utilities.
-	switch util {
-	case "top":
-		// For 'pgcenter top' truncate pg_stat_statements.query length, because it make no sense
-		// to process full query when sizes of user's screen is limited.
-		opts.PgSSQueryLenFn = "left(p.query, 256)"
-	case "record":
-		// For 'pgcenter record' record full length of the pg_stat_statements.query,
-		// except when user doesn't specified exact length.
-		if opts.PgSSQueryLen > 0 {
-			opts.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", querylen)
-		} else {
-			opts.PgSSQueryLenFn = "p.query"
-		}
+	// Define length limit for pg_stat_statement.query.
+	if opts.PgSSQueryLen > 0 {
+		opts.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", querylen)
+	} else {
+		opts.PgSSQueryLenFn = "p.query"
 	}
 
 	return opts

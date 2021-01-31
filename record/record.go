@@ -71,7 +71,7 @@ func (app *app) setup() error {
 
 	// Create and configure stats views depending on running Postgres.
 	views := view.New()
-	err = views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "record")
+	err = views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit)
 	if err != nil {
 		return err
 	}

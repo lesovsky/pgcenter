@@ -14,7 +14,7 @@ func Test_StatSizesQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("sizes/%d", version), func(t *testing.T) {
 			tmpl := PgTablesSizesDefault
 
-			opts := NewOptions(version, "f", 0, "top")
+			opts := NewOptions(version, "f", 256)
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

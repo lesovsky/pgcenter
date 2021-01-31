@@ -22,48 +22,52 @@ func TestFormat(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestOptions_Configure(t *testing.T) {
+func TestNewOptions(t *testing.T) {
 	testcases := []struct {
 		version  int
 		recovery string
-		program  string
+		querylen int
 		want     Options
 	}{
-		{version: 130000, recovery: "f", program: "top", want: Options{
+		{version: 130000, recovery: "f", querylen: 256, want: Options{
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 130000, recovery: "t", program: "top", want: Options{
+		{version: 130000, recovery: "t", querylen: 256, want: Options{
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_last_wal_receive_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 96000, recovery: "f", program: "top", want: Options{
+		{version: 96000, recovery: "f", querylen: 256, want: Options{
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_current_xlog_location",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 96000, recovery: "t", program: "top", want: Options{
+		{version: 96000, recovery: "t", querylen: 256, want: Options{
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_last_xlog_receive_location",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 130000, recovery: "f", program: "record", want: Options{
+		{version: 130000, recovery: "f", querylen: 0, want: Options{
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 0, PgSSQueryLenFn: "p.query",
+		}},
+		{version: 130000, recovery: "f", querylen: 123, want: Options{
+			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
 		}},
 	}
 
 	for _, tc := range testcases {
-		opts := NewOptions(tc.version, tc.recovery, 0, tc.program)
+		opts := NewOptions(tc.version, tc.recovery, tc.querylen)
 		assert.Equal(t, tc.want, opts)
 	}
 
-	opts := NewOptions(130000, "f", 123, "record")
-	assert.Equal(
-		t, Options{
-			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
-		},
-		opts,
-	)
+	//opts := NewOptions(130000, "f", 123)
+	//assert.Equal(
+	//	t, Options{
+	//		ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
+	//		QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
+	//	},
+	//	opts,
+	//)
 }
 
 func Test_selectWalFunctions(t *testing.T) {

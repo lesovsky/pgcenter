@@ -14,7 +14,7 @@ func Test_StatProgressClusterQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_progress_cluster/%d", version), func(t *testing.T) {
 			tmpl := PgStatProgressClusterDefault
 
-			opts := NewOptions(version, "f", 0, "top")
+			opts := NewOptions(version, "f", 256)
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

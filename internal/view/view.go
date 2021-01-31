@@ -205,9 +205,13 @@ func New() Views {
 }
 
 // Configure performs adjusting of queries accordingly to Postgres version.
-func (v Views) Configure(version int, recovery string, gucTrackCommitXactTimestamp string, app string) error {
+//   IN version int: numeric Postgres version
+//   IN recovery string: recovery state of Postgres (f/t)
+//   IN gucTrackCommitTS string: value of track_commit_timestamp GUC (on/off)
+//   IN querylen int: length limit for pg_stat_statement.query
+func (v Views) Configure(version int, recovery string, gucTrackCommitTS string, querylen int) error {
 	var track bool
-	if gucTrackCommitXactTimestamp == "on" {
+	if gucTrackCommitTS == "on" {
 		track = true
 	}
 	for k, view := range v {
@@ -227,7 +231,7 @@ func (v Views) Configure(version int, recovery string, gucTrackCommitXactTimesta
 		}
 	}
 
-	opts := query.NewOptions(version, recovery, 0, app)
+	opts := query.NewOptions(version, recovery, querylen)
 
 	// Build query texts based on templates.
 	for k, view := range v {

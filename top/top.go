@@ -58,7 +58,7 @@ func (app *app) setup() error {
 	}
 
 	// Create and configure stats views depending on running Postgres.
-	err = app.config.views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "top")
+	err = app.config.views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256)
 	if err != nil {
 		return err
 	}

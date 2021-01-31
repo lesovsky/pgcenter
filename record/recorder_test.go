@@ -33,7 +33,7 @@ func Test_tarRecorder(t *testing.T) {
 	props, err := stat.GetPostgresProperties(db)
 	assert.NoError(t, err)
 	views := view.New()
-	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, "record"))
+	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 0))
 	db.Close()
 
 	// create postgres config
