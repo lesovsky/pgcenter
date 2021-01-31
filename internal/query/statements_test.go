@@ -70,5 +70,43 @@ func Test_StatStatementsQueries(t *testing.T) {
 			conn.Close()
 		}
 	})
+}
 
+func TestSelectQueryReportQuery(t *testing.T) {
+	testcases := []struct {
+		version int
+		want    string
+	}{
+		{version: 90500, want: PgStatStatementsReportQueryPG12},
+		{version: 90600, want: PgStatStatementsReportQueryPG12},
+		{version: 100000, want: PgStatStatementsReportQueryPG12},
+		{version: 110000, want: PgStatStatementsReportQueryPG12},
+		{version: 120000, want: PgStatStatementsReportQueryPG12},
+		{version: 130000, want: PgStatStatementsReportQueryDefault},
+	}
+
+	for _, tc := range testcases {
+		got := SelectQueryReportQuery(tc.version)
+		assert.Equal(t, tc.want, got)
+	}
+}
+
+func Test_StatStatementsReportQueries(t *testing.T) {
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000}
+
+	for _, version := range versions {
+		tmpl := SelectQueryReportQuery(version)
+		opts := NewOptions(version, "f", 0, "top")
+		q, err := Format(tmpl, opts)
+		assert.NoError(t, err)
+
+		conn, err := postgres.NewTestConnectVersion(version)
+		assert.NoError(t, err)
+
+		// Use fake query_id, just test queries are executed with no errors.
+		_, err = conn.Exec(q, 1234567890)
+		assert.NoError(t, err)
+
+		conn.Close()
+	}
 }

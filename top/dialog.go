@@ -103,8 +103,6 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error 
 // dialogFinish runs proper handler after user submits its dialog input.
 func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		var answer string
-
 		printCmdline(g, "")
 
 		// TODO: refactor functions to return value and not use gocui object inside
@@ -128,7 +126,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogChangeAge:
 			changeQueryAge(g, v.Buffer(), app.config)
 		case dialogQueryReport:
-			_ = buildQueryReport(g, answer, app.db, app.uiExit)
+			_ = buildQueryReport(g, v.Buffer(), app.postgresProps.VersionNum, app.db, app.uiExit)
 		case dialogChangeRefresh:
 			changeRefresh(g, v.Buffer(), app.config)
 		case dialogNone:
