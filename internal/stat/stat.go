@@ -35,7 +35,7 @@ type Stat struct {
 	Error  error // error occurred during reading stats
 }
 
-// System
+// System defines system-related stats.
 type System struct {
 	LoadAvg
 	Meminfo
@@ -44,25 +44,24 @@ type System struct {
 	Netdevs
 }
 
-// Collector
+// Collector defines container for stats objects.
 type Collector struct {
-	//
-	config Config
-	//
+	config Config // collector configuration
+	// cpu usage snapshots for previous and current intervals
 	prevCpuStat CpuStat
 	currCpuStat CpuStat
-	//
+	// disk devices usage snapshots for previous and current intervals
 	prevDiskstats Diskstats
 	currDiskstats Diskstats
-	//
+	// network interfaces snapshots for previous and current intervals
 	prevNetdevs Netdevs
 	currNetdevs Netdevs
-	//
+	// postgres stats snapshots for previous and current intervals
 	prevPgStat Pgstat
 	currPgStat Pgstat
 }
 
-//
+// Config defines collector's runtime configuration.
 type Config struct {
 	// value of system setting CLK_TCK, required for local stats calculations.
 	ticks float64
@@ -72,7 +71,7 @@ type Config struct {
 	PostgresProperties
 }
 
-//
+// NewCollector creates new collector.
 func NewCollector(db *postgres.DB) (*Collector, error) {
 	systicks, err := getSysticksLocal()
 	if err != nil {
@@ -93,13 +92,13 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 	}, nil
 }
 
-// Reset ...
+// Reset clears stats snapshots.
 func (c *Collector) Reset() {
 	c.prevPgStat = Pgstat{}
 	c.currPgStat = Pgstat{}
 }
 
-// Update ...
+// Update implements stats collecting.
 func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duration) (Stat, error) {
 	var s Stat
 
@@ -174,12 +173,12 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	return s, nil
 }
 
-// ToggleCollectExtra ...
+// ToggleCollectExtra toggle collector's setting related to extra stats.
 func (c *Collector) ToggleCollectExtra(e int) {
 	c.config.collectExtra = e
 }
 
-// collectDiskstats ...
+// collectDiskstats implements collecting of disk devices stats.
 func (c *Collector) collectDiskstats(db *postgres.DB) (Diskstats, error) {
 	stats, err := readDiskstats(db, c.config)
 	if err != nil {
@@ -199,7 +198,7 @@ func (c *Collector) collectDiskstats(db *postgres.DB) (Diskstats, error) {
 	return usage, nil
 }
 
-// collectNetdevs ...
+// collectNetdevs implements collecting network interfaces stats.
 func (c *Collector) collectNetdevs(db *postgres.DB) (Netdevs, error) {
 	stats, err := readNetdevs(db, c.config)
 	if err != nil {
