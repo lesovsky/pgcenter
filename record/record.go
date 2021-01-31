@@ -34,7 +34,7 @@ func RunMain(dbConfig postgres.Config, config Config) error {
 
 	// In case of SIGINT stop program gracefully
 	doQuit := make(chan os.Signal, 1)
-	signal.Notify(doQuit, os.Interrupt)
+	signal.Notify(doQuit, os.Interrupt, os.Kill)
 
 	// Run recording loop
 	return app.record(doQuit)
@@ -97,7 +97,14 @@ func (app *app) record(doQuit chan os.Signal) error {
 	t := time.NewTimer(interval)
 
 	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
-	for i := count; i > 0; i-- {
+	var n int
+	for {
+		if count > 0 && n >= count {
+			break
+		} else {
+			n++
+		}
+
 		err := app.recorder.open()
 		if err != nil {
 			return err
@@ -122,14 +129,9 @@ func (app *app) record(doQuit chan os.Signal) error {
 		case <-t.C:
 			t.Reset(interval)
 			continue
-		case <-doQuit:
+		case sig := <-doQuit:
 			t.Stop()
-
-			err = app.recorder.close()
-			if err != nil {
-				fmt.Println(err)
-			}
-			return fmt.Errorf("got interrupt")
+			return fmt.Errorf("got %s", sig.String())
 		}
 	}
 

@@ -50,7 +50,7 @@ func init() {
 	CommandDefinition.Flags().IntVarP(&connOptions.Port, "port", "p", 5432, "database server port")
 	CommandDefinition.Flags().StringVarP(&connOptions.User, "username", "U", "", "database user name")
 	CommandDefinition.Flags().StringVarP(&connOptions.Dbname, "dbname", "d", "", "database name to connect to")
-	CommandDefinition.Flags().DurationVarP(&recordConfig.Interval, "interval", "i", 1*time.Second, "statistics recording interval (default: 1 second)")
+	CommandDefinition.Flags().DurationVarP(&recordConfig.Interval, "interval", "i", time.Second, "statistics recording interval (default: 1 second)")
 	CommandDefinition.Flags().IntVarP(&recordConfig.Count, "count", "c", -1, "number of statistics samples to record")
 	CommandDefinition.Flags().StringVarP(&recordConfig.OutputFile, "file", "f", defaultRecordFile, "file where statistics are saved")
 	CommandDefinition.Flags().BoolVarP(&recordConfig.TruncateFile, "truncate", "t", false, "truncate statistics file, before starting (default: false)")

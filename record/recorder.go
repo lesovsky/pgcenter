@@ -143,9 +143,5 @@ func (c *tarRecorder) close() error {
 		}
 	}
 
-	if c.file != nil {
-		return c.file.Close()
-	}
-
-	return nil
+	return c.file.Close()
 }
