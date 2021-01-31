@@ -94,7 +94,7 @@ func (app *app) record(doQuit chan os.Signal) error {
 		interval = app.config.Interval
 	)
 
-	t := time.NewTimer(interval)
+	t := time.NewTicker(interval)
 
 	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
 	var n int
@@ -127,7 +127,6 @@ func (app *app) record(doQuit chan os.Signal) error {
 
 		select {
 		case <-t.C:
-			t.Reset(interval)
 			continue
 		case sig := <-doQuit:
 			t.Stop()

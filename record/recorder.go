@@ -105,8 +105,7 @@ func (c *tarRecorder) collect(dbConfig postgres.Config, views view.Views) (map[s
 			return nil, err
 		}
 
-		key := fmt.Sprintf("%s.%s.json", k, time.Now().Format("20060102T150405"))
-		stats[key] = res
+		stats[k] = res
 	}
 
 	return stats, nil
@@ -120,7 +119,9 @@ func (c *tarRecorder) write(stats map[string]stat.PGresult) error {
 			return err
 		}
 
-		hdr := &tar.Header{Name: name, Mode: 0644, Size: int64(len(data)), ModTime: time.Now()}
+		now := time.Now()
+		filename := fmt.Sprintf("%s.%s.json", name, now.Format("20060102T150405"))
+		hdr := &tar.Header{Name: filename, Mode: 0644, Size: int64(len(data)), ModTime: now}
 		err = c.writer.WriteHeader(hdr)
 		if err != nil {
 			return err
