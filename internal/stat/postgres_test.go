@@ -15,20 +15,32 @@ func newTestPGresult() PGresult {
 	return PGresult{
 		Valid: true,
 		Ncols: 4,
-		Nrows: 4,
+		Nrows: 8,
 		Cols:  []string{"col1", "col2", "col3", "col4"},
 		Values: [][]sql.NullString{
 			{
-				{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true},
+				{String: "248", Valid: true}, {String: "brodsky", Valid: true}, {String: "row6:value3", Valid: true}, {String: "row6:value4", Valid: true},
+			},
+			{
+				{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row3:value4", Valid: true},
+			},
+			{
+				{String: "15", Valid: true}, {String: "evioni", Valid: true}, {String: "row5:value3", Valid: true}, {String: "row2:value4", Valid: true},
+			},
+			{
+				{String: "48752", Valid: true}, {String: "aalfia", Valid: true}, {String: "row8:value3", Valid: true}, {String: "row8:value4", Valid: true},
 			},
 			{
 				{String: "2", Valid: true}, {String: "cilla", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true},
 			},
 			{
-				{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true},
+				{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row4:value4", Valid: true},
 			},
 			{
-				{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true},
+				{String: "3987", Valid: true}, {String: "fasivy", Valid: true}, {String: "row7:value3", Valid: true}, {String: "row7:value4", Valid: true},
+			},
+			{
+				{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true},
 			},
 		},
 	}
@@ -246,44 +258,62 @@ func Test_sort(t *testing.T) {
 		{
 			name: "numeric asc", key: 0, desc: false,
 			want: [][]sql.NullString{
-				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
 				{{String: "2", Valid: true}, {String: "cilla", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
-				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row3:value4", Valid: true}},
+				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row4:value4", Valid: true}},
+				{{String: "15", Valid: true}, {String: "evioni", Valid: true}, {String: "row5:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "248", Valid: true}, {String: "brodsky", Valid: true}, {String: "row6:value3", Valid: true}, {String: "row6:value4", Valid: true}},
+				{{String: "3987", Valid: true}, {String: "fasivy", Valid: true}, {String: "row7:value3", Valid: true}, {String: "row7:value4", Valid: true}},
+				{{String: "48752", Valid: true}, {String: "aalfia", Valid: true}, {String: "row8:value3", Valid: true}, {String: "row8:value4", Valid: true}},
 			},
 		},
 		{
 			name: "numeric desc", key: 0, desc: true,
 			want: [][]sql.NullString{
-				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
+				{{String: "48752", Valid: true}, {String: "aalfia", Valid: true}, {String: "row8:value3", Valid: true}, {String: "row8:value4", Valid: true}},
+				{{String: "3987", Valid: true}, {String: "fasivy", Valid: true}, {String: "row7:value3", Valid: true}, {String: "row7:value4", Valid: true}},
+				{{String: "248", Valid: true}, {String: "brodsky", Valid: true}, {String: "row6:value3", Valid: true}, {String: "row6:value4", Valid: true}},
+				{{String: "15", Valid: true}, {String: "evioni", Valid: true}, {String: "row5:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row4:value4", Valid: true}},
+				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row3:value4", Valid: true}},
 				{{String: "2", Valid: true}, {String: "cilla", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
 			},
 		},
 		{
 			name: "string asc", key: 1, desc: false,
 			want: [][]sql.NullString{
-				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "48752", Valid: true}, {String: "aalfia", Valid: true}, {String: "row8:value3", Valid: true}, {String: "row8:value4", Valid: true}},
+				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row4:value4", Valid: true}},
+				{{String: "248", Valid: true}, {String: "brodsky", Valid: true}, {String: "row6:value3", Valid: true}, {String: "row6:value4", Valid: true}},
+				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
 				{{String: "2", Valid: true}, {String: "cilla", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
+				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row3:value4", Valid: true}},
+				{{String: "15", Valid: true}, {String: "evioni", Valid: true}, {String: "row5:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "3987", Valid: true}, {String: "fasivy", Valid: true}, {String: "row7:value3", Valid: true}, {String: "row7:value4", Valid: true}},
 			},
 		},
 		{
 			name: "string desc", key: 1, desc: true,
 			want: [][]sql.NullString{
-				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
+				{{String: "3987", Valid: true}, {String: "fasivy", Valid: true}, {String: "row7:value3", Valid: true}, {String: "row7:value4", Valid: true}},
+				{{String: "15", Valid: true}, {String: "evioni", Valid: true}, {String: "row5:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "3", Valid: true}, {String: "direct", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row3:value4", Valid: true}},
 				{{String: "2", Valid: true}, {String: "cilla", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
-				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row2:value3", Valid: true}, {String: "row2:value4", Valid: true}},
+				{{String: "1", Valid: true}, {String: "bronze", Valid: true}, {String: "row1:value3", Valid: true}, {String: "row1:value4", Valid: true}},
+				{{String: "248", Valid: true}, {String: "brodsky", Valid: true}, {String: "row6:value3", Valid: true}, {String: "row6:value4", Valid: true}},
+				{{String: "4", Valid: true}, {String: "arktika", Valid: true}, {String: "row3:value3", Valid: true}, {String: "row4:value4", Valid: true}},
+				{{String: "48752", Valid: true}, {String: "aalfia", Valid: true}, {String: "row8:value3", Valid: true}, {String: "row8:value4", Valid: true}},
 			},
 		},
 	}
 
 	for _, tc := range testcases {
-		res.sort(tc.key, tc.desc)
-		assert.Equal(t, tc.want, res.Values)
+		t.Run(tc.name, func(t *testing.T) {
+			res.sort(tc.key, tc.desc)
+			assert.Equal(t, tc.want, res.Values)
+		})
 	}
 
 	// test sorting of empty PGresult.
@@ -299,9 +329,9 @@ func TestPGresult_Fprint(t *testing.T) {
 	err := res.Fprint(&buf)
 	assert.NoError(t, err)
 	assert.Greater(t, len(buf.String()), 0)
-	assert.Contains(t, buf.String(), "row1:value4")
-	assert.Contains(t, buf.String(), "row2:value4")
-
+	for i := 1; i <= res.Ncols; i++ {
+		assert.Contains(t, buf.String(), fmt.Sprintf("row%d:value4", i))
+	}
 }
 
 func Test_isExtensionExists(t *testing.T) {
@@ -328,22 +358,4 @@ func Test_isSchemaExists(t *testing.T) {
 	// test with already closed connection
 	conn.Close()
 	assert.False(t, isSchemaExists(conn, "public"))
-}
-
-func Test_Example(t *testing.T) {
-	cfg, err := postgres.NewConfig("127.0.0.1", 5432, "lesovsky", "lesovsky")
-	assert.NoError(t, err)
-
-	conn, err := postgres.Connect(cfg)
-	assert.NoError(t, err)
-
-	res, err := NewPGresult(conn, query.PgStatFunctionsDefault)
-	assert.NoError(t, err)
-
-	for _, v := range res.Values {
-		for _, v2 := range v {
-			fmt.Println(v2)
-		}
-	}
-
 }
