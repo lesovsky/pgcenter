@@ -104,7 +104,7 @@ func Test_StatStatementsReportQueries(t *testing.T) {
 		assert.NoError(t, err)
 
 		// Use fake query_id, just test queries are executed with no errors.
-		_, err = conn.Exec(q, 1234567890)
+		_, err = conn.Exec(q, "1234567890")
 		assert.NoError(t, err)
 
 		conn.Close()

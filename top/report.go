@@ -106,10 +106,6 @@ func buildQueryReport(g *gocui.Gui, buf string, version int, db *postgres.DB, ui
 		return nil
 	}
 
-	if r.QueryID != answer {
-		printCmdline(g, "Failed, requested queryid doesn't match to queryid in response.")
-		return nil
-	}
 	if err := printQueryReport(g, r, uiExit); err != nil {
 		printCmdline(g, "Failed to show query report.")
 	}

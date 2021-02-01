@@ -3,6 +3,7 @@ package stat
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/stretchr/testify/assert"
@@ -327,4 +328,22 @@ func Test_isSchemaExists(t *testing.T) {
 	// test with already closed connection
 	conn.Close()
 	assert.False(t, isSchemaExists(conn, "public"))
+}
+
+func Test_Example(t *testing.T) {
+	cfg, err := postgres.NewConfig("127.0.0.1", 5432, "lesovsky", "lesovsky")
+	assert.NoError(t, err)
+
+	conn, err := postgres.Connect(cfg)
+	assert.NoError(t, err)
+
+	res, err := NewPGresult(conn, query.PgStatFunctionsDefault)
+	assert.NoError(t, err)
+
+	for _, v := range res.Values {
+		for _, v2 := range v {
+			fmt.Println(v2)
+		}
+	}
+
 }
