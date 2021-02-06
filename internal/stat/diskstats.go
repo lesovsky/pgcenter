@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -76,7 +77,7 @@ func readDiskstats(db *postgres.DB, config Config) (Diskstats, error) {
 // readDiskstatsLocal return block devices stats read from local proc file.
 func readDiskstatsLocal(statfile string, ticks float64) (Diskstats, error) {
 	var stat Diskstats
-	f, err := os.Open(statfile)
+	f, err := os.Open(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
 	}

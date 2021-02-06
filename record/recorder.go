@@ -53,7 +53,7 @@ func newTarRecorder(c tarConfig) recorder {
 
 // open method opens tar archive.
 func (c *tarRecorder) open() error {
-	f, err := os.OpenFile(filepath.Clean(c.config.filename), c.fileFlags, 0640)
+	f, err := os.OpenFile(filepath.Clean(c.config.filename), c.fileFlags, 0600)
 	if err != nil {
 		return err
 	}

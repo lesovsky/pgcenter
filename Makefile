@@ -23,7 +23,7 @@ dep: ## Download the dependencies.
 
 lint: ## Lint the source files
 	golangci-lint run --timeout 5m -E golint -e '(struct field|type|method|func) [a-zA-Z`]+ should be [a-zA-Z`]+'
-#	gosec -quiet ./...
+	gosec -quiet ./...
 
 test: dep ## Run tests
 	go test -race -p 1 -timeout 300s -coverprofile=.test_coverage.txt ./... && \

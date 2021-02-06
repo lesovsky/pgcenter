@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -40,7 +41,7 @@ func readMeminfo(db *postgres.DB, schemaExists bool) (Meminfo, error) {
 func readMeminfoLocal(statfile string) (Meminfo, error) {
 	var stat Meminfo
 
-	f, err := os.Open(statfile)
+	f, err := os.Open(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
 	}

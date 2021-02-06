@@ -78,7 +78,7 @@ func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View)
 
 		cmd := exec.Command("psql",
 			"-h", cfg.Host, "-p", strconv.Itoa(int(cfg.Port)),
-			"-U", cfg.User, "-d", cfg.Database)
+			"-U", cfg.User, "-d", cfg.Database) // #nosec G204
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

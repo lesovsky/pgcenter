@@ -101,11 +101,11 @@ func getLinkSettings(ifname string) (int64, int64, error) {
 	ifr := ifreq{
 		ifrName: name,
 		ifrData: uintptr(unsafe.Pointer(&ecmd)),
-	}
+	} // #nosec G103
 
-	_, _, ep := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd), siocEthtool, uintptr(unsafe.Pointer(&ifr)))
-	if ep != 0 {
-		return 0, 0, fmt.Errorf("ioctl failed: %s", ep)
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd), siocEthtool, uintptr(unsafe.Pointer(&ifr))) // #nosec G103
+	if errno != 0 {
+		return 0, 0, fmt.Errorf("ioctl failed: %s", errno)
 	}
 
 	//var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)

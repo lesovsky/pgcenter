@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io/ioutil"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -32,7 +33,7 @@ func readLoadAverage(db *postgres.DB, schemaExists bool) (LoadAvg, error) {
 func readLoadAverageLocal(statfile string) (LoadAvg, error) {
 	var stat LoadAvg
 
-	data, err := ioutil.ReadFile(statfile)
+	data, err := ioutil.ReadFile(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
 	}

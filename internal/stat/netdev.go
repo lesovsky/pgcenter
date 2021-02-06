@@ -8,6 +8,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -70,7 +71,7 @@ func readNetdevs(db *postgres.DB, config Config) (Netdevs, error) {
 // readNetdevsLocal returns network interfaces stats read from local proc file.
 func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 	var stat Netdevs
-	f, err := os.Open(statfile)
+	f, err := os.Open(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
 	}

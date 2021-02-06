@@ -32,7 +32,7 @@ func showPgLog(db *postgres.DB, version int, uiExit chan int) func(g *gocui.Gui,
 		uiExit <- 1
 		g.Close()
 
-		cmd := exec.Command(pager, logfile)
+		cmd := exec.Command(pager, logfile) // #nosec G204
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {

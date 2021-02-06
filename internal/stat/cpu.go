@@ -8,6 +8,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -41,7 +42,7 @@ func readCpuStat(db *postgres.DB, schemaExists bool) (CpuStat, error) {
 // readCpuStatLocal returns CPU stats read from local proc file.
 func readCpuStatLocal(statfile string) (CpuStat, error) {
 	var stat CpuStat
-	f, err := os.Open(statfile)
+	f, err := os.Open(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
 	}

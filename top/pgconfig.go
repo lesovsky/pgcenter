@@ -54,7 +54,7 @@ func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.
 		uiExit <- 1
 		g.Close()
 
-		cmd := exec.Command(pager)
+		cmd := exec.Command(pager) // #nosec G204
 		cmd.Stdin = strings.NewReader(buf.String())
 		cmd.Stdout = os.Stdout
 
@@ -97,7 +97,7 @@ func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, uiExit chan in
 	uiExit <- 1
 	g.Close()
 
-	cmd := exec.Command(editor, configFile)
+	cmd := exec.Command(editor, configFile) // #nosec G204
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 

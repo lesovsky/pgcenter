@@ -130,7 +130,7 @@ func printQueryReport(g *gocui.Gui, r report, uiExit chan int) error {
 	uiExit <- 1
 	g.Close()
 
-	cmd := exec.Command(pager)
+	cmd := exec.Command(pager) // #nosec G204
 	cmd.Stdin = strings.NewReader(buf.String())
 	cmd.Stdout = os.Stdout
 
