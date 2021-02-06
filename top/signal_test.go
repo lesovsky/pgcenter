@@ -18,43 +18,45 @@ func Test_killSingle(t *testing.T) {
 	err = victim.QueryRow("select pg_backend_pid()::text").Scan(&pid)
 	assert.NoError(t, err)
 
+	cancelPrompt := dialogPrompts[dialogCancelQuery]
+	terminatePrompt := dialogPrompts[dialogTerminateBackend]
+
 	testcases := []struct {
 		pid   string
 		mode  string
 		input string
-		valid bool
+		want  string
 	}{
-		{pid: pid, mode: "cancel", input: dialogPrompts[dialogCancelQuery], valid: true},
-		{pid: pid, mode: "terminate", input: dialogPrompts[dialogTerminateBackend], valid: true},
-		{pid: pid, mode: "terminate", input: dialogPrompts[dialogTerminateBackend], valid: true}, // attempt to terminate the previously terminated pid should not fail
-		{pid: "invalid", mode: "terminate", input: dialogPrompts[dialogTerminateBackend], valid: false},
-		{pid: pid, mode: "invalid", valid: false},
+		{pid: pid, mode: "cancel", input: cancelPrompt, want: "Signals: done"},
+		{pid: pid, mode: "terminate", input: terminatePrompt, want: "Signals: done"},
+		{pid: pid, mode: "terminate", input: terminatePrompt, want: "Signals: done"}, // attempt to terminate the previously terminated pid should not fail
+		{pid: "invalid", mode: "terminate", input: terminatePrompt, want: `Signals: do nothing, strconv.Atoi: parsing "invalid": invalid syntax`},
+		{pid: pid, mode: "invalid", want: "Signals: do nothing, unknown mode"},
 	}
 
 	db, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
-	defer db.Close()
 
 	for _, tc := range testcases {
-		if tc.valid {
-			assert.NoError(t, killSingle(db, tc.mode, tc.input+tc.pid))
-		} else {
-			assert.Error(t, killSingle(db, tc.mode, tc.input+tc.pid))
-		}
+		assert.Equal(t, tc.want, killSingle(db, tc.mode, tc.input+tc.pid))
 	}
+
+	db.Close()
+	assert.Equal(t, "Signals: do nothing, conn closed", killSingle(db, "cancel", cancelPrompt+pid))
 }
 
 func Test_killGroup(t *testing.T) {
 	testcases := []struct {
 		mode string
 		mask int
+		want string
 	}{
-		{mode: "cancel", mask: groupIdle},
-		{mode: "cancel", mask: groupActive},
-		{mode: "cancel", mask: groupIdleXact},
-		{mode: "terminate", mask: groupIdle},
-		{mode: "terminate", mask: groupActive},
-		{mode: "terminate", mask: groupIdleXact},
+		{mode: "cancel", mask: groupIdle, want: "Signals: cancelled"},
+		{mode: "cancel", mask: groupActive, want: "Signals: cancelled"},
+		{mode: "cancel", mask: groupIdleXact, want: "Signals: cancelled"},
+		{mode: "terminate", mask: groupIdle, want: "Signals: terminated"},
+		{mode: "terminate", mask: groupActive, want: "Signals: terminated"},
+		{mode: "terminate", mask: groupIdleXact, want: "Signals: terminated"},
 	}
 
 	db, err := postgres.NewTestConnect()
@@ -105,10 +107,7 @@ func Test_killGroup(t *testing.T) {
 			}()
 
 			time.Sleep(1 * time.Second) // make sure victim connection is established and started
-			msg, err := killGroup(app, tc.mode)
-			assert.NoError(t, err)
-			assert.NotEqual(t, "", msg)
-			fmt.Println(msg)
+			assert.Contains(t, killGroup(app, tc.mode), tc.want)
 			ch <- struct{}{}
 			app.config.procMask = 0 // reset mask
 		})
@@ -118,44 +117,43 @@ func Test_killGroup(t *testing.T) {
 	// run test with invalid input
 	t.Run("invalid input", func(t *testing.T) {
 		app.config.view = app.config.views["tables"]
-		msg, err := killGroup(app, "cancel")
-		assert.Equal(t, "Terminate or cancel backend allowed in pg_stat_activity.", msg)
-		assert.NoError(t, err)
+		msg := killGroup(app, "cancel")
+		assert.Equal(t, "Signals: sending signals allowed in pg_stat_activity only", msg)
 
 		app.config.view = app.config.views["activity"]
 		app.config.procMask = 0
-		msg, err = killGroup(app, "cancel")
-		assert.Equal(t, "Do nothing. The mask is empty.", msg)
-		assert.NoError(t, err)
+		msg = killGroup(app, "cancel")
+		assert.Equal(t, "Signals: do nothing, process mask is empty", msg)
 
 		app.config.procMask = groupIdle
-		msg, err = killGroup(app, "invalid")
-		assert.Equal(t, "Do nothing. Unknown mode (not cancel, nor terminate).", msg)
-		assert.NoError(t, err)
+		msg = killGroup(app, "invalid")
+		assert.Equal(t, "Signals: do nothing, unknown mode", msg)
 	})
 }
 
 func Test_setProcMask(t *testing.T) {
+	prompt := dialogPrompts[dialogSetMask]
 	testcases := []struct {
 		buf  string
 		want int
 	}{
-		{buf: dialogPrompts[dialogSetMask] + "", want: 0},
-		{buf: dialogPrompts[dialogSetMask] + "i", want: groupIdle},
-		{buf: dialogPrompts[dialogSetMask] + "ix", want: groupIdle + groupIdleXact},
-		{buf: dialogPrompts[dialogSetMask] + "aw", want: groupWaiting + groupActive},
-		{buf: dialogPrompts[dialogSetMask] + "iax", want: groupIdle + groupIdleXact + groupActive},
-		{buf: dialogPrompts[dialogSetMask] + "aox", want: groupOthers + groupActive + groupIdleXact},
-		{buf: dialogPrompts[dialogSetMask] + "wixa", want: groupIdle + groupIdleXact + groupActive + groupWaiting},
-		{buf: dialogPrompts[dialogSetMask] + "woix", want: groupIdleXact + groupOthers + groupWaiting + groupIdle},
-		{buf: dialogPrompts[dialogSetMask] + "iowax", want: groupIdle + groupIdleXact + groupActive + groupWaiting + groupOthers},
+		{buf: prompt + "", want: 0},
+		{buf: prompt + "i", want: groupIdle},
+		{buf: prompt + "ix", want: groupIdle + groupIdleXact},
+		{buf: prompt + "aw", want: groupWaiting + groupActive},
+		{buf: prompt + "iax", want: groupIdle + groupIdleXact + groupActive},
+		{buf: prompt + "aox", want: groupOthers + groupActive + groupIdleXact},
+		{buf: prompt + "wixa", want: groupIdle + groupIdleXact + groupActive + groupWaiting},
+		{buf: prompt + "woix", want: groupIdleXact + groupOthers + groupWaiting + groupIdle},
+		{buf: prompt + "iowax", want: groupIdle + groupIdleXact + groupActive + groupWaiting + groupOthers},
 	}
 
 	config := newConfig()
 
 	for _, tc := range testcases {
-		setProcMask(nil, tc.buf, config)
+		got := setProcMask(tc.buf, config)
 		assert.Equal(t, tc.want, config.procMask)
+		assert.Equal(t, printMaskString(config.procMask), got)
 	}
 }
 
@@ -185,7 +183,22 @@ func Test_showProcMask(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
+		fmt.Println(tc)
 		fn := showProcMask(tc)
 		assert.NoError(t, fn(nil, nil))
+	}
+}
+
+func Test_printMaskString(t *testing.T) {
+	testcases := map[int]string{
+		0:  "Mask: empty ",
+		2:  "Mask: idle ",
+		6:  "Mask: idle idle_xact ",
+		7:  "Mask: idle idle_xact active ",
+		15: "Mask: idle idle_xact active waiting ",
+		31: "Mask: idle idle_xact active waiting others ",
+	}
+	for k, v := range testcases {
+		assert.Equal(t, v, printMaskString(k))
 	}
 }

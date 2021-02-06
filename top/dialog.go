@@ -105,33 +105,39 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		printCmdline(g, "")
 
-		// TODO: refactor functions to return value and not use gocui object inside
-		//   Most of the should return error/success response which should be printed to user.
+		answer := v.Buffer()
+		var message string
 
 		switch app.config.dialog {
 		case dialogPgReload:
-			_ = doReload(g, v.Buffer(), app.db)
+			message = doReload(answer, app.db)
 		case dialogFilter:
-			setFilter(g, v.Buffer(), app.config.view)
+			message = setFilter(answer, app.config.view)
 		case dialogCancelQuery:
-			_ = killSingle(app.db, "cancel", v.Buffer())
+			message = killSingle(app.db, "cancel", answer)
 		case dialogTerminateBackend:
-			_ = killSingle(app.db, "terminate", v.Buffer())
+			message = killSingle(app.db, "terminate", answer)
 		case dialogSetMask:
-			setProcMask(g, v.Buffer(), app.config)
+			message = setProcMask(answer, app.config)
 		case dialogCancelGroup:
-			_, _ = killGroup(app, "cancel")
+			message = killGroup(app, "cancel")
 		case dialogTerminateGroup:
-			_, _ = killGroup(app, "terminate")
+			message = killGroup(app, "terminate")
 		case dialogChangeAge:
-			changeQueryAge(g, v.Buffer(), app.config)
+			message = changeQueryAge(answer, app.config)
 		case dialogQueryReport:
-			_ = buildQueryReport(g, v.Buffer(), app.postgresProps.VersionNum, app.db, app.uiExit)
+			var r report
+			r, message = getQueryReport(answer, app.postgresProps.VersionNum, app.db)
+			if message != "" {
+				message = printQueryReport(g, r, app.uiExit)
+			}
 		case dialogChangeRefresh:
-			changeRefresh(g, v.Buffer(), app.config)
+			message = changeRefresh(answer, app.config)
 		case dialogNone:
-			/* do nothing */
+			// do nothing
 		}
+
+		printCmdline(g, message)
 
 		return dialogClose(g, v)
 	}

@@ -18,6 +18,9 @@ func TestFormat(t *testing.T) {
 		got,
 	)
 
+	_, err = Format("{{", opts)
+	assert.Error(t, err)
+
 	_, err = Format("{{ .Invalid }}", opts)
 	assert.Error(t, err)
 }

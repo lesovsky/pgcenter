@@ -65,9 +65,14 @@ func selectWalFunctions(version int, recovery string) (string, string) {
 
 // Format transforms query's template to a particular query.
 func Format(tmpl string, o Options) (string, error) {
-	t := template.Must(template.New("query").Parse(tmpl))
+	t, err := template.New("query").Parse(tmpl)
+	if err != nil {
+		return "", err
+	}
+
 	buf := &bytes.Buffer{}
-	if err := t.Execute(buf, o); err != nil {
+	err = t.Execute(buf, o)
+	if err != nil {
 		return "", err
 	}
 

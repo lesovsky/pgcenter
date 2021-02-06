@@ -174,29 +174,23 @@ func Test_switchSortOrder(t *testing.T) {
 }
 
 func Test_setFilter(t *testing.T) {
+	prompt := dialogPrompts[dialogFilter]
+	testcases := []struct {
+		answer string
+		want   string
+	}{
+		{answer: prompt + "example", want: "Filters: ok"},
+		{answer: prompt + "", want: "Filters: regular expression cleared"},
+		{answer: prompt + "[0-", want: "Filters: error parsing regexp: missing closing ]: `[0-`"},
+	}
+
 	config := newConfig()
 	config.view = config.views["activity"]
 	config.view.OrderKey = 0
-	buf := bytes.NewBuffer([]byte{})
 
-	// Make user answer.
-	_, err := fmt.Fprintln(buf, dialogPrompts[dialogFilter]+"example")
-	assert.NoError(t, err)
-
-	assert.Equal(t, 0, len(config.view.Filters)) // no filters at the beginning
-
-	setFilter(nil, buf.String(), config.view)
-	assert.Equal(t, 1, len(config.view.Filters)) // add first regexp
-
-	re := config.view.Filters[0] // test regexp works as intended
-	assert.True(t, re.MatchString("test_example"))
-	assert.False(t, re.MatchString("invalid"))
-
-	setFilter(nil, "", config.view) // clear regexp
-	assert.Equal(t, 0, len(config.view.Filters))
-
-	setFilter(nil, `[0-`, config.view) // invalid regexp is not added
-	assert.Equal(t, 0, len(config.view.Filters))
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, setFilter(tc.answer, config.view))
+	}
 }
 
 func Test_switchViewTo(t *testing.T) {
@@ -331,22 +325,67 @@ func Test_changeQueryAge(t *testing.T) {
 				wg.Done()
 			}()
 
-			changeQueryAge(nil, buf.String(), config)
+			got := changeQueryAge(buf.String(), config)
+			assert.Equal(t, "Activity age: set "+tc.want, got)
 		})
 		wg.Wait()
 	}
 
-	// test invalid input
-	for _, in := range []string{"invalid", "01:01:", "01:01", "25:00:00", "01:61:00", "00:01:61", "00:01:01.1000000"} {
+	t.Run("invalid time", func(t *testing.T) {
 		config.queryOptions.QueryAgeThresh = "01:02:03"
 		buf := bytes.NewBuffer([]byte{})
-		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeAge]+in)
+		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeAge]+"invalid")
 		assert.NoError(t, err)
-		changeQueryAge(nil, buf.String(), config)
-		assert.Equal(t, "01:02:03", config.queryOptions.QueryAgeThresh)
-	}
+		got := changeQueryAge(buf.String(), config)
+		assert.Equal(t, "Activity age: do nothing, invalid input", got)
+		assert.Equal(t, "01:02:03", config.queryOptions.QueryAgeThresh) // age should be the same as before calling changeQueryAge.
+	})
+
+	t.Run("break formatting", func(t *testing.T) {
+		config.queryOptions.QueryAgeThresh = "11:12:13"
+		config.view.QueryTmpl = "{{" // break query template leads breaking query formatting
+		buf := bytes.NewBuffer([]byte{})
+		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeAge]+"00:00:00")
+		assert.NoError(t, err)
+		got := changeQueryAge(buf.String(), config)
+		assert.Equal(t, "Activity age: do nothing, template: query:1: unexpected unclosed action in command", got)
+		assert.Equal(t, "11:12:13", config.queryOptions.QueryAgeThresh) // age should be the same as before calling changeQueryAge.
+	})
 
 	close(config.viewCh)
+}
+
+func Test_parseHumanTimeString(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		t     string
+	}{
+		{valid: true, t: "00:00:00"},
+		{valid: true, t: "01:01:01"},
+		{valid: true, t: "01:01:01.100"},
+		{valid: false, t: "invalid"},
+		{valid: false, t: "01"},
+		{valid: false, t: "01:"},
+		{valid: false, t: "01:01"},
+		{valid: false, t: "01:01:01:"},
+		{valid: false, t: "01:01:01."},
+		{valid: false, t: "-01:00:00"},
+		{valid: false, t: "01:-01:00"},
+		{valid: false, t: "01:01:-01"},
+		{valid: false, t: "01:01:01.-100"},
+		{valid: false, t: "25:00:00"},
+		{valid: false, t: "01:60:00"},
+		{valid: false, t: "01:01:60"},
+		{valid: false, t: "01:01:01.1000000"},
+	}
+
+	for _, tc := range testcases {
+		if tc.valid {
+			assert.NoError(t, parseHumanTimeString(tc.t))
+		} else {
+			assert.Error(t, parseHumanTimeString(tc.t))
+		}
+	}
 }
 
 func Test_toggleIdleConns(t *testing.T) {
@@ -395,33 +434,47 @@ func Test_toggleIdleConns(t *testing.T) {
 }
 
 func Test_changeRefresh(t *testing.T) {
-	config := newConfig()
-	config.view = config.views["activity"]
-	wg := sync.WaitGroup{}
+	t.Run("valid", func(t *testing.T) {
+		config := newConfig()
+		config.view = config.views["activity"]
+		wg := sync.WaitGroup{}
 
-	buf := bytes.NewBuffer([]byte{})
-	_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+"5")
-	assert.NoError(t, err)
+		buf := bytes.NewBuffer([]byte{})
+		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+"5")
+		assert.NoError(t, err)
 
-	wg.Add(1)
-	go func() {
-		v := <-config.viewCh
-		assert.Equal(t, v.Refresh, 5*time.Second)
-		wg.Done()
-	}()
+		wg.Add(1)
+		go func() {
+			v := <-config.viewCh
+			assert.Equal(t, v.Refresh, 5*time.Second)
+			wg.Done()
+		}()
 
-	changeRefresh(nil, buf.String(), config)
-	wg.Wait()
+		assert.Equal(t, "Refresh: ok", changeRefresh(buf.String(), config))
+		wg.Wait()
+		close(config.viewCh)
+	})
 
 	// test invalid input
-	for _, in := range []string{"", "a", "-1", "0", "0.5", "301"} {
-		config.view.Refresh = 1 * time.Second
-		buf := bytes.NewBuffer([]byte{})
-		_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+in)
-		assert.NoError(t, err)
-		changeRefresh(nil, buf.String(), config)
-		assert.Equal(t, 1*time.Second, config.view.Refresh) // should not be 0
-	}
+	t.Run("invalid input", func(t *testing.T) {
+		config := newConfig()
+		config.view = config.views["activity"]
 
-	close(config.viewCh)
+		testcases := map[string]string{
+			"":    "Refresh: do nothing",
+			"a":   "Refresh: do nothing, invalid input",
+			"0.5": "Refresh: do nothing, invalid input",
+			"-1":  "Refresh: input value should be between 1 and 300",
+			"0":   "Refresh: input value should be between 1 and 300",
+			"301": "Refresh: input value should be between 1 and 300",
+		}
+		for k, v := range testcases {
+			config.view.Refresh = 1 * time.Second
+			buf := bytes.NewBuffer([]byte{})
+			_, err := fmt.Fprintln(buf, dialogPrompts[dialogChangeRefresh]+k)
+			assert.NoError(t, err)
+			assert.Equal(t, v, changeRefresh(buf.String(), config))
+			assert.Equal(t, 1*time.Second, config.view.Refresh) // should not be 0
+		}
+	})
 }

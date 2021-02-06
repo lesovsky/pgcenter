@@ -35,7 +35,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'p', switchViewTo(app, "progress")},
 		{"sysstat", 'a', switchViewTo(app, "activity")},
 		{"sysstat", 'x', switchViewTo(app, "statements")},
-		{"sysstat", 'Q', resetStat(app.db)},
+		{"sysstat", 'Q', resetStat(app.db, app.postgresProps.ExtPGSSAvail)},
 		{"sysstat", 'E', menuOpen(menuConf, app.config, false)},
 		{"sysstat", 'X', menuOpen(menuPgss, app.config, app.postgresProps.ExtPGSSAvail)},
 		{"sysstat", 'P', menuOpen(menuProgress, app.config, false)},

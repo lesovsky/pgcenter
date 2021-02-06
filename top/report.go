@@ -2,7 +2,6 @@ package top
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/jackc/pgx/v4"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
@@ -82,14 +81,13 @@ query info:
 `
 )
 
-// buildQueryReport queries statements stats, generate the report and shows it.
-func buildQueryReport(g *gocui.Gui, buf string, version int, db *postgres.DB, uiExit chan int) error {
-	answer := strings.TrimPrefix(buf, dialogPrompts[dialogQueryReport])
+// getQueryReport queries statements stats, generate the report and returns it.
+func getQueryReport(answer string, version int, db *postgres.DB) (report, string) {
+	answer = strings.TrimPrefix(answer, dialogPrompts[dialogQueryReport])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
-		printCmdline(g, "Do nothing.")
-		return nil
+		return report{}, "Report: do nothing"
 	}
 
 	var r report
@@ -103,23 +101,23 @@ func buildQueryReport(g *gocui.Gui, buf string, version int, db *postgres.DB, ui
 	)
 
 	if err == pgx.ErrNoRows {
-		printCmdline(g, "No stats for such queryid.")
-		return nil
+		return report{}, "Report: no statistics for such queryid"
 	}
 
-	if err := printQueryReport(g, r, uiExit); err != nil {
-		printCmdline(g, "Failed to show query report.")
-	}
-
-	return nil
+	return r, ""
 }
 
 // printQueryReport prints report in $PAGER program.
-func printQueryReport(g *gocui.Gui, r report, uiExit chan int) error {
-	t := template.Must(template.New("query").Parse(reportTemplate))
+func printQueryReport(g *gocui.Gui, r report, uiExit chan int) string {
+	t, err := template.New("query").Parse(reportTemplate)
+	if err != nil {
+		return err.Error()
+	}
+
 	var buf bytes.Buffer
-	if err := t.Execute(&buf, r); err != nil {
-		return err
+	err = t.Execute(&buf, r)
+	if err != nil {
+		return err.Error()
 	}
 
 	var pager string
@@ -135,9 +133,10 @@ func printQueryReport(g *gocui.Gui, r report, uiExit chan int) error {
 	cmd.Stdin = strings.NewReader(buf.String())
 	cmd.Stdout = os.Stdout
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("run pager failed: %s", err)
+	err = cmd.Run()
+	if err != nil {
+		return err.Error()
 	}
 
-	return nil
+	return ""
 }

@@ -81,25 +81,24 @@ func switchSortOrder(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // setFilter adds pattern for filtering values in the current column.
-func setFilter(g *gocui.Gui, buf string, view view.View) {
-	answer := strings.TrimPrefix(buf, dialogPrompts[dialogFilter])
+func setFilter(answer string, view view.View) string {
+	answer = strings.TrimPrefix(answer, dialogPrompts[dialogFilter])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	// Clear used pattern if empty string is entered.
 	if answer == "\n" || answer == "" {
 		delete(view.Filters, view.OrderKey)
-		printCmdline(g, "Regexp cleared")
-		return
+		return "Filters: regular expression cleared"
 	}
 
 	// Compile regexp and store to filters.
 	re, err := regexp.Compile(answer)
 	if err != nil {
-		printCmdline(g, "Do nothing. Failed to compile regexp: %s", err)
-		return
+		return fmt.Sprintf("Filters: %s", err)
 	}
 
 	view.Filters[view.OrderKey] = re
+	return "Filters: ok"
 }
 
 // switchViewTo switches from current view to requested using high-level logic.
@@ -193,33 +192,71 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // changeQueryAge changes age threshold for showing queries and transactions (pg_stat_activity only).
-func changeQueryAge(g *gocui.Gui, buf string, config *config) {
-	answer := strings.TrimPrefix(buf, dialogPrompts[dialogChangeAge])
+func changeQueryAge(answer string, config *config) string {
+	answer = strings.TrimPrefix(answer, dialogPrompts[dialogChangeAge])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	// Reset threshold if empty answer.
-	if answer != "" {
-		var hour, min, sec, msec int
-		n, err := fmt.Sscanf(answer, "%d:%d:%d.%d", &hour, &min, &sec, &msec)
-		if (n < 3 && err != nil) || ((hour > 23) || (min > 59) || (sec > 59) || (msec > 999999)) {
-			printCmdline(g, "Nothing to do. Invalid input.")
-			return
-		}
-		config.queryOptions.QueryAgeThresh = answer
-	} else {
-		printCmdline(g, "Reset to default - 00:00:00.")
-		config.queryOptions.QueryAgeThresh = "00:00:00"
+	if answer == "" {
+		answer = "00:00:00"
 	}
 
+	// Parse user input.
+	err := parseHumanTimeString(answer)
+	if err != nil {
+		return fmt.Sprintf("Activity age: do nothing, %s", err.Error())
+	}
+
+	// Remember current age to restore it if formatting new query will fail.
+	fallbackAge := config.queryOptions.QueryAgeThresh
+
+	// Update query options and format activity query.
+	config.queryOptions.QueryAgeThresh = answer
 	q, err := query.Format(config.view.QueryTmpl, config.queryOptions)
 	if err != nil {
-		printCmdline(g, "Nothing to do. Failed: %s", err.Error())
-		config.queryOptions.QueryAgeThresh = "00:00:00" // reset to default
-		return
+		config.queryOptions.QueryAgeThresh = fallbackAge // restore fallback
+		return fmt.Sprintf("Activity age: do nothing, %s", err.Error())
 	}
 
+	// Update query and view.
 	config.view.Query = q
 	config.viewCh <- config.view
+
+	return "Activity age: set " + answer
+}
+
+// parseHumanTimeString parses time in human-readable format and validates its correctness.
+func parseHumanTimeString(t string) error {
+	pattern := `^([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(\.[0-9]{1,6})?$`
+	re := regexp.MustCompile(pattern)
+
+	if !re.MatchString(t) {
+		return fmt.Errorf("invalid input")
+	}
+
+	parts := re.FindStringSubmatch(t)
+	if len(parts) != 5 {
+		return fmt.Errorf("invalid input")
+	}
+
+	var hour, min, sec, msec int
+	if parts[4] == "" {
+		_, err := fmt.Sscanf(t, "%d:%d:%d", &hour, &min, &sec)
+		if err != nil {
+			return err
+		}
+	} else {
+		_, err := fmt.Sscanf(t, "%d:%d:%d.%d", &hour, &min, &sec, &msec)
+		if err != nil {
+			return err
+		}
+	}
+
+	if (hour < 0 || hour > 23) || (min < 0 || min > 59) || (sec < 0 || sec > 59) || (msec < 0 || msec > 999999) {
+		return fmt.Errorf("invalid input")
+	}
+
+	return nil
 }
 
 // A toggle to show 'idle' connections (pg_stat_activity only)
@@ -250,24 +287,21 @@ func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 }
 
 // changeRefresh changes current refresh interval.
-func changeRefresh(g *gocui.Gui, buf string, config *config) {
-	answer := strings.TrimPrefix(buf, dialogPrompts[dialogChangeRefresh])
+func changeRefresh(answer string, config *config) string {
+	answer = strings.TrimPrefix(answer, dialogPrompts[dialogChangeRefresh])
 	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
-		printCmdline(g, "Do nothing. Empty input.")
-		return
+		return "Refresh: do nothing"
 	}
 
 	interval, err := strconv.Atoi(answer)
 	if err != nil {
-		printCmdline(g, "Do nothing. Invalid input.")
-		return
+		return "Refresh: do nothing, invalid input"
 	}
 
 	if interval < 1 || interval > 300 {
-		printCmdline(g, "Value should be between 1 and 300.")
-		return
+		return "Refresh: input value should be between 1 and 300"
 	}
 
 	// Set refresh interval, send it to stats channel and reset interval in the view.
@@ -275,4 +309,6 @@ func changeRefresh(g *gocui.Gui, buf string, config *config) {
 	config.view.Refresh = time.Duration(interval) * time.Second
 	config.viewCh <- config.view
 	config.view.Refresh = 0
+
+	return "Refresh: ok"
 }
