@@ -39,7 +39,7 @@ Report bugs to <%s>.
 		record.CommandDefinition.Short,
 		report.CommandDefinition.Short,
 		top.CommandDefinition.Short,
-		programIssuesUrl)
+		programIssuesURL)
 }
 
 func printConfigHelp() string {
@@ -62,7 +62,7 @@ General options:
 Report bugs to <%s>.
 `,
 		config.CommandDefinition.Long,
-		programIssuesUrl)
+		programIssuesURL)
 }
 
 func printProfileHelp() string {
@@ -87,7 +87,7 @@ General options:
 Report bugs to <%s>.
 `,
 		profile.CommandDefinition.Long,
-		programIssuesUrl)
+		programIssuesURL)
 }
 
 func printTopHelp() string {
@@ -108,7 +108,7 @@ General options:
 Report bugs to <%s>.
 `,
 		top.CommandDefinition.Long,
-		programIssuesUrl)
+		programIssuesURL)
 }
 
 func printRecordHelp() string {
@@ -136,7 +136,7 @@ General options:
 Report bugs to <%s>.
 `,
 		record.CommandDefinition.Long,
-		programIssuesUrl)
+		programIssuesURL)
 }
 
 func printReportHelp() string {
@@ -179,5 +179,5 @@ General options:
 Report bugs to <%s>.
 `,
 		report.CommandDefinition.Long,
-		programIssuesUrl)
+		programIssuesURL)
 }

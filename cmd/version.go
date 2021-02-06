@@ -10,8 +10,8 @@ const (
 	// programName is the name of this program
 	programName = "pgcenter"
 
-	// programIssuesUrl is the public URL for posting issues, bug reports and asking questions
-	programIssuesUrl = "https://github.com/lesovsky/pgcenter/issues"
+	// programIssuesURL is the public URL for posting issues, bug reports and asking questions
+	programIssuesURL = "https://github.com/lesovsky/pgcenter/issues"
 )
 
 var (
