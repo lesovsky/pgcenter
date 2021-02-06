@@ -189,7 +189,7 @@ func readDiskstatsRemote(db *postgres.DB) (Diskstats, error) {
 // countDiskstatsUsage compares block devices stats snapshots and returns devices usage stats over time interval.
 func countDiskstatsUsage(prev Diskstats, curr Diskstats, ticks float64) Diskstats {
 	if len(curr) != len(prev) {
-		// TODO: make possible to diff snapshots with different number of devices.
+		// do nothing and return
 		return nil
 	}
 

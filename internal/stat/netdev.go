@@ -120,7 +120,7 @@ func readNetdevsLocal(statfile string, ticks float64) (Netdevs, error) {
 		// Get interface's speed and duplex
 		// TODO: perhaps it's too expensive to poll interface in every execution of the function.
 		// TODO: log errors.
-		n.Speed, n.Duplex, _ = getLinkSettings(n.Ifname) /* ignore errors, just use zeros if any */
+		n.Speed, n.Duplex, _ = getLinkSettings(n.Ifname) // ignore errors, just use zeros if any
 
 		stat = append(stat, n)
 	}
@@ -153,7 +153,7 @@ func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 			return nil, err
 		}
 
-		// skip pseudo block devices.
+		// skip virtual network interfaces.
 		re := regexp.MustCompile(`docker|virbr|veth`)
 		if re.MatchString(n.Ifname) {
 			continue
@@ -178,7 +178,7 @@ func readNetdevsRemote(db *postgres.DB) (Netdevs, error) {
 // countNetdevsUsage compares two network interfaces stats snapshots and return usage stats over time interval.
 func countNetdevsUsage(prev Netdevs, curr Netdevs, ticks float64) Netdevs {
 	if len(curr) != len(prev) {
-		// TODO: make possible to diff snapshots with different number of devices.
+		// do nothing and return
 		return nil
 	}
 
