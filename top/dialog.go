@@ -8,10 +8,11 @@ import (
 	"strings"
 )
 
+// dialogType defines type of dialog between pgcenter and user.
 type dialogType int
 
-// Dialog types
 const (
+	// All possible dialog types.
 	dialogNone dialogType = iota
 	dialogPgReload
 	dialogFilter
@@ -25,10 +26,9 @@ const (
 	dialogChangeRefresh
 )
 
-var (
-	// dialogPrompts defines prompts for user-requested actions.
-	// This is read-only and should not be changed during runtime.
-	dialogPrompts = map[dialogType]string{
+// dialogPrompts returns dialog prompt depending on user-requested actions.
+func dialogPrompts(t dialogType) string {
+	prompts := map[dialogType]string{
 		dialogPgReload:         "Reload configuration files (y/n): ",
 		dialogFilter:           "Set filter: ",
 		dialogCancelQuery:      "PID to cancel: ",
@@ -40,11 +40,15 @@ var (
 		dialogQueryReport:      "Enter the queryid: ",
 		dialogChangeRefresh:    "Change refresh (min 1, max 300) to ",
 	}
-)
+
+	return prompts[t]
+}
 
 // dialogOpen opens view for the dialog.
 func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		prompt := dialogPrompts(d)
+
 		// some types of actions allowed only in specifics stats contexts.
 		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != "activity" {
 			var msg string
@@ -66,8 +70,9 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 		}
 
 		maxX, _ := g.Size()
+
 		// Create one-line editable view, print a prompt and set cursor after it.
-		v, err := g.SetView("dialog", len(dialogPrompts[d])-1, 3, maxX-1, 5)
+		v, err := g.SetView("dialog", len(prompt)-1, 3, maxX-1, 5)
 		if err != nil {
 			// gocui.ErrUnknownView is OK it means a new view has been created, continue if it happens.
 			if err != gocui.ErrUnknownView {
@@ -80,7 +85,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 			return fmt.Errorf("set focus on cmdline view failed: %s", err)
 		}
 
-		_, err = fmt.Fprintf(p, dialogPrompts[d])
+		_, err = fmt.Fprint(p, prompt)
 		if err != nil {
 			return fmt.Errorf("print to cmdline view failed: %s", err)
 		}
@@ -105,7 +110,10 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
 		printCmdline(g, "")
 
-		answer := v.Buffer()
+		// Extract user entered answer from buffer.
+		answer := strings.TrimPrefix(v.Buffer(), dialogPrompts(app.config.dialog))
+		answer = strings.TrimSuffix(answer, "\n")
+
 		var message string
 
 		switch app.config.dialog {

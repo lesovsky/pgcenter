@@ -7,8 +7,6 @@ import (
 )
 
 func Test_getQueryReport(t *testing.T) {
-	prompt := dialogPrompts[dialogQueryReport]
-
 	// Connect to Postgres and get random queryid needed for testcase.
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
@@ -22,9 +20,9 @@ func Test_getQueryReport(t *testing.T) {
 		answer string
 		want   string
 	}{
-		{answer: prompt + queryid, want: ""},
-		{answer: prompt + "", want: "Report: do nothing"},
-		{answer: prompt + "invalid", want: "Report: no statistics for such queryid"},
+		{answer: queryid, want: ""},
+		{answer: "", want: "Report: do nothing"},
+		{answer: "invalid", want: "Report: no statistics for such queryid"},
 	}
 
 	for _, tc := range testcases {

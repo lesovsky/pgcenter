@@ -83,9 +83,6 @@ query info:
 
 // getQueryReport queries statements stats, generate the report and returns it.
 func getQueryReport(answer string, version int, db *postgres.DB) (report, string) {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogQueryReport])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	if answer == "" {
 		return report{}, "Report: do nothing"
 	}

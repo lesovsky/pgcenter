@@ -8,7 +8,6 @@ import (
 	"github.com/lesovsky/pgcenter/internal/view"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -82,9 +81,6 @@ func switchSortOrder(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 
 // setFilter adds pattern for filtering values in the current column.
 func setFilter(answer string, view view.View) string {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogFilter])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	// Clear used pattern if empty string is entered.
 	if answer == "\n" || answer == "" {
 		delete(view.Filters, view.OrderKey)
@@ -193,9 +189,6 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 
 // changeQueryAge changes age threshold for showing queries and transactions (pg_stat_activity only).
 func changeQueryAge(answer string, config *config) string {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogChangeAge])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	// Reset threshold if empty answer.
 	if answer == "" {
 		answer = "00:00:00"
@@ -288,9 +281,6 @@ func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 
 // changeRefresh changes current refresh interval.
 func changeRefresh(answer string, config *config) string {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogChangeRefresh])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	if answer == "" {
 		return "Refresh: do nothing"
 	}

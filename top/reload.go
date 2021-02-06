@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
-	"strings"
 )
 
 // doReload performs reload of Postgres service by executing pg_reload_conf().
 func doReload(answer string, db *postgres.DB) string {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogPgReload])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	var message string
+
 	switch answer {
 	case "y":
 		var status sql.NullBool

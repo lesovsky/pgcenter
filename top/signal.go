@@ -8,7 +8,6 @@ import (
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"strconv"
-	"strings"
 )
 
 const (
@@ -30,12 +29,9 @@ func killSingle(db *postgres.DB, mode string, answer string) string {
 	switch mode {
 	case "cancel":
 		q = query.ExecCancelQuery
-		answer = strings.TrimPrefix(answer, dialogPrompts[dialogCancelQuery])
 	case "terminate":
 		q = query.ExecTerminateBackend
-		answer = strings.TrimPrefix(answer, dialogPrompts[dialogTerminateBackend])
 	}
-	answer = strings.TrimSuffix(answer, "\n")
 
 	pid, err := strconv.Atoi(answer)
 	if err != nil {
@@ -118,9 +114,6 @@ func killGroup(app *app, mode string) string {
 
 // setProcMask set process mask.
 func setProcMask(answer string, config *config) string {
-	answer = strings.TrimPrefix(answer, dialogPrompts[dialogSetMask])
-	answer = strings.TrimSuffix(answer, "\n")
-
 	// Reset existing mask.
 	config.procMask = 0
 

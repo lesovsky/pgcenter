@@ -7,14 +7,13 @@ import (
 )
 
 func Test_doReload(t *testing.T) {
-	prompt := dialogPrompts[dialogPgReload]
 	testcases := []struct {
 		answer string
 		want   string
 	}{
-		{answer: prompt + "y", want: "Reload: successful"},
-		{answer: prompt + "n", want: "Reload: do nothing, canceled"},
-		{answer: prompt + "q", want: "Reload: do nothing, invalid input"},
+		{answer: "y", want: "Reload: successful"},
+		{answer: "n", want: "Reload: do nothing, canceled"},
+		{answer: "q", want: "Reload: do nothing, invalid input"},
 	}
 
 	conn, err := postgres.NewTestConnect()

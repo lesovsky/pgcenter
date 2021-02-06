@@ -18,19 +18,15 @@ func Test_killSingle(t *testing.T) {
 	err = victim.QueryRow("select pg_backend_pid()::text").Scan(&pid)
 	assert.NoError(t, err)
 
-	cancelPrompt := dialogPrompts[dialogCancelQuery]
-	terminatePrompt := dialogPrompts[dialogTerminateBackend]
-
 	testcases := []struct {
-		pid   string
-		mode  string
-		input string
-		want  string
+		pid  string
+		mode string
+		want string
 	}{
-		{pid: pid, mode: "cancel", input: cancelPrompt, want: "Signals: done"},
-		{pid: pid, mode: "terminate", input: terminatePrompt, want: "Signals: done"},
-		{pid: pid, mode: "terminate", input: terminatePrompt, want: "Signals: done"}, // attempt to terminate the previously terminated pid should not fail
-		{pid: "invalid", mode: "terminate", input: terminatePrompt, want: `Signals: do nothing, strconv.Atoi: parsing "invalid": invalid syntax`},
+		{pid: pid, mode: "cancel", want: "Signals: done"},
+		{pid: pid, mode: "terminate", want: "Signals: done"},
+		{pid: pid, mode: "terminate", want: "Signals: done"}, // attempt to terminate the previously terminated pid should not fail
+		{pid: "invalid", mode: "terminate", want: `Signals: do nothing, strconv.Atoi: parsing "invalid": invalid syntax`},
 		{pid: pid, mode: "invalid", want: "Signals: do nothing, unknown mode"},
 	}
 
@@ -38,11 +34,11 @@ func Test_killSingle(t *testing.T) {
 	assert.NoError(t, err)
 
 	for _, tc := range testcases {
-		assert.Equal(t, tc.want, killSingle(db, tc.mode, tc.input+tc.pid))
+		assert.Equal(t, tc.want, killSingle(db, tc.mode, tc.pid))
 	}
 
 	db.Close()
-	assert.Equal(t, "Signals: do nothing, conn closed", killSingle(db, "cancel", cancelPrompt+pid))
+	assert.Equal(t, "Signals: do nothing, conn closed", killSingle(db, "cancel", pid))
 }
 
 func Test_killGroup(t *testing.T) {
@@ -132,28 +128,27 @@ func Test_killGroup(t *testing.T) {
 }
 
 func Test_setProcMask(t *testing.T) {
-	prompt := dialogPrompts[dialogSetMask]
 	testcases := []struct {
-		buf  string
-		want int
+		answer string
+		want   int
 	}{
-		{buf: prompt + "", want: 0},
-		{buf: prompt + "i", want: groupIdle},
-		{buf: prompt + "ix", want: groupIdle + groupIdleXact},
-		{buf: prompt + "aw", want: groupWaiting + groupActive},
-		{buf: prompt + "iax", want: groupIdle + groupIdleXact + groupActive},
-		{buf: prompt + "aox", want: groupOthers + groupActive + groupIdleXact},
-		{buf: prompt + "wixa", want: groupIdle + groupIdleXact + groupActive + groupWaiting},
-		{buf: prompt + "woix", want: groupIdleXact + groupOthers + groupWaiting + groupIdle},
-		{buf: prompt + "iowax", want: groupIdle + groupIdleXact + groupActive + groupWaiting + groupOthers},
+		{answer: "", want: 0},
+		{answer: "i", want: groupIdle},
+		{answer: "ix", want: groupIdle + groupIdleXact},
+		{answer: "aw", want: groupWaiting + groupActive},
+		{answer: "iax", want: groupIdle + groupIdleXact + groupActive},
+		{answer: "aox", want: groupOthers + groupActive + groupIdleXact},
+		{answer: "wixa", want: groupIdle + groupIdleXact + groupActive + groupWaiting},
+		{answer: "woix", want: groupIdleXact + groupOthers + groupWaiting + groupIdle},
+		{answer: "iowax", want: groupIdle + groupIdleXact + groupActive + groupWaiting + groupOthers},
 	}
 
 	config := newConfig()
 
 	for _, tc := range testcases {
-		got := setProcMask(tc.buf, config)
-		assert.Equal(t, tc.want, config.procMask)
+		got := setProcMask(tc.answer, config)
 		assert.Equal(t, printMaskString(config.procMask), got)
+		assert.Equal(t, tc.want, config.procMask)
 	}
 }
 
