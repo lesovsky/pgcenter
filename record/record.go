@@ -34,7 +34,7 @@ func RunMain(dbConfig postgres.Config, config Config) error {
 
 	// In case of SIGINT stop program gracefully
 	doQuit := make(chan os.Signal, 1)
-	signal.Notify(doQuit, os.Interrupt, os.Kill)
+	signal.Notify(doQuit, os.Interrupt)
 
 	// Run recording loop
 	return app.record(doQuit)

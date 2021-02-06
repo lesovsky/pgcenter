@@ -128,7 +128,7 @@ func (app *app) doReport(r *tar.Reader) error {
 
 		// if previous stats snapshot is not defined, copy current to previous.
 		// Usually this occurs when reading first stat sample at startup.
-		if prevStat.Valid != true {
+		if !prevStat.Valid {
 			prevStat = currStat
 			prevTs = ts
 			continue

@@ -16,6 +16,7 @@ func Test_killSingle(t *testing.T) {
 
 	var pid string
 	err = victim.QueryRow("select pg_backend_pid()::text").Scan(&pid)
+	assert.NoError(t, err)
 
 	testcases := []struct {
 		pid   string

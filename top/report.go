@@ -84,7 +84,7 @@ query info:
 // buildQueryReport queries statements stats, generate the report and shows it.
 func buildQueryReport(g *gocui.Gui, buf string, version int, db *postgres.DB, uiExit chan int) error {
 	answer := strings.TrimPrefix(buf, dialogPrompts[dialogQueryReport])
-	answer = strings.TrimSuffix(buf, "\n")
+	answer = strings.TrimSuffix(answer, "\n")
 
 	if answer == "" {
 		printCmdline(g, "Do nothing.")

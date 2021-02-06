@@ -106,7 +106,7 @@ func setFilter(g *gocui.Gui, buf string, view view.View) {
 func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		// in case of switching to pg_stat_statements and it isn't available - keep current view
-		if app.postgresProps.ExtPGSSAvail == false && c == "statements" {
+		if !app.postgresProps.ExtPGSSAvail && c == "statements" {
 			printCmdline(g, "NOTICE: pg_stat_statements is not available in this database")
 			return nil
 		}

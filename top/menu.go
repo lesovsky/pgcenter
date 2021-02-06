@@ -213,13 +213,13 @@ func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) e
 			case moveDown:
 				err := v.SetCursor(cx, cy+1) /* errors don't make sense here */
 				if err != nil {
-					// TODO: add logging
+					return err
 				}
 				menuDraw(v, config.menu.items)
 			case moveUp:
 				err := v.SetCursor(cx, cy-1) /* errors don't make sense here */
 				if err != nil {
-					// TODO: add logging
+					return err
 				}
 				menuDraw(v, config.menu.items)
 			}

@@ -50,7 +50,7 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		v.Frame = false
-		_, err = fmt.Fprintf(v, helpTemplate)
+		_, err = fmt.Fprint(v, helpTemplate)
 		if err != nil {
 			return fmt.Errorf("print on 'help' view failed: %s", err)
 		}

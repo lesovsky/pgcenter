@@ -30,6 +30,7 @@ func Test_tarRecorder(t *testing.T) {
 
 	// create and configure views
 	db, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
 	props, err := stat.GetPostgresProperties(db)
 	assert.NoError(t, err)
 	views := view.New()
@@ -40,6 +41,7 @@ func Test_tarRecorder(t *testing.T) {
 	dbConfig, err := postgres.NewTestConfig()
 	assert.NoError(t, err)
 	stats, err := tc.collect(dbConfig, views)
+	assert.NoError(t, err)
 	assert.NotNil(t, stats)
 
 	// check all stats have filled columns

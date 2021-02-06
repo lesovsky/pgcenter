@@ -182,6 +182,9 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	_, err = fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
+	if err != nil {
+		return err
+	}
 
 	/* line2: cpu usage */
 	_, err = fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",

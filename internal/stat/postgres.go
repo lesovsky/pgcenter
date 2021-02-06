@@ -325,7 +325,7 @@ func diff(curr PGresult, prev PGresult, itv int, interval [2]int, ukey int) (PGr
 		}
 
 		// End of the searching in 'previous' snapshot, if we reached here it means row not found and it simply should be added as is.
-		if found == false {
+		if !found {
 			for l := 0; l < curr.Ncols; l++ {
 				diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
 				diff.Values[i][l].Valid = curr.Values[i][l].Valid
