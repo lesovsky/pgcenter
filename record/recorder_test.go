@@ -15,11 +15,11 @@ import (
 )
 
 func Test_tarRecorder_open_close(t *testing.T) {
-	tc := newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: true})
+	tc := newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", append: false})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.close())
 
-	tc = newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", truncate: false})
+	tc = newTarRecorder(tarConfig{filename: "/tmp/pgcenter-record-testing.stat.tar", append: true})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.close())
 }
@@ -66,7 +66,7 @@ func Test_tarRecorder_write(t *testing.T) {
 	filename := "/tmp/pgcenter-record-testing.stat.tar"
 
 	// Write testdata.
-	tc := newTarRecorder(tarConfig{filename: filename, truncate: true})
+	tc := newTarRecorder(tarConfig{filename: filename, append: false})
 	assert.NoError(t, tc.open())
 	assert.NoError(t, tc.write(stats))
 	assert.NoError(t, tc.close())

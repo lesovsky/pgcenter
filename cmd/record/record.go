@@ -22,7 +22,7 @@ var (
 		RunE: func(command *cobra.Command, args []string) error {
 			// Convert 'oneshot' to set of options.
 			if oneshot {
-				recordConfig.TruncateFile = false
+				recordConfig.AppendFile = true
 				recordConfig.Count = 1
 				recordConfig.Interval = time.Millisecond // interval must not be zero - ticker will panic.
 			}
@@ -53,7 +53,7 @@ func init() {
 	CommandDefinition.Flags().DurationVarP(&recordConfig.Interval, "interval", "i", time.Second, "statistics recording interval (default: 1 second)")
 	CommandDefinition.Flags().IntVarP(&recordConfig.Count, "count", "c", -1, "number of statistics samples to record")
 	CommandDefinition.Flags().StringVarP(&recordConfig.OutputFile, "file", "f", defaultRecordFile, "file where statistics are saved")
-	CommandDefinition.Flags().BoolVarP(&recordConfig.TruncateFile, "truncate", "t", false, "truncate statistics file, before starting (default: false)")
-	CommandDefinition.Flags().IntVarP(&recordConfig.StringLimit, "strlimit", "s", 0, "maximum query length to record (default: 0, no limit)")
+	CommandDefinition.Flags().BoolVarP(&recordConfig.AppendFile, "append", "a", false, "append statistics to file (default: true)")
+	CommandDefinition.Flags().IntVarP(&recordConfig.StringLimit, "strlimit", "t", 0, "maximum query length to record (default: 0, no limit)")
 	CommandDefinition.Flags().BoolVarP(&oneshot, "oneshot", "1", false, "append single statistics snapshot to file and exit")
 }

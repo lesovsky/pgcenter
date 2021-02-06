@@ -42,19 +42,19 @@ func Test_app_record(t *testing.T) {
 		{
 			// a new archive should be created with
 			name:      "append to new file",
-			config:    Config{Count: count, Interval: itv, OutputFile: filename, TruncateFile: true},
+			config:    Config{Count: count, Interval: itv, OutputFile: filename, AppendFile: false},
 			filesWant: totalViews * count,
 		},
 		{
 			// append to existing file, previously written files should be kept.
 			name:      "append to existing file",
-			config:    Config{Count: count, Interval: itv, OutputFile: filename, TruncateFile: false},
+			config:    Config{Count: count, Interval: itv, OutputFile: filename, AppendFile: true},
 			filesWant: (totalViews * count) * 2, // doubles because files are from previous test.
 		},
 		{
 			// truncate existing file and write new stats
 			name:      "truncate existing file",
-			config:    Config{Count: count, Interval: itv, OutputFile: filename, TruncateFile: true},
+			config:    Config{Count: count, Interval: itv, OutputFile: filename, AppendFile: false},
 			filesWant: totalViews * count,
 		},
 	}

@@ -14,11 +14,11 @@ import (
 
 // Config defines config container for configuring 'pgcenter record'.
 type Config struct {
-	Interval     time.Duration // Statistics recording interval
-	Count        int           // Number of statistics snapshot to record
-	OutputFile   string        // File where statistics will be saved
-	TruncateFile bool          // Truncate a file before beginning
-	StringLimit  int           // Limit of the length, to which query should be trimmed
+	Interval    time.Duration // Statistics recording interval
+	Count       int           // Number of statistics snapshot to record
+	OutputFile  string        // File where statistics will be saved
+	AppendFile  bool          // Append data to file
+	StringLimit int           // Limit of the length, to which query should be trimmed
 }
 
 // RunMain is the 'pgcenter record' main entry point.
@@ -81,7 +81,7 @@ func (app *app) setup() error {
 	// Create tar recorder.
 	app.recorder = newTarRecorder(tarConfig{
 		filename: app.config.OutputFile,
-		truncate: app.config.TruncateFile,
+		append:   app.config.AppendFile,
 	})
 
 	return nil

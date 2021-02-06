@@ -24,7 +24,7 @@ type recorder interface {
 // tarConfig defines configuration needed for creating tar recorder.
 type tarConfig struct {
 	filename string
-	truncate bool
+	append   bool
 }
 
 // tarRecorder implement recorder interface.
@@ -39,10 +39,10 @@ type tarRecorder struct {
 // newTarRecorder creates new recorder.
 func newTarRecorder(c tarConfig) recorder {
 	var flags int
-	if c.truncate {
-		flags = os.O_CREATE | os.O_RDWR | os.O_TRUNC
-	} else {
+	if c.append {
 		flags = os.O_CREATE | os.O_RDWR
+	} else {
+		flags = os.O_CREATE | os.O_RDWR | os.O_TRUNC
 	}
 
 	return &tarRecorder{

@@ -126,7 +126,7 @@ Options:
  -i, --interval DURATION	statistics recording interval (default: 1s)
  -c, --count INT		number of statistics samples to record
  -f, --file FILENAME		file name where statistics to write to (default: pgcenter.stat.tar)
- -t, --truncate			truncate statistics file, before starting (defailt: false)
+ -a, --append			append statistics to file (defailt: true)
  -s, --strlimit INT		maximum query length to record (default: 0, no limit)
  -1, --oneshot			append single statistics snapshot and exit (alias for --interval 0 --count 1)
 
@@ -154,7 +154,7 @@ Options:
      --asc			use ascendant order
  -g, --grep COLNAME:PATTERN	filter values in specfied column (format: colname:filtertext)
  -l, --limit INT		print only limited number of rows per sample (default: unlimited)
- -t, --strlimit INT		maximum string size to print (default: 32, 0 disables truncate)
+ -t, --strlimit INT		maximum string size to print (default: 32, 0 disables)
  -r, --rate DURATION		statistics changes rate interval (default: 1s)
 
 Report options:
