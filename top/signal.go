@@ -136,10 +136,10 @@ func setProcMask(answer string, config *config) string {
 }
 
 // showProcMask UI-wrapper over printMaskString.
-func showProcMask(mask int) func(g *gocui.Gui, _ *gocui.View) error {
+func showProcMask(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 
-		printCmdline(g, printMaskString(mask))
+		printCmdline(g, printMaskString(config.procMask))
 		return nil
 	}
 }

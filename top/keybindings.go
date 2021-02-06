@@ -50,7 +50,7 @@ func keybindings(app *app) error {
 		{"sysstat", '-', dialogOpen(app, dialogCancelQuery)},
 		{"sysstat", '_', dialogOpen(app, dialogTerminateBackend)},
 		{"sysstat", 'n', dialogOpen(app, dialogSetMask)},
-		{"sysstat", 'm', showProcMask(app.config.procMask)},
+		{"sysstat", 'm', showProcMask(app.config)},
 		{"sysstat", 'k', dialogOpen(app, dialogCancelGroup)},
 		{"sysstat", 'K', dialogOpen(app, dialogTerminateGroup)},
 		{"sysstat", 'A', dialogOpen(app, dialogChangeAge)},

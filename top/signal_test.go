@@ -177,9 +177,10 @@ func Test_showProcMask(t *testing.T) {
 		}(),
 	}
 
+	cfg := newConfig()
 	for _, tc := range testcases {
-		fmt.Println(tc)
-		fn := showProcMask(tc)
+		cfg.procMask = tc
+		fn := showProcMask(cfg)
 		assert.NoError(t, fn(nil, nil))
 	}
 }
