@@ -14,6 +14,7 @@ import (
 )
 
 // report defines data container with report values.
+// All values are string because all calculations are made on Postgres side, pgcenter just receives and prints final values.
 type report struct {
 	Query                  string // query text from pg_stat_statements.query
 	QueryID                string // query ID from pg_stat_statements.queryid

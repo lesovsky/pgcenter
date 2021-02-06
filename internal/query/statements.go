@@ -80,11 +80,11 @@ const (
 	// PgStatStatementsReportQuery defines query used for calculating per-statement report based on pg_stat_statements.
 	PgStatStatementsReportQueryDefault = "WITH totals AS (SELECT " +
 		"sum(calls) AS total_calls," +
-		"coalesce(nullif(sum(rows), 0), 1) AS total_rows," +
-		"coalesce(nullif(sum(total_plan_time + total_exec_time), 0), 1) AS total_all_time," +
-		"coalesce(nullif(sum(total_plan_time), 0), 1) AS total_plan_time," +
-		"coalesce(nullif(sum(total_exec_time - blk_read_time + blk_write_time), 0), 1) AS total_cpu_time," +
-		"coalesce(nullif(sum(blk_read_time+blk_write_time), 0), 1) AS total_io_time " +
+		"sum(rows) AS total_rows," +
+		"sum(total_plan_time + total_exec_time) AS total_all_time," +
+		"sum(total_plan_time) AS total_plan_time," +
+		"sum(total_exec_time - blk_read_time + blk_write_time) AS total_cpu_time," +
+		"sum(blk_read_time + blk_write_time) AS total_io_time " +
 		"FROM pg_stat_statements)," +
 		"stmt AS (" +
 		"SELECT " +
@@ -101,24 +101,24 @@ const (
 		"to_char((SELECT total_calls FROM totals), 'FM999,999,999,990') AS total_calls," +
 		"to_char((SELECT total_rows FROM totals), 'FM999,999,999,990') AS total_rows," +
 		"to_char(interval '1 millisecond' * (SELECT total_all_time FROM totals), 'HH24:MI:SS') AS total_all_time," +
-		"to_char(interval '1 millisecond' * (SELECT total_plan_time FROM totals), 'HH24:MI:SS') AS total_plan_time," +
-		"to_char(100 * (SELECT total_plan_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_plan_time_dist_ratio," +
+		"to_char(interval '1 millisecond' * (SELECT coalesce(nullif(total_plan_time, 0), 1) FROM totals), 'HH24:MI:SS') AS total_plan_time," +
+		"to_char(100 * (SELECT total_plan_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_plan_time_dist_ratio," +
 		"to_char(interval '1 millisecond' * (SELECT total_cpu_time FROM totals), 'HH24:MI:SS') AS total_cpu_time," +
-		"to_char(100 * (SELECT total_cpu_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_cpu_time_dist_ratio," +
+		"to_char(100 * (SELECT total_cpu_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_cpu_time_dist_ratio," +
 		"to_char(interval '1 millisecond' * (SELECT total_io_time FROM totals), 'HH24:MI:SS') AS total_io_time," +
-		"to_char(100 * (SELECT total_io_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_io_time_dist_ratio," +
+		"to_char(100 * (SELECT total_io_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_io_time_dist_ratio," +
 		"to_char(s.calls, 'FM999,999,999,990') AS calls," +
 		"to_char(100*s.calls/(SELECT total_calls FROM totals), 'FM990.00') AS calls_ratio," +
 		"to_char(s.rows, 'FM999,999,999,990') AS rows," +
-		"to_char(100*s.rows/(SELECT total_rows FROM totals), 'FM990.00') AS rows_ratio," +
+		"to_char(100*s.rows/(SELECT coalesce(nullif(total_rows, 0), 1) FROM totals), 'FM990.00') AS rows_ratio," +
 		"to_char(interval '1 millisecond' * s.all_time, 'HH24:MI:SS.MS') AS all_time," +
-		"to_char(100*s.all_time/(SELECT total_all_time FROM totals), 'FM990.00') AS all_time_ratio," +
+		"to_char(100*s.all_time/(SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS all_time_ratio," +
 		"to_char(interval '1 millisecond' * s.plan_time, 'HH24:MI:SS.MS') AS plan_time," +
-		"to_char(100*s.plan_time/(SELECT total_plan_time FROM totals), 'FM990.00') AS plan_time_ratio," +
+		"to_char(100*s.plan_time/(SELECT coalesce(nullif(total_plan_time, 0), 1) FROM totals), 'FM990.00') AS plan_time_ratio," +
 		"to_char(interval '1 millisecond' * s.cpu_time, 'HH24:MI:SS.MS') AS cpu_time," +
-		"to_char(100*s.cpu_time/(SELECT total_cpu_time FROM totals), 'FM990.00') AS cpu_time_ratio," +
+		"to_char(100*s.cpu_time/(SELECT coalesce(nullif(total_cpu_time, 0), 1) FROM totals), 'FM990.00') AS cpu_time_ratio," +
 		"to_char(interval '1 millisecond' * s.io_time, 'HH24:MI:SS.MS') AS io_time," +
-		"to_char(100*s.io_time/(SELECT total_io_time FROM totals), 'FM990.00') AS io_time_ratio," +
+		"to_char(100*s.io_time/(SELECT coalesce(nullif(total_io_time, 0), 1) FROM totals), 'FM990.00') AS io_time_ratio," +
 		"(s.all_time / s.calls)::numeric(20,2) AS avg_all_time," +
 		"(s.plan_time / s.calls)::numeric(20,2) AS avg_plan_time," +
 		"(s.cpu_time / s.calls)::numeric(20,2) AS avg_cpu_time," +
@@ -131,11 +131,11 @@ const (
 	// PgStatStatementsReportQueryPG12 defines query used for calculating per-statement report based on pg_stat_statements for postgres 12 and earlier.
 	PgStatStatementsReportQueryPG12 = "WITH totals AS (SELECT " +
 		"sum(calls) AS total_calls," +
-		"coalesce(nullif(sum(rows), 0), 1) AS total_rows," +
-		"coalesce(nullif(sum(total_time), 0), 1) AS total_all_time," +
-		"1 AS total_plan_time," +
-		"coalesce(nullif(sum(total_time - blk_read_time + blk_write_time), 0), 1) AS total_cpu_time," +
-		"coalesce(nullif(sum(blk_read_time+blk_write_time), 0), 1) AS total_io_time " +
+		"sum(rows) AS total_rows," +
+		"sum(total_time) AS total_all_time," +
+		"0 AS total_plan_time," +
+		"sum(total_time - blk_read_time + blk_write_time) AS total_cpu_time," +
+		"sum(blk_read_time+blk_write_time) AS total_io_time " +
 		"FROM pg_stat_statements)," +
 		"stmt AS (" +
 		"SELECT " +
@@ -153,23 +153,23 @@ const (
 		"to_char((SELECT total_rows FROM totals), 'FM999,999,999,990') AS total_rows," +
 		"to_char(interval '1 millisecond' * (SELECT total_all_time FROM totals), 'HH24:MI:SS') AS total_all_time," +
 		"to_char(interval '1 millisecond' * (SELECT total_plan_time FROM totals), 'HH24:MI:SS') AS total_plan_time," +
-		"to_char(100 * (SELECT total_plan_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_plan_time_dist_ratio," +
+		"to_char(100 * (SELECT total_plan_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_plan_time_dist_ratio," +
 		"to_char(interval '1 millisecond' * (SELECT total_cpu_time FROM totals), 'HH24:MI:SS') AS total_cpu_time," +
-		"to_char(100 * (SELECT total_cpu_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_cpu_time_dist_ratio," +
+		"to_char(100 * (SELECT total_cpu_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_cpu_time_dist_ratio," +
 		"to_char(interval '1 millisecond' * (SELECT total_io_time FROM totals), 'HH24:MI:SS') AS total_io_time," +
-		"to_char(100 * (SELECT total_io_time FROM totals) / (SELECT total_all_time FROM totals), 'FM990.00') AS total_io_time_dist_ratio," +
+		"to_char(100 * (SELECT total_io_time FROM totals) / (SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS total_io_time_dist_ratio," +
 		"to_char(s.calls, 'FM999,999,999,990') AS calls," +
 		"to_char(100*s.calls/(SELECT total_calls FROM totals), 'FM990.00') AS calls_ratio," +
 		"to_char(s.rows, 'FM999,999,999,990') AS rows," +
-		"to_char(100*s.rows/(SELECT total_rows FROM totals), 'FM990.00') AS rows_ratio," +
+		"to_char(100*s.rows/(SELECT coalesce(nullif(total_rows, 0), 1) FROM totals), 'FM990.00') AS rows_ratio," +
 		"to_char(interval '1 millisecond' * s.all_time, 'HH24:MI:SS.MS') AS all_time," +
-		"to_char(100*s.all_time/(SELECT total_all_time FROM totals), 'FM990.00') AS all_time_ratio," +
+		"to_char(100*s.all_time/(SELECT coalesce(nullif(total_all_time, 0), 1) FROM totals), 'FM990.00') AS all_time_ratio," +
 		"to_char(interval '1 millisecond' * s.plan_time, 'HH24:MI:SS.MS') AS plan_time," +
-		"to_char(100*s.plan_time/(SELECT total_plan_time FROM totals), 'FM990.00') AS plan_time_ratio," +
+		"to_char(100*s.plan_time/(SELECT coalesce(nullif(total_plan_time, 0), 1) FROM totals), 'FM990.00') AS plan_time_ratio," +
 		"to_char(interval '1 millisecond' * s.cpu_time, 'HH24:MI:SS.MS') AS cpu_time," +
-		"to_char(100*s.cpu_time/(SELECT total_cpu_time FROM totals), 'FM990.00') AS cpu_time_ratio," +
+		"to_char(100*s.cpu_time/(SELECT coalesce(nullif(total_cpu_time, 0), 1) FROM totals), 'FM990.00') AS cpu_time_ratio," +
 		"to_char(interval '1 millisecond' * s.io_time, 'HH24:MI:SS.MS') AS io_time," +
-		"to_char(100*s.io_time/(SELECT total_io_time FROM totals), 'FM990.00') AS io_time_ratio," +
+		"to_char(100*s.io_time/(SELECT coalesce(nullif(total_io_time, 0), 1) FROM totals), 'FM990.00') AS io_time_ratio," +
 		"(s.all_time / s.calls)::numeric(20,2) AS avg_all_time," +
 		"(s.plan_time / s.calls)::numeric(20,2) AS avg_plan_time," +
 		"(s.cpu_time / s.calls)::numeric(20,2) AS avg_cpu_time," +
