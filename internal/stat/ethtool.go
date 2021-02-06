@@ -10,13 +10,13 @@ import (
 )
 
 const (
-	ethtoolGset          = 0x00000001 /* get settings -- DEPRECATED */
-	ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
-	ifNameSize           = 16         /* maximum size of an interface name */
-	siocEthtool          = 0x8946     /* ioctl ethtool request */
-	duplexHalf           = 0
-	duplexFull           = 1
-	duplexUnknown        = 255
+	ethtoolGset = 0x00000001 /* get settings -- DEPRECATED */
+	//ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
+	ifNameSize    = 16     /* maximum size of an interface name */
+	siocEthtool   = 0x8946 /* ioctl ethtool request */
+	duplexHalf    = 0
+	duplexFull    = 1
+	duplexUnknown = 255
 )
 
 // ethtool describes communication channel used for getting interface properties.
@@ -60,23 +60,24 @@ type ethtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 	Reserved      [2]uint32
 }
 
-// EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct
-type ethtoolLinkSettings struct {
-	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
-	Speed               uint32 // Link speed (Mbps)
-	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
-	Port                uint8  // Physical connector type; one of %PORT_*
-	PhyAddress          uint8  // MDIO address of PHY (transceiver) -- origin 'phy_address'
-	Autoneg             uint8  // Enable/disable autonegotiation and auto-detection
-	MdioSupport         uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols supported by the interface -- origin 'mdio_support'
-	EthTpMdix           uint8  // Ethernet twisted-pair MDI(-X) status -- origin 'eth_tp_mdix'
-	EthTpMdixCtrl       uint8  // Ethernet twisted pair MDI(-X) control -- origin 'eth_tp_mdix_ctrl'
-	LinkModeMasksNwords uint8  // Number of 32-bit words for each of the supported, advertising, lp_advertising link mode bitmaps. -- origin 'link_mode_masks_nwords'
-	Transceiver         uint8  // Used to distinguish different possible PHY types
-	Reserved1           [3]uint8
-	Reserved            [7]uint32
-	LinkModeMasks       [0]uint32 // -- origin 'link_mode_masks'
-}
+// EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct.
+// This struct is commented for possible further use.
+//type ethtoolLinkSettings struct {
+//	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
+//	Speed               uint32 // Link speed (Mbps)
+//	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
+//	Port                uint8  // Physical connector type; one of %PORT_*
+//	PhyAddress          uint8  // MDIO address of PHY (transceiver) -- origin 'phy_address'
+//	Autoneg             uint8  // Enable/disable autonegotiation and auto-detection
+//	MdioSupport         uint8  // Bitmask of %ETH_MDIO_SUPPORTS_* flags for the MDIO protocols supported by the interface -- origin 'mdio_support'
+//	EthTpMdix           uint8  // Ethernet twisted-pair MDI(-X) status -- origin 'eth_tp_mdix'
+//	EthTpMdixCtrl       uint8  // Ethernet twisted pair MDI(-X) control -- origin 'eth_tp_mdix_ctrl'
+//	LinkModeMasksNwords uint8  // Number of 32-bit words for each of the supported, advertising, lp_advertising link mode bitmaps. -- origin 'link_mode_masks_nwords'
+//	Transceiver         uint8  // Used to distinguish different possible PHY types
+//	Reserved1           [3]uint8
+//	Reserved            [7]uint32
+//	LinkModeMasks       [0]uint32 // -- origin 'link_mode_masks'
+//}
 
 // ifreq describes ethtool request about specific network interface.
 type ifreq struct {
