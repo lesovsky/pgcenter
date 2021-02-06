@@ -43,8 +43,8 @@ var (
 )
 
 // dialogOpen opens view for the dialog.
-func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
+func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
 		// some types of actions allowed only in specifics stats contexts.
 		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != "activity" {
 			var msg string
