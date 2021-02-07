@@ -29,48 +29,46 @@ func TestNewOptions(t *testing.T) {
 	testcases := []struct {
 		version  int
 		recovery string
+		track    string
 		querylen int
 		want     Options
 	}{
-		{version: 130000, recovery: "f", querylen: 256, want: Options{
+		{version: 130000, recovery: "f", track: "on", querylen: 256, want: Options{
+			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 130000, recovery: "t", querylen: 256, want: Options{
+		{version: 130000, recovery: "t", track: "on", querylen: 256, want: Options{
+			Version: 130000, Recovery: "t", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_last_wal_receive_lsn",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 96000, recovery: "f", querylen: 256, want: Options{
+		{version: 96000, recovery: "f", track: "on", querylen: 256, want: Options{
+			Version: 96000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_current_xlog_location",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 96000, recovery: "t", querylen: 256, want: Options{
+		{version: 96000, recovery: "t", track: "on", querylen: 256, want: Options{
+			Version: 96000, Recovery: "t", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_last_xlog_receive_location",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
-		{version: 130000, recovery: "f", querylen: 0, want: Options{
+		{version: 130000, recovery: "f", track: "on", querylen: 0, want: Options{
+			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 0, PgSSQueryLenFn: "p.query",
 		}},
-		{version: 130000, recovery: "f", querylen: 123, want: Options{
+		{version: 130000, recovery: "f", track: "on", querylen: 123, want: Options{
+			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
 			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
 		}},
 	}
 
 	for _, tc := range testcases {
-		opts := NewOptions(tc.version, tc.recovery, tc.querylen)
+		opts := NewOptions(tc.version, tc.recovery, tc.track, tc.querylen)
 		assert.Equal(t, tc.want, opts)
 	}
-
-	//opts := NewOptions(130000, "f", 123)
-	//assert.Equal(
-	//	t, Options{
-	//		ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-	//		QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
-	//	},
-	//	opts,
-	//)
 }
 
 func Test_selectWalFunctions(t *testing.T) {

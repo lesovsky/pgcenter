@@ -205,33 +205,29 @@ func New() Views {
 }
 
 // Configure performs adjusting of queries accordingly to Postgres version.
-//   IN version int: numeric Postgres version
-//   IN recovery string: recovery state of Postgres (f/t)
+//   IN opts Options: struct with additional Postgres properties required for formatting necessary queries
 //   IN gucTrackCommitTS string: value of track_commit_timestamp GUC (on/off)
-//   IN querylen int: length limit for pg_stat_statement.query
-func (v Views) Configure(version int, recovery string, gucTrackCommitTS string, querylen int) error {
+func (v Views) Configure(opts query.Options) error {
 	var track bool
-	if gucTrackCommitTS == "on" {
+	if opts.GucTrackCommitTS == "on" {
 		track = true
 	}
 	for k, view := range v {
 		switch k {
 		case "activity":
-			view.QueryTmpl, view.Ncols = query.SelectStatActivityQuery(version)
+			view.QueryTmpl, view.Ncols = query.SelectStatActivityQuery(opts.Version)
 			v[k] = view
 		case "replication":
-			view.QueryTmpl, view.Ncols = query.SelectStatReplicationQuery(version, track)
+			view.QueryTmpl, view.Ncols = query.SelectStatReplicationQuery(opts.Version, track)
 			v[k] = view
 		case "databases":
-			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseQuery(version)
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseQuery(opts.Version)
 			v[k] = view
 		case "statements_timings":
-			view.QueryTmpl = query.SelectStatStatementsTimingQuery(version)
+			view.QueryTmpl = query.SelectStatStatementsTimingQuery(opts.Version)
 			v[k] = view
 		}
 	}
-
-	opts := query.NewOptions(version, recovery, querylen)
 
 	// Build query texts based on templates.
 	for k, view := range v {

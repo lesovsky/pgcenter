@@ -76,7 +76,8 @@ func TestViews_Configure(t *testing.T) {
 
 	for _, tc := range testcases {
 		views := New()
-		err := views.Configure(tc.version, tc.recovery, tc.trackCommit, tc.querylen)
+		opts := query.NewOptions(tc.version, tc.recovery, tc.trackCommit, tc.querylen)
+		err := views.Configure(opts)
 		assert.NoError(t, err)
 
 		switch tc.version {

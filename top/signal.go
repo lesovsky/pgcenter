@@ -62,12 +62,8 @@ func killGroup(app *app, mode string) string {
 		return "Signals: do nothing, unknown mode"
 	}
 
-	var (
-		template, q               string
-		signalled, signalledTotal int64
-	)
-
 	// Select signal function: pg_cancel_backend or pg_terminate_backend.
+	var template string
 	switch mode {
 	case "cancel":
 		template = query.ExecCancelQueryGroup
@@ -85,14 +81,22 @@ func killGroup(app *app, mode string) string {
 	}
 
 	// Walk through the states, if state is in the mask then send signal to that group of process.
+	var signalled, signalledTotal int64
 	for state, part := range states {
 		if (mask & state) != 0 {
 			app.config.queryOptions.BackendState = part
 			if state == groupWaiting && app.postgresProps.VersionNum < 90600 {
 				app.config.queryOptions.BackendState = "waiting"
 			}
-			q, _ = query.Format(template, app.config.queryOptions)
-			err := app.db.QueryRow(q).Scan(&signalled)
+
+			// format query
+			q, err := query.Format(template, app.config.queryOptions)
+			if err != nil {
+				return fmt.Sprintf("Signals: %s", err.Error())
+			}
+
+			// execute query
+			err = app.db.QueryRow(q).Scan(&signalled)
 			if err != nil {
 				return fmt.Sprintf("Signals: %s", err.Error())
 			}

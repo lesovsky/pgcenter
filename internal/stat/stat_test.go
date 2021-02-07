@@ -46,7 +46,8 @@ func TestCollector_Update(t *testing.T) {
 			Refresh:   1 * time.Second,
 		},
 	}
-	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256))
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256)
+	assert.NoError(t, views.Configure(opts))
 
 	c, err := NewCollector(conn)
 	assert.NoError(t, err)

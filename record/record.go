@@ -5,6 +5,7 @@ package record
 import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
@@ -70,8 +71,10 @@ func (app *app) setup() error {
 	}
 
 	// Create and configure stats views depending on running Postgres.
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit)
+
 	views := view.New()
-	err = views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit)
+	err = views.Configure(opts)
 	if err != nil {
 		return err
 	}

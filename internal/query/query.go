@@ -8,30 +8,36 @@ import (
 
 // Options contains queries' settings that used depending on user preferences.
 type Options struct {
-	ViewType       string // Show stats including system tables/indexes
-	WalFunction1   string // Use old pg_xlog_* or newer pg_wal_* functions
-	WalFunction2   string // Use old pg_xlog_* or newer pg_wal_* functions
-	QueryAgeThresh string // Show only queries with duration more than specified
-	BackendState   string // Backend state's selector for cancel/terminate function
-	ShowNoIdle     bool   // don't show IDLEs, background workers)
-	PgSSQueryLen   int    // Specify the length of query to show in pg_stat_statements
-	PgSSQueryLenFn string // Specify exact func to truncating query
+	Version          int    // Postgres version (numeric format)
+	Recovery         string // Recovery state
+	GucTrackCommitTS string // Value of track_commit_timestamp GUC
+	ViewType         string // Show stats including system tables/indexes
+	WalFunction1     string // Use old pg_xlog_* or newer pg_wal_* functions
+	WalFunction2     string // Use old pg_xlog_* or newer pg_wal_* functions
+	QueryAgeThresh   string // Show only queries with duration more than specified
+	BackendState     string // Backend state's selector for cancel/terminate function
+	ShowNoIdle       bool   // don't show IDLEs, background workers)
+	PgSSQueryLen     int    // Specify the length of query to show in pg_stat_statements
+	PgSSQueryLenFn   string // Specify exact func to truncating query
 }
 
 // NewOptions creates query options used for queries customization depending on Postgres version and other important settings.
-func NewOptions(version int, recovery string, querylen int) Options {
+func NewOptions(version int, recovery string, track string, querylen int) Options {
 	opts := Options{
-		ViewType:       "user",       // System tables and indexes aren't shown by default
-		QueryAgeThresh: "00:00:00.0", // Don't filter queries by age
-		ShowNoIdle:     true,         // Don't show idle clients and background workers
-		PgSSQueryLen:   querylen,
+		Version:          version,
+		Recovery:         recovery,
+		GucTrackCommitTS: track,
+		ViewType:         "user",       // System tables and indexes aren't shown by default
+		QueryAgeThresh:   "00:00:00.0", // Don't filter queries by age
+		ShowNoIdle:       true,         // Don't show idle clients and background workers
+		PgSSQueryLen:     querylen,
 	}
 
-	opts.WalFunction1, opts.WalFunction2 = selectWalFunctions(version, recovery)
+	opts.WalFunction1, opts.WalFunction2 = selectWalFunctions(opts.Version, opts.Recovery)
 
 	// Define length limit for pg_stat_statement.query.
 	if opts.PgSSQueryLen > 0 {
-		opts.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", querylen)
+		opts.PgSSQueryLenFn = fmt.Sprintf("left(p.query, %d)", opts.PgSSQueryLen)
 	} else {
 		opts.PgSSQueryLenFn = "p.query"
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,8 @@ func Test_tarRecorder(t *testing.T) {
 	props, err := stat.GetPostgresProperties(db)
 	assert.NoError(t, err)
 	views := view.New()
-	assert.NoError(t, views.Configure(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 0))
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 0)
+	assert.NoError(t, views.Configure(opts))
 	db.Close()
 
 	// create postgres config

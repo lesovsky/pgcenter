@@ -39,7 +39,7 @@ func Test_StatStatementsQueries(t *testing.T) {
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_statements/%d", version), func(t *testing.T) {
 			for _, query := range queries {
-				opts := NewOptions(version, "f", 256)
+				opts := NewOptions(version, "f", "off", 256)
 				q, err := Format(query, opts)
 				assert.NoError(t, err)
 
@@ -57,7 +57,7 @@ func Test_StatStatementsQueries(t *testing.T) {
 	t.Run("pg_stat_statements_timing", func(t *testing.T) {
 		for _, version := range versions {
 			tmpl := SelectStatStatementsTimingQuery(version)
-			opts := NewOptions(version, "f", 256)
+			opts := NewOptions(version, "f", "off", 256)
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 
@@ -96,7 +96,7 @@ func Test_StatStatementsReportQueries(t *testing.T) {
 
 	for _, version := range versions {
 		tmpl := SelectQueryReportQuery(version)
-		opts := NewOptions(version, "f", 256)
+		opts := NewOptions(version, "f", "off", 256)
 		q, err := Format(tmpl, opts)
 		assert.NoError(t, err)
 
