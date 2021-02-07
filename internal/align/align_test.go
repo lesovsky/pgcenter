@@ -34,14 +34,21 @@ func TestSetAlign(t *testing.T) {
 			dynamic: false, limit: 1000, wantcols: []string{"col12", "col123"}, wantwidthes: map[int]int{0: 8, 1: 8},
 		},
 		{
-			// When values longer than 8 chars but shorter than 16, width truncated to 8 chars.
+			// When values longer than twice longer than column name: width set to value length but no more than 32 chars .
 			res: stat.PGresult{
-				Valid: true, Ncols: 2, Nrows: 1, Cols: []string{"col123", "col12345"},
+				Valid: true, Ncols: 5, Nrows: 1, Cols: []string{"col001", "col00002", "col00003", "col00004"},
 				Values: [][]sql.NullString{
-					{{String: "123456789012", Valid: true}, {String: "45879812", Valid: true}},
+					{
+						{String: "1234567890123456789012345678901234567890", Valid: true}, // trunc to 32
+						{String: "12345678901234567890", Valid: true},                     // width to value length
+						{String: "1234567890", Valid: true},                               // width to value length
+						{String: "12345678", Valid: true},                                 // width to value length
+					},
 				},
 			},
-			dynamic: false, limit: 1000, wantcols: []string{"col123", "col12345"}, wantwidthes: map[int]int{0: 8, 1: 8},
+			dynamic: false, limit: 1000,
+			wantcols:    []string{"col001", "col00002", "col00003", "col00004"},
+			wantwidthes: map[int]int{0: 32, 1: 20, 2: 10, 3: 8},
 		},
 		{
 			// When values longer than 16 chars, width expanded to their length.

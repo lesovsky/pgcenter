@@ -49,7 +49,7 @@ func SetAlign(r stat.PGresult, truncLimit int, dynamic bool) (map[int]int, []str
 					if valuelen > colnamelen*2 {
 						widthes[colidx] = math.Min(valuelen, 32)
 					} else {
-						widthes[colidx] = colnamelen
+						widthes[colidx] = valuelen
 					}
 				}
 			// for last column set width using truncation limit
