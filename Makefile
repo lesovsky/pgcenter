@@ -21,7 +21,7 @@ clean: ## Clean build directory.
 dep: ## Download the dependencies.
 	go mod download
 
-lint: ## Lint the source files
+lint: dep ## Lint the source files
 	golangci-lint run --timeout 5m -E golint -e '(struct field|type|method|func) [a-zA-Z`]+ should be [a-zA-Z`]+'
 	gosec -quiet ./...
 

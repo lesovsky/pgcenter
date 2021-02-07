@@ -365,9 +365,9 @@ func Test_formatStatSample(t *testing.T) {
 }
 
 func Test_printReportHeader(t *testing.T) {
-	tsStart, err := time.Parse("2006-01-02 15:04:05 -07", "2021-01-18 05:00:00 +05")
+	tsStart, err := time.Parse("2006-01-02 15:04:05 MST", "2021-01-18 05:00:00 +05")
 	assert.NoError(t, err)
-	tsEnd, err := time.Parse("2006-01-02 15:04:05 -07", "2021-01-18 06:00:00 +05")
+	tsEnd, err := time.Parse("2006-01-02 15:04:05 MST", "2021-01-18 06:00:00 +05")
 	assert.NoError(t, err)
 
 	c := Config{

@@ -4,16 +4,12 @@ import "fmt"
 
 // NewTestConfig returns test config used for testing purposes.
 func NewTestConfig() (Config, error) {
-	return NewConfig("127.0.0.1", 5432, "postgres", "pgcenter_fixtures")
+	return NewConfig("127.0.0.1", 21913, "postgres", "pgcenter_fixtures")
 }
 
 // TestConnect returns test connection used for testing purposes.
 func NewTestConnect() (*DB, error) {
-	config, err := NewConfig("127.0.0.1", 5432, "postgres", "pgcenter_fixtures")
-	if err != nil {
-		return nil, err
-	}
-	return Connect(config)
+	return NewTestConnectVersion(130000)
 }
 
 // NewTestConnectVersion connects to test Postgres.

@@ -79,7 +79,8 @@ Additional information and usage examples available [here](doc/examples.md).
 
 #### Development and testing
 The following notes are important for people who interested in developing new features.
-- pgCenter goes with builtin tests that cover pgCenter's functionality. Some tests might be harmful like those which test cancel/terminate group of backends. Run tests only on isolated or non-important environments.
+- pgcenter goes with special docker [image](https://hub.docker.com/repository/docker/lesovsky/pgcenter-testing) used for local and CI/CD testing. See [testing](./testing) directory for details.
+- see [docs](./doc/development.md) about how to deploy environment for local development.
 
 #### Known issues
 pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:

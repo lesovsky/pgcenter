@@ -17,13 +17,13 @@ func TestNewConfig(t *testing.T) {
 		user   string
 		dbname string
 	}{
-		{name: "all values", valid: true, host: "127.0.0.1", port: 5432, user: "postgres", dbname: "postgres"},
-		{name: "no host", valid: true, port: 5432, user: "postgres", dbname: "postgres"},
+		{name: "all values", valid: true, host: "127.0.0.1", port: 1234, user: "postgres", dbname: "postgres"},
+		{name: "no host", valid: true, port: 1234, user: "postgres", dbname: "postgres"},
 		{name: "no port", valid: true, host: "127.0.0.1", user: "postgres", dbname: "postgres"},
-		{name: "no user", valid: true, host: "127.0.0.1", port: 5432, dbname: "postgres"},
-		{name: "no dbname", valid: true, host: "127.0.0.1", port: 5432, user: "postgres"},
+		{name: "no user", valid: true, host: "127.0.0.1", port: 1234, dbname: "postgres"},
+		{name: "no dbname", valid: true, host: "127.0.0.1", port: 1234, user: "postgres"},
 		{name: "no host/port", valid: true, user: "postgres", dbname: "postgres"},
-		{name: "no user/dbname", valid: true, host: "127.0.0.1", port: 5432},
+		{name: "no user/dbname", valid: true, host: "127.0.0.1", port: 1234},
 		{name: "all empty", valid: true},
 		{name: "unix socket", valid: true, host: "/var/run/postgresql"},
 		{name: "invalid", valid: false, host: "invalid, invalid"},
@@ -59,24 +59,24 @@ func TestNewConfig_LibPQ_Env(t *testing.T) {
 		wantOptions string
 	}{
 		{
-			envvar: "PGHOST", envvalue: "1.2.3.4", host: "", port: 5432, user: "test", dbname: "testdb",
-			wantHost: "1.2.3.4", wantPort: 5432, wantUser: "test", wantDbname: "testdb",
+			envvar: "PGHOST", envvalue: "1.2.3.4", host: "", port: 1234, user: "test", dbname: "testdb",
+			wantHost: "1.2.3.4", wantPort: 1234, wantUser: "test", wantDbname: "testdb",
 		},
 		{
-			envvar: "PGPORT", envvalue: "1122", host: "127.0.0.1", port: 1122, user: "test", dbname: "testdb",
-			wantHost: "127.0.0.1", wantPort: 1122, wantUser: "test", wantDbname: "testdb",
+			envvar: "PGPORT", envvalue: "1234", host: "127.0.0.1", port: 1234, user: "test", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 1234, wantUser: "test", wantDbname: "testdb",
 		},
 		{
-			envvar: "PGUSER", envvalue: "example", host: "127.0.0.1", port: 5432, user: "", dbname: "testdb",
-			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "example", wantDbname: "testdb",
+			envvar: "PGUSER", envvalue: "example", host: "127.0.0.1", port: 1234, user: "", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 1234, wantUser: "example", wantDbname: "testdb",
 		},
 		{
-			envvar: "PGDATABASE", envvalue: "example_db", host: "127.0.0.1", port: 5432, user: "test", dbname: "",
-			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "test", wantDbname: "example_db",
+			envvar: "PGDATABASE", envvalue: "example_db", host: "127.0.0.1", port: 1234, user: "test", dbname: "",
+			wantHost: "127.0.0.1", wantPort: 1234, wantUser: "test", wantDbname: "example_db",
 		},
 		{
-			envvar: "PGOPTIONS", envvalue: "-c work_mem=100MB", host: "127.0.0.1", port: 5432, user: "test", dbname: "testdb",
-			wantHost: "127.0.0.1", wantPort: 5432, wantUser: "test", wantDbname: "testdb", wantOptions: "-c work_mem=100MB",
+			envvar: "PGOPTIONS", envvalue: "-c work_mem=100MB", host: "127.0.0.1", port: 1234, user: "test", dbname: "testdb",
+			wantHost: "127.0.0.1", wantPort: 1234, wantUser: "test", wantDbname: "testdb", wantOptions: "-c work_mem=100MB",
 		},
 	}
 
@@ -101,7 +101,7 @@ func TestConnect(t *testing.T) {
 	}{
 		{
 			name:    "available postgres",
-			connStr: "host=127.0.0.1 port=5432 user=postgres dbname=pgcenter_fixtures",
+			connStr: "host=127.0.0.1 port=21913 user=postgres dbname=pgcenter_fixtures",
 			valid:   true,
 		},
 		{

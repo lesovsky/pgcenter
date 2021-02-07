@@ -16,31 +16,31 @@ func TestConnectionOptions_ParseExtraArgs(t *testing.T) {
 	}{
 		{
 			desc:       "dbname and user are not specified",
-			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 5432},
+			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 1234},
 			args:       []string{},
 			wantdbname: "", wantuser: "",
 		},
 		{
 			desc:       "dbname specified as argument",
-			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 5432},
+			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 1234},
 			args:       []string{"newdb"},
 			wantdbname: "newdb", wantuser: "",
 		},
 		{
 			desc:       "dbname and user specified as argument",
-			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 5432},
+			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 1234},
 			args:       []string{"newdb", "newuser"},
 			wantdbname: "newdb", wantuser: "newuser",
 		},
 		{
 			desc:       "dbname specified as a parameter's values",
-			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 5432, Dbname: "postgres"},
+			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 1234, Dbname: "postgres"},
 			args:       []string{"newdb"},
 			wantdbname: "postgres", wantuser: "",
 		},
 		{
 			desc:       "dbname and user are specified as a parameter's values",
-			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 5432, Dbname: "postgres", User: "postgres"},
+			opts:       &ConnectionOptions{Host: "127.0.0.1", Port: 1234, Dbname: "postgres", User: "postgres"},
 			args:       []string{"newdb", "newuser"},
 			wantdbname: "postgres", wantuser: "postgres",
 		},

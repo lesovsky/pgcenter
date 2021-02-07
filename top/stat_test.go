@@ -15,12 +15,12 @@ func Test_formatInfoString(t *testing.T) {
 		want string
 	}{
 		{
-			cfg:  postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{Host: "127.0.0.1", Port: 5432, User: "test", Database: "testdb"}}},
-			want: "state [up]: 127.0.0.1:5432 test@testdb (ver: 13.1 on x86_64-~, up 01:23:48, recovery: f)",
+			cfg:  postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{Host: "127.0.0.1", Port: 1234, User: "test", Database: "testdb"}}},
+			want: "state [up]: 127.0.0.1:1234 test@testdb (ver: 13.1 on x86_64-~, up 01:23:48, recovery: f)",
 		},
 		{
-			cfg:  postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{Host: "127.0.0.1", Port: 5432, User: "test", Database: ""}}},
-			want: "state [up]: 127.0.0.1:5432 test@test (ver: 13.1 on x86_64-~, up 01:23:48, recovery: f)",
+			cfg:  postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{Host: "127.0.0.1", Port: 1234, User: "test", Database: ""}}},
+			want: "state [up]: 127.0.0.1:1234 test@test (ver: 13.1 on x86_64-~, up 01:23:48, recovery: f)",
 		},
 	}
 
