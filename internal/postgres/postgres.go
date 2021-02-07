@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
+	"golang.org/x/crypto/ssh/terminal"
 	"os"
 	"strconv"
 	"strings"
@@ -61,16 +63,39 @@ func NewConfig(host string, port int, user string, dbname string) (Config, error
 
 // Connect connects to Postgres using provided config and returns DB object.
 func Connect(config Config) (*DB, error) {
-	conn, err := pgx.ConnectConfig(context.TODO(), config.Config)
-	if err != nil {
-		return nil, err
-	}
+	for {
+		// Make connection attempt
+		conn, err := pgx.ConnectConfig(context.TODO(), config.Config)
 
-	return &DB{
-		Config: config,
-		Conn:   conn,
-		Local:  strings.HasPrefix(config.Config.Host, "/"),
-	}, nil
+		// Handle error if occurred.
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				switch pgErr.Code {
+				case "28P01": // password authentication failed
+					fmt.Printf("Password for user %s: ", config.Config.User)
+					bytePassword, err := terminal.ReadPassword(0)
+					if err != nil {
+						return nil, err
+					}
+					config.Config.Password = string(bytePassword)
+					fmt.Println()
+					continue
+				default:
+					return nil, fmt.Errorf("failed connection establishing: %s", err)
+				}
+			} else {
+				return nil, err
+			}
+		}
+
+		// Return established connection
+		return &DB{
+			Config: config,
+			Conn:   conn,
+			Local:  strings.HasPrefix(config.Config.Host, "/"),
+		}, nil
+	}
 }
 
 // Reconnect reconnects to Postgres using existing config and swaps failed DB connection.
