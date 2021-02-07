@@ -150,6 +150,15 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	// Take refresh interval from view
 	itv := int(refresh / time.Second)
 
+	err = db.PQstatus()
+	if err != nil {
+		err = postgres.Reconnect(db)
+		if err != nil {
+			s.Pgstat.Activity.State = "down"
+			return s, err
+		}
+	}
+
 	// Collect Postgres stats.
 	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSAvail, itv, view.Query, c.prevPgStat)
 	if err != nil {

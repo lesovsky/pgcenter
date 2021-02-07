@@ -67,15 +67,6 @@ type Activity struct {
 func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev Pgstat) (Activity, error) {
 	var s Activity
 
-	err := db.PQstatus()
-	if err != nil {
-		err = postgres.Reconnect(db)
-		if err != nil {
-			s.State = "down"
-			return s, err
-		}
-	}
-
 	if err := db.QueryRow(query.GetUptime).Scan(&s.Uptime); err != nil {
 		s.Uptime = "--:--:--"
 	}
@@ -88,7 +79,7 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 	queryActivity := query.SelectActivityActivityQuery(version)
 	queryAutovacuum := query.SelectActivityAutovacuumQuery(version)
 
-	err = db.QueryRow(queryActivity).Scan(
+	err := db.QueryRow(queryActivity).Scan(
 		&s.ConnTotal, &s.ConnIdle, &s.ConnIdleXact, &s.ConnActive, &s.ConnWaiting, &s.ConnOthers, &s.ConnPrepared)
 	if err != nil {
 		return s, err
