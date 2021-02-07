@@ -136,7 +136,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogQueryReport:
 			var r report
 			r, message = getQueryReport(answer, app.postgresProps.VersionNum, app.db)
-			if message != "" {
+			if message == "" {
 				message = printQueryReport(g, r, app.uiExit)
 			}
 		case dialogChangeRefresh:
