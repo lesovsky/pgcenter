@@ -1,6 +1,7 @@
 package top
 
 import (
+	"fmt"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"github.com/lesovsky/pgcenter/internal/postgres"
@@ -25,5 +26,24 @@ func Test_formatInfoString(t *testing.T) {
 
 	for _, tc := range testcases {
 		assert.Equal(t, tc.want, formatInfoString(tc.cfg, "up", "13.1 on x86_64-pc-linux-gnu Debian", "01:23:48", "f"))
+	}
+}
+
+func Test_formatError(t *testing.T) {
+	testcases := []struct {
+		err  error
+		want string
+	}{
+		{err: nil, want: ""},
+		{
+			err:  &pgconn.PgError{Severity: "TEST", Message: "test message", Detail: "test detail", Hint: "test hint"},
+			want: "TEST: test message\nDETAIL: test detail\nHINT: test hint",
+		},
+		{err: fmt.Errorf("example error"), want: "ERROR: example error"},
+	}
+
+	for _, tc := range testcases {
+		got := formatError(tc.err)
+		assert.Equal(t, tc.want, got)
 	}
 }

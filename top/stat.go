@@ -2,6 +2,7 @@ package top
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgconn"
 	"github.com/jroimartin/gocui"
@@ -271,8 +272,8 @@ func formatInfoString(cfg postgres.Config, state, version, uptime, recovery stri
 // printDbstat prints main Postgres stats on UI.
 func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	// If reading stats failed, print the error occurred and return.
-	if err, ok := s.Error.(*pgconn.PgError); ok {
-		_, err := fmt.Fprintf(v, "%s: %s\nDETAIL: %s\nHINT: %s", err.Severity, err.Message, err.Detail, err.Hint)
+	if s.Error != nil {
+		_, err := fmt.Fprint(v, formatError(s.Error))
 		if err != nil {
 			return err
 		}
@@ -301,6 +302,20 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	}
 
 	return nil
+}
+
+// formatError returns formatted error string depending on its type.
+func formatError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return fmt.Sprintf("%s: %s\nDETAIL: %s\nHINT: %s", pgErr.Severity, pgErr.Message, pgErr.Detail, pgErr.Hint)
+	}
+
+	return fmt.Sprintf("ERROR: %s", err.Error())
 }
 
 // printStatHeader prints stats header.
