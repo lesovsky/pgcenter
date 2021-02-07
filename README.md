@@ -15,13 +15,15 @@ pgCenter is a command-line admin tool for observing and troubleshooting Postgres
   - [System statistics](#system-statistics)
 - [Install notes](#install-notes)
 - [Usage notes](#usage-notes)
+- [Development and testing](#development-and-testing)
 - [Known issues](#known-issues)
 - [Thanks](#thanks)
 
 ---
 #### Main goal
-Postgres provides various activity statistics that include detailed information about its behaviour: connections, statements, database operations, replication, resources usage and more. General purpose of the statistics is to help DBAs to monitor and troubleshoot Postgres. However, these statistics provided in textual form retrieved from SQL functions and views, and Postgres doesn't provide any tools for working with them.
-pgCenter's main goal is to help Postgres DBA manage statistics that theу have in their databases and see all the necessary data in convenient format based on builtin stats views and functions.
+Postgres provides various activity statistics about its runtime, such as connections, statements, database operations, replication, resources usage and more. General purpose of the statistics is to help DBAs to monitor and troubleshoot Postgres. However, these statistics provided in textual form retrieved from SQL functions and views, and Postgres doesn't provide native tools for working with statistics views.
+
+pgCenter's main goal is to help Postgres DBA working with statistics and provide a convenient way to observe Postgres in runtime.  
 
 ![](doc/images/pgcenter-demo.gif)
 
@@ -75,6 +77,10 @@ Additional information and usage examples available [here](doc/examples.md).
 - it is possible to run pgCenter on one host and connect to Postgres which runs on another host, but some functions may not work - this fully applies to `pgcenter top` command.
 - pgCenter also supports Amazon RDS for PostgreSQL, but as mentioned above, some functions will not work and also system stats will not be available, because of PostgreSQL RDS instances don't support untrusted procedural languages due to security reasons.
 
+#### Development and testing
+The following notes are important for people who interested in developing new features.
+- pgCenter goes with builtin tests that cover pgCenter's functionality. Some tests might be harmful like those which test cancel/terminate group of backends. Run tests only on isolated or non-important environments.
+
 #### Known issues
 pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:
 
@@ -83,6 +89,7 @@ pgCenter is beta software, thus in some circumstances, segfaults and panics may 
 - also, please list the information about your operating system, its release version and version of Postgres.
 
 #### Thanks
+- Thank you for using pgCenter!
 - Sebastien Godard for [sysstat](https://github.com/sysstat/sysstat).
 - Brendan Gregg and Tim Cook for [nicstat](http://sourceforge.net/projects/nicstat/).
 - Pavel Stěhule for his [articles](http://postgres.cz/wiki/PostgreSQL).
@@ -91,4 +98,3 @@ pgCenter is beta software, thus in some circumstances, segfaults and panics may 
 - Anton Novojilov, package maintainer on RHEL/CentOS Linux (Essential Kaos repo).
 - Nikolay A. Fetisov, package maintainer at [Sisyphus](http://www.sisyphus.ru/ru/srpm/pgcenter) ALT Linux.
 - Devrim Gündüz, package maintainer on official [PostgreSQL yum repo](https://yum.postgresql.org/).
-- Thank you for using pgCenter!
