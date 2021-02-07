@@ -1,5 +1,3 @@
-// Dialogs are used for asking a user about something or for confirming actions that are going to be executed.
-
 package top
 
 import (

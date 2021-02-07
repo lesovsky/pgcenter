@@ -1,6 +1,3 @@
-// config defines 'top' program runtime configuration - selected screen and its settings like columns order, used
-// aligning, filters, etc.
-
 package top
 
 import (

@@ -1,5 +1,3 @@
-// Stuff related to displaying built-in help
-
 package top
 
 import (

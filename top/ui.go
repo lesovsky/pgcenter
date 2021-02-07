@@ -1,5 +1,3 @@
-// Stuff related to user interface.
-
 package top
 
 import (

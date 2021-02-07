@@ -1,5 +1,3 @@
-// 'pgcenter top' - top-like stats viewer.
-
 package top
 
 import (

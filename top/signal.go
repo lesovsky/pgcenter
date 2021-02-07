@@ -1,5 +1,3 @@
-// Stuff that allows to cancel Postgres queries and terminate backends.
-
 package top
 
 import (
