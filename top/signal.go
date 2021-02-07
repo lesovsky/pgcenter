@@ -76,7 +76,7 @@ func killGroup(app *app, mode string) string {
 		groupIdle:     "state = 'idle'",
 		groupIdleXact: "state IN ('idle in transaction (aborted)', 'idle in transaction')",
 		groupActive:   "state = 'active'",
-		groupWaiting:  "wait_event IS NOT NULL OR wait_event_type IS NOT NULL",
+		groupWaiting:  "wait_event_type = 'Lock'",
 		groupOthers:   "state IN ('fastpath function call', 'disabled')",
 	}
 
