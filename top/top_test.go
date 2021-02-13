@@ -46,14 +46,14 @@ func Test_app_quit(t *testing.T) {
 
 	app := newApp(conn, newConfig())
 	assert.NotNil(t, app)
-
 	assert.NoError(t, app.setup())
-
-	fn := app.quit()
 
 	ui, err := gocui.NewGui(gocui.OutputNormal)
 	assert.NoError(t, err)
+
+	app.uiExit = make(chan int)
 	app.ui = ui
+	fn := app.quit()
 
 	assert.Equal(t, gocui.ErrQuit, fn(app.ui, nil))
 }
