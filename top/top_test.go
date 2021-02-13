@@ -51,7 +51,6 @@ func Test_app_quit(t *testing.T) {
 	ui, err := gocui.NewGui(gocui.OutputNormal)
 	assert.NoError(t, err)
 
-	app.uiExit = make(chan int)
 	app.ui = ui
 	fn := app.quit()
 
