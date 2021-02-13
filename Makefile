@@ -1,3 +1,4 @@
+DOCKER_ACCOUNT = lesovsky
 PROGRAM_NAME = pgcenter
 
 COMMIT=$(shell git rev-parse --short HEAD)
@@ -39,3 +40,10 @@ install: ## Install pgcenter executable into /usr/bin directory.
 
 uninstall: ## Uninstall pgcenter executable from /usr/bin directory.
 	rm -f /usr/bin/${PROGRAM_NAME}
+
+docker-build: ## Build docker image
+	docker build -t ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:${TAG} .
+	docker image prune --force --filter label=stage=intermediate
+
+docker-push: ## Push docker image to registry
+	docker push ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:${TAG}
