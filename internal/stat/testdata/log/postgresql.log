@@ -1,0 +1,18 @@
+2020-12-05 00:03:46 +05 [1361]: [6517-1] LOG:  checkpoint starting: time
+2020-12-05 00:06:16 +05 [1361]: [6518-1] LOG:  checkpoint complete: wrote 3034 buffers (18.5%); 0 WAL file(s) added, 0 removed, 1 recycled; write=148.920 s, sync=0.331 s, total=149.951 s; sync files=13, longest=0.172 s, average=0.025 s; distance=14294 kB, estimate=15221 kB
+2020-12-05 00:23:49 +05 [3496012]: [1-1] LOG:  automatic analyze of table "pgbench.public.pgbench_accounts" system usage: CPU: user: 0.41 s, system: 0.26 s, elapsed: 8.24 s
+2020-12-05 01:03:46 +05 [1361]: [6541-1] LOG:  checkpoint starting: time
+2020-12-05 01:06:16 +05 [1361]: [6542-1] LOG:  checkpoint complete: wrote 3371 buffers (20.6%); 0 WAL file(s) added, 0 removed, 1 recycled; write=148.822 s, sync=0.124 s, total=149.601 s; sync files=13, longest=0.078 s, average=0.009 s; distance=14809 kB, estimate=14817 kB
+2020-12-05 09:43:26 +05 [3857610]: [1-1] LOG:  automatic analyze of table "pgbench.public.pgbench_accounts" system usage: CPU: user: 0.47 s, system: 0.24 s, elapsed: 8.10 s
+2020-12-05 09:43:50 +05 [1361]: [6749-1] LOG:  checkpoint starting: time
+2020-12-05 09:46:20 +05 [1361]: [6750-1] LOG:  checkpoint complete: wrote 3958 buffers (24.2%); 0 WAL file(s) added, 0 removed, 1 recycled; write=148.482 s, sync=0.201 s, total=150.272 s; sync files=14, longest=0.157 s, average=0.014 s; distance=15838 kB, estimate=15838 kB
+2020-12-05 09:48:50 +05 [1361]: [6751-1] LOG:  checkpoint starting: time
+2020-12-05 09:50:33 +05 [3862897]: [1-1] 127.0.0.1(39352)LOG:  could not receive data from client: Connection reset by peer
+2020-12-05 09:50:34 +05 [3862933]: [1-1] 127.0.0.1(39374)LOG:  could not receive data from client: Connection reset by peer
+2020-12-05 09:51:20 +05 [1361]: [6752-1] LOG:  checkpoint complete: wrote 3199 buffers (19.5%); 0 WAL file(s) added, 0 removed, 1 recycled; write=149.151 s, sync=0.286 s, total=150.170 s; sync files=13, longest=0.100 s, average=0.022 s; distance=12650 kB, estimate=15519 kB
+2020-12-05 09:53:50 +05 [1361]: [6753-1] LOG:  checkpoint starting: time
+2020-12-05 09:56:20 +05 [1361]: [6754-1] LOG:  checkpoint complete: wrote 3570 buffers (21.8%); 0 WAL file(s) added, 0 removed, 1 recycled; write=148.898 s, sync=0.327 s, total=149.897 s; sync files=12, longest=0.155 s, average=0.027 s; distance=15367 kB, estimate=15504 kB
+2020-12-05 09:56:23 +05 [3867158]: [1-1] 127.0.0.1(39578)LOG:  could not receive data from client: Connection reset by peer
+2020-12-05 09:56:24 +05 [3867171]: [1-1] 127.0.0.1(39588)LOG:  could not receive data from client: Connection reset by peer
+2020-12-05 09:58:50 +05 [1361]: [6755-1] LOG:  checkpoint starting: time
+2020-12-05 10:01:20 +05 [1361]: [6756-1] LOG:  checkpoint complete: wrote 3483 buffers (21.3%); 0 WAL file(s) added, 0 removed, 1 recycled; write=149.046 s, sync=0.109 s, total=149.671 s; sync files=11, longest=0.080 s, average=0.009 s; distance=14103 kB, estimate=15364 kB

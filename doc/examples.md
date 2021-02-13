@@ -4,19 +4,20 @@
 - [Download](#download)
 - [Install devel](#install-from-dev-branch)
 - [Run in Docker](#run-in-docker)
-- [pgCenter usage](#pgcenter-usage)
+- [pgCenter usage examples](#pgcenter-usage)
 ---
 
 #### General notes
 - run pgCenter on the same host with Postgres, otherwise some features will not work, e.g. config editing, logfile view.
 - run pgCenter using database `SUPERUSER` account, e.g. postgres. Some kind of stats aren't available for unprivileged accounts.
-- Connections established to Postgres are managed by [lib/pq](https://godoc.org/github.com/lib/pq) driver which supports [.pgpass](https://www.postgresql.org/docs/current/static/libpq-pgpass.html) and libpq [environment variables](https://www.postgresql.org/docs/current/static/libpq-envars.html), such as PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, PGOPTIONS.
+- Connections established to Postgres are managed by [jackc/pgx](https://github.com/jackc/pgx/) driver which supports [.pgpass](https://www.postgresql.org/docs/current/static/libpq-pgpass.html) and most of common libpq [environment variables](https://www.postgresql.org/docs/current/static/libpq-envars.html), such as PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, PGOPTIONS.
 
 #### Download
-Download latest release from [release page](https://github.com/lesovsky/pgcenter/releases) and unpack, after that pgCenter is ready to run.
+Download the latest release from [release page](https://github.com/lesovsky/pgcenter/releases) and unpack, after that pgCenter is ready to run.
 
 #### Install from dev branch
-- Install fresh version of `golang` into the system. Install it with package manager or download it directly from the [official site](https://golang.org/dl/). In this case after downloading you need to unpack the archive and copy binaries into the $PATH.
+This way can be used to get develoment (unstable) version of pgCenter for development or testing purposes.
+- Install a fresh version of `golang` into the system. Install it with package manager or download it directly from the [official site](https://golang.org/dl/). In this case after downloading you need to unpack the archive and copy binaries into the PATH.
 - Clone pgcenter's repo, switch to `dev` branch.
 ```
 git clone https://github.com/lesovsky/pgcenter
@@ -70,7 +71,7 @@ In most cases, connection setting can be omitted.
 
 - Run `report` command, build activity report with start time 12:30:00 and end time 12:50:00:
     ```
-    pgcenter report --activity --start 123000 --end 125000
+    pgcenter report --activity --start 12:30:00 --end 12:50:00
     ```
     
 - Run `report` command, build tables report order by `seq_scan` column and show only 2 tables per snapshot:

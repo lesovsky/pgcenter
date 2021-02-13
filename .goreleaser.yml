@@ -1,0 +1,30 @@
+before:
+  hooks:
+  - make dep
+
+builds:
+  - binary: pgcenter
+    main: ./cmd
+    goarch:
+      - amd64
+    goos:
+      - linux
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -a -installsuffix cgo
+      - -X main.gitTag={{.Tag}} -X main.gitCommit={{.Commit}} -X main.gitBranch={{.Branch}}
+
+archives:
+  - builds: [pgcenter]
+
+changelog:
+  sort: asc
+
+nfpms:
+  - vendor: pgcenter
+    homepage: https://github.com/lesovsky/pgcenter
+    maintainer: Alexey Lesovsky
+    description: Command-line admin tool for observing and troubleshooting Postgres.
+    license: BSD-3
+    formats: [ deb, rpm ]

@@ -1,203 +1,139 @@
-// Stuff related to query reporting.
-
 package top
 
 import (
 	"bytes"
-	"database/sql"
+	"github.com/jackc/pgx/v4"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/utils"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"os"
 	"os/exec"
 	"strings"
 	"text/template"
 )
 
-// Container for report
+// report defines data container with report values.
+// All values are string because all calculations are made on Postgres side, pgcenter just receives and prints final values.
 type report struct {
-	AllTotalTime    string
-	AllIoTime       string
-	AllCpuTime      string
-	AllTotalTimePct float64
-	AllIoTimePct    float64
-	AllCpuTimePct   float64
-	AllTotalQueries string
-	TotalTimePct    float64
-	IoTimePct       float64
-	CpuTimePct      float64
-	AvgTotalTimePct float64
-	AvgIoTimePct    float64
-	AvgCpuTimePct   float64
-	TotalTime       string
-	AvgTotalTime    float64
-	AvgIoTime       float64
-	AvgCpuTime      float64
-	Calls           string
-	CallPct         float64
-	Rows            string
-	RowsPct         float64
-	Dbname          string
-	Username        string
-	Query           string
-	QueryId         string
+	Query                  string // query text from pg_stat_statements.query
+	QueryID                string // query ID from pg_stat_statements.queryid
+	Usename                string // username based on pg_stat_statements.userid
+	Datname                string // database name based on pg_database.datname
+	TotalCalls             string // total number of calls for all queries
+	TotalRows              string // total number of rows for all queries
+	TotalAllTime           string // total amount of time spent executing for all queries (including plan, exec, IO, etc)
+	TotalPlanTime          string // total amount of time spent planning for all queries
+	TotalPlanTimeDistRatio string // ratio of total planning time across total time
+	TotalCPUTime           string // total amount of time spent executing (excluding planning and doing IO) for all queries
+	TotalCPUTimeDistRatio  string // ratio of total CPU time across total time
+	TotalIOTime            string // total amount of time spent doing IO for all queries
+	TotalIOTimeDistRatio   string // ratio of total IO time across total time
+	Calls                  string // number of calls for particular query
+	CallsRatio             string // calls ratio to total number of calls
+	Rows                   string // number of rows for particular query
+	RowsRatio              string // rows ratio to total number of rows
+	AllTime                string // total amount of time spent doing particular query
+	AllTimeRatio           string // ratio of query's total time to total time of all queries
+	PlanTime               string // total amount of time spent planning particular query
+	PlanTimeRatio          string // ratio of query's planning time to total time of all queries
+	CPUTime                string // total amount of time spent executing particular query (with no planning, doing IO, etc)
+	CPUTimeRatio           string // ratio of query's executing time to total time of all queries
+	IOTime                 string // total amount of time spent doing IO for particular query
+	IOTimeRatio            string // ratio of query's IO time to total time of all queries
+	AvgAllTime             string // query's average time
+	AvgPlanTime            string // query's average planning time
+	AvgCPUTime             string // query's average CPU time
+	AvgIOTime              string // query's average IO time
+	PlanTimeDistRatio      string // ratio of planning time to total query time
+	CPUTimeDistRatio       string // ratio of CPU time to total query time
+	IOTimeDistRatio        string // ratio of IO time to total query time
 }
 
 const (
-	// pgssReportQuery queries statements from pg_stat_statements and process stat on Postgres-side
-	pgssReportQuery = `WITH pg_stat_statements_normalized AS (
-        SELECT *,
-            regexp_replace(
-            regexp_replace(
-            regexp_replace(
-            regexp_replace(
-            regexp_replace(query,
-            E'\\\\?(::[a-zA-Z_]+)?( *, *\\\\?(::[a-zA-Z_]+)?)+', '?', 'g'),
-            E'\\\\$[0-9]+(::[a-zA-Z_]+)?( *, *\\\\$[0-9]+(::[a-zA-Z_]+)?)*', '$N', 'g'),
-            E'--.*$', '', 'ng'),
-            E'/\\\\*.*?\\\\*\\/', '', 'g'),
-            E'\\\\s+', ' ', 'g')
-            AS query_normalized
-        FROM pg_stat_statements
-    ),
-    totals AS (
-        SELECT
-            sum(total_time) AS total_time,
-            greatest(sum(blk_read_time+blk_write_time), 1) AS io_time,
-            sum(total_time-blk_read_time-blk_write_time) AS cpu_time,
-            sum(calls) AS ncalls, sum(rows) AS total_rows
-        FROM pg_stat_statements
-    ),
-    _pg_stat_statements AS (
-        SELECT
-            d.datname AS database, a.rolname AS username,
-            replace(
-            (array_agg(query ORDER BY length(query)))[1],
-            E'-- \n', E'--\n') AS query,
-            sum(total_time) AS total_time,
-            sum(blk_read_time) AS blk_read_time, sum(blk_write_time) AS blk_write_time,
-            sum(calls) AS calls, sum(rows) AS rows
-        FROM pg_stat_statements_normalized p
-        JOIN pg_roles a ON a.oid=p.userid
-        JOIN pg_database d ON d.oid=p.dbid
-        WHERE TRUE AND left(md5(p.dbid::text || p.userid || p.queryid), 10) = $1
-        GROUP BY d.datname, a.rolname, query_normalized
-    ),
-    totals_readable AS (
-        SELECT
-            to_char(interval '1 millisecond' * total_time, 'HH24:MI:SS') AS all_total_time,
-            to_char(interval '1 millisecond' * io_time, 'HH24:MI:SS') AS all_io_time,
-            to_char(interval '1 millisecond' * cpu_time, 'HH24:MI:SS') AS all_cpu_time,
-            (100*total_time/total_time)::numeric(20,2) AS all_total_time_percent,
-            (100*io_time/total_time)::numeric(20,2) AS all_io_time_percent,
-            (100*cpu_time/total_time)::numeric(20,2) AS all_cpu_time_percent,
-            to_char(ncalls, 'FM999,999,999,990') AS all_total_queries
-        FROM totals
-    ),
-    statements AS (
-        SELECT
-            (100*total_time/(select total_time FROM totals)) AS time_percent,
-            (100*(blk_read_time+blk_write_time)/(select io_time FROM totals)) AS io_time_percent,
-            (100*(total_time-blk_read_time-blk_write_time)/(select cpu_time FROM totals)) AS cpu_time_percent,
-            to_char(interval '1 millisecond' * total_time, 'HH24:MI:SS') AS total_time,
-            (total_time::numeric/calls)::numeric(20,2) AS avg_time,
-            ((total_time-blk_read_time-blk_write_time)::numeric/calls)::numeric(20, 2) AS avg_cpu_time,
-            ((blk_read_time+blk_write_time)::numeric/calls)::numeric(20, 2) AS avg_io_time,
-            to_char(calls, 'FM999,999,999,990') AS calls,
-            (100*calls/(select ncalls FROM totals))::numeric(20, 2) AS calls_percent,
-            to_char(rows, 'FM999,999,999,990') AS rows,
-            (100*rows/(select total_rows FROM totals))::numeric(20, 2) AS row_percent,
-            database, username, query
-        FROM _pg_stat_statements
-    ),
-    statements_readable AS (
-        SELECT
-            to_char(time_percent, 'FM990.0') AS time_percent,
-            to_char(io_time_percent, 'FM990.0') AS io_time_percent,
-            to_char(cpu_time_percent, 'FM990.0') AS cpu_time_percent,
-            to_char(avg_time*100/(coalesce(nullif(avg_time, 0), 1)), 'FM990.0') AS avg_time_percent,
-            to_char(avg_io_time*100/(coalesce(nullif(avg_time, 0), 1)), 'FM990.0') AS avg_io_time_percent,
-            to_char(avg_cpu_time*100/(coalesce(nullif(avg_time, 0), 1)), 'FM990.0') AS avg_cpu_time_percent,
-            total_time, avg_time, avg_cpu_time, avg_io_time,
-            calls, calls_percent, rows, row_percent,
-            database, username, query
-        FROM statements s
-    )
-    SELECT * FROM totals_readable CROSS JOIN statements_readable`
-
 	// reportTemplate is the template for the report shown to user
 	reportTemplate = `summary:
-	total_time: {{.AllTotalTime}}, cpu_time: {{.AllCpuTime}}, io_time: {{.AllIoTime}} (ALL: {{.AllTotalTimePct}}%, CPU: {{.AllCpuTimePct}}%, IO: {{.AllIoTimePct}}%)
-	total queries: {{.AllTotalQueries}}
+    total queries: {{.TotalCalls}}
+    total rows: {{.TotalRows}}
+    total_time: {{.TotalAllTime}}, 100% 
+        total_plan_time: {{.TotalPlanTime}},  {{.TotalPlanTimeDistRatio}}%
+        total_cpu_time: {{.TotalCPUTime}},  {{.TotalCPUTimeDistRatio}}%
+        total_io_time: {{.TotalIOTime}},  {{.TotalIOTimeDistRatio}}%
 
 query info:
-	usename:				{{.Username}},
-	datname:				{{.Dbname}},
-	calls (relative to all queries):	{{.Calls}} ({{.CallPct}}%),
-	rows (relative to all queries):		{{.Rows}} ({{.RowsPct}}%),
-	total time (relative to all queries):	{{.TotalTime}} (ALL: {{.TotalTimePct}}%, CPU: {{.CpuTimePct}}%, IO: {{.IoTimePct}}%),
-	average time (only for this query):	{{.AvgTotalTime}}ms, cpu_time: {{.AvgCpuTime}}ms, io_time: {{.AvgIoTime}}ms, (ALL: {{.AvgTotalTimePct}}%, CPU: {{.AvgCpuTimePct}}%, IO: {{.AvgIoTimePct}}%),
+    queryid:                               {{.QueryID}}
+    username:                              {{.Usename}},
+    database:                              {{.Datname}},
+    calls (relative to total):             {{.Calls}},  {{.CallsRatio}}%,
+    rows (relative to total):              {{.Rows}},  {{.RowsRatio}}%,
+    total times (relative to total):       {{.AllTime}},  {{.AllTimeRatio}}%
+        planning:                          {{.PlanTime}},  {{.PlanTimeRatio}}%
+        cpu:                               {{.CPUTime}},  {{.CPUTimeRatio}}%
+        io:                                {{.IOTime}},  {{.IOTimeRatio}}%
+    average times (in-query distribution): {{.AvgAllTime}}ms,  100%
+        planning:                          {{.AvgPlanTime}}ms,  {{.PlanTimeDistRatio}}%
+        cpu:                               {{.AvgCPUTime}}ms,  {{.CPUTimeDistRatio}}%
+        io:                                {{.AvgIOTime}}ms,  {{.IOTimeDistRatio}}%
 
-query text (id: {{.QueryId}}):
-	{{.Query}}`
+    query text:
+	{{.Query}}
+
+	* cpu_time means execution time excluding time spent on reading or writing block IO. cpu_time includes waiting time implicitly.
+`
 )
 
-// buildQueryReport queries statements stats, generate the report and shows it.
-func buildQueryReport(g *gocui.Gui, v *gocui.View, answer string) {
-	answer = strings.TrimPrefix(string(v.Buffer()), dialogPrompts[dialogQueryReport])
-	answer = strings.TrimSuffix(answer, "\n")
-
+// getQueryReport queries statements stats, generate the report and returns it.
+func getQueryReport(answer string, version int, db *postgres.DB) (report, string) {
 	if answer == "" {
-		printCmdline(g, "Do nothing.")
-		return
+		return report{}, "Report: do nothing"
 	}
 
 	var r report
-	err := conn.QueryRow(pgssReportQuery, answer).Scan(&r.AllTotalTime, &r.AllIoTime, &r.AllCpuTime,
-		&r.AllTotalTimePct, &r.AllIoTimePct, &r.AllCpuTimePct,
-		&r.AllTotalQueries, &r.TotalTimePct, &r.IoTimePct, &r.CpuTimePct,
-		&r.AvgTotalTimePct, &r.AvgIoTimePct, &r.AvgCpuTimePct,
-		&r.TotalTime, &r.AvgTotalTime, &r.AvgCpuTime, &r.AvgIoTime, &r.Calls, &r.CallPct, &r.Rows, &r.RowsPct,
-		&r.Dbname, &r.Username, &r.Query)
+	err := db.QueryRow(query.SelectQueryReportQuery(version), answer).Scan(
+		&r.Query, &r.QueryID, &r.Usename, &r.Datname, &r.TotalCalls, &r.TotalRows, &r.TotalAllTime,
+		&r.TotalPlanTime, &r.TotalPlanTimeDistRatio, &r.TotalCPUTime, &r.TotalCPUTimeDistRatio, &r.TotalIOTime, &r.TotalIOTimeDistRatio,
+		&r.Calls, &r.CallsRatio, &r.Rows, &r.RowsRatio,
+		&r.AllTime, &r.AllTimeRatio, &r.PlanTime, &r.PlanTimeRatio, &r.CPUTime, &r.CPUTimeRatio, &r.IOTime, &r.IOTimeRatio,
+		&r.AvgAllTime, &r.AvgPlanTime, &r.AvgCPUTime, &r.AvgIOTime,
+		&r.PlanTimeDistRatio, &r.CPUTimeDistRatio, &r.IOTimeDistRatio,
+	)
 
-	if err == sql.ErrNoRows {
-		printCmdline(g, "No stats for such queryid.")
-		return
+	if err == pgx.ErrNoRows {
+		return report{}, "Report: no statistics for such queryid"
 	}
 
-	r.QueryId = answer
-	if err := r.Print(g); err != nil {
-		printCmdline(g, "Failed to show query report.")
-	}
-
-	return
+	return r, ""
 }
 
-// Print method prints report in $PAGER program.
-func (r *report) Print(g *gocui.Gui) error {
-	t := template.Must(template.New("query").Parse(reportTemplate))
-	buf := &bytes.Buffer{}
-	if err := t.Execute(buf, r); err != nil {
-		return err
+// printQueryReport prints report in $PAGER program.
+func printQueryReport(g *gocui.Gui, r report, uiExit chan int) string {
+	t, err := template.New("query").Parse(reportTemplate)
+	if err != nil {
+		return err.Error()
+	}
+
+	var buf bytes.Buffer
+	err = t.Execute(&buf, r)
+	if err != nil {
+		return err.Error()
 	}
 
 	var pager string
 	if pager = os.Getenv("PAGER"); pager == "" {
-		pager = utils.DefaultPager
+		pager = "less"
 	}
 
 	// Exit from UI, will restore it after $PAGER is closed.
-	doExit <- 1
+	uiExit <- 1
 	g.Close()
 
-	cmd := exec.Command(pager)
+	cmd := exec.Command(pager) // #nosec G204
 	cmd.Stdin = strings.NewReader(buf.String())
 	cmd.Stdout = os.Stdout
 
-	if err := cmd.Run(); err != nil {
-		// If external program fails, save error and show it to user in next UI iteration
-		errSaved = err
-		return err
+	err = cmd.Run()
+	if err != nil {
+		return err.Error()
 	}
 
-	return nil
+	return ""
 }

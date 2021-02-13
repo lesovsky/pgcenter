@@ -1,140 +1,140 @@
-// Code related to 'pgcenter record' command
+// 'pgcenter record' - collects Postgres statistics and record to persistent store.
 
 package record
 
 import (
-	"archive/tar"
-	"database/sql"
-	"encoding/json"
 	"fmt"
-	"github.com/lesovsky/pgcenter/lib/stat"
-	"github.com/lesovsky/pgcenter/lib/utils"
-	"io"
-	"log"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
+	"github.com/lesovsky/pgcenter/internal/stat"
+	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
 	"os/signal"
 	"time"
 )
 
-// RecordOptions is the container for recorder settings
-type RecordOptions struct {
-	Interval      time.Duration    // Statistics pollint interval
-	Count         int32            // Number of statistics snapshot to record
-	OutputFile    string           // File where statistics will be saved
-	AppendFile    bool             // Append to a file, or create/truncate at the beginning
-	TruncLimit    int              // Limit of the length, to which query should be truncated
-	contextList   stat.ContextList // List of statistics available for recording
-	sharedOptions stat.Options     // Queries' settings that depend on Postgres version
+// Config defines config container for configuring 'pgcenter record'.
+type Config struct {
+	Interval    time.Duration // Statistics recording interval
+	Count       int           // Number of statistics snapshot to record
+	OutputFile  string        // File where statistics will be saved
+	AppendFile  bool          // Append data to file
+	StringLimit int           // Limit of the length, to which query should be trimmed
 }
 
-var (
-	conn   *sql.DB
-	stats  stat.Stat
-	doQuit = make(chan os.Signal, 1)
-)
+// RunMain is the 'pgcenter record' main entry point.
+func RunMain(dbConfig postgres.Config, config Config) error {
+	app := newApp(config, dbConfig)
 
-// RunMain is the program's main entry point
-func RunMain(args []string, conninfo utils.Conninfo, opts RecordOptions) {
-	var err error
-	fmt.Printf("INFO: recording to %s\n", opts.OutputFile)
-
-	// Handle extra arguments passed
-	utils.HandleExtraArgs(args, &conninfo)
-
-	// Setup connection to Postgres
-	conn, err = utils.CreateConn(&conninfo)
+	err := app.setup()
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-		return
+		return err
 	}
-	defer conn.Close()
 
-	// Open file for statistics
-	var f *os.File
-	if opts.AppendFile {
-		if f, err = os.OpenFile(opts.OutputFile, os.O_CREATE|os.O_RDWR, 0644); err != nil {
-			log.Fatalf("ERROR: failed to open file: %s\n", err)
-		} else {
-			_, _ = f.Seek(-2<<9, io.SeekEnd) // ignore errors, if seek failed it's highly likely an empty file
-		}
-	} else {
-		if f, err = os.OpenFile(opts.OutputFile, os.O_CREATE|os.O_RDWR|os.O_TRUNC, 0644); err != nil {
-			log.Fatalf("ERROR: failed to create file: %s\n", err)
-		}
-	}
-	defer f.Close()
-
-	// Initialize tar writer
-	tw := tar.NewWriter(f)
-	defer tw.Close()
+	fmt.Printf("INFO: recording to %s\n", config.OutputFile)
 
 	// In case of SIGINT stop program gracefully
+	doQuit := make(chan os.Signal, 1)
 	signal.Notify(doQuit, os.Interrupt)
 
-	// Get necessary information about Postgres: version, recovery status, settings, etc.
-	stats.ReadPgInfo(conn, conninfo.ConnLocal)
-
-	// Setup recordOptions - adjust queries for used Postgres version
-	opts.Setup(stats.PgInfo)
-
-	// Recording loop
-	recordLoop(tw, opts)
+	// Run recording loop
+	return app.record(doQuit)
 }
 
-// Record stats with an interval
-func recordLoop(w *tar.Writer, opts RecordOptions) {
-	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
-	for i := opts.Count; i != 0; i-- {
-		if err := doWork(w, opts); err != nil {
-			fmt.Printf("ERROR: %s\n", err)
-		}
+// app defines 'pgcenter record' runtime dependencies.
+type app struct {
+	config   Config
+	dbConfig postgres.Config
+	views    view.Views
+	recorder recorder
+}
 
-		select {
-		case <-time.After(opts.Interval):
-			break
-		case <-doQuit:
-			fmt.Println("quit")
-			i = 1 // 'i' decrements to zero after iteration and loop will be finished
-		}
+// newApp creates new 'pgcenter record' app.
+func newApp(config Config, dbConfig postgres.Config) *app {
+	return &app{
+		config:   config,
+		dbConfig: dbConfig,
 	}
 }
 
-// Read stats from Postgres and write it to a file
-func doWork(w *tar.Writer, opts RecordOptions) error {
-	now := time.Now()
-
-	// loop over available contexts
-	for ctxUnit := range opts.contextList {
-		// prepare query and select stats from Postgres
-		query, _ := stat.PrepareQuery(opts.contextList[ctxUnit].Query, opts.sharedOptions)
-
-		if err := stats.GetPgstatSample(conn, query); err != nil {
-			return err
-		}
-
-		// write stats to a file
-		name := fmt.Sprintf("%s.%s.json", ctxUnit, now.Format("20060102T150405"))
-		if err := writeToTar(w, stats.CurrPGresult, name); err != nil {
-			return err
-		}
+// setup configures necessary queries depending on Postgres version.
+func (app *app) setup() error {
+	db, err := postgres.Connect(app.dbConfig)
+	if err != nil {
+		return err
 	}
+	defer db.Close()
+
+	props, err := stat.GetPostgresProperties(db)
+	if err != nil {
+		return err
+	}
+
+	// Create and configure stats views depending on running Postgres.
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit)
+
+	views := view.New()
+	err = views.Configure(opts)
+	if err != nil {
+		return err
+	}
+
+	app.views = views
+
+	// Create tar recorder.
+	app.recorder = newTarRecorder(tarConfig{
+		filename: app.config.OutputFile,
+		append:   app.config.AppendFile,
+	})
+
 	return nil
 }
 
-// Write statistics to a tar-file
-func writeToTar(w *tar.Writer, object interface{}, name string) error {
-	data, err := json.Marshal(object)
-	if err != nil {
-		return fmt.Errorf("failed to marshal: %s", err.Error())
-	}
+// record collects statistics and stores into file.
+func (app *app) record(doQuit chan os.Signal) error {
+	var (
+		count    = app.config.Count
+		interval = app.config.Interval
+	)
 
-	hdr := &tar.Header{Name: name, Mode: 0644, Size: int64(len(data)), ModTime: time.Now()}
-	if err := w.WriteHeader(hdr); err != nil {
-		return fmt.Errorf("failed to write header: %s", err)
-	}
+	t := time.NewTicker(interval)
 
-	if _, err := w.Write(data); err != nil {
-		return fmt.Errorf("failed to write body: %s", err)
+	// record the number of snapshots requested by user (or record continuously until SIGINT will be received)
+	var n int
+	for {
+		if count > 0 && n >= count {
+			break
+		} else {
+			n++
+		}
+
+		err := app.recorder.open()
+		if err != nil {
+			return err
+		}
+
+		stats, err := app.recorder.collect(app.dbConfig, app.views)
+		if err != nil {
+			return err
+		}
+
+		err = app.recorder.write(stats)
+		if err != nil {
+			return err
+		}
+
+		err = app.recorder.close()
+		if err != nil {
+			return err
+		}
+
+		select {
+		case <-t.C:
+			continue
+		case sig := <-doQuit:
+			t.Stop()
+			return fmt.Errorf("got %s", sig.String())
+		}
 	}
 
 	return nil

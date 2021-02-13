@@ -1,93 +1,108 @@
-// Stuff related to Postgres config files such as displaying, editing, etc.
-
 package top
 
 import (
 	"bytes"
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/stat"
-	"github.com/lesovsky/pgcenter/lib/utils"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"os"
 	"os/exec"
 	"strings"
 )
 
-// Show Postgres config in $PAGER program
-func showPgConfig(g *gocui.Gui, _ *gocui.View) error {
-	rows, err := conn.Query(stat.PgGetConfigAllQuery)
-	if err != nil {
-		printCmdline(g, err.Error())
+const (
+	// gucMainConfFile is the name of GUC which stores Postgres config file location
+	gucMainConfFile = "config_file"
+	// gucHbaFile is the name of GUC which stores Postgres HBA file location
+	gucHbaFile = "hba_file"
+	// gucIdentFile is the name of GUC which stores ident file location
+	gucIdentFile = "ident_file"
+	// gucRecoveryFile is the name of pseudo-GUC which stores recovery settings location
+	gucRecoveryFile = "recovery.conf"
+	// gucDataDir is the name of GUC which stores data directory location
+	gucDataDir = "data_directory"
+)
+
+// showPgConfig fetches Postgres configuration settings and opens it in $PAGER program.
+func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		res, err := stat.NewPGresult(db, query.GetAllSettings)
+		if err != nil {
+			printCmdline(g, err.Error())
+			return nil
+		}
+
+		var buf bytes.Buffer
+		if _, err := fmt.Fprintf(&buf, "PostgreSQL configuration:\n"); err != nil {
+			printCmdline(g, "print string to buffer failed: %s", err)
+			return nil
+		}
+
+		if err := res.Fprint(&buf); err != nil {
+			printCmdline(g, "print string to buffer failed: %s", err)
+			return nil
+		}
+
+		var pager string
+		if pager = os.Getenv("PAGER"); pager == "" {
+			pager = "less"
+		}
+
+		// Exit from UI and stats loop... will restore it after $PAGER is closed.
+		uiExit <- 1
+		g.Close()
+
+		cmd := exec.Command(pager) // #nosec G204
+		cmd.Stdin = strings.NewReader(buf.String())
+		cmd.Stdout = os.Stdout
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("run pager failed: %s", err)
+		}
+
 		return nil
 	}
-	defer rows.Close()
-
-	var buf bytes.Buffer
-	var res stat.PGresult
-
-	if err := res.New(rows); err != nil {
-		printCmdline(g, err.Error())
-		return nil
-	}
-
-	fmt.Fprintf(&buf, "PostgreSQL configuration:\n")
-	res.Fprint(&buf)
-
-	var pager string
-	if pager = os.Getenv("PAGER"); pager == "" {
-		pager = utils.DefaultPager
-	}
-
-	// Exit from UI and stats loop... will restore it after $PAGER is closed.
-	doExit <- 1
-	g.Close()
-
-	cmd := exec.Command(pager)
-	cmd.Stdin = strings.NewReader(buf.String())
-	cmd.Stdout = os.Stdout
-
-	if err := cmd.Run(); err != nil {
-		// If external program fails, save error and show it to user in next UI iteration
-		errSaved = err
-	}
-
-	return err
 }
 
-// Open specified configuration file in $EDITOR program
-func editPgConfig(g *gocui.Gui, n string) error {
-	if !conninfo.ConnLocal {
+// editPgConfig opens specified configuration file in $EDITOR program.
+func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, uiExit chan int) error {
+	if !db.Local {
 		printCmdline(g, "Edit config is not supported for remote hosts")
 		return nil
 	}
 
 	var configFile string
-
-	if n != stat.GucRecoveryFile {
-		conn.QueryRow(stat.PgGetSingleSettingQuery, n).Scan(&configFile)
+	if filename != gucRecoveryFile {
+		if err := db.QueryRow(query.GetSetting, filename).Scan(&configFile); err != nil {
+			printCmdline(g, "scan failed: %s", err)
+			return nil
+		}
 	} else {
 		var dataDirectory string
-		conn.QueryRow(stat.PgGetSingleSettingQuery, stat.GucDataDir).Scan(&dataDirectory)
-		configFile = dataDirectory + "/" + n
+		if err := db.QueryRow(query.GetSetting, gucDataDir).Scan(&dataDirectory); err != nil {
+			printCmdline(g, "scan failed: %s", err)
+			return nil
+		}
+		configFile = dataDirectory + "/" + filename
 	}
 
 	var editor string
 	if editor = os.Getenv("EDITOR"); editor == "" {
-		editor = utils.DefaultEditor
+		editor = "vi"
 	}
 
 	// Exit from UI and stats loop... will restore it after $EDITOR is closed.
-	doExit <- 1
+	uiExit <- 1
 	g.Close()
 
-	cmd := exec.Command(editor, configFile)
+	cmd := exec.Command(editor, configFile) // #nosec G204
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 
 	if err := cmd.Run(); err != nil {
-		// If external program fails, save error and show it to user in next UI iteration
-		errSaved = err
-		return err
+		return fmt.Errorf("run editor failed: %s", err)
 	}
 
 	return nil

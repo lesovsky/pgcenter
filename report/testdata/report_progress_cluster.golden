@@ -1,0 +1,5 @@
+         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation          [0m[37;1mindex                  [0m[37;1mstate     [0m[37;1mwaiting     [0m[37;1mphase                [0m[37;1mt_size    [0m[37;1mscanned_%  [0m[37;1mtup_scanned  [0m[37;1mtup_written  [0m[37;1mquery                             [0m
+15:31:24 3365697   00:00:07  pgbench   pgbench_accounts  pgbench_accounts_pkey  active    IO.WALSync  index scanning heap  0         0e-2       139590       139590       cluster pgbench_accounts using ~
+15:31:25 3365697   00:00:08  pgbench   pgbench_accounts  pgbench_accounts_pkey  active    IO.DataFi~  index scanning heap  0         0e-2       66468        66468        cluster pgbench_accounts using ~
+15:31:26 3365697   00:00:09  pgbench   pgbench_accounts  pgbench_accounts_pkey  active    IO.DataFi~  index scanning heap  0         0e-2       45606        45606        cluster pgbench_accounts using ~
+15:31:27 3365697   00:00:10  pgbench   pgbench_accounts  pgbench_accounts_pkey  active    LWLock.WA~  index scanning heap  0         0e-2       23936        23936        cluster pgbench_accounts using ~

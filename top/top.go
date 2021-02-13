@@ -1,46 +1,87 @@
-// 'pgcenter top' - top-like stats viewer.
-
 package top
 
 import (
-	"database/sql"
-	"fmt"
-	"github.com/lesovsky/pgcenter/lib/utils"
-	"sync"
-)
-
-var (
-	wg       sync.WaitGroup
-	conninfo utils.Conninfo
-	conn     *sql.DB
+	"context"
+	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
+	"github.com/lesovsky/pgcenter/internal/stat"
 )
 
 // RunMain is the main entry point for 'pgcenter top' command
-func RunMain(args []string, c utils.Conninfo) {
-	var err error
-
-	// Assign conninfo values from external struct into global one (it have to be available everywhere)
-	conninfo = c
-
-	// Handle extra arguments passed
-	utils.HandleExtraArgs(args, &conninfo)
-
-	// Connect to Postgres
-	conn, err = utils.CreateConn(&conninfo)
+func RunMain(dbConfig postgres.Config) error {
+	// Connect to Postgres.
+	db, err := postgres.Connect(dbConfig)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-		return
+		return err
 	}
-	defer conn.Close()
+	defer db.Close()
 
-	// Get necessary information about Postgres, such as version, recovery status, settings, etc.
-	stats.ReadPgInfo(conn, conninfo.ConnLocal)
+	// Create application instance.
+	app := newApp(db, newConfig())
 
-	// Setup context - which kind of stats should be displayed
-	ctx.Setup(stats.PgInfo)
+	// Setup application.
+	err = app.setup()
+	if err != nil {
+		return err
+	}
 
-	// Run UI
-	if err := uiLoop(); err != nil {
-		fmt.Println(err)
+	// Run application workers and UI.
+	return mainLoop(context.Background(), app)
+}
+
+// app defines application and all necessary dependencies.
+type app struct {
+	config        *config                 // runtime configuration.
+	ui            *gocui.Gui              // UI instance.
+	uiExit        chan int                // used for signaling when to need exiting from UI.
+	uiError       error                   // hold error occurred during executing UI.
+	db            *postgres.DB            // connection to Postgres.
+	postgresProps stat.PostgresProperties // properties of Postgres to which connected to.
+}
+
+// newApp creates new application instance.
+func newApp(db *postgres.DB, config *config) *app {
+	return &app{
+		config: config,
+		db:     db,
+	}
+}
+
+// setup performs initial application setup based on Postgres settings to which application connected to.
+func (app *app) setup() error {
+	// Fetch Postgres properties.
+	props, err := stat.GetPostgresProperties(app.db)
+	if err != nil {
+		return err
+	}
+
+	// Create query options needed for formatting necessary queries.
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256)
+
+	// Create and configure stats views adjusting them depending on running Postgres.
+	err = app.config.views.Configure(opts)
+	if err != nil {
+		return err
+	}
+
+	// Set default view.
+	app.config.view = app.config.views["activity"]
+
+	app.config.queryOptions = opts
+	app.postgresProps = props
+	app.uiExit = make(chan int)
+
+	return nil
+}
+
+// quit performs graceful application quit.
+func (app *app) quit() func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		close(app.uiExit)
+		g.Close()
+		app.db.Close()
+
+		return gocui.ErrQuit
 	}
 }

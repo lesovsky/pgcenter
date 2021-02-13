@@ -1,0 +1,7 @@
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+br-1234567: 197988130  583968  458  125  245    42       4582       248 8693944658 1461271   421   458   256   785     485        547
+vetha6f6db1: 77210195  225136    0    0    0     0          0         0 74368060  422541    0    0    0     0       0          0
+veth681540b:       0       0    0    0    0     0          0         0  7866431   41776    0    0    0     0       0          0
+vethb1d564c: 10229088765 3863777    0    0    0     0          0         0 5022145302 3353289    0    0    0     0       0          0
+wlx1234567: 19560963123 15078842   54    48  478   125        355       455 834982407 4024235  487  755  985   475     500        875

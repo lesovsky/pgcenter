@@ -1,3 +1,8 @@
+pgcenter (0.7.0) unstable; urgency=low
+  * add golangci-lint, fix issues
+  * add gosec, fix issues
+  * add testing, major code and internal design refactoring
+
 pgcenter (0.6.6) unstable; urgency=low
   * adjust query for getting statements rate, accordingly to v13.
   * adjust query for getting statements timings accordingly to v13. Exec and Plan times from pg_stat_statements are accounted together.

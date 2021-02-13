@@ -1,18 +1,16 @@
-// Dialogs are used for asking a user about something or for confirming actions that are going to be executed.
-
 package top
 
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
-	"github.com/lesovsky/pgcenter/lib/stat"
 	"strings"
 )
 
+// dialogType defines type of dialog between pgcenter and user.
 type dialogType int
 
-// Dialog types
 const (
+	// All possible dialog types.
 	dialogNone dialogType = iota
 	dialogPgReload
 	dialogFilter
@@ -26,9 +24,9 @@ const (
 	dialogChangeRefresh
 )
 
-var (
-	// There is a prompt for every dialog.
-	dialogPrompts = map[dialogType]string{
+// dialogPrompts returns dialog prompt depending on user-requested actions.
+func dialogPrompts(t dialogType) string {
+	prompts := map[dialogType]string{
 		dialogPgReload:         "Reload configuration files (y/n): ",
 		dialogFilter:           "Set filter: ",
 		dialogCancelQuery:      "PID to cancel: ",
@@ -41,110 +39,140 @@ var (
 		dialogChangeRefresh:    "Change refresh (min 1, max 300) to ",
 	}
 
-	// Variable-transporter, function which check user's input, uses this variable to select appropriate handler. Depending on dialog type, select appropriate function.
-	dialog dialogType
-)
+	return prompts[t]
+}
 
-// Open 'gocui' view for the dialog.
-func dialogOpen(d dialogType) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
+// dialogOpen opens view for the dialog.
+func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		prompt := dialogPrompts(d)
+
 		// some types of actions allowed only in specifics stats contexts.
-		if (d > dialogFilter && d <= dialogChangeAge) && ctx.current.Name != stat.ActivityView {
+		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != "activity" {
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
-				msg = "Terminate or cancel backend is allowed in pg_stat_activity tab."
+				msg = "Terminate backends or cancel queries allowed in pg_stat_activity view only."
 			case dialogSetMask:
-				msg = "State mask setup is allowed in pg_stat_activity tab."
+				msg = "State mask setup allowed in pg_stat_activity view only."
 			case dialogChangeAge:
-				msg = "Changing queries' min age is allowed in pg_stat_activity tab."
+				msg = "Changing queries age threshold allowed in pg_stat_activity view only."
 			}
 			printCmdline(g, msg)
 			return nil
 		}
 
-		if d == dialogQueryReport && !strings.Contains(ctx.current.Name, stat.StatementsView) {
-			printCmdline(g, "Query report is allowed in pg_stat_statements tabs.")
+		if d == dialogQueryReport && !strings.Contains(app.config.view.Name, "statements") {
+			printCmdline(g, "Query reports allowed in pg_stat_statements views only.")
 			return nil
 		}
 
 		maxX, _ := g.Size()
-		// Open one-line editable view, print a propmt and set cursor after it.
-		if v, err := g.SetView("dialog", len(dialogPrompts[d])-1, 3, maxX-1, 5); err != nil {
+
+		// Create one-line editable view, print a prompt and set cursor after it.
+		v, err := g.SetView("dialog", len(prompt)-1, 3, maxX-1, 5)
+		if err != nil {
+			// gocui.ErrUnknownView is OK it means a new view has been created, continue if it happens.
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dialog view on layout failed: %s", err)
 			}
-
-			p, err := g.View("cmdline")
-			if err != nil {
-				return fmt.Errorf("Set focus on cmdline view failed: %s", err)
-			}
-			fmt.Fprintf(p, dialogPrompts[d])
-
-			g.Cursor = true
-			v.Editable = true
-			v.Frame = false
-
-			if _, err := g.SetCurrentView("dialog"); err != nil {
-				return fmt.Errorf("set dialog view as current on layout failed: %s", err)
-			}
-
-			// Remember the type of an opened dialog. It will be required when the dialog will be finished.
-			dialog = d
 		}
+
+		p, err := g.View("cmdline")
+		if err != nil {
+			return fmt.Errorf("set focus on cmdline view failed: %s", err)
+		}
+
+		_, err = fmt.Fprint(p, prompt)
+		if err != nil {
+			return fmt.Errorf("print to cmdline view failed: %s", err)
+		}
+
+		g.Cursor = true
+		v.Editable = true
+		v.Frame = false
+
+		if _, err := g.SetCurrentView("dialog"); err != nil {
+			return fmt.Errorf("set dialog view as current on layout failed: %s", err)
+		}
+
+		// Remember the type of an opened dialog. It will be required when the dialog will be finished.
+		app.config.dialog = d
+
 		return nil
 	}
 }
 
-// When gocui.KeyEnter is pressed in the end of user's input, depending on dialog type an appropriate handler should be started.
-func dialogFinish(g *gocui.Gui, v *gocui.View) error {
-	var answer string
+// dialogFinish runs proper handler after user submits its dialog input.
+func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		printCmdline(g, "")
 
-	printCmdline(g, "")
+		// Extract user entered answer from buffer.
+		answer := strings.TrimPrefix(v.Buffer(), dialogPrompts(app.config.dialog))
+		answer = strings.TrimSuffix(answer, "\n")
 
-	switch dialog {
-	case dialogPgReload:
-		doReload(g, v, answer)
-	case dialogFilter:
-		setFilter(g, v, answer)
-	case dialogCancelQuery:
-		killSingle(g, v, answer, "cancel")
-	case dialogTerminateBackend:
-		killSingle(g, v, answer, "terminate")
-	case dialogSetMask:
-		setBackendMask(g, v, answer)
-	case dialogCancelGroup:
-		killGroup(g, v, "cancel")
-	case dialogTerminateGroup:
-		killGroup(g, v, "terminate")
-	case dialogChangeAge:
-		changeQueryAge(g, v, answer)
-	case dialogQueryReport:
-		buildQueryReport(g, v, answer)
-	case dialogChangeRefresh:
-		changeRefresh(g, v, answer)
-	case dialogNone:
-		/* do nothing */
+		var message string
+
+		switch app.config.dialog {
+		case dialogPgReload:
+			message = doReload(answer, app.db)
+		case dialogFilter:
+			message = setFilter(answer, app.config.view)
+		case dialogCancelQuery:
+			message = killSingle(app.db, "cancel", answer)
+		case dialogTerminateBackend:
+			message = killSingle(app.db, "terminate", answer)
+		case dialogSetMask:
+			message = setProcMask(answer, app.config)
+		case dialogCancelGroup:
+			message = killGroup(app, "cancel")
+		case dialogTerminateGroup:
+			message = killGroup(app, "terminate")
+		case dialogChangeAge:
+			message = changeQueryAge(answer, app.config)
+		case dialogQueryReport:
+			var r report
+			r, message = getQueryReport(answer, app.postgresProps.VersionNum, app.db)
+			if message == "" {
+				message = printQueryReport(g, r, app.uiExit)
+			}
+		case dialogChangeRefresh:
+			message = changeRefresh(answer, app.config)
+		case dialogNone:
+			// do nothing
+		}
+
+		printCmdline(g, message)
+
+		return dialogClose(g, v)
 	}
-
-	return dialogClose(g, v)
 }
 
-// Finish dialog when user presses Esc to cancel.
-func dialogCancel(g *gocui.Gui, v *gocui.View) error {
-	dialog = dialogNone
-	printCmdline(g, "Do nothing. Operation canceled.")
-
-	return dialogClose(g, v)
+// dialogCancel reset dialog state when user cancels input.
+func dialogCancel(app *app) func(g *gocui.Gui, v *gocui.View) error {
+	return func(g *gocui.Gui, v *gocui.View) error {
+		app.config.dialog = dialogNone
+		printCmdline(g, "Do nothing. Operation canceled.")
+		return dialogClose(g, v)
+	}
 }
 
-// Close 'gocui' view object related to dialog.
+// dialogClose destroys UI view object related to dialog.
 func dialogClose(g *gocui.Gui, v *gocui.View) error {
 	g.Cursor = false
 	v.Clear()
-	g.DeleteView("dialog")
-	if _, err := g.SetCurrentView("sysstat"); err != nil {
+
+	err := g.DeleteView("dialog")
+	if err != nil {
+		return fmt.Errorf("deleting dialog view failed: %s", err)
+	}
+
+	// Switch focus from destroyed 'dialog' view to 'sysstat'.
+	_, err = g.SetCurrentView("sysstat")
+	if err != nil {
 		return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
 	}
+
 	return nil
 }

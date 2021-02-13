@@ -1,5 +1,3 @@
-// Stuff related to displaying built-in help
-
 package top
 
 import (
@@ -12,16 +10,16 @@ const (
 
 general actions:
     a,d,f,r     mode: 'a' activity, 'd' databases, 'f' functions, 'r' replication,
-    s,t,i,v           's' tables sizes, 't' tables, 'i' indexes, 'v' vacuum progress,
+    s,t,i             's' tables sizes, 't' tables, 'i' indexes.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
-	p,P                 'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
+    p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.
     ~                 start psql session.
     l                 open log file with pager.
 
-aux stats actions:
+extra stats actions:
     B,N,L       'B' diskstat, 'N' nicstat, 'L' logtail.
 
 activity actions:
@@ -41,7 +39,7 @@ other actions:
 Type 'q' or 'Esc' to continue.`
 )
 
-// Open gocui view and shows built-in help.
+// showHelp opens fullscreen view with built-in help.
 func showHelp(g *gocui.Gui, _ *gocui.View) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("help", -1, -1, maxX-1, maxY-1); err != nil {
@@ -50,7 +48,10 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		v.Frame = false
-		fmt.Fprintf(v, helpTemplate)
+		_, err = fmt.Fprint(v, helpTemplate)
+		if err != nil {
+			return fmt.Errorf("print on 'help' view failed: %s", err)
+		}
 
 		if _, err := g.SetCurrentView("help"); err != nil {
 			return fmt.Errorf("set 'help' view as current on layout failed: %s", err)
@@ -59,12 +60,16 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 	return nil
 }
 
-// Close gocui view and return
+// closeHelp closes 'help' view and switches focus to 'sysstat' view.
 func closeHelp(g *gocui.Gui, v *gocui.View) error {
 	v.Clear()
-	g.DeleteView("help")
+	err := g.DeleteView("help")
+	if err != nil {
+		return fmt.Errorf("delete help view failed: %s", err)
+	}
+
 	if _, err := g.SetCurrentView("sysstat"); err != nil {
-		return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
+		return fmt.Errorf("set focus on sysstat view failed: %s", err)
 	}
 	return nil
 }

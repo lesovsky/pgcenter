@@ -1,0 +1,44 @@
+         [37;1mpid       [0m[37;1mcl_addr   [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname   [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event  [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age  [0m[37;1mchange_age  [0m[37;1mquery                             [0m
+15:31:24 3365818             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  Lock        relation    active    00:00:06  00:00:06   00:00:06    vacuum pgbench_accounts
+         3365716             -1        pgbench   lesovsky  psql      client backend                          active    00:00:07  00:00:07   00:00:07    create index CONCURRENTLY pgben~
+         3365697             -1        pgbench   lesovsky  psql      client backend  IO          WALSync     active    00:00:07  00:00:07   00:00:07    cluster pgbench_accounts using ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:07  00:00:07   00:00:07    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:07  00:00:07   00:00:07    UPDATE pgbench_accounts SET aba~
+15:31:25 3365828             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  Lock        relation    active    00:00:07  00:00:07   00:00:07    vacuum pgbench_accounts
+         3365716             -1        pgbench   lesovsky  psql      client backend  Lock        virtualxid  active    00:00:08  00:00:08   00:00:08    create index CONCURRENTLY pgben~
+         3365697             -1        pgbench   lesovsky  psql      client backend  IO          DataFileR~  active    00:00:08  00:00:08   00:00:08    cluster pgbench_accounts using ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:08  00:00:08   00:00:08    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:08  00:00:08   00:00:08    UPDATE pgbench_accounts SET aba~
+15:31:26 3365840             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  Lock        relation    active    00:00:08  00:00:08   00:00:08    vacuum pgbench_accounts
+         3365716             -1        pgbench   lesovsky  psql      client backend  Lock        virtualxid  active    00:00:09  00:00:09   00:00:09    create index CONCURRENTLY pgben~
+         3365697             -1        pgbench   lesovsky  psql      client backend  IO          DataFileE~  active    00:00:09  00:00:09   00:00:09    cluster pgbench_accounts using ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:09  00:00:09   00:00:09    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:09  00:00:09   00:00:09    UPDATE pgbench_accounts SET aba~
+15:31:27 3365868             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  Lock        relation    active    00:00:09  00:00:09   00:00:09    vacuum pgbench_accounts
+         3365716             -1        pgbench   lesovsky  psql      client backend  Lock        virtualxid  active    00:00:10  00:00:10   00:00:10    create index CONCURRENTLY pgben~
+         3365697             -1        pgbench   lesovsky  psql      client backend  LWLock      WALWrite    active    00:00:10  00:00:10   00:00:10    cluster pgbench_accounts using ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:10  00:00:10   00:00:10    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  Lock        relation    active    00:00:10  00:00:10   00:00:10    UPDATE pgbench_accounts SET aba~
+         [37;1mpid       [0m[37;1mcl_addr   [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname   [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event  [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age  [0m[37;1mchange_age  [0m[37;1mquery                             [0m
+15:31:28 3365885             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  IO          WALSync     active    00:00:10  00:00:10   00:00:10    vacuum pgbench_accounts
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:11  00:00:00   00:00:00    END;
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:11  00:00:00   00:00:00    END;
+15:31:29 3365896             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365734             -1        pgbench   lesovsky  psql      client backend  LWLock      WALWrite    active    00:00:11  00:00:11   00:00:11    vacuum pgbench_accounts
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  IO          WALSync     active    00:00:00  00:00:00   00:00:00    END;
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:00  00:00:00   00:00:00    END;
+15:31:30 3365909             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3365907                       pgbench                       autovacuum wo~  IO          WALSync     active    00:00:00  00:00:00   00:00:00    autovacuum: VACUUM ANALYZE publ~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  IO          DataFileR~  active    00:00:00  00:00:00   00:00:00    UPDATE pgbench_accounts SET aba~
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:00  00:00:00   00:00:00    END;
+15:31:31 3365918             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  IO          WALSync     active    00:00:00  00:00:00   00:00:00    END;
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:00  00:00:00   00:00:00    END;
+15:31:32 3365929             -1        pgbench   lesovsky            client backend                          active    00:00:00  00:00:00   00:00:00    SELECT pid, client_addr AS cl_a~
+         3364289             -1        pgbench   lesovsky  pgbench   client backend  LWLock      WALWrite    active    00:00:00  00:00:00   00:00:00    END;
+         3364288             -1        pgbench   lesovsky  pgbench   client backend  IO          WALSync     active    00:00:00  00:00:00   00:00:00    END;

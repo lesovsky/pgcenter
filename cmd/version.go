@@ -1,6 +1,6 @@
 // Stuff related to program versions, releases, etc.
 
-package cmd
+package main
 
 import (
 	"fmt"
@@ -10,8 +10,8 @@ const (
 	// programName is the name of this program
 	programName = "pgcenter"
 
-	// programIssuesUrl is the public URL for posting issues, bug reports and asking questions
-	programIssuesUrl = "https://github.com/lesovsky/pgcenter/issues"
+	// programIssuesURL is the public URL for posting issues, bug reports and asking questions
+	programIssuesURL = "https://github.com/lesovsky/pgcenter/issues"
 )
 
 var (
@@ -20,6 +20,6 @@ var (
 )
 
 // PrintVersion prints the name and version of this program
-func PrintVersion() string {
+func printVersion() string {
 	return fmt.Sprintf("%s %s %s-%s\n", programName, gitTag, gitCommit, gitBranch)
 }

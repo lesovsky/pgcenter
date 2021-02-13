@@ -1,9 +1,11 @@
-FROM golang:1.11
+# stage 1: build
+FROM golang:1.15 as build
+LABEL stage=intermediate
+WORKDIR /app
+COPY . .
+RUN make build
 
-WORKDIR /go/src/pgcenter
-
-ADD . .
-
-RUN export GO111MODULE="on" && export GOPATH="/go" && make && make install
-
-ENTRYPOINT ["pgcenter"]
+# stage 2: scratch
+FROM scratch as scratch
+COPY --from=build /app/bin/pgcenter /bin/pgcenter
+CMD ["pgcenter"]

@@ -1,94 +1,88 @@
-// Command 'pgcenter config' is used for managing pgCenter's stats schema. This schema should be installed
-// into target database and used for gathering '/proc' stats from hosts where the database runs.
-// Main aim of this schema is providing stats in case when pgCenter and Postgres are running on separate hosts.
-
 package config
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
-	"github.com/lesovsky/pgcenter/lib/utils"
-	"github.com/lib/pq"
+	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 )
-
-// Config describes actions which can be performed against pgcenter's config
-type Config struct {
-	Install   bool
-	Uninstall bool
-}
 
 const (
-	doInstall = iota
-	doUninstall
-)
-
-var (
-	conninfo utils.Conninfo
-	db       *sql.DB
-	err      error
+	// Flags which tells to pgcenter install or uninstall schema.
+	Install = iota
+	Uninstall
 )
 
 // RunMain is the main entry point for 'pgcenter config' command.
-func RunMain(args []string, c utils.Conninfo, cfg Config) {
-	conninfo = c // copy conninfo from external struct into local one
-	utils.HandleExtraArgs(args, &conninfo)
-
-	db, err = utils.CreateConn(&conninfo)
+func RunMain(dbConfig postgres.Config, mode int) error {
+	db, err := postgres.Connect(dbConfig)
 	if err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-		return
+		return err
 	}
-
 	defer db.Close()
 
-	switch {
-	case cfg.Install == true:
-		// install stats schema
-		if err := manageSchema(doInstall); err != nil {
-			fmt.Println(err)
+	switch mode {
+	case Install:
+		if err := doInstall(db); err != nil {
+			return err
 		}
-	case cfg.Uninstall == true:
-		// uninstall stats schema
-		if err := manageSchema(doUninstall); err != nil {
-			fmt.Println(err)
+		fmt.Printf("pgCenter schema installed.")
+	case Uninstall:
+		if err := doUninstall(db); err != nil {
+			return err
 		}
+		fmt.Printf("pgCenter schema uninstalled.")
+	default:
+		// should not be here, but who knows...
+		fmt.Printf("do nothing, unknown mode selected.")
+		return fmt.Errorf("unknown mode selected")
 	}
 
-	return
+	return nil
 }
 
-// Used for installing or removing stats schema into/from Postgres database
-func manageSchema(action int) error {
-	var sqlSet []string
-	var msg string
-
-	// Select an appropriate set of SQL commands depending on specified action
-	switch action {
-	case doInstall:
-		sqlSet = createSchemaSqlSet
-		msg = "Statistics schema installed."
-	case doUninstall:
-		sqlSet = dropSchemaSqlSet
-		msg = "Statistics schema removed."
+// doInstall begins transaction and create pgcenter schema, functions and views.
+func doInstall(db *postgres.DB) error {
+	queries := []string{
+		query.StatSchemaCreateSchema,
+		query.StatSchemaCreateFunction1,
+		query.StatSchemaCreateFunction2,
+		query.StatSchemaCreateFunction3,
+		query.StatSchemaCreateView1,
+		query.StatSchemaCreateView2,
+		query.StatSchemaCreateView3,
+		query.StatSchemaCreateView4,
+		query.StatSchemaCreateView5,
+		query.StatSchemaCreateView6,
 	}
 
-	// Start a transaction and execute SQL commands. Rollback it if something goes wrong.
-	tx, err := db.Begin()
+	tx, err := db.Conn.Begin(context.Background())
 	if err != nil {
-		return fmt.Errorf("ERROR: failed to begin transaction: %s", err)
+		return err
 	}
 
-	for _, query := range sqlSet {
-		_, err := tx.Exec(query)
-		if err, ok := err.(*pq.Error); ok {
-			tx.Rollback()
-			return fmt.Errorf("%s: %s\nDETAIL: %s\nHINT: %s\nSTATEMENT: %s", err.Severity, err.Message, err.Detail, err.Hint, query)
+	for _, q := range queries {
+		_, err := tx.Exec(context.Background(), q)
+		if err != nil {
+			_ = tx.Rollback(context.Background())
+			return err
 		}
 	}
 
-	// Commit the transaction if everything is OK.
-	tx.Commit()
-	fmt.Println(msg)
+	err = tx.Commit(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// doUninstall drops pgcenter stats schema.
+func doUninstall(db *postgres.DB) error {
+	_, err := db.Exec(query.StatSchemaDropSchema)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
