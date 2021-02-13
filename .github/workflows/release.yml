@@ -8,9 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    container:
-      image: lesovsky/pgcenter-testing:v0.0.1
-      options: --interactive --tty
+    container: lesovsky/pgcenter-testing:v0.0.1
 
     steps:
       - name: Checkout code

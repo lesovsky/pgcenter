@@ -78,9 +78,9 @@ func (app *app) setup() error {
 // quit performs graceful application quit.
 func (app *app) quit() func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		close(app.uiExit)
 		g.Close()
 		app.db.Close()
-		close(app.uiExit)
 		return gocui.ErrQuit
 	}
 }
