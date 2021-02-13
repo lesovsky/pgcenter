@@ -10,9 +10,9 @@ const (
 		"({{.WalFunction1}}(write_lsn,flush_lsn) / 1024)::bigint AS flush, " +
 		"({{.WalFunction1}}(flush_lsn,replay_lsn) / 1024)::bigint AS replay, " +
 		"({{.WalFunction1}}({{.WalFunction2}}(),replay_lsn))::bigint / 1024 AS total_lag, " +
-		"coalesce(date_trunc('seconds', write_lag), '0 seconds'::interval) AS write_lag, " +
-		"coalesce(date_trunc('seconds', flush_lag), '0 seconds'::interval) AS flush_lag, " +
-		"coalesce(date_trunc('seconds', replay_lag), '0 seconds'::interval) AS replay_lag " +
+		"coalesce(date_trunc('seconds', write_lag), '0 seconds'::interval)::text AS write_lag, " +
+		"coalesce(date_trunc('seconds', flush_lag), '0 seconds'::interval)::text AS flush_lag, " +
+		"coalesce(date_trunc('seconds', replay_lag), '0 seconds'::interval)::text AS replay_lag " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
 	// PgStatReplicationExtended is the extended query for getting replication stats from pg_stat_replication view
@@ -24,9 +24,9 @@ const (
 		"({{.WalFunction1}}(write_lsn,flush_lsn) / 1024)::bigint AS flush, " +
 		"({{.WalFunction1}}(flush_lsn,replay_lsn) / 1024)::bigint AS replay, " +
 		"({{.WalFunction1}}({{.WalFunction2}}(),replay_lsn) / 1024)::bigint AS total_lag, " +
-		"coalesce(date_trunc('seconds', write_lag), '0 seconds'::interval) AS write_lag, " +
-		"coalesce(date_trunc('seconds', flush_lag), '0 seconds'::interval) AS flush_lag, " +
-		"coalesce(date_trunc('seconds', replay_lag), '0 seconds'::interval) AS replay_lag, " +
+		"coalesce(date_trunc('seconds', write_lag), '0 seconds'::interval)::text AS write_lag, " +
+		"coalesce(date_trunc('seconds', flush_lag), '0 seconds'::interval)::text AS flush_lag, " +
+		"coalesce(date_trunc('seconds', replay_lag), '0 seconds'::interval)::text AS replay_lag, " +
 		"(pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as xact_age, " +
 		"date_trunc('seconds', (pg_last_committed_xact()).timestamp - pg_xact_commit_timestamp(backend_xmin)) as time_age " +
 		"FROM pg_stat_replication ORDER BY pid DESC"
