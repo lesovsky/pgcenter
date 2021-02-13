@@ -55,5 +55,5 @@ func Test_app_quit(t *testing.T) {
 	assert.NoError(t, err)
 	app.ui = ui
 
-	assert.Equal(t, gocui.ErrQuit, fn(nil, nil))
+	assert.Equal(t, gocui.ErrQuit, fn(app.ui, nil))
 }
