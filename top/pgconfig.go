@@ -28,7 +28,7 @@ const (
 // showPgConfig fetches Postgres configuration settings and opens it in $PAGER program.
 func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		res, err := stat.NewPGresult(db, query.GetAllSettings)
+		res, err := stat.NewPGresultQuery(db, query.GetAllSettings)
 		if err != nil {
 			printCmdline(g, err.Error())
 			return nil

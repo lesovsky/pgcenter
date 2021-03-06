@@ -111,7 +111,7 @@ func TestGetPostgresProperties(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestNewPGresult(t *testing.T) {
+func TestNewPGresultQuery(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
@@ -124,17 +124,17 @@ func TestNewPGresult(t *testing.T) {
 			{{String: "3", Valid: true}, {String: "", Valid: false}, {String: "", Valid: false}, {String: "", Valid: false}},
 		},
 	}
-	got, err := NewPGresult(conn, "SELECT * FROM (VALUES (1,'one',10,11.1), (2,'two',20,22.2), (3,NULL,NULL,NULL)) AS t (id,name,v1,v2)")
+	got, err := NewPGresultQuery(conn, "SELECT * FROM (VALUES (1,'one',10,11.1), (2,'two',20,22.2), (3,NULL,NULL,NULL)) AS t (id,name,v1,v2)")
 	assert.NoError(t, err)
 	assert.Equal(t, want, got)
 
 	// testing empty query
-	_, err = NewPGresult(conn, "")
+	_, err = NewPGresultQuery(conn, "")
 	assert.Error(t, err)
 
 	// testing with already closed conn
 	conn.Close()
-	_, err = NewPGresult(conn, "SELECT 1")
+	_, err = NewPGresultQuery(conn, "SELECT 1")
 	assert.Error(t, err)
 }
 

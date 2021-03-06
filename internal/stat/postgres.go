@@ -30,7 +30,7 @@ func collectPostgresStat(db *postgres.DB, version int, pgss bool, itv int, query
 	pgstat.Activity = activity
 
 	// Read stat
-	res, err := NewPGresult(db, query)
+	res, err := NewPGresultQuery(db, query)
 	if err != nil {
 		return pgstat, err
 	}
@@ -166,8 +166,8 @@ type PGresult struct {
 	Valid  bool               /* Used for result invalidations, on context switching for example */
 }
 
-// NewPGresult does query and wraps returned result into PGresult.
-func NewPGresult(db *postgres.DB, query string) (PGresult, error) {
+// NewPGresultQuery creates PGresult using passed database connection and query.
+func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 	if query == "" {
 		return PGresult{}, fmt.Errorf("no query defined")
 	}

@@ -100,7 +100,7 @@ func (c *tarRecorder) collect(dbConfig postgres.Config, views view.Views) (map[s
 	stats := map[string]stat.PGresult{}
 
 	for k, v := range views {
-		res, err := stat.NewPGresult(db, v.Query)
+		res, err := stat.NewPGresultQuery(db, v.Query)
 		if err != nil {
 			return nil, err
 		}
