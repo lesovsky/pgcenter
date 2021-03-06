@@ -5,12 +5,12 @@
 # __release_tag__ postgres 10.15 was released 2020-12-03
 # __release_tag__ postgres 9.6.20 was released 2020-12-03
 # __release_tag__ postgres 9.5.24 was released 2020-12-03
-# __release_tag__ golang 1.15.8 was released 2021-02-04
+# __release_tag__ golang 1.16 was released 2021-02-16
 # __release_tag__ golangci-lint v1.36.0 was released 2021-01-26
 # __release_tag__ gosec v2.6.1 was released 2021-01-22
 FROM ubuntu:20.04
 
-LABEL version="v0.0.1"
+LABEL version="v0.0.2"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -27,7 +27,7 @@ RUN apt-get update && \
         postgresql-plperl-9.5 postgresql-plperl-9.6 postgresql-plperl-10 postgresql-plperl-11 postgresql-plperl-12 postgresql-plperl-13 && \
     cpan Module::Build && \
     cpan Linux::Ethtool::Settings && \
-    curl -s -L https://dl.google.com/go/go1.15.8.linux-amd64.tar.gz -o - | \
+    curl -s -L https://dl.google.com/go/go1.16.linux-amd64.tar.gz -o - | \
         tar xzf - -C /usr/local && \
     cp /usr/local/go/bin/go /usr/local/bin/ && \
     curl -s -L https://github.com/golangci/golangci-lint/releases/download/v1.36.0/golangci-lint-1.36.0-linux-amd64.tar.gz -o - | \
@@ -42,4 +42,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing v0.0.1"]
+CMD ["echo", "I'm pgcenter-testing v0.0.2"]

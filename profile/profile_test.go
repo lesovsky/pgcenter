@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
+	"os"
 	"testing"
 	"time"
 )
@@ -176,7 +176,7 @@ func Test_resetCounters(t *testing.T) {
 func Test_printHeader(t *testing.T) {
 	stat := profileStat{queryText: "SELECT f1, f2, f3 FROM t1, t2 WHERE t1.f1 = t2.f1"}
 
-	want, err := ioutil.ReadFile("testdata/profile_header.golden")
+	want, err := os.ReadFile("testdata/profile_header.golden")
 	assert.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -200,7 +200,7 @@ func Test_printStat(t *testing.T) {
 		},
 	}
 
-	want, err := ioutil.ReadFile("testdata/profile_stats.golden")
+	want, err := os.ReadFile("testdata/profile_stats.golden")
 	assert.NoError(t, err)
 
 	var buf bytes.Buffer

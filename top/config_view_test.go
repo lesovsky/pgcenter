@@ -337,7 +337,7 @@ func Test_changeQueryAge(t *testing.T) {
 		config.queryOptions.QueryAgeThresh = "11:12:13"
 		config.view.QueryTmpl = "{{" // break query template leads breaking query formatting
 		got := changeQueryAge("00:00:00", config)
-		assert.Equal(t, "Activity age: do nothing, template: query:1: unexpected unclosed action in command", got)
+		assert.Equal(t, "Activity age: do nothing, template: query:1: unclosed action", got)
 		assert.Equal(t, "11:12:13", config.queryOptions.QueryAgeThresh) // age should be the same as before calling changeQueryAge.
 	})
 

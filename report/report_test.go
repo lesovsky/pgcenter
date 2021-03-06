@@ -10,7 +10,6 @@ import (
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"testing"
@@ -151,7 +150,7 @@ func Test_app_doReport(t *testing.T) {
 		err = app.doReport(tr)
 		assert.NoError(t, err)
 
-		want, err := ioutil.ReadFile(tc.wantFile)
+		want, err := os.ReadFile(tc.wantFile)
 		assert.NoError(t, err)
 
 		assert.Equal(t, string(want), buf.String())
@@ -459,7 +458,7 @@ func Test_printStatSample(t *testing.T) {
 	v.Cols = cols
 	v.Aligned = true
 
-	f, err := ioutil.TempFile("/tmp", "pgcenter-test-report-")
+	f, err := os.CreateTemp("/tmp", "pgcenter-test-report-")
 	assert.NoError(t, err)
 	fname := f.Name()
 
@@ -473,11 +472,11 @@ func Test_printStatSample(t *testing.T) {
 	assert.NoError(t, err)
 
 	// read file
-	got, err := ioutil.ReadAll(f)
+	got, err := io.ReadAll(f)
 	assert.NoError(t, err)
 
 	// read wanted
-	want, err := ioutil.ReadFile("testdata/report_entry_sample.golden")
+	want, err := os.ReadFile("testdata/report_entry_sample.golden")
 	assert.NoError(t, err)
 
 	// compare created and wanted

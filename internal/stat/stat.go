@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/view"
-	"io/ioutil"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -231,7 +231,7 @@ func (c *Collector) collectNetdevs(db *postgres.DB) (Netdevs, error) {
 func readUptimeLocal(procfile string, ticks float64) (float64, error) {
 	var sec, csec int64
 
-	content, err := ioutil.ReadFile(filepath.Clean(procfile))
+	content, err := os.ReadFile(filepath.Clean(procfile))
 	if err != nil {
 		return 0, err
 	}
