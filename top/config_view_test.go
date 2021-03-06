@@ -217,7 +217,8 @@ func Test_switchViewTo(t *testing.T) {
 		{current: "statements_timings", to: "progress", want: "progress_vacuum"},
 		{current: "progress_vacuum", to: "progress", want: "progress_cluster"},
 		{current: "progress_cluster", to: "progress", want: "progress_index"},
-		{current: "progress_index", to: "progress", want: "progress_vacuum"},
+		{current: "progress_index", to: "progress", want: "progress_analyze"},
+		{current: "progress_analyze", to: "progress", want: "progress_vacuum"},
 	}
 
 	wg := sync.WaitGroup{}

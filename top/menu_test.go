@@ -12,7 +12,7 @@ func Test_selectMenuStyle(t *testing.T) {
 	}{
 		{menu: menuNone, want: 0},
 		{menu: menuPgss, want: 5},
-		{menu: menuProgress, want: 3},
+		{menu: menuProgress, want: 4},
 		{menu: menuConf, want: 4},
 	}
 

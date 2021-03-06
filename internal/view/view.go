@@ -201,6 +201,17 @@ func New() Views {
 			Msg:       "Show create index/reindex progress statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"progress_analyze": {
+			Name:      "progress_analyze",
+			QueryTmpl: query.PgStatProgressAnalyzeDefault,
+			DiffIntvl: [2]int{0, 0},
+			Ncols:     12,
+			OrderKey:  0,
+			OrderDesc: true,
+			ColsWidth: map[int]int{},
+			Msg:       "Show analyze progress statistics",
+			Filters:   map[int]*regexp.Regexp{},
+		},
 	}
 }
 

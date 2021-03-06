@@ -8,7 +8,7 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 15, len(v)) // 15 is the total number of views have to be returned
+	assert.Equal(t, 16, len(v)) // 16 is the total number of views have to be returned
 }
 
 func TestViews_Configure(t *testing.T) {
