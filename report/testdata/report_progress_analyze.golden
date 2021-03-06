@@ -1,0 +1,12 @@
+         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation  [0m[37;1mstate     [0m[37;1mwaiting          [0m[37;1mphase                  [0m[37;1mt_size    [0m[37;1mscanned_%  [0m[37;1mext_total/done  [0m[37;1mchild_total/done_%  [0m[37;1mchild_in_progress  [0m
+15:31:24 204645    00:14:44  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    56.00      0/0             0/0.00              -
+15:31:25 204645    00:14:45  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    57.00      0/0             0/0.00              -
+15:31:26 212982    00:01:08  pgbench   89984     active    f                acquiring sample rows  240000    7.00       0/0             0/0.00              -
+         204645    00:14:46  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    60.00      0/0             0/0.00              -
+15:31:27 212982    00:01:09  pgbench   89984     active    Timeout.Vacuum~  acquiring sample rows  240000    57.00      0/0             0/0.00              -
+         204645    00:14:47  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    61.00      0/0             0/0.00              -
+15:31:28 204645    00:14:48  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    62.00      0/0             0/0.00              -
+15:31:29 204645    00:14:49  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    63.00      0/0             0/0.00              -
+15:31:30 204645    00:14:50  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    63.00      0/0             0/0.00              -
+15:31:31 204645    00:14:51  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    64.00      0/0             0/0.00              -
+15:31:32 204645    00:14:52  pgbench   89900     active    IO.DataFileRead  acquiring sample rows  240000    64.00      0/0             0/0.00              -

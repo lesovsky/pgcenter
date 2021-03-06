@@ -98,6 +98,11 @@ func Test_app_doReport(t *testing.T) {
 			config:   Config{ReportType: "progress_index", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_index.golden",
 		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "progress_analyze", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_progress_analyze.golden",
+		},
 		{ // start, end times within report interval
 			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
 			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},

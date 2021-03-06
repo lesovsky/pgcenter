@@ -51,6 +51,7 @@ func Test_selectReport(t *testing.T) {
 		{opts: options{showProgress: "v"}, want: "progress_vacuum"},
 		{opts: options{showProgress: "c"}, want: "progress_cluster"},
 		{opts: options{showProgress: "i"}, want: "progress_index"},
+		{opts: options{showProgress: "a"}, want: "progress_analyze"},
 		{opts: options{}, want: ""},
 	}
 

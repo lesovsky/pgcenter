@@ -217,7 +217,7 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING
 `
 
-	// pgStatProgressCreateIndexDescription is the detailed description of pg_stat_progress_cluster view
+	// pgStatProgressCreateIndexDescription is the detailed description of pg_stat_progress_create_index view
 	pgStatProgressCreateIndexDescription = `Statistics about progress of create index/reindex operations based on pg_stat_progress_create_index view:
 
   column		origin				description
@@ -240,6 +240,30 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING
 `
+
+	// pgStatProgressAnalyzeDescription is the detailed description of pg_stat_progress_analyze view
+	pgStatProgressAnalyzeDescription = `Statistics about progress of analyze operations based on pg_stat_progress_analyze view:
+
+  column		origin				description
+- pid			pid				Process ID of this worker
+- xact_age*		xact_start			Current transaction's duration if active
+- datname		datname				Name of the database this worker is connected to
+- relation		relid				Name of the relation which is processed by this worker
+- state			state				Current overall state of this worker
+- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase			phase				Current processing phase of operation
+- t_size        	sample_blks_total		Total size of the sample, in kB.
+- scanned_%		sample_blks_total,sample_blks_scanned	Total size of scanned sample, in percent
+- ext_total/done	ext_stats_total,ext_stats_computed	Total number of extended statistics and number of already computed statistics
+- child_total/done_%	child_tables_total,child_tables_done Total number of child tables and ratio of child tables already processed 
+- child_in_progress	current_child_table_relid	Name of child relation which is processed by this worker
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE-PROGRESS-REPORTING
+`
+
+	// pid  xact_age  datname  relation  state  waiting  phase  t_size  scanned_%  ext_total/done  child_total/done_%  child_in_progress
 
 	// pgStatStatementsTimingsDescription is the detailed description of pg_stat_statements section about timing stats
 	pgStatStatementsTimingsDescription = `Statements timing statistics based on pg_stat_statements:

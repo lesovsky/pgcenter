@@ -164,6 +164,8 @@ func selectReport(opts options) string {
 			return "progress_cluster"
 		case "i":
 			return "progress_index"
+		case "a":
+			return "progress_analyze"
 		}
 	}
 

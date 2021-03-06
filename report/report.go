@@ -405,6 +405,7 @@ func describeReport(w io.Writer, report string) error {
 		"progress_vacuum":    pgStatProgressVacuumDescription,
 		"progress_cluster":   pgStatProgressClusterDescription,
 		"progress_index":     pgStatProgressCreateIndexDescription,
+		"progress_analyze":   pgStatProgressAnalyzeDescription,
 		"statements_timings": pgStatStatementsTimingsDescription,
 		"statements_general": pgStatStatementsGeneralDescription,
 		"statements_io":      pgStatStatementsIODescription,
