@@ -48,6 +48,7 @@ func Test_selectReport(t *testing.T) {
 		{opts: options{showStatements: "i"}, want: "statements_io"},
 		{opts: options{showStatements: "t"}, want: "statements_temp"},
 		{opts: options{showStatements: "l"}, want: "statements_local"},
+		{opts: options{showStatements: "w"}, want: "statements_wal"},
 		{opts: options{showProgress: "v"}, want: "progress_vacuum"},
 		{opts: options{showProgress: "c"}, want: "progress_cluster"},
 		{opts: options{showProgress: "i"}, want: "progress_index"},

@@ -85,6 +85,11 @@ func Test_app_doReport(t *testing.T) {
 		},
 		{
 			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "statements_wal", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_statements_wal.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
 			config:   Config{ReportType: "progress_vacuum", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_vacuum.golden",
 		},

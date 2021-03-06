@@ -412,6 +412,7 @@ func describeReport(w io.Writer, report string) error {
 		"statements_io":       pgStatStatementsIODescription,
 		"statements_local":    pgStatStatementsTempDescription,
 		"statements_temp":     pgStatStatementsLocalDescription,
+		"statements_wal":      pgStatStatementsWalDescription,
 	}
 
 	if description, ok := m[report]; ok {

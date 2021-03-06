@@ -155,6 +155,8 @@ func selectReport(opts options) string {
 			return "statements_temp"
 		case "l":
 			return "statements_local"
+		case "w":
+			return "statements_wal"
 		}
 	case opts.showProgress != "":
 		switch opts.showProgress {
