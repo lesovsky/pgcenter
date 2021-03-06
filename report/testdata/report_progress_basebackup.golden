@@ -1,0 +1,10 @@
+         [37;1mpid       [0m[37;1mstarted_from  [0m[37;1mstarted_at           [0m[37;1mduration  [0m[37;1mstate     [0m[37;1mwaiting             [0m[37;1mphase                     [0m[37;1mt_size    [0m[37;1mstreamed_%  [0m[37;1mstreamed  [0m[37;1mtablespaces_total/streamed  [0m
+15:31:24 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:29  active    Client.ClientWrite  streaming database files  30908667  21.00       90624     1/0
+15:31:25 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:30  active    Client.ClientWrite  streaming database files  30908667  22.00       134848    1/0
+15:31:26 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:31  active    Client.ClientWrite  streaming database files  30908667  22.00       123840    1/0
+15:31:27 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:32  active    f                   streaming database files  30908667  23.00       129088    1/0
+15:31:28 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:33  active    Client.ClientWrite  streaming database files  30908667  23.00       101568    1/0
+15:31:29 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:34  active    Client.ClientWrite  streaming database files  30908667  23.00       138240    1/0
+15:31:30 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:35  active    Client.ClientWrite  streaming database files  30908667  24.00       115488    1/0
+15:31:31 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:36  active    f                   streaming database files  30908667  24.00       119076    1/0
+15:31:32 280274    127.0.0.1/32  2021-03-06 17:34:10  00:00:37  active    Client.ClientWrite  streaming database files  30908667  25.00       139106    1/0

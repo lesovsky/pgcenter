@@ -166,6 +166,8 @@ func selectReport(opts options) string {
 			return "progress_index"
 		case "a":
 			return "progress_analyze"
+		case "b":
+			return "progress_basebackup"
 		}
 	}
 

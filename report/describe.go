@@ -263,7 +263,26 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE-PROGRESS-REPORTING
 `
 
-	// pid  xact_age  datname  relation  state  waiting  phase  t_size  scanned_%  ext_total/done  child_total/done_%  child_in_progress
+	// pgStatProgressBasebackupDescription is the detailed description of pg_stat_progress_basebackup view
+	pgStatProgressBasebackupDescription = `Statistics about progress of basebackups performed based on pg_stat_progress_basebackup view:
+
+  column		origin				description
+- pid			pid				Process ID of this worker
+- started_from  	client_addr			Network address of the client performed basebackup
+- started_at		backend_start			Timestamp of when basebackup has been started
+- duration		backend_start			Duration of basebackup
+- state			state				Current overall state of this worker
+- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase			phase				Current processing phase of operation
+- t_size        	backup_total			Total amount of data that will be streamed, in kB
+- streamed_%		backup_total,backup_streamed	Total amount of data already streamed, in percent
+- streamed			backup_total,backup_streamed	Amount of data streamed
+- tablespaces_total/streamed	tablespaces_total,tablespaces_streamed	Total number of tablespaces and already streamed.
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#BASEBACKUP-PROGRESS-REPORTING
+`
 
 	// pgStatStatementsTimingsDescription is the detailed description of pg_stat_statements section about timing stats
 	pgStatStatementsTimingsDescription = `Statements timing statistics based on pg_stat_statements:
