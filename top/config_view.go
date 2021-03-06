@@ -120,6 +120,8 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			case "statements_temp":
 				viewSwitchHandler(app.config, "statements_local")
 			case "statements_local":
+				viewSwitchHandler(app.config, "statements_wal")
+			case "statements_wal":
 				viewSwitchHandler(app.config, "statements_timings")
 			default:
 				viewSwitchHandler(app.config, "statements_timings")

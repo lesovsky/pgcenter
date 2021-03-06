@@ -77,6 +77,14 @@ const (
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
+	// PgStatStatementsWalDefault is the default query for getting stats about WAL usage from pg_stat_statements
+	PgStatStatementsWalDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database," +
+		"(wal_bytes / 1024)::numeric(20,2)::text AS t_wal, (wal_bytes / 1024)::numeric(20,2)::text AS wal," +
+		"wal_records AS wal_records, wal_fpi AS wal_fpi, p.calls AS t_calls," +
+		"left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid," +
+		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
+		"FROM pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
+
 	// PgStatStatementsReportQuery defines query used for calculating per-statement report based on pg_stat_statements.
 	PgStatStatementsReportQueryDefault = "WITH totals AS (SELECT " +
 		"sum(calls) AS total_calls," +

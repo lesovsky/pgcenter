@@ -70,6 +70,23 @@ func Test_StatStatementsQueries(t *testing.T) {
 			conn.Close()
 		}
 	})
+
+	t.Run("pg_stat_statements_wal", func(t *testing.T) {
+		for _, version := range []int{130000} {
+			tmpl := PgStatStatementsWalDefault
+			opts := NewOptions(version, "f", "off", 256)
+			q, err := Format(tmpl, opts)
+			assert.NoError(t, err)
+
+			conn, err := postgres.NewTestConnectVersion(version)
+			assert.NoError(t, err)
+
+			_, err = conn.Exec(q)
+			assert.NoError(t, err)
+
+			conn.Close()
+		}
+	})
 }
 
 func TestSelectQueryReportQuery(t *testing.T) {

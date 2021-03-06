@@ -168,6 +168,18 @@ func New() Views {
 			Msg:       "Show statements temp tables statistics (local IO)",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"statements_wal": {
+			Name:      "statements_wal",
+			QueryTmpl: query.PgStatStatementsWalDefault,
+			DiffIntvl: [2]int{3, 6},
+			Ncols:     9,
+			OrderKey:  0,
+			OrderDesc: true,
+			UniqueKey: 7,
+			ColsWidth: map[int]int{},
+			Msg:       "Show statements WAL statistics",
+			Filters:   map[int]*regexp.Regexp{},
+		},
 		"progress_vacuum": {
 			Name:      "progress_vacuum",
 			QueryTmpl: query.PgStatProgressVacuumDefault,
