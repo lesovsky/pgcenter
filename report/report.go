@@ -2,7 +2,6 @@ package report
 
 import (
 	"archive/tar"
-	"encoding/json"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/stat"
@@ -121,7 +120,7 @@ func (app *app) doReport(r *tar.Reader) error {
 		}
 
 		// Read stats from file.
-		currStat, err := readFileStat(r, hdr.Size)
+		currStat, err := stat.NewPGresultFile(r, hdr.Size)
 		if err != nil {
 			return err
 		}
@@ -225,24 +224,6 @@ func isFilenameTimestampOK(name string, start, end time.Time) (time.Time, error)
 	}
 
 	return ts, nil
-}
-
-// readFileStat reads content of tar file, unmarshal data and return stat object.
-func readFileStat(r *tar.Reader, bufsz int64) (stat.PGresult, error) {
-	data := make([]byte, bufsz)
-
-	if _, err := io.ReadFull(r, data); err != nil {
-		return stat.PGresult{}, err
-	}
-
-	// initialize an empty struct and unmarshal data from the buffer
-	res := stat.PGresult{}
-	err := json.Unmarshal(data, &res)
-	if err != nil {
-		return stat.PGresult{}, err
-	}
-
-	return res, nil
 }
 
 // countDiff compares two stat samples and produce differential sample.

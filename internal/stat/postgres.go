@@ -3,9 +3,11 @@ package stat
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -222,6 +224,24 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 		Values: rowsStore,
 		Valid:  true,
 	}, nil
+}
+
+// NewPGresultFile creates PGresult using reader interface.
+func NewPGresultFile(r io.Reader, bufsz int64) (PGresult, error) {
+	data := make([]byte, bufsz)
+
+	if _, err := io.ReadFull(r, data); err != nil {
+		return PGresult{}, err
+	}
+
+	// initialize an empty struct and unmarshal data from the buffer
+	res := PGresult{}
+	err := json.Unmarshal(data, &res)
+	if err != nil {
+		return PGresult{}, err
+	}
+
+	return res, nil
 }
 
 // Compare is public wrapper around calculateDelta.

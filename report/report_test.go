@@ -211,44 +211,6 @@ func Test_isFilenameTimestampOK(t *testing.T) {
 	}
 }
 
-func Test_readFileStat(t *testing.T) {
-	testcases := []struct {
-		valid    bool
-		filename string
-	}{
-		{valid: true, filename: "testdata/pgcenter.stat.golden.tar"},
-		{valid: false, filename: "testdata/pgcenter.stat.invalid.tar"},
-	}
-
-	for _, tc := range testcases {
-		t.Run(tc.filename, func(t *testing.T) {
-			f, err := os.Open(tc.filename)
-			assert.NoError(t, err)
-
-			r := tar.NewReader(f)
-
-			for {
-				hdr, err := r.Next()
-				if err == io.EOF {
-					break
-				} else if err != nil {
-					assert.Fail(t, "unexpected error", err)
-				}
-
-				got, err := readFileStat(r, hdr.Size)
-				if tc.valid {
-					assert.NoError(t, err)
-					assert.NotNil(t, got.Values)
-					assert.NotNil(t, got.Cols)
-				} else {
-					assert.Error(t, err)
-					assert.Equal(t, stat.PGresult{}, got)
-				}
-			}
-		})
-	}
-}
-
 func Test_countDiff(t *testing.T) {
 	prev := stat.PGresult{
 		Valid: true, Ncols: 18, Nrows: 1,
