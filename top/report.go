@@ -21,6 +21,7 @@ type report struct {
 	Datname                string // database name based on pg_database.datname
 	TotalCalls             string // total number of calls for all queries
 	TotalRows              string // total number of rows for all queries
+	TotalWalBytes          string // total number of WAL bytes for all queries
 	TotalAllTime           string // total amount of time spent executing for all queries (including plan, exec, IO, etc)
 	TotalPlanTime          string // total amount of time spent planning for all queries
 	TotalPlanTimeDistRatio string // ratio of total planning time across total time
@@ -47,6 +48,12 @@ type report struct {
 	PlanTimeDistRatio      string // ratio of planning time to total query time
 	CPUTimeDistRatio       string // ratio of CPU time to total query time
 	IOTimeDistRatio        string // ratio of IO time to total query time
+	WalRecords             string // total WAL records produced by the query
+	WalRecordsRatio        string // ratio of query's WAL records to total number of WAL records
+	WalFpi                 string // total WAL full-page images produced by the query
+	WalFpiRatio            string // ratio of query's WAL full-page images to total number of WAL FPI
+	WalBytes               string // total number of WAL bytes produced by the query
+	WalBytesRatio          string // ratio of query's WAL bytes to total WAL bytes
 }
 
 const (
@@ -54,6 +61,7 @@ const (
 	reportTemplate = `summary:
     total queries: {{.TotalCalls}}
     total rows: {{.TotalRows}}
+    total WAL: {{.TotalWalBytes}}
     total_time: {{.TotalAllTime}}, 100% 
         total_plan_time: {{.TotalPlanTime}},  {{.TotalPlanTimeDistRatio}}%
         total_cpu_time: {{.TotalCPUTime}},  {{.TotalCPUTimeDistRatio}}%
@@ -65,6 +73,10 @@ query info:
     database:                              {{.Datname}},
     calls (relative to total):             {{.Calls}},  {{.CallsRatio}}%,
     rows (relative to total):              {{.Rows}},  {{.RowsRatio}}%,
+    WAL usage (relative to total):
+        records:                           {{.WalRecords}},  {{.WalRecordsRatio}}%
+        full-page images:                  {{.WalFpi}},  {{.WalFpiRatio}}%
+        bytes:                             {{.WalBytes}},  {{.WalBytesRatio}}%
     total times (relative to total):       {{.AllTime}},  {{.AllTimeRatio}}%
         planning:                          {{.PlanTime}},  {{.PlanTimeRatio}}%
         cpu:                               {{.CPUTime}},  {{.CPUTimeRatio}}%
@@ -89,12 +101,13 @@ func getQueryReport(answer string, version int, db *postgres.DB) (report, string
 
 	var r report
 	err := db.QueryRow(query.SelectQueryReportQuery(version), answer).Scan(
-		&r.Query, &r.QueryID, &r.Usename, &r.Datname, &r.TotalCalls, &r.TotalRows, &r.TotalAllTime,
+		&r.Query, &r.QueryID, &r.Usename, &r.Datname, &r.TotalCalls, &r.TotalRows, &r.TotalWalBytes, &r.TotalAllTime,
 		&r.TotalPlanTime, &r.TotalPlanTimeDistRatio, &r.TotalCPUTime, &r.TotalCPUTimeDistRatio, &r.TotalIOTime, &r.TotalIOTimeDistRatio,
 		&r.Calls, &r.CallsRatio, &r.Rows, &r.RowsRatio,
 		&r.AllTime, &r.AllTimeRatio, &r.PlanTime, &r.PlanTimeRatio, &r.CPUTime, &r.CPUTimeRatio, &r.IOTime, &r.IOTimeRatio,
 		&r.AvgAllTime, &r.AvgPlanTime, &r.AvgCPUTime, &r.AvgIOTime,
 		&r.PlanTimeDistRatio, &r.CPUTimeDistRatio, &r.IOTimeDistRatio,
+		&r.WalRecords, &r.WalRecordsRatio, &r.WalFpi, &r.WalFpiRatio, &r.WalBytes, &r.WalBytesRatio,
 	)
 
 	if err == pgx.ErrNoRows {
