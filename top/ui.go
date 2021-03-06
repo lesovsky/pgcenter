@@ -42,7 +42,7 @@ func mainLoop(ctx context.Context, app *app) error {
 		}()
 
 		// Run UI management loop.
-		err = g.MainLoop()
+		err = app.ui.MainLoop()
 		if err != nil {
 			// quit received.
 			if err == gocui.ErrQuit {
@@ -75,7 +75,6 @@ func doWork(ctx context.Context, app *app) {
 	wg.Add(1)
 	go func() {
 		collectStat(ctx, app.db, statCh, app.config.viewCh)
-		close(statCh)
 		wg.Done()
 	}()
 
@@ -94,7 +93,6 @@ func doWork(ctx context.Context, app *app) {
 		case s := <-statCh:
 			printStat(app, s, app.postgresProps)
 		case <-ctx.Done():
-			close(statCh)
 			wg.Wait()
 			return
 		}

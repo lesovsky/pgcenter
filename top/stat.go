@@ -86,6 +86,7 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			continue
 		case <-ctx.Done():
 			ticker.Stop()
+			close(statCh)
 			return
 		case <-ticker.C:
 			continue
