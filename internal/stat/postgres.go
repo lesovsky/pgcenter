@@ -217,13 +217,20 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 		colnames[i] = string(d.Name)
 	}
 
-	return PGresult{
+	res := PGresult{
 		Nrows:  nrows,
 		Ncols:  ncols,
 		Cols:   colnames,
 		Values: rowsStore,
 		Valid:  true,
-	}, nil
+	}
+
+	err = res.validate()
+	if err != nil {
+		return PGresult{}, err
+	}
+
+	return res, nil
 }
 
 // NewPGresultFile creates PGresult using reader interface.
@@ -241,10 +248,32 @@ func NewPGresultFile(r io.Reader, bufsz int64) (PGresult, error) {
 		return PGresult{}, err
 	}
 
+	err = res.validate()
+	if err != nil {
+		return PGresult{}, err
+	}
+
 	return res, nil
 }
 
-// Compare is public wrapper around calculateDelta.
+// validate validates content of PGresult
+func (r *PGresult) validate() error {
+	// Check that number or values in rows are equal to number of columns names.
+	for _, row := range r.Values {
+		if len(row) != len(r.Cols) {
+			return fmt.Errorf("invalid number of values in row")
+		}
+	}
+
+	// Check number of rows is the same as declared
+	if r.Nrows != len(r.Values) {
+		return fmt.Errorf("invalid number of rows and values")
+	}
+
+	return nil
+}
+
+// Compare is public wrapper over calculateDelta.
 func Compare(curr, prev PGresult, itv int, interval [2]int, skey int, desc bool, ukey int) (PGresult, error) {
 	return calculateDelta(curr, prev, itv, interval, skey, desc, ukey)
 }

@@ -179,6 +179,42 @@ func Test_NewPGresultFile(t *testing.T) {
 	}
 }
 
+func TestPGresult_validate(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		res   PGresult
+	}{
+		{valid: true, res: PGresult{
+			Valid: true, Ncols: 4, Nrows: 2, Cols: []string{"col1", "col2", "col3", "col4"},
+			Values: [][]sql.NullString{
+				{{String: "1", Valid: true}, {String: "one", Valid: true}, {String: "10", Valid: true}, {String: "111e-1", Valid: true}},
+				{{String: "3", Valid: true}, {String: "", Valid: false}, {String: "", Valid: false}, {String: "", Valid: false}},
+			},
+		}},
+		{valid: false, res: PGresult{
+			Valid: true, Ncols: 4, Nrows: 1, Cols: []string{"col1", "col2", "col3", "col4"},
+			Values: [][]sql.NullString{
+				{{String: "1", Valid: true}, {String: "one", Valid: true}, {String: "10", Valid: true}},
+			},
+		}},
+		{valid: false, res: PGresult{
+			Valid: true, Ncols: 4, Nrows: 2, Cols: []string{"col1", "col2", "col3", "col4"},
+			Values: [][]sql.NullString{
+				{{String: "1", Valid: true}, {String: "one", Valid: true}, {String: "10", Valid: true}, {String: "111e-1", Valid: true}},
+			},
+		}},
+	}
+
+	for _, tc := range testcases {
+		err := tc.res.validate()
+		if tc.valid {
+			assert.NoError(t, err)
+		} else {
+			assert.Error(t, err)
+		}
+	}
+}
+
 func Test_calculateDelta(t *testing.T) {
 	prev := PGresult{
 		Valid: true, Ncols: 4, Nrows: 4, Cols: []string{"unique", "col2", "col3", "col4"},
