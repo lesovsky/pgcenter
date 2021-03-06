@@ -52,6 +52,10 @@ func NewConfig(host string, port int, user string, dbname string) (Config, error
 	// use PreferSimpleProtocol disables implicit prepared statement usage and enable compatibility with Pgbouncer.
 	pgConfig.PreferSimpleProtocol = true
 
+	// Using simple protocol requires explicit options to be set.
+	pgConfig.RuntimeParams["standard_conforming_strings"] = "on"
+	pgConfig.RuntimeParams["client_encoding"] = "UTF8"
+
 	// process PGOPTIONS explicitly, because used jackc/pgx driver supports a limited set of libpq environment variables.
 	if options := os.Getenv("PGOPTIONS"); options != "" {
 		pgConfig.RuntimeParams["options"] = options
