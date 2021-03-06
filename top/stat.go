@@ -54,7 +54,16 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 		if err != nil {
 			stats.Error = err
 		}
-		statCh <- stats
+
+		// Sending collected stats. Also checking for context cancel, it could be received due to failed UI.
+		select {
+		case statCh <- stats:
+			// ok, stats received.
+		case <-ctx.Done():
+			// quit received, close channel and return.
+			close(statCh)
+			return
+		}
 
 		// Waiting for receiving new view until refresh interval expired. When new view has been received, use its
 		// settings to adjust collector's behavior.
