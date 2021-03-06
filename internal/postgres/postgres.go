@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v4"
 	"golang.org/x/crypto/ssh/terminal"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -93,7 +94,7 @@ func Connect(config Config) (*DB, error) {
 		return &DB{
 			Config: config,
 			Conn:   conn,
-			Local:  strings.HasPrefix(config.Config.Host, "/"),
+			Local:  isLocalhost(config.Config.Host),
 		}, nil
 	}
 }
@@ -135,4 +136,34 @@ func (db *DB) Close() {
 func (db *DB) PQstatus() error {
 	var s string
 	return db.QueryRow("SELECT 1").Scan(&s)
+}
+
+// isLocalhost check connection host address and returns true if it is local and 'false' if not.
+func isLocalhost(host string) bool {
+	if host == "" {
+		return false
+	}
+
+	if strings.HasPrefix(host, "/") {
+		return true
+	}
+
+	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
+		return true
+	}
+
+	addresses, err := net.InterfaceAddrs()
+	if err != nil {
+		// Consider error as the passed host address is not local
+		// TODO: log error
+		return false
+	}
+
+	for _, a := range addresses {
+		if strings.HasPrefix(a.String(), host) {
+			return true
+		}
+	}
+
+	return false
 }

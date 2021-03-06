@@ -175,3 +175,23 @@ func TestDB_ALL(t *testing.T) {
 
 	conn.Close()
 }
+
+func Test_isLocalhost(t *testing.T) {
+	testcases := []struct {
+		host string
+		want bool
+	}{
+		{host: "/var/lib/postgresql", want: true},
+		{host: "/", want: true},
+		{host: "localhost", want: true},
+		{host: "127.0.0.1", want: true},
+		{host: "::1", want: true},
+		{host: "", want: false},
+		{host: "example", want: false},
+		{host: "1.2.3.4", want: false},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, isLocalhost(tc.host))
+	}
+}
