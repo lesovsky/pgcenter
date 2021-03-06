@@ -212,6 +212,17 @@ func New() Views {
 			Msg:       "Show analyze progress statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"progress_basebackup": {
+			Name:      "progress_basebackup",
+			QueryTmpl: query.PgStatProgressBasebackupDefault,
+			DiffIntvl: [2]int{9, 9},
+			Ncols:     11,
+			OrderKey:  0,
+			OrderDesc: true,
+			ColsWidth: map[int]int{},
+			Msg:       "Show basebackup progress statistics",
+			Filters:   map[int]*regexp.Regexp{},
+		},
 	}
 }
 

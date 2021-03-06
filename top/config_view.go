@@ -134,6 +134,8 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			case "progress_index":
 				viewSwitchHandler(app.config, "progress_analyze")
 			case "progress_analyze":
+				viewSwitchHandler(app.config, "progress_basebackup")
+			case "progress_basebackup":
 				viewSwitchHandler(app.config, "progress_vacuum")
 			default:
 				viewSwitchHandler(app.config, "progress_vacuum")
