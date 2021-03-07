@@ -2,157 +2,23 @@ package profile
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
 	"time"
 )
 
-func Test_profileLoop(t *testing.T) {
-	target, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
-
-	var pid int
-	err = target.QueryRow("SELECT pg_backend_pid()").Scan(&pid)
-	assert.NoError(t, err)
-
-	db, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
-
-	// go sleep in profiled connection
-	go func() {
-		// waiting for to start profiling
-		time.Sleep(time.Second)
-
-		// run query 1
-		_, err = target.Exec("SELECT 1, pg_sleep(1)")
-		assert.NoError(t, err)
-
-		// immediately run query 2
-		_, err = target.Exec("SELECT 2, pg_sleep(1)")
-		assert.NoError(t, err)
-
-		// be idle for a bit
-		time.Sleep(200 * time.Millisecond)
-
-		// run query 3
-		_, err = target.Exec("SELECT 3, pg_sleep(1)")
-		assert.NoError(t, err)
-
-		// close DB connection - profiler will exit.
-		target.Close()
-	}()
-
-	var buf bytes.Buffer
-	err = profileLoop(&buf, db, Config{Pid: pid, Frequency: 50 * time.Millisecond, Strsize: 64}, nil)
-	assert.NoError(t, err)
-	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Profiling process %d with 50ms sampling", pid))
-	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 1, pg_sleep(1)")
-	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 2, pg_sleep(1)")
-	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 3, pg_sleep(1)")
-	assert.Contains(t, buf.String(), "Timeout.PgSleep")
-	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Stop profiling, process with pid %d doesn't exist (no rows in result set)", pid))
-	//fmt.Println(buf.String())
-	db.Close()
+func Test_newStatsStore(t *testing.T) {
+	s := newStatsStore()
+	assert.NotNil(t, s.durations)
+	assert.NotNil(t, s.ratios)
 }
 
-func Test_getProfileSnapshot(t *testing.T) {
-	target, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
-
-	var pid int
-	err = target.QueryRow("SELECT pg_backend_pid()").Scan(&pid)
-	assert.NoError(t, err)
-
-	db, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
-
-	// go sleep in profiled connection
-	go func() {
-		_, err := target.Exec("SELECT pg_sleep(1)")
-		assert.NoError(t, err)
-	}()
-
-	// try profile 'target' backend
-	got, err := getProfileSnapshot(db, pid)
-	assert.NoError(t, err)
-	assert.NotNil(t, got)
-	assert.Equal(t, "SELECT pg_sleep(1)", got.queryText)
-
-	db.Close()
-	target.Close()
-}
-
-func Test_countWaitings(t *testing.T) {
-	// wait events distribution at the beginning: query was working 1 second, running 0.5s (50%), test entry 0.5s (50%)
-	s := stats{
-		durations: map[string]float64{
-			"Running":     0.5,
-			"Test.Entry1": 0.5,
-		},
-		ratios: map[string]float64{
-			"Running":     50,
-			"Test.Entry1": 50,
-		},
-	}
-	ps := profileStat{
-		queryDurationSec: 1.0, // query was working 1 second
-		state:            "active",
-		waitEntry:        "Test.Entry1",
-		queryText:        "SELECT 1",
-	}
-
-	// current snapshot - query waits 1 extra second in Test.Entry1
-	cs := profileStat{
-		queryDurationSec: 2.0, // +1 second
-		state:            "active",
-		waitEntry:        "Test.Entry1",
-		queryText:        "SELECT 1",
-	}
-
-	// all waiting time accounted for Test.Entry1 - running 0.5s (25%), wait entry - 1.5s (75%)
-	want := stats{
-		durations: map[string]float64{
-			"Running":     0.5,
-			"Test.Entry1": 1.5,
-		},
-		ratios: map[string]float64{
-			"Running":     25,
-			"Test.Entry1": 75,
-		},
-	}
-
-	got := countWaitings(s, cs, ps)
-	assert.Equal(t, want, got)
-
-	// swap prev with curr and update curr with new value - query is running 1 extra second (running means no wait)
-	ps = cs
-	cs = profileStat{
-		queryDurationSec: 3.0, // +1 second
-		state:            "active",
-		waitEntry:        "", // no wait
-		queryText:        "SELECT 1",
-	}
-
-	// all running time should be accounted to 'Running' - running 1.5s (50%), wait entry - 1.5s (50%)
-	want = stats{
-		durations: map[string]float64{
-			"Running":     1.5,
-			"Test.Entry1": 1.5,
-		},
-		ratios: map[string]float64{
-			"Running":     50,
-			"Test.Entry1": 50,
-		},
-	}
-
-	got = countWaitings(s, cs, ps)
-	assert.Equal(t, want, got)
-}
-
-func Test_resetCounters(t *testing.T) {
+func Test_resetStatsStore(t *testing.T) {
 	s := stats{
 		durations: map[string]float64{
 			"Test.Entry3": 140,
@@ -168,24 +34,165 @@ func Test_resetCounters(t *testing.T) {
 		},
 	}
 
-	resetCounters(s)
+	resetStatsStore(s)
 	assert.Equal(t, 0, len(s.durations))
 	assert.Equal(t, 0, len(s.ratios))
 }
 
+func Test_profileLoop(t *testing.T) {
+	target, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+
+	var pid int
+	err = target.QueryRow("SELECT pg_backend_pid()").Scan(&pid)
+	assert.NoError(t, err)
+
+	db, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+
+	fmt.Println("start with ", pid)
+	// go sleep in profiled connection
+	go func() {
+		// waiting for to start profiling outside this goroutine
+		time.Sleep(time.Second)
+
+		fmt.Println("start select 1")
+		// run query 1
+		_, err = target.Exec("SELECT 1, pg_sleep(1)")
+		assert.NoError(t, err)
+
+		fmt.Println("start select 2")
+		// immediately run query 2
+		_, err = target.Exec("SELECT 2, pg_sleep(1)")
+		assert.NoError(t, err)
+
+		// be idle for a bit
+		time.Sleep(200 * time.Millisecond)
+
+		// run query 3
+		fmt.Println("start select 3")
+		_, err = target.Exec("SELECT 3, pg_sleep(1)")
+		assert.NoError(t, err)
+
+		// close DB connection - profiler will exit.
+		fmt.Println("close")
+		target.Close()
+	}()
+
+	var buf bytes.Buffer
+	err = profileLoop(&buf, db, Config{Pid: pid, Frequency: 50 * time.Millisecond, Strsize: 64}, nil)
+	assert.NoError(t, err)
+	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Profiling process %d with 50ms sampling", pid))
+	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 1, pg_sleep(1)")
+	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 2, pg_sleep(1)")
+	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 3, pg_sleep(1)")
+	assert.Contains(t, buf.String(), "Timeout.PgSleep")
+	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Stop profiling, no process with pid %d", pid))
+	//fmt.Println(buf.String())
+	db.Close()
+}
+
+func Test_parseActivitySnapshot(t *testing.T) {
+	res := stat.PGresult{
+		Valid: true, Ncols: 6, Nrows: 3, Cols: []string{"pid", "query_duration", "state_change_time", "state", "wait_entry", "query"},
+		Values: [][]sql.NullString{
+			{
+				{String: "123456", Valid: true}, {String: "2.000", Valid: true},
+				{String: "2021-01-01T00:00:00.000+05:00", Valid: true}, {String: "active", Valid: true},
+				{String: "", Valid: true}, {String: "SELECT 1", Valid: true},
+			},
+			{
+				{String: "123457", Valid: true}, {String: "1.000", Valid: true},
+				{String: "2021-01-01T00:00:01.000+05:00", Valid: true}, {String: "active", Valid: true},
+				{String: "example:entry1", Valid: true}, {String: "SELECT 1", Valid: true},
+			},
+			{
+				{String: "123458", Valid: true}, {String: "0.500", Valid: true},
+				{String: "2021-01-01T00:00:01.500+05:00", Valid: true}, {String: "active", Valid: true},
+				{String: "example:entry2", Valid: true}, {String: "SELECT 1", Valid: true},
+			},
+		},
+	}
+
+	want := map[int]profileStat{
+		123456: {queryDurationSec: 2.000, changeStateTime: "2021-01-01T00:00:00.000+05:00", state: "active", queryText: "SELECT 1"},
+		123457: {queryDurationSec: 1.000, changeStateTime: "2021-01-01T00:00:01.000+05:00", state: "active", waitEntry: "example:entry1", queryText: "SELECT 1"},
+		123458: {queryDurationSec: 0.500, changeStateTime: "2021-01-01T00:00:01.500+05:00", state: "active", waitEntry: "example:entry2", queryText: "SELECT 1"},
+	}
+
+	assert.Equal(t, want, parseActivitySnapshot(res))
+}
+
+func Test_countWaitEvents(t *testing.T) {
+	testcases := []map[int]profileStat{
+		{
+			1085637: {queryDurationSec: 0.000},
+			1085638: {queryDurationSec: 0.000},
+			1085639: {queryDurationSec: 0.000},
+		},
+		{
+			1085637: {queryDurationSec: 0.500, waitEntry: "example::event1"},
+			1085638: {queryDurationSec: 0.500, waitEntry: "example::event1"},
+			1085639: {queryDurationSec: 0.500, waitEntry: "example::event2"},
+		},
+		{
+			1085637: {queryDurationSec: 1.000, waitEntry: "example::event1"},
+			1085638: {queryDurationSec: 1.000, waitEntry: "example::event2"},
+			1085640: {queryDurationSec: 0.500, waitEntry: "example::event2"},
+		},
+		{
+			1085637: {queryDurationSec: 1.500, waitEntry: "example::event3"},
+			1085638: {queryDurationSec: 1.500, waitEntry: "example::event3"},
+			1085640: {queryDurationSec: 1.000}, // count as Running
+			1085641: {queryDurationSec: 0.500}, // count as Running
+		},
+	}
+
+	want := stats{
+		real:        1.5,
+		accumulated: 5,
+		durations: map[string]float64{
+			"Running":         1,
+			"example::event1": 1.5,
+			"example::event2": 1.5,
+			"example::event3": 1,
+		},
+		ratios: map[string]float64{
+			"Running":         20,
+			"example::event1": 30,
+			"example::event2": 30,
+			"example::event3": 20,
+		},
+	}
+
+	s := stats{
+		durations: map[string]float64{},
+		ratios:    map[string]float64{},
+	}
+
+	for i := 1; i < len(testcases); i++ {
+		s = countWaitEvents(s, 1085637, testcases[i], testcases[i-1])
+	}
+
+	assert.Equal(t, want, s)
+
+}
+
 func Test_printHeader(t *testing.T) {
-	stat := profileStat{queryText: "SELECT f1, f2, f3 FROM t1, t2 WHERE t1.f1 = t2.f1"}
+	s := profileStat{queryText: "SELECT f1, f2, f3 FROM t1, t2 WHERE t1.f1 = t2.f1"}
 
 	want, err := os.ReadFile("testdata/profile_header.golden")
 	assert.NoError(t, err)
 
 	var buf bytes.Buffer
-	assert.NoError(t, printHeader(&buf, stat, 64))
+	assert.NoError(t, printHeader(&buf, s, 64))
 	assert.Equal(t, string(want), buf.String())
 }
 
 func Test_printStat(t *testing.T) {
 	s := stats{
+		real:        10000,
+		accumulated: 30000,
 		durations: map[string]float64{
 			"Test.Entry3": 140,
 			"Test.Entry2": 330,
@@ -203,9 +210,14 @@ func Test_printStat(t *testing.T) {
 	want, err := os.ReadFile("testdata/profile_stats.golden")
 	assert.NoError(t, err)
 
-	var buf bytes.Buffer
-	assert.NoError(t, printStat(&buf, s))
+	buf := bytes.NewBuffer([]byte{})
+	assert.NoError(t, printStat(buf, s))
 	assert.Equal(t, string(want), buf.String())
+
+	// Test with empty stats.
+	buf = bytes.NewBuffer([]byte{})
+	assert.NoError(t, printStat(buf, stats{durations: map[string]float64{}}))
+	assert.Equal(t, "", buf.String())
 }
 
 func Test_truncateQuery(t *testing.T) {
@@ -221,5 +233,19 @@ func Test_truncateQuery(t *testing.T) {
 	for _, tc := range testcases {
 		got := truncateQuery(tc.in, tc.limit)
 		assert.Equal(t, tc.want, got)
+	}
+}
+
+func Test_selectQuery(t *testing.T) {
+	testcases := []struct {
+		inclusive bool
+		want      string
+	}{
+		{inclusive: true, want: fmt.Sprintf(inclusiveQuery, 123456, 123456)},
+		{inclusive: false, want: fmt.Sprintf(exclusiveQuery, 123456)},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, selectQuery(123456, tc.inclusive))
 	}
 }
