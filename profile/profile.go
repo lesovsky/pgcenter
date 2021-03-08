@@ -330,7 +330,8 @@ func printStat(w io.Writer, s waitEventsStat) error {
 		return err
 	}
 
-	_, err = fmt.Fprintf(w, "%*.2f %*.6f\n       %*.6f including workers\n", 6, totalPct, 12, s.real, 12, s.accumulated)
+	//_, err = fmt.Fprintf(w, "%*.2f %*.6f\n       %*.6f including workers\n", 6, totalPct, 12, s.real, 12, s.accumulated)
+	_, err = fmt.Fprintf(w, "%*.2f %*.6f including workers\n       %*.6f\n", 6, totalPct, 12, s.accumulated, 12, s.real)
 	if err != nil {
 		return err
 	}
