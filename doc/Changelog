@@ -1,4 +1,4 @@
-pgcenter (master) unstable; urgency=low
+pgcenter (0.8.0) unstable; urgency=low
   * add accounting of parallel workers stats when profiling (available only for PG13 and newer)
   * add support of pg_stat_statements WAL usage statistics
   * add support for pg_stat_progress_basebackup statistics
