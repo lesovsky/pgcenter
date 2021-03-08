@@ -1,3 +1,15 @@
+pgcenter (master) unstable; urgency=low
+  * add accounting of parallel workers stats when profiling (available only for PG13 and newer)
+  * add support of pg_stat_statements WAL usage statistics
+  * add support for pg_stat_progress_basebackup statistics
+  * add support for pg_stat_progress_analyze statistics
+  * fix connection problems related to absence needed conn options which required when using 'simple' protocol
+  * update Go version up to 1.16
+  * top: fix hangs on statistics writing when UI fails
+  * use alpine as a base image for Docker
+  * fix problems related to run using Docker
+  * minor code improvements, comments
+
 pgcenter (0.7.0) unstable; urgency=low
   * add golangci-lint, fix issues
   * add gosec, fix issues
