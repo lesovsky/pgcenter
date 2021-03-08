@@ -19,7 +19,7 @@ func Test_newStatsStore(t *testing.T) {
 }
 
 func Test_resetStatsStore(t *testing.T) {
-	s := stats{
+	s := waitEventsStat{
 		durations: map[string]float64{
 			"Test.Entry3": 140,
 			"Test.Entry2": 330,
@@ -143,7 +143,7 @@ func Test_countWaitEvents(t *testing.T) {
 		},
 	}
 
-	want := stats{
+	want := waitEventsStat{
 		real:        1.5,
 		accumulated: 5,
 		durations: map[string]float64{
@@ -160,7 +160,7 @@ func Test_countWaitEvents(t *testing.T) {
 		},
 	}
 
-	s := stats{
+	s := waitEventsStat{
 		durations: map[string]float64{},
 		ratios:    map[string]float64{},
 	}
@@ -185,7 +185,7 @@ func Test_printHeader(t *testing.T) {
 }
 
 func Test_printStat(t *testing.T) {
-	s := stats{
+	s := waitEventsStat{
 		real:        10000,
 		accumulated: 30000,
 		durations: map[string]float64{
@@ -211,7 +211,7 @@ func Test_printStat(t *testing.T) {
 
 	// Test with empty stats.
 	buf = bytes.NewBuffer([]byte{})
-	assert.NoError(t, printStat(buf, stats{durations: map[string]float64{}}))
+	assert.NoError(t, printStat(buf, waitEventsStat{durations: map[string]float64{}}))
 	assert.Equal(t, "", buf.String())
 }
 

@@ -55,24 +55,27 @@ func RunMain(dbConfig postgres.Config, config Config) error {
 	return profileLoop(os.Stdout, conn, config, doQuit)
 }
 
-// stats defines local statistics storage for profiled query.
-type stats struct {
-	real        float64
-	accumulated float64
-	durations   map[string]float64
-	ratios      map[string]float64
+// waitEventsStat defines local statistics storage for single, profiled query.
+type waitEventsStat struct {
+	real        float64            // Number of seconds the query has been executed
+	accumulated float64            // Number of seconds the query and all parallel workers have been executed
+	durations   map[string]float64 // Total per-wait_event durations in seconds
+	ratios      map[string]float64 // Per-wait_event relative ratios to accumulated execution time, in percent
 }
 
-// newStatsStore creates new stats store.
-func newStatsStore() stats {
-	return stats{
+// newStatsStore creates new wait_events stats store.
+func newStatsStore() waitEventsStat {
+	return waitEventsStat{
 		durations: make(map[string]float64),
 		ratios:    make(map[string]float64),
 	}
 }
 
-// resetStatsStore deletes all entries from the stats maps counters
-func resetStatsStore(s stats) stats {
+// resetStatsStore deletes all entries from the wait_events stats maps counters.
+func resetStatsStore(s waitEventsStat) waitEventsStat {
+	s.real = 0
+	s.accumulated = 0
+
 	for k := range s.durations {
 		delete(s.durations, k)
 	}
@@ -82,7 +85,7 @@ func resetStatsStore(s stats) stats {
 	return s
 }
 
-// profileStat describes snapshot of activity statistics about single profiled process.
+// profileStat describes snapshot of raw activity statistics about single profiled process returned from Postgres.
 type profileStat struct {
 	queryDurationSec float64 // number of seconds query is running at the moment of snapshot.
 	changeStateTime  string  // value of pg_stat_activity.change_state tells about when query has been finished (or new one started)
@@ -183,7 +186,7 @@ func profileLoop(w io.Writer, conn *postgres.DB, cfg Config, doQuit chan os.Sign
 
 // parseActivitySnapshot parses PGresult and returns per-process profile statistics.
 func parseActivitySnapshot(res stat.PGresult) map[int]profileStat {
-	stat := make(map[int]profileStat)
+	stats := make(map[int]profileStat)
 
 	for _, row := range res.Values {
 		var pid int
@@ -219,14 +222,14 @@ func parseActivitySnapshot(res stat.PGresult) map[int]profileStat {
 			}
 		}
 
-		stat[pid] = s
+		stats[pid] = s
 	}
 
-	return stat
+	return stats
 }
 
 // countWaitEvents counts wait events durations and its percent rations accordingly to total query time.
-func countWaitEvents(s stats, targetPid int, curr map[int]profileStat, prev map[int]profileStat) stats {
+func countWaitEvents(s waitEventsStat, targetPid int, curr map[int]profileStat, prev map[int]profileStat) waitEventsStat {
 	// Walk through current and previous activity snapshots and calculate durations
 	for k, vCurr := range curr {
 		if vPrev, ok := prev[k]; ok {
@@ -278,7 +281,8 @@ func printHeader(w io.Writer, curr profileStat, strsize int) error {
 	return nil
 }
 
-// waitEvent defines particular wait event and how many times it is occurred.
+// waitEvent defines particular wait_event and its duration.
+// waitEvent type is needed for translating waitEventsStat.durations map to sort-possible waitEvents slice.
 type waitEvent struct {
 	waitEventName  string
 	waitEventValue float64
@@ -293,7 +297,7 @@ func (p waitEvents) Swap(i, j int)      { p[i], p[j] = p[j], p[i] }
 func (p waitEvents) Less(i, j int) bool { return p[i].waitEventValue > p[j].waitEventValue }
 
 // printStat prints report body with collected wait events durations and percent ratios.
-func printStat(w io.Writer, s stats) error {
+func printStat(w io.Writer, s waitEventsStat) error {
 	if len(s.durations) == 0 {
 		return nil
 	} // nothing to do
