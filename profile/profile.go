@@ -33,9 +33,10 @@ const (
 
 // Config defines program's configuration options.
 type Config struct {
-	Pid       int // PID of profiled backend
-	Frequency time.Duration
-	Strsize   int // Limit length for query string
+	Pid       int           // Process ID of profiled backend
+	Frequency time.Duration // Interval used for collecting activity statistics
+	Strsize   int           // Limit length for query string
+	NoWorkers bool          // Don't collect statistics about children parallel workers
 }
 
 // RunMain is the main entry point for 'pgcenter profile' command
@@ -104,8 +105,13 @@ func profileLoop(w io.Writer, conn *postgres.DB, cfg Config, doQuit chan os.Sign
 
 	pid := cfg.Pid
 
-	// TODO: inclusive queries impossible on Postgres version 12 and older.
-	query := selectQuery(pid, true)
+	// Get Postgres properties, depending on Postgres version select proper version of query.
+	props, err := stat.GetPostgresProperties(conn)
+	if err != nil {
+		return err
+	}
+
+	query := selectQuery(pid, cfg.NoWorkers, props.VersionNum)
 
 	for {
 		// Get activity snapshot
@@ -337,15 +343,15 @@ func truncateQuery(s string, limit int) string {
 }
 
 // selectQuery defines query used for profiling. Possible two kind of queries:
-// - inclusive - selects background (parallel) workers using 'leader_pid' (available since Postgres 13)
-// - exclusive - selects target PID only without background (parallel) workers.
-func selectQuery(pid int, inclusive bool) string {
+// - exclusive - selects target PID only, with no statistics about background (parallel) workers.
+// - inclusive - selects statistics about target PID and background (parallel) workers (using 'leader_pid' available since Postgres 13)
+func selectQuery(pid int, exclusive bool, version int) string {
 	var query string
 
-	if inclusive {
-		query = fmt.Sprintf(inclusiveQuery, pid, pid)
-	} else {
+	if exclusive || version < 130000 {
 		query = fmt.Sprintf(exclusiveQuery, pid)
+	} else {
+		query = fmt.Sprintf(inclusiveQuery, pid, pid)
 	}
 
 	return query

@@ -79,7 +79,8 @@ Options:
 
  -P, --pid PID			backend PID to profile to
  -F, --freq FREQ		profile at this frequency (default: 100ms, min: 1ms, max: 1s)
- -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default 128)
+ -s, --strsize SIZE		limit length of print query strings to STRSIZE chars (default: 128)
+ -W, --no-workers		don't profile child parallel workers (default: false)
 
 General options:
  -?, --help		show this help and exit

@@ -50,18 +50,15 @@ func Test_profileLoop(t *testing.T) {
 	db, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	fmt.Println("start with ", pid)
 	// go sleep in profiled connection
 	go func() {
 		// waiting for to start profiling outside this goroutine
 		time.Sleep(time.Second)
 
-		fmt.Println("start select 1")
 		// run query 1
 		_, err = target.Exec("SELECT 1, pg_sleep(1)")
 		assert.NoError(t, err)
 
-		fmt.Println("start select 2")
 		// immediately run query 2
 		_, err = target.Exec("SELECT 2, pg_sleep(1)")
 		assert.NoError(t, err)
@@ -70,12 +67,10 @@ func Test_profileLoop(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 
 		// run query 3
-		fmt.Println("start select 3")
 		_, err = target.Exec("SELECT 3, pg_sleep(1)")
 		assert.NoError(t, err)
 
 		// close DB connection - profiler will exit.
-		fmt.Println("close")
 		target.Close()
 	}()
 
@@ -238,14 +233,17 @@ func Test_truncateQuery(t *testing.T) {
 
 func Test_selectQuery(t *testing.T) {
 	testcases := []struct {
-		inclusive bool
+		exclusive bool
+		version   int
 		want      string
 	}{
-		{inclusive: true, want: fmt.Sprintf(inclusiveQuery, 123456, 123456)},
-		{inclusive: false, want: fmt.Sprintf(exclusiveQuery, 123456)},
+		{exclusive: true, version: 120000, want: fmt.Sprintf(exclusiveQuery, 123456)},
+		{exclusive: true, version: 130000, want: fmt.Sprintf(exclusiveQuery, 123456)},
+		{exclusive: false, version: 120000, want: fmt.Sprintf(exclusiveQuery, 123456)},
+		{exclusive: false, version: 130000, want: fmt.Sprintf(inclusiveQuery, 123456, 123456)},
 	}
 
 	for _, tc := range testcases {
-		assert.Equal(t, tc.want, selectQuery(123456, tc.inclusive))
+		assert.Equal(t, tc.want, selectQuery(123456, tc.exclusive, tc.version))
 	}
 }

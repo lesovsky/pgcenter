@@ -48,7 +48,8 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&connOptions.Dbname, "dbname", "d", "", "database name to connect to")
 	CommandDefinition.Flags().IntVarP(&profileConfig.Pid, "pid", "P", 0, "PID of Postgres backend to profile to")
 	CommandDefinition.Flags().DurationVarP(&profileConfig.Frequency, "freq", "F", 100*time.Millisecond, "profile with this frequency (default: 100ms)")
-	CommandDefinition.Flags().IntVarP(&profileConfig.Strsize, "strsize", "s", 128, "limit length of print query strings to STRSIZE chars (default 128)")
+	CommandDefinition.Flags().IntVarP(&profileConfig.Strsize, "strsize", "s", 128, "limit length of print query strings to STRSIZE chars (default: 128)")
+	CommandDefinition.Flags().BoolVarP(&profileConfig.NoWorkers, "no-workers", "W", false, "don't profile child parallel workers (default: false)")
 
 	_ = CommandDefinition.MarkFlagRequired("pid")
 }
