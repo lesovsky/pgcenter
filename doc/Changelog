@@ -1,3 +1,6 @@
+pgcenter (devel) unstable; urgency=low
+  * top: fix silent wreck of terminal when working with menus
+
 pgcenter (0.8.0) unstable; urgency=low
   * add accounting of parallel workers stats when profiling (available only for PG13 and newer)
   * add support of pg_stat_statements WAL usage statistics

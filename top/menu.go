@@ -218,23 +218,41 @@ func menuDraw(v *gocui.View, items []string) {
 // moveCursor handles user input in the menu.
 func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		if v != nil {
-			cx, cy := v.Cursor()
-			switch d {
-			case moveDown:
-				err := v.SetCursor(cx, cy+1) /* errors don't make sense here */
-				if err != nil {
-					return err
-				}
-				menuDraw(v, config.menu.items)
-			case moveUp:
-				err := v.SetCursor(cx, cy-1) /* errors don't make sense here */
-				if err != nil {
-					return err
-				}
-				menuDraw(v, config.menu.items)
-			}
+		if v == nil {
+			return nil
 		}
+
+		limit := len(config.menu.items)
+
+		cx, cy := v.Cursor()
+		switch d {
+		case moveDown:
+			// Set cursor position to next menu item, check if it's out of last menu item then set cursor to the first menu item.
+			pos := cy + 1
+			if pos >= limit {
+				pos = 0
+			}
+
+			err := v.SetCursor(cx, pos)
+			if err != nil {
+				return err
+			}
+			menuDraw(v, config.menu.items)
+		case moveUp:
+			// Set cursor position to prior item, check if it's out of first menu item then set cursor to the last menu item.
+			pos := cy - 1
+			if pos < 0 {
+				pos = limit - 1
+			}
+
+			err := v.SetCursor(cx, pos)
+			if err != nil {
+				//return err
+				return fmt.Errorf("lessqq up %s: %d, %d", err.Error(), cy, pos)
+			}
+			menuDraw(v, config.menu.items)
+		}
+
 		return nil
 	}
 }
