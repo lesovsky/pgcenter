@@ -52,6 +52,8 @@ pgCenter supports majority of statistics views available in Postgres, and at the
 - [pg_stat_progress_vacuum](https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING) - information about progress of (auto)vacuums status.
 - [pg_stat_progress_cluster](https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING) - information about progress of CLUSTER and VACUUM FULL operations.
 - [pg_stat_progress_create_index](https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING) - information about progress of CREATE INDEX and REINDEX operations.
+- [pg_stat_progress_analyze](https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE-PROGRESS-REPORTING) - information about progress of ANALYZE operations.
+- [pg_stat_progress_basebackup](https://www.postgresql.org/docs/current/progress-reporting.html#BASEBACKUP-PROGRESS-REPORTING) - information about progress of basebackup operations.
 
 ##### System statistics
 `pgcenter top` also provides system usage information based on statistics from `procfs` filesystem:
@@ -64,9 +66,11 @@ pgCenter supports majority of statistics views available in Postgres, and at the
 In case of connecting to remote Postgres there is possibility to use additional SQL functions used for retrieving `/proc` statistics from remote host. For more information see details [here](doc/pgcenter-config-readme.md).
 
 #### Install notes
-pgCenter is written on Go language and distributed as a single precompiled binary file. Download it from [releases](https://github.com/lesovsky/pgcenter/releases), unpack and it's ready to use.
+Check out [releases](https://github.com/lesovsky/pgcenter/releases) page. Pgcenter could be installed using package managers - RPM and DEB packages are available. Precompiled version also available in `.tar.gz` archive. 
 
 Additional information and usage examples available [here](doc/examples.md).
+
+Fore development and testing purposes, see development [notes](doc/development.md).
 
 #### Usage notes
 - pgCenter has been developed to work on Linux and hasn't been tested on other OS (operating systems), therefore, it is not recommended to use it on alternative systems because it will not operate properly.
@@ -83,11 +87,10 @@ The following notes are important for people who interested in developing new fe
 - see [docs](./doc/development.md) about how to deploy environment for local development.
 
 #### Known issues
-pgCenter is beta software, thus in some circumstances, segfaults and panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:
+pgCenter is quite stable software, but not all functionality is covered by tests and in some circumstances, errors or panics may occur. When panics occur please do let me know - this helps me in making necessary changes and improve this software. To make sure that I can reproduce an issue you’ve been having and can address it accordingly please follow these steps:
 
 - build pgCenter from the master branch and try to reproduce the bug/crash. 
-- create an [issue](https://github.com/lesovsky/pgcenter/issues) and include clear instructions on how the bug could be reproduced.
-- also, please list the information about your operating system, its release version and version of Postgres.
+- create an [issue](https://github.com/lesovsky/pgcenter/issues) using issue template and follow recommendations described in the template.
 
 #### Thanks
 - Thank you for using pgCenter!

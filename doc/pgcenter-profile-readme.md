@@ -36,7 +36,7 @@ Exploring your queries with `pgcenter profiler` you can see many other interesti
 
 #### Limitations
 - [Wait events](https://www.postgresql.org/docs/current/monitoring-stats.html#WAIT-EVENT-TABLE) has been introduced in Postgres 9.6, hence the profiling is possible for 9.6 and newer versions of Postgres.
-- Profiling is not accounting wait events for parallel workers, because there is no guaranteed way to associate master process with its workers. 
+- Profiling wait events for parallel workers is working only since Postgres 13, because there is no guaranteed way to associate master process with its workers in earlier versions. 
 
 #### Usage
 Run `profile` and specify backend PID which want to profile to:

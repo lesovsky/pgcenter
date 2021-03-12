@@ -2,7 +2,6 @@
 
 - [General notes](#general-notes)
 - [Download](#download)
-- [Install devel](#install-from-dev-branch)
 - [Run in Docker](#run-in-docker)
 - [pgCenter usage examples](#pgcenter-usage)
 ---
@@ -13,35 +12,17 @@
 - Connections established to Postgres are managed by [jackc/pgx](https://github.com/jackc/pgx/) driver which supports [.pgpass](https://www.postgresql.org/docs/current/static/libpq-pgpass.html) and most of common libpq [environment variables](https://www.postgresql.org/docs/current/static/libpq-envars.html), such as PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, PGOPTIONS.
 
 #### Download
-Download the latest release from [release page](https://github.com/lesovsky/pgcenter/releases) and unpack, after that pgCenter is ready to run.
-
-#### Install from dev branch
-This way can be used to get develoment (unstable) version of pgCenter for development or testing purposes.
-- Install a fresh version of `golang` into the system. Install it with package manager or download it directly from the [official site](https://golang.org/dl/). In this case after downloading you need to unpack the archive and copy binaries into the PATH.
-- Clone pgcenter's repo, switch to `dev` branch.
-```
-git clone https://github.com/lesovsky/pgcenter
-cd pgcenter
-git checkout --track origin/dev
-```
-- Build `pgcenter` using `Makefile`. It supposes `go` binary is already is in the PATH.
-```
-make
-```
-- Optionally you can install `pgcenter` into `/usr/bin` using `Makefile`. Root privileges required.
-```
-make install
-```
-Now `pgcenter` is ready for use.
+Download the latest release from [release page](https://github.com/lesovsky/pgcenter/releases), install using package manager or unpack from `.tar.gz` archive. Now, pgCenter is ready to run.
 
 #### Run in Docker
+There is option to run pgCenter using Docker. Docker images available on [DockerHub](https://hub.docker.com/r/lesovsky/pgcenter) or could be build manually.
 ```
-docker build -t pgcenter .
+docker pull pgcenter .
 docker run -it --rm pgcenter top -h 1.2.3.4 -U user -d production_db
 ```
 
 #### pgCenter usage
-pgCenter's functionality is splitted among several sub-comands, run specific one to achieve your goals.
+pgCenter's functionality is splitted among several sub-commands, run specific one to achieve your goals.
 In most cases, connection setting can be omitted.
 
 - Run `top` command to connect to Postgres and watching statistics:
@@ -64,9 +45,9 @@ In most cases, connection setting can be omitted.
     pgcenter record -f /tmp/stats.tar -U postgres production_db
     ```
 
-- Run `report` command to read previously written file and build a report:
+- Run `report` command to read the previously written file and build a report:
     ```
-    pgcenter report -f /tmp/stats.tar --database
+    pgcenter report -f /tmp/stats.tar --databases
     ```
 
 - Run `report` command, build activity report with start time 12:30:00 and end time 12:50:00:
@@ -74,7 +55,7 @@ In most cases, connection setting can be omitted.
     pgcenter report --activity --start 12:30:00 --end 12:50:00
     ```
     
-- Run `report` command, build tables report order by `seq_scan` column and show only 2 tables per snapshot:
+- Run `report` command, build tables report order by `seq_scan` column and show only 2 tables per single stat snapshot:
     ```
     pgcenter report --tables --order seq_scan --limit 2
     ```
