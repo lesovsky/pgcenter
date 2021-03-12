@@ -1,4 +1,5 @@
 pgcenter (devel) unstable; urgency=low
+  * Simplify regexp for extracting query text from pg_stat_activity
   * top: fix silent wreck of terminal when working with menus
 
 pgcenter (0.8.0) unstable; urgency=low
