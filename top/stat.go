@@ -390,6 +390,10 @@ func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) erro
 				valuelen := len(s.Result.Values[rownum][colnum].String)
 				if valuelen > config.view.ColsWidth[i] {
 					width := config.view.ColsWidth[i]
+					if width <= 0 {
+						return fmt.Errorf("zero or negative width, skip")
+					}
+
 					// truncate value up to column width and replace last character with '~' symbol
 					s.Result.Values[rownum][colnum].String = s.Result.Values[rownum][colnum].String[:width-1] + "~"
 				}
