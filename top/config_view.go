@@ -173,15 +173,20 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 			config.queryOptions.ViewType = "user"
 		}
 
-		// Recreate dependant queries accordingly to new view type.
-		for _, t := range []string{"tables", "indexes", "sizes"} {
+		// Format new queries depending on requested view type.
+		queries := make([]string, 3)
+		for i, t := range []string{"tables", "indexes", "sizes"} {
 			q, err := query.Format(config.views[t].QueryTmpl, config.queryOptions)
 			if err != nil {
-				// TODO: log error
-				continue
+				return err
 			}
+			queries[i] = q
+		}
+
+		// Update queries in view.
+		for i, t := range []string{"tables", "indexes", "sizes"} {
 			v := config.views[t]
-			v.Query = q
+			v.Query = queries[i]
 			config.views[t] = v
 		}
 
