@@ -87,7 +87,7 @@ func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *
 
 		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
 		if !pgssAvail && s.menuType == menuPgss {
-			printCmdline(g, "NOTICE: pg_stat_statements is not available in this database")
+			printCmdline(g, "NOTICE: pg_stat_statements not found")
 			return nil
 		}
 
@@ -102,7 +102,10 @@ func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *
 			return err
 		}
 
-		menuDraw(v, s.items)
+		err = menuDraw(v, s.items)
+		if err != nil {
+			return err
+		}
 
 		// Save menu properties in config.
 		config.menu = s
@@ -194,7 +197,7 @@ func menuClose(g *gocui.Gui, v *gocui.View) error {
 }
 
 // menuDraw draws passed items in the menu.
-func menuDraw(v *gocui.View, items []string) {
+func menuDraw(v *gocui.View, items []string) error {
 	_, cy := v.Cursor()
 	v.Clear()
 	// print menu items
@@ -202,17 +205,17 @@ func menuDraw(v *gocui.View, items []string) {
 		if i == cy {
 			_, err := fmt.Fprintln(v, "\033[30;47m"+item+"\033[0m")
 			if err != nil {
-				// TODO: add logging
-				return
+				return err
 			}
 		} else {
 			_, err := fmt.Fprintln(v, item)
 			if err != nil {
-				// TODO: add logging
-				return
+				return err
 			}
 		}
 	}
+
+	return nil
 }
 
 // moveCursor handles user input in the menu.
@@ -237,7 +240,10 @@ func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) e
 			if err != nil {
 				return err
 			}
-			menuDraw(v, config.menu.items)
+			err = menuDraw(v, config.menu.items)
+			if err != nil {
+				return err
+			}
 		case moveUp:
 			// Set cursor position to prior item, check if it's out of first menu item then set cursor to the last menu item.
 			pos := cy - 1
@@ -247,10 +253,12 @@ func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) e
 
 			err := v.SetCursor(cx, pos)
 			if err != nil {
-				//return err
-				return fmt.Errorf("lessqq up %s: %d, %d", err.Error(), cy, pos)
+				return err
 			}
-			menuDraw(v, config.menu.items)
+			err = menuDraw(v, config.menu.items)
+			if err != nil {
+				return err
+			}
 		}
 
 		return nil

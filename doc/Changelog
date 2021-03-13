@@ -1,4 +1,5 @@
 pgcenter (devel) unstable; urgency=low
+  * top: add error handling to menu drawing routines
   * when printing stat, return error in case of zero or negative column width calculated
   * simplify regexp for extracting query text from pg_stat_activity
   * top: fix silent wreck of terminal when working with menus
