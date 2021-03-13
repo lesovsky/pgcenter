@@ -43,7 +43,7 @@ func Test_StatReplicationQueries(t *testing.T) {
 			tmpl1, _ := SelectStatReplicationQuery(version, false)
 			tmpl2, _ := SelectStatReplicationQuery(version, true)
 
-			opts := NewOptions(version, "f", "off", 256)
+			opts := NewOptions(version, "f", "off", 256, "public")
 			q1, err := Format(tmpl1, opts)
 			assert.NoError(t, err)
 

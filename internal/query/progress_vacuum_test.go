@@ -14,7 +14,7 @@ func Test_StatProgressVacuumQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_progress_vacuum/%d", version), func(t *testing.T) {
 			tmpl := PgStatProgressVacuumDefault
 
-			opts := NewOptions(version, "f", "off", 256)
+			opts := NewOptions(version, "f", "off", 256, "public")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

@@ -14,7 +14,7 @@ func Test_StatFunctionsQueries(t *testing.T) {
 		t.Run(fmt.Sprintf("pg_stat_user_functions/%d", version), func(t *testing.T) {
 			tmpl := PgStatFunctionsDefault
 
-			opts := NewOptions(version, "f", "off", 256)
+			opts := NewOptions(version, "f", "off", 256, "public")
 			q, err := Format(tmpl, opts)
 			assert.NoError(t, err)
 

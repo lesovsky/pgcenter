@@ -26,7 +26,7 @@ func Test_getQueryReport(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		_, got := getQueryReport(tc.answer, 130000, conn)
+		_, got := getQueryReport(tc.answer, 130000, "public", conn)
 		assert.Equal(t, tc.want, got)
 	}
 }

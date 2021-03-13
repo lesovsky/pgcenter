@@ -35,7 +35,7 @@ func Test_tarRecorder(t *testing.T) {
 	props, err := stat.GetPostgresProperties(db)
 	assert.NoError(t, err)
 	views := view.New()
-	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 0)
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 0, "public")
 	assert.NoError(t, views.Configure(opts))
 	db.Close()
 

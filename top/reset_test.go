@@ -10,10 +10,10 @@ func Test_resetStat(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	fn := resetStat(conn, true)
+	fn := resetStat(conn, "public")
 	assert.NoError(t, fn(nil, nil))
 
-	fn = resetStat(conn, false)
+	fn = resetStat(conn, "")
 	assert.NoError(t, fn(nil, nil))
 
 	conn.Close()

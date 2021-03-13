@@ -71,11 +71,10 @@ func Test_CommonQueries(t *testing.T) {
 		{query: GetRecoveryStatus},
 		{query: GetUptime},
 		{query: CheckSchemaExists, args: []interface{}{"public"}},
-		{query: CheckExtensionExists, args: []interface{}{"plpgsql"}},
+		{query: GetExtensionSchema, args: []interface{}{"plpgsql"}},
 		{query: GetAllSettings},
 		{query: ExecReloadConf},
 		{query: ExecResetStats},
-		{query: ExecResetPgStatStatements},
 		{query: SelectCommonProperties},
 	}
 

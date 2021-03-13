@@ -36,37 +36,37 @@ func TestNewOptions(t *testing.T) {
 		{version: 130000, recovery: "f", track: "on", querylen: 256, want: Options{
 			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
 		{version: 130000, recovery: "t", track: "on", querylen: 256, want: Options{
 			Version: 130000, Recovery: "t", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_last_wal_receive_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
 		{version: 96000, recovery: "f", track: "on", querylen: 256, want: Options{
 			Version: 96000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_current_xlog_location",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
 		{version: 96000, recovery: "t", track: "on", querylen: 256, want: Options{
 			Version: 96000, Recovery: "t", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_xlog_location_diff", WalFunction2: "pg_last_xlog_receive_location",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 256, PgSSQueryLenFn: "left(p.query, 256)",
 		}},
 		{version: 130000, recovery: "f", track: "on", querylen: 0, want: Options{
 			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 0, PgSSQueryLenFn: "p.query",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 0, PgSSQueryLenFn: "p.query",
 		}},
 		{version: 130000, recovery: "f", track: "on", querylen: 123, want: Options{
 			Version: 130000, Recovery: "f", GucTrackCommitTS: "on",
 			ViewType: "user", WalFunction1: "pg_wal_lsn_diff", WalFunction2: "pg_current_wal_lsn",
-			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
+			QueryAgeThresh: "00:00:00.0", ShowNoIdle: true, PGSSSchema: "public", PgSSQueryLen: 123, PgSSQueryLenFn: "left(p.query, 123)",
 		}},
 	}
 
 	for _, tc := range testcases {
-		opts := NewOptions(tc.version, tc.recovery, tc.track, tc.querylen)
+		opts := NewOptions(tc.version, tc.recovery, tc.track, tc.querylen, "public")
 		assert.Equal(t, tc.want, opts)
 	}
 }

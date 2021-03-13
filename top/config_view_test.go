@@ -227,7 +227,7 @@ func Test_switchViewTo(t *testing.T) {
 	for i, tc := range testcases {
 		t.Run(fmt.Sprintln(i), func(t *testing.T) {
 			app.config.view = app.config.views[tc.current]
-			app.postgresProps.ExtPGSSAvail = true
+			app.postgresProps.ExtPGSSSchema = "public"
 
 			wg.Add(1)
 			go func() {
@@ -245,7 +245,7 @@ func Test_switchViewTo(t *testing.T) {
 
 	// Attempt to switch when pg_stat_statements is not available (should stay on current)
 	app.config.view = app.config.views["databases"]
-	app.postgresProps.ExtPGSSAvail = false
+	app.postgresProps.ExtPGSSSchema = ""
 
 	fn := switchViewTo(app, "statements")
 	assert.NoError(t, fn(nil, nil))

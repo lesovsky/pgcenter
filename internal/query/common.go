@@ -9,8 +9,8 @@ const (
 	GetUptime = "SELECT date_trunc('seconds', now() - pg_postmaster_start_time())"
 	// CheckSchemaExists checks schema exists in the database.
 	CheckSchemaExists = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)"
-	// CheckExtensionExists checks extension is installed in the database.
-	CheckExtensionExists = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = $1)"
+	// GetExtensionSchema checks extension is installed in the database.
+	GetExtensionSchema = "SELECT extnamespace::regnamespace FROM pg_extension WHERE extname = $1"
 	// GetAllSettings queries current Postgres configuration
 	GetAllSettings = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
 	// GetCurrentLogfile queries current Postgres logfile
@@ -36,7 +36,7 @@ const (
 	// ExecResetStats resets statistics counter in the current database
 	ExecResetStats = "SELECT pg_stat_reset()"
 	// ExecResetPgStatStatements resets pg_stat_statements statistics
-	ExecResetPgStatStatements = "SELECT pg_stat_statements_reset()"
+	ExecResetPgStatStatements = "SELECT {{.PgSSSchema}}.pg_stat_statements_reset()"
 
 	// SelectCommonProperties used for getting Postgres settings necessary during pgcenter runtime.
 	//   Notes: track_commit_timestamp introduced in 9.5
@@ -114,8 +114,8 @@ const (
 
 	// SelectActivityStatements queries general stats from pg_stat_statements
 	//   Postgres 13: total_time replaced to total_exec_time, total_plan_time.
-	SelectActivityStatementsPG12   = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
-	SelectActivityStatementsLatest = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM pg_stat_statements"
+	SelectActivityStatementsPG12   = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM {{.PGSSSchema}}.pg_stat_statements"
+	SelectActivityStatementsLatest = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM {{.PGSSSchema}}.pg_stat_statements"
 
 	// SelectRemoteProcSysTicks queries system timer's frequency from Postgres instance
 	SelectRemoteProcSysTicks = "SELECT pgcenter.get_sys_clk_ticks()::float"

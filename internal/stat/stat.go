@@ -160,7 +160,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	}
 
 	// Collect Postgres stats.
-	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSAvail, itv, view.Query, c.prevPgStat)
+	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSSchema, itv, view.Query, c.prevPgStat)
 	if err != nil {
 		s.Pgstat.Activity = pgstat.Activity
 		return s, err

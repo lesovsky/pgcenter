@@ -76,7 +76,7 @@ func TestViews_Configure(t *testing.T) {
 
 	for _, tc := range testcases {
 		views := New()
-		opts := query.NewOptions(tc.version, tc.recovery, tc.trackCommit, tc.querylen)
+		opts := query.NewOptions(tc.version, tc.recovery, tc.trackCommit, tc.querylen, "public")
 		err := views.Configure(opts)
 		assert.NoError(t, err)
 

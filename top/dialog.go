@@ -133,7 +133,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			message = changeQueryAge(answer, app.config)
 		case dialogQueryReport:
 			var r report
-			r, message = getQueryReport(answer, app.postgresProps.VersionNum, app.db)
+			r, message = getQueryReport(answer, app.postgresProps.VersionNum, app.postgresProps.ExtPGSSSchema, app.db)
 			if message == "" {
 				message = printQueryReport(g, r, app.uiExit)
 			}

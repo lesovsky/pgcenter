@@ -20,10 +20,10 @@ type Pgstat struct {
 }
 
 // collectPostgresStat collect Postgres activity stats and stats returned by passed query.
-func collectPostgresStat(db *postgres.DB, version int, pgss bool, itv int, query string, prev Pgstat) (Pgstat, error) {
+func collectPostgresStat(db *postgres.DB, version int, pgssSchema string, itv int, query string, prev Pgstat) (Pgstat, error) {
 	var pgstat Pgstat
 
-	activity, err := collectActivityStat(db, version, pgss, itv, prev)
+	activity, err := collectActivityStat(db, version, pgssSchema, itv, prev)
 	if err != nil {
 		pgstat.Activity = activity
 		return pgstat, err
@@ -66,7 +66,7 @@ type Activity struct {
 }
 
 // collectActivityStat collects Postgres runtime activity about connected clients and workload.
-func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev Pgstat) (Activity, error) {
+func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv int, prev Pgstat) (Activity, error) {
 	var s Activity
 
 	if err := db.QueryRow(query.GetUptime).Scan(&s.Uptime); err != nil {
@@ -93,9 +93,14 @@ func collectActivityStat(db *postgres.DB, version int, pgss bool, itv int, prev 
 	}
 
 	// read pg_stat_statements only if it's available
-	if pgss {
-		q := query.SelectActivityStatementsQuery(version)
-		err := db.QueryRow(q).Scan(&s.StmtAvgTime, &s.Calls)
+	if pgssSchema != "" {
+		tmpl := query.SelectActivityStatementsQuery(version)
+		q, err := query.Format(tmpl, query.Options{PGSSSchema: pgssSchema})
+		if err != nil {
+			return s, err
+		}
+
+		err = db.QueryRow(q).Scan(&s.StmtAvgTime, &s.Calls)
 		if err != nil {
 			return s, err
 		}
@@ -121,7 +126,7 @@ type PostgresProperties struct {
 	GucAVMaxWorkers         int     // value of autovacuum_max_workers GUC
 	GucMaxConnections       int     // value of max_connections GUC
 	GucMaxPrepXacts         int     // value of max_prepared_transactions GUC
-	ExtPGSSAvail            bool    // is 'pg_stat_statements' extension installed?
+	ExtPGSSSchema           string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
 	SchemaPgcenterAvail     bool    // is 'pgcenter' schema installed?
 	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
 }
@@ -143,7 +148,7 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	}
 
 	// Is pg_stat_statement available?
-	props.ExtPGSSAvail = isExtensionExists(db, "pg_stat_statements")
+	props.ExtPGSSSchema = extensionSchema(db, "pg_stat_statements")
 
 	// In case of remote Postgres we should to know remote CLK_TCK
 	if !db.Local {
@@ -451,17 +456,17 @@ func (r *PGresult) Fprint(buf *bytes.Buffer) error {
 	return nil
 }
 
-// isExtensionExists returns 'true' if requested extension exists in the database, and 'false' if not.
-func isExtensionExists(db *postgres.DB, name string) bool {
-	var exists bool
-	err := db.QueryRow(query.CheckExtensionExists, name).Scan(&exists)
+// extensionSchema returns schema where the requested extension is installed in the database. Return empty string if not found.
+func extensionSchema(db *postgres.DB, name string) string {
+	var schema string
+	err := db.QueryRow(query.GetExtensionSchema, name).Scan(&schema)
 	if err != nil {
 		// TODO: enable when proper logging will be implemented
 		//fmt.Println("failed to check extensions in pg_extension: ", err)
-		exists = false
+		schema = ""
 	}
 
-	return exists
+	return schema
 }
 
 // isSchemaExists returns 'true' if requested schema exists in the database, and 'false' if not.

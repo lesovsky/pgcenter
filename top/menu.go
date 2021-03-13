@@ -81,12 +81,12 @@ func selectMenuStyle(t menuType) menuStyle {
 }
 
 // menuOpen selects menu requested menu properties and opens UI view object for menu.
-func menuOpen(m menuType, config *config, pgssAvail bool) func(g *gocui.Gui, _ *gocui.View) error {
+func menuOpen(m menuType, config *config, pgssSchema string) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		s := selectMenuStyle(m)
 
 		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
-		if !pgssAvail && s.menuType == menuPgss {
+		if pgssSchema == "" && s.menuType == menuPgss {
 			printCmdline(g, "NOTICE: pg_stat_statements not found")
 			return nil
 		}

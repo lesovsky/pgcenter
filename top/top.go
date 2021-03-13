@@ -57,7 +57,7 @@ func (app *app) setup() error {
 	}
 
 	// Create query options needed for formatting necessary queries.
-	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256)
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, props.ExtPGSSSchema)
 
 	// Create and configure stats views adjusting them depending on running Postgres.
 	err = app.config.views.Configure(opts)

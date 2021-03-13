@@ -2,6 +2,7 @@ package top
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/jackc/pgx/v4"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
@@ -94,13 +95,19 @@ query info:
 )
 
 // getQueryReport queries statements stats, generate the report and returns it.
-func getQueryReport(answer string, version int, db *postgres.DB) (report, string) {
+func getQueryReport(answer string, version int, pgssSchema string, db *postgres.DB) (report, string) {
 	if answer == "" {
 		return report{}, "Report: do nothing"
 	}
 
+	tmpl := query.SelectQueryReportQuery(version)
+	q, err := query.Format(tmpl, query.Options{PGSSSchema: pgssSchema})
+	if err != nil {
+		return report{}, fmt.Sprintf("Report failed: %s", err.Error())
+	}
+
 	var r report
-	err := db.QueryRow(query.SelectQueryReportQuery(version), answer).Scan(
+	err = db.QueryRow(q, answer).Scan(
 		&r.Query, &r.QueryID, &r.Usename, &r.Datname, &r.TotalCalls, &r.TotalRows, &r.TotalWalBytes, &r.TotalAllTime,
 		&r.TotalPlanTime, &r.TotalPlanTimeDistRatio, &r.TotalCPUTime, &r.TotalCPUTimeDistRatio, &r.TotalIOTime, &r.TotalIOTimeDistRatio,
 		&r.Calls, &r.CallsRatio, &r.Rows, &r.RowsRatio,
