@@ -17,8 +17,8 @@ Download the latest release from [release page](https://github.com/lesovsky/pgce
 #### Run in Docker
 There is option to run pgCenter using Docker. Docker images available on [DockerHub](https://hub.docker.com/r/lesovsky/pgcenter) or could be build manually.
 ```
-docker pull pgcenter .
-docker run -it --rm pgcenter top -h 1.2.3.4 -U user -d production_db
+docker pull lesovsky/pgcenter:v0.8.0 # replace v0.0.0 with the desired version
+docker run -it --rm lesovsky/pgcenter:v0.8.0 top -h 1.2.3.4 -U user -d production_db
 ```
 
 #### pgCenter usage
