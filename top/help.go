@@ -3,10 +3,11 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/version"
 )
 
 const (
-	helpTemplate = `Help for interactive commands
+	helpTemplate = `%s: Help for interactive commands
 
 general actions:
     a,d,f,r     mode: 'a' activity, 'd' databases, 'f' functions, 'r' replication,
@@ -47,8 +48,11 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 			return fmt.Errorf("set 'help' view on layout failed: %s", err)
 		}
 
+		name, tag, commit, branch := version.Version()
+		versionStr := fmt.Sprintf("%s %s (%s, %s)", name, tag, commit, branch)
+
 		v.Frame = false
-		_, err = fmt.Fprint(v, helpTemplate)
+		_, err = fmt.Fprintf(v, helpTemplate, versionStr)
 		if err != nil {
 			return fmt.Errorf("print on 'help' view failed: %s", err)
 		}

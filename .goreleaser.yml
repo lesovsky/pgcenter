@@ -13,7 +13,9 @@ builds:
       - CGO_ENABLED=0
     ldflags:
       - -a -installsuffix cgo
-      - -X main.gitTag={{.Tag}} -X main.gitCommit={{.Commit}} -X main.gitBranch={{.Branch}}
+      - -X github.com/lesovsky/pgcenter/internal/version.gitTag={{.Tag}}
+      - -X github.com/lesovsky/pgcenter/internal/version.gitCommit={{.Commit}}
+      - -X github.com/lesovsky/pgcenter/internal/version.gitBranch={{.Branch}}
 
 archives:
   - builds: [pgcenter]

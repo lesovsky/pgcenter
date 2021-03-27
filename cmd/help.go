@@ -11,6 +11,8 @@ import (
 	top "github.com/lesovsky/pgcenter/cmd/top"
 )
 
+const programIssuesURL = "https://github.com/lesovsky/pgcenter/issues"
+
 func printMainHelp() string {
 	return fmt.Sprintf(`%s
 

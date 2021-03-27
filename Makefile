@@ -1,11 +1,12 @@
 DOCKER_ACCOUNT = lesovsky
 PROGRAM_NAME = pgcenter
 
+PKG_PATH = github.com/lesovsky/pgcenter
 COMMIT=$(shell git rev-parse --short HEAD)
 BRANCH=$(shell git rev-parse --abbrev-ref HEAD)
 TAG=$(shell git describe --tags |cut -d- -f1)
 
-LDFLAGS = -ldflags "-X main.gitTag=${TAG} -X main.gitCommit=${COMMIT} -X main.gitBranch=${BRANCH}"
+LDFLAGS = -ldflags "-X ${PKG_PATH}/internal/version.gitTag=${TAG} -X ${PKG_PATH}/internal/version.gitCommit=${COMMIT} -X ${PKG_PATH}/internal/version.gitBranch=${BRANCH}"
 
 .PHONY: help clean dep build install uninstall
 
