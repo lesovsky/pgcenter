@@ -133,14 +133,19 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-U
 	// pgStatSizesDescription is the detailed description of stats about tables sizes
 	pgStatSizesDescription = `Statistics about sizes of tables based on pg_*_size() functions:
 
-  column	origin	description
-- relation	-	Name of the table, including schema
-- total_size	-	Total size of the table, including its indexes, in kB
-- rel_size	-	Total size of the table, without its indexes, in kB
-- idx_size	-	Total size of tables' indexes, in kB
-- total_change	-	How does size of the table, including its indexes, is changing per second, in kB
-- rel_change	-	How does size of the table, without its indexes, is changing per second, in kB
-- idx_change	-	How does size of the tables' indexes is changing per second, in kB
+  column		origin	description
+- relation		-	Name of the table, including schema
+- n_indexes		-	Total number of indexes on the table 
+- total_size		-	Total size of the table, including metadata and indexes, in kB
+- rel_main_size		-	Size of the table, without metadata and indexes, in kB
+- rel_meta_size		-	Size of table metadata (VM, FSM, INIT forks), in kB
+- toast_size		-	Size of table's TOASTed data, in kB
+- idx_size		-	Total size of table's indexes, in kB
+- total_change		-	How does size of the table, including metadata and indexes is changing per second, in kB
+- rel_main_change	-	How does size of the table, without metadata and indexes is changing per second, in kB
+- rel_meta_change	-	How does size of the table's metadata is changing per second, in kB
+- toast_change		-	How does size of the table's TOASTed data is changing per second, in kB
+- idx_change		-	How does size of the table's indexes is changing per second, in kB
 
 * - extended value, based on origin and calculated using additional functions.
 

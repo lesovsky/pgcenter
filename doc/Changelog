@@ -1,4 +1,5 @@
 pgcenter (devel) unstable; urgency=low
+  * extend tables sizes statistics: add info about tables metadata and TOASTs
   * fix problem when pg_stat_statements cannot be found when installed in other than 'public' schema
   * top: when formatting queries for sys/all tables or indexes avoid silent continue if query templating failed
   * top: add error handling to menu drawing routines

@@ -89,8 +89,8 @@ func New() Views {
 		"sizes": {
 			Name:      "sizes",
 			QueryTmpl: query.PgTablesSizesDefault,
-			DiffIntvl: [2]int{4, 6},
-			Ncols:     7,
+			DiffIntvl: [2]int{7, 11},
+			Ncols:     12,
 			OrderKey:  0,
 			OrderDesc: true,
 			ColsWidth: map[int]int{},
