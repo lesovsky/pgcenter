@@ -328,45 +328,29 @@ func diff(curr PGresult, prev PGresult, itv int, interval [2]int, ukey int) (PGr
 		found = false
 
 		for j, pv := range prev.Values {
-			if cv[ukey].String == pv[ukey].String {
-				// Row exists in both snapshots
-				found = true
-
-				// Do diff
-				for l := 0; l < curr.Ncols; l++ {
-					if l < interval[0] || l > interval[1] {
-						diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
-						diff.Values[i][l].Valid = curr.Values[i][l].Valid
-					} else {
-						// Values with dots or in scientific notation consider as floats and integer otherwise.
-						if strings.Contains(prev.Values[j][l].String, ".") || strings.Contains(prev.Values[j][l].String, "e") ||
-							strings.Contains(curr.Values[i][l].String, ".") || strings.Contains(curr.Values[i][l].String, "e") {
-							cv, err := strconv.ParseFloat(curr.Values[i][l].String, 64)
-							if err != nil {
-								return diff, fmt.Errorf("failed to convert curr to float [%d:%d]: %s", i, l, err)
-							}
-							pv, err := strconv.ParseFloat(prev.Values[j][l].String, 64)
-							if err != nil {
-								return diff, fmt.Errorf("failed to convert prev to float [%d:%d]: %s", j, l, err)
-							}
-							diff.Values[i][l].String = strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64)
-							diff.Values[i][l].Valid = true
-						} else {
-							cv, err := strconv.ParseInt(curr.Values[i][l].String, 10, 64)
-							if err != nil {
-								return diff, fmt.Errorf("failed to convert curr to integer [%d:%d]: %s", i, l, err)
-							}
-							pv, err := strconv.ParseInt(prev.Values[j][l].String, 10, 64)
-							if err != nil {
-								return diff, fmt.Errorf("failed to convert prev to integer [%d:%d]: %s", j, l, err)
-							}
-							diff.Values[i][l].String = strconv.FormatInt((cv-pv)/int64(itv), 10)
-							diff.Values[i][l].Valid = true
-						}
-					}
-				}
-				break // Go to searching next row from current snapshot
+			if cv[ukey].String != pv[ukey].String {
+				// Row is not exist in previous snapshot
+				continue
 			}
+
+			found = true
+
+			// Do diff
+			for l := 0; l < curr.Ncols; l++ {
+				if l < interval[0] || l > interval[1] {
+					diff.Values[i][l].String = curr.Values[i][l].String // don't diff, copy value as-is
+					diff.Values[i][l].Valid = curr.Values[i][l].Valid
+				} else {
+					// Values with dots or in scientific notation consider as floats and integer otherwise.
+					v, err := diffPair(curr.Values[i][l].String, prev.Values[j][l].String, itv)
+					if err != nil {
+						return diff, err
+					}
+					diff.Values[i][l].String = v
+					diff.Values[i][l].Valid = true
+				}
+			}
+			break // Go to searching next row from current snapshot
 		}
 
 		// End of the searching in 'previous' snapshot, if we reached here it means row not found and it simply should be added as is.
@@ -409,6 +393,52 @@ func (r *PGresult) sort(key int, desc bool) {
 			return r.Values[i][key].String < r.Values[j][key].String /* asc order: 'a' -> 'z' */
 		})
 	}
+}
+
+// diffPair produces a delta of two string values.
+func diffPair(curr, prev string, itv int) (string, error) {
+	if strings.Contains(prev, ".") || strings.Contains(prev, "e") ||
+		strings.Contains(curr, ".") || strings.Contains(curr, "e") {
+		cv, pv, err := parsePairFloat(curr, prev)
+		if err != nil {
+			return "", err
+		}
+		return strconv.FormatFloat((cv-pv)/float64(itv), 'f', 2, 64), nil
+	}
+
+	cv, pv, err := parsePairInt(curr, prev)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatInt((cv-pv)/int64(itv), 10), nil
+}
+
+// parsePairFloat parses pair of string and return two float64 values.
+func parsePairFloat(curr, prev string) (float64, float64, error) {
+	cv, err := strconv.ParseFloat(curr, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %s", curr, err)
+	}
+	pv, err := strconv.ParseFloat(prev, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %s", prev, err)
+	}
+
+	return cv, pv, nil
+}
+
+// parsePairInt parses pair of string and return two int64 values.
+func parsePairInt(curr, prev string) (int64, int64, error) {
+	cv, err := strconv.ParseInt(curr, 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("convert '%s' to int failed: %s", curr, err)
+	}
+	pv, err := strconv.ParseInt(prev, 10, 64)
+	if err != nil {
+		return 0, 0, fmt.Errorf("convert '%s' to int failed: %s", curr, err)
+	}
+
+	return cv, pv, nil
 }
 
 // Fprint prints content of PGresult container to buffer.

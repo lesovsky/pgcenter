@@ -32,6 +32,7 @@ const (
 		"FROM pg_stat_database ORDER BY datname DESC"
 )
 
+// SelectStatDatabaseQuery returns proper query, number of columns and diff interval depending on Postgres version.
 func SelectStatDatabaseQuery(version int) (string, int, [2]int) {
 	switch {
 	case version < 120000:

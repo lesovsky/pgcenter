@@ -34,7 +34,7 @@ func (l *Logfile) Close() error {
 	return l.File.Close()
 }
 
-// ReOpen closes log file and open it again in case of rotate.
+// Reopen closes log file and open it again in case of rotate.
 func (l *Logfile) Reopen(db *postgres.DB, version int) error {
 	if err := l.Close(); err != nil {
 		return err

@@ -17,7 +17,7 @@ const (
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// pg_stat_statements timing query for Postgres 12 and older.
+	// PgStatStatementsTimingPG12 pg_stat_statements timing query for Postgres 12 and older.
 	PgStatStatementsTimingPG12 = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
 		"date_trunc('seconds', round(p.total_time) / 1000 * '1 second'::interval)::text AS t_all_t, " +
 		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS t_read_t, " +
@@ -80,7 +80,7 @@ const (
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsReportQuery defines query used for calculating per-statement report based on pg_stat_statements.
+	// PgStatStatementsReportQueryDefault defines query used for calculating per-statement report based on pg_stat_statements.
 	PgStatStatementsReportQueryDefault = "WITH totals AS (SELECT " +
 		"sum(calls) AS total_calls," +
 		"sum(rows) AS total_rows," +

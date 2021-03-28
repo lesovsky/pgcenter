@@ -137,6 +137,7 @@ func (db *DB) Close() {
 	}
 }
 
+// PQstatus checks connection status using simple query.
 func (db *DB) PQstatus() error {
 	var s string
 	return db.QueryRow("SELECT 1").Scan(&s)

@@ -7,12 +7,12 @@ func NewTestConfig() (Config, error) {
 	return NewConfig("127.0.0.1", 21913, "postgres", "pgcenter_fixtures")
 }
 
-// TestConnect returns test connection used for testing purposes.
+// NewTestConnect returns default test connection used for testing purposes.
 func NewTestConnect() (*DB, error) {
 	return NewTestConnectVersion(130000)
 }
 
-// NewTestConnectVersion connects to test Postgres.
+// NewTestConnectVersion connects to test Postgres of specific version.
 // Necessary Postgres instances have to be up and running on specified ports.
 func NewTestConnectVersion(version int) (*DB, error) {
 	if version < 90400 || version > 140000 {

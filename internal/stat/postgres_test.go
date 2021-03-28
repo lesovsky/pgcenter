@@ -322,6 +322,22 @@ func Test_diff(t *testing.T) {
 	got, err := diff(curr, prev, 1, [2]int{1, 3}, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, want, got)
+
+	prevValid := PGresult{
+		Valid: true, Ncols: 2, Nrows: 1, Cols: []string{"unique", "col2"},
+		Values: [][]sql.NullString{
+			{{String: "1", Valid: true}, {String: "300", Valid: true}},
+		},
+	}
+	currInvalid := PGresult{
+		Valid: true, Ncols: 2, Nrows: 1, Cols: []string{"unique", "col2"},
+		Values: [][]sql.NullString{
+			{{String: "1", Valid: true}, {String: "invalid", Valid: true}},
+		},
+	}
+
+	_, err = diff(currInvalid, prevValid, 1, [2]int{1, 3}, 0)
+	assert.Error(t, err)
 }
 
 func Test_sort(t *testing.T) {
@@ -397,6 +413,88 @@ func Test_sort(t *testing.T) {
 	emptyRes := PGresult{Valid: true, Ncols: 1, Nrows: 0, Cols: []string{"col1"}, Values: [][]sql.NullString{}}
 	emptyRes.sort(0, false)
 	assert.Equal(t, emptyRes.Values, [][]sql.NullString{})
+}
+
+func Test_diffPair(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		curr  string
+		prev  string
+		want  string
+	}{
+		{valid: true, curr: "100", prev: "10", want: "90"},
+		{valid: false, curr: "100", prev: ""},
+		{valid: true, curr: "100", prev: "55.55", want: "44.45"},
+		{valid: true, curr: "44.45", prev: "0", want: "44.45"},
+		{valid: true, curr: "1.23456e+05", prev: "100000", want: "23456.00"},
+		{valid: true, curr: "100000", prev: "1.23456e+05", want: "-23456.00"},
+		{valid: false, curr: "invalid", prev: "1.23456e+05"},
+	}
+
+	for _, tc := range testcases {
+		got, err := diffPair(tc.curr, tc.prev, 1)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		} else {
+			assert.Error(t, err)
+		}
+	}
+}
+
+func Test_parsePairFloat(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		curr  string
+		prev  string
+		c     float64
+		p     float64
+	}{
+		{valid: true, curr: "123.456", prev: "654.321", c: 123.456, p: 654.321},
+		{valid: true, curr: "1.23456e+05", prev: "6.54321e-01", c: 123456, p: 0.654321},
+		{valid: false, curr: "123.456", prev: "invalid"},
+		{valid: false, curr: "invalid", prev: "123.456"},
+		{valid: false, curr: "123.456", prev: ""},
+		{valid: false, curr: "", prev: "123.456"},
+	}
+
+	for _, tc := range testcases {
+		c, p, err := parsePairFloat(tc.curr, tc.prev)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.c, c)
+			assert.Equal(t, tc.p, p)
+		} else {
+			assert.Error(t, err)
+		}
+	}
+}
+
+func Test_parsePairInt(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		curr  string
+		prev  string
+		c     int64
+		p     int64
+	}{
+		{valid: true, curr: "123456", prev: "654321", c: 123456, p: 654321},
+		{valid: false, curr: "123456", prev: "invalid"},
+		{valid: false, curr: "invalid", prev: "123456"},
+		{valid: false, curr: "123456", prev: ""},
+		{valid: false, curr: "", prev: "123456"},
+	}
+
+	for _, tc := range testcases {
+		c, p, err := parsePairInt(tc.curr, tc.prev)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.c, c)
+			assert.Equal(t, tc.p, p)
+		} else {
+			assert.Error(t, err)
+		}
+	}
 }
 
 func TestPGresult_Fprint(t *testing.T) {

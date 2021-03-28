@@ -8,8 +8,9 @@ import (
 )
 
 const (
-	// Flags which tells to pgcenter install or uninstall schema.
+	// Install flag tells to install schema.
 	Install = iota
+	// Uninstall flag tells to uninstall schema.
 	Uninstall
 )
 

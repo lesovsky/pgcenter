@@ -56,6 +56,7 @@ const (
 		"FROM pg_stat_replication ORDER BY pid DESC"
 )
 
+// SelectStatReplicationQuery returns proper query and number of columns depending on Postgres version.
 func SelectStatReplicationQuery(version int, track bool) (string, int) {
 	switch {
 	case version < 100000:

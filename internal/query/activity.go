@@ -45,6 +45,7 @@ const (
 		"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"
 )
 
+// SelectStatActivityQuery returns proper query and number of columns, depending on Postgres version.
 func SelectStatActivityQuery(version int) (string, int) {
 	switch {
 	case version < 90600:

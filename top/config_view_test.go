@@ -252,6 +252,43 @@ func Test_switchViewTo(t *testing.T) {
 	assert.Equal(t, "databases", app.config.view.Name)
 }
 
+func Test_statementsNextView(t *testing.T) {
+	testcases := []struct {
+		current string
+		want    string
+	}{
+		{current: "statements_timings", want: "statements_general"},
+		{current: "statements_general", want: "statements_io"},
+		{current: "statements_io", want: "statements_temp"},
+		{current: "statements_temp", want: "statements_local"},
+		{current: "statements_local", want: "statements_wal"},
+		{current: "statements_wal", want: "statements_timings"},
+		{current: "unknown", want: "statements_timings"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, statementsNextView(tc.current))
+	}
+}
+
+func Test_progressNextView(t *testing.T) {
+	testcases := []struct {
+		current string
+		want    string
+	}{
+		{current: "progress_vacuum", want: "progress_cluster"},
+		{current: "progress_cluster", want: "progress_index"},
+		{current: "progress_index", want: "progress_analyze"},
+		{current: "progress_analyze", want: "progress_basebackup"},
+		{current: "progress_basebackup", want: "progress_vacuum"},
+		{current: "unknown", want: "progress_vacuum"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, progressNextView(tc.current))
+	}
+}
+
 func Test_toggleSysTables(t *testing.T) {
 	testcases := []struct {
 		name    string

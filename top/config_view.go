@@ -109,39 +109,9 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 		// Switch to requested view.
 		switch c {
 		case "statements":
-			// fall through another switch and select appropriate pg_stat_statements stats
-			switch app.config.view.Name {
-			case "statements_timings":
-				viewSwitchHandler(app.config, "statements_general")
-			case "statements_general":
-				viewSwitchHandler(app.config, "statements_io")
-			case "statements_io":
-				viewSwitchHandler(app.config, "statements_temp")
-			case "statements_temp":
-				viewSwitchHandler(app.config, "statements_local")
-			case "statements_local":
-				viewSwitchHandler(app.config, "statements_wal")
-			case "statements_wal":
-				viewSwitchHandler(app.config, "statements_timings")
-			default:
-				viewSwitchHandler(app.config, "statements_timings")
-			}
+			viewSwitchHandler(app.config, statementsNextView(app.config.view.Name))
 		case "progress":
-			// fall through another switch and select appropriate pg_stat_progress_* stats
-			switch app.config.view.Name {
-			case "progress_vacuum":
-				viewSwitchHandler(app.config, "progress_cluster")
-			case "progress_cluster":
-				viewSwitchHandler(app.config, "progress_index")
-			case "progress_index":
-				viewSwitchHandler(app.config, "progress_analyze")
-			case "progress_analyze":
-				viewSwitchHandler(app.config, "progress_basebackup")
-			case "progress_basebackup":
-				viewSwitchHandler(app.config, "progress_vacuum")
-			default:
-				viewSwitchHandler(app.config, "progress_vacuum")
-			}
+			viewSwitchHandler(app.config, progressNextView(app.config.view.Name))
 		default:
 			viewSwitchHandler(app.config, c)
 		}
@@ -149,6 +119,50 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 		printCmdline(g, app.config.view.Msg)
 		return nil
 	}
+}
+
+// statementsNextView depending on current statements view returns next view.
+func statementsNextView(current string) string {
+	var next string
+
+	switch current {
+	case "statements_timings":
+		next = "statements_general"
+	case "statements_general":
+		next = "statements_io"
+	case "statements_io":
+		next = "statements_temp"
+	case "statements_temp":
+		next = "statements_local"
+	case "statements_local":
+		next = "statements_wal"
+	case "statements_wal":
+		next = "statements_timings"
+	default:
+		next = "statements_timings"
+	}
+	return next
+}
+
+// progressNextView depending on current progress view returns next view.
+func progressNextView(current string) string {
+	var next string
+
+	switch current {
+	case "progress_vacuum":
+		next = "progress_cluster"
+	case "progress_cluster":
+		next = "progress_index"
+	case "progress_index":
+		next = "progress_analyze"
+	case "progress_analyze":
+		next = "progress_basebackup"
+	case "progress_basebackup":
+		next = "progress_vacuum"
+	default:
+		next = "progress_vacuum"
+	}
+	return next
 }
 
 // viewSwitchHandler is routine handler which switches views and notify channel.

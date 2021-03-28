@@ -1,7 +1,7 @@
 package query
 
 const (
-	// GetSetting queries specified Postgres configuration setting
+	// GetSetting queries specified Postgres configuration setting.
 	GetSetting = "SELECT current_setting($1)"
 	// GetRecoveryStatus queries current Postgres recovery status.
 	GetRecoveryStatus = "SELECT pg_is_in_recovery()"
@@ -11,31 +11,31 @@ const (
 	CheckSchemaExists = "SELECT EXISTS (SELECT 1 FROM information_schema.schemata WHERE schema_name = $1)"
 	// GetExtensionSchema checks extension is installed in the database.
 	GetExtensionSchema = "SELECT extnamespace::regnamespace FROM pg_extension WHERE extname = $1"
-	// GetAllSettings queries current Postgres configuration
+	// GetAllSettings queries current Postgres configuration.
 	GetAllSettings = "SELECT name, setting, unit, category FROM pg_settings ORDER BY 4"
-	// GetCurrentLogfile queries current Postgres logfile
+	// GetCurrentLogfile queries current Postgres logfile.
 	GetCurrentLogfile = "SELECT pg_current_logfile()"
-	// ExecReloadConf does Postgres reload
+	// ExecReloadConf does Postgres reload.
 	ExecReloadConf = "SELECT pg_reload_conf()"
-	// ExecCancelQuery cancels query executed by backend with specified PID
+	// ExecCancelQuery cancels query executed by backend with specified PID.
 	ExecCancelQuery = "SELECT pg_cancel_backend($1)"
-	// ExecTerminateBackend terminates the backend with specified PID
+	// ExecTerminateBackend terminates the backend with specified PID.
 	ExecTerminateBackend = "SELECT pg_terminate_backend($1)"
-	// ExecCancelQueryGroup cancels a group of queries based on specified criteria
+	// ExecCancelQueryGroup cancels a group of queries based on specified criteria.
 	ExecCancelQueryGroup = "SELECT count(pg_cancel_backend(pid)) " +
 		"FROM pg_stat_activity WHERE {{.BackendState}} " +
 		"AND ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval " +
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"AND pid != pg_backend_pid()"
-	// ExecTerminateBackendGroup terminate a group of backends based on specified criteria
+	// ExecTerminateBackendGroup terminate a group of backends based on specified criteria.
 	ExecTerminateBackendGroup = "SELECT count(pg_terminate_backend(pid)) " +
 		"FROM pg_stat_activity WHERE {{.BackendState}} " +
 		"AND ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval " +
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"AND pid != pg_backend_pid()"
-	// ExecResetStats resets statistics counter in the current database
+	// ExecResetStats resets statistics counter in the current database.
 	ExecResetStats = "SELECT pg_stat_reset()"
-	// ExecResetPgStatStatements resets pg_stat_statements statistics
+	// ExecResetPgStatStatements resets pg_stat_statements statistics.
 	ExecResetPgStatStatements = "SELECT {{.PgSSSchema}}.pg_stat_statements_reset()"
 
 	// SelectCommonProperties used for getting Postgres settings necessary during pgcenter runtime.
@@ -47,7 +47,7 @@ const (
 		"pg_is_in_recovery(), " +
 		"extract(epoch from pg_postmaster_start_time())"
 
-	// SelectActivityDefault is the default query for getting stats about connected clients from pg_stat_activity
+	// SelectActivityDefault is the default query for getting stats about connected clients from pg_stat_activity.
 	//   Postgres 10: The 'backend_type' has been introduced.
 	SelectActivityDefault = "SELECT count(*) FILTER (WHERE state IS NOT NULL) AS total, " +
 		"count(*) FILTER (WHERE state = 'idle') AS idle, " +
@@ -90,7 +90,7 @@ const (
 		"(SELECT count(*) FROM pgsa WHERE state IN ('fastpath function call','disabled')) AS others, " +
 		"(SELECT count(*) FROM pg_prepared_xacts) AS total_prepared"
 
-	// SelectAutovacuumDefault is the default query for getting stats about autovacuum activity from pg_stat_activity
+	// SelectAutovacuumDefault is the default query for getting stats about autovacuum activity from pg_stat_activity.
 	//   Postgres 9.4: 'FILTER (WHERE ...)' has been introduced.
 	SelectAutovacuumDefault = "SELECT count(*) FILTER (WHERE query ~* '^autovacuum:') AS av_workers, " +
 		"count(*) FILTER (WHERE query ~* '^autovacuum:.*to prevent wraparound') AS av_wrap, " +
@@ -106,18 +106,18 @@ const (
 		"(SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') FROM pgsa " +
 		"WHERE (query ~* '^autovacuum:' OR query ~* '^vacuum') AND pid <> pg_backend_pid()) AS av_maxtime"
 
-	// SelectActivityTimes queries stats about longest activity
+	// SelectActivityTimes queries stats about longest activity.
 	SelectActivityTimes = "SELECT (SELECT coalesce(date_trunc('seconds', max(now() - xact_start)), '00:00:00') AS xact_maxtime " +
 		"FROM pg_stat_activity WHERE (query !~* '^autovacuum:' AND query !~* '^vacuum') AND pid <> pg_backend_pid()), " +
 		"(SELECT COALESCE(date_trunc('seconds', max(clock_timestamp() - prepared)), '00:00:00') AS prep_maxtime " +
 		"FROM pg_prepared_xacts)"
 
-	// SelectActivityStatements queries general stats from pg_stat_statements
-	//   Postgres 13: total_time replaced to total_exec_time, total_plan_time.
-	SelectActivityStatementsPG12   = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM {{.PGSSSchema}}.pg_stat_statements"
+	// SelectActivityStatementsPG12 queries general stats from pg_stat_statements.
+	SelectActivityStatementsPG12 = "SELECT (sum(total_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM {{.PGSSSchema}}.pg_stat_statements"
+	// SelectActivityStatementsLatest -- Postgres 13: total_time replaced to total_exec_time, total_plan_time.
 	SelectActivityStatementsLatest = "SELECT (sum(total_exec_time) / sum(calls))::numeric(20,2) AS avg_query, sum(calls) AS total_calls FROM {{.PGSSSchema}}.pg_stat_statements"
 
-	// SelectRemoteProcSysTicks queries system timer's frequency from Postgres instance
+	// SelectRemoteProcSysTicks queries system timer's frequency from Postgres instance.
 	SelectRemoteProcSysTicks = "SELECT pgcenter.get_sys_clk_ticks()::float"
 )
 

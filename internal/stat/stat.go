@@ -21,7 +21,7 @@ const (
 		((seconds_total - floor(seconds_total)) * pgcenter.get_sys_clk_ticks() / 100)
 		FROM pgcenter.sys_proc_uptime`
 
-	// collect flags specifies what kind of extra stats should be collected.
+	// Collect flags specifies what kind of extra stats should be collected.
 	CollectNone = iota
 	CollectDiskstats
 	CollectNetdev

@@ -7,9 +7,11 @@ package query
 // transaction.
 
 const (
+	// StatSchemaCreateSchema defines SQL for creating stats schema.
 	// Name: pgcenter; Type: SCHEMA; Schema: -
 	StatSchemaCreateSchema = `CREATE SCHEMA IF NOT EXISTS pgcenter`
 
+	// StatSchemaCreateFunction1 defines SQL for creating stats function #1.
 	// Name: get_netdev_link_settings(character varying); Type: FUNCTION; Schema: pgcenter
 	StatSchemaCreateFunction1 = `CREATE OR REPLACE FUNCTION pgcenter.get_netdev_link_settings(INOUT iface CHARACTER VARYING, OUT speed BIGINT, OUT duplex INTEGER) RETURNS RECORD
 LANGUAGE plperlu
@@ -24,6 +26,7 @@ if (my $settings = Linux::Ethtool::Settings->new($_[0])) {
 }
 $$;`
 
+	// StatSchemaCreateFunction2 defines SQL for creating stats function #2.
 	// Name: get_sys_clk_ticks(); Type: FUNCTION; Schema: pgcenter
 	StatSchemaCreateFunction2 = `CREATE OR REPLACE FUNCTION pgcenter.get_sys_clk_ticks() RETURNS integer
 LANGUAGE plperlu
@@ -33,6 +36,7 @@ $clock_ticks = POSIX::sysconf( &POSIX::_SC_CLK_TCK );
 return $clock_ticks;
 $$;`
 
+	// StatSchemaCreateFunction3 defines SQL for creating stats function #3.
 	// Name: get_proc_stats(character varying, character varying, character varying, integer); Type: FUNCTION; Schema: pgcenter
 	StatSchemaCreateFunction3 = `CREATE OR REPLACE FUNCTION pgcenter.get_proc_stats(character varying, character varying, character varying, integer) RETURNS SETOF record
 LANGUAGE plperlu
@@ -59,6 +63,7 @@ close FILE;
 return \@cntn;
 $$;`
 
+	// StatSchemaCreateFunction4 defines SQL for creating stats function #4.
 	// Name: get_filesystem_stats; Type: FUNCTION; Schema: pgcenter
 	StatSchemaCreateFunction4 = `CREATE OR REPLACE FUNCTION pgcenter.get_filesystem_stats(INOUT mountpoint CHARACTER VARYING, OUT size_bytes NUMERIC, OUT free_bytes NUMERIC, OUT avail_bytes NUMERIC, OUT used_bytes NUMERIC, OUT reserved_bytes NUMERIC, OUT used_bytes_ratio NUMERIC, OUT size_files NUMERIC, OUT free_files NUMERIC, OUT used_files NUMERIC, OUT used_files_ratio NUMERIC) RETURNS RECORD
 LANGUAGE plperlu
@@ -101,6 +106,7 @@ if(defined($ref)) {
 }
 $$;`
 
+	// StatSchemaCreateView1 defines SQL for creating stats view #1.
 	// Name: sys_proc_diskstats; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView1 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_diskstats AS
 SELECT get_proc_stats.col0 AS maj,
@@ -125,6 +131,7 @@ COALESCE(get_proc_stats.col18, (0)::double precision) AS flushes,
 COALESCE(get_proc_stats.col19, (0)::double precision) AS fspent
 FROM pgcenter.get_proc_stats('/proc/diskstats'::character varying, ' '::character varying, ''::character varying, 0) get_proc_stats(col0 integer, col1 integer, col2 character varying, col3 double precision, col4 double precision, col5 double precision, col6 double precision, col7 double precision, col8 double precision, col9 double precision, col10 double precision, col11 double precision, col12 double precision, col13 double precision, col14 double precision, col15 double precision, col16 double precision, col17 double precision, col18 double precision, col19 double precision);`
 
+	// StatSchemaCreateView2 defines SQL for creating stats view #2.
 	// Name: sys_proc_loadavg; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView2 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_loadavg AS
 SELECT get_proc_stats.col0 AS min1,
@@ -135,6 +142,7 @@ get_proc_stats.col4 AS last_pid
 FROM pgcenter.get_proc_stats('/proc/loadavg'::character varying, ' '::character varying, ''::character varying, 0)
 AS (col0 double precision, col1 double precision, col2 double precision, col3 character varying, col4 integer);`
 
+	// StatSchemaCreateView3 defines SQL for creating stats view #3.
 	// Name: sys_proc_meminfo; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView3 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_meminfo AS
 SELECT get_proc_stats.col0 AS metric,
@@ -143,6 +151,7 @@ get_proc_stats.col2 AS unit
 FROM pgcenter.get_proc_stats('/proc/meminfo'::character varying, ' '::character varying, ''::character varying, 0)
 AS (col0 character varying, col1 bigint, col2 character varying);`
 
+	// StatSchemaCreateView4 defines SQL for creating stats view #4.
 	// Name: sys_proc_netdev; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView4 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_netdev AS
 SELECT get_proc_stats.col0 AS iface,
@@ -165,6 +174,7 @@ get_proc_stats.col16 AS sent_cmpr
 FROM pgcenter.get_proc_stats('/proc/net/dev'::character varying, ' '::character varying, ''::character varying, 2)
 AS (col0 character varying, col1 float, col2 float, col3 float, col4 float, col5 float, col6 float, col7 float, col8 float, col9 float, col10 float, col11 float, col12 float, col13 float, col14 float, col15 float, col16 float)`
 
+	// StatSchemaCreateView5 defines SQL for creating stats view #5.
 	// Name: sys_proc_stat; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView5 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_stat AS
 SELECT get_proc_stats.col0 AS cpu,
@@ -181,6 +191,7 @@ get_proc_stats.col10 AS guest_ni_time
 FROM pgcenter.get_proc_stats('/proc/stat'::character varying, ' '::character varying, 'cpu'::character varying, 0)
 AS (col0 character varying, col1 bigint, col2 bigint, col3 bigint, col4 bigint, col5 bigint, col6 bigint, col7 bigint, col8 bigint, col9 bigint, col10 bigint);`
 
+	// StatSchemaCreateView6 defines SQL for creating stats view #6.
 	// Name: sys_proc_uptime; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView6 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_uptime AS
 SELECT get_proc_stats.col0 AS seconds_total,
@@ -188,6 +199,7 @@ get_proc_stats.col1 AS seconds_idle
 FROM pgcenter.get_proc_stats('/proc/uptime'::character varying, ' '::character varying, ''::character varying, 0)
 AS (col0 numeric, col1 numeric);`
 
+	// StatSchemaCreateView7 defines SQL for creating stats view #7.
 	// Name: sys_proc_mounts; Type: VIEW; Schema: pgcenter
 	StatSchemaCreateView7 = `CREATE OR REPLACE VIEW pgcenter.sys_proc_mounts AS
 SELECT get_proc_stats.col0 AS device,
@@ -199,6 +211,7 @@ get_proc_stats.col5 AS fsck_order
 FROM pgcenter.get_proc_stats('/proc/mounts'::character varying, ' '::character varying, ''::character varying, 0)
 AS (col0 character varying, col1 character varying, col2 character varying, col3 character varying, col4 integer, col5 integer);`
 
+	// StatSchemaDropSchema defines SQL for drop stats schema.
 	// Name: pgcenter; Type: SCHEMA; Schema: -
 	StatSchemaDropSchema = "DROP SCHEMA IF EXISTS pgcenter CASCADE"
 )
