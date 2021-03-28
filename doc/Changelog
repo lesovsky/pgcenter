@@ -1,4 +1,6 @@
 pgcenter (devel) unstable; urgency=low
+  * add 'apk' package format
+  * use '/usr/bin' instead of '/usr/local/bin' when installing from rpm/deb packages
   * top: add filesystem stats screen
   * top: expose version info in help screen
   * extend tables sizes statistics: add info about tables metadata and TOASTs

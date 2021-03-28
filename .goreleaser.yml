@@ -29,4 +29,9 @@ nfpms:
     maintainer: Alexey Lesovsky
     description: Command-line admin tool for observing and troubleshooting Postgres.
     license: BSD-3
-    formats: [ deb, rpm ]
+    formats: [ deb, rpm, apk ]
+    bindir: /usr/bin
+    contents:
+      - src: /usr/bin/pgcenter
+        dst: /bin/pgcenter
+        type: "symlink"
