@@ -15,10 +15,10 @@
 Download the latest release from [release page](https://github.com/lesovsky/pgcenter/releases), install using package manager or unpack from `.tar.gz` archive. Now, pgCenter is ready to run.
 
 #### Run in Docker
-There is option to run pgCenter using Docker. Docker images available on [DockerHub](https://hub.docker.com/r/lesovsky/pgcenter) or could be build manually.
+There is option to run pgCenter using Docker. Docker images available on [DockerHub](https://hub.docker.com/r/lesovsky/pgcenter).
 ```
-docker pull pgcenter .
-docker run -it --rm pgcenter top -h 1.2.3.4 -U user -d production_db
+docker pull lesovsky/pgcenter:latest .
+docker run -it --rm lesovsky/pgcenter:latest pgcenter top -h 1.2.3.4 -U user -d production_db
 ```
 
 #### pgCenter usage

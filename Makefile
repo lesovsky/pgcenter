@@ -44,7 +44,9 @@ uninstall: ## Uninstall pgcenter executable from /usr/bin directory.
 
 docker-build: ## Build docker image
 	docker build -t ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:${TAG} .
+	docker tag ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:${TAG} ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:latest
 	docker image prune --force --filter label=stage=intermediate
 
 docker-push: ## Push docker image to registry
 	docker push ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:${TAG}
+	docker push ${DOCKER_ACCOUNT}/${PROGRAM_NAME}:latest

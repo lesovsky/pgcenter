@@ -66,7 +66,7 @@ pgCenter supports majority of statistics views available in Postgres, and at the
 In case of connecting to remote Postgres there is possibility to use additional SQL functions used for retrieving `/proc` statistics from remote host. For more information see details [here](doc/pgcenter-config-readme.md).
 
 #### Install notes
-Check out [releases](https://github.com/lesovsky/pgcenter/releases) page. Pgcenter could be installed using package managers - RPM and DEB packages are available. Precompiled version also available in `.tar.gz` archive. 
+Check out [releases](https://github.com/lesovsky/pgcenter/releases) page. Pgcenter could be installed using package managers - RPM, DEB, APK packages are available. Also, a precompiled version is available in `.tar.gz` archive. 
 
 Additional information and usage examples available [here](doc/examples.md).
 
