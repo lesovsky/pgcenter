@@ -8,6 +8,7 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/pretty"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
@@ -153,6 +154,12 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			case stat.CollectNetdev:
 				v.Clear()
 				err := printNetdev(v, s.Netdevs)
+				if err != nil {
+					return err
+				}
+			case stat.CollectFsstats:
+				v.Clear()
+				err := printFsstats(v, s.Fsstats)
 				if err != nil {
 					return err
 				}
@@ -466,6 +473,29 @@ func printNetdev(v *gocui.View, s stat.Netdevs) error {
 			s[i].Rpackets, s[i].Tpackets, s[i].Raverage, s[i].Taverage,
 			s[i].Rerrs, s[i].Terrs, s[i].Tcolls,
 			s[i].Saturation, s[i].Rutil, s[i].Tutil, s[i].Utilization,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// printFsstats prints stats similar to 'df -h', 'df -i' - mounted filesystems stats.
+func printFsstats(v *gocui.View, s stat.Fsstats) error {
+	// print header
+	_, err := fmt.Fprintf(v, "\033[30;47m             Filesystem:       size       used      avail   reserved     use%%      inodes       iused       ifree    iuse%%   fstype  mounted on\033[0m\n")
+	if err != nil {
+		return err
+	}
+
+	for i := 0; i < len(s); i++ {
+		// print stats
+		_, err := fmt.Fprintf(v, "%24s%11s%11s%11s%11s%8.0f%%%12.0f%12.0f%12.0f%8.0f%%%9s  %-24s\n",
+			s[i].Mount.Device,
+			pretty.Size(s[i].Size), pretty.Size(s[i].Used), pretty.Size(s[i].Avail), pretty.Size(s[i].Reserved), s[i].Pused,
+			s[i].Files, s[i].Filesused, s[i].Filesfree, s[i].Filespused,
+			s[i].Mount.Fstype, s[i].Mount.Mountpoint,
 		)
 		if err != nil {
 			return err

@@ -48,12 +48,14 @@ func doInstall(db *postgres.DB) error {
 		query.StatSchemaCreateFunction1,
 		query.StatSchemaCreateFunction2,
 		query.StatSchemaCreateFunction3,
+		query.StatSchemaCreateFunction4,
 		query.StatSchemaCreateView1,
 		query.StatSchemaCreateView2,
 		query.StatSchemaCreateView3,
 		query.StatSchemaCreateView4,
 		query.StatSchemaCreateView5,
 		query.StatSchemaCreateView6,
+		query.StatSchemaCreateView7,
 	}
 
 	tx, err := db.Conn.Begin(context.Background())

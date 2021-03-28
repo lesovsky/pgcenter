@@ -44,6 +44,7 @@ func keybindings(app *app) error {
 		{"sysstat", '~', runPsql(app.db, app.uiExit)},
 		{"sysstat", 'B', showExtra(app, stat.CollectDiskstats)},
 		{"sysstat", 'N', showExtra(app, stat.CollectNetdev)},
+		{"sysstat", 'F', showExtra(app, stat.CollectFsstats)},
 		{"sysstat", 'L', showExtra(app, stat.CollectLogtail)},
 		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
 		{"sysstat", '/', dialogOpen(app, dialogFilter)},

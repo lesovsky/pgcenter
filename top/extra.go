@@ -30,6 +30,8 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 			msg = "Show block devices statistics"
 		case stat.CollectNetdev:
 			msg = "Show network interfaces statistics"
+		case stat.CollectFsstats:
+			msg = "Show mounted filesystems statistics"
 		case stat.CollectLogtail:
 			if !app.db.Local {
 				printCmdline(g, "Log tail is not supported for remote hosts")

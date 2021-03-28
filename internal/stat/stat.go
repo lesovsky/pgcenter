@@ -25,6 +25,7 @@ const (
 	CollectNone = iota
 	CollectDiskstats
 	CollectNetdev
+	CollectFsstats
 	CollectLogtail
 )
 
@@ -42,6 +43,7 @@ type System struct {
 	CpuStat
 	Diskstats
 	Netdevs
+	Fsstats
 }
 
 // Collector defines container for stats objects.
@@ -56,6 +58,8 @@ type Collector struct {
 	// network interfaces snapshots for previous and current intervals
 	prevNetdevs Netdevs
 	currNetdevs Netdevs
+	// mounted filesystems snapshot
+	currFsstats Fsstats
 	// postgres stats snapshots for previous and current intervals
 	prevPgStat Pgstat
 	currPgStat Pgstat
@@ -131,6 +135,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	// Collect extra stats if required.
 	var diskstats Diskstats
 	var netdevs Netdevs
+	var fsstats Fsstats
 
 	switch c.config.collectExtra {
 	case CollectDiskstats:
@@ -145,6 +150,12 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			return s, err
 		}
 		s.Netdevs = netdevs
+	case CollectFsstats:
+		fsstats, err = c.collectFsstats(db)
+		if err != nil {
+			return s, err
+		}
+		s.Fsstats = fsstats
 	}
 
 	// Take refresh interval from view
@@ -225,6 +236,18 @@ func (c *Collector) collectNetdevs(db *postgres.DB) (Netdevs, error) {
 	usage := countNetdevsUsage(c.prevNetdevs, c.currNetdevs, c.config.ticks)
 
 	return usage, nil
+}
+
+// collectFsstats implements collecting mounted filesystems stats.
+func (c *Collector) collectFsstats(db *postgres.DB) (Fsstats, error) {
+	stats, err := readFsstats(db, c.config)
+	if err != nil {
+		return nil, err
+	}
+
+	c.currFsstats = stats
+
+	return c.currFsstats, nil
 }
 
 // readUptimeLocal returns uptime value from passed specified procfile.

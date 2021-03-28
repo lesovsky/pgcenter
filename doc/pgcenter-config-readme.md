@@ -17,10 +17,10 @@ It's not an issue and pgCenter can track remote system statistics through establ
 Installing and removing functions is possible with `pgcenter config`, however, with few limitations:
 
 - `plperlu` (which means *untrusted plperl*) procedural language must be installed manually in the database you want to connect pgCenter to (see details [here](https://www.postgresql.org/docs/current/static/plperl.html)).
-- perl module `Linux::Ethtool::Settings` should be installed in the system, it's used to get speed and duplex of network interfaces and properly calculate some metrics.
+- perl modules `Linux::Ethtool::Settings`, `Filesys::Df` should be installed in the system, it's used to get stats about network interfaces and mounted filesystems needed to calculate metrics.
 
 #### Main functions
-- installing and removing SQL functions and views in desired database.
+- installing and removing SQL functions and views in a desired database.
 
 #### Usage
 
@@ -62,6 +62,7 @@ Here is a complete example reproduced in Docker environment using using [officia
 # yum install -y gcc make perl cpan
 # cpan Module::Build
 # cpan Linux::Ethtool::Settings
+# cpan Filesys::Df
 # psql -U postgres -c 'CREATE LANGUAGE plperlu'
 # pgcenter config -i -U postgres
 # psql -U postgres -c "select * from pgcenter.get_netdev_link_settings('eth0')"

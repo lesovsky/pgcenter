@@ -10,7 +10,7 @@
 # __release_tag__ gosec v2.6.1 was released 2021-01-22
 FROM ubuntu:20.04
 
-LABEL version="v0.0.2"
+LABEL version="v0.0.3"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -24,7 +24,8 @@ RUN apt-get update && \
     echo "deb http://apt.postgresql.org/pub/repos/apt focal-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
     apt-get install -y postgresql-9.5 postgresql-9.6 postgresql-10 postgresql-11 postgresql-12 postgresql-13 \
-        postgresql-plperl-9.5 postgresql-plperl-9.6 postgresql-plperl-10 postgresql-plperl-11 postgresql-plperl-12 postgresql-plperl-13 && \
+        postgresql-plperl-9.5 postgresql-plperl-9.6 postgresql-plperl-10 postgresql-plperl-11 postgresql-plperl-12 postgresql-plperl-13 \
+        libfilesys-df-perl && \
     cpan Module::Build && \
     cpan Linux::Ethtool::Settings && \
     curl -s -L https://dl.google.com/go/go1.16.linux-amd64.tar.gz -o - | \
@@ -42,4 +43,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing v0.0.2"]
+CMD ["echo", "I'm pgcenter-testing v0.0.3"]

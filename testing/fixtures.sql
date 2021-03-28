@@ -53,6 +53,47 @@ close FILE;
 return \@cntn;
 $$;
 
+CREATE OR REPLACE FUNCTION pgcenter.get_filesystem_stats(INOUT mountpoint CHARACTER VARYING, OUT size_bytes NUMERIC, OUT free_bytes NUMERIC, OUT avail_bytes NUMERIC, OUT used_bytes NUMERIC, OUT reserved_bytes NUMERIC, OUT used_bytes_ratio NUMERIC, OUT size_files NUMERIC, OUT free_files NUMERIC, OUT used_files NUMERIC, OUT used_files_ratio NUMERIC) RETURNS RECORD
+    LANGUAGE plperlu
+AS $$
+use Filesys::Df;
+
+my $ref = df($_[0], 1);
+if(defined($ref)) {
+    my $size_bytes = $ref->{blocks};
+    my $free_bytes = $ref->{bfree};
+    my $avail_bytes = $ref->{bavail};
+    my $used_bytes = $ref->{used};
+    my $reserved_bytes = $ref->{bfree} - $ref->{bavail};
+    my $used_bytes_ratio = $ref->{per};
+
+    my $size_files = $ref->{files};
+    my $free_files = $ref->{ffree};
+    my $used_files = $ref->{files} - $ref->{ffree};
+    my $used_files_ratio = $ref->{fper};
+
+    return {
+        mountpoint => $_[0],
+        size_bytes => $size_bytes,
+        free_bytes => $free_bytes,
+        avail_bytes => $avail_bytes,
+        used_bytes => $used_bytes,
+        reserved_bytes => $reserved_bytes,
+        used_bytes_ratio => $used_bytes_ratio,
+        size_files => $size_files,
+        free_files => $free_files,
+        used_files => $used_files,
+        used_files_ratio => $used_files_ratio,
+    };
+} else {
+    return {
+        mountpoint => $_[0], size_bytes => 0, free_bytes => 0, avail_bytes => 0,
+        used_bytes => 0, reserved_bytes => 0, used_bytes_ratio => 0,
+        size_files => 0, free_files => 0, used_files => 0, used_files_ratio => 0,
+    };
+}
+$$;
+
 CREATE OR REPLACE VIEW pgcenter.sys_proc_diskstats AS
 SELECT get_proc_stats.col0 AS maj,
        get_proc_stats.col1 AS min,
@@ -133,6 +174,16 @@ SELECT get_proc_stats.col0 AS seconds_total,
        get_proc_stats.col1 AS seconds_idle
 FROM pgcenter.get_proc_stats('/proc/uptime'::character varying, ' '::character varying, ''::character varying, 0)
          AS (col0 numeric, col1 numeric);
+
+CREATE OR REPLACE VIEW pgcenter.sys_proc_mounts AS
+SELECT get_proc_stats.col0 AS device,
+       get_proc_stats.col1 AS mountpoint,
+       get_proc_stats.col2 AS fstype,
+       get_proc_stats.col3 AS options,
+       get_proc_stats.col4 AS dump,
+       get_proc_stats.col5 AS fsck_order
+FROM pgcenter.get_proc_stats('/proc/mounts'::character varying, ' '::character varying, ''::character varying, 0)
+         AS (col0 character varying, col1 character varying, col2 character varying, col3 character varying, col4 integer, col5 integer);
 
 \c pgcenter_fixtures_config
 

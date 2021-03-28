@@ -1,4 +1,5 @@
 pgcenter (devel) unstable; urgency=low
+  * top: add filesystem stats screen
   * top: expose version info in help screen
   * extend tables sizes statistics: add info about tables metadata and TOASTs
   * fix problem when pg_stat_statements cannot be found when installed in other than 'public' schema

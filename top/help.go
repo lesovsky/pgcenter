@@ -21,7 +21,7 @@ general actions:
     l                 open log file with pager.
 
 extra stats actions:
-    B,N,L       'B' diskstat, 'N' nicstat, 'L' logtail.
+    B,N,F,L       'B' diskstat, 'N' nicstat, 'F' filesystems, L' logtail.
 
 activity actions:
     -,_         '-' cancel backend by pid, '_' terminate backend by pid.
