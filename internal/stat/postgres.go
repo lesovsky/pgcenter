@@ -21,17 +21,6 @@ type Pgstat struct {
 
 // collectPostgresStat collect Postgres activity stats and stats returned by passed query.
 func collectPostgresStat(db *postgres.DB, query string) (PGresult, error) {
-	//var pgstat Pgstat
-
-	//activity, err := collectActivityStat(db, version, pgssSchema, itv, prev)
-	//if err != nil {
-	//	pgstat.Activity = activity
-	//	return pgstat, err
-	//}
-	//
-	//pgstat.Activity = activity
-
-	// Read stat
 	res, err := NewPGresultQuery(db, query)
 	if err != nil {
 		return PGresult{}, err
