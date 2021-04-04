@@ -126,3 +126,27 @@ func TestViews_Configure(t *testing.T) {
 		}
 	}
 }
+
+func TestView_VersionOK(t *testing.T) {
+	testcases := []struct {
+		version int
+		total   int
+	}{
+		{version: 130000, total: 18},
+		{version: 120000, total: 15},
+		{version: 110000, total: 13},
+		{version: 100000, total: 13},
+	}
+
+	for _, tc := range testcases {
+		views := New()
+
+		var total int
+		for _, v := range views {
+			if v.VersionOK(tc.version) {
+				total++
+			}
+		}
+		assert.Equal(t, tc.total, total)
+	}
+}

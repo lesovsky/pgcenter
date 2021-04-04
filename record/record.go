@@ -73,7 +73,11 @@ func (app *app) setup() error {
 	// Create and configure stats views depending on running Postgres.
 	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit, props.ExtPGSSSchema)
 
-	views := view.New()
+	n, views := filterViews(props.VersionNum, view.New())
+	if n > 0 {
+		fmt.Println("INFO: some statistics is not supported by the current version of Postgres and will be skipped")
+	}
+
 	err = views.Configure(opts)
 	if err != nil {
 		return err
@@ -138,4 +142,17 @@ func (app *app) record(doQuit chan os.Signal) error {
 	}
 
 	return nil
+}
+
+// filterViews removes views which are not suitable for specified version.
+func filterViews(version int, views view.Views) (int, view.Views) {
+	var filtered int
+	for k, v := range views {
+		if !v.VersionOK(version) {
+			delete(views, k)
+			filtered++
+		}
+	}
+
+	return filtered, views
 }

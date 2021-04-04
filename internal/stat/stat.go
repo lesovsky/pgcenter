@@ -170,17 +170,30 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		}
 	}
 
-	// Collect Postgres stats.
-	pgstat, err := collectPostgresStat(db, c.config.VersionNum, c.config.ExtPGSSSchema, itv, view.Query, c.prevPgStat)
+	// Collect Postgres current general activity stats.
+	activity, err := collectActivityStat(db, c.config.VersionNum, c.config.ExtPGSSSchema, itv, c.prevPgStat.Activity.Calls)
 	if err != nil {
-		s.Pgstat.Activity = pgstat.Activity
+		s.Pgstat.Activity = activity
 		return s, err
 	}
 
-	s.Pgstat.Activity = pgstat.Activity
+	s.Pgstat.Activity = activity
+
+	// Check view is supported by current version. This helps to avoid unnecessary errors in Postgres logs.
+	if !view.VersionOK(c.config.VersionNum) {
+		return s, fmt.Errorf("selected statistics is not supported by current version of Postgres")
+	}
+
+	// Collect Postgres stats related to user's choice.
+	res, err := collectPostgresStat(db, view.Query)
+	if err != nil {
+		return s, err
+	}
+
+	s.Pgstat.Result = res
 
 	c.prevPgStat = c.currPgStat
-	c.currPgStat = pgstat
+	c.currPgStat = Pgstat{Activity: activity, Result: res}
 
 	// Compare previous and current Postgres stats snapshots and calculate delta.
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, itv, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)

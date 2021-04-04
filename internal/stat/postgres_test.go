@@ -53,17 +53,13 @@ func Test_collectPostgresStat(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	prev := Pgstat{Activity: Activity{Calls: 0}}
-
-	version := 1000000 // suppose to use PG 100.0
-	got, err := collectPostgresStat(conn, version, "public", 1, query.PgStatDatabaseDefault, prev)
+	got, err := collectPostgresStat(conn, query.PgStatDatabaseDefault)
 	assert.NoError(t, err)
-	assert.Equal(t, "ok", got.Activity.State)
-	assert.Greater(t, got.Result.Nrows, 0)
+	assert.Greater(t, got.Nrows, 0)
 
 	// testing with already closed conn
 	conn.Close()
-	_, err = collectPostgresStat(conn, 0, "public", 1, "SELECT qq", prev)
+	_, err = collectPostgresStat(conn, "SELECT qq")
 	assert.Error(t, err)
 }
 
@@ -71,10 +67,8 @@ func Test_collectActivityStat(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	prev := Pgstat{Activity: Activity{Calls: 0}}
-
 	version := 1000000 // suppose to use PG 100.0
-	got, err := collectActivityStat(conn, version, "public", 1, prev)
+	got, err := collectActivityStat(conn, version, "public", 1, 0)
 	assert.NoError(t, err)
 	assert.Equal(t, "ok", got.State)
 	assert.NotEqual(t, "", got.Uptime)
@@ -87,7 +81,7 @@ func Test_collectActivityStat(t *testing.T) {
 
 	// testing with already closed conn
 	conn.Close()
-	_, err = collectActivityStat(conn, 0, "public", 1, prev)
+	_, err = collectActivityStat(conn, 0, "public", 1, 0)
 	assert.Error(t, err)
 }
 

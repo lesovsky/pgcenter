@@ -124,11 +124,11 @@ const (
 // SelectActivityActivityQuery returns activity main query depending on used version.
 func SelectActivityActivityQuery(version int) string {
 	switch {
-	case version < 90400:
+	case version < PostgresV94:
 		return SelectActivityPG93
-	case version < 90600:
+	case version < PostgresV96:
 		return SelectActivityPG95
-	case version < 100000:
+	case version < PostgresV10:
 		return SelectActivityPG96
 	default:
 		return SelectActivityDefault
@@ -138,7 +138,7 @@ func SelectActivityActivityQuery(version int) string {
 // SelectActivityAutovacuumQuery returns autovacuum activity query depending on used version.
 func SelectActivityAutovacuumQuery(version int) string {
 	switch {
-	case version < 90400:
+	case version < PostgresV94:
 		return SelectAutovacuumPG93
 	default:
 		return SelectAutovacuumDefault
@@ -148,7 +148,7 @@ func SelectActivityAutovacuumQuery(version int) string {
 // SelectActivityStatementsQuery returns statements activity query depending on used version.
 func SelectActivityStatementsQuery(version int) string {
 	switch {
-	case version < 130000:
+	case version < PostgresV13:
 		return SelectActivityStatementsPG12
 	default:
 		return SelectActivityStatementsLatest

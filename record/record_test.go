@@ -94,3 +94,22 @@ func Test_app_record(t *testing.T) {
 	}
 	assert.NoError(t, os.Remove(filename))
 }
+
+func Test_filterViews(t *testing.T) {
+	testcases := []struct {
+		version int
+		wantN   int
+		wantV   int
+	}{
+		{version: 130000, wantN: 0, wantV: 18},
+		{version: 120000, wantN: 3, wantV: 15},
+		{version: 110000, wantN: 5, wantV: 13},
+		{version: 100000, wantN: 5, wantV: 13},
+	}
+
+	for _, tc := range testcases {
+		n, v := filterViews(tc.version, view.New())
+		assert.Equal(t, tc.wantN, n)
+		assert.Equal(t, tc.wantV, len(v))
+	}
+}

@@ -20,26 +20,24 @@ type Pgstat struct {
 }
 
 // collectPostgresStat collect Postgres activity stats and stats returned by passed query.
-func collectPostgresStat(db *postgres.DB, version int, pgssSchema string, itv int, query string, prev Pgstat) (Pgstat, error) {
-	var pgstat Pgstat
+func collectPostgresStat(db *postgres.DB, query string) (PGresult, error) {
+	//var pgstat Pgstat
 
-	activity, err := collectActivityStat(db, version, pgssSchema, itv, prev)
-	if err != nil {
-		pgstat.Activity = activity
-		return pgstat, err
-	}
-
-	pgstat.Activity = activity
+	//activity, err := collectActivityStat(db, version, pgssSchema, itv, prev)
+	//if err != nil {
+	//	pgstat.Activity = activity
+	//	return pgstat, err
+	//}
+	//
+	//pgstat.Activity = activity
 
 	// Read stat
 	res, err := NewPGresultQuery(db, query)
 	if err != nil {
-		return pgstat, err
+		return PGresult{}, err
 	}
 
-	pgstat.Result = res
-
-	return pgstat, nil
+	return res, nil
 }
 
 // Activity describes Postgres' current activity stats.
@@ -66,7 +64,7 @@ type Activity struct {
 }
 
 // collectActivityStat collects Postgres runtime activity about connected clients and workload.
-func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv int, prev Pgstat) (Activity, error) {
+func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv int, prevCalls int) (Activity, error) {
 	var s Activity
 
 	if err := db.QueryRow(query.GetUptime).Scan(&s.Uptime); err != nil {
@@ -104,7 +102,7 @@ func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv in
 		if err != nil {
 			return s, err
 		}
-		s.CallsRate = (s.Calls - prev.Activity.Calls) / itv
+		s.CallsRate = (s.Calls - prevCalls) / itv
 	}
 
 	err = db.QueryRow(query.SelectActivityTimes).Scan(&s.XactMaxTime, &s.PrepMaxTime)

@@ -6,6 +6,16 @@ import (
 	"text/template"
 )
 
+const (
+	PostgresV94 = 90400
+	PostgresV95 = 90500
+	PostgresV96 = 90600
+	PostgresV10 = 100000
+	PostgresV11 = 110000
+	PostgresV12 = 120000
+	PostgresV13 = 130000
+)
+
 // Options contains queries' settings that used depending on user preferences.
 type Options struct {
 	Version          int    // Postgres version (numeric format)
@@ -48,12 +58,12 @@ func NewOptions(version int, recovery string, track string, querylen int, pgssSc
 }
 
 // selectWalFunctions returns proper function names for getting WAL locations.
-// 1. WAL-related functions have been renamed in Postgres 10, hence functions' names between 9.x and 10 are differ.
+// 1. WAL-related functions have been renamed in Postgres 10, functions' names between 9.x and 10 are different.
 // 2. Depending on recovery status, for obtaining WAL location different functions have to be used.
 func selectWalFunctions(version int, recovery string) (string, string) {
 	var fn1, fn2 string
 	switch {
-	case version < 100000:
+	case version < PostgresV10:
 		fn1 = "pg_xlog_location_diff"
 		if recovery == "f" {
 			fn2 = "pg_current_xlog_location"

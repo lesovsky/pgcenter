@@ -8,21 +8,22 @@ import (
 
 // View describes how stats received from Postgres should be displayed.
 type View struct {
-	Name      string                 // View name
-	QueryTmpl string                 // Query template used for making particular query.
-	Query     string                 // Query based on template and runtime options.
-	DiffIntvl [2]int                 // Columns interval for diff
-	Cols      []string               // Columns names
-	Ncols     int                    // Number of columns returned by query, used as a right border for OrderKey
-	OrderKey  int                    // Index of column used for order
-	OrderDesc bool                   // Order direction: descending (true) or ascending (false)
-	UniqueKey int                    // index of column used as unique key when comparing rows during diffs, by default it's zero which is OK in almost all views
-	ColsWidth map[int]int            // Width used for columns and control an aligning
-	Aligned   bool                   // Flag shows aligning is calculated or not
-	Msg       string                 // Show this text in Cmdline when switching to this view
-	Filters   map[int]*regexp.Regexp // Filter patterns: key is the column index, value - regexp pattern
-	Refresh   time.Duration          // Number of seconds between update view.
-	ShowExtra int                    // Specifies extra stats should be enabled on the view.
+	Name               string                 // View name
+	MinRequiredVersion int                    // Minimum required Postgres version
+	QueryTmpl          string                 // Query template used for making particular query.
+	Query              string                 // Query based on template and runtime options.
+	DiffIntvl          [2]int                 // Columns interval for diff
+	Cols               []string               // Columns names
+	Ncols              int                    // Number of columns returned by query, used as a right border for OrderKey
+	OrderKey           int                    // Index of column used for order
+	OrderDesc          bool                   // Order direction: descending (true) or ascending (false)
+	UniqueKey          int                    // index of column used as unique key when comparing rows during diffs, by default it's zero which is OK in almost all views
+	ColsWidth          map[int]int            // Width used for columns and control an aligning
+	Aligned            bool                   // Flag shows aligning is calculated or not
+	Msg                string                 // Show this text in Cmdline when switching to this view
+	Filters            map[int]*regexp.Regexp // Filter patterns: key is the column index, value - regexp pattern
+	Refresh            time.Duration          // Number of seconds between update view.
+	ShowExtra          int                    // Specifies extra stats should be enabled on the view.
 }
 
 // Views is a list of all used context units.
@@ -169,71 +170,77 @@ func New() Views {
 			Filters:   map[int]*regexp.Regexp{},
 		},
 		"statements_wal": {
-			Name:      "statements_wal",
-			QueryTmpl: query.PgStatStatementsWalDefault,
-			DiffIntvl: [2]int{3, 6},
-			Ncols:     9,
-			OrderKey:  0,
-			OrderDesc: true,
-			UniqueKey: 7,
-			ColsWidth: map[int]int{},
-			Msg:       "Show statements WAL statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "statements_wal",
+			MinRequiredVersion: query.PostgresV13,
+			QueryTmpl:          query.PgStatStatementsWalDefault,
+			DiffIntvl:          [2]int{3, 6},
+			Ncols:              9,
+			OrderKey:           0,
+			OrderDesc:          true,
+			UniqueKey:          7,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show statements WAL statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"progress_vacuum": {
-			Name:      "progress_vacuum",
-			QueryTmpl: query.PgStatProgressVacuumDefault,
-			DiffIntvl: [2]int{10, 11},
-			Ncols:     13,
-			OrderKey:  0,
-			OrderDesc: true,
-			ColsWidth: map[int]int{},
-			Msg:       "Show vacuum progress statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "progress_vacuum",
+			MinRequiredVersion: query.PostgresV96,
+			QueryTmpl:          query.PgStatProgressVacuumDefault,
+			DiffIntvl:          [2]int{10, 11},
+			Ncols:              13,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show vacuum progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"progress_cluster": {
-			Name:      "progress_cluster",
-			QueryTmpl: query.PgStatProgressClusterDefault,
-			DiffIntvl: [2]int{10, 11},
-			Ncols:     13,
-			OrderKey:  0,
-			OrderDesc: true,
-			ColsWidth: map[int]int{},
-			Msg:       "Show cluster/vacuum full progress statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "progress_cluster",
+			MinRequiredVersion: query.PostgresV12,
+			QueryTmpl:          query.PgStatProgressClusterDefault,
+			DiffIntvl:          [2]int{10, 11},
+			Ncols:              13,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show cluster/vacuum full progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"progress_index": {
-			Name:      "progress_index",
-			QueryTmpl: query.PgStatProgressCreateIndexDefault,
-			DiffIntvl: [2]int{0, 0},
-			Ncols:     14,
-			OrderKey:  0,
-			OrderDesc: true,
-			ColsWidth: map[int]int{},
-			Msg:       "Show create index/reindex progress statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "progress_index",
+			MinRequiredVersion: query.PostgresV12,
+			QueryTmpl:          query.PgStatProgressCreateIndexDefault,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              14,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show create index/reindex progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"progress_analyze": {
-			Name:      "progress_analyze",
-			QueryTmpl: query.PgStatProgressAnalyzeDefault,
-			DiffIntvl: [2]int{0, 0},
-			Ncols:     12,
-			OrderKey:  0,
-			OrderDesc: true,
-			ColsWidth: map[int]int{},
-			Msg:       "Show analyze progress statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "progress_analyze",
+			MinRequiredVersion: query.PostgresV13,
+			QueryTmpl:          query.PgStatProgressAnalyzeDefault,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              12,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show analyze progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"progress_basebackup": {
-			Name:      "progress_basebackup",
-			QueryTmpl: query.PgStatProgressBasebackupDefault,
-			DiffIntvl: [2]int{9, 9},
-			Ncols:     11,
-			OrderKey:  0,
-			OrderDesc: true,
-			ColsWidth: map[int]int{},
-			Msg:       "Show basebackup progress statistics",
-			Filters:   map[int]*regexp.Regexp{},
+			Name:               "progress_basebackup",
+			MinRequiredVersion: query.PostgresV13,
+			QueryTmpl:          query.PgStatProgressBasebackupDefault,
+			DiffIntvl:          [2]int{9, 9},
+			Ncols:              11,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show basebackup progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 	}
 }
@@ -274,4 +281,9 @@ func (v Views) Configure(opts query.Options) error {
 	}
 
 	return nil
+}
+
+// VersionOK tests current version of Postgres is suitable for view.
+func (v View) VersionOK(version int) bool {
+	return version >= v.MinRequiredVersion
 }

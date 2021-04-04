@@ -1,4 +1,6 @@
 pgcenter (devel) unstable; urgency=low
+  * top: avoid generating Postgres errors if requested stats is not supported by Postgres
+  * record: skip collecting stats if this stats is not supported by Postgres
   * add 'apk' package format
   * use '/usr/bin' instead of '/usr/local/bin' when installing from rpm/deb packages
   * top: add filesystem stats screen
