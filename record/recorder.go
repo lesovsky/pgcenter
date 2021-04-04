@@ -103,8 +103,6 @@ func (c *tarRecorder) collect(dbConfig postgres.Config, views view.Views) (map[s
 		res, err := stat.NewPGresultQuery(db, v.Query)
 		if err != nil {
 			return nil, err
-			//fmt.Printf("WARN: %s; skip collecting %s\n", err.Error(), v.Name)
-			//continue
 		}
 
 		stats[k] = res
