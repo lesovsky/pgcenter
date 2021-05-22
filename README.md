@@ -81,6 +81,11 @@ Fore development and testing purposes, see development [notes](doc/development.m
 - it is possible to run pgCenter on one host and connect to Postgres which runs on another host, but some functions may not work - this fully applies to `pgcenter top` command.
 - pgCenter also supports Amazon RDS for PostgreSQL, but as mentioned above, some functions will not work and also system stats will not be available, because of PostgreSQL RDS instances don't support untrusted procedural languages due to security reasons.
 
+#### Contribution
+- PR's are welcome.
+- Ideas could be proposed [here](https://github.com/lesovsky/pgcenter/discussions).
+- About grammar issues or typos let me know [here](https://github.com/lesovsky/pgcenter/discussions/92).
+
 #### Development and testing
 The following notes are important for people who interested in developing new features.
 - pgcenter goes with special docker [image](https://hub.docker.com/repository/docker/lesovsky/pgcenter-testing) used for local and CI/CD testing. See [testing](./testing) directory for details.
