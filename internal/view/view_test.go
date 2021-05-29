@@ -104,8 +104,8 @@ func TestViews_Configure(t *testing.T) {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
 			assert.Equal(t, query.PgStatDatabasePG11, views["databases"].QueryTmpl)
-			assert.Equal(t, 17, views["databases"].Ncols)
-			assert.Equal(t, [2]int{1, 15}, views["databases"].DiffIntvl)
+			assert.Equal(t, 18, views["databases"].Ncols)
+			assert.Equal(t, [2]int{2, 16}, views["databases"].DiffIntvl)
 		case 90600:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplication96Extended, views["replication"].QueryTmpl)

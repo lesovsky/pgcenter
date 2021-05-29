@@ -228,51 +228,51 @@ func Test_isFilenameTimestampOK(t *testing.T) {
 
 func Test_countDiff(t *testing.T) {
 	prev := stat.PGresult{
-		Valid: true, Ncols: 18, Nrows: 1,
+		Valid: true, Ncols: 19, Nrows: 1,
 		Cols: []string{
-			"datname", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
 			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
 		},
 		Values: [][]sql.NullString{
 			{
-				{String: "example_db", Valid: true}, {String: "1000", Valid: true}, {String: "10", Valid: true}, {String: "4000", Valid: true},
-				{String: "20000", Valid: true}, {String: "2000", Valid: true}, {String: "6000", Valid: true}, {String: "8000", Valid: true},
-				{String: "12000", Valid: true}, {String: "3000", Valid: true}, {String: "50", Valid: true}, {String: "60", Valid: true},
-				{String: "0", Valid: true}, {String: "100", Valid: true}, {String: "50000", Valid: true}, {String: "500", Valid: true},
-				{String: "5", Valid: true}, {String: "11 days 10:10:10", Valid: true},
+				{String: "example_db", Valid: true}, {String: "15", Valid: true}, {String: "1000", Valid: true}, {String: "10", Valid: true},
+				{String: "4000", Valid: true}, {String: "20000", Valid: true}, {String: "2000", Valid: true}, {String: "6000", Valid: true},
+				{String: "8000", Valid: true}, {String: "12000", Valid: true}, {String: "3000", Valid: true}, {String: "50", Valid: true},
+				{String: "60", Valid: true}, {String: "0", Valid: true}, {String: "100", Valid: true}, {String: "50000", Valid: true},
+				{String: "500", Valid: true}, {String: "5", Valid: true}, {String: "11 days 10:10:10", Valid: true},
 			},
 		},
 	}
 	curr := stat.PGresult{
-		Valid: true, Ncols: 18, Nrows: 1,
+		Valid: true, Ncols: 19, Nrows: 1,
 		Cols: []string{
-			"datname", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
 			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
 		},
 		Values: [][]sql.NullString{
 			{
-				{String: "example_db", Valid: true}, {String: "1500", Valid: true}, {String: "15", Valid: true}, {String: "6000", Valid: true},
-				{String: "30000", Valid: true}, {String: "3000", Valid: true}, {String: "9000", Valid: true}, {String: "12000", Valid: true},
-				{String: "18000", Valid: true}, {String: "4500", Valid: true}, {String: "75", Valid: true}, {String: "90", Valid: true},
-				{String: "1", Valid: true}, {String: "150", Valid: true}, {String: "75000", Valid: true}, {String: "750", Valid: true},
-				{String: "8", Valid: true}, {String: "11 days 10:10:11", Valid: true},
+				{String: "example_db", Valid: true}, {String: "11", Valid: true}, {String: "1500", Valid: true}, {String: "15", Valid: true},
+				{String: "6000", Valid: true}, {String: "30000", Valid: true}, {String: "3000", Valid: true}, {String: "9000", Valid: true},
+				{String: "12000", Valid: true}, {String: "18000", Valid: true}, {String: "4500", Valid: true}, {String: "75", Valid: true},
+				{String: "90", Valid: true}, {String: "1", Valid: true}, {String: "150", Valid: true}, {String: "75000", Valid: true},
+				{String: "750", Valid: true}, {String: "8", Valid: true}, {String: "11 days 10:10:11", Valid: true},
 			},
 		},
 	}
 
 	want := stat.PGresult{
-		Valid: true, Ncols: 18, Nrows: 1,
+		Valid: true, Ncols: 19, Nrows: 1,
 		Cols: []string{
-			"datname", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
 			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
 		},
 		Values: [][]sql.NullString{
 			{
-				{String: "example_db", Valid: true}, {String: "500", Valid: true}, {String: "5", Valid: true}, {String: "2000", Valid: true},
-				{String: "10000", Valid: true}, {String: "1000", Valid: true}, {String: "3000", Valid: true}, {String: "4000", Valid: true},
-				{String: "6000", Valid: true}, {String: "1500", Valid: true}, {String: "25", Valid: true}, {String: "30", Valid: true},
-				{String: "1", Valid: true}, {String: "50", Valid: true}, {String: "25000", Valid: true}, {String: "250", Valid: true},
-				{String: "3", Valid: true}, {String: "11 days 10:10:11", Valid: true},
+				{String: "example_db", Valid: true}, {String: "11", Valid: true}, {String: "500", Valid: true}, {String: "5", Valid: true},
+				{String: "2000", Valid: true}, {String: "10000", Valid: true}, {String: "1000", Valid: true}, {String: "3000", Valid: true},
+				{String: "4000", Valid: true}, {String: "6000", Valid: true}, {String: "1500", Valid: true}, {String: "25", Valid: true},
+				{String: "30", Valid: true}, {String: "1", Valid: true}, {String: "50", Valid: true}, {String: "25000", Valid: true},
+				{String: "250", Valid: true}, {String: "3", Valid: true}, {String: "11 days 10:10:11", Valid: true},
 			},
 		},
 	}

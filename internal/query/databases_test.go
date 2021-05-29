@@ -14,12 +14,12 @@ func TestSelectStatDatabaseQuery(t *testing.T) {
 		wantN   int
 		wantD   [2]int
 	}{
-		{version: 90500, wantQ: PgStatDatabasePG11, wantN: 17, wantD: [2]int{1, 15}},
-		{version: 90600, wantQ: PgStatDatabasePG11, wantN: 17, wantD: [2]int{1, 15}},
-		{version: 100000, wantQ: PgStatDatabasePG11, wantN: 17, wantD: [2]int{1, 15}},
-		{version: 110000, wantQ: PgStatDatabasePG11, wantN: 17, wantD: [2]int{1, 15}},
-		{version: 120000, wantQ: PgStatDatabaseDefault, wantN: 18, wantD: [2]int{1, 16}},
-		{version: 130000, wantQ: PgStatDatabaseDefault, wantN: 18, wantD: [2]int{1, 16}},
+		{version: 90500, wantQ: PgStatDatabasePG11, wantN: 18, wantD: [2]int{2, 16}},
+		{version: 90600, wantQ: PgStatDatabasePG11, wantN: 18, wantD: [2]int{2, 16}},
+		{version: 100000, wantQ: PgStatDatabasePG11, wantN: 18, wantD: [2]int{2, 16}},
+		{version: 110000, wantQ: PgStatDatabasePG11, wantN: 18, wantD: [2]int{2, 16}},
+		{version: 120000, wantQ: PgStatDatabaseDefault, wantN: 19, wantD: [2]int{2, 17}},
+		{version: 130000, wantQ: PgStatDatabaseDefault, wantN: 19, wantD: [2]int{2, 17}},
 	}
 
 	for _, tc := range testcases {

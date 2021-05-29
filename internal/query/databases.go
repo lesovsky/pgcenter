@@ -2,8 +2,7 @@ package query
 
 const (
 	// PgStatDatabaseDefault is the default query for getting databases' stats from pg_stat_database view
-	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQueryDefault, DiffIntvl: [2]int{1,16}, Ncols: 18, OrderKey: 0, OrderDesc: true }
-	PgStatDatabaseDefault = "SELECT datname, " +
+	PgStatDatabaseDefault = "SELECT datname, numbackends AS backends, " +
 		"coalesce(xact_commit, 0) AS commits, coalesce(xact_rollback, 0) AS rollbacks, " +
 		"coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads, " +
 		"coalesce(blks_hit, 0) AS hits, coalesce(tup_returned, 0) AS returned, " +
@@ -17,8 +16,7 @@ const (
 		"FROM pg_stat_database ORDER BY datname DESC"
 
 	// PgStatDatabasePG11 is the query for getting databases' stats from pg_stat_database view for versions 11 and older.
-	// { Name: "pg_stat_database", Query: common.PgStatDatabaseQuery11, DiffIntvl: [2]int{1,15}, Ncols: 17, OrderKey: 0, OrderDesc: true }
-	PgStatDatabasePG11 = "SELECT datname, " +
+	PgStatDatabasePG11 = "SELECT datname, numbackends AS backends, " +
 		"coalesce(xact_commit, 0) AS commits, coalesce(xact_rollback, 0) AS rollbacks, " +
 		"coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads, " +
 		"coalesce(blks_hit, 0) AS hits, coalesce(tup_returned, 0) AS returned, " +
@@ -36,8 +34,8 @@ const (
 func SelectStatDatabaseQuery(version int) (string, int, [2]int) {
 	switch {
 	case version < 120000:
-		return PgStatDatabasePG11, 17, [2]int{1, 15}
+		return PgStatDatabasePG11, 18, [2]int{2, 16}
 	default:
-		return PgStatDatabaseDefault, 18, [2]int{1, 16}
+		return PgStatDatabaseDefault, 19, [2]int{2, 17}
 	}
 }

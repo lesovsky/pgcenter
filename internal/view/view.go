@@ -57,7 +57,7 @@ func New() Views {
 		"databases": {
 			Name:      "databases",
 			QueryTmpl: query.PgStatDatabaseDefault,
-			DiffIntvl: [2]int{1, 16},
+			DiffIntvl: [2]int{2, 17},
 			Ncols:     18,
 			OrderKey:  0,
 			OrderDesc: true,
