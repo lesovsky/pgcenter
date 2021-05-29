@@ -10,6 +10,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 )
 
@@ -73,7 +74,7 @@ func (app *app) setup() error {
 	// Create and configure stats views depending on running Postgres.
 	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, app.config.StringLimit, props.ExtPGSSSchema)
 
-	n, views := filterViews(props.VersionNum, view.New())
+	n, views := filterViews(props.VersionNum, props.ExtPGSSSchema, view.New())
 	if n > 0 {
 		fmt.Println("INFO: some statistics is not supported by the current version of Postgres and will be skipped")
 	}
@@ -144,14 +145,28 @@ func (app *app) record(doQuit chan os.Signal) error {
 	return nil
 }
 
-// filterViews removes views which are not suitable for specified version.
-func filterViews(version int, views view.Views) (int, view.Views) {
+// filterViews removes views which are not suitable for specified version and used configuration.
+func filterViews(version int, pgssSchema string, views view.Views) (int, view.Views) {
 	var filtered int
+	var pgssNotfound bool
+
 	for k, v := range views {
 		if !v.VersionOK(version) {
 			delete(views, k)
 			filtered++
+			continue
 		}
+
+		// Skip statements views if schema, where pg_stat_statements is installed, not found.
+		if strings.HasPrefix(k, "statements_") && pgssSchema == "" {
+			delete(views, k)
+			filtered++
+			pgssNotfound = true
+		}
+	}
+
+	if pgssNotfound {
+		fmt.Println("INFO: pg_stat_statements not found, skip recording it")
 	}
 
 	return filtered, views
