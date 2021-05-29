@@ -14,6 +14,7 @@ const (
 	PostgresV11 = 110000
 	PostgresV12 = 120000
 	PostgresV13 = 130000
+	PostgresV14 = 140000
 )
 
 // Options contains queries' settings that used depending on user preferences.

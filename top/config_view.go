@@ -158,6 +158,8 @@ func progressNextView(current string) string {
 	case "progress_analyze":
 		next = "progress_basebackup"
 	case "progress_basebackup":
+		next = "progress_copy"
+	case "progress_copy":
 		next = "progress_vacuum"
 	default:
 		next = "progress_vacuum"

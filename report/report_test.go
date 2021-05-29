@@ -113,6 +113,11 @@ func Test_app_doReport(t *testing.T) {
 			config:   Config{ReportType: "progress_basebackup", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_basebackup.golden",
 		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "progress_copy", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_progress_copy.golden",
+		},
 		{ // start, end times within report interval
 			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
 			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
@@ -479,6 +484,9 @@ func Test_describeReport(t *testing.T) {
 		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
 		{report: "progress_cluster", want: pgStatProgressClusterDescription},
 		{report: "progress_index", want: pgStatProgressCreateIndexDescription},
+		{report: "progress_analyze", want: pgStatProgressAnalyzeDescription},
+		{report: "progress_basebackup", want: pgStatProgressBasebackupDescription},
+		{report: "progress_copy", want: pgStatProgressCopyDescription},
 		{report: "statements_timings", want: pgStatStatementsTimingsDescription},
 		{report: "statements_general", want: pgStatStatementsGeneralDescription},
 		{report: "statements_io", want: pgStatStatementsIODescription},

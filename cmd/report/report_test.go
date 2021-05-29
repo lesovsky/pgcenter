@@ -54,6 +54,7 @@ func Test_selectReport(t *testing.T) {
 		{opts: options{showProgress: "i"}, want: "progress_index"},
 		{opts: options{showProgress: "a"}, want: "progress_analyze"},
 		{opts: options{showProgress: "b"}, want: "progress_basebackup"},
+		{opts: options{showProgress: "y"}, want: "progress_copy"},
 		{opts: options{}, want: ""},
 	}
 

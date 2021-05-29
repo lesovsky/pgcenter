@@ -289,6 +289,30 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#BASEBACKUP-PROGRESS-REPORTING
 `
 
+	// pgStatProgressCopyDescription is the detailed description of pg_stat_progress_copy view
+	pgStatProgressCopyDescription = `Statistics about progress of COPY operations performed, based on pg_stat_progress_copy view:
+
+  column		origin				description
+- pid			pid				Process ID of this worker
+- xact_age*		xact_start			Current transaction's duration if active
+- datname		datname				Name of the database this worker is connected to
+- relation		relid				Name of the relation which is processed by this worker
+- state			state				Current overall state of this worker
+- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- command		command				The command that is running: COPY FROM, or COPY TO
+- type			type				The io type that the data is read from or written to: FILE, PROGRAM, PIPE or CALLBACK
+- relation_size_kb        				Size of the table, without metadata and indexes, in kB
+- total_kb		bytes_total			Size of source file for COPY FROM command in bytes. It is set to 0 if not available
+- processed_kb		bytes_processed			Number of bytes already processed by COPY command
+- processed_%*		bytes_total,bytes_processed	Ratio of processed data accordingly to sizeof source file, if available
+- tuples_processed	tuples_processed		Number of tuples already processed by COPY command
+- tuples_excluded	tuples_excluded			Number of tuples not processed because they were excluded by the WHERE clause of the COPY command
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/progress-reporting.html#COPY-PROGRESS-REPORTING
+`
+
 	// pgStatStatementsTimingsDescription is the detailed description of pg_stat_statements section about timing stats
 	pgStatStatementsTimingsDescription = `Statements timing statistics based on pg_stat_statements:
 

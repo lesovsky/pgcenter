@@ -8,7 +8,7 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 18, len(v)) // 18 is the total number of views have to be returned
+	assert.Equal(t, 19, len(v)) // 19 is the total number of views have to be returned
 }
 
 func TestViews_Configure(t *testing.T) {
@@ -18,6 +18,15 @@ func TestViews_Configure(t *testing.T) {
 		trackCommit string
 		querylen    int
 	}{
+		// v14 matrix
+		//{version: 140000, recovery: "f", trackCommit: "on", querylen: 256},
+		//{version: 140000, recovery: "f", trackCommit: "on", querylen: 0},
+		//{version: 140000, recovery: "f", trackCommit: "off", querylen: 256},
+		//{version: 140000, recovery: "f", trackCommit: "off", querylen: 0},
+		//{version: 140000, recovery: "t", trackCommit: "on", querylen: 256},
+		//{version: 140000, recovery: "t", trackCommit: "on", querylen: 0},
+		//{version: 140000, recovery: "t", trackCommit: "off", querylen: 256},
+		//{version: 140000, recovery: "t", trackCommit: "off", querylen: 0},
 		// v13 matrix
 		{version: 130000, recovery: "f", trackCommit: "on", querylen: 256},
 		{version: 130000, recovery: "f", trackCommit: "on", querylen: 0},

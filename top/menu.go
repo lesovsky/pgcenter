@@ -58,6 +58,7 @@ func selectMenuStyle(t menuType) menuStyle {
 				" pg_stat_progress_create_index",
 				" pg_stat_progress_analyze",
 				" pg_stat_progress_basebackup",
+				" pg_stat_progress_copy",
 			},
 		}
 	case menuConf:
@@ -151,6 +152,8 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 				viewSwitchHandler(app.config, "progress_analyze")
 			case 4:
 				viewSwitchHandler(app.config, "progress_basebackup")
+			case 5:
+				viewSwitchHandler(app.config, "progress_copy")
 			default:
 				viewSwitchHandler(app.config, "progress_vacuum")
 			}

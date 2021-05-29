@@ -206,6 +206,18 @@ func New() Views {
 			Msg:                "Show cluster/vacuum full progress statistics",
 			Filters:            map[int]*regexp.Regexp{},
 		},
+		"progress_copy": {
+			Name:               "progress_copy",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatProgressCopyDefault,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              14,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show COPY progress statistics",
+			Filters:            map[int]*regexp.Regexp{},
+		},
 		"progress_index": {
 			Name:               "progress_index",
 			MinRequiredVersion: query.PostgresV12,

@@ -220,7 +220,8 @@ func Test_switchViewTo(t *testing.T) {
 		{current: "progress_cluster", to: "progress", want: "progress_index"},
 		{current: "progress_index", to: "progress", want: "progress_analyze"},
 		{current: "progress_analyze", to: "progress", want: "progress_basebackup"},
-		{current: "progress_basebackup", to: "progress", want: "progress_vacuum"},
+		{current: "progress_basebackup", to: "progress", want: "progress_copy"},
+		{current: "progress_copy", to: "progress", want: "progress_vacuum"},
 	}
 
 	wg := sync.WaitGroup{}
@@ -280,7 +281,8 @@ func Test_progressNextView(t *testing.T) {
 		{current: "progress_cluster", want: "progress_index"},
 		{current: "progress_index", want: "progress_analyze"},
 		{current: "progress_analyze", want: "progress_basebackup"},
-		{current: "progress_basebackup", want: "progress_vacuum"},
+		{current: "progress_basebackup", want: "progress_copy"},
+		{current: "progress_copy", want: "progress_vacuum"},
 		{current: "unknown", want: "progress_vacuum"},
 	}
 

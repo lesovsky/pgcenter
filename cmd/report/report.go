@@ -170,6 +170,8 @@ func selectReport(opts options) string {
 			return "progress_analyze"
 		case "b":
 			return "progress_basebackup"
+		case "y":
+			return "progress_copy"
 		}
 	}
 

@@ -102,11 +102,12 @@ func Test_filterViews(t *testing.T) {
 		wantN      int
 		wantV      int
 	}{
-		{version: 130000, pgssSchema: "", wantN: 6, wantV: 12},
-		{version: 130000, pgssSchema: "public", wantN: 0, wantV: 18},
-		{version: 120000, pgssSchema: "public", wantN: 3, wantV: 15},
-		{version: 110000, pgssSchema: "public", wantN: 5, wantV: 13},
-		{version: 100000, pgssSchema: "public", wantN: 5, wantV: 13},
+		{version: 140000, pgssSchema: "", wantN: 6, wantV: 13},
+		{version: 140000, pgssSchema: "public", wantN: 0, wantV: 19},
+		{version: 130000, pgssSchema: "public", wantN: 1, wantV: 18},
+		{version: 120000, pgssSchema: "public", wantN: 4, wantV: 15},
+		{version: 110000, pgssSchema: "public", wantN: 6, wantV: 13},
+		{version: 100000, pgssSchema: "public", wantN: 6, wantV: 13},
 	}
 
 	for _, tc := range testcases {
