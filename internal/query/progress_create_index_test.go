@@ -8,7 +8,7 @@ import (
 )
 
 func Test_StatProgressCreateIndexQueries(t *testing.T) {
-	versions := []int{120000, 130000}
+	versions := []int{120000, 130000, 140000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_progress_create_index/%d", version), func(t *testing.T) {

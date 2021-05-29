@@ -8,7 +8,7 @@ import (
 )
 
 func Test_StatProgressAnalyzeQueries(t *testing.T) {
-	versions := []int{130000}
+	versions := []int{140000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_progress_analyze/%d", version), func(t *testing.T) {

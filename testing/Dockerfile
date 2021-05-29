@@ -1,4 +1,5 @@
 # lesovsky/pgcenter-testing
+# __release_tag__ postgres 14 beta was released 2021-05-20
 # __release_tag__ postgres 13.1 was released 2020-12-03
 # __release_tag__ postgres 12.5 was released 2020-12-03
 # __release_tag__ postgres 11.10 was released 2020-12-03
@@ -10,7 +11,7 @@
 # __release_tag__ gosec v2.6.1 was released 2021-01-22
 FROM ubuntu:20.04
 
-LABEL version="v0.0.3"
+LABEL version="v0.0.4"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -21,10 +22,10 @@ RUN apt-get update && \
     locale-gen && \
     curl -s https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /tmp/ACCC4CF8.asc && \
     apt-key add /tmp/ACCC4CF8.asc && \
-    echo "deb http://apt.postgresql.org/pub/repos/apt focal-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    echo "deb http://apt.postgresql.org/pub/repos/apt focal-pgdg main 14" > /etc/apt/sources.list.d/pgdg.list && \
     apt-get update && \
-    apt-get install -y postgresql-9.5 postgresql-9.6 postgresql-10 postgresql-11 postgresql-12 postgresql-13 \
-        postgresql-plperl-9.5 postgresql-plperl-9.6 postgresql-plperl-10 postgresql-plperl-11 postgresql-plperl-12 postgresql-plperl-13 \
+    apt-get install -y postgresql-9.5 postgresql-9.6 postgresql-10 postgresql-11 postgresql-12 postgresql-13 postgresql-14 \
+        postgresql-plperl-9.5 postgresql-plperl-9.6 postgresql-plperl-10 postgresql-plperl-11 postgresql-plperl-12 postgresql-plperl-13 postgresql-plperl-14\
         libfilesys-df-perl && \
     cpan Module::Build && \
     cpan Linux::Ethtool::Settings && \
@@ -43,4 +44,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing v0.0.3"]
+CMD ["echo", "I'm pgcenter-testing v0.0.4"]

@@ -61,7 +61,7 @@ func TestSelectActivityStatementsQuery(t *testing.T) {
 }
 
 func Test_CommonQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000}
 
 	queries := []struct {
 		query string

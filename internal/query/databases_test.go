@@ -31,7 +31,7 @@ func TestSelectStatDatabaseQuery(t *testing.T) {
 }
 
 func Test_StatDatabaseQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_database/%d", version), func(t *testing.T) {

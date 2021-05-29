@@ -27,7 +27,7 @@ func TestSelectStatStatementsTimingQuery(t *testing.T) {
 }
 
 func Test_StatStatementsQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000}
 
 	queries := []string{
 		PgStatStatementsGeneralDefault,
@@ -109,7 +109,7 @@ func TestSelectQueryReportQuery(t *testing.T) {
 }
 
 func Test_StatStatementsReportQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000}
 
 	for _, version := range versions {
 		tmpl := SelectQueryReportQuery(version)
