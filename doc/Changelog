@@ -1,4 +1,6 @@
-pgcenter (devel) unstable; urgency=low
+pgcenter (master) unstable; urgency=low
+  * add support of pg_stat_progress_copy (Postgres 14)
+  * add support of pg_stat_database.numbackends
   * top: avoid generating Postgres errors if requested stats is not supported by Postgres
   * record: skip collecting stats if this stats is not supported by Postgres
   * add 'apk' package format
