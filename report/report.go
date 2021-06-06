@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -88,17 +89,47 @@ func newApp(config Config) *app {
 	}
 }
 
+// data defines unit of stats portion transmitted through channel from reader to reporter.
+type data struct {
+	ts  time.Time
+	res stat.PGresult
+}
+
 // Read statistics file and create a report based on report settings
 func (app *app) doReport(r *tar.Reader) error {
-	var prevStat stat.PGresult
-	var prevTs time.Time
-	var linesPrinted = repeatHeaderAfter // initial value means print header at the beginning of all output
-	var orderConfigured = false          // flag tells about order is not configured.
-
 	c := app.config
 	v := app.view
 
-	// read files headers continuously, read stats files requested by user and skip others.
+	dataCh := make(chan data)
+	doneCh := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		err := reader(r, c, dataCh, doneCh)
+		if err != nil {
+			fmt.Println(err)
+		}
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		err := reporter(app, v, c, dataCh, doneCh)
+		if err != nil {
+			fmt.Println(err)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+	return nil
+}
+
+// reader reads stats from tar stream, and send it to data channel.
+func reader(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{}) error {
+	var statOK bool
+
 	for {
 		hdr, err := r.Next()
 		if err == io.EOF {
@@ -108,14 +139,23 @@ func (app *app) doReport(r *tar.Reader) error {
 		}
 
 		// Check filename - it has valid format and corresponds to requested report type.
-		err = isFilenameOK(hdr.Name, c.ReportType)
+		err = isFilenameOK(hdr.Name, config.ReportType)
 		if err != nil {
 			continue
 		}
 
 		// Check timestamp in filename, is it correct and is in requested report interval.
-		ts, err := isFilenameTimestampOK(hdr.Name, c.TsStart, c.TsEnd)
+		ts, err := isFilenameTimestampOK(hdr.Name, config.TsStart, config.TsEnd)
 		if err != nil {
+			continue
+		}
+
+		if strings.HasPrefix(hdr.Name, "meta.") {
+			//currMeta, err := createOrUpdateMeta(r, hdr.Size)
+			//if err != nil {
+			//	return err
+			//}
+			//metaOK = true
 			continue
 		}
 
@@ -124,79 +164,111 @@ func (app *app) doReport(r *tar.Reader) error {
 		if err != nil {
 			return err
 		}
+		statOK = true
 
-		// if previous stats snapshot is not defined, copy current to previous.
-		// Usually this occurs when reading first stat sample at startup.
-		if !prevStat.Valid {
-			prevStat = currStat
-			prevTs = ts
+		//
+		if !statOK {
 			continue
 		}
 
-		// Calculate time interval.
-		interval := ts.Sub(prevTs)
-		if c.Rate > interval {
-			_, err := fmt.Fprintf(
-				app.writer,
-				"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s\n",
-				interval.String(),
-			)
+		// Send stats and reset flags.
+
+		dataCh <- data{ts: ts, res: currStat}
+
+		statOK = false
+
+	} //end for
+
+	doneCh <- struct{}{}
+
+	return nil
+}
+
+// reporter receives stats from data channel and print it.
+func reporter(app *app, v view.View, config Config, dataCh chan data, doneCh chan struct{}) error {
+	var prevStat stat.PGresult
+	var prevTs time.Time
+	linesPrinted := repeatHeaderAfter // initial value means print header at the beginning of all output
+	orderConfigured := false          // flag tells about order is not configured.
+
+	// waiting for stats, or message about reader is done
+	for {
+		select {
+		case d := <-dataCh:
+			// If previous stats snapshot is not defined, copy current to previous.
+			// Usually this occurs when reading first stat sample at startup.
+			if !prevStat.Valid {
+				prevStat = d.res
+				prevTs = d.ts
+				continue
+			}
+
+			// Calculate time interval.
+			interval := d.ts.Sub(prevTs)
+			if config.Rate > interval {
+				_, err := fmt.Fprintf(
+					app.writer,
+					"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s\n",
+					interval.String(),
+				)
+				if err != nil {
+					return err
+				}
+				config.Rate = interval
+			}
+
+			// When first data read, list of columns is known and it is possible to set up order.
+			if config.OrderColName != "" && !orderConfigured {
+				if idx, ok := getColumnIndex(d.res.Cols, config.OrderColName); ok {
+					v.OrderKey = idx
+					v.OrderDesc = config.OrderDesc
+					orderConfigured = true
+				}
+			}
+
+			// Calculate delta between current and previous stats snapshots.
+			diffStat, err := countDiff(d.res, prevStat, int(interval/config.Rate), v)
 			if err != nil {
 				return err
 			}
-			c.Rate = interval
-		}
 
-		// When first data read, list of columns is known and it is possible to set up order.
-		if c.OrderColName != "" && !orderConfigured {
-			if idx, ok := getColumnIndex(currStat.Cols, c.OrderColName); ok {
-				v.OrderKey = idx
-				v.OrderDesc = c.OrderDesc
-				orderConfigured = true
+			// Format the stat
+			formatStatSample(&diffStat, &v, config)
+
+			// print header after every Nth lines
+			linesPrinted, err = printStatHeader(app.writer, linesPrinted, v)
+			if err != nil {
+				return err
 			}
+
+			// print the stats - calculated delta between previous and current stats snapshots
+			n, err := printStatSample(app.writer, &diffStat, v, config, d.ts)
+			if err != nil {
+				return err
+			}
+			linesPrinted += n
+
+			// Swap previous with current
+			prevStat = d.res
+			prevTs = d.ts
+		case <-doneCh:
+			close(dataCh)
+			return nil
 		}
-
-		// Calculate delta between current and previous stats snapshots.
-		diffStat, err := countDiff(currStat, prevStat, int(interval/c.Rate), v)
-		if err != nil {
-			return err
-		}
-
-		// Format the stat
-		formatStatSample(&diffStat, &v, c)
-
-		// print header after every Nth lines
-		linesPrinted, err = printStatHeader(app.writer, linesPrinted, v)
-		if err != nil {
-			return err
-		}
-
-		// print the stats - calculated delta between previous and current stats snapshots
-		n, err := printStatSample(app.writer, &diffStat, v, c, ts)
-		if err != nil {
-			return err
-		}
-		linesPrinted += n
-
-		// Swap previous with current
-		prevStat = currStat
-		prevTs = ts
-	} //end for
-
-	return nil
+	}
 }
 
 // isFilenameOK checks filename format.
 func isFilenameOK(name string, report string) error {
 	s := strings.Split(name, ".")
 
-	// File name should be in the format: 'report_type.timestamp.json'
+	// File name should be in the format: 'report_type.timestamp.json'.
 	if len(s) != 3 {
 		return fmt.Errorf("bad file name format %s, skip", name)
 	}
 
-	// Is filename correspond to user-requested report?
-	if s[0] != report {
+	// Check the filename corresponds to user-requested report or metadata.
+	if s[0] != report && s[0] != "meta" {
 		return fmt.Errorf("skip sample")
 	}
 

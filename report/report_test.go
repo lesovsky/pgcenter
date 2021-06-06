@@ -184,6 +184,7 @@ func Test_isFilenameOK(t *testing.T) {
 		report string
 	}{
 		{valid: true, name: "databases.20210116T140630.json", report: "databases"},
+		{valid: true, name: "meta.20210116T140630.json", report: "databases"},
 		{valid: false, name: "databases.20210116T140630.json", report: "replication"},
 		{valid: false, name: "databases.json", report: "databases"},
 	}
