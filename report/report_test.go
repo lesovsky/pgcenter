@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sync"
 	"testing"
 	"time"
 )
@@ -174,6 +175,163 @@ func Test_app_doReport(t *testing.T) {
 		assert.NoError(t, err)
 
 		assert.Equal(t, string(want), buf.String())
+	}
+}
+
+func Test_readTar(t *testing.T) {
+	config := Config{
+		ReportType: "databases",
+		TsStart:    time.Date(2021, 01, 23, 00, 00, 00, 0, time.UTC),
+		TsEnd:      time.Date(2021, 01, 23, 23, 59, 59, 0, time.UTC),
+		TruncLimit: 32, Rate: 1 * time.Second}
+	f, err := os.Open("testdata/pgcenter.stat.golden.tar")
+	assert.NoError(t, err)
+	tr := tar.NewReader(f)
+
+	dataCh := make(chan data)
+	doneCh := make(chan struct{})
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		var count int
+		for {
+			select {
+			case <-dataCh:
+				count++
+			case <-doneCh:
+				assert.Equal(t, 10, count)
+				wg.Done()
+				break
+			}
+		}
+	}()
+
+	err = readTar(tr, config, dataCh, doneCh)
+	assert.NoError(t, err)
+
+	wg.Wait()
+
+	assert.NoError(t, f.Close())
+}
+
+func Test_processData(t *testing.T) {
+	prev := stat.PGresult{
+		Valid: true, Ncols: 19, Nrows: 1,
+		Cols: []string{
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
+		},
+		Values: [][]sql.NullString{
+			{
+				{String: "example_db", Valid: true}, {String: "15", Valid: true}, {String: "1000", Valid: true}, {String: "10", Valid: true},
+				{String: "4000", Valid: true}, {String: "20000", Valid: true}, {String: "2000", Valid: true}, {String: "6000", Valid: true},
+				{String: "8000", Valid: true}, {String: "12000", Valid: true}, {String: "3000", Valid: true}, {String: "50", Valid: true},
+				{String: "60", Valid: true}, {String: "0", Valid: true}, {String: "100", Valid: true}, {String: "50000", Valid: true},
+				{String: "500", Valid: true}, {String: "5", Valid: true}, {String: "11 days 10:10:10", Valid: true},
+			},
+		},
+	}
+	curr := stat.PGresult{
+		Valid: true, Ncols: 19, Nrows: 1,
+		Cols: []string{
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
+		},
+		Values: [][]sql.NullString{
+			{
+				{String: "example_db", Valid: true}, {String: "11", Valid: true}, {String: "1500", Valid: true}, {String: "15", Valid: true},
+				{String: "6000", Valid: true}, {String: "30000", Valid: true}, {String: "3000", Valid: true}, {String: "9000", Valid: true},
+				{String: "12000", Valid: true}, {String: "18000", Valid: true}, {String: "4500", Valid: true}, {String: "75", Valid: true},
+				{String: "90", Valid: true}, {String: "1", Valid: true}, {String: "150", Valid: true}, {String: "75000", Valid: true},
+				{String: "750", Valid: true}, {String: "8", Valid: true}, {String: "11 days 10:10:11", Valid: true},
+			},
+		},
+	}
+
+	config := Config{ReportType: "databases", TruncLimit: 32, Rate: 2 * time.Second, OrderColName: "datname"}
+	app := newApp(config)
+	var buf bytes.Buffer
+	app.writer = &buf
+
+	views := view.New()
+
+	dataCh := make(chan data)
+	doneCh := make(chan struct{})
+
+	go func() {
+		dataCh <- data{
+			ts:   time.Date(2021, 01, 01, 00, 00, 00, 0, time.UTC),
+			res:  prev,
+			meta: metadata{version: 140000},
+		}
+
+		dataCh <- data{
+			ts:   time.Date(2021, 01, 01, 00, 00, 01, 0, time.UTC),
+			res:  curr,
+			meta: metadata{version: 140000},
+		}
+
+		doneCh <- struct{}{}
+	}()
+
+	err := processData(app, views["activity"], config, dataCh, doneCh)
+	assert.NoError(t, err)
+
+	want, err := os.ReadFile("testdata/report_sample.golden")
+	assert.NoError(t, err)
+
+	assert.Equal(t, string(want), buf.String())
+}
+
+func Test_readMeta(t *testing.T) {
+	testcases := []struct {
+		valid bool
+		res   stat.PGresult
+		want  metadata
+	}{
+		{
+			valid: true,
+			res: stat.PGresult{
+				Values: [][]sql.NullString{
+					{
+						{String: "14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)", Valid: true}, {String: "140000", Valid: true},
+						{String: "off", Valid: true}, {String: "100", Valid: true}, {String: "3", Valid: true},
+						{String: "false", Valid: true}, {String: "1622828486655396e-6", Valid: true},
+					},
+				},
+				Cols:  []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "recovery", "start_time_unix"},
+				Ncols: 7, Nrows: 1, Valid: true,
+			},
+			want: metadata{version: 140000},
+		},
+		{
+			valid: false,
+			res: stat.PGresult{
+				Values: [][]sql.NullString{
+					{
+						{String: "14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)", Valid: true}, {String: "invalid", Valid: true},
+						{String: "off", Valid: true}, {String: "100", Valid: true}, {String: "3", Valid: true},
+						{String: "false", Valid: true}, {String: "1622828486655396e-6", Valid: true},
+					},
+				},
+				Cols:  []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "recovery", "start_time_unix"},
+				Ncols: 7, Nrows: 1, Valid: true,
+			},
+			want: metadata{version: 140000},
+		},
+		{valid: false, res: stat.PGresult{Ncols: 1, Nrows: 1, Valid: true}},
+		{valid: false, res: stat.PGresult{Ncols: 7, Nrows: 0, Valid: true}},
+	}
+
+	for _, tc := range testcases {
+		got, err := readMeta(tc.res)
+		if tc.valid {
+			assert.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		} else {
+			assert.Error(t, err)
+		}
 	}
 }
 

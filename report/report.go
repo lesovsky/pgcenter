@@ -4,11 +4,13 @@ import (
 	"archive/tar"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/align"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -89,10 +91,16 @@ func newApp(config Config) *app {
 	}
 }
 
-// data defines unit of stats portion transmitted through channel from reader to reporter.
+// metadata defines metadata of stats snapshot
+type metadata struct {
+	version int // version reflects Postgres version
+}
+
+// data defines unit of stats portion transmitted through channel from stats reader to stats processor.
 type data struct {
-	ts  time.Time
-	res stat.PGresult
+	ts   time.Time
+	res  stat.PGresult
+	meta metadata
 }
 
 // Read statistics file and create a report based on report settings
@@ -106,7 +114,7 @@ func (app *app) doReport(r *tar.Reader) error {
 
 	wg.Add(1)
 	go func() {
-		err := reader(r, c, dataCh, doneCh)
+		err := readTar(r, c, dataCh, doneCh)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -115,7 +123,7 @@ func (app *app) doReport(r *tar.Reader) error {
 
 	wg.Add(1)
 	go func() {
-		err := reporter(app, v, c, dataCh, doneCh)
+		err := processData(app, v, c, dataCh, doneCh)
 		if err != nil {
 			fmt.Println(err)
 		}
@@ -126,9 +134,12 @@ func (app *app) doReport(r *tar.Reader) error {
 	return nil
 }
 
-// reader reads stats from tar stream, and send it to data channel.
-func reader(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{}) error {
-	var statOK bool
+// readTar reads stats amd metadata from tar stream and send it to data channel.
+func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{}) error {
+	var metaOK, statOK bool
+	var meta metadata
+
+	defer func() { doneCh <- struct{}{} }()
 
 	for {
 		hdr, err := r.Next()
@@ -150,42 +161,47 @@ func reader(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{}
 			continue
 		}
 
+		// Read metadata from file.
 		if strings.HasPrefix(hdr.Name, "meta.") {
-			//currMeta, err := createOrUpdateMeta(r, hdr.Size)
-			//if err != nil {
-			//	return err
-			//}
-			//metaOK = true
+			res, err := stat.NewPGresultFile(r, hdr.Size)
+			if err != nil {
+				return err
+			}
+
+			m, err := readMeta(res)
+			if err != nil {
+				return err
+			}
+
+			metaOK, meta = true, m
 			continue
 		}
 
 		// Read stats from file.
-		currStat, err := stat.NewPGresultFile(r, hdr.Size)
+		s, err := stat.NewPGresultFile(r, hdr.Size)
 		if err != nil {
 			return err
 		}
 		statOK = true
 
-		//
-		if !statOK {
+		if !metaOK || !statOK {
 			continue
 		}
 
-		// Send stats and reset flags.
+		// Send stats and meta, and reset flags.
 
-		dataCh <- data{ts: ts, res: currStat}
+		dataCh <- data{ts: ts, res: s, meta: meta}
 
-		statOK = false
+		metaOK, statOK = false, false
 
 	} //end for
-
-	doneCh <- struct{}{}
 
 	return nil
 }
 
-// reporter receives stats from data channel and print it.
-func reporter(app *app, v view.View, config Config, dataCh chan data, doneCh chan struct{}) error {
+// processData receives stats from data channel and print it.
+func processData(app *app, v view.View, config Config, dataCh chan data, doneCh chan struct{}) error {
+	var prevMeta metadata
 	var prevStat stat.PGresult
 	var prevTs time.Time
 	linesPrinted := repeatHeaderAfter // initial value means print header at the beginning of all output
@@ -197,9 +213,25 @@ func reporter(app *app, v view.View, config Config, dataCh chan data, doneCh cha
 		case d := <-dataCh:
 			// If previous stats snapshot is not defined, copy current to previous.
 			// Usually this occurs when reading first stat sample at startup.
-			if !prevStat.Valid {
+
+			// Also checking version of stats in metadata, if it's different also discard previous.
+			if !prevStat.Valid || prevMeta.version != d.meta.version {
+				prevMeta = d.meta
 				prevStat = d.res
 				prevTs = d.ts
+
+				views := view.Views{
+					config.ReportType: v,
+				}
+				err := views.Configure(query.Options{
+					Version: d.meta.version,
+				})
+				if err != nil {
+					return err
+				}
+
+				v = views[config.ReportType]
+
 				continue
 			}
 
@@ -256,6 +288,20 @@ func reporter(app *app, v view.View, config Config, dataCh chan data, doneCh cha
 			return nil
 		}
 	}
+}
+
+// readMeta creates metadata object from stat.PGresult.
+func readMeta(res stat.PGresult) (metadata, error) {
+	if res.Nrows != 1 || res.Ncols != 7 {
+		return metadata{}, fmt.Errorf("invalid result")
+	}
+
+	version, err := strconv.ParseInt(res.Values[0][1].String, 10, 64)
+	if err != nil {
+		return metadata{}, err
+	}
+
+	return metadata{version: int(version)}, nil
 }
 
 // isFilenameOK checks filename format.

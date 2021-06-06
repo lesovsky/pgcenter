@@ -1,0 +1,3 @@
+WARNING: specified rate longer than stats snapshots interval, adjusting it to 1s
+         [37;1mdatname     [0m[37;1mbackends  [0m[37;1mcommits   [0m[37;1mrollbacks  [0m[37;1mreads     [0m[37;1mhits      [0m[37;1mreturned  [0m[37;1mfetched   [0m[37;1minserts   [0m[37;1mupdates   [0m[37;1mdeletes   [0m[37;1mconflicts  [0m[37;1mdeadlocks  [0m[37;1mcsum_fails  [0m[37;1mtemp_files  [0m[37;1mtemp_bytes  [0m[37;1mread_t    [0m[37;1mwrite_t   [0m[37;1mstats_age                         [0m
+00:00:01 example_db  11        500       5          2000      10000     1000      3000      4000      6000      1500      25         30         1           50          25000       250       3         11 days 10:10:11
