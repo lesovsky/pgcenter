@@ -31,8 +31,8 @@ func Test_app_setup(t *testing.T) {
 
 func Test_app_record(t *testing.T) {
 	filename := "/tmp/pgcenter-record-testing.stat.tar"
-	totalViews := len(view.New())
-	count, itv := 2, time.Second // recording settings
+	totalViews := len(view.New()) + 1 // stats + metadata
+	count, itv := 2, time.Second      // recording settings
 
 	testcases := []struct {
 		name      string

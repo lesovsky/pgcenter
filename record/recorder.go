@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"io"
@@ -97,8 +98,19 @@ func (c *tarRecorder) collect(dbConfig postgres.Config, views view.Views) (map[s
 		return nil, err
 	}
 
+	defer db.Close()
+
 	stats := map[string]stat.PGresult{}
 
+	// Collect metadata about running Postgres.
+	meta, err := stat.NewPGresultQuery(db, query.SelectCommonProperties)
+	if err != nil {
+		return nil, err
+	}
+
+	stats["meta"] = meta
+
+	// Collect the all necessary stats.
 	for k, v := range views {
 		res, err := stat.NewPGresultQuery(db, v.Query)
 		if err != nil {

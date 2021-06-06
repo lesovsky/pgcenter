@@ -40,12 +40,13 @@ const (
 
 	// SelectCommonProperties used for getting Postgres settings necessary during pgcenter runtime.
 	//   Notes: track_commit_timestamp introduced in 9.5
-	SelectCommonProperties = "SELECT current_setting('server_version'), current_setting('server_version_num')::int, " +
-		"current_setting('track_commit_timestamp'), " +
-		"current_setting('max_connections')::int, " +
-		"current_setting('autovacuum_max_workers')::int, " +
-		"pg_is_in_recovery(), " +
-		"extract(epoch from pg_postmaster_start_time())"
+	SelectCommonProperties = "SELECT current_setting('server_version') AS version, " +
+		"current_setting('server_version_num')::int AS version_num, " +
+		"current_setting('track_commit_timestamp') AS track_commit_timestamp, " +
+		"current_setting('max_connections')::int AS max_connections, " +
+		"current_setting('autovacuum_max_workers')::int AS autovacuum_max_workers, " +
+		"pg_is_in_recovery() AS recovery, " +
+		"extract(epoch from pg_postmaster_start_time()) AS start_time_unix"
 
 	// SelectActivityDefault is the default query for getting stats about connected clients from pg_stat_activity.
 	//   Postgres 10: The 'backend_type' has been introduced.
