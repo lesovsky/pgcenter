@@ -192,7 +192,7 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 
 		dataCh <- data{ts: ts, res: s, meta: meta}
 
-		metaOK, statOK = false, false
+		metaOK, statOK = false, false // nolint: ineffassign
 
 	} //end for
 
