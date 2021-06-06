@@ -11,13 +11,13 @@
 # __release_tag__ gosec v2.6.1 was released 2021-01-22
 FROM ubuntu:20.04
 
-LABEL version="v0.0.4"
+LABEL version="v0.0.5"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 # install dependencies
 RUN apt-get update && \
-    apt-get install -y locales curl ca-certificates gnupg make gcc && \
+    apt-get install -y locales curl ca-certificates gnupg make gcc git && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen && \
     curl -s https://www.postgresql.org/media/keys/ACCC4CF8.asc -o /tmp/ACCC4CF8.asc && \
@@ -44,4 +44,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing v0.0.4"]
+CMD ["echo", "I'm pgcenter-testing v0.0.5"]
