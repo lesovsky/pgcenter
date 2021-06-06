@@ -19,6 +19,12 @@ jobs:
         run: make lint
       - name: Run test
         run: make test
+      - name: Build
+        run: make build
+      - name: Install
+        run: make install
+      - name: Run E2E tests
+        run: ./testing/e2e.sh
 
   build:
     runs-on: ubuntu-latest
