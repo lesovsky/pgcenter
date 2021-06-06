@@ -170,9 +170,9 @@ Report options:
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
  -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats
-				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io
+				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io; 'w' - wal statistics
  -P, --progress SELECTOR	show pg_stat_progress_* statistics, use additional selector to choose stats
-				'v' - vacuum; 'c' - cluster; 'i' - create index
+				'v' - vacuum; 'c' - cluster; 'i' - create index; 'a' - analyze; 'b' - basebackup; 'y' - copy
 
  -d, --describe			show statistics description, combined with one of the report options
 
