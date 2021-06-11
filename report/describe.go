@@ -1,11 +1,12 @@
 package report
 
 const (
-	// pgStatDatabaseDescription is the detailed description of pg_stat_database view
-	pgStatDatabaseDescription = `Database-wide statistics based on pg_stat_database view:
+	// pgStatDatabaseGeneralDescription is the detailed description of pg_stat_database (general stats) view
+	pgStatDatabaseGeneralDescription = `Database-wide general statistics based on pg_stat_database view:
 
   column	origin		description
 - datname	datname		Name of this database
+- backends  	numbackends 	Total number of backends connected to the database
 - commits	xact_commit	Number of transactions in this database that have been committed
 - rollbacks	xact_rollback	Number of transactions in this database that have been rolled back
 - reads*	blks_read	Number of data read in this database, in kilobytes
@@ -29,6 +30,28 @@ const (
 - read_t	blk_read_time	Time spent reading data file blocks by backends in this database, in milliseconds
 - write_t	blk_write_time	Time spent writing data file blocks by backends in this database, in milliseconds
 - stats_age*	stats_reset	Age of collected statistics in the moment when stats are taken from this database
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG-STAT-DATABASE-VIEW
+`
+
+	// pgStatDatabaseSessionsDescription is the detailed description of pg_stat_database (sessions stats) view
+	pgStatDatabaseSessionsDescription = `Databases sessions statistics based on pg_stat_database view:
+
+  column		origin				description
+- datname		datname				Name of this database
+- backends  		numbackends			Total number of backends connected to the database
+- total_session_t	session_time			Total time spent by database sessions in this database
+- total_active_t	active_time			Total time spent executing SQL statements in this database
+- total_idle_xact_t	idle_in_transaction_time	Total time spent idling while in a transaction in this database
+- session_t		session_time			Time spent by database sessions in this database, per second
+- active_t		active_time			Time spent executing SQL statements in this database, per second
+- idle_xact_t		idle_in_transaction_time	Time spent idling while in a transaction in this database, per second	
+- sessions		sessions			Number of sessions established to this database, per second
+- abandoned		sessions_abandoned		Number of database sessions to this database that were terminated because connection to the client was lost, per second
+- fatal			sessions_fatal			Number of database sessions to this database that were terminated by fatal errors, per second
+- killed 		sessions_killed			Number of database sessions to this database that were terminated by operator intervention, per second
 
 * - extended value, based on origin and calculated using additional functions.
 

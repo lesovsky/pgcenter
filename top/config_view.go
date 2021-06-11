@@ -108,6 +108,8 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 
 		// Switch to requested view.
 		switch c {
+		case "databases":
+			viewSwitchHandler(app.config, databasesNextView(app.config.view.Name))
 		case "statements":
 			viewSwitchHandler(app.config, statementsNextView(app.config.view.Name))
 		case "progress":
@@ -119,6 +121,21 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 		printCmdline(g, app.config.view.Msg)
 		return nil
 	}
+}
+
+// databasesNextView depending on current databases view returns next view.
+func databasesNextView(current string) string {
+	var next string
+
+	switch current {
+	case "databases_general":
+		next = "databases_sessions"
+	case "databases_sessions":
+		next = "databases_general"
+	default:
+		next = "databases_general"
+	}
+	return next
 }
 
 // statementsNextView depending on current statements view returns next view.

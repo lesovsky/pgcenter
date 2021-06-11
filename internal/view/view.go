@@ -54,16 +54,28 @@ func New() Views {
 			Msg:       "Show replication statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
-		"databases": {
-			Name:      "databases",
-			QueryTmpl: query.PgStatDatabaseDefault,
+		"databases_general": {
+			Name:      "databases_general",
+			QueryTmpl: query.PgStatDatabaseGeneralDefault,
 			DiffIntvl: [2]int{2, 17},
 			Ncols:     18,
 			OrderKey:  0,
 			OrderDesc: true,
 			ColsWidth: map[int]int{},
-			Msg:       "Show databases statistics",
+			Msg:       "Show databases general statistics",
 			Filters:   map[int]*regexp.Regexp{},
+		},
+		"databases_sessions": {
+			Name:               "databases_sessions",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatDatabaseSessionsDefault,
+			DiffIntvl:          [2]int{5, 11},
+			Ncols:              12,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show databases sessions statistics",
+			Filters:            map[int]*regexp.Regexp{},
 		},
 		"tables": {
 			Name:      "tables",
@@ -273,8 +285,8 @@ func (v Views) Configure(opts query.Options) error {
 		case "replication":
 			view.QueryTmpl, view.Ncols = query.SelectStatReplicationQuery(opts.Version, track)
 			v[k] = view
-		case "databases":
-			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseQuery(opts.Version)
+		case "databases_general":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseGeneralQuery(opts.Version)
 			v[k] = view
 		case "statements_timings":
 			view.QueryTmpl = query.SelectStatStatementsTimingQuery(opts.Version)

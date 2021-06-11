@@ -17,7 +17,7 @@ type options struct {
 
 	showActivity    bool   // Show stats from pg_stat_activity
 	showReplication bool   // Show stats from pg_stat_replication
-	showDatabases   bool   // Show stats from pg_stat_database
+	showDatabases   string // Show stats from pg_stat_database
 	showTables      bool   // Show stats from pg_stat_user_tables, pg_statio_user_tables
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
 	showSizes       bool   // Show tables sizes
@@ -59,11 +59,11 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&opts.describe, "describe", "d", false, "describe columns of specified statistics")
 	CommandDefinition.Flags().BoolVarP(&opts.showActivity, "activity", "A", false, "show pg_stat_activity report")
 	CommandDefinition.Flags().BoolVarP(&opts.showReplication, "replication", "R", false, "show pg_stat_replication report")
-	CommandDefinition.Flags().BoolVarP(&opts.showDatabases, "databases", "D", false, "show pg_stat_database report")
 	CommandDefinition.Flags().BoolVarP(&opts.showTables, "tables", "T", false, "show pg_stat_user_tables and pg_statio_user_tables report")
 	CommandDefinition.Flags().BoolVarP(&opts.showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
+	CommandDefinition.Flags().StringVarP(&opts.showDatabases, "databases", "D", "", "show pg_stat_database report")
 	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
 	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
 
@@ -133,8 +133,13 @@ func selectReport(opts options) string {
 		return "activity"
 	case opts.showReplication:
 		return "replication"
-	case opts.showDatabases:
-		return "databases"
+	case opts.showDatabases != "":
+		switch opts.showDatabases {
+		case "g":
+			return "databases_general"
+		case "s":
+			return "databases_sessions"
+		}
 	case opts.showTables:
 		return "tables"
 	case opts.showIndexes:

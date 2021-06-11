@@ -513,7 +513,8 @@ func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, 
 // doDescribe shows detailed description of the requested stats
 func describeReport(w io.Writer, report string) error {
 	m := map[string]string{
-		"databases":           pgStatDatabaseDescription,
+		"databases_general":   pgStatDatabaseGeneralDescription,
+		"databases_sessions":  pgStatDatabaseSessionsDescription,
 		"activity":            pgStatActivityDescription,
 		"replication":         pgStatReplicationDescription,
 		"tables":              pgStatTablesDescription,

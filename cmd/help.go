@@ -163,15 +163,16 @@ Options:
 Report options:
  -A, --activity			show pg_stat_activity statistics
  -R, --replication		show pg_stat_replication statistics
- 
- -D, --databases		show pg_stat_database statistics
+
  -T, --tables			show pg_stat_user_tables statistics
  -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
- -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats
+ -D, --databases SELECTOR	show pg_stat_database statistics, use additional selector to choose stats:
+				'g' - general; 's' - sessions
+ -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats:
 				'm' - timings; 'g' - general; 'i' - io; 't' - temp files io; 'l' - local files io; 'w' - wal statistics
- -P, --progress SELECTOR	show pg_stat_progress_* statistics, use additional selector to choose stats
+ -P, --progress SELECTOR	show pg_stat_progress_* statistics, use additional selector to choose stats:
 				'v' - vacuum; 'c' - cluster; 'i' - create index; 'a' - analyze; 'b' - basebackup; 'y' - copy
 
  -d, --describe			show statistics description, combined with one of the report options

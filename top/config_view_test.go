@@ -202,8 +202,9 @@ func Test_switchViewTo(t *testing.T) {
 		want      string
 		pgssAvail bool
 	}{
-		{current: "activity", to: "databases", want: "databases"},
-		{current: "databases", to: "tables", want: "tables"},
+		{current: "activity", to: "databases_general", want: "databases_general"},
+		{current: "databases_general", to: "databases_sessions", want: "databases_sessions"},
+		{current: "databases_sessions", to: "tables", want: "tables"},
 		{current: "tables", to: "indexes", want: "indexes"},
 		{current: "indexes", to: "sizes", want: "sizes"},
 		{current: "sizes", to: "functions", want: "functions"},
@@ -245,12 +246,27 @@ func Test_switchViewTo(t *testing.T) {
 	close(app.config.viewCh)
 
 	// Attempt to switch when pg_stat_statements is not available (should stay on current)
-	app.config.view = app.config.views["databases"]
+	app.config.view = app.config.views["databases_general"]
 	app.postgresProps.ExtPGSSSchema = ""
 
 	fn := switchViewTo(app, "statements")
 	assert.NoError(t, fn(nil, nil))
-	assert.Equal(t, "databases", app.config.view.Name)
+	assert.Equal(t, "databases_general", app.config.view.Name)
+}
+
+func Test_databasesNextView(t *testing.T) {
+	testcases := []struct {
+		current string
+		want    string
+	}{
+		{current: "databases_general", want: "databases_sessions"},
+		{current: "databases_sessions", want: "databases_general"},
+		{current: "unknown", want: "databases_general"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, databasesNextView(tc.current))
+	}
 }
 
 func Test_statementsNextView(t *testing.T) {
@@ -455,7 +471,7 @@ func Test_toggleIdleConns(t *testing.T) {
 	}
 
 	// test attempt to change in other than activity view (should be unchanged).
-	config.view = config.views["databases"]
+	config.view = config.views["databases_general"]
 	config.queryOptions.ShowNoIdle = true
 	fn := toggleIdleConns(config)
 	assert.NoError(t, fn(nil, nil))

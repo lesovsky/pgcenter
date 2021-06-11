@@ -36,8 +36,13 @@ func Test_app_doReport(t *testing.T) {
 		},
 		{
 			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
-			config:   Config{ReportType: "databases", TruncLimit: 32, Rate: time.Second},
-			wantFile: "testdata/report_databases.golden",
+			config:   Config{ReportType: "databases_general", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_databases_general.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "databases_sessions", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_databases_sessions.golden",
 		},
 		{
 			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
@@ -180,7 +185,7 @@ func Test_app_doReport(t *testing.T) {
 
 func Test_readTar(t *testing.T) {
 	config := Config{
-		ReportType: "databases",
+		ReportType: "databases_general",
 		TsStart:    time.Date(2021, 01, 23, 00, 00, 00, 0, time.UTC),
 		TsEnd:      time.Date(2021, 01, 23, 23, 59, 59, 0, time.UTC),
 		TruncLimit: 32, Rate: 1 * time.Second}
@@ -249,7 +254,7 @@ func Test_processData(t *testing.T) {
 		},
 	}
 
-	config := Config{ReportType: "databases", TruncLimit: 32, Rate: 2 * time.Second, OrderColName: "datname"}
+	config := Config{ReportType: "databases_general", TruncLimit: 32, Rate: 2 * time.Second, OrderColName: "datname"}
 	app := newApp(config)
 	var buf bytes.Buffer
 	app.writer = &buf
@@ -341,10 +346,10 @@ func Test_isFilenameOK(t *testing.T) {
 		name   string
 		report string
 	}{
-		{valid: true, name: "databases.20210116T140630.json", report: "databases"},
-		{valid: true, name: "meta.20210116T140630.json", report: "databases"},
-		{valid: false, name: "databases.20210116T140630.json", report: "replication"},
-		{valid: false, name: "databases.json", report: "databases"},
+		{valid: true, name: "databases_general.20210116T140630.json", report: "databases_general"},
+		{valid: true, name: "meta.20210116T140630.json", report: "databases_general"},
+		{valid: false, name: "databases_general.20210116T140630.json", report: "replication"},
+		{valid: false, name: "databases_general.json", report: "databases_general"},
 	}
 
 	for _, tc := range testcases {
@@ -364,11 +369,11 @@ func Test_isFilenameTimestampOK(t *testing.T) {
 		end   string
 		want  string
 	}{
-		{valid: true, name: "databases.20210116T140630.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
+		{valid: true, name: "databases_general.20210116T140630.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
 		{valid: false, name: "invalid.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
 		{valid: false, name: "invalid.invalid-ts.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "databases.20210116T140630.json", start: "14:30:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "databases.20210116T140630.json", start: "13:30:00", end: "14:00:00", want: "20210116 14:06:30"},
+		{valid: false, name: "databases_general.20210116T140630.json", start: "14:30:00", end: "15:00:00", want: "20210116 14:06:30"},
+		{valid: false, name: "databases_general.20210116T140630.json", start: "13:30:00", end: "14:00:00", want: "20210116 14:06:30"},
 	}
 
 	loc := time.Now().Location()
@@ -442,7 +447,7 @@ func Test_countDiff(t *testing.T) {
 	}
 
 	views := view.New()
-	v := views["databases"]
+	v := views["databases_general"]
 
 	got, err := countDiff(curr, prev, 1, v)
 	assert.NoError(t, err)
@@ -495,7 +500,7 @@ func Test_formatStatSample(t *testing.T) {
 	}
 
 	views := view.New()
-	v := views["databases"]
+	v := views["databases_general"]
 
 	formatStatSample(res, &v, Config{})
 
@@ -539,7 +544,7 @@ func Test_printStatHeader(t *testing.T) {
 	}
 
 	views := view.New()
-	v := views["databases"]
+	v := views["databases_general"]
 
 	widthes, cols := align.SetAlign(*res, 32, true)
 	v.ColsWidth = widthes
@@ -592,7 +597,7 @@ func Test_printStatSample(t *testing.T) {
 	}
 
 	views := view.New()
-	v := views["databases"]
+	v := views["databases_general"]
 
 	widthes, cols := align.SetAlign(*res, 32, true)
 	v.ColsWidth = widthes
@@ -633,7 +638,8 @@ func Test_describeReport(t *testing.T) {
 		report string
 		want   string
 	}{
-		{report: "databases", want: pgStatDatabaseDescription},
+		{report: "databases_general", want: pgStatDatabaseGeneralDescription},
+		{report: "databases_sessions", want: pgStatDatabaseSessionsDescription},
 		{report: "activity", want: pgStatActivityDescription},
 		{report: "replication", want: pgStatReplicationDescription},
 		{report: "tables", want: pgStatTablesDescription},

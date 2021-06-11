@@ -38,7 +38,8 @@ func Test_selectReport(t *testing.T) {
 	}{
 		{opts: options{showActivity: true}, want: "activity"},
 		{opts: options{showReplication: true}, want: "replication"},
-		{opts: options{showDatabases: true}, want: "databases"},
+		{opts: options{showDatabases: "g"}, want: "databases_general"},
+		{opts: options{showDatabases: "s"}, want: "databases_sessions"},
 		{opts: options{showTables: true}, want: "tables"},
 		{opts: options{showIndexes: true}, want: "indexes"},
 		{opts: options{showFunctions: true}, want: "functions"},

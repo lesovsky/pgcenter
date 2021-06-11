@@ -53,7 +53,7 @@ func Test_collectPostgresStat(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	got, err := collectPostgresStat(conn, query.PgStatDatabaseDefault)
+	got, err := collectPostgresStat(conn, query.PgStatDatabaseGeneralDefault)
 	assert.NoError(t, err)
 	assert.Greater(t, got.Nrows, 0)
 

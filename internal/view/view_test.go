@@ -8,7 +8,7 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 19, len(v)) // 19 is the total number of views have to be returned
+	assert.Equal(t, 20, len(v)) // 20 is the total number of views have to be returned
 }
 
 func TestViews_Configure(t *testing.T) {
@@ -19,14 +19,14 @@ func TestViews_Configure(t *testing.T) {
 		querylen    int
 	}{
 		// v14 matrix
-		//{version: 140000, recovery: "f", trackCommit: "on", querylen: 256},
-		//{version: 140000, recovery: "f", trackCommit: "on", querylen: 0},
-		//{version: 140000, recovery: "f", trackCommit: "off", querylen: 256},
-		//{version: 140000, recovery: "f", trackCommit: "off", querylen: 0},
-		//{version: 140000, recovery: "t", trackCommit: "on", querylen: 256},
-		//{version: 140000, recovery: "t", trackCommit: "on", querylen: 0},
-		//{version: 140000, recovery: "t", trackCommit: "off", querylen: 256},
-		//{version: 140000, recovery: "t", trackCommit: "off", querylen: 0},
+		{version: 140000, recovery: "f", trackCommit: "on", querylen: 256},
+		{version: 140000, recovery: "f", trackCommit: "on", querylen: 0},
+		{version: 140000, recovery: "f", trackCommit: "off", querylen: 256},
+		{version: 140000, recovery: "f", trackCommit: "off", querylen: 0},
+		{version: 140000, recovery: "t", trackCommit: "on", querylen: 256},
+		{version: 140000, recovery: "t", trackCommit: "on", querylen: 0},
+		{version: 140000, recovery: "t", trackCommit: "off", querylen: 256},
+		{version: 140000, recovery: "t", trackCommit: "off", querylen: 0},
 		// v13 matrix
 		{version: 130000, recovery: "f", trackCommit: "on", querylen: 256},
 		{version: 130000, recovery: "f", trackCommit: "on", querylen: 0},
@@ -112,9 +112,9 @@ func TestViews_Configure(t *testing.T) {
 			} else {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
-			assert.Equal(t, query.PgStatDatabasePG11, views["databases"].QueryTmpl)
-			assert.Equal(t, 18, views["databases"].Ncols)
-			assert.Equal(t, [2]int{2, 16}, views["databases"].DiffIntvl)
+			assert.Equal(t, query.PgStatDatabaseGeneralPG11, views["databases_general"].QueryTmpl)
+			assert.Equal(t, 18, views["databases_general"].Ncols)
+			assert.Equal(t, [2]int{2, 16}, views["databases_general"].DiffIntvl)
 		case 90600:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplication96Extended, views["replication"].QueryTmpl)
@@ -141,6 +141,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
+		{version: 140000, total: 20},
 		{version: 130000, total: 18},
 		{version: 120000, total: 15},
 		{version: 110000, total: 13},

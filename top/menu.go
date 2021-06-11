@@ -13,10 +13,11 @@ type direction int
 
 const (
 	// Available menu types.
-	menuNone     menuType = iota // no active menu
-	menuPgss                     // menu with pg_stat_statements stats
-	menuProgress                 // menu with pg_stat_progress_* stats
-	menuConf                     // menu with configuration files
+	menuNone      menuType = iota // no active menu
+	menuDatabases                 // menu with pg_stat_databases stats
+	menuPgss                      // menu with pg_stat_statements stats
+	menuProgress                  // menu with pg_stat_progress_* stats
+	menuConf                      // menu with configuration files
 
 	// Directions allowed when working with menu.
 	moveUp   direction = iota // move up
@@ -35,6 +36,15 @@ func selectMenuStyle(t menuType) menuStyle {
 	var s menuStyle
 
 	switch t {
+	case menuDatabases:
+		s = menuStyle{
+			menuType: menuDatabases,
+			title:    " Choose pg_stat_database mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_database general",
+				" pg_stat_database sessions",
+			},
+		}
 	case menuPgss:
 		s = menuStyle{
 			menuType: menuPgss,
@@ -122,6 +132,16 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		_, cy := v.Cursor()
 
 		switch app.config.menu.menuType {
+		case menuDatabases:
+			switch cy {
+			case 0:
+				viewSwitchHandler(app.config, "databases_general")
+			case 1:
+				viewSwitchHandler(app.config, "databases_sessions")
+			default:
+				viewSwitchHandler(app.config, "databases_general")
+			}
+			printCmdline(app.ui, app.config.view.Msg)
 		case menuPgss:
 			switch cy {
 			case 0:
