@@ -7,7 +7,7 @@
 ---
 
 #### General notes
-- run pgCenter on the same host with Postgres, otherwise some features will not work, e.g. config editing, logfile view.
+- recommended running pgCenter on the same host with Postgres, otherwise some features will not work, e.g. config editing, logfile view.
 - run pgCenter using database `SUPERUSER` account, e.g. postgres. Some kind of stats aren't available for unprivileged accounts.
 - Connections established to Postgres are managed by [jackc/pgx](https://github.com/jackc/pgx/) driver which supports [.pgpass](https://www.postgresql.org/docs/current/static/libpq-pgpass.html) and most of common libpq [environment variables](https://www.postgresql.org/docs/current/static/libpq-envars.html), such as PGHOST, PGPORT, PGUSER, PGDATABASE, PGPASSWORD, PGOPTIONS.
 
@@ -17,7 +17,7 @@ Download the latest release from [release page](https://github.com/lesovsky/pgce
 #### Run in Docker
 There is option to run pgCenter using Docker. Docker images available on [DockerHub](https://hub.docker.com/r/lesovsky/pgcenter).
 ```
-docker pull lesovsky/pgcenter:latest .
+docker pull lesovsky/pgcenter:latest
 docker run -it --rm lesovsky/pgcenter:latest pgcenter top -h 1.2.3.4 -U user -d production_db
 ```
 

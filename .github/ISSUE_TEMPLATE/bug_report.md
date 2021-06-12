@@ -17,6 +17,7 @@ Describe the environment where the bug occurred.
 - pgCenter Version [output of `pgcenter --version`]
 - pgCenter installation method: [releases page, manual build, other?]
 - PostgreSQL Version [output of `psql -c 'select version()'`]
+- Did you try build pgCenter from master branch and reproduce the issue? ['yes' or 'no']
 
 **To Reproduce**
 Describe the steps to reproduce the behavior. Attach the full error text, panic stack trace, screenshots, etc. 
