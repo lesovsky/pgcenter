@@ -43,6 +43,7 @@ func Test_selectReport(t *testing.T) {
 		{opts: options{showTables: true}, want: "tables"},
 		{opts: options{showIndexes: true}, want: "indexes"},
 		{opts: options{showFunctions: true}, want: "functions"},
+		{opts: options{showWAL: true}, want: "wal"},
 		{opts: options{showSizes: true}, want: "sizes"},
 		{opts: options{showStatements: "m"}, want: "statements_timings"},
 		{opts: options{showStatements: "g"}, want: "statements_general"},

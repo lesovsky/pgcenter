@@ -153,6 +153,27 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-USER-FUNCTIONS-VIEW
 `
 
+	// pgStatWALDescription is the detailed description of pg_stat_wal view
+	pgStatWALDescription = `WAL statistics based on pg_stat_wal view:
+
+  column	origin			description
+- source	-			Always has 'WAL' value
+- waldir_size*	-			Total size of WAL directory, in bytes 
+- records	wal_records		Number of WAL records generated, per second
+- fpi		wal_fpi			Number of WAL full page images generated, per second
+- wal		wal_bytes		Amount of WAL generated, bytes per second
+- buffers_full	wal_buffers_full	Number of times WAL data was written to disk because WAL buffers became full, per second
+- writes	wal_write		Number of times WAL buffers were written out to disk via XLogWrite request, per second
+- syncs		wal_sync		Number of times WAL files were synced to disk via issue_xlog_fsync request, per second
+- write_time	wal_write_time		Amount of time spent writing WAL buffers to disk via XLogWrite request, in milliseconds per second 
+- sync_time	wal_sync_time		Amount of time spent syncing WAL files to disk via issue_xlog_fsync request, in milliseconds per second
+- stats_age*	stats_reset		Age of collected statistics in the moment when stats are taken
+
+* - extended value, based on origin and calculated using additional functions.
+
+Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-WAL-VIEW
+`
+
 	// pgStatSizesDescription is the detailed description of stats about tables sizes
 	pgStatSizesDescription = `Statistics about sizes of tables based on pg_*_size() functions:
 

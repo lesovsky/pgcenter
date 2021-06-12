@@ -520,6 +520,7 @@ func describeReport(w io.Writer, report string) error {
 		"tables":              pgStatTablesDescription,
 		"indexes":             pgStatIndexesDescription,
 		"functions":           pgStatFunctionsDescription,
+		"wal":                 pgStatWALDescription,
 		"sizes":               pgStatSizesDescription,
 		"progress_vacuum":     pgStatProgressVacuumDescription,
 		"progress_cluster":    pgStatProgressClusterDescription,

@@ -22,6 +22,7 @@ type options struct {
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
 	showSizes       bool   // Show tables sizes
 	showFunctions   bool   // Show stats from pg_stat_user_functions
+	showWAL         bool   // Show stats from pg_stat_wal
 	showStatements  string // Show stats from pg_stat_statements
 	showProgress    string // Show stats from pg_stat_progress_* stats
 
@@ -63,6 +64,7 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&opts.showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
+	CommandDefinition.Flags().BoolVarP(&opts.showWAL, "wal", "W", false, "show pg_stat_wal report")
 	CommandDefinition.Flags().StringVarP(&opts.showDatabases, "databases", "D", "", "show pg_stat_database report")
 	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
 	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
@@ -146,6 +148,8 @@ func selectReport(opts options) string {
 		return "indexes"
 	case opts.showFunctions:
 		return "functions"
+	case opts.showWAL:
+		return "wal"
 	case opts.showSizes:
 		return "sizes"
 	case opts.showStatements != "":

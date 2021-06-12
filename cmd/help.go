@@ -168,6 +168,7 @@ Report options:
  -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
+ -W, --wal				show pg_stat_wal statistics
  -D, --databases SELECTOR	show pg_stat_database statistics, use additional selector to choose stats:
 				'g' - general; 's' - sessions
  -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats:

@@ -66,6 +66,11 @@ func Test_app_doReport(t *testing.T) {
 		},
 		{
 			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			config:   Config{ReportType: "wal", TruncLimit: 32, Rate: time.Second},
+			wantFile: "testdata/report_wal.golden",
+		},
+		{
+			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
 			config:   Config{ReportType: "statements_timings", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_timings.golden",
 		},
@@ -645,6 +650,7 @@ func Test_describeReport(t *testing.T) {
 		{report: "tables", want: pgStatTablesDescription},
 		{report: "indexes", want: pgStatIndexesDescription},
 		{report: "functions", want: pgStatFunctionsDescription},
+		{report: "wal", want: pgStatWALDescription},
 		{report: "sizes", want: pgStatSizesDescription},
 		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
 		{report: "progress_cluster", want: pgStatProgressClusterDescription},

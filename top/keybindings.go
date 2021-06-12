@@ -32,6 +32,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'i', switchViewTo(app, "indexes")},
 		{"sysstat", 's', switchViewTo(app, "sizes")},
 		{"sysstat", 'f', switchViewTo(app, "functions")},
+		{"sysstat", 'w', switchViewTo(app, "wal")},
 		{"sysstat", 'p', switchViewTo(app, "progress")},
 		{"sysstat", 'a', switchViewTo(app, "activity")},
 		{"sysstat", 'x', switchViewTo(app, "statements")},

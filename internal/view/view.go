@@ -121,6 +121,18 @@ func New() Views {
 			Msg:       "Show functions statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"wal": {
+			Name:               "wal",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatWALDefault,
+			DiffIntvl:          [2]int{2, 9},
+			Ncols:              11,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show WAL statistics",
+			Filters:            map[int]*regexp.Regexp{},
+		},
 		"statements_timings": {
 			Name:      "statements_timings",
 			QueryTmpl: query.PgStatStatementsTimingDefault,
