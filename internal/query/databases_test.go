@@ -34,8 +34,26 @@ func Test_SelectStatDatabaseGeneralQuery(t *testing.T) {
 	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000}
 
 	for _, version := range versions {
-		t.Run(fmt.Sprintf("pg_stat_database/%d", version), func(t *testing.T) {
+		t.Run(fmt.Sprintf("pg_stat_database/general/%d", version), func(t *testing.T) {
 			tmpl, _, _ := SelectStatDatabaseGeneralQuery(version)
+
+			opts := NewOptions(version, "f", "off", 256, "public")
+			q, err := Format(tmpl, opts)
+			assert.NoError(t, err)
+
+			conn, err := postgres.NewTestConnectVersion(version)
+			assert.NoError(t, err)
+
+			_, err = conn.Exec(q)
+			assert.NoError(t, err)
+
+			conn.Close()
+		})
+	}
+
+	for _, version := range []int{140000} {
+		t.Run(fmt.Sprintf("pg_stat_database/sessions/%d", version), func(t *testing.T) {
+			tmpl := PgStatDatabaseSessionsDefault
 
 			opts := NewOptions(version, "f", "off", 256, "public")
 			q, err := Format(tmpl, opts)
