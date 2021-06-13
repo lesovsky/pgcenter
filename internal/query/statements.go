@@ -4,78 +4,78 @@ const (
 	// NOTES:
 	// 1. regexp_replace() removes extra spaces, tabs and newlines from queries
 
-	// PgStatStatementsTimingDefault is the default query for getting timings stats from pg_stat_statements view
+	// PgStatStatementsTimingDefault defines default query for getting timings stats from pg_stat_statements view.
 	PgStatStatementsTimingDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
-		"date_trunc('seconds', round(p.total_plan_time + p.total_exec_time) / 1000 * '1 second'::interval)::text AS t_all_t, " +
-		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS t_read_t, " +
-		"date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS t_write_t, " +
-		"date_trunc('seconds', round((p.total_plan_time + p.total_exec_time) - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS t_cpu_t, " +
-		"round(p.total_plan_time + p.total_exec_time) AS all_t, " +
-		"round(p.blk_read_time) AS read_t, round(p.blk_write_time) AS write_t, " +
-		"round((p.total_plan_time + p.total_exec_time) - (p.blk_read_time + p.blk_write_time)) AS cpu_t, " +
+		"date_trunc('seconds', round(p.total_plan_time + p.total_exec_time) / 1000 * '1 second'::interval)::text AS all_total, " +
+		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS read_total, " +
+		"date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS write_total, " +
+		"date_trunc('seconds', round((p.total_plan_time + p.total_exec_time) - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS exec_total, " +
+		`round(p.total_plan_time + p.total_exec_time) AS "all,ms", ` +
+		`round(p.blk_read_time) AS "read,ms", round(p.blk_write_time) AS "write,ms", ` +
+		`round((p.total_plan_time + p.total_exec_time) - (p.blk_read_time + p.blk_write_time)) AS "exec,ms",` +
 		"p.calls AS calls, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsTimingPG12 pg_stat_statements timing query for Postgres 12 and older.
+	// PgStatStatementsTimingPG12 defines pg_stat_statements timing query for Postgres 12 and older.
 	PgStatStatementsTimingPG12 = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
-		"date_trunc('seconds', round(p.total_time) / 1000 * '1 second'::interval)::text AS t_all_t, " +
-		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS t_read_t, " +
-		"date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS t_write_t, " +
-		"date_trunc('seconds', round(p.total_time - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS t_cpu_t, " +
-		"round(p.total_time) AS all_t, round(p.blk_read_time) AS read_t, round(p.blk_write_time) AS write_t, " +
-		"round(p.total_time - (p.blk_read_time + p.blk_write_time)) AS cpu_t, p.calls AS calls, " +
+		"date_trunc('seconds', round(p.total_time) / 1000 * '1 second'::interval)::text AS all_total, " +
+		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS read_total, " +
+		"date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS write_total, " +
+		"date_trunc('seconds', round(p.total_time - (p.blk_read_time + p.blk_write_time)) / 1000 * '1 second'::interval)::text AS exec_total, " +
+		`round(p.total_time) AS "all,ms", round(p.blk_read_time) AS "read,ms", round(p.blk_write_time) AS "write,ms", ` +
+		`round(p.total_time - (p.blk_read_time + p.blk_write_time)) AS "exec,ms", p.calls AS calls, ` +
 		"left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsGeneralDefault is the default query for getting general stats from pg_stat_statements
-	PgStatStatementsGeneralDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, p.calls AS t_calls, " +
-		"p.rows AS t_rows, p.calls AS calls, p.rows AS rows, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
+	// PgStatStatementsGeneralDefault defines default query for getting general stats from pg_stat_statements.
+	PgStatStatementsGeneralDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, p.calls AS calls_total, " +
+		"p.rows AS rows_total, p.calls AS calls, p.rows AS rows, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsIoDefault is the default query for getting IO stats from pg_stat_statements
+	// PgStatStatementsIoDefault defines default query for getting IO stats from pg_stat_statements.
 	PgStatStatementsIoDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
-		"p.shared_blks_hit + p.local_blks_hit AS t_hits, " +
-		"(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS t_reads, " +
-		"(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS t_dirtied, " +
-		"(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS t_written, " +
+		"p.shared_blks_hit + p.local_blks_hit AS hits_total, " +
+		`(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS "read_total,KiB", ` +
+		`(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS "dirtied_total,KiB", ` +
+		`(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS "written_total,KiB", ` +
 		"p.shared_blks_hit + p.local_blks_hit AS hits, " +
-		"(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS reads, " +
-		"(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS dirtied, " +
-		"(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS written, " +
+		`(p.shared_blks_read + p.local_blks_read) * (SELECT current_setting('block_size')::int / 1024) AS "read,KiB", ` +
+		`(p.shared_blks_dirtied + p.local_blks_dirtied) * (SELECT current_setting('block_size')::int / 1024) AS "dirtied,KiB", ` +
+		`(p.shared_blks_written + p.local_blks_written) * (SELECT current_setting('block_size')::int / 1024) AS "written,KiB", ` +
 		"p.calls AS calls, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsTempDefault is the default query for getting stats about temp files IO from pg_stat_statements
+	// PgStatStatementsTempDefault defines default query for getting stats about temp files IO from pg_stat_statements.
 	PgStatStatementsTempDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
-		"p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_read, " +
-		"p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS t_tmp_write, " +
-		"p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS tmp_read, " +
-		"p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS tmp_write, " +
+		`p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS "read_total,kiB", ` +
+		`p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS "write_total,KiB", ` +
+		`p.temp_blks_read * (SELECT current_setting('block_size')::int / 1024) AS "read,KiB", ` +
+		`p.temp_blks_written * (SELECT current_setting('block_size')::int / 1024) AS "write,KiB", ` +
 		"p.calls AS calls, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsLocalDefault is the default query for getting stats about local buffers IO from pg_stat_statements
+	// PgStatStatementsLocalDefault defines default query for getting stats about local buffers IO from pg_stat_statements.
 	PgStatStatementsLocalDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
-		"p.local_blks_hit AS t_lo_hits, p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS t_lo_reads, " +
-		"p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS t_lo_dirtied, " +
-		"p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS t_lo_written, " +
-		"p.local_blks_hit AS lo_hits, " +
-		"p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS lo_reads, " +
-		"p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS lo_dirtied, " +
-		"p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS lo_written, " +
+		`p.local_blks_hit AS hits_total, p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS "read_total,KiB", ` +
+		`p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS "dirtied_total,KiB", ` +
+		`p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS "written,KiB", ` +
+		"p.local_blks_hit AS hits, " +
+		`p.local_blks_read * (SELECT current_setting('block_size')::int / 1024) AS "read,KiB", ` +
+		`p.local_blks_dirtied * (SELECT current_setting('block_size')::int / 1024) AS "dirtied,KiB", ` +
+		`p.local_blks_written * (SELECT current_setting('block_size')::int / 1024) AS "written,KiB", ` +
 		"p.calls AS calls, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsWalDefault is the default query for getting stats about WAL usage from pg_stat_statements
+	// PgStatStatementsWalDefault defines default query for getting stats about WAL usage from pg_stat_statements.
 	PgStatStatementsWalDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database," +
-		"(wal_bytes / 1024)::numeric(20,2)::text AS t_wal, (wal_bytes / 1024)::numeric(20,2)::text AS wal," +
-		"wal_records AS wal_records, wal_fpi AS wal_fpi, p.calls AS t_calls," +
+		`(wal_bytes / 1024)::numeric(20,2)::text AS "wal_total,KiB", (wal_bytes / 1024)::numeric(20,2)::text AS "wal,KiB",` +
+		"wal_records AS records, wal_fpi AS fpi, p.calls AS t_calls," +
 		"left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid," +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
