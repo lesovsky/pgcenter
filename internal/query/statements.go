@@ -75,7 +75,7 @@ const (
 	// PgStatStatementsWalDefault defines default query for getting stats about WAL usage from pg_stat_statements.
 	PgStatStatementsWalDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database," +
 		`(wal_bytes / 1024)::numeric(20,2)::text AS "wal_total,KiB", (wal_bytes / 1024)::numeric(20,2)::text AS "wal,KiB",` +
-		"wal_records AS records, wal_fpi AS fpi, p.calls AS t_calls," +
+		"wal_records AS records, wal_fpi AS fpi, p.calls AS calls," +
 		"left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid," +
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"

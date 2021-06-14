@@ -661,8 +661,8 @@ func Test_describeReport(t *testing.T) {
 		{report: "statements_timings", want: pgStatStatementsTimingsDescription},
 		{report: "statements_general", want: pgStatStatementsGeneralDescription},
 		{report: "statements_io", want: pgStatStatementsIODescription},
-		{report: "statements_local", want: pgStatStatementsTempDescription},
-		{report: "statements_temp", want: pgStatStatementsLocalDescription},
+		{report: "statements_local", want: pgStatStatementsLocalDescription},
+		{report: "statements_temp", want: pgStatStatementsTempDescription},
 		{report: "invalid", want: "unknown description requested"},
 	}
 
