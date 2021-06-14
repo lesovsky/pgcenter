@@ -1,8 +1,10 @@
-         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation  [0m[37;1mstate     [0m[37;1mwaiting        [0m[37;1mphase     [0m[37;1mt_size    [0m[37;1mt_scanned_%  [0m[37;1mt_vacuumed_%  [0m[37;1mscanned   [0m[37;1mvacuumed  [0m[37;1mquery                             [0m
-15:31:24 3365734   00:00:06                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
-15:31:25 3365734   00:00:07                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
-15:31:26 3365734   00:00:08                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
-15:31:27 3365734   00:00:09                      active    Lock.relation                                                 0         0         vacuum pgbench_accounts
-15:31:28 3365734   00:00:10  pgbench   pgbench~  active    f              scannin~  711008    1000e-2      0e-2          78096     0         vacuum pgbench_accounts
-15:31:29 3365734   00:00:11  pgbench   pgbench~  active    LWLock.WALWr~  scannin~  711008    1900e-2      0e-2          62480     0         vacuum pgbench_accounts
-15:31:30 3365907   00:00:00                      active    IO.WALSync                                                    0         0         autovacuum: VACUUM ANALYZE publ~
+         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation          [0m[37;1mstate     [0m[37;1mwaiting     [0m[37;1mphase          [0m[37;1msize_total,KiB  [0m[37;1mscanned_total,%  [0m[37;1mvacuumed_total,%  [0m[37;1mscanned,KiB  [0m[37;1mvacuumed,KiB  [0m[37;1mquery                             [0m
+11:56:34 3790850   00:00:27  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              3264         0             autovacuum: VACUUM public.pgben~
+11:56:35 3790850   00:00:28  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              3248         0             autovacuum: VACUUM public.pgben~
+11:56:36 3790850   00:00:29  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              3248         0             autovacuum: VACUUM public.pgben~
+11:56:37 3790850   00:00:30  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              2920         0             autovacuum: VACUUM public.pgben~
+11:56:38 3790850   00:00:31  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              3280         0             autovacuum: VACUUM public.pgben~
+11:56:39 3790850   00:00:32  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         15.00            0.00              2232         0             autovacuum: VACUUM public.pgben~
+11:56:40 3790850   00:00:33  pgbench   pgbench_accounts  active    Timeout.V~  scanning heap  3781592         16.00            0.00              2576         0             autovacuum: VACUUM public.pgben~
+11:56:41 3790850   00:00:34  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         16.00            0.00              2368         0             autovacuum: VACUUM public.pgben~
+11:56:42 3790850   00:00:35  pgbench   pgbench_accounts  active    IO.WALSync  scanning heap  3781592         16.00            0.00              2816         0             autovacuum: VACUUM public.pgben~

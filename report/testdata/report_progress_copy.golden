@@ -1,19 +1,19 @@
-         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation            [0m[37;1mstate     [0m[37;1mwaiting          [0m[37;1mcommand   [0m[37;1mtype      [0m[37;1mrelation_size_kb  [0m[37;1mtotal_kb  [0m[37;1mprocessed_kb  [0m[37;1mprocessed_%  [0m[37;1mtuples_processed  [0m[37;1mtuples_excluded                   [0m
-15:31:24 112255    00:00:02  pgbench   pgbench_accounts_2  active    IO.DataFileRead  COPY TO   PIPE      131152            0         46504                      485926            0
-         112254    00:00:02  pgbench   pgbench_accounts_3  active    IO.DataFileRead  COPY TO   PIPE      131152            0         46971                      490806            0
-15:31:25 112255    00:00:03  pgbench   pgbench_accounts_2  active    IO.DataFileRead  COPY TO   PIPE      131152            0         67427                      704550            0
-         112254    00:00:03  pgbench   pgbench_accounts_3  active    IO.DataFileRead  COPY TO   PIPE      131152            0         66026                      689910            0
-15:31:26 112255    00:00:04  pgbench   pgbench_accounts_2  active    IO.DataFileRead  COPY TO   PIPE      131152            0         92735                      968989            0
-         112254    00:00:04  pgbench   pgbench_accounts_3  active    f                COPY TO   PIPE      131152            0         93476                      976729            0
-15:31:27 112255    00:00:05  pgbench   pgbench_accounts_5  active    IO.DataFileRead  COPY TO   PIPE      131152            0         14839                      155062            0
-         112254    00:00:05  pgbench   pgbench_accounts_4  active    IO.DataFileRead  COPY TO   PIPE      131152            0         15680                      163846            0
-15:31:28 112255    00:00:06  pgbench   pgbench_accounts_5  active    IO.DataFileRead  COPY TO   PIPE      131152            0         33334                      348310            0
-         112254    00:00:06  pgbench   pgbench_accounts_4  active    IO.DataFileRead  COPY TO   PIPE      131152            0         33894                      354166            0
-15:31:29 112255    00:00:07  pgbench   pgbench_accounts_5  active    IO.DataFileRead  COPY TO   PIPE      131152            0         50801                      530822            0
-         112254    00:00:07  pgbench   pgbench_accounts_4  active    f                COPY TO   PIPE      131152            0         51698                      540195            0
-15:31:30 112255    00:00:08  pgbench   pgbench_accounts_5  active    IO.DataFileRead  COPY TO   PIPE      131152            0         65746                      686982            0
-         112254    00:00:08  pgbench   pgbench_accounts_4  active    IO.DataFileRead  COPY TO   PIPE      131152            0         67240                      702598            0
-15:31:31 112255    00:00:09  pgbench   pgbench_accounts_5  active    IO.DataFileRead  COPY TO   PIPE      131152            0         88537                      925126            0
-         112254    00:00:09  pgbench   pgbench_accounts_6  active    IO.DataFileRead  COPY TO   PIPE      131152            0         0                          0                 0
-15:31:32 112255    00:00:10  pgbench   pgbench_accounts_7  active    IO.DataFileRead  COPY TO   PIPE      131152            0         17175                      179462            0
-         112254    00:00:10  pgbench   pgbench_accounts_6  active    IO.DataFileRead  COPY TO   PIPE      131152            0         26328                      275110            0
+         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation          [0m[37;1mstate     [0m[37;1mwaiting   [0m[37;1mcommand    [0m[37;1mtype      [0m[37;1msize_total,KiB  [0m[37;1msource_total,KiB  [0m[37;1mprocessed,KiB  [0m[37;1mprocessed,%  [0m[37;1mtuples_processed  [0m[37;1mtuples_excluded                   [0m
+11:56:34 3793641   00:00:02  tmp       47542             active    f         COPY FROM  PIPE                      0                 148620                      1537084           0
+         3793637   00:00:03  pgbench   pgbench_accounts  active    f         COPY TO    PIPE      1967216         0                 148919                      1540266           0
+11:56:35 3793641   00:00:03  tmp       47542             active    f         COPY FROM  PIPE                      0                 196468                      2047453           0
+         3793637   00:00:04  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 196854                      2051574           0
+11:56:36 3793641   00:00:04  tmp       47542             active    IO.Data~  COPY FROM  PIPE                      0                 244976                      2555726           0
+         3793637   00:00:05  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 245319                      2559305           0
+11:56:37 3793641   00:00:05  tmp       47542             active    IO.WALS~  COPY FROM  PIPE                      0                 287944                      3004686           0
+         3793637   00:00:06  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 288378                      3009226           0
+11:56:38 3793641   00:00:06  tmp       47542             active    f         COPY FROM  PIPE                      0                 336554                      3512607           0
+         3793637   00:00:07  pgbench   pgbench_accounts  active    f         COPY TO    PIPE      1967216         0                 336857                      3515774           0
+11:56:39 3793641   00:00:08  tmp       47542             active    f         COPY FROM  PIPE                      0                 381876                      3986178           0
+         3793637   00:00:08  pgbench   pgbench_accounts  active    f         COPY TO    PIPE      1967216         0                 382184                      3989401           0
+11:56:40 3793641   00:00:09  tmp       47542             active    LWLock.~  COPY FROM  PIPE                      0                 429562                      4484450           0
+         3793637   00:00:09  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 430023                      4489265           0
+11:56:41 3793641   00:00:09  tmp       47542             active    IO.WALS~  COPY FROM  PIPE                      0                 476402                      4973874           0
+         3793637   00:00:10  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 476782                      4977840           0
+11:56:42 3793641   00:00:10  tmp       47542             active    LWLock.~  COPY FROM  PIPE                      0                 518001                      5408542           0
+         3793637   00:00:11  pgbench   pgbench_accounts  active    Client.~  COPY TO    PIPE      1967216         0                 518326                      5411934           0

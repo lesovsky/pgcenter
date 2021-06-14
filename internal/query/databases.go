@@ -4,7 +4,7 @@ const (
 	// PgStatDatabaseGeneralDefault defines default query for getting general databases' stats from pg_stat_database view.
 	PgStatDatabaseGeneralDefault = "SELECT datname, numbackends AS backends_total, " +
 		"coalesce(xact_commit, 0) AS commits, coalesce(xact_rollback, 0) AS rollbacks, " +
-		"coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads, " +
+		`coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS "read,KiB", ` +
 		"coalesce(blks_hit, 0) AS hits, coalesce(tup_returned, 0) AS returned, " +
 		"coalesce(tup_fetched, 0) AS fetched, coalesce(tup_inserted, 0) AS inserts, " +
 		"coalesce(tup_updated, 0) AS updates, coalesce(tup_deleted, 0) AS deletes, " +
@@ -18,7 +18,7 @@ const (
 	// PgStatDatabaseGeneralPG11 defines query for getting general databases' stats from pg_stat_database view for versions 11 and older.
 	PgStatDatabaseGeneralPG11 = "SELECT datname, numbackends AS backends_total, " +
 		"coalesce(xact_commit, 0) AS commits, coalesce(xact_rollback, 0) AS rollbacks, " +
-		"coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS reads, " +
+		`coalesce(blks_read * (SELECT current_setting('block_size')::int / 1024), 0) AS "read,KiB", ` +
 		"coalesce(blks_hit, 0) AS hits, coalesce(tup_returned, 0) AS returned, " +
 		"coalesce(tup_fetched, 0) AS fetched, coalesce(tup_inserted, 0) AS inserts, " +
 		"coalesce(tup_updated, 0) AS updates, coalesce(tup_deleted, 0) AS deletes, " +

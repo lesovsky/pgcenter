@@ -25,137 +25,137 @@ func Test_app_doReport(t *testing.T) {
 		wantFile string
 	}{
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_activity.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "replication", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_replication.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "databases_general", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_databases_general.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "databases_sessions", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_databases_sessions.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "tables", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_tables.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "indexes", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_indexes.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "sizes", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_sizes.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "functions", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_functions.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "wal", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_wal.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_timings", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_timings.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_general", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_general.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_io", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_io.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_local", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_local.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_temp", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_temp.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "statements_wal", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_wal.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_vacuum", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_vacuum.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_cluster", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_cluster.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_index", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_index.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_analyze", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_analyze.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_basebackup", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_basebackup.golden",
 		},
 		{
-			start: "2021-01-23 15:31:00", end: "2021-01-23 15:32:00",
+			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
 			config:   Config{ReportType: "progress_copy", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_progress_copy.golden",
 		},
 		{ // start, end times within report interval
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
 			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_activity_start_end.golden",
 		},
 		{ // start, end times within report interval, set order by pid (desc)
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
 			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: true, TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_activity_order_pid_desc.golden",
 		},
 		{ // start, end times within report interval, set order by pid (asc)
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
 			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: false, TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_activity_order_pid_asc.golden",
 		},
 		{ // start, end times within report interval, grep by query:UPDATE
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
-			config:   Config{ReportType: "activity", FilterColName: "query", FilterRE: regexp.MustCompile("UPDATE"), TruncLimit: 32, Rate: time.Second},
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
+			config:   Config{ReportType: "activity", FilterColName: "query", FilterRE: regexp.MustCompile("SELECT"), TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_activity_grep.golden",
 		},
 		{ // start, end times within report interval, limit by number of rows
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
 			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 32, Rate: time.Second},
 			wantFile: "testdata/report_statements_timings_limit.golden",
 		},
 		{ // start, end times within report interval, limit by number of rows, string limit
-			start: "2021-01-23 15:31:26", end: "2021-01-23 15:31:27",
+			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
 			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 64, Rate: time.Second},
 			wantFile: "testdata/report_statements_timings_limit_truncate.golden",
 		},
@@ -191,8 +191,8 @@ func Test_app_doReport(t *testing.T) {
 func Test_readTar(t *testing.T) {
 	config := Config{
 		ReportType: "databases_general",
-		TsStart:    time.Date(2021, 01, 23, 00, 00, 00, 0, time.UTC),
-		TsEnd:      time.Date(2021, 01, 23, 23, 59, 59, 0, time.UTC),
+		TsStart:    time.Date(2021, 06, 14, 00, 00, 00, 0, time.UTC),
+		TsEnd:      time.Date(2021, 06, 14, 23, 59, 59, 0, time.UTC),
 		TruncLimit: 32, Rate: 1 * time.Second}
 	f, err := os.Open("testdata/pgcenter.stat.golden.tar")
 	assert.NoError(t, err)
