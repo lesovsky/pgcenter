@@ -4,34 +4,28 @@ const (
 	// pgStatDatabaseGeneralDescription is the detailed description of pg_stat_database (general stats) view
 	pgStatDatabaseGeneralDescription = `Database-wide general statistics based on pg_stat_database view:
 
-  column	origin		description
-- datname	datname		Name of this database
-- backends  	numbackends 	Total number of backends connected to the database
-- commits	xact_commit	Number of transactions in this database that have been committed
-- rollbacks	xact_rollback	Number of transactions in this database that have been rolled back
-- reads*	blks_read	Number of data read in this database, in kilobytes
-- hits		blks_hit	Number of times disk blocks were found already in the buffer cache, so that a read was 
-				not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating
-				system's file system cache)
-- returned	tup_returned	Number of rows returned by queries in this database
-- fetched	tup_fetched	Number of rows fetched by queries in this database
-- inserts	tup_inserted	Number of rows inserted by queries in this database
-- updates	tup_updated	Number of rows updated by queries in this database
-- deletes	tup_deleted	Number of rows deleted by queries in this database
-- conflicts	conflicts	Number of queries canceled due to conflicts with recovery in this database. (Conflicts
-				occur only on standby servers; see pg_stat_database_conflicts for details.)
-- deadlocks	deadlocks	Number of deadlocks detected in this database
-- temp_files	temp_files	Number of temporary files created by queries in this database. All temporary files are 
-				counted, regardless of why the temporary file was created (e.g., sorting or hashing), 
-				and regardless of the log_temp_files setting.
-- temp_bytes	temp_bytes	Total amount of data written to temporary files by queries in this database. All 
-				temporary files are counted, regardless of why the temporary file was created, and 
-				regardless of the log_temp_files setting.
-- read_t	blk_read_time	Time spent reading data file blocks by backends in this database, in milliseconds
-- write_t	blk_write_time	Time spent writing data file blocks by backends in this database, in milliseconds
-- stats_age*	stats_reset	Age of collected statistics in the moment when stats are taken from this database
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin		description
+- datname		datname		Name of this database
+- backends_total  	numbackends 	Total number of backends connected to the database
+- commits		xact_commit	Number of transactions in this database that have been committed
+- rollbacks		xact_rollback	Number of transactions in this database that have been rolled back
+- read,KiB		blks_read	Number of data read in this database, in KiB
+- hits			blks_hit	Number of times disk blocks were found already in the buffer cache, so that a read was 
+					not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating
+					system's file system cache)
+- returned		tup_returned	Number of rows returned by queries in this database
+- fetched		tup_fetched	Number of rows fetched by queries in this database
+- inserts		tup_inserted	Number of rows inserted by queries in this database
+- updates		tup_updated	Number of rows updated by queries in this database
+- deletes		tup_deleted	Number of rows deleted by queries in this database
+- conflicts		conflicts	Number of queries canceled due to conflicts with recovery in this database.
+- deadlocks		deadlocks	Number of deadlocks detected in this database
+- csum_fails		checksum_failures	Number of data page checksum failures detected in this database
+- temp_files		temp_files	Number of temporary files created by queries in this database.
+- temp_bytes		temp_bytes	Total amount of data written to temporary files by queries in this database.
+- read,ms		blk_read_time	Time spent reading data file blocks by backends in this database, in milliseconds
+- write,ms		blk_write_time	Time spent writing data file blocks by backends in this database, in milliseconds
+- stats_age		stats_reset	Age of collected statistics in the moment when stats are taken from this database
 
 Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG-STAT-DATABASE-VIEW
 `
@@ -41,19 +35,17 @@ Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG
 
   column		origin				description
 - datname		datname				Name of this database
-- backends  		numbackends			Total number of backends connected to the database
-- total_session_t	session_time			Total time spent by database sessions in this database
-- total_active_t	active_time			Total time spent executing SQL statements in this database
-- total_idle_xact_t	idle_in_transaction_time	Total time spent idling while in a transaction in this database
-- session_t		session_time			Time spent by database sessions in this database, per second
-- active_t		active_time			Time spent executing SQL statements in this database, per second
-- idle_xact_t		idle_in_transaction_time	Time spent idling while in a transaction in this database, per second	
-- sessions		sessions			Number of sessions established to this database, per second
-- abandoned		sessions_abandoned		Number of database sessions to this database that were terminated because connection to the client was lost, per second
-- fatal			sessions_fatal			Number of database sessions to this database that were terminated by fatal errors, per second
-- killed 		sessions_killed			Number of database sessions to this database that were terminated by operator intervention, per second
-
-* - extended value, based on origin and calculated using additional functions.
+- backends_total	numbackends			Total number of backends connected to the database
+- session_total		session_time			Total time spent by database sessions in this database
+- active_total		active_time			Total time spent executing SQL statements in this database
+- idle_xact_total	idle_in_transaction_time	Total time spent idling while in a transaction in this database
+- session,ms		session_time			Time spent by database sessions in this database, in milliseconds
+- active,ms		active_time			Time spent executing SQL statements in this database, in milliseconds
+- idle_xact,ms		idle_in_transaction_time	Time spent idling while in a transaction in this database, in milliseconds	
+- sessions		sessions			Number of sessions established to this database
+- abandoned		sessions_abandoned		Number of database sessions to this database that were terminated because connection to the client was lost
+- fatal			sessions_fatal			Number of database sessions to this database that were terminated by fatal errors
+- killed 		sessions_killed			Number of database sessions to this database that were terminated by operator intervention
 
 Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG-STAT-DATABASE-VIEW
 `
@@ -68,22 +60,20 @@ Details: https://www.postgresql.org/docs/current/static/monitoring-stats.html#PG
 - name		application_name	Name of the application that is connected to this WAL sender
 - state		state			Current WAL sender state
 - mode		sync_state		Synchronous state of this standby server
-- wal*		-			Amount of WAL generated by server, in kB
-- pending*	sent_lsn		Amount of WAL generated, but not sent to the standby, in kB
-- write*	write_lsn		Amount of WAL sent, but not written by standby, in kB
-- flush*	flush_lsn		Amount of WAL written by standby, but not flushed, in kB
-- replay*	replay_lsn		Amount of WAL flushed by standby, but not replayed, in kB
-- total_lag*	replay_lsn		Total amount of WAL that have to be sent, written, flushed and replayed.
-- write_lag	write_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
+- wal,KiB	-			Amount of WAL generated by server, in KiB
+- pending,KiB	sent_lsn		Amount of WAL generated, but not sent to the standby, in KiB
+- write,KiB	write_lsn		Amount of WAL sent, but not written by standby, in KiB
+- flush,KiB	flush_lsn		Amount of WAL written by standby, but not flushed, in KiB
+- replay,KiB	replay_lsn		Amount of WAL flushed by standby, but not replayed, in KiB
+- total,KiB	replay_lsn		Total amount of WAL that have to be sent, written, flushed and replayed.
+- write		write_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
 					server has written it (but not yet flushed it or applied it)
-- flush_lag	flush_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
+- flush		flush_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
 					server has written and flushed it (but not yet applied it)
-- replay_lag	replay_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
+- replay	replay_lag		Time elapsed between flushing recent WAL locally and receiving notification that this standby
 					server has written, flushed and applied it
-- xact_age*	backend_xmin		Number of transactions have to be replayed on this standby server
-- time_age*	-			Age of the xmin's horizon on this standby server
-
-* - extended value, based on origin and calculated using additional functions.
+- horizon_xacts	backend_xmin		Number of transactions have to be replayed on this standby server
+- horizon_age	-			Age of the xmin's horizon on this standby server
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-REPLICATION-VIEW
 `
@@ -91,28 +81,26 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-R
 	// pgStatTablesDescription is the detailed description of pg_stat_all_tables and pg_statio_all_tables views
 	pgStatTablesDescription = `Tables' statistics based on pg_stat_all_tables and pg_statio_all_tables views:
 
-  column	origin			description
-- relation*	schemaname,relname	Name of the table, including schema
-- seq_scan	seq_scan		Number of sequential scans initiated on this table
-- seq_read	seq_tup_read		Number of live rows fetched by sequential scans
-- idx_scan	idx_scan		Number of index scans initiated on this table
-- idx_fetch	idx_tup_fetch		Number of live rows fetched by index scans
-- inserts	n_tup_ins		Number of rows inserted
-- updates	n_tup_upd		Number of rows updated (includes HOT updated rows)
-- deletes	n_tup_del		Number of rows deleted
-- hot_updates	n_tup_hot_upd		Number of rows HOT updated (i.e., with no separate index update required)
-- live		n_live_tup		Estimated number of live rows
-- dead		n_dead_tup		Estimated number of dead rows
-- heap_read*	heap_blks_read		Amount of data have been read from this table, in kB
-- heap_hit	heap_blks_hit		Number of buffer hits in this table
-- idx_read*	idx_blks_read		Amount of data have been read from all indexes on this table, in kB
-- idx_hit	idx_blks_hit		Number of buffer hits in all indexes on this table
-- toast_read*	toast_blks_read		Amount of data have been read from this table's TOAST table (if any), in kB
-- toast_hit	toast_blks_hit		Number of buffer hits in this table's TOAST table (if any)
-- tidx_read*	tidx_blks_read		Amount of data have been read from this table's TOAST table indexes (if any), in kB
-- tidx_hit	tidx_blks_hit		Number of buffer hits in this table's TOAST table indexes (if any)
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- relation		schemaname,relname	Name of the table, including schema
+- seq_scan		seq_scan		Number of sequential scans initiated on this table
+- seq_read		seq_tup_read		Number of live rows fetched by sequential scans
+- idx_scan		idx_scan		Number of index scans initiated on this table
+- idx_fetch		idx_tup_fetch		Number of live rows fetched by index scans
+- inserts		n_tup_ins		Number of rows inserted
+- updates		n_tup_upd		Number of rows updated (includes HOT updated rows)
+- deletes		n_tup_del		Number of rows deleted
+- hot_updates		n_tup_hot_upd		Number of rows HOT updated (i.e., with no separate index update required)
+- live			n_live_tup		Estimated number of live rows
+- dead			n_dead_tup		Estimated number of dead rows
+- heap_read,KiB		heap_blks_read		Amount of data have been read from this table, in KiB
+- heap_hit		heap_blks_hit		Number of buffer hits in this table
+- idx_read,KiB		idx_blks_read		Amount of data have been read from all indexes on this table, in KiB
+- idx_hit		idx_blks_hit		Number of buffer hits in all indexes on this table
+- toast_read,KiB	toast_blks_read		Amount of data have been read from this table's TOAST table (if any), in KiB
+- toast_hit		toast_blks_hit		Number of buffer hits in this table's TOAST table (if any)
+- tidx_read,KiB		tidx_blks_read		Amount of data have been read from this table's TOAST table indexes (if any), in KiB
+- tidx_hit		tidx_blks_hit		Number of buffer hits in this table's TOAST table indexes (if any)
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-TABLES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-TABLES-VIEW
@@ -122,14 +110,12 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 	pgStatIndexesDescription = `Indexes' statistics based on pg_stat_all_indexes and pg_statio_all_indexes views:
 
   column	origin				description
-- index*	schemaname,relname,indexrelname	Name of the index, including schema and table
-- idx_scan	idx_scan			Number of index scans initiated on this index
-- idx_tup_read	idx_tup_read			Number of index entries returned by scans on this index
-- idx_tup_fetch	idx_tup_fetch			Number of live table rows fetched by simple index scans using this index
-- idx_read*	idx_blks_read			Amount of data have been read from this index, in kB
-- idx_hit	idx_blks_hit			Number of buffer hits in this index
-
-* - extended value, based on origin and calculated using additional functions.
+- index		schemaname,relname,indexrelname	Name of the index, including schema and table
+- scan		idx_scan			Number of index scans initiated on this index
+- tuples_read	idx_tup_read			Number of index entries returned by scans on this index
+- tuples_fetch	idx_tup_fetch			Number of live table rows fetched by simple index scans using this index
+- hit		idx_blks_hit			Number of buffer hits in this index
+- read,KiB	idx_blks_read			Amount of data have been read from this index, in KiB
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-INDEXES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-INDEXES-VIEW
@@ -141,14 +127,12 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
   column	origin			description
 - funcid	funcid			OID of a function
 - function	schemaname,funcname	Name of this function, including schema
-- total_calls*	calls			Total mumber of times this function has been called
+- calls_total	calls			Total number of times this function has been called
 - calls		calls			Number of times this function has been called per second
-- total_t	total_time		Total time spent in this function and all other functions called by it, in milliseconds
-- self_t	self_time		Total time spent in this function itself, not including other functions called by it, in milliseconds
-- avg_t*	total_time,calls	Average time spent in this function and all other functions called by it, in milliseconds
-- avg_self_t*	self_time,calls		Average time spent in this function itself, not including other functions called by it, in milliseconds
-
-* - extended value, based on origin and calculated using additional functions.
+- total		total_time		Total time spent in this function and all other functions called by it
+- self		self_time		Total time spent in this function itself, not including other functions called by it
+- total_avg,ms	total_time,calls	Average time spent in this function and all other functions called by it, in milliseconds
+- self_avg,ms	self_time,calls		Average time spent in this function itself, not including other functions called by it, in milliseconds
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-USER-FUNCTIONS-VIEW
 `
@@ -158,18 +142,16 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-U
 
   column	origin			description
 - source	-			Always has 'WAL' value
-- waldir_size*	-			Total size of WAL directory, in bytes 
-- records	wal_records		Number of WAL records generated, per second
-- fpi		wal_fpi			Number of WAL full page images generated, per second
-- wal		wal_bytes		Amount of WAL generated, bytes per second
-- buffers_full	wal_buffers_full	Number of times WAL data was written to disk because WAL buffers became full, per second
-- writes	wal_write		Number of times WAL buffers were written out to disk via XLogWrite request, per second
-- syncs		wal_sync		Number of times WAL files were synced to disk via issue_xlog_fsync request, per second
-- write_time	wal_write_time		Amount of time spent writing WAL buffers to disk via XLogWrite request, in milliseconds per second 
-- sync_time	wal_sync_time		Amount of time spent syncing WAL files to disk via issue_xlog_fsync request, in milliseconds per second
-- stats_age*	stats_reset		Age of collected statistics in the moment when stats are taken
-
-* - extended value, based on origin and calculated using additional functions.
+- waldir_size	-			Total size of WAL directory (pretty) 
+- wal,KiB	wal_bytes		Amount of WAL generated, in KiB
+- records	wal_records		Number of WAL records generated
+- fpi		wal_fpi			Number of WAL full page images generated
+- write		wal_write		Number of times WAL buffers were written out to disk via XLogWrite request
+- sync		wal_sync		Number of times WAL files were synced to disk via issue_xlog_fsync request
+- write,ms	wal_write_time		Amount of time spent writing WAL buffers to disk via XLogWrite request, in milliseconds 
+- sync,ms	wal_sync_time		Amount of time spent syncing WAL files to disk via issue_xlog_fsync request, in milliseconds
+- buffers_full	wal_buffers_full	Number of times WAL data was written to disk because WAL buffers became full
+- stats_age	stats_reset		Age of collected statistics in the moment when stats are taken
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-WAL-VIEW
 `
@@ -179,19 +161,17 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-W
 
   column		origin	description
 - relation		-	Name of the table, including schema
-- n_indexes		-	Total number of indexes on the table 
-- total_size		-	Total size of the table, including metadata and indexes, in kB
-- rel_main_size		-	Size of the table, without metadata and indexes, in kB
-- rel_meta_size		-	Size of table metadata (VM, FSM, INIT forks), in kB
-- toast_size		-	Size of table's TOASTed data, in kB
-- idx_size		-	Total size of table's indexes, in kB
-- total_change		-	How does size of the table, including metadata and indexes is changing per second, in kB
-- rel_main_change	-	How does size of the table, without metadata and indexes is changing per second, in kB
-- rel_meta_change	-	How does size of the table's metadata is changing per second, in kB
-- toast_change		-	How does size of the table's TOASTed data is changing per second, in kB
-- idx_change		-	How does size of the table's indexes is changing per second, in kB
-
-* - extended value, based on origin and calculated using additional functions.
+- indexes_total		-	Total number of indexes on the table 
+- size_total,KiB	-	Total size of the table, including metadata and indexes, in KiB
+- table_total,KiB	-	Total size of the table, without metadata and indexes, in KiB
+- meta_total,KiB	-	Total size of table metadata (VM, FSM, INIT forks), in KiB
+- toast_total,KiB	-	Total size of table's TOASTed data, in KiB
+- indexes_total,KiB	-	Total size of table's indexes, in KiB
+- size,KiB		-	How does size of the table, including metadata and indexes is changing, in KiB
+- table,KiB		-	How does size of the table, without metadata and indexes is changing, in KiB
+- meta,KiB		-	How does size of the table's metadata is changing, in KiB
+- toast,KiB		-	How does size of the table's TOASTed data is changing, in KiB
+- indexes,KiB		-	How does size of the table's indexes is changing, in KiB
 
 Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-ADMIN-DBOBJECT
 `
@@ -210,12 +190,10 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 - wait_etype	wait_event_type		The type of event for which the backend is waiting, if any
 - wait_event	wait_event		Wait event name if backend is currently waiting
 - state		state			Current overall state of this backend
-- xact_age*	xact_start		Current transaction's duration if active
-- query_age*	query_start		Current query's duration if active
-- change_age*	state_change		Age since last state has been changed
+- xact_age	xact_start		Current transaction's duration if active
+- query_age	query_start		Current query's duration if active
+- change_age	state_change		Age since last state has been changed
 - query		query			Text of this backend's most recent query
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW
 `
@@ -223,22 +201,20 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 	// pgStatProgressVacuumDescription is the detailed description of pg_stat_progress_vacuum view
 	pgStatProgressVacuumDescription = `Statistics about progress of vacuums based on pg_stat_progress_vacuum view:
 
-  column	origin			description
-- pid		pid			Process ID of this worker
-- xact_age*	xact_start		Current transaction's duration if active
-- datname	datname			Name of the database this worker is connected to
-- relation	relid			Name of the relation which is vacuumed by this worker
-- state		state			Current overall state of this worker
-- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
-- phase		phase			Current processing phase of vacuum
-- t_size*	heap_blks_total		Total size of the table, in kB
-- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
-- t_vacuumed_%*	heap_blks_vacuumed	The percent of data vacuumed, in kB
-- scanned	heap_blks_scanned	Amount of data scanned per interval, in kB
-- vacuumed	heap_blks_vacuumed	Amount of data vacuumed per interval, in kB
-- query		query			Text of this workers's "query"
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- pid			pid			Process ID of this worker
+- xact_age		xact_start		Current transaction's duration if active
+- datname		datname			Name of the database this worker is connected to
+- relation		relid			Name of the relation which is vacuumed by this worker
+- state			state			Current overall state of this worker
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase			phase			Current processing phase of vacuum
+- size_total,KiB	heap_blks_total		Total size of the table, in KiB
+- scanned_total,%	heap_blks_scanned	The percent of data scanned
+- vacuumed_total,%	heap_blks_vacuumed	The percent of data vacuumed
+- scanned,KiB		heap_blks_scanned	Amount of data scanned, in KiB
+- vacuumed,KiB		heap_blks_vacuumed	Amount of data vacuumed, in KiB
+- query			query			Text of this workers's "query"
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-PROGRESS-REPORTING
 `
@@ -246,22 +222,20 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#VACUUM-
 	// pgStatProgressClusterDescription is the detailed description of pg_stat_progress_cluster view
 	pgStatProgressClusterDescription = `Statistics about progress of cluster and vacuum full operations based on pg_stat_progress_cluster view:
 
-  column	origin			description
-- pid		pid			Process ID of this worker
-- xact_age*	xact_start		Current transaction's duration if active
-- datname	datname			Name of the database this worker is connected to
-- relation	relid			Name of the relation which is processed by this worker
-- index		cluster_index_relid	Name of the relation which is processed by this worker
-- state		state			Current overall state of this worker
-- waiting*	wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
-- phase		phase			Current processing phase of operation
-- t_size*	heap_blks_total		Total size of the table, in kB
-- t_scanned_%*	heap_blks_scanned	The percent of data scanned, in kB
-- tup_scanned	heap_tuples_scanned	Number of heap tuples scanned
-- tup_written	heap_tuples_written	Number of heap tuples written
-- query		query			Text of this workers's "query"
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- pid			pid			Process ID of this worker
+- xact_age		xact_start		Current transaction's duration if active
+- datname		datname			Name of the database this worker is connected to
+- relation		relid			Name of the relation which is processed by this worker
+- index			cluster_index_relid	Name of the relation which is processed by this worker
+- state			state			Current overall state of this worker
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- phase			phase			Current processing phase of operation
+- size_total,KiB	heap_blks_total		Total size of the table, in KiB
+- scanned_total,%	heap_blks_scanned	The percent of data scanned
+- tuples_scanned	heap_tuples_scanned	Number of heap tuples scanned
+- tuples_written	heap_tuples_written	Number of heap tuples written
+- query			query			Text of this workers's "query"
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER-PROGRESS-REPORTING
 `
@@ -271,21 +245,19 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#CLUSTER
 
   column		origin				description
 - pid			pid				Process ID of this worker
-- xact_age*		xact_start			Current transaction's duration if active
+- xact_age		xact_start			Current transaction's duration if active
 - datname		datname				Name of the database this worker is connected to
 - relation		relid				Name of the relation which is processed by this worker
 - index			cluster_index_relid		Name of the relation which is processed by this worker
 - state			state				Current overall state of this worker
-- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - phase			phase				Current processing phase of operation
 - locker_pid		current_locker_pid		Process ID of the locker currently being waited for
-- lockers*		lockers_total,lockers_done	Total number of lockers to wait for, and number of lockers already waited for.
-- size_total/done_%*	blocks_total,blocks_done	Total size to be processed and percent of already processed in the current phase, in kB
-- tup_total/done_%*	tuples_total,tuples_done	Total number of tuples to be processed and percent of already processed in the current phase
-- parts_total/done_%*	partitions_total,partitions_done	Total number of partitions on which the index is to be created, and the number of partitions on which the index has been completed
+- lockers		lockers_total,lockers_done	Total number of lockers to wait for, and number of lockers already waited for.
+- size_total/done,%	blocks_total,blocks_done	Total size to be processed and percent of already processed in the current phase, in KiB and percent
+- tuples_total/done,%	tuples_total,tuples_done	Total number of tuples to be processed and percent of already processed in the current phase
+- parts_total/done,%	partitions_total,partitions_done	Total number of partitions on which the index is to be created, and the number of partitions on which the index has been completed
 - query			query				Text of this workers's "query"
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING
 `
@@ -295,19 +267,17 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#CREATE-
 
   column		origin				description
 - pid			pid				Process ID of this worker
-- xact_age*		xact_start			Current transaction's duration if active
+- xact_age		xact_start			Current transaction's duration if active
 - datname		datname				Name of the database this worker is connected to
 - relation		relid				Name of the relation which is processed by this worker
 - state			state				Current overall state of this worker
-- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - phase			phase				Current processing phase of operation
-- t_size        	sample_blks_total		Total size of the sample, in kB.
-- scanned_%		sample_blks_total,sample_blks_scanned	Total size of scanned sample, in percent
+- sample_size,KiB	sample_blks_total		Total size of the sample, in KiB
+- scanned,%		sample_blks_total,sample_blks_scanned	Total size of scanned sample, in percent
 - ext_total/done	ext_stats_total,ext_stats_computed	Total number of extended statistics and number of already computed statistics
-- child_total/done_%	child_tables_total,child_tables_done Total number of child tables and ratio of child tables already processed 
+- child_total/done,%	child_tables_total,child_tables_done Total number of child tables and ratio of child tables already processed 
 - child_in_progress	current_child_table_relid	Name of child relation which is processed by this worker
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE-PROGRESS-REPORTING
 `
@@ -321,14 +291,12 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#ANALYZE
 - started_at		backend_start			Timestamp of when basebackup has been started
 - duration		backend_start			Duration of basebackup
 - state			state				Current overall state of this worker
-- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - phase			phase				Current processing phase of operation
-- t_size        	backup_total			Total amount of data that will be streamed, in kB
-- streamed_%		backup_total,backup_streamed	Total amount of data already streamed, in percent
-- streamed			backup_total,backup_streamed	Amount of data streamed
+- size_total,KiB        	backup_total			Total amount of data that will be streamed, in KiB
+- streamed,%		backup_total,backup_streamed	Total amount of data already streamed, in percent
+- streamed,KiB			backup_total,backup_streamed	Amount of data streamed, in KiB
 - tablespaces_total/streamed	tablespaces_total,tablespaces_streamed	Total number of tablespaces and already streamed.
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#BASEBACKUP-PROGRESS-REPORTING
 `
@@ -338,21 +306,19 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#BASEBAC
 
   column		origin				description
 - pid			pid				Process ID of this worker
-- xact_age*		xact_start			Current transaction's duration if active
+- xact_age		xact_start			Current transaction's duration if active
 - datname		datname				Name of the database this worker is connected to
 - relation		relid				Name of the relation which is processed by this worker
 - state			state				Current overall state of this worker
-- waiting*		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
+- waiting		wait_event_type,wait_event	Wait event name and type for which the worker is waiting, if any
 - command		command				The command that is running: COPY FROM, or COPY TO
 - type			type				The io type that the data is read from or written to: FILE, PROGRAM, PIPE or CALLBACK
-- relation_size_kb        				Size of the table, without metadata and indexes, in kB
-- total_kb		bytes_total			Size of source file for COPY FROM command in bytes. It is set to 0 if not available
-- processed_kb		bytes_processed			Number of bytes already processed by COPY command
-- processed_%*		bytes_total,bytes_processed	Ratio of processed data accordingly to sizeof source file, if available
+- size_total,KiB	-    				Size of the table, without metadata and indexes, in KiB
+- source_total,KiB	bytes_total			Size of source file for COPY FROM command, in KiB. It is set to 0 if not available
+- processed,KiB		bytes_processed			Amount of data already processed by COPY command, in KiB
+- processed,%		bytes_total,bytes_processed	Ratio of processed data accordingly to sizeof source file, if available
 - tuples_processed	tuples_processed		Number of tuples already processed by COPY command
 - tuples_excluded	tuples_excluded			Number of tuples not processed because they were excluded by the WHERE clause of the COPY command
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/progress-reporting.html#COPY-PROGRESS-REPORTING
 `
@@ -363,19 +329,17 @@ Details: https://www.postgresql.org/docs/current/progress-reporting.html#COPY-PR
   column	origin			description
 - user		rolname			Name of of user who executed the statement
 - database	datname			Name of database in which the statement was executed
-- t_all_t	total_time		Total time spent in the statement
-- t_read_t	blk_read_time		Total time the statement spent reading blocks
-- t_write_t	blk_write_time		Total time the statement spent writing blocks
-- t_cpu_t*	-			Total time spent in the statement, except time spent reading and writing blocks
-- all_t		total_time		Time spent in the statement, per second
-- read_t	blk_read_time		Time the statement spent reading blocks, per second
-- write_t	blk_write_time		Time the statement spent writing blocks, per second
-- cpu_t*	-			Time spent in the statement, except time spent reading and writing blocks, per second
-- calls		calls			Number of times executed, per second
+- all_total	total_time		Total time spent in the statement
+- read_total	blk_read_time		Total time the statement spent reading blocks
+- write_total	blk_write_time		Total time the statement spent writing blocks
+- exec_total	-			Total time spent executing the statement (except time spent reading and writing blocks)
+- all,ms	total_time		Time spent in the statement, in milliseconds
+- read,ms	blk_read_time		Time the statement spent reading blocks, in milliseconds
+- write,ms	blk_write_time		Time the statement spent writing blocks, in milliseconds
+- exec,ms	-			Time spent in the statement, except time spent reading and writing blocks, in milliseconds
+- calls		calls			Number of times executed
 - queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
 - query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
@@ -386,14 +350,12 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
   column	origin			description
 - user		rolname			Name of of user who executed the statement
 - database	datname			Name of database in which the statement was executed
-- t_calls	calls			Total number of times executed
-- t_rows	rows			Total number of rows retrieved or affected by the statement
-- calls		calls			Number of times executed, per second
-- rows		rows			Number of rows retrieved or affected by the statement, per second
-- queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- calls_total	calls			Total number of times executed
+- rows_total	rows			Total number of rows retrieved or affected by the statement
+- calls		calls			Number of times executed
+- rows		rows			Number of rows retrieved or affected by the statement
+- queryid	rolname,datname,query	Fake queryid based on username, datname and text of the statement
 - query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
@@ -401,22 +363,20 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 	// pgStatStatementsIODescription is the detailed description of pg_stat_statements section about buffers IO stats
 	pgStatStatementsIODescription = `Statements statistics related to I/O, based on pg_stat_statements:
 
-  column	origin			description
-- user		rolname			Name of of user who executed the statement
-- database	datname			Name of database in which the statement was executed
-- t_hits	shared_blks_hit		Total number of shared block cache hits by the statement
-- t_reads*	shared_blks_read	Total number of shared blocks read by the statement, in kB
-- t_dirtied*	shared_blks_dirtied	Total number of shared blocks dirtied by the statement, in kB
-- t_written*	shared_blks_written	Total number of shared blocks written by the statement, in Kb
-- hits		shared_blks_hit		Number of shared block cache hits by the statement, per second 
-- reads*	shared_blks_read	Number of shared blocks read by the statement, in kB/s
-- dirtied*	shared_blks_dirtied	Number of shared blocks dirtied by the statement, in kB/s
-- written*	shared_blks_written	Number of shared blocks written by the statement, in kB/s
-- calls		calls			Number of times executed
-- queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
-- query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- user			rolname			Name of of user who executed the statement
+- database		datname			Name of database in which the statement was executed
+- hits_total		shared_blks_hit		Total number of shared block cache hits by the statement
+- read_total,KiB	shared_blks_read	Total number of shared blocks read by the statement, in KiB
+- dirtied_total,KiB	shared_blks_dirtied	Total number of shared blocks dirtied by the statement, in KiB
+- written_total,KiB	shared_blks_written	Total number of shared blocks written by the statement, in KiB
+- hits			shared_blks_hit		Number of shared block cache hits by the statement
+- read,KiB		shared_blks_read	Number of shared blocks read by the statement, in KiB
+- dirtied,KiB		shared_blks_dirtied	Number of shared blocks dirtied by the statement, in KiB
+- written,KiB		shared_blks_written	Number of shared blocks written by the statement, in KiB
+- calls			calls			Number of times executed
+- queryid		rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- query			query			Text of a representative statement
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
@@ -424,18 +384,16 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 	// pgStatStatementsTempDescription is the detailed description of pg_stat_statements section about temp files IO stats
 	pgStatStatementsTempDescription = `Statements statistics related to temp I/O, based on pg_stat_statements:
 
-  column	origin			description
-- user		rolname			Name of of user who executed the statement
-- database	datname			Name of database in which the statement was executed
-- t_tmp_read*	temp_blks_read		Total number of temp blocks read by the statement, in kB
-- t_tmp_write*	temp_blks_written	Total number of temp blocks written by the statement, in kB
-- tmp_read*	temp_blks_read		Number of temp blocks read by the statement, in kB/s
-- tmp_write*	temp_blks_written	Number of temp blocks written by the statement, in kB/s
-- calls		calls			Number of times executed
-- queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
-- query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- user			rolname			Name of of user who executed the statement
+- database		datname			Name of database in which the statement was executed
+- read_total,KiB	temp_blks_read		Total number of temp blocks read by the statement, in KiB
+- write_total,KiB	temp_blks_written	Total number of temp blocks written by the statement, in KiB
+- read,KiB		temp_blks_read		Number of temp blocks read by the statement, in KiB
+- write,KiB		temp_blks_written	Number of temp blocks written by the statement, in KiB
+- calls			calls			Number of times executed
+- queryid		rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- query			query			Text of a representative statement
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
@@ -443,22 +401,20 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 	// pgStatStatementsLocalDescription is the detailed description of pg_stat_statements section about local buffers IO stats
 	pgStatStatementsLocalDescription = `Statements statistics related to local I/O, based on pg_stat_statements:
 
-  column	origin			description
-- user		rolname			Name of of user who executed the statement
-- database	datname			Name of database in which the statement was executed
-- t_lo_hits	local_blks_hit		Total number of local block cache hits by the statement
-- t_lo_reads*	local_blks_read		Total number of local blocks read by the statement, in kB
-- t_lo_dirtied*	local_blks_dirtied	Total number of local blocks dirtied by the statement, in kB
-- t_lo_written*	local_blks_written	Total number of local blocks written by the statement, in kB
-- lo_hits	local_blks_hit		Number of local block cache hits by the statement, per second
-- lo_reads*	local_blks_read		Number of local blocks read by the statement, in kB/s
-- lo_dirtied*	local_blks_dirtied	Number of local blocks dirtied by the statement, in kB/s
-- lo_written*	local_blks_written	Number of local blocks written by the statement, in kB/s
-- calls		calls			Number of times executed
-- queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
-- query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
+  column		origin			description
+- user			rolname			Name of of user who executed the statement
+- database		datname			Name of database in which the statement was executed
+- hits_total		local_blks_hit		Total number of local block cache hits by the statement
+- read_total,KiB	local_blks_read		Total number of local blocks read by the statement, in KiB
+- dirtied_total,KiB	local_blks_dirtied	Total number of local blocks dirtied by the statement, in KiB
+- written_total,KiB	local_blks_written	Total number of local blocks written by the statement, in KiB
+- hits			local_blks_hit		Number of local block cache hits by the statement
+- read,KiB		local_blks_read		Number of local blocks read by the statement, in KiB
+- dirtied,KiB		local_blks_dirtied	Number of local blocks dirtied by the statement, in KiB
+- written,KiB		local_blks_written	Number of local blocks written by the statement, in KiB
+- calls			calls			Number of times executed
+- queryid		rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- query			query			Text of a representative statement
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
@@ -469,15 +425,13 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
   column	origin			description
 - user		rolname			Name of of user who executed the statement
 - database	datname			Name of database in which the statement was executed
-- t_wal		wal_bytes		Total amount of WAL bytes generated by the statement, in kB
-- wal		wal_bytes		Total amount of WAL bytes generated by the statement, in kB/s
-- wal_records	wal_records		Total number of WAL records generated by the statement, in records/s
-- wal_fpi	wal_fpi			Total number of WAL full page images generated by the statement, in fpi/s
-- calls		calls			Number of times query executed, calls/s
-- queryid*	rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- wal_total,KiB	wal_bytes		Total amount of WAL bytes generated by the statement, in KiB
+- wal,KiB	wal_bytes		Amount of WAL bytes generated by the statement, in KiB
+- records	wal_records		Number of WAL records generated by the statement
+- fpi		wal_fpi			Number of WAL full page images generated by the statement
+- calls		calls			Number of times query executed
+- queryid	rolname,datname,query	Fake queryid based on username, datname and text of the statement
 - query		query			Text of a representative statement
-
-* - extended value, based on origin and calculated using additional functions.
 
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `

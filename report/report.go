@@ -530,8 +530,8 @@ func describeReport(w io.Writer, report string) error {
 		"statements_timings":  pgStatStatementsTimingsDescription,
 		"statements_general":  pgStatStatementsGeneralDescription,
 		"statements_io":       pgStatStatementsIODescription,
-		"statements_local":    pgStatStatementsTempDescription,
-		"statements_temp":     pgStatStatementsLocalDescription,
+		"statements_local":    pgStatStatementsLocalDescription,
+		"statements_temp":     pgStatStatementsTempDescription,
 		"statements_wal":      pgStatStatementsWalDescription,
 	}
 
