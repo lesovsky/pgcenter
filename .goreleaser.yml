@@ -20,9 +20,6 @@ builds:
 archives:
   - builds: [pgcenter]
 
-changelog:
-  sort: asc
-
 nfpms:
   - vendor: pgcenter
     homepage: https://github.com/lesovsky/pgcenter
