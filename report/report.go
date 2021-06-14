@@ -134,10 +134,11 @@ func (app *app) doReport(r *tar.Reader) error {
 	return nil
 }
 
-// readTar reads stats amd metadata from tar stream and send it to data channel.
+// readTar reads stats and metadata from tar stream and send it to data channel.
 func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{}) error {
 	var metaOK, statOK bool
 	var meta metadata
+	var res stat.PGresult
 
 	defer func() { doneCh <- struct{}{} }()
 
@@ -174,25 +175,23 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 			}
 
 			metaOK, meta = true, m
-			continue
+		} else {
+			// Read stats from file.
+			res, err = stat.NewPGresultFile(r, hdr.Size)
+			if err != nil {
+				return err
+			}
+			statOK = true
 		}
-
-		// Read stats from file.
-		s, err := stat.NewPGresultFile(r, hdr.Size)
-		if err != nil {
-			return err
-		}
-		statOK = true
 
 		if !metaOK || !statOK {
 			continue
 		}
 
 		// Send stats and meta, and reset flags.
+		dataCh <- data{ts: ts, res: res, meta: meta}
 
-		dataCh <- data{ts: ts, res: s, meta: meta}
-
-		metaOK, statOK = false, false // nolint: ineffassign
+		metaOK, statOK = false, false
 
 	} //end for
 
