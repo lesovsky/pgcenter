@@ -26,137 +26,137 @@ func Test_app_doReport(t *testing.T) {
 	}{
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "activity", TruncLimit: 32},
 			wantFile: "testdata/report_activity.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "replication", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "replication", TruncLimit: 32},
 			wantFile: "testdata/report_replication.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "databases_general", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "databases_general", TruncLimit: 32},
 			wantFile: "testdata/report_databases_general.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "databases_sessions", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "databases_sessions", TruncLimit: 32},
 			wantFile: "testdata/report_databases_sessions.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "tables", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "tables", TruncLimit: 32},
 			wantFile: "testdata/report_tables.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "indexes", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "indexes", TruncLimit: 32},
 			wantFile: "testdata/report_indexes.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "sizes", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "sizes", TruncLimit: 32},
 			wantFile: "testdata/report_sizes.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "functions", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "functions", TruncLimit: 32},
 			wantFile: "testdata/report_functions.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "wal", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "wal", TruncLimit: 32},
 			wantFile: "testdata/report_wal.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_timings", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_timings", TruncLimit: 32},
 			wantFile: "testdata/report_statements_timings.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_general", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_general", TruncLimit: 32},
 			wantFile: "testdata/report_statements_general.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_io", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_io", TruncLimit: 32},
 			wantFile: "testdata/report_statements_io.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_local", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_local", TruncLimit: 32},
 			wantFile: "testdata/report_statements_local.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_temp", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_temp", TruncLimit: 32},
 			wantFile: "testdata/report_statements_temp.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "statements_wal", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_wal", TruncLimit: 32},
 			wantFile: "testdata/report_statements_wal.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_vacuum", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_vacuum", TruncLimit: 32},
 			wantFile: "testdata/report_progress_vacuum.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_cluster", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_cluster", TruncLimit: 32},
 			wantFile: "testdata/report_progress_cluster.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_index", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_index", TruncLimit: 32},
 			wantFile: "testdata/report_progress_index.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_analyze", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_analyze", TruncLimit: 32},
 			wantFile: "testdata/report_progress_analyze.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_basebackup", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_basebackup", TruncLimit: 32},
 			wantFile: "testdata/report_progress_basebackup.golden",
 		},
 		{
 			start: "2021-06-14 11:56:00", end: "2021-06-14 11:57:00",
-			config:   Config{ReportType: "progress_copy", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "progress_copy", TruncLimit: 32},
 			wantFile: "testdata/report_progress_copy.golden",
 		},
 		{ // start, end times within report interval
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "activity", TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "activity", TruncLimit: 32},
 			wantFile: "testdata/report_activity_start_end.golden",
 		},
 		{ // start, end times within report interval, set order by pid (desc)
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: true, TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: true, TruncLimit: 32},
 			wantFile: "testdata/report_activity_order_pid_desc.golden",
 		},
 		{ // start, end times within report interval, set order by pid (asc)
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: false, TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "activity", OrderColName: "pid", OrderDesc: false, TruncLimit: 32},
 			wantFile: "testdata/report_activity_order_pid_asc.golden",
 		},
 		{ // start, end times within report interval, grep by query:UPDATE
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "activity", FilterColName: "query", FilterRE: regexp.MustCompile("SELECT"), TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "activity", FilterColName: "query", FilterRE: regexp.MustCompile("SELECT"), TruncLimit: 32},
 			wantFile: "testdata/report_activity_grep.golden",
 		},
 		{ // start, end times within report interval, limit by number of rows
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 32, Rate: time.Second},
+			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 32},
 			wantFile: "testdata/report_statements_timings_limit.golden",
 		},
 		{ // start, end times within report interval, limit by number of rows, string limit
 			start: "2021-06-14 11:56:41", end: "2021-06-14 11:57:42",
-			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 64, Rate: time.Second},
+			config:   Config{ReportType: "statements_timings", RowLimit: 10, TruncLimit: 64},
 			wantFile: "testdata/report_statements_timings_limit_truncate.golden",
 		},
 	}
@@ -193,7 +193,7 @@ func Test_readTar(t *testing.T) {
 		ReportType: "databases_general",
 		TsStart:    time.Date(2021, 06, 14, 00, 00, 00, 0, time.UTC),
 		TsEnd:      time.Date(2021, 06, 14, 23, 59, 59, 0, time.UTC),
-		TruncLimit: 32, Rate: 1 * time.Second}
+		TruncLimit: 32}
 	f, err := os.Open("testdata/pgcenter.stat.golden.tar")
 	assert.NoError(t, err)
 	tr := tar.NewReader(f)
@@ -259,7 +259,7 @@ func Test_processData(t *testing.T) {
 		},
 	}
 
-	config := Config{ReportType: "databases_general", TruncLimit: 32, Rate: 2 * time.Second, OrderColName: "datname"}
+	config := Config{ReportType: "databases_general", TruncLimit: 32, OrderColName: "datname"}
 	app := newApp(config)
 	var buf bytes.Buffer
 	app.writer = &buf
@@ -351,10 +351,11 @@ func Test_isFilenameOK(t *testing.T) {
 		name   string
 		report string
 	}{
-		{valid: true, name: "databases_general.20210116T140630.json", report: "databases_general"},
-		{valid: true, name: "meta.20210116T140630.json", report: "databases_general"},
-		{valid: false, name: "databases_general.20210116T140630.json", report: "replication"},
-		{valid: false, name: "databases_general.json", report: "databases_general"},
+		{valid: true, name: "databases_general.20210116T140630.123.json", report: "databases_general"},
+		{valid: true, name: "databases_general.20210116T140630.000.json", report: "databases_general"},
+		{valid: true, name: "meta.20210116T140630.123.json", report: "databases_general"},
+		{valid: false, name: "databases_general.20210116T140630.123.json", report: "replication"},
+		{valid: false, name: "databases_general.20210116T140630.json", report: "databases_general"},
 	}
 
 	for _, tc := range testcases {
@@ -374,26 +375,26 @@ func Test_isFilenameTimestampOK(t *testing.T) {
 		end   string
 		want  string
 	}{
-		{valid: true, name: "databases_general.20210116T140630.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "invalid.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "invalid.invalid-ts.json", start: "14:00:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "databases_general.20210116T140630.json", start: "14:30:00", end: "15:00:00", want: "20210116 14:06:30"},
-		{valid: false, name: "databases_general.20210116T140630.json", start: "13:30:00", end: "14:00:00", want: "20210116 14:06:30"},
+		{valid: true, name: "databases_general.20210116T140630.123.json", start: "14:00:00.000", end: "15:00:00.000", want: "20210116 14:06:30.123"},
+		{valid: false, name: "invalid.json", start: "14:00:00.000", end: "15:00:00.000", want: "20210116 14:06:30.000"},
+		{valid: false, name: "invalid.invalid-ts.json", start: "14:00:00.000", end: "15:00:00.000", want: "20210116 14:06:30.000"},
+		{valid: false, name: "databases_general.20210116T140630.json", start: "14:30:00.000", end: "15:00:00.000", want: "20210116 14:06:30.000"},
+		{valid: false, name: "databases_general.20210116T140630.json", start: "13:30:00.000", end: "14:00:00.000", want: "20210116 14:06:30.000"},
 	}
 
 	loc := time.Now().Location()
 
 	for _, tc := range testcases {
-		start, err := time.ParseInLocation("20060102 15:04:05", fmt.Sprintf("20210116 %s", tc.start), loc)
+		start, err := time.ParseInLocation("20060102 15:04:05.000", fmt.Sprintf("20210116 %s", tc.start), loc)
 		assert.NoError(t, err)
 
-		end, err := time.ParseInLocation("20060102 15:04:05", fmt.Sprintf("20210116 %s", tc.end), loc)
+		end, err := time.ParseInLocation("20060102 15:04:05.000", fmt.Sprintf("20210116 %s", tc.end), loc)
 		assert.NoError(t, err)
 
 		got, err := isFilenameTimestampOK(tc.name, start, end)
 		if tc.valid {
 			assert.NoError(t, err)
-			assert.Equal(t, tc.want, got.Format("20060102 15:04:05"))
+			assert.Equal(t, tc.want, got.Format("20060102 15:04:05.000"))
 		} else {
 			assert.Error(t, err)
 		}
@@ -434,7 +435,7 @@ func Test_countDiff(t *testing.T) {
 		},
 	}
 
-	want := stat.PGresult{
+	want1second := stat.PGresult{
 		Valid: true, Ncols: 19, Nrows: 1,
 		Cols: []string{
 			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
@@ -451,12 +452,33 @@ func Test_countDiff(t *testing.T) {
 		},
 	}
 
+	want5second := stat.PGresult{
+		Valid: true, Ncols: 19, Nrows: 1,
+		Cols: []string{
+			"datname", "backends", "commits", "rollbacks", "reads", "hits", "returned", "fetched", "inserts", "updates", "deletes",
+			"conflicts", "deadlocks", "csum_fails", "temp_files", "temp_bytes", "read_t", "write_t", "stats_age",
+		},
+		Values: [][]sql.NullString{
+			{
+				{String: "example_db", Valid: true}, {String: "11", Valid: true}, {String: "100", Valid: true}, {String: "1", Valid: true},
+				{String: "400", Valid: true}, {String: "2000", Valid: true}, {String: "200", Valid: true}, {String: "600", Valid: true},
+				{String: "800", Valid: true}, {String: "1200", Valid: true}, {String: "300", Valid: true}, {String: "5", Valid: true},
+				{String: "6", Valid: true}, {String: "0", Valid: true}, {String: "10", Valid: true}, {String: "5000", Valid: true},
+				{String: "50", Valid: true}, {String: "0", Valid: true}, {String: "11 days 10:10:11", Valid: true},
+			},
+		},
+	}
+
 	views := view.New()
 	v := views["databases_general"]
 
 	got, err := countDiff(curr, prev, 1, v)
 	assert.NoError(t, err)
-	assert.Equal(t, want, got)
+	assert.Equal(t, want1second, got)
+
+	got, err = countDiff(curr, prev, 5, v)
+	assert.NoError(t, err)
+	assert.Equal(t, want5second, got)
 }
 
 func Test_getColumnIndex(t *testing.T) {
@@ -525,12 +547,11 @@ func Test_printReportHeader(t *testing.T) {
 		ReportType: "test_example",
 		TsStart:    tsStart,
 		TsEnd:      tsEnd,
-		Rate:       time.Second,
 	}
 
 	want := `INFO: reading from test_example.stat.tar
 INFO: report test_example
-INFO: start from: 2021-01-18 05:00:00 +05, to: 2021-01-18 06:00:00 +05, with rate: 1s
+INFO: start from: 2021-01-18 05:00:00 +05, to: 2021-01-18 06:00:00 +05
 `
 
 	var buf bytes.Buffer
@@ -561,7 +582,7 @@ func Test_printStatHeader(t *testing.T) {
 	n, err := printStatHeader(&buf, 20, v)
 	assert.Equal(t, 0, n)
 	assert.Equal(t,
-		"         \x1b[37;1mdatname  \x1b[0m\x1b[37;1mcommits  \x1b[0m\x1b[37;1mrollbacks  \x1b[0m\x1b[37;1mreads  \x1b[0m\x1b[37;1mhits  \x1b[0m\x1b[37;1mreturned  \x1b[0m\x1b[37;1mfetched  \x1b[0m\x1b[37;1minserts  \x1b[0m\x1b[37;1mupdates  \x1b[0m\x1b[37;1mdeletes  \x1b[0m\x1b[37;1mconflicts  \x1b[0m\x1b[37;1mdeadlocks  \x1b[0m\x1b[37;1mcsum_fails  \x1b[0m\x1b[37;1mtemp_files  \x1b[0m\x1b[37;1mtemp_bytes  \x1b[0m\x1b[37;1mread_t  \x1b[0m\x1b[37;1mwrite_t  \x1b[0m\x1b[37;1mstats_age  \x1b[0m\n",
+		"\x1b[37;1mdatname  \x1b[0m\x1b[37;1mcommits  \x1b[0m\x1b[37;1mrollbacks  \x1b[0m\x1b[37;1mreads  \x1b[0m\x1b[37;1mhits  \x1b[0m\x1b[37;1mreturned  \x1b[0m\x1b[37;1mfetched  \x1b[0m\x1b[37;1minserts  \x1b[0m\x1b[37;1mupdates  \x1b[0m\x1b[37;1mdeletes  \x1b[0m\x1b[37;1mconflicts  \x1b[0m\x1b[37;1mdeadlocks  \x1b[0m\x1b[37;1mcsum_fails  \x1b[0m\x1b[37;1mtemp_files  \x1b[0m\x1b[37;1mtemp_bytes  \x1b[0m\x1b[37;1mread_t  \x1b[0m\x1b[37;1mwrite_t  \x1b[0m\x1b[37;1mstats_age  \x1b[0m\n",
 		buf.String(),
 	)
 	assert.NoError(t, err)
@@ -614,7 +635,7 @@ func Test_printStatSample(t *testing.T) {
 	fname := f.Name()
 
 	// print report
-	n, err := printStatSample(f, res, v, Config{}, time.Time{})
+	n, err := printStatSample(f, res, v, Config{}, time.Time{}, time.Second)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, n)
 

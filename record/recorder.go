@@ -132,8 +132,7 @@ func (c *tarRecorder) write(stats map[string]stat.PGresult) error {
 		}
 
 		now := time.Now()
-		filename := fmt.Sprintf("%s.%s.json", name, now.Format("20060102T150405"))
-		hdr := &tar.Header{Name: filename, Mode: 0644, Size: int64(len(data)), ModTime: now}
+		hdr := &tar.Header{Name: newFilenameString(now, name), Mode: 0644, Size: int64(len(data)), ModTime: now}
 		err = c.writer.WriteHeader(hdr)
 		if err != nil {
 			return err
@@ -157,4 +156,9 @@ func (c *tarRecorder) close() error {
 	}
 
 	return c.file.Close()
+}
+
+// newFilenameString returns a filename string with formatted timestamp and report name.
+func newFilenameString(ts time.Time, name string) string {
+	return fmt.Sprintf("%s.%s.json", name, ts.Format("20060102T150405.000"))
 }

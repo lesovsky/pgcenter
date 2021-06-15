@@ -26,15 +26,14 @@ type options struct {
 	showStatements  string // Show stats from pg_stat_statements
 	showProgress    string // Show stats from pg_stat_progress_* stats
 
-	inputFile      string        // Input file with statistics
-	tsStart, tsEnd string        // Show stats within an interval
-	orderColName   string        // Name of the column used for sorting
-	orderDesc      bool          // Specify to use descendant order
-	orderAsc       bool          // Specify to use ascendant order
-	filter         string        // Perform filtering
-	rowLimit       int           // Number of rows per timestamp
-	strLimit       int           // Trim all strings longer than this limit
-	rate           time.Duration // Stats rate
+	inputFile      string // Input file with statistics
+	tsStart, tsEnd string // Show stats within an interval
+	orderColName   string // Name of the column used for sorting
+	orderDesc      bool   // Specify to use descendant order
+	orderAsc       bool   // Specify to use ascendant order
+	filter         string // Perform filtering
+	rowLimit       int    // Number of rows per timestamp
+	strLimit       int    // Trim all strings longer than this limit
 }
 
 var (
@@ -78,7 +77,6 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&opts.filter, "grep", "g", "", "grep values in specified column (format: colname:filter_pattern)")
 	CommandDefinition.Flags().IntVarP(&opts.rowLimit, "limit", "l", 0, "print only limited number of rows per sample")
 	CommandDefinition.Flags().IntVarP(&opts.strLimit, "strlimit", "t", 32, "maximum string size for long lines to print (default: 32)")
-	CommandDefinition.Flags().DurationVarP(&opts.rate, "rate", "r", time.Second, "statistics changes rate interval (default: 1s)")
 }
 
 // validate parses and validates options passed by user and returns options ready for 'pgcenter report'.
@@ -87,11 +85,6 @@ func (opts options) validate() (report.Config, error) {
 	r := selectReport(opts)
 	if r == "" {
 		return report.Config{}, fmt.Errorf("report type is not specified, quit")
-	}
-
-	if opts.rate < time.Second {
-		fmt.Println("INFO: round rate interval to minimum allowed 1 second.")
-		opts.rate = time.Second
 	}
 
 	// Define report start/end interval.
@@ -124,7 +117,6 @@ func (opts options) validate() (report.Config, error) {
 		FilterRE:      re,
 		RowLimit:      opts.rowLimit,
 		TruncLimit:    opts.strLimit,
-		Rate:          opts.rate,
 	}, nil
 }
 

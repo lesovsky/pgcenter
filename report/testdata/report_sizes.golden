@@ -1,38 +1,47 @@
-         [37;1mrelation                 [0m[37;1mindexes_total  [0m[37;1msize_total,KiB  [0m[37;1mtable_total,KiB  [0m[37;1mmeta_total,KiB  [0m[37;1mtoast_total,KiB  [0m[37;1mindexes_total,KiB  [0m[37;1msize,KiB  [0m[37;1mtable,KiB  [0m[37;1mmeta,KiB  [0m[37;1mtoast,KiB  [0m[37;1mindexes,KiB                       [0m
-11:56:34 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:35 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:36 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:37 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:38 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-         [37;1mrelation                 [0m[37;1mindexes_total  [0m[37;1msize_total,KiB  [0m[37;1mtable_total,KiB  [0m[37;1mmeta_total,KiB  [0m[37;1mtoast_total,KiB  [0m[37;1mindexes_total,KiB  [0m[37;1msize,KiB  [0m[37;1mtable,KiB  [0m[37;1mmeta,KiB  [0m[37;1mtoast,KiB  [0m[37;1mindexes,KiB                       [0m
-11:56:39 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:40 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:41 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
-11:56:42 public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
-         public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
-         public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
-         public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+[37;1mrelation                 [0m[37;1mindexes_total  [0m[37;1msize_total,KiB  [0m[37;1mtable_total,KiB  [0m[37;1mmeta_total,KiB  [0m[37;1mtoast_total,KiB  [0m[37;1mindexes_total,KiB  [0m[37;1msize,KiB  [0m[37;1mtable,KiB  [0m[37;1mmeta,KiB  [0m[37;1mtoast,KiB  [0m[37;1mindexes,KiB                       [0m
+2021/06/14 11:56:34, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:35, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:36, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:37, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:38, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+[37;1mrelation                 [0m[37;1mindexes_total  [0m[37;1msize_total,KiB  [0m[37;1mtable_total,KiB  [0m[37;1mmeta_total,KiB  [0m[37;1mtoast_total,KiB  [0m[37;1mindexes_total,KiB  [0m[37;1msize,KiB  [0m[37;1mtable,KiB  [0m[37;1mmeta,KiB  [0m[37;1mtoast,KiB  [0m[37;1mindexes,KiB                       [0m
+2021/06/14 11:56:39, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:40, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:41, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0
+2021/06/14 11:56:42, rate: 1s
+public.pgbench_tellers   1              224             136              32              0                56                 0         0          0         0          0
+public.pgbench_history   0              680             656              24              0                0                  0         0          0         0          0
+public.pgbench_branches  1              552             504              32              0                16                 0         0          0         0          0
+public.pgbench_accounts  1              2301448         1971832          568             0                329048             0         0          0         0          0

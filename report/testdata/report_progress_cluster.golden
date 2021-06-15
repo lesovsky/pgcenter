@@ -1,10 +1,19 @@
-         [37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation          [0m[37;1mindex     [0m[37;1mstate     [0m[37;1mwaiting     [0m[37;1mphase              [0m[37;1msize_total,KiB  [0m[37;1mscanned_total,%  [0m[37;1mtuples_scanned  [0m[37;1mtuples_written  [0m[37;1mquery                             [0m
-11:56:34 3788780   00:00:06  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         59.00            502152          502152          vacuum full pgbench_accounts ;
-11:56:35 3788780   00:00:07  pgbench   pgbench_accounts  -         active    f           seq scanning heap  3781592         60.00            383519          383519          vacuum full pgbench_accounts ;
-11:56:36 3788780   00:00:08  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         62.00            495308          495308          vacuum full pgbench_accounts ;
-11:56:37 3788780   00:00:09  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         63.00            502152          502152          vacuum full pgbench_accounts ;
-11:56:38 3788780   00:00:10  pgbench   pgbench_accounts  -         active    LWLock.WA~  seq scanning heap  3781592         65.00            502213          502213          vacuum full pgbench_accounts ;
-11:56:39 3788780   00:00:11  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         67.00            502152          502152          vacuum full pgbench_accounts ;
-11:56:40 3788780   00:00:12  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         69.00            502152          502152          vacuum full pgbench_accounts ;
-11:56:41 3788780   00:00:13  pgbench   pgbench_accounts  -         active    LWLock.WA~  seq scanning heap  3781592         70.00            502213          502213          vacuum full pgbench_accounts ;
-11:56:42 3788780   00:00:14  pgbench   pgbench_accounts  -         active    f           seq scanning heap  3781592         72.00            580719          580719          vacuum full pgbench_accounts ;
+[37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname   [0m[37;1mrelation          [0m[37;1mindex     [0m[37;1mstate     [0m[37;1mwaiting     [0m[37;1mphase              [0m[37;1msize_total,KiB  [0m[37;1mscanned_total,%  [0m[37;1mtuples_scanned  [0m[37;1mtuples_written  [0m[37;1mquery                             [0m
+2021/06/14 11:56:34, rate: 1s
+3788780   00:00:06  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         59.00            502152          502152          vacuum full pgbench_accounts ;
+2021/06/14 11:56:35, rate: 1s
+3788780   00:00:07  pgbench   pgbench_accounts  -         active    f           seq scanning heap  3781592         60.00            383519          383519          vacuum full pgbench_accounts ;
+2021/06/14 11:56:36, rate: 1s
+3788780   00:00:08  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         62.00            495308          495308          vacuum full pgbench_accounts ;
+2021/06/14 11:56:37, rate: 1s
+3788780   00:00:09  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         63.00            502152          502152          vacuum full pgbench_accounts ;
+2021/06/14 11:56:38, rate: 1s
+3788780   00:00:10  pgbench   pgbench_accounts  -         active    LWLock.WA~  seq scanning heap  3781592         65.00            502213          502213          vacuum full pgbench_accounts ;
+2021/06/14 11:56:39, rate: 1s
+3788780   00:00:11  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         67.00            502152          502152          vacuum full pgbench_accounts ;
+2021/06/14 11:56:40, rate: 1s
+3788780   00:00:12  pgbench   pgbench_accounts  -         active    IO.WALSync  seq scanning heap  3781592         69.00            502152          502152          vacuum full pgbench_accounts ;
+2021/06/14 11:56:41, rate: 1s
+3788780   00:00:13  pgbench   pgbench_accounts  -         active    LWLock.WA~  seq scanning heap  3781592         70.00            502213          502213          vacuum full pgbench_accounts ;
+2021/06/14 11:56:42, rate: 1s
+3788780   00:00:14  pgbench   pgbench_accounts  -         active    f           seq scanning heap  3781592         72.00            580719          580719          vacuum full pgbench_accounts ;

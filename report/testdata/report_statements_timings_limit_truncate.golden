@@ -1,11 +1,12 @@
-         [37;1muser      [0m[37;1mdatabase        [0m[37;1mall_total  [0m[37;1mread_total  [0m[37;1mwrite_total  [0m[37;1mexec_total  [0m[37;1mall,ms    [0m[37;1mread,ms   [0m[37;1mwrite,ms  [0m[37;1mexec,ms   [0m[37;1mcalls     [0m[37;1mqueryid     [0m[37;1mquery                                                             [0m
-11:56:42 postgres  postgres        00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         8820b43fce  SELECT current_setting($1),pg_current_logfile()
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         f844975654  insert into pgbench_branches(bid,bbalance) values($1,$2)
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         c9a1f648ed  insert into pgbench_branches(bid,bbalance) values($1,$2)
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cab2e6e673  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         5f5fd4b0e3  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
-         postgres  pgscv_fixtures  00:01:11   00:00:00    00:00:00     00:01:11    0         0         0         0         0         7a4ca00981  SELECT current_database() AS database, s1.schemaname AS schema,~
-         postgres  pgscv_fixtures  00:00:32   00:00:00    00:00:00     00:00:32    0         0         0         0         0         e8ac4a8798  SELECT sum(pg_total_relation_size(relname::regclass)) AS bytes ~
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cc9b0d1c16  insert into pgbench_branches(bid,bbalance) values($1,$2)
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         4f36e29390  insert into pgbench_branches(bid,bbalance) values($1,$2)
-         postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         1c95078779  insert into pgbench_branches(bid,bbalance) values($1,$2)
+[37;1muser      [0m[37;1mdatabase        [0m[37;1mall_total  [0m[37;1mread_total  [0m[37;1mwrite_total  [0m[37;1mexec_total  [0m[37;1mall,ms    [0m[37;1mread,ms   [0m[37;1mwrite,ms  [0m[37;1mexec,ms   [0m[37;1mcalls     [0m[37;1mqueryid     [0m[37;1mquery                                                             [0m
+2021/06/14 11:56:42, rate: 1s
+postgres  postgres        00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         8820b43fce  SELECT current_setting($1),pg_current_logfile()
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         f844975654  insert into pgbench_branches(bid,bbalance) values($1,$2)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         c9a1f648ed  insert into pgbench_branches(bid,bbalance) values($1,$2)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cab2e6e673  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         5f5fd4b0e3  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
+postgres  pgscv_fixtures  00:01:11   00:00:00    00:00:00     00:01:11    0         0         0         0         0         7a4ca00981  SELECT current_database() AS database, s1.schemaname AS schema,~
+postgres  pgscv_fixtures  00:00:32   00:00:00    00:00:00     00:00:32    0         0         0         0         0         e8ac4a8798  SELECT sum(pg_total_relation_size(relname::regclass)) AS bytes ~
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cc9b0d1c16  insert into pgbench_branches(bid,bbalance) values($1,$2)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         4f36e29390  insert into pgbench_branches(bid,bbalance) values($1,$2)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         1c95078779  insert into pgbench_branches(bid,bbalance) values($1,$2)

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func Test_tarRecorder_open_close(t *testing.T) {
@@ -92,4 +93,22 @@ func Test_tarRecorder_write(t *testing.T) {
 
 	// Cleanup.
 	assert.NoError(t, os.Remove(filename))
+}
+
+func Test_newFilenameString(t *testing.T) {
+	testcases := []struct {
+		ts   time.Time
+		want string
+	}{
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 123456789, time.UTC), want: "example.20210615T123015.123.json"},
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 23456789, time.UTC), want: "example.20210615T123015.023.json"},
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 3456789, time.UTC), want: "example.20210615T123015.003.json"},
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 456789, time.UTC), want: "example.20210615T123015.000.json"},
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 789, time.UTC), want: "example.20210615T123015.000.json"},
+		{ts: time.Date(2021, 06, 15, 12, 30, 15, 0, time.UTC), want: "example.20210615T123015.000.json"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, newFilenameString(tc.ts, "example"))
+	}
 }

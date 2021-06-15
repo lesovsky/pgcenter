@@ -1,12 +1,13 @@
-         [37;1mpid       [0m[37;1mcl_addr       [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname     [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event     [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age        [0m[37;1mchange_age       [0m[37;1mquery                             [0m
-11:56:42 2967718   127.0.0.1/32  35960               postgres  14/replica  walsender       Activity    WalSenderMain  active              3 days 18:14:38  3 days 18:14:38  START_REPLICATION 36/E3000000 T~
-         3781488                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781489                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781490                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781491                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781492                 -1        pgbench   postgres  pgbench     client backend  IO          WALSync        active    00:00:00  00:00:00         00:00:00         END;
-         3781493                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781494                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781495                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
-         3781498                 -1        pgbench   postgres  pgbench     client backend                             active    00:00:00  00:00:00         00:00:00         SELECT abalance FROM pgbench_ac~
-         3781555                 -1        pgbench   lesovsky              client backend                             active    00:00:00  00:00:00         00:00:00         SELECT pid, client_addr AS cl_a~
+[37;1mpid       [0m[37;1mcl_addr       [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname     [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event     [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age        [0m[37;1mchange_age       [0m[37;1mquery                             [0m
+2021/06/14 11:56:42, rate: 1s
+2967718   127.0.0.1/32  35960               postgres  14/replica  walsender       Activity    WalSenderMain  active              3 days 18:14:38  3 days 18:14:38  START_REPLICATION 36/E3000000 T~
+3781488                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781489                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781490                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781491                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781492                 -1        pgbench   postgres  pgbench     client backend  IO          WALSync        active    00:00:00  00:00:00         00:00:00         END;
+3781493                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781494                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781495                 -1        pgbench   postgres  pgbench     client backend  LWLock      WALWrite       active    00:00:00  00:00:00         00:00:00         END;
+3781498                 -1        pgbench   postgres  pgbench     client backend                             active    00:00:00  00:00:00         00:00:00         SELECT abalance FROM pgbench_ac~
+3781555                 -1        pgbench   lesovsky              client backend                             active    00:00:00  00:00:00         00:00:00         SELECT pid, client_addr AS cl_a~

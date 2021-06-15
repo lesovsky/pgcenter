@@ -29,7 +29,6 @@ type Config struct {
 	FilterRE      *regexp.Regexp
 	RowLimit      int
 	TruncLimit    int
-	Rate          time.Duration
 }
 
 const (
@@ -234,18 +233,18 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 				continue
 			}
 
-			// Calculate time interval.
+			// Calculate interval and rate.
+			// Interval defines number of seconds used for calculating rate values.
+			// Rate is not used in calculations and printed on info header.
 			interval := d.ts.Sub(prevTs)
-			if config.Rate > interval {
-				_, err := fmt.Fprintf(
-					app.writer,
-					"WARNING: specified rate longer than stats snapshots interval, adjusting it to %s\n",
-					interval.String(),
-				)
-				if err != nil {
-					return err
-				}
-				config.Rate = interval
+			var itv int
+			var rate time.Duration
+			if interval < time.Second {
+				itv = 1
+				rate = interval
+			} else {
+				itv = int(interval / time.Second)
+				rate = time.Second
 			}
 
 			// When first data read, list of columns is known and it is possible to set up order.
@@ -258,7 +257,7 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 			}
 
 			// Calculate delta between current and previous stats snapshots.
-			diffStat, err := countDiff(d.res, prevStat, int(interval/config.Rate), v)
+			diffStat, err := countDiff(d.res, prevStat, itv, v)
 			if err != nil {
 				return err
 			}
@@ -273,7 +272,7 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 			}
 
 			// print the stats - calculated delta between previous and current stats snapshots
-			n, err := printStatSample(app.writer, &diffStat, v, config, d.ts)
+			n, err := printStatSample(app.writer, &diffStat, v, config, d.ts, rate)
 			if err != nil {
 				return err
 			}
@@ -308,7 +307,7 @@ func isFilenameOK(name string, report string) error {
 	s := strings.Split(name, ".")
 
 	// File name should be in the format: 'report_type.timestamp.json'.
-	if len(s) != 3 {
+	if len(s) != 4 {
 		return fmt.Errorf("bad file name format %s, skip", name)
 	}
 
@@ -324,13 +323,13 @@ func isFilenameOK(name string, report string) error {
 func isFilenameTimestampOK(name string, start, end time.Time) (time.Time, error) {
 	s := strings.Split(name, ".")
 
-	// File name should be in the format: 'report_type.timestamp.json'
-	if len(s) != 3 {
+	// File name should be in the format: 'report_type.timestamp.ms.json'
+	if len(s) != 4 {
 		return time.Time{}, fmt.Errorf("bad file name format %s, skip", name)
 	}
 
 	// Calculate timestamp when stats were recorded, parse timestamp considering it is in local timezone.
-	ts, err := time.ParseInLocation("20060102T150405", s[1], time.Now().Location())
+	ts, err := time.ParseInLocation("20060102T150405.000", s[1]+"."+s[2], time.Now().Location())
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -386,13 +385,12 @@ func formatStatSample(d *stat.PGresult, view *view.View, c Config) {
 func printReportHeader(w io.Writer, c Config) error {
 	tmpl := "INFO: reading from %s\n" +
 		"INFO: report %s\n" +
-		"INFO: start from: %s, to: %s, with rate: %s\n"
+		"INFO: start from: %s, to: %s\n"
 	msg := fmt.Sprintf(tmpl,
 		c.InputFile,
 		c.ReportType,
 		c.TsStart.Format("2006-01-02 15:04:05 MST"),
 		c.TsEnd.Format("2006-01-02 15:04:05 MST"),
-		c.Rate.String(),
 	)
 
 	_, err := fmt.Fprint(w, msg)
@@ -408,11 +406,6 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 		return printedNum, nil
 	}
 
-	_, err := fmt.Fprintf(w, "         ")
-	if err != nil {
-		return 0, err
-	}
-
 	for i, name := range v.Cols {
 		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 37, 1, v.ColsWidth[i]+2, name)
 		if err != nil {
@@ -420,7 +413,7 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 		}
 	}
 
-	_, err = fmt.Fprintf(w, "\n")
+	_, err := fmt.Fprintf(w, "\n")
 	if err != nil {
 		return 0, err
 	}
@@ -428,7 +421,7 @@ func printStatHeader(w io.Writer, printedNum int, v view.View) (int, error) {
 }
 
 // printStatSample prints given stats
-func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, ts time.Time) (int, error) {
+func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, ts time.Time, interval time.Duration) (int, error) {
 	// print stats values
 	var printFirst = true // every first line in the snapshot should begin with timestamp when stats were taken
 	var linesPrinted int  // count lines printed per snapshot (for limiting purposes)
@@ -455,17 +448,13 @@ func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, 
 
 		// print the row
 		if doPrint {
+			header := fmt.Sprintf("%s, rate: %s\n", ts.Format("2006/01/02 15:04:05"), interval.String())
 			if printFirst {
-				_, err := fmt.Fprintf(w, "%s ", ts.Format("15:04:05"))
+				_, err := fmt.Fprint(w, header)
 				if err != nil {
 					return 0, err
 				}
 				printFirst = false
-			} else {
-				_, err := fmt.Fprintf(w, "         ")
-				if err != nil {
-					return 0, err
-				}
 			}
 
 			for i := range res.Cols {

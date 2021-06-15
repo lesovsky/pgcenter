@@ -1,4 +1,5 @@
 pgcenter (master) unstable; urgency=low
+  * record/report: add support for millisecond resolution
   * add support of pg_stat_wal WAL usage statistics (Postgres 14)
   * add support of pg_stat_database sessions statistics (Postgres 14)
   * add support of pg_stat_progress_copy (Postgres 14)

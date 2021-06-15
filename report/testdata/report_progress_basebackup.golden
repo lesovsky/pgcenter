@@ -1,10 +1,19 @@
-         [37;1mpid       [0m[37;1mstarted_from  [0m[37;1mstarted_at           [0m[37;1mduration  [0m[37;1mstate     [0m[37;1mwaiting   [0m[37;1mphase                     [0m[37;1msize_total,KiB  [0m[37;1mstreamed,%  [0m[37;1mstreamed,KiB  [0m[37;1mtablespaces_total/streamed  [0m
-11:56:34 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:02  active    f         streaming database files  2455099         6.00        134641        1/0
-11:56:35 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:03  active    IO.Base~  streaming database files  2455099         12.00       144000        1/0
-11:56:36 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:04  active    Client.~  streaming database files  2455099         33.00       535473        1/0
-11:56:37 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:05  active    IO.Base~  streaming database files  2455099         58.00       611195        1/0
-11:56:38 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:06  active    f         streaming database files  2455099         76.00       439659        1/0
-11:56:39 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:07  active    IO.Base~  streaming database files  2455099         98.00       527648        1/0
-11:56:40 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:08  active    IO.Base~  streaming database files  2455099         98.00       20190         1/0
-11:56:41 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:09  active    IO.Base~  streaming database files  2455099         99.00       1964          1/0
-11:56:42 3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:10  active    IO.Base~  streaming database files  2455099         99.00       1309          1/0
+[37;1mpid       [0m[37;1mstarted_from  [0m[37;1mstarted_at           [0m[37;1mduration  [0m[37;1mstate     [0m[37;1mwaiting   [0m[37;1mphase                     [0m[37;1msize_total,KiB  [0m[37;1mstreamed,%  [0m[37;1mstreamed,KiB  [0m[37;1mtablespaces_total/streamed  [0m
+2021/06/14 11:56:34, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:02  active    f         streaming database files  2455099         6.00        134641        1/0
+2021/06/14 11:56:35, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:03  active    IO.Base~  streaming database files  2455099         12.00       144000        1/0
+2021/06/14 11:56:36, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:04  active    Client.~  streaming database files  2455099         33.00       535473        1/0
+2021/06/14 11:56:37, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:05  active    IO.Base~  streaming database files  2455099         58.00       611195        1/0
+2021/06/14 11:56:38, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:06  active    f         streaming database files  2455099         76.00       439659        1/0
+2021/06/14 11:56:39, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:07  active    IO.Base~  streaming database files  2455099         98.00       527648        1/0
+2021/06/14 11:56:40, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:08  active    IO.Base~  streaming database files  2455099         98.00       20190         1/0
+2021/06/14 11:56:41, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:09  active    IO.Base~  streaming database files  2455099         99.00       1964          1/0
+2021/06/14 11:56:42, rate: 1s
+3793153   127.0.0.1/32  2021-06-14 12:38:56  00:00:10  active    IO.Base~  streaming database files  2455099         99.00       1309          1/0

@@ -1,3 +1,4 @@
-         [37;1mpid       [0m[37;1mcl_addr       [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname     [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event     [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age        [0m[37;1mchange_age       [0m[37;1mquery                             [0m
-11:56:42 3781555                 -1        pgbench   lesovsky              client backend                             active    00:00:00  00:00:00         00:00:00         SELECT pid, client_addr AS cl_a~
-         3781498                 -1        pgbench   postgres  pgbench     client backend                             active    00:00:00  00:00:00         00:00:00         SELECT abalance FROM pgbench_ac~
+[37;1mpid       [0m[37;1mcl_addr       [0m[37;1mcl_port   [0m[37;1mdatname   [0m[37;1musename   [0m[37;1mappname     [0m[37;1mbackend_type    [0m[37;1mwait_etype  [0m[37;1mwait_event     [0m[37;1mstate     [0m[37;1mxact_age  [0m[37;1mquery_age        [0m[37;1mchange_age       [0m[37;1mquery                             [0m
+2021/06/14 11:56:42, rate: 1s
+3781555                 -1        pgbench   lesovsky              client backend                             active    00:00:00  00:00:00         00:00:00         SELECT pid, client_addr AS cl_a~
+3781498                 -1        pgbench   postgres  pgbench     client backend                             active    00:00:00  00:00:00         00:00:00         SELECT abalance FROM pgbench_ac~

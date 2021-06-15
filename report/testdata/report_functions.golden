@@ -1,19 +1,28 @@
-         [37;1mfuncid    [0m[37;1mfunction                    [0m[37;1mcalls_total  [0m[37;1mcalls     [0m[37;1mtotal     [0m[37;1mself      [0m[37;1mtotal_avg,ms  [0m[37;1mself_avg,ms                       [0m
-11:56:34 26082     public.pg_stat_statements   72054        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:35 26082     public.pg_stat_statements   72060        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:36 26082     public.pg_stat_statements   72066        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:37 26082     public.pg_stat_statements   72072        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:38 26082     public.pg_stat_statements   72078        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:39 26082     public.pg_stat_statements   72084        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:40 26082     public.pg_stat_statements   72090        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:41 26082     public.pg_stat_statements   72096        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
-11:56:42 26082     public.pg_stat_statements   72102        6         00:02:53  00:02:53  2.4100        2.4100
-         1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+[37;1mfuncid    [0m[37;1mfunction                    [0m[37;1mcalls_total  [0m[37;1mcalls     [0m[37;1mtotal     [0m[37;1mself      [0m[37;1mtotal_avg,ms  [0m[37;1mself_avg,ms                       [0m
+2021/06/14 11:56:34, rate: 1s
+26082     public.pg_stat_statements   72054        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:35, rate: 1s
+26082     public.pg_stat_statements   72060        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:36, rate: 1s
+26082     public.pg_stat_statements   72066        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:37, rate: 1s
+26082     public.pg_stat_statements   72072        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:38, rate: 1s
+26082     public.pg_stat_statements   72078        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:39, rate: 1s
+26082     public.pg_stat_statements   72084        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:40, rate: 1s
+26082     public.pg_stat_statements   72090        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:41, rate: 1s
+26082     public.pg_stat_statements   72096        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700
+2021/06/14 11:56:42, rate: 1s
+26082     public.pg_stat_statements   72102        6         00:02:53  00:02:53  2.4100        2.4100
+1215      pg_catalog.obj_description  12           0         00:00:00  00:00:00  1.3700        1.3700

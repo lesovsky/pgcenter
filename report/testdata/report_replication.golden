@@ -1,10 +1,19 @@
-         [37;1mpid       [0m[37;1mclient        [0m[37;1muser      [0m[37;1mname        [0m[37;1mstate      [0m[37;1mmode      [0m[37;1mwal,KiB   [0m[37;1mpending,KiB  [0m[37;1mwrite,KiB  [0m[37;1mflush,KiB  [0m[37;1mreplay,KiB  [0m[37;1mtotal,KiB  [0m[37;1mwrite     [0m[37;1mflush     [0m[37;1mreplay    [0m
-11:56:34 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     3337      0            355        525        3           882        00:00:00  00:00:00  00:00:00
-11:56:35 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     2921      0            0          362        0           362        00:00:00  00:00:00  00:00:00
-11:56:36 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     3030      0            228        364        86          678        00:00:00  00:00:00  00:00:00
-11:56:37 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1774      0            0          230        198         427        00:00:00  00:00:00  00:00:00
-11:56:38 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     2353      0            0          488        0           488        00:00:00  00:00:00  00:00:00
-11:56:39 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1909      0            372        291        16          679        00:00:00  00:00:00  00:00:00
-11:56:40 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1738      0            55         63         16          134        00:00:00  00:00:00  00:00:00
-11:56:41 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1802      0            0          213        0           212        00:00:00  00:00:00  00:00:00
-11:56:42 2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1954      0            87         136        80          302        00:00:00  00:00:00  00:00:00
+[37;1mpid       [0m[37;1mclient        [0m[37;1muser      [0m[37;1mname        [0m[37;1mstate      [0m[37;1mmode      [0m[37;1mwal,KiB   [0m[37;1mpending,KiB  [0m[37;1mwrite,KiB  [0m[37;1mflush,KiB  [0m[37;1mreplay,KiB  [0m[37;1mtotal,KiB  [0m[37;1mwrite     [0m[37;1mflush     [0m[37;1mreplay    [0m
+2021/06/14 11:56:34, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     3337      0            355        525        3           882        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:35, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     2921      0            0          362        0           362        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:36, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     3030      0            228        364        86          678        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:37, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1774      0            0          230        198         427        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:38, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     2353      0            0          488        0           488        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:39, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1909      0            372        291        16          679        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:40, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1738      0            55         63         16          134        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:41, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1802      0            0          213        0           212        00:00:00  00:00:00  00:00:00
+2021/06/14 11:56:42, rate: 1s
+2967718   127.0.0.1/32  postgres  14/replica  streaming  async     1954      0            87         136        80          302        00:00:00  00:00:00  00:00:00
