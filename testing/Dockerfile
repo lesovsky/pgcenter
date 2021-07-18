@@ -11,7 +11,7 @@
 # __release_tag__ gosec v2.6.1 was released 2021-01-22
 FROM ubuntu:20.04
 
-LABEL version="v0.0.5"
+LABEL version="0.0.6"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -44,4 +44,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing v0.0.5"]
+CMD ["echo", "I'm pgcenter-testing 0.0.6"]

@@ -47,7 +47,10 @@ while (<FILE>) {
 	# skip header if required.
     if ($i < $_[3]) { $i++; next; }
     chomp;
-    my @items = map {s/^\s+|\s+$//g; $_;} split ($_[1]);
+    # trim extra white-spaces
+    $_ =~ s/\s+/ /g;
+    $_ =~ s/^\s+|\s+$//g;
+    my @items = map { $_ } split ($_[1]);
     my %iitems;
     # use filter if required.
     if ($items[0] =~ $_[2] && $_[2] ne "") {
