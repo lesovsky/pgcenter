@@ -3,7 +3,7 @@ package query
 const (
 	// PgStatProgressBasebackupDefault defines default query for getting stats from pg_stat_progress_basebackup view.
 	PgStatProgressBasebackupDefault = "SELECT " +
-		"a.pid, a.client_addr AS started_from, " +
+		"a.pid, host(a.client_addr) AS started_from, " +
 		"to_char(backend_start, 'YYYY-MM-DD HH24:MI:SS') AS started_at, " +
 		"date_trunc('seconds', clock_timestamp() - backend_start)::text AS duration, a.state, " +
 		"coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting, p.phase, " +

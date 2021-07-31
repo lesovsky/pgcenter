@@ -2,7 +2,7 @@ package query
 
 const (
 	// PgStatReplicationDefault defines default query for getting replication stats from pg_stat_replication view.
-	PgStatReplicationDefault = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
+	PgStatReplicationDefault = "SELECT pid AS pid, host(client_addr) AS client, usename AS user, application_name AS name, " +
 		`state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS "wal,KiB", ` +
 		`({{.WalFunction1}}({{.WalFunction2}}(),sent_lsn) / 1024)::bigint AS "pending,KiB", ` +
 		`({{.WalFunction1}}(sent_lsn,write_lsn) / 1024)::bigint AS "write,KiB", ` +
@@ -15,7 +15,7 @@ const (
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
 	// PgStatReplicationExtended defines extended query for getting replication stats (including horizon ages) from pg_stat_replication view.
-	PgStatReplicationExtended = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
+	PgStatReplicationExtended = "SELECT pid AS pid, host(client_addr) AS client, usename AS user, application_name AS name, " +
 		`state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS "wal,KiB", ` +
 		`({{.WalFunction1}}({{.WalFunction2}}(),sent_lsn) / 1024)::bigint AS "pending,KiB", ` +
 		`({{.WalFunction1}}(sent_lsn,write_lsn) / 1024)::bigint AS "write,KiB", ` +
@@ -30,7 +30,7 @@ const (
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
 	// PgStatReplication96 defines query for getting replication stats from versions for 9.6 and older.
-	PgStatReplication96 = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
+	PgStatReplication96 = "SELECT pid AS pid, host(client_addr) AS client, usename AS user, application_name AS name, " +
 		`state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS "wal,KiB", ` +
 		`({{.WalFunction1}}({{.WalFunction2}}(),sent_location) / 1024)::bigint AS "pending,KiB", ` +
 		`({{.WalFunction1}}(sent_location,write_location) / 1024)::bigint AS "write,KiB", ` +
@@ -40,7 +40,7 @@ const (
 		"FROM pg_stat_replication ORDER BY pid DESC"
 
 	// PgStatReplication96Extended defines extended query for getting replication stats (including horizon ages) for 9.6 and older.
-	PgStatReplication96Extended = "SELECT pid AS pid, client_addr AS client, usename AS user, application_name AS name, " +
+	PgStatReplication96Extended = "SELECT pid AS pid, host(client_addr) AS client, usename AS user, application_name AS name, " +
 		`state, sync_state AS mode, ({{.WalFunction1}}({{.WalFunction2}}(),'0/0') / 1024)::bigint AS "wal,KiB", ` +
 		`({{.WalFunction1}}({{.WalFunction2}}(),sent_location) / 1024)::bigint AS "pending,KiB", ` +
 		`({{.WalFunction1}}(sent_location,write_location) / 1024)::bigint AS "write,KiB", ` +
