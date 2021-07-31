@@ -113,6 +113,7 @@ type PostgresProperties struct {
 	GucAVMaxWorkers         int     // value of autovacuum_max_workers GUC
 	GucMaxConnections       int     // value of max_connections GUC
 	GucMaxPrepXacts         int     // value of max_prepared_transactions GUC
+	GucSharedPreLibraries   string  // value of shared_preload_libraries GUC
 	ExtPGSSSchema           string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
 	SchemaPgcenterAvail     bool    // is 'pgcenter' schema installed?
 	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
@@ -127,6 +128,7 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 		&props.GucTrackCommitTimestamp,
 		&props.GucMaxConnections,
 		&props.GucAVMaxWorkers,
+		&props.GucSharedPreLibraries,
 		&props.Recovery,
 		&props.StartTime,
 	)
@@ -135,7 +137,9 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 	}
 
 	// Is pg_stat_statement available?
-	props.ExtPGSSSchema = extensionSchema(db, "pg_stat_statements")
+	if strings.Contains(props.GucSharedPreLibraries, "pg_stat_statements") {
+		props.ExtPGSSSchema = extensionSchema(db, "pg_stat_statements")
+	}
 
 	// In case of remote Postgres we should to know remote CLK_TCK
 	if !db.Local {

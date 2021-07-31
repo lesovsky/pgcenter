@@ -45,6 +45,7 @@ const (
 		"current_setting('track_commit_timestamp') AS track_commit_timestamp, " +
 		"current_setting('max_connections')::int AS max_connections, " +
 		"current_setting('autovacuum_max_workers')::int AS autovacuum_max_workers, " +
+		"current_setting('shared_preload_libraries') AS shared_preload_libraries," +
 		"pg_is_in_recovery() AS recovery, " +
 		"extract(epoch from pg_postmaster_start_time()) AS start_time_unix"
 

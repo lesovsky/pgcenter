@@ -98,6 +98,7 @@ func TestGetPostgresProperties(t *testing.T) {
 	assert.NotEqual(t, "", got.GucTrackCommitTimestamp)
 	assert.NotEqual(t, 0, got.GucMaxConnections)
 	assert.NotEqual(t, 0, got.GucAVMaxWorkers)
+	assert.NotEqual(t, "", got.GucSharedPreLibraries)
 	assert.NotEqual(t, "", got.Recovery)
 	assert.NotEqual(t, "", got.StartTime)
 	assert.NotEqual(t, 0, got.SysTicks)
