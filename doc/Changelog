@@ -1,4 +1,12 @@
 pgcenter (master) unstable; urgency=low
+  * avoid output of the netmask in values of pg_stat_activity.client_addr and  pg_stat_replication.client_addr.
+  * fix stuck with error on startup when pg_stat_statements installed on database, but not enabled in configuration.
+
+pgcenter (0.9.2) unstable; urgency=low
+  * fix plperlu stat function to work with Perl with older split logic.
+
+pgcenter (0.9.1) unstable; urgency=low
+  * fix broken packages.
 
 pgcenter (0.9.0) unstable; urgency=low
   * record/report: add support for millisecond resolution

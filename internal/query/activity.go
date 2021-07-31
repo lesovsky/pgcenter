@@ -1,9 +1,8 @@
 package query
 
 const (
-	// PgStatActivityDefault is the default query for getting stats from pg_stat_activity view
-	// { Name: "pg_stat_activity", Query: common.PgStatActivityQueryDefault, DiffIntvl: [2]int{99,99}, Ncols: 14, OrderKey: 0, OrderDesc: true }
-	// regexp_replace() removes extra spaces, tabs and newlines from queries
+	// PgStatActivityDefault is the default query for getting stats from pg_stat_activity view.
+	// - regexp_replace() removes extra spaces, tabs and newlines from queries.
 	PgStatActivityDefault = "SELECT pid, host(client_addr) AS cl_addr, client_port AS cl_port, " +
 		"datname, usename, left(application_name, 16) AS appname, backend_type, " +
 		"wait_event_type AS wait_etype, wait_event, state, " +
@@ -16,9 +15,8 @@ const (
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"
 
-	// PgStatActivity96 queries for getting stats from pg_stat_activity view for versions 9.6.*
-	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery96, DiffIntvl: [2]int{99,99}, Ncols: 13, OrderKey: 0, OrderDesc: true }
-	// regexp_replace() removes extra spaces, tabs and newlines from queries
+	// PgStatActivity96 queries for getting stats from pg_stat_activity view for versions 9.6.*.
+	// - regexp_replace() removes extra spaces, tabs and newlines from queries.
 	PgStatActivity96 = "SELECT pid, host(client_addr) AS cl_addr, client_port AS cl_port, datname, " +
 		"usename, left(application_name, 16) AS appname, wait_event_type AS wait_etype, " +
 		"wait_event, state, date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age, " +
@@ -30,9 +28,8 @@ const (
 		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
 		"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"
 
-	// PgStatActivity95 queries activity stats from pg_stat_activity view from versions for 9.5.* and later
-	// { Name: "pg_stat_activity", Query: common.PgStatActivityQuery95, DiffIntvl: [2]int{99,99}, Ncols: 12, OrderKey: 0, OrderDesc: true }
-	// regexp_replace() removes extra spaces, tabs and newlines from queries
+	// PgStatActivity95 queries activity stats from pg_stat_activity view from versions for 9.5.* and later.
+	// - regexp_replace() removes extra spaces, tabs and newlines from queries.
 	PgStatActivity95 = "SELECT pid, host(client_addr) AS cl_addr, client_port AS cl_port, datname, " +
 		"usename, left(application_name, 16) AS appname, waiting, state, " +
 		"date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age, " +
