@@ -7,6 +7,7 @@ builds:
     main: ./cmd
     goarch:
       - amd64
+      - arm64
     goos:
       - linux
     env:
