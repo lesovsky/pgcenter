@@ -1,17 +1,17 @@
 # lesovsky/pgcenter-testing
-# __release_tag__ postgres 14 beta was released 2021-05-20
-# __release_tag__ postgres 13.1 was released 2020-12-03
-# __release_tag__ postgres 12.5 was released 2020-12-03
-# __release_tag__ postgres 11.10 was released 2020-12-03
-# __release_tag__ postgres 10.15 was released 2020-12-03
-# __release_tag__ postgres 9.6.20 was released 2020-12-03
-# __release_tag__ postgres 9.5.24 was released 2020-12-03
-# __release_tag__ golang 1.16 was released 2021-02-16
-# __release_tag__ golangci-lint v1.36.0 was released 2021-01-26
-# __release_tag__ gosec v2.6.1 was released 2021-01-22
+# __release_tag__ postgres 14.1 was released 2021-11-11
+# __release_tag__ postgres 13.5 was released 2021-11-11
+# __release_tag__ postgres 12.9 was released 2021-11-11
+# __release_tag__ postgres 11.14 was released 2021-11-11
+# __release_tag__ postgres 10.19 was released 2021-11-11
+# __release_tag__ postgres 9.6.24 was released 2021-11-11
+# __release_tag__ postgres 9.5.24 was released 2020-12-03 -- EOL
+# __release_tag__ golang 1.17.6 was released 2022-01-06
+# __release_tag__ golangci-lint v1.44.0 was released 2022-01-25
+# __release_tag__ gosec v2.9.6 was released 2022-01-10
 FROM ubuntu:20.04
 
-LABEL version="0.0.6"
+LABEL version="0.0.7"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -29,13 +29,13 @@ RUN apt-get update && \
         libfilesys-df-perl && \
     cpan Module::Build && \
     cpan Linux::Ethtool::Settings && \
-    curl -s -L https://dl.google.com/go/go1.16.linux-amd64.tar.gz -o - | \
+    curl -s -L https://go.dev/dl/go1.17.6.linux-amd64.tar.gz -o - | \
         tar xzf - -C /usr/local && \
     cp /usr/local/go/bin/go /usr/local/bin/ && \
-    curl -s -L https://github.com/golangci/golangci-lint/releases/download/v1.36.0/golangci-lint-1.36.0-linux-amd64.tar.gz -o - | \
-        tar xzf - -C /usr/local golangci-lint-1.36.0-linux-amd64/golangci-lint && \
-    cp /usr/local/golangci-lint-1.36.0-linux-amd64/golangci-lint /usr/local/bin/ && \
-    curl -s -L https://github.com/securego/gosec/releases/download/v2.6.1/gosec_2.6.1_linux_amd64.tar.gz -o - | \
+    curl -s -L https://github.com/golangci/golangci-lint/releases/download/v1.44.0/golangci-lint-1.44.0-linux-amd64.tar.gz -o - | \
+        tar xzf - -C /usr/local golangci-lint-1.44.0-linux-amd64/golangci-lint && \
+    cp /usr/local/golangci-lint-1.44.0-linux-amd64/golangci-lint /usr/local/bin/ && \
+    curl -s -L https://github.com/securego/gosec/releases/download/v2.9.6/gosec_2.9.6_linux_amd64.tar.gz -o - | \
         tar xzf - -C /usr/local/bin gosec && \
     mkdir /usr/local/testing/ && \
     rm -rf /var/lib/apt/lists/*
@@ -44,4 +44,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "I'm pgcenter-testing 0.0.6"]
+CMD ["echo", "I'm pgcenter-testing 0.0.7"]
