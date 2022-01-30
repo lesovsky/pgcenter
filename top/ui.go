@@ -111,7 +111,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Sysstat view.
-		v, err := app.ui.SetView("sysstat", -1, -1, maxX-1/2, 4)
+		v, err := app.ui.SetView("sysstat", -1, -1, (maxX-1)/2, 4)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set sysstat view on layout failed: %s", err)
