@@ -36,7 +36,7 @@ const (
 	// ExecResetStats resets statistics counter in the current database.
 	ExecResetStats = "SELECT pg_stat_reset()"
 	// ExecResetPgStatStatements resets pg_stat_statements statistics.
-	ExecResetPgStatStatements = "SELECT {{.PgSSSchema}}.pg_stat_statements_reset()"
+	ExecResetPgStatStatements = "SELECT {{.PGSSSchema}}.pg_stat_statements_reset()"
 
 	// SelectCommonProperties used for getting Postgres settings necessary during pgcenter runtime.
 	//   Notes: track_commit_timestamp introduced in 9.5
