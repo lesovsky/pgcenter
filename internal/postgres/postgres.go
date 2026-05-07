@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"golang.org/x/crypto/ssh/terminal"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"golang.org/x/term"
 	"net"
 	"os"
 	"strconv"
@@ -49,8 +49,8 @@ func NewConfig(host string, port int, user string, dbname string) (Config, error
 		return Config{}, err
 	}
 
-	// use PreferSimpleProtocol disables implicit prepared statement usage and enable compatibility with Pgbouncer.
-	pgConfig.PreferSimpleProtocol = true
+	// use SimpleProtocol disables implicit prepared statement usage and enable compatibility with Pgbouncer.
+	pgConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	// Using simple protocol requires explicit options to be set.
 	pgConfig.RuntimeParams["standard_conforming_strings"] = "on"
@@ -79,7 +79,7 @@ func Connect(config Config) (*DB, error) {
 				switch pgErr.Code {
 				case "28P01": // password authentication failed
 					fmt.Printf("Password for user %s: ", config.Config.User)
-					bytePassword, err := terminal.ReadPassword(0)
+					bytePassword, err := term.ReadPassword(0)
 					if err != nil {
 						return nil, err
 					}
