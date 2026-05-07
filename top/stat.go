@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/postgres"

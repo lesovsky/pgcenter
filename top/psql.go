@@ -28,7 +28,7 @@ func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View)
 			"-p", strconv.Itoa(int(cfg.Port)),
 			"-U", cfg.User,
 			"-d", cfg.Database,
-		) // #nosec G204
+		) // #nosec G204,G702
 
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 

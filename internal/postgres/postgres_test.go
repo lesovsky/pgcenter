@@ -2,7 +2,7 @@ package postgres
 
 import (
 	"fmt"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/assert"
 	"os"
 	"testing"
@@ -120,7 +120,9 @@ func TestConnect(t *testing.T) {
 			if tc.valid {
 				assert.NoError(t, err)
 				assert.NotNil(t, db)
-				db.Close()
+				if db != nil {
+					db.Close()
+				}
 			} else {
 				assert.Error(t, err)
 			}

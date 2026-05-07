@@ -74,7 +74,7 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 		app.config.view.ShowExtra = extra
 		app.config.viewCh <- app.config.view
 
-		printCmdline(g, msg)
+		printCmdline(g, "%s", msg)
 
 		return nil
 	}

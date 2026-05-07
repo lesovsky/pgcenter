@@ -116,8 +116,8 @@ func TestNewPGresultQuery(t *testing.T) {
 	want := PGresult{
 		Valid: true, Ncols: 4, Nrows: 3, Cols: []string{"id", "name", "v1", "v2"},
 		Values: [][]sql.NullString{
-			{{String: "1", Valid: true}, {String: "one", Valid: true}, {String: "10", Valid: true}, {String: "111e-1", Valid: true}},
-			{{String: "2", Valid: true}, {String: "two", Valid: true}, {String: "20", Valid: true}, {String: "222e-1", Valid: true}},
+			{{String: "1", Valid: true}, {String: "one", Valid: true}, {String: "10", Valid: true}, {String: "11.1", Valid: true}},
+			{{String: "2", Valid: true}, {String: "two", Valid: true}, {String: "20", Valid: true}, {String: "22.2", Valid: true}},
 			// next row contains NULL values, all Valid fields are 'false'
 			{{String: "3", Valid: true}, {String: "", Valid: false}, {String: "", Valid: false}, {String: "", Valid: false}},
 		},

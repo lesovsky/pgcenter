@@ -141,7 +141,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			default:
 				viewSwitchHandler(app.config, "databases_general")
 			}
-			printCmdline(app.ui, app.config.view.Msg)
+			printCmdline(app.ui, "%s", app.config.view.Msg)
 		case menuPgss:
 			switch cy {
 			case 0:
@@ -159,7 +159,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			default:
 				viewSwitchHandler(app.config, "statements_timings")
 			}
-			printCmdline(app.ui, app.config.view.Msg)
+			printCmdline(app.ui, "%s", app.config.view.Msg)
 		case menuProgress:
 			switch cy {
 			case 0:
@@ -177,7 +177,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			default:
 				viewSwitchHandler(app.config, "progress_vacuum")
 			}
-			printCmdline(app.ui, app.config.view.Msg)
+			printCmdline(app.ui, "%s", app.config.view.Msg)
 		case menuConf:
 			switch cy {
 			case 0:

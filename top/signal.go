@@ -141,7 +141,7 @@ func setProcMask(answer string, config *config) string {
 func showProcMask(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 
-		printCmdline(g, printMaskString(config.procMask))
+		printCmdline(g, "%s", printMaskString(config.procMask))
 		return nil
 	}
 }

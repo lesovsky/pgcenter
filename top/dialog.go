@@ -58,7 +58,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 			case dialogChangeAge:
 				msg = "Changing queries age threshold allowed in pg_stat_activity view only."
 			}
-			printCmdline(g, msg)
+			printCmdline(g, "%s", msg)
 			return nil
 		}
 
@@ -143,7 +143,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			// do nothing
 		}
 
-		printCmdline(g, message)
+		printCmdline(g, "%s", message)
 
 		return dialogClose(g, v)
 	}

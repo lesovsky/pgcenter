@@ -118,7 +118,7 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			viewSwitchHandler(app.config, c)
 		}
 
-		printCmdline(g, app.config.view.Msg)
+		printCmdline(g, "%s", app.config.view.Msg)
 		return nil
 	}
 }
@@ -226,7 +226,7 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		config.view = config.views[name]
 		config.viewCh <- config.view
 
-		printCmdline(g, "Show relations: "+config.queryOptions.ViewType)
+		printCmdline(g, "Show relations: %s", config.queryOptions.ViewType)
 		return nil
 	}
 }

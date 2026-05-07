@@ -33,7 +33,7 @@ func resetStat(db *postgres.DB, pgssSchema string) func(g *gocui.Gui, _ *gocui.V
 			}
 		}
 
-		printCmdline(g, msg)
+		printCmdline(g, "%s", msg)
 
 		return nil
 	}
