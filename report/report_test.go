@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"database/sql"
+	"flag"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/stat"
@@ -16,6 +17,8 @@ import (
 	"testing"
 	"time"
 )
+
+var update = flag.Bool("update", false, "update golden files")
 
 func Test_app_doReport(t *testing.T) {
 	testcases := []struct {
@@ -180,6 +183,11 @@ func Test_app_doReport(t *testing.T) {
 
 		err = app.doReport(tr)
 		assert.NoError(t, err)
+
+		if *update {
+			assert.NoError(t, os.WriteFile(tc.wantFile, buf.Bytes(), 0644))
+			continue
+		}
 
 		want, err := os.ReadFile(tc.wantFile)
 		assert.NoError(t, err)

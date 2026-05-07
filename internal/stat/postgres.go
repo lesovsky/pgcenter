@@ -366,7 +366,7 @@ func (r *PGresult) sort(key int, desc bool) {
 	_, err := strconv.ParseFloat(r.Values[0][key].String, 64)
 	if err == nil {
 		// value is numeric
-		sort.Slice(r.Values, func(i, j int) bool {
+		sort.SliceStable(r.Values, func(i, j int) bool {
 			// TODO: handle errors
 			l, _ := strconv.ParseFloat(r.Values[i][key].String, 64)
 			r, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
@@ -377,7 +377,7 @@ func (r *PGresult) sort(key int, desc bool) {
 		})
 	} else {
 		// value is string
-		sort.Slice(r.Values, func(i, j int) bool {
+		sort.SliceStable(r.Values, func(i, j int) bool {
 			if desc {
 				return r.Values[i][key].String > r.Values[j][key].String /* desc order: 'z' -> 'a' */
 			}

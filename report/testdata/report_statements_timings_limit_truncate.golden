@@ -4,9 +4,9 @@ postgres  postgres        00:00:00   00:00:00    00:00:00     00:00:00    0     
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         f844975654  insert into pgbench_branches(bid,bbalance) values($1,$2)
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         c9a1f648ed  insert into pgbench_branches(bid,bbalance) values($1,$2)
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cab2e6e673  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
-postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         5f5fd4b0e3  insert into pgbench_tellers(tid,bid,tbalance) values ($1,$2,$3)
 postgres  pgscv_fixtures  00:01:11   00:00:00    00:00:00     00:01:11    0         0         0         0         0         7a4ca00981  SELECT current_database() AS database, s1.schemaname AS schema,~
 postgres  pgscv_fixtures  00:00:32   00:00:00    00:00:00     00:00:32    0         0         0         0         0         e8ac4a8798  SELECT sum(pg_total_relation_size(relname::regclass)) AS bytes ~
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         cc9b0d1c16  insert into pgbench_branches(bid,bbalance) values($1,$2)
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         4f36e29390  insert into pgbench_branches(bid,bbalance) values($1,$2)
 postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         1c95078779  insert into pgbench_branches(bid,bbalance) values($1,$2)
+postgres  pgbench         00:00:00   00:00:00    00:00:00     00:00:00    0         0         0         0         0         c580f5b226  insert into pgbench_branches(bid,bbalance) values($1,$2)
