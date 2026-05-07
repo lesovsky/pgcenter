@@ -146,7 +146,7 @@ func printQueryReport(g *gocui.Gui, r report, uiExit chan int) string {
 	uiExit <- 1
 	g.Close()
 
-	cmd := exec.Command(pager) // #nosec G204
+	cmd := exec.Command(pager) // #nosec G204,G702
 	cmd.Stdin = strings.NewReader(buf.String())
 	cmd.Stdout = os.Stdout
 
