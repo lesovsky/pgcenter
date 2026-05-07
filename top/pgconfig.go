@@ -30,7 +30,7 @@ func showPgConfig(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		res, err := stat.NewPGresultQuery(db, query.GetAllSettings)
 		if err != nil {
-			printCmdline(g, err.Error())
+			printCmdline(g, "%s", err.Error())
 			return nil
 		}
 
