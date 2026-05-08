@@ -8,7 +8,7 @@ import (
 )
 
 func Test_StatProgressBasebackupQueries(t *testing.T) {
-	versions := []int{140000}
+	versions := []int{140000, 150000, 160000, 170000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_progress_basebackup/%d", version), func(t *testing.T) {

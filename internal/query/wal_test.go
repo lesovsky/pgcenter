@@ -9,7 +9,7 @@ import (
 
 // Test_StatWALQueries tests query, executing it against all supported Postgres versions.
 func Test_StatWALQueries(t *testing.T) {
-	versions := []int{140000}
+	versions := []int{140000, 150000, 160000, 170000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_wal/%d", version), func(t *testing.T) {
