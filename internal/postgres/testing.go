@@ -2,12 +2,12 @@ package postgres
 
 // NewTestConfig returns test config used for testing purposes.
 func NewTestConfig() (Config, error) {
-	return NewConfig("127.0.0.1", 21917, "postgres", "pgcenter_fixtures")
+	return NewConfig("127.0.0.1", 21914, "postgres", "pgcenter_fixtures")
 }
 
 // NewTestConnect returns default test connection used for testing purposes.
 func NewTestConnect() (*DB, error) {
-	return NewTestConnectVersion(170000)
+	return NewTestConnectVersion(140000)
 }
 
 // NewTestConnectVersion connects to test Postgres of specific version.
