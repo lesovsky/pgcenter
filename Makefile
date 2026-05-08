@@ -27,6 +27,9 @@ lint: dep ## Lint the source files
 	golangci-lint run --timeout 5m
 	gosec -quiet ./...
 
+vuln: dep ## Check for known vulnerabilities
+	govulncheck ./...
+
 test: dep ## Run tests
 	go test -race -p 1 -timeout 300s -coverprofile=.test_coverage.txt ./... && \
     	go tool cover -func=.test_coverage.txt | tail -n1 | awk '{print "Total test coverage: " $$3}'
