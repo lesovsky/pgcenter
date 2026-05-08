@@ -18,7 +18,7 @@ func Test_QueryPgcenterSchema(t *testing.T) {
 		"SELECT * FROM pgcenter.sys_proc_mounts",
 	}
 
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("query-pgcenter-schema/%d", version), func(t *testing.T) {

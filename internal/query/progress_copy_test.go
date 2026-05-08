@@ -8,7 +8,7 @@ import (
 )
 
 func Test_StatProgressCopyQueries(t *testing.T) {
-	versions := []int{140000, 150000, 160000, 170000}
+	versions := []int{140000, 150000, 160000, 170000, 180000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_progress_copy/%d", version), func(t *testing.T) {

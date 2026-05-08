@@ -15,7 +15,8 @@ func NewTestConnect() (*DB, error) {
 // Callers should use t.Skip() when this returns an error for EOL versions.
 func NewTestConnectVersion(version int) (*DB, error) {
 	ports := map[int]int{
-		// active versions (available in pgcenter-testing:0.0.8+)
+		// active versions (available in pgcenter-testing:0.0.9+)
+		180000: 21918,
 		170000: 21917,
 		160000: 21916,
 		150000: 21915,
