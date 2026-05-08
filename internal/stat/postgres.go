@@ -189,7 +189,7 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 	var rowsStore = make([][]sql.NullString, 0, 10)
 
 	for rows.Next() {
-		pointers := make([]interface{}, ncols)
+		pointers := make([]any, ncols)
 		values := make([]sql.NullString, ncols)
 
 		for i := range pointers {

@@ -184,7 +184,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 }
 
 // printCmdline prints formatted message on cmdline.
-func printCmdline(g *gocui.Gui, format string, s ...interface{}) {
+func printCmdline(g *gocui.Gui, format string, s ...any) {
 	// Do nothing if Gui is not defined.
 	if g == nil {
 		return

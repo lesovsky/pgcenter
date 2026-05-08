@@ -9,7 +9,7 @@ import (
 // Key represents binding between key button and handler should be running when user presses the button.
 type key struct {
 	viewname string
-	key      interface{}
+	key      any
 	handler  func(g *gocui.Gui, v *gocui.View) error
 }
 
