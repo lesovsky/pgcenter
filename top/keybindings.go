@@ -9,7 +9,7 @@ import (
 // Key represents binding between key button and handler should be running when user presses the button.
 type key struct {
 	viewname string
-	key      interface{}
+	key      any
 	handler  func(g *gocui.Gui, v *gocui.View) error
 }
 
@@ -75,7 +75,7 @@ func keybindings(app *app) error {
 
 	for _, k := range keys {
 		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
-			return fmt.Errorf("setup keybindings failed: %s", err)
+			return fmt.Errorf("setup keybindings failed: %w", err)
 		}
 	}
 

@@ -276,20 +276,20 @@ func parseHumanTimeString(t string) error {
 		return fmt.Errorf("invalid input")
 	}
 
-	var hour, min, sec, msec int
+	var hour, mins, sec, msec int
 	if parts[4] == "" {
-		_, err := fmt.Sscanf(t, "%d:%d:%d", &hour, &min, &sec)
+		_, err := fmt.Sscanf(t, "%d:%d:%d", &hour, &mins, &sec)
 		if err != nil {
 			return err
 		}
 	} else {
-		_, err := fmt.Sscanf(t, "%d:%d:%d.%d", &hour, &min, &sec, &msec)
+		_, err := fmt.Sscanf(t, "%d:%d:%d.%d", &hour, &mins, &sec, &msec)
 		if err != nil {
 			return err
 		}
 	}
 
-	if (hour < 0 || hour > 23) || (min < 0 || min > 59) || (sec < 0 || sec > 59) || (msec < 0 || msec > 999999) {
+	if (hour < 0 || hour > 23) || (mins < 0 || mins > 59) || (sec < 0 || sec > 59) || (msec < 0 || msec > 999999) {
 		return fmt.Errorf("invalid input")
 	}
 

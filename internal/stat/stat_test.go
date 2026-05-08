@@ -60,7 +60,7 @@ func TestCollector_Update(t *testing.T) {
 
 	assert.NotEqual(t, float64(0), stat.System.LoadAvg.One)
 	assert.NotEqual(t, float64(0), stat.System.Meminfo.MemUsed)
-	assert.NotEqual(t, float64(0), stat.System.CpuStat.User)
+	assert.NotEqual(t, float64(0), stat.System.CPUStat.User)
 	assert.NotEqual(t, 0, len(stat.System.Diskstats))
 	assert.NotEqual(t, float64(0), stat.Pgstat.Activity.ConnTotal)
 	assert.True(t, stat.Pgstat.Result.Valid)

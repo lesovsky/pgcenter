@@ -2,6 +2,7 @@ package top
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jroimartin/gocui"
@@ -117,7 +118,7 @@ func getQueryReport(answer string, version int, pgssSchema string, db *postgres.
 		&r.WalRecords, &r.WalRecordsRatio, &r.WalFpi, &r.WalFpiRatio, &r.WalBytes, &r.WalBytesRatio,
 	)
 
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return report{}, "Report: no statistics for such queryid"
 	}
 

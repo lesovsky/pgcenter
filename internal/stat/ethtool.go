@@ -11,7 +11,7 @@ import (
 
 const (
 	ethtoolGset = 0x00000001 /* get settings -- DEPRECATED */
-	//ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
+	// ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
 	ifNameSize    = 16     /* maximum size of an interface name */
 	siocEthtool   = 0x8946 /* ioctl ethtool request */
 	duplexHalf    = 0
@@ -28,7 +28,7 @@ type ethtool struct {
 func newEthtool() (*ethtool, error) {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open socket: %s", err)
+		return nil, fmt.Errorf("failed to open socket: %w", err)
 	}
 
 	return &ethtool{fd: fd}, nil
@@ -62,7 +62,7 @@ type ethtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 
 // EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct.
 // This struct is commented for possible further use.
-//type ethtoolLinkSettings struct {
+// type ethtoolLinkSettings struct {
 //	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
 //	Speed               uint32 // Link speed (Mbps)
 //	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
@@ -89,7 +89,7 @@ type ifreq struct {
 func getLinkSettings(ifname string) (int64, int64, error) {
 	e, err := newEthtool()
 	if err != nil {
-		return 0, 0, fmt.Errorf("new ethtool failed: %s", err)
+		return 0, 0, fmt.Errorf("new ethtool failed: %w", err)
 	}
 	defer e.close()
 
@@ -105,10 +105,10 @@ func getLinkSettings(ifname string) (int64, int64, error) {
 
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd), siocEthtool, uintptr(unsafe.Pointer(&ifr))) // #nosec G103
 	if errno != 0 {
-		return 0, 0, fmt.Errorf("ioctl failed: %s", errno)
+		return 0, 0, fmt.Errorf("ioctl failed: %w", errno)
 	}
 
-	//var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
+	// var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
 
 	return int64(ecmd.Speed) * 1000000, int64(ecmd.Duplex), nil
 }

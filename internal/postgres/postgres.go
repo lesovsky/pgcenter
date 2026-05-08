@@ -87,7 +87,7 @@ func Connect(config Config) (*DB, error) {
 					fmt.Println()
 					continue
 				default:
-					return nil, fmt.Errorf("failed connection establishing: %s", err)
+					return nil, fmt.Errorf("failed connection establishing: %w", err)
 				}
 			} else {
 				return nil, err
@@ -116,17 +116,17 @@ func Reconnect(db *DB) error {
 }
 
 // Exec is a wrapper over pgx.Exec.
-func (db *DB) Exec(query string, args ...interface{}) (pgconn.CommandTag, error) {
+func (db *DB) Exec(query string, args ...any) (pgconn.CommandTag, error) {
 	return db.Conn.Exec(context.TODO(), query, args...)
 }
 
 // QueryRow is a wrapper over pgx.QueryRow.
-func (db *DB) QueryRow(query string, args ...interface{}) pgx.Row {
+func (db *DB) QueryRow(query string, args ...any) pgx.Row {
 	return db.Conn.QueryRow(context.TODO(), query, args...)
 }
 
 // Query is a wrapper over pgx.Query.
-func (db *DB) Query(query string, args ...interface{}) (pgx.Rows, error) {
+func (db *DB) Query(query string, args ...any) (pgx.Rows, error) {
 	return db.Conn.Query(context.TODO(), query, args...)
 }
 

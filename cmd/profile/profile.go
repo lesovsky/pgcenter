@@ -19,7 +19,7 @@ var (
 		Use:   "profile",
 		Short: "wait events profiler",
 		Long:  `'pgcenter profile' profiles wait events of running queries.`,
-		RunE: func(command *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			// Parse extra arguments.
 			if len(args) > 0 {
 				connOptions.ParseExtraArgs(args)

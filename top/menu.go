@@ -208,7 +208,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 }
 
 // menuClose destroys UI view object and return focus to 'sysstat' view.
-func menuClose(g *gocui.Gui, v *gocui.View) error {
+func menuClose(g *gocui.Gui, _ *gocui.View) error {
 	if err := g.DeleteView("menu"); err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func menuDraw(v *gocui.View, items []string) error {
 
 // moveCursor handles user input in the menu.
 func moveCursor(d direction, config *config) func(g *gocui.Gui, v *gocui.View) error {
-	return func(g *gocui.Gui, v *gocui.View) error {
+	return func(_ *gocui.Gui, v *gocui.View) error {
 		if v == nil {
 			return nil
 		}

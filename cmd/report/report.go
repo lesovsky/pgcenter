@@ -44,7 +44,7 @@ var (
 		Use:   "report",
 		Short: "make report based on previously saved statistics",
 		Long:  `'pgcenter report' reads statistics from file and prints reports.`,
-		RunE: func(command *cobra.Command, _ []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			reportOpts, err := opts.validate()
 			if err != nil {
 				return err

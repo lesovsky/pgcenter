@@ -109,9 +109,8 @@ func (app *app) record(doQuit chan os.Signal) error {
 	for {
 		if count > 0 && n >= count {
 			break
-		} else {
-			n++
 		}
+		n++
 
 		err := app.recorder.open()
 		if err != nil {

@@ -6,33 +6,76 @@ on: push
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: lesovsky/pgcenter-testing:0.0.6
+    container: lesovsky/pgcenter-testing:0.0.8
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
+      - name: Cache Go 1.25.10 binary
+        id: cache-go
+        uses: actions/cache@v4
+        with:
+          path: /opt/go
+          key: go-1.25.10-linux-amd64
+
       - name: Install Go 1.25.10
+        if: steps.cache-go.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://dl.google.com/go/go1.25.10.linux-amd64.tar.gz -o /tmp/go.tar.gz
           tar -xf /tmp/go.tar.gz -C /opt
+
+      - name: Setup Go symlinks
+        run: |
           ln -sf /opt/go/bin/go /usr/local/bin/go
           ln -sf /opt/go/bin/gofmt /usr/local/bin/gofmt
           go version
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-1.25.10-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-1.25.10-
+
+      - name: Cache lint tools
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-lint-v2-golangci-gosec-govulncheck
+
       - name: Install lint tools
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          ln -sf $(go env GOPATH)/bin/golangci-lint /usr/local/bin/golangci-lint
-          ln -sf $(go env GOPATH)/bin/gosec /usr/local/bin/gosec
+          test -f ~/go/bin/golangci-lint || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          test -f ~/go/bin/gosec        || go install github.com/securego/gosec/v2/cmd/gosec@latest
+          test -f ~/go/bin/govulncheck  || go install golang.org/x/vuln/cmd/govulncheck@latest
+          ln -sf ~/go/bin/golangci-lint /usr/local/bin/golangci-lint
+          ln -sf ~/go/bin/gosec         /usr/local/bin/gosec
+          ln -sf ~/go/bin/govulncheck   /usr/local/bin/govulncheck
+
       - name: Prepare test environment
         run: prepare-test-environment.sh
+
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Run lint
         run: make lint
+
+      - name: Run vulnerability check
+        run: govulncheck ./...
+
       - name: Run test
         run: make test
+
       - name: Build
         run: make build
+
       - name: Install
         run: make install
+
       - name: Run E2E tests
         run: ./testing/e2e.sh

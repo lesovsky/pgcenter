@@ -16,7 +16,7 @@ var (
 		Use:   "top",
 		Short: "top-like stats viewer",
 		Long:  `'pgcenter top' is the top-like stats viewer.`,
-		RunE: func(command *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			// Parse extra arguments.
 			if len(args) > 0 {
 				opts.ParseExtraArgs(args)

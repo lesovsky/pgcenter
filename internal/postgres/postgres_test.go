@@ -101,7 +101,7 @@ func TestConnect(t *testing.T) {
 	}{
 		{
 			name:    "available postgres",
-			connStr: "host=127.0.0.1 port=21913 user=postgres dbname=pgcenter_fixtures",
+			connStr: "host=127.0.0.1 port=21917 user=postgres dbname=pgcenter_fixtures",
 			valid:   true,
 		},
 		{
