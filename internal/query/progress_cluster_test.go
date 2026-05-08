@@ -8,7 +8,7 @@ import (
 )
 
 func Test_StatProgressClusterQueries(t *testing.T) {
-	versions := []int{120000, 130000, 140000}
+	versions := []int{120000, 130000, 140000, 150000, 160000, 170000, 180000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_progress_cluster/%d", version), func(t *testing.T) {
