@@ -10,7 +10,8 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
+
       - name: Install Go 1.25.10
         run: |
           curl -fsSL https://dl.google.com/go/go1.25.10.linux-amd64.tar.gz -o /tmp/go.tar.gz
@@ -18,21 +19,49 @@ jobs:
           ln -sf /opt/go/bin/go /usr/local/bin/go
           ln -sf /opt/go/bin/gofmt /usr/local/bin/gofmt
           go version
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-1.25.10-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-1.25.10-
+
+      - name: Cache lint tools
+        id: cache-lint
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin
+          key: ${{ runner.os }}-lint-golangci-gosec
+
       - name: Install lint tools
+        if: steps.cache-lint.outputs.cache-hit != 'true'
         run: |
           go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
+
+      - name: Setup lint tools symlinks
+        run: |
           ln -sf $(go env GOPATH)/bin/golangci-lint /usr/local/bin/golangci-lint
           ln -sf $(go env GOPATH)/bin/gosec /usr/local/bin/gosec
+
       - name: Prepare test environment
         run: prepare-test-environment.sh
+
       - name: Run lint
         run: make lint
+
       - name: Run test
         run: make test
+
       - name: Build
         run: make build
+
       - name: Install
         run: make install
+
       - name: Run E2E tests
         run: ./testing/e2e.sh
