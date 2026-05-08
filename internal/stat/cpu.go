@@ -72,7 +72,7 @@ func readCPUStatLocal(statfile string) (CPUStat, error) {
 		)
 
 		if err != nil && err != io.EOF {
-			return stat, fmt.Errorf("%s bad content: %s", statfile, err)
+			return stat, fmt.Errorf("%s bad content: %w", statfile, err)
 		}
 		if count != 11 {
 			return stat, fmt.Errorf("%s bad content: not enough fields in '%s'", statfile, line)

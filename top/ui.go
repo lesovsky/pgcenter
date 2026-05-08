@@ -18,7 +18,7 @@ func mainLoop(ctx context.Context, app *app) error {
 		// Init UI
 		g, err := gocui.NewGui(gocui.OutputNormal)
 		if err != nil {
-			return fmt.Errorf("create UI failed: %s", err)
+			return fmt.Errorf("create UI failed: %w", err)
 		}
 
 		app.ui = g
@@ -56,7 +56,7 @@ func mainLoop(ctx context.Context, app *app) error {
 			// check errors rate - quit if them too much (allow no more than 5 errors within 1 second)
 			if err := e.check(1*time.Second, 5); err != nil {
 				cancel()
-				return fmt.Errorf("too many UI errors occurred: %s (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
+				return fmt.Errorf("too many UI errors occurred: %w (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
 			}
 		}
 
@@ -114,10 +114,10 @@ func layout(app *app) func(g *gocui.Gui) error {
 		v, err := app.ui.SetView("sysstat", -1, -1, (maxX-1)/2, 4)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set sysstat view on layout failed: %s", err)
+				return fmt.Errorf("set sysstat view on layout failed: %w", err)
 			}
 			if _, err := app.ui.SetCurrentView("sysstat"); err != nil {
-				return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
+				return fmt.Errorf("set sysstat view as current on layout failed: %w", err)
 			}
 		}
 		if v != nil {
@@ -128,7 +128,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		v, err = app.ui.SetView("pgstat", maxX/2, -1, maxX, 4)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set pgstat view on layout failed: %s", err)
+				return fmt.Errorf("set pgstat view on layout failed: %w", err)
 			}
 		}
 		if v != nil {
@@ -139,7 +139,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		v, err = app.ui.SetView("cmdline", -1, 3, maxX, 5)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set cmdline view on layout failed: %s", err)
+				return fmt.Errorf("set cmdline view on layout failed: %w", err)
 			}
 			// show saved error to user if any
 			if app.uiError != nil {
@@ -155,7 +155,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		v, err = app.ui.SetView("dbstat", -1, 4, maxX, maxY-1)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set dbstat view on layout failed: %s", err)
+				return fmt.Errorf("set dbstat view on layout failed: %w", err)
 			}
 		}
 		if v != nil {
@@ -167,11 +167,11 @@ func layout(app *app) func(g *gocui.Gui) error {
 			v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY-1)
 			if err != nil {
 				if err != gocui.ErrUnknownView {
-					return fmt.Errorf("set extra view on layout failed: %s", err)
+					return fmt.Errorf("set extra view on layout failed: %w", err)
 				}
 				_, err := fmt.Fprintln(v, "")
 				if err != nil {
-					return fmt.Errorf("print extra stats failed: %s", err)
+					return fmt.Errorf("print extra stats failed: %w", err)
 				}
 			}
 			if v != nil {
@@ -193,12 +193,12 @@ func printCmdline(g *gocui.Gui, format string, s ...any) {
 	g.Update(func(g *gocui.Gui) error {
 		v, err := g.View("cmdline")
 		if err != nil {
-			return fmt.Errorf("set focus on cmdline failed: %s", err)
+			return fmt.Errorf("set focus on cmdline failed: %w", err)
 		}
 		v.Clear()
 		_, err = fmt.Fprintf(v, format, s...)
 		if err != nil {
-			return fmt.Errorf("print on cmdline failed: %s", err)
+			return fmt.Errorf("print on cmdline failed: %w", err)
 		}
 
 		// Clear the message after 2 seconds.

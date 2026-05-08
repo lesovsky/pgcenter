@@ -109,39 +109,39 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {
-			return fmt.Errorf("set focus on sysstat view failed: %s", err)
+			return fmt.Errorf("set focus on sysstat view failed: %w", err)
 		}
 		v.Clear()
 		err = printSysstat(v, s)
 		if err != nil {
-			return fmt.Errorf("print sysstat failed: %s", err)
+			return fmt.Errorf("print sysstat failed: %w", err)
 		}
 
 		v, err = g.View("pgstat")
 		if err != nil {
-			return fmt.Errorf("set focus on pgstat view failed: %s", err)
+			return fmt.Errorf("set focus on pgstat view failed: %w", err)
 		}
 		v.Clear()
 		err = printPgstat(v, s, props, app.db)
 		if err != nil {
-			return fmt.Errorf("print summary postgres stat failed: %s", err)
+			return fmt.Errorf("print summary postgres stat failed: %w", err)
 		}
 
 		v, err = g.View("dbstat")
 		if err != nil {
-			return fmt.Errorf("set focus on dbstat view failed: %s", err)
+			return fmt.Errorf("set focus on dbstat view failed: %w", err)
 		}
 		v.Clear()
 
 		err = printDbstat(v, app.config, s)
 		if err != nil {
-			return fmt.Errorf("print main postgres stat failed: %s", err)
+			return fmt.Errorf("print main postgres stat failed: %w", err)
 		}
 
 		if app.config.view.ShowExtra > stat.CollectNone {
 			v, err := g.View("extra")
 			if err != nil {
-				return fmt.Errorf("set focus on extra view failed: %s", err)
+				return fmt.Errorf("set focus on extra view failed: %w", err)
 			}
 
 			switch app.config.view.ShowExtra {

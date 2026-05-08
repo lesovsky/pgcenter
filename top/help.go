@@ -46,7 +46,7 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 	maxX, maxY := g.Size()
 	if v, err := g.SetView("help", -1, -1, maxX-1, maxY-1); err != nil {
 		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set 'help' view on layout failed: %s", err)
+			return fmt.Errorf("set 'help' view on layout failed: %w", err)
 		}
 
 		name, tag, commit, branch := version.Version()
@@ -55,11 +55,11 @@ func showHelp(g *gocui.Gui, _ *gocui.View) error {
 		v.Frame = false
 		_, err = fmt.Fprintf(v, helpTemplate, versionStr)
 		if err != nil {
-			return fmt.Errorf("print on 'help' view failed: %s", err)
+			return fmt.Errorf("print on 'help' view failed: %w", err)
 		}
 
 		if _, err := g.SetCurrentView("help"); err != nil {
-			return fmt.Errorf("set 'help' view as current on layout failed: %s", err)
+			return fmt.Errorf("set 'help' view as current on layout failed: %w", err)
 		}
 	}
 	return nil
@@ -70,11 +70,11 @@ func closeHelp(g *gocui.Gui, v *gocui.View) error {
 	v.Clear()
 	err := g.DeleteView("help")
 	if err != nil {
-		return fmt.Errorf("delete help view failed: %s", err)
+		return fmt.Errorf("delete help view failed: %w", err)
 	}
 
 	if _, err := g.SetCurrentView("sysstat"); err != nil {
-		return fmt.Errorf("set focus on sysstat view failed: %s", err)
+		return fmt.Errorf("set focus on sysstat view failed: %w", err)
 	}
 	return nil
 }

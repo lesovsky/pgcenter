@@ -198,7 +198,7 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 
 		err = rows.Scan(pointers...)
 		if err != nil {
-			// log.Warnf("skip collecting stats: %s", err) // TODO: add error handling and notification
+			// log.Warnf("skip collecting stats: %w", err) // TODO: add error handling and notification
 			continue
 		}
 		rowsStore = append(rowsStore, values)
@@ -288,7 +288,7 @@ func calculateDelta(curr, prev PGresult, itv int, interval [2]int, skey int, des
 	if interval != [2]int{0, 0} {
 		delta, err = diff(curr, prev, itv, interval, ukey)
 		if err != nil {
-			return PGresult{}, fmt.Errorf("diff failed: %s", err)
+			return PGresult{}, fmt.Errorf("diff failed: %w", err)
 		}
 	} else {
 		delta = curr
@@ -408,11 +408,11 @@ func diffPair(curr, prev string, itv int) (string, error) {
 func parsePairFloat(curr, prev string) (float64, float64, error) {
 	cv, err := strconv.ParseFloat(curr, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %s", curr, err)
+		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %w", curr, err)
 	}
 	pv, err := strconv.ParseFloat(prev, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %s", prev, err)
+		return 0, 0, fmt.Errorf("convert '%s' to float64 failed: %w", prev, err)
 	}
 
 	return cv, pv, nil
@@ -422,11 +422,11 @@ func parsePairFloat(curr, prev string) (float64, float64, error) {
 func parsePairInt(curr, prev string) (int64, int64, error) {
 	cv, err := strconv.ParseInt(curr, 10, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("convert '%s' to int failed: %s", curr, err)
+		return 0, 0, fmt.Errorf("convert '%s' to int failed: %w", curr, err)
 	}
 	pv, err := strconv.ParseInt(prev, 10, 64)
 	if err != nil {
-		return 0, 0, fmt.Errorf("convert '%s' to int failed: %s", curr, err)
+		return 0, 0, fmt.Errorf("convert '%s' to int failed: %w", curr, err)
 	}
 
 	return cv, pv, nil

@@ -146,7 +146,7 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 		if err == io.EOF {
 			break
 		} else if err != nil {
-			return fmt.Errorf("advance read position failed: %s", err)
+			return fmt.Errorf("advance read position failed: %w", err)
 		}
 
 		// Check filename - it has valid format and corresponds to requested report type.

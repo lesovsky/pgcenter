@@ -75,7 +75,7 @@ func keybindings(app *app) error {
 
 	for _, k := range keys {
 		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
-			return fmt.Errorf("setup keybindings failed: %s", err)
+			return fmt.Errorf("setup keybindings failed: %w", err)
 		}
 	}
 

@@ -87,7 +87,7 @@ func openExtraView(g *gocui.Gui, _ *gocui.View) error {
 	if err != nil {
 		// gocui.ErrUnknownView is OK, it means a new view has been created.
 		if err != gocui.ErrUnknownView {
-			return fmt.Errorf("set extra view on layout failed: %s", err)
+			return fmt.Errorf("set extra view on layout failed: %w", err)
 		}
 	}
 	v.Frame = false

@@ -74,18 +74,18 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 		if err != nil {
 			// gocui.ErrUnknownView is OK it means a new view has been created, continue if it happens.
 			if err != gocui.ErrUnknownView {
-				return fmt.Errorf("set dialog view on layout failed: %s", err)
+				return fmt.Errorf("set dialog view on layout failed: %w", err)
 			}
 		}
 
 		p, err := g.View("cmdline")
 		if err != nil {
-			return fmt.Errorf("set focus on cmdline view failed: %s", err)
+			return fmt.Errorf("set focus on cmdline view failed: %w", err)
 		}
 
 		_, err = fmt.Fprint(p, prompt)
 		if err != nil {
-			return fmt.Errorf("print to cmdline view failed: %s", err)
+			return fmt.Errorf("print to cmdline view failed: %w", err)
 		}
 
 		g.Cursor = true
@@ -93,7 +93,7 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 		v.Frame = false
 
 		if _, err := g.SetCurrentView("dialog"); err != nil {
-			return fmt.Errorf("set dialog view as current on layout failed: %s", err)
+			return fmt.Errorf("set dialog view as current on layout failed: %w", err)
 		}
 
 		// Remember the type of an opened dialog. It will be required when the dialog will be finished.
@@ -165,13 +165,13 @@ func dialogClose(g *gocui.Gui, v *gocui.View) error {
 
 	err := g.DeleteView("dialog")
 	if err != nil {
-		return fmt.Errorf("deleting dialog view failed: %s", err)
+		return fmt.Errorf("deleting dialog view failed: %w", err)
 	}
 
 	// Switch focus from destroyed 'dialog' view to 'sysstat'.
 	_, err = g.SetCurrentView("sysstat")
 	if err != nil {
-		return fmt.Errorf("set sysstat view as current on layout failed: %s", err)
+		return fmt.Errorf("set sysstat view as current on layout failed: %w", err)
 	}
 
 	return nil

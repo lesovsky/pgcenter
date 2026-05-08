@@ -33,7 +33,7 @@ func runPsql(db *postgres.DB, uiExit chan int) func(g *gocui.Gui, _ *gocui.View)
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("run psql failed: %s", err)
+			return fmt.Errorf("run psql failed: %w", err)
 		}
 
 		return nil

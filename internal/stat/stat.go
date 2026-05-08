@@ -79,13 +79,13 @@ type Config struct {
 func NewCollector(db *postgres.DB) (*Collector, error) {
 	systicks, err := getSysticksLocal()
 	if err != nil {
-		return nil, fmt.Errorf("get systicks failed: %s", err)
+		return nil, fmt.Errorf("get systicks failed: %w", err)
 	}
 
 	// read Postgres properties
 	props, err := GetPostgresProperties(db)
 	if err != nil {
-		return nil, fmt.Errorf("read postgres properties failed: %s", err)
+		return nil, fmt.Errorf("read postgres properties failed: %w", err)
 	}
 
 	return &Collector{

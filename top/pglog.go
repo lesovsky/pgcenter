@@ -36,7 +36,7 @@ func showPgLog(db *postgres.DB, version int, uiExit chan int) func(g *gocui.Gui,
 		cmd.Stdout = os.Stdout
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("open %s failed: %s", logfile, err)
+			return fmt.Errorf("open %s failed: %w", logfile, err)
 		}
 
 		return nil

@@ -28,7 +28,7 @@ type ethtool struct {
 func newEthtool() (*ethtool, error) {
 	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_DGRAM, syscall.IPPROTO_IP)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open socket: %s", err)
+		return nil, fmt.Errorf("failed to open socket: %w", err)
 	}
 
 	return &ethtool{fd: fd}, nil
@@ -89,7 +89,7 @@ type ifreq struct {
 func getLinkSettings(ifname string) (int64, int64, error) {
 	e, err := newEthtool()
 	if err != nil {
-		return 0, 0, fmt.Errorf("new ethtool failed: %s", err)
+		return 0, 0, fmt.Errorf("new ethtool failed: %w", err)
 	}
 	defer e.close()
 
@@ -105,7 +105,7 @@ func getLinkSettings(ifname string) (int64, int64, error) {
 
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(e.fd), siocEthtool, uintptr(unsafe.Pointer(&ifr))) // #nosec G103
 	if errno != 0 {
-		return 0, 0, fmt.Errorf("ioctl failed: %s", errno)
+		return 0, 0, fmt.Errorf("ioctl failed: %w", errno)
 	}
 
 	// var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)

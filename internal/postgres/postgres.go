@@ -87,7 +87,7 @@ func Connect(config Config) (*DB, error) {
 					fmt.Println()
 					continue
 				default:
-					return nil, fmt.Errorf("failed connection establishing: %s", err)
+					return nil, fmt.Errorf("failed connection establishing: %w", err)
 				}
 			} else {
 				return nil, err
