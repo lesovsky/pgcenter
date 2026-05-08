@@ -12,10 +12,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache Go 1.25.10 binary
+        id: cache-go
+        uses: actions/cache@v4
+        with:
+          path: /opt/go
+          key: go-1.25.10-linux-amd64
+
       - name: Install Go 1.25.10
+        if: steps.cache-go.outputs.cache-hit != 'true'
         run: |
           curl -fsSL https://dl.google.com/go/go1.25.10.linux-amd64.tar.gz -o /tmp/go.tar.gz
           tar -xf /tmp/go.tar.gz -C /opt
+
+      - name: Setup Go symlinks
+        run: |
           ln -sf /opt/go/bin/go /usr/local/bin/go
           ln -sf /opt/go/bin/gofmt /usr/local/bin/gofmt
           go version
