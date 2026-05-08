@@ -19,7 +19,7 @@ var (
 		Use:   "record",
 		Short: "record stats to file",
 		Long:  `'pgcenter record' connects to PostgreSQL and collects stats into local file.`,
-		RunE: func(command *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			// Convert 'oneshot' to set of options.
 			if oneshot {
 				recordConfig.AppendFile = true

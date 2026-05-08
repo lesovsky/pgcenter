@@ -41,7 +41,7 @@ func Test_app_setup(t *testing.T) {
 
 // This test hangs when executing on Github Actions due to hangs here:
 //   github.com/nsf/termbox-go@v0.0.0-20180819125858-b66b20ab708e/api.go:122
-//func Test_app_quit(t *testing.T) {
+// func Test_app_quit(t *testing.T) {
 //	conn, err := postgres.NewTestConnect()
 //	assert.NoError(t, err)
 //

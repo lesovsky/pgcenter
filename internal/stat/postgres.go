@@ -198,7 +198,7 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 
 		err = rows.Scan(pointers...)
 		if err != nil {
-			//log.Warnf("skip collecting stats: %s", err) // TODO: add error handling and notification
+			// log.Warnf("skip collecting stats: %s", err) // TODO: add error handling and notification
 			continue
 		}
 		rowsStore = append(rowsStore, values)
@@ -483,7 +483,7 @@ func extensionSchema(db *postgres.DB, name string) string {
 	err := db.QueryRow(query.GetExtensionSchema, name).Scan(&schema)
 	if err != nil {
 		// TODO: enable when proper logging will be implemented
-		//fmt.Println("failed to check extensions in pg_extension: ", err)
+		// fmt.Println("failed to check extensions in pg_extension: ", err)
 		schema = ""
 	}
 
@@ -496,7 +496,7 @@ func isSchemaExists(db *postgres.DB, name string) bool {
 	err := db.QueryRow(query.CheckSchemaExists, name).Scan(&exists)
 	if err != nil {
 		// TODO: enable when proper logging will be implemented
-		//fmt.Println("failed to check schema in information_schema: ", err)
+		// fmt.Println("failed to check schema in information_schema: ", err)
 		exists = false
 	}
 

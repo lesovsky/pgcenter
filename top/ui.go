@@ -101,7 +101,7 @@ func doWork(ctx context.Context, app *app) {
 
 // layout defines UI layout - set of screen areas and their locations.
 func layout(app *app) func(g *gocui.Gui) error {
-	return func(g *gocui.Gui) error {
+	return func(_ *gocui.Gui) error {
 		maxX, maxY := app.ui.Size()
 
 		// Screen dimensions could be equal to zero after executing external programs like pager/editor/psql.

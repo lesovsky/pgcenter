@@ -206,8 +206,8 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 
 	/* line2: cpu usage */
 	_, err = fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
-		s.CpuStat.User, s.CpuStat.Sys, s.CpuStat.Nice, s.CpuStat.Idle,
-		s.CpuStat.Iowait, s.CpuStat.Irq, s.CpuStat.Softirq, s.CpuStat.Steal)
+		s.CPUStat.User, s.CPUStat.Sys, s.CPUStat.Nice, s.CPUStat.Idle,
+		s.CPUStat.Iowait, s.CPUStat.Irq, s.CPUStat.Softirq, s.CPUStat.Steal)
 	if err != nil {
 		return err
 	}
@@ -383,9 +383,8 @@ func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) erro
 					if config.view.Filters[i].MatchString(s.Result.Values[rownum][i].String) {
 						doPrint = true
 						break
-					} else {
-						doPrint = false
 					}
+					doPrint = false
 				}
 			}
 		}

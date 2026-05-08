@@ -13,18 +13,18 @@ func Test_readCpuStat(t *testing.T) {
 
 	// test "local" reading
 	conn.Local = true
-	got, err := readCpuStat(conn, false)
+	got, err := readCPUStat(conn, false)
 	assert.NoError(t, err)
 	assert.Greater(t, got.Total, float64(0))
 
 	// test "remote" reading
 	conn.Local = false
-	got, err = readCpuStat(conn, true)
+	got, err = readCPUStat(conn, true)
 	assert.NoError(t, err)
 	assert.Greater(t, got.Total, float64(0))
 
 	// test "remote", but when schema is not available
-	got, err = readCpuStat(conn, false)
+	got, err = readCPUStat(conn, false)
 	assert.NoError(t, err)
 	assert.Equal(t, got.Total, float64(0))
 }
@@ -33,12 +33,12 @@ func Test_readCpuStatLocal(t *testing.T) {
 	testcases := []struct {
 		statfile string
 		valid    bool
-		want     CpuStat
+		want     CPUStat
 	}{
 		{
 			statfile: "testdata/proc/stat.golden",
 			valid:    true,
-			want: CpuStat{
+			want: CPUStat{
 				Entry:   "cpu",
 				User:    3097668,
 				Nice:    1593,
@@ -57,7 +57,7 @@ func Test_readCpuStatLocal(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		got, err := readCpuStatLocal(tc.statfile)
+		got, err := readCPUStatLocal(tc.statfile)
 		if tc.valid {
 			assert.NoError(t, err)
 			assert.Equal(t, tc.want, got)
@@ -71,27 +71,27 @@ func Test_readCpuStatRemote(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 
-	got, err := readCpuStatRemote(conn)
+	got, err := readCPUStatRemote(conn)
 	assert.NoError(t, err)
 	assert.Greater(t, got.Total, float64(0))
 	assert.Greater(t, got.User, float64(0))
 	assert.Greater(t, got.Sys, float64(0))
 
 	conn.Close()
-	_, err = readCpuStatRemote(conn)
+	_, err = readCPUStatRemote(conn)
 	assert.Error(t, err)
 }
 
-func Test_countCpuUsage(t *testing.T) {
-	prev, err := readCpuStatLocal("testdata/proc/stat.golden")
+func Test_countCPUUsage(t *testing.T) {
+	prev, err := readCPUStatLocal("testdata/proc/stat.golden")
 	assert.NoError(t, err)
 
-	curr, err := readCpuStatLocal("testdata/proc/stat2.golden")
+	curr, err := readCPUStatLocal("testdata/proc/stat2.golden")
 	assert.NoError(t, err)
 
-	got := countCpuUsage(prev, curr, 100)
+	got := countCPUUsage(prev, curr, 100)
 
-	want := CpuStat{
+	want := CPUStat{
 		Entry:   "",
 		User:    16.666666666666664,
 		Nice:    16.666666666666664,

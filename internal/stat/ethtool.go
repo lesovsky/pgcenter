@@ -11,7 +11,7 @@ import (
 
 const (
 	ethtoolGset = 0x00000001 /* get settings -- DEPRECATED */
-	//ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
+	// ethtoolGlinkSettings = 0x0000004c /* get ethtool_link_settings, should be used instead of ethtool_cmd and ETHTOOL_GSET */
 	ifNameSize    = 16     /* maximum size of an interface name */
 	siocEthtool   = 0x8946 /* ioctl ethtool request */
 	duplexHalf    = 0
@@ -62,7 +62,7 @@ type ethtoolCmd struct { /* ethtool.c: struct ethtool_cmd */
 
 // EthtoolLinkSettings describes newer ethtool_link_settings{} C struct for managing link control and status. NEWER struct.
 // This struct is commented for possible further use.
-//type ethtoolLinkSettings struct {
+// type ethtoolLinkSettings struct {
 //	Cmd                 uint32 // Command number = %ETHTOOL_GLINKSETTINGS or %ETHTOOL_SLINKSETTINGS
 //	Speed               uint32 // Link speed (Mbps)
 //	Duplex              uint8  // Duplex mode; one of %DUPLEX_*
@@ -108,7 +108,7 @@ func getLinkSettings(ifname string) (int64, int64, error) {
 		return 0, 0, fmt.Errorf("ioctl failed: %s", errno)
 	}
 
-	//var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
+	// var speedval uint32 = (uint32(ecmd.Speed_hi) << 16) | (uint32(ecmd.Speed) & 0xffff)
 
 	return int64(ecmd.Speed) * 1000000, int64(ecmd.Duplex), nil
 }

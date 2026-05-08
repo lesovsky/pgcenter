@@ -83,7 +83,7 @@ func Test_profileLoop(t *testing.T) {
 	assert.Contains(t, buf.String(), "% time      seconds wait_event                     query: SELECT 3, pg_sleep(1)")
 	assert.Contains(t, buf.String(), "Timeout.PgSleep")
 	assert.Contains(t, buf.String(), fmt.Sprintf("LOG: Stop profiling, no process with pid %d", pid))
-	//fmt.Println(buf.String())
+	// fmt.Println(buf.String())
 	db.Close()
 }
 

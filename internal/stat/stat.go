@@ -40,7 +40,7 @@ type Stat struct {
 type System struct {
 	LoadAvg
 	Meminfo
-	CpuStat
+	CPUStat
 	Diskstats
 	Netdevs
 	Fsstats
@@ -50,8 +50,8 @@ type System struct {
 type Collector struct {
 	config Config // collector configuration
 	// cpu usage snapshots for previous and current intervals
-	prevCpuStat CpuStat
-	currCpuStat CpuStat
+	prevCPUStat CPUStat
+	currCPUStat CPUStat
 	// disk devices usage snapshots for previous and current intervals
 	prevDiskstats Diskstats
 	currDiskstats Diskstats
@@ -123,14 +123,14 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	s.Meminfo = meminfo
 
 	// Collect CPU usage stats
-	cpustat, err := readCpuStat(db, c.config.SchemaPgcenterAvail)
+	cpustat, err := readCPUStat(db, c.config.SchemaPgcenterAvail)
 	if err != nil {
 		return s, err
 	}
 
-	c.prevCpuStat = c.currCpuStat
-	c.currCpuStat = cpustat
-	s.CpuStat = countCpuUsage(c.prevCpuStat, c.currCpuStat, c.config.ticks)
+	c.prevCPUStat = c.currCPUStat
+	c.currCPUStat = cpustat
+	s.CPUStat = countCPUUsage(c.prevCPUStat, c.currCPUStat, c.config.ticks)
 
 	// Collect extra stats if required.
 	var diskstats Diskstats

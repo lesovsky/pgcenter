@@ -12,8 +12,8 @@ import (
 	"strings"
 )
 
-// CpuStat describes CPU statistics based on /proc/stat.
-type CpuStat struct {
+// CPUStat describes CPU statistics based on /proc/stat.
+type CPUStat struct {
 	Entry   string
 	User    float64
 	Nice    float64
@@ -29,19 +29,19 @@ type CpuStat struct {
 }
 
 // readCpuStat returns CPU stats based on type of passed DB connection.
-func readCpuStat(db *postgres.DB, schemaExists bool) (CpuStat, error) {
+func readCPUStat(db *postgres.DB, schemaExists bool) (CPUStat, error) {
 	if db.Local {
-		return readCpuStatLocal("/proc/stat")
+		return readCPUStatLocal("/proc/stat")
 	} else if schemaExists {
-		return readCpuStatRemote(db)
+		return readCPUStatRemote(db)
 	}
 
-	return CpuStat{}, nil
+	return CPUStat{}, nil
 }
 
 // readCpuStatLocal returns CPU stats read from local proc file.
-func readCpuStatLocal(statfile string) (CpuStat, error) {
-	var stat CpuStat
+func readCPUStatLocal(statfile string) (CPUStat, error) {
+	var stat CPUStat
 	f, err := os.Open(filepath.Clean(statfile))
 	if err != nil {
 		return stat, err
@@ -88,8 +88,8 @@ func readCpuStatLocal(statfile string) (CpuStat, error) {
 }
 
 // readCpuStatRemote returns CPU stats from SQL stats schema.
-func readCpuStatRemote(db *postgres.DB) (CpuStat, error) {
-	var stat CpuStat
+func readCPUStatRemote(db *postgres.DB) (CPUStat, error) {
+	var stat CPUStat
 	q := `SELECT cpu,us_time::numeric,ni_time::numeric,sy_time::numeric,id_time::numeric,wa_time::numeric,hi_time::numeric,si_time::numeric,st_time::numeric,quest_time::numeric,guest_ni_time::numeric FROM pgcenter.sys_proc_stat WHERE cpu = 'cpu'`
 	err := db.QueryRow(q).Scan(&stat.Entry, &stat.User, &stat.Nice, &stat.Sys, &stat.Idle,
 		&stat.Iowait, &stat.Irq, &stat.Softirq, &stat.Steal, &stat.Guest, &stat.GstNice)
@@ -103,8 +103,8 @@ func readCpuStatRemote(db *postgres.DB) (CpuStat, error) {
 }
 
 // countCpuUsage compares CPU stats snapshots and returns CPU usage stats over time interval.
-func countCpuUsage(prev CpuStat, curr CpuStat, ticks float64) CpuStat {
-	var stat CpuStat
+func countCPUUsage(prev CPUStat, curr CPUStat, ticks float64) CPUStat {
+	var stat CPUStat
 	itv := curr.Total - prev.Total
 
 	stat.User = sValue(prev.User, curr.User, itv, ticks)

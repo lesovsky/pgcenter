@@ -1,0 +1,37 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - gocritic
+    - gosimple
+    - govet
+    - ineffassign
+    - revive
+    - staticcheck
+    - unused
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+
+  revive:
+    rules:
+      - name: unused-parameter
+        severity: warning
+      - name: var-naming
+        severity: warning
+      - name: superfluous-else
+        severity: warning
+      - name: redefines-builtin-id
+        severity: error
+
+
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  exclude-rules:
+    - path: "_test.go"
+      linters:
+        - errcheck

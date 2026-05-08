@@ -192,7 +192,7 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 
 		metaOK, statOK = false, false
 
-	} //end for
+	} // end for
 
 	return nil
 }
