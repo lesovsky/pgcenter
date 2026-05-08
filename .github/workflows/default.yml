@@ -59,6 +59,9 @@ jobs:
       - name: Prepare test environment
         run: prepare-test-environment.sh
 
+      - name: Fix git safe directory
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Run lint
         run: make lint
 
