@@ -4,28 +4,30 @@
 
 ```
 cmd/
-  pgcenter.go     # root cobra command
-  top/            # top command — real-time TUI
-  record/         # record command — stats collection to files
-  report/         # report command — report generation
-  profile/        # profile command — wait events profiler
+  pgcenter.go         # root cobra command
+  top/, record/, report/, profile/, config/  # subcommands
 
 internal/
-  postgres/       # PG connection management, query execution
-  query/          # SQL queries for each stats view (one file per view)
-  stat/           # stats collection, processing, diff computation
-  view/           # TUI view definitions (column layout, sort, filter)
-  align/          # column width alignment
-  pretty/         # human-readable formatting (bytes, intervals)
-  math/           # numeric utilities for rate calculations
-  version/        # version string (injected via ldflags at build time)
+  postgres/           # PG connection, query execution, test helpers
+  query/              # SQL query templates per stats view (version-aware)
+  stat/               # stats collection, diff computation, CPUStat etc.
+  view/               # TUI view definitions (columns, sort, filters)
+  align/              # column width alignment
+  pretty/             # human-readable formatting (bytes, intervals)
+  math/               # rate calculation utilities
+  version/            # version string injected via ldflags
+
+top/                  # top command implementation (TUI logic)
+record/, report/      # record/report command implementations
+profile/              # wait events profiler
+config/               # config command implementation
 ```
 
 ## Data Flow (top command)
 
 ```
 postgres connection
-  → query/         SQL query per stats view
+  → query/         version-aware SQL template → formatted query
   → stat/          collect → compute diff vs previous sample
   → view/          apply column layout, sort, filter
   → gocui TUI      render to terminal
@@ -33,18 +35,33 @@ postgres connection
 
 ## PostgreSQL Version Handling
 
-Stats views change between PG versions (new columns, renamed columns, new views).
-Each stats view query in `internal/query/` may have version-specific variants.
-Version detection happens at connect time via `SELECT version()`.
+Stats views change between PG versions. Version detection at connect time via `SELECT version()`.
 
-## Configuration
+Version-specific query selectors in `internal/query/`:
+- `SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10
+- `SelectStatReplicationQuery(version, track)` — branches at PG 10
+- `SelectStatDatabaseGeneralQuery(version)` — branches at PG 12
+- `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17
+- `SelectStatWALQuery(version)` — branches at PG 18 (columns removed)
 
-Connection params: CLI flags (host, port, user, dbname, password).
-pgpass and pg_service files are supported via pgconn.
-Custom queries: YAML config files in `config/`.
+View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` and `Ncols` per view at connection time.
+
+## PostgreSQL Driver
+
+pgx/v5 (`github.com/jackc/pgx/v5`). Connection uses `QueryExecModeSimpleProtocol` for PgBouncer compatibility. Error types from `pgx/v5/pgconn`.
+
+## Remote Monitoring Mode
+
+When pgcenter runs against a remote PG, system stats (CPU, disk, network) are read via PL/Perl functions in the `pgcenter` schema — installed by `testing/fixtures.sql`. Requires `plperlu` + CPAN modules (`Linux::Ethtool::Settings`, `Filesys::Df`).
 
 ## Testing
 
-Integration tests require a live PostgreSQL instance.
-Test helpers in `testing/`.
-Run with: `make test` (uses `-race -p 1 -timeout 300s`).
+Integration tests require a running PostgreSQL instance.
+Test helpers in `internal/postgres/testing.go`:
+- `NewTestConnect()` — connects to PG 17 (port 21917, default)
+- `NewTestConnectVersion(version)` — connects to specific version; returns error for unavailable versions (callers use `t.Skipf`)
+
+Port map: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918.
+EOL entries (PG 9.5–13) kept in map but connections will fail gracefully.
+
+Run with: `make test` (race detector, timeout 300s).
