@@ -1,14 +1,12 @@
-# __release_tag__ golang 1.16 was released 2021-02-16
-# __release_tag__ alpine 3.13 was released 2021-01-14
-
 # stage 1: build
-FROM golang:1.16 as build
+FROM golang:1.25-alpine AS build
 LABEL stage=intermediate
 WORKDIR /app
 COPY . .
 RUN make build
 
-# stage 2: scratch
-FROM alpine:3.13 as scratch
+# stage 2: final image
+FROM alpine:3.21 AS final
+RUN apk --no-cache add ca-certificates
 COPY --from=build /app/bin/pgcenter /bin/pgcenter
 CMD ["pgcenter"]

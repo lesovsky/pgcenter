@@ -1,12 +1,15 @@
+version: 2
+
 before:
   hooks:
-  - make dep
+    - make dep
 
 builds:
   - binary: pgcenter
     main: ./cmd
     goarch:
       - amd64
+      - arm64
     goos:
       - linux
     env:
@@ -19,6 +22,8 @@ builds:
 
 archives:
   - builds: [pgcenter]
+    formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
 nfpms:
   - vendor: pgcenter
@@ -26,5 +31,18 @@ nfpms:
     maintainer: Alexey Lesovsky
     description: Command-line admin tool for observing and troubleshooting Postgres.
     license: BSD-3
-    formats: [ deb, rpm, apk ]
+    formats: [deb, rpm, apk]
     bindir: /usr/bin
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
