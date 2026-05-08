@@ -31,24 +31,19 @@ jobs:
             ${{ runner.os }}-go-1.25.10-
 
       - name: Cache lint tools
-        id: cache-lint
         uses: actions/cache@v4
         with:
           path: ~/go/bin
-          key: ${{ runner.os }}-lint-golangci-gosec
+          key: ${{ runner.os }}-lint-v2-golangci-gosec-govulncheck
 
       - name: Install lint tools
-        if: steps.cache-lint.outputs.cache-hit != 'true'
         run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          go install github.com/securego/gosec/v2/cmd/gosec@latest
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-
-      - name: Setup lint tools symlinks
-        run: |
-          ln -sf $(go env GOPATH)/bin/golangci-lint /usr/local/bin/golangci-lint
-          ln -sf $(go env GOPATH)/bin/gosec /usr/local/bin/gosec
-          ln -sf $(go env GOPATH)/bin/govulncheck /usr/local/bin/govulncheck
+          test -f ~/go/bin/golangci-lint || go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          test -f ~/go/bin/gosec        || go install github.com/securego/gosec/v2/cmd/gosec@latest
+          test -f ~/go/bin/govulncheck  || go install golang.org/x/vuln/cmd/govulncheck@latest
+          ln -sf ~/go/bin/golangci-lint /usr/local/bin/golangci-lint
+          ln -sf ~/go/bin/gosec         /usr/local/bin/gosec
+          ln -sf ~/go/bin/govulncheck   /usr/local/bin/govulncheck
 
       - name: Prepare test environment
         run: prepare-test-environment.sh
