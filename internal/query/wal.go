@@ -21,10 +21,12 @@ const (
 		"FROM pg_stat_wal"
 )
 
-// SelectStatWALQuery returns the proper query and column count for pg_stat_wal based on PG version.
-func SelectStatWALQuery(version int) (string, int) {
+// SelectStatWALQuery returns the proper query, column count and diff interval for pg_stat_wal based on PG version.
+func SelectStatWALQuery(version int) (string, int, [2]int) {
 	if version >= 180000 {
-		return PgStatWALPG18, 7
+		// PG 18 removed wal_write/wal_sync columns; stats_age is col 6 and must not be diffed.
+		return PgStatWALPG18, 7, [2]int{2, 5}
 	}
-	return PgStatWALDefault, 11
+	// cols 2-9: wal,KiB..buffers_full; col 10 (stats_age) excluded.
+	return PgStatWALDefault, 11, [2]int{2, 9}
 }
