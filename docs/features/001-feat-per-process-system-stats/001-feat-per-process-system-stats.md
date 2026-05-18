@@ -1,6 +1,6 @@
 ---
 created: 2026-05-18
-status: draft
+status: approved
 type: feature
 size: L
 ---
@@ -36,15 +36,15 @@ DBA при troubleshooting видит долгоживущий запрос в `
 1. DBA замечает высокую нагрузку на сервер PostgreSQL.
 2. DBA открывает `pgcenter top` и нажимает `Shift+S`.
 3. Система открывает экран "Per-process system stats" с таблицей всех бэкендов.
-4. DBA нажимает `←`/`→` для смены колонки сортировки, выбирает `all%`.
-5. DBA видит бэкенд с `all%=95%`, `us%=94%`, `sy%=1%` — запрос CPU-bound.
+4. DBA нажимает `←`/`→` для смены колонки сортировки, выбирает `%all`.
+5. DBA видит бэкенд с `%all=95`, `%us=94`, `%sy=1` — запрос CPU-bound.
 6. DBA смотрит колонку `query` — видит текст тяжёлого запроса прямо в той же строке.
 7. Результат: DBA определил виновника CPU без выхода из pgcenter.
 
 **Сценарий 2: Диагностика IO-bound запроса**
 1. DBA видит деградацию производительности, CPU сервера невысок.
-2. DBA открывает экран `Shift+S`, сортирует по `read` (KiB/s).
-3. DBA видит процесс с `read=450 KiB/s`, `all%=12%` — запрос IO-bound, CPU почти не использует.
+2. DBA открывает экран `Shift+S`, сортирует по `read,KiB/s`.
+3. DBA видит процесс с `read,KiB/s=450`, `%all=12` — запрос IO-bound, CPU почти не использует.
 4. DBA смотрит `wait_event` — видит `DataFileRead`, подтверждение IO-ожидания.
 5. Результат: подтверждён IO-bound запрос с конкретными IO-метриками и wait event.
 
@@ -57,14 +57,14 @@ DBA при troubleshooting видит долгоживущий запрос в `
 **Сценарий 4: Анализ параллельного запроса**
 1. DBA видит несколько строк с одинаковым `datname`/`usename` но разными `pid`.
 2. Это параллельные воркеры одного запроса — каждый виден отдельной строкой.
-3. DBA суммирует `all%` воркеров — понимает реальную загрузку параллельного плана.
+3. DBA суммирует `%all` воркеров — понимает реальную загрузку параллельного плана.
 
 **Сценарий 5: Запуск без прав на /proc/[pid]/io**
 1. DBA запускает pgcenter от имени своего пользователя (не `postgres`, не `root`).
 2. При открытии экрана `Shift+S` в строке статуса появляется warning:
    "Cannot read /proc/[pid]/io: permission denied. Run as postgres user or via sudo."
-3. CPU-колонки (`all%`, `us%`, `sy%`, накопленные) отображаются нормально.
-4. IO-колонки (`read`, `write`, `read_total`, `write_total`) пустые для всех строк.
+3. CPU-колонки (`%all`, `%us`, `%sy`, `all_total,s`, `us_total,s`, `sy_total,s`) отображаются нормально.
+4. IO-колонки (`read,KiB/s`, `write,KiB/s`, `read_total,KiB`, `write_total,KiB`) пустые для всех строк.
 5. Результат: экран частично работоспособен, пользователь знает о причине.
 
 ## Дизайн и интерфейс
@@ -77,25 +77,27 @@ DBA при troubleshooting видит долгоживущий запрос в `
 
 ### Колонки (17 штук, в порядке отображения)
 
-| # | Имя колонки | Источник               | Формат   | Описание                                              |
-|---|-------------|------------------------|----------|-------------------------------------------------------|
-| 1 | pid         | pg_stat_activity       | integer  | PID бэкенда                                           |
-| 2 | datname     | pg_stat_activity       | text     | База данных                                           |
-| 3 | usename     | pg_stat_activity       | text     | Пользователь                                          |
-| 4 | state       | pg_stat_activity       | text     | Состояние (active, idle, idle in transaction, …)      |
-| 5 | wait_etype  | pg_stat_activity       | text     | Тип ожидания (wait_event_type, сокращение)            |
-| 6 | wait_event  | pg_stat_activity       | text     | Событие ожидания                                      |
-| 7 | all_total   | /proc/[pid]/stat       | HH:MM:SS | Accumulated CPU: utime+stime с момента старта         |
-| 8 | us_total    | /proc/[pid]/stat       | HH:MM:SS | Accumulated user-mode CPU time                        |
-| 9 | sy_total    | /proc/[pid]/stat       | HH:MM:SS | Accumulated system-mode CPU time                      |
-|10 | read_total  | /proc/[pid]/io         | KiB      | Accumulated bytes read (syscall level)                |
-|11 | write_total | /proc/[pid]/io         | KiB      | Accumulated bytes written (syscall level)             |
-|12 | all%        | /proc/[pid]/stat       | %        | CPU rate: (Δutime+Δstime)/Δtime, нормализован 0–100% |
-|13 | us%         | /proc/[pid]/stat       | %        | User CPU rate, нормализован 0–100%                    |
-|14 | sy%         | /proc/[pid]/stat       | %        | System CPU rate, нормализован 0–100%                  |
-|15 | read        | /proc/[pid]/io         | KiB/s    | IO read rate                                          |
-|16 | write       | /proc/[pid]/io         | KiB/s    | IO write rate                                         |
-|17 | query       | pg_stat_activity       | text     | Текст текущего запроса (обрезается по ширине)         |
+Соглашение об именах: `name,unit` — накопленные; `%name` — CPU rate в %; `name,KiB/s` — IO rate.
+
+| # | Имя колонки      | Источник               | Формат   | Описание                                              |
+|---|------------------|------------------------|----------|-------------------------------------------------------|
+| 1 | pid              | pg_stat_activity       | integer  | PID бэкенда                                           |
+| 2 | datname          | pg_stat_activity       | text     | База данных                                           |
+| 3 | usename          | pg_stat_activity       | text     | Пользователь                                          |
+| 4 | state            | pg_stat_activity       | text     | Состояние (active, idle, idle in transaction, …)      |
+| 5 | wait_etype       | pg_stat_activity       | text     | Тип ожидания (wait_event_type, сокращение)            |
+| 6 | wait_event       | pg_stat_activity       | text     | Событие ожидания                                      |
+| 7 | all_total,s      | /proc/[pid]/stat       | HH:MM:SS | Accumulated CPU: utime+stime с момента старта         |
+| 8 | us_total,s       | /proc/[pid]/stat       | HH:MM:SS | Accumulated user-mode CPU time                        |
+| 9 | sy_total,s       | /proc/[pid]/stat       | HH:MM:SS | Accumulated system-mode CPU time                      |
+|10 | read_total,KiB   | /proc/[pid]/io         | KiB      | Accumulated bytes read (syscall level)                |
+|11 | write_total,KiB  | /proc/[pid]/io         | KiB      | Accumulated bytes written (syscall level)             |
+|12 | %all             | /proc/[pid]/stat       | %        | CPU rate: (Δutime+Δstime)/Δtime, нормализован 0–100% |
+|13 | %us              | /proc/[pid]/stat       | %        | User CPU rate, нормализован 0–100%                    |
+|14 | %sy              | /proc/[pid]/stat       | %        | System CPU rate, нормализован 0–100%                  |
+|15 | read,KiB/s       | /proc/[pid]/io         | KiB/s    | IO read rate                                          |
+|16 | write,KiB/s      | /proc/[pid]/io         | KiB/s    | IO write rate                                         |
+|17 | query            | pg_stat_activity       | text     | Текст текущего запроса (обрезается по ширине)         |
 
 Примечание по IO-семантике: `read_bytes`/`write_bytes` из `/proc/[pid]/io` считают байты,
 прошедшие через read/write syscalls — они включают page cache и не равны фактическому
@@ -103,8 +105,10 @@ DBA при troubleshooting видит долгоживущий запрос в `
 
 ### UX-поведение
 
-- **Сортировка:** стрелки `←`/`→` переключают колонку сортировки, `<` меняет направление.
-  По умолчанию — сортировка по `pid` по возрастанию (стандарт pgcenter).
+- **Навигация по колонкам и сортировка:** стандартные контролы pgcenter:
+  `←`/`→` — выбор колонки сортировки; `↑`/`↓` — изменение ширины текущей колонки;
+  `<` — переключение направления сортировки (desc/asc); `/` — установка текстового фильтра.
+  По умолчанию — сортировка по `pid` по возрастанию.
 - **Фильтр `I`:** переключает скрытие бэкендов с `state = 'idle'`.
   Уже реализован глобально в pgcenter как `toggleIdleConns` — новый экран наследует автоматически.
 - **Фильтр `A`:** открывает диалог ввода порога возраста в секундах.
@@ -115,7 +119,7 @@ DBA при troubleshooting видит долгоживущий запрос в `
   пропадает на следующем обновлении (как на activity-экране).
 - **Недоступность `/proc/[pid]/io`:** при первом открытии экрана `Shift+S` pgcenter
   пробует прочитать `/proc/self/io`; если получен `EACCES` — выводится warning один раз
-  за сессию в строке статуса. IO-колонки (`read`, `write`, `read_total`, `write_total`)
+  за сессию в строке статуса. IO-колонки (`read,KiB/s`, `write,KiB/s`, `read_total,KiB`, `write_total,KiB`)
   пустые для всех строк на протяжении всей сессии. CPU-колонки работают штатно.
   Если `/proc/[pid]/io` конкретного PID недоступен в момент чтения (race condition,
   отличный пользователь) — IO-значения этой строки пустые, остальные строки не затрагиваются.
@@ -135,10 +139,10 @@ DBA при troubleshooting видит долгоживущий запрос в `
    - `/proc/[pid]/stat` → `utime`, `stime` (jiffies)
    - `/proc/[pid]/io` → `read_bytes`, `write_bytes` (если доступно)
 6. Вычисляет дельту относительно предыдущего тика:
-   - На первом тике rate-колонки (`all%`, `us%`, `sy%`, `read`, `write`) отображаются как 0;
+   - На первом тике rate-колонки (`%all`, `%us`, `%sy`, `read,KiB/s`, `write,KiB/s`) отображаются как 0;
      дельта начинает вычисляться со второго тика.
-   - Rate-метрики: `all% = (Δutime + Δstime) / Δtime / cpu_count × 100`; `read`/`write` KiB/s.
-   - Accumulated-метрики: `utime + stime` → HH:MM:SS; `read_bytes`/`write_bytes` → KiB.
+   - Rate-метрики: `%all = (Δutime + Δstime) / Δtime / cpu_count × 100`; `read,KiB/s`/`write,KiB/s` аналогично.
+   - Accumulated-метрики: `utime + stime` → `all_total,s` (HH:MM:SS); `read_bytes` → `read_total,KiB`.
 7. Объединяет данные pg_stat_activity и procfs по `pid`, формирует строки таблицы.
 8. Отображает таблицу в главной области, применяет активные фильтры.
 
@@ -220,8 +224,8 @@ DBA при troubleshooting видит долгоживущий запрос в `
 ### Пользователь проверяет
 
 - Запустить `pgcenter top` (от пользователя `postgres` или через `sudo`), нажать `Shift+S` — открылся экран "Per-process system stats" с 17 колонками.
-- Запустить тяжёлый CPU-запрос (например, рекурсивный CTE или full-scan большой таблицы), найти его PID в экране, сравнить `all%` визуально с выводом `top -p <pid>`.
-- Аналогично проверить `read`/`write` с `pidstat -d 1 -p <pid>`.
+- Запустить тяжёлый CPU-запрос (например, рекурсивный CTE или full-scan большой таблицы), найти его PID в экране, сравнить `%all` визуально с выводом `top -p <pid>`.
+- Аналогично проверить `read,KiB/s`/`write,KiB/s` с `pidstat -d 1 -p <pid>`.
 - Нажать `I` — idle-бэкенды исчезли; нажать `I` снова — появились.
 - Нажать `A`, ввести `10` — показываются только бэкенды старше 10 секунд.
 - Запустить pgcenter от непривилегированного пользователя, нажать `Shift+S` — появился warning об отсутствии прав на IO, CPU-колонки работают, IO-колонки пустые.
