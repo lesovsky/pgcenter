@@ -4,8 +4,8 @@ const (
 	// NOTES:
 	// 1. regexp_replace() removes extra spaces, tabs and newlines from queries
 
-	// PgStatStatementsTimingDefault defines default query for getting timings stats from pg_stat_statements view.
-	PgStatStatementsTimingDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
+	// PgStatStatementsTimingPG13 defines timing query for pg_stat_statements (PG 13-16).
+	PgStatStatementsTimingPG13 = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
 		"date_trunc('seconds', round(p.total_plan_time + p.total_exec_time) / 1000 * '1 second'::interval)::text AS all_total, " +
 		"date_trunc('seconds', round(p.blk_read_time) / 1000 * '1 second'::interval)::text AS read_total, " +
 		"date_trunc('seconds', round(p.blk_write_time) / 1000 * '1 second'::interval)::text AS write_total, " +
@@ -29,8 +29,9 @@ const (
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// the timing query for Postgres 17 and newer. v17 splits up the read-write timing stats into more granular columns.
-	PgStatStatementsTimingPG17 = `
+	// PgStatStatementsTimingDefault defines timing query for pg_stat_statements (PG 17+).
+	// PG 17 splits read/write timing into shared_blk_*, local_blk_*, temp_blk_* columns.
+	PgStatStatementsTimingDefault = `
 SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database,
 	date_trunc('seconds', round(p.total_exec_time + p.total_plan_time) / 1000 * '1 second'::interval)::text AS all_total,
 	date_trunc('seconds', round(p.shared_blk_read_time + p.local_blk_read_time + p.temp_blk_read_time) / 1000 * '1 second'::interval)::text AS read_total,
@@ -96,8 +97,8 @@ FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid
 		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
 		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid"
 
-	// PgStatStatementsReportQueryDefault defines query used for calculating per-statement report based on pg_stat_statements.
-	PgStatStatementsReportQueryDefault = "WITH totals AS (SELECT " +
+	// PgStatStatementsReportQueryPG13 defines report query for pg_stat_statements (PG 13-16).
+	PgStatStatementsReportQueryPG13 = "WITH totals AS (SELECT " +
 		"sum(calls) AS total_calls," +
 		"sum(rows) AS total_rows," +
 		"sum(total_plan_time + total_exec_time) AS total_all_time," +
@@ -158,8 +159,9 @@ FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid
 		"to_char(100*s.wal_bytes/(SELECT coalesce(nullif(total_wal_bytes, 0), 1) FROM totals), 'FM990.00') AS wal_bytes_ratio " +
 		"FROM stmt s JOIN pg_database d ON d.oid=s.dbid LIMIT 1"
 
-	// The reports query for Postgres 17 and newer. v17 splits up the read-write timing stats into more granular columns.
-	PgStatStatementsReportQueryPG17 = `
+	// PgStatStatementsReportQueryDefault defines report query for pg_stat_statements (PG 17+).
+	// PG 17 splits read/write timing into shared_blk_*, local_blk_*, temp_blk_* columns.
+	PgStatStatementsReportQueryDefault = `
 WITH totals AS (
 	SELECT
 		sum(calls) AS total_calls,
@@ -306,9 +308,9 @@ func SelectStatStatementsTimingQuery(version int) string {
 	case version < 130000:
 		return PgStatStatementsTimingPG12
 	case version >= 170000:
-		return PgStatStatementsTimingPG17
-	default:
 		return PgStatStatementsTimingDefault
+	default:
+		return PgStatStatementsTimingPG13
 	}
 }
 
@@ -318,8 +320,8 @@ func SelectQueryReportQuery(version int) string {
 	case version < 130000:
 		return PgStatStatementsReportQueryPG12
 	case version >= 170000:
-		return PgStatStatementsReportQueryPG17
-	default:
 		return PgStatStatementsReportQueryDefault
+	default:
+		return PgStatStatementsReportQueryPG13
 	}
 }

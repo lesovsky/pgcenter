@@ -124,7 +124,7 @@ func New() Views {
 		"wal": {
 			Name:               "wal",
 			MinRequiredVersion: query.PostgresV14,
-			QueryTmpl:          query.PgStatWALDefault,
+			QueryTmpl:          query.PgStatWALPG14,
 			DiffIntvl:          [2]int{2, 9},
 			Ncols:              11,
 			OrderKey:           0,
@@ -135,7 +135,7 @@ func New() Views {
 		},
 		"statements_timings": {
 			Name:      "statements_timings",
-			QueryTmpl: query.PgStatStatementsTimingDefault,
+			QueryTmpl: query.PgStatStatementsTimingPG13,
 			DiffIntvl: [2]int{6, 10},
 			Ncols:     13,
 			OrderKey:  0,
