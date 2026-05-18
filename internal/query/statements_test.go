@@ -17,12 +17,12 @@ func TestSelectStatStatementsTimingQuery(t *testing.T) {
 		{version: 100000, want: PgStatStatementsTimingPG12},
 		{version: 110000, want: PgStatStatementsTimingPG12},
 		{version: 120000, want: PgStatStatementsTimingPG12},
-		{version: 130000, want: PgStatStatementsTimingDefault},
-		{version: 140000, want: PgStatStatementsTimingDefault},
-		{version: 160000, want: PgStatStatementsTimingDefault},
+		{version: 130000, want: PgStatStatementsTimingPG13},
+		{version: 140000, want: PgStatStatementsTimingPG13},
+		{version: 160000, want: PgStatStatementsTimingPG13},
 		// PG 17+: blk_read_time/blk_write_time replaced by shared_blk_read_time etc.
-		{version: 170000, want: PgStatStatementsTimingPG17},
-		{version: 180000, want: PgStatStatementsTimingPG17},
+		{version: 170000, want: PgStatStatementsTimingDefault},
+		{version: 180000, want: PgStatStatementsTimingDefault},
 	}
 
 	for _, tc := range testcases {
@@ -112,12 +112,12 @@ func TestSelectQueryReportQuery(t *testing.T) {
 		{version: 100000, want: PgStatStatementsReportQueryPG12},
 		{version: 110000, want: PgStatStatementsReportQueryPG12},
 		{version: 120000, want: PgStatStatementsReportQueryPG12},
-		{version: 130000, want: PgStatStatementsReportQueryDefault},
-		{version: 140000, want: PgStatStatementsReportQueryDefault},
-		{version: 160000, want: PgStatStatementsReportQueryDefault},
+		{version: 130000, want: PgStatStatementsReportQueryPG13},
+		{version: 140000, want: PgStatStatementsReportQueryPG13},
+		{version: 160000, want: PgStatStatementsReportQueryPG13},
 		// PG 17+: blk_read_time/blk_write_time replaced by shared_blk_read_time etc.
-		{version: 170000, want: PgStatStatementsReportQueryPG17},
-		{version: 180000, want: PgStatStatementsReportQueryPG17},
+		{version: 170000, want: PgStatStatementsReportQueryDefault},
+		{version: 180000, want: PgStatStatementsReportQueryDefault},
 	}
 
 	for _, tc := range testcases {
