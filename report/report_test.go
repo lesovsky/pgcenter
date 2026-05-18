@@ -338,6 +338,25 @@ func Test_readMeta(t *testing.T) {
 			},
 			want: metadata{version: 140000},
 		},
+		// Reproduces issue #122: shared_preload_libraries was added to SelectCommonProperties
+		// in cbfa0a4, making it 8 columns. Tar files recorded after that commit have Ncols=8
+		// and were incorrectly rejected by the strict "!= 7" check.
+		{
+			valid: true,
+			res: stat.PGresult{
+				Values: [][]sql.NullString{
+					{
+						{String: "14.9", Valid: true}, {String: "140009", Valid: true},
+						{String: "off", Valid: true}, {String: "100", Valid: true}, {String: "3", Valid: true},
+						{String: "pg_stat_statements", Valid: true},
+						{String: "false", Valid: true}, {String: "1622828486655396e-6", Valid: true},
+					},
+				},
+				Cols:  []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "shared_preload_libraries", "recovery", "start_time_unix"},
+				Ncols: 8, Nrows: 1, Valid: true,
+			},
+			want: metadata{version: 140009},
+		},
 		{valid: false, res: stat.PGresult{Ncols: 1, Nrows: 1, Valid: true}},
 		{valid: false, res: stat.PGresult{Ncols: 7, Nrows: 0, Valid: true}},
 	}
