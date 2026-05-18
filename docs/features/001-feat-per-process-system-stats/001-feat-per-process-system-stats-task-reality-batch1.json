@@ -1,0 +1,92 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "hints",
+      "task": "01",
+      "issue": "Implementation Hints section contains an internally contradictory explanation for the utime/stime suffix indices. The hint text says 'After consuming `pid (comm) state` (3 fields), the zero-based suffix indices are 11 and 12 respectively', but 'consuming 3 fields' implies the suffix starts after the state field, which would place utime at index 10, not 11. In reality the correct parsing slices from `last ) + 2` (as described in the What-to-do and Details sections), meaning the suffix INCLUDES the state token at suffix[0], making utime=suffix[11] and stime=suffix[12] — which is correct and verified against live /proc/[pid]/stat. The indices 11 and 12 are correct; only the explanatory phrase 'After consuming pid (comm) state (3 fields)' is misleading because it implies state is excluded from the suffix. An implementer following the hint text literally could derive wrong indices.",
+      "fix": "Rewrite the hint explanation to: 'The suffix is everything after the last `)` plus a space — it starts with the state character as suffix[0]. utime is at suffix[11] (kernel ABI field 14), stime is at suffix[12] (kernel ABI field 15). Verify with: python3 -c \"import re; s=open('/proc/self/stat').read(); idx=s.rfind(')'); print(s[idx+2:].split()[11], s[idx+2:].split()[12])\"'"
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "02",
+      "issue": "The Acceptance Criteria and the SQL code block in the Details section both show '{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}' (no spaces inside the delimiters), but the Critical Conventions sub-section says 'The existing activity query uses `{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}` with spaces inside — match this spacing.' These two instructions within the same task contradict each other. The actual existing code in internal/query/activity.go uses the spaced form: '{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}'.",
+      "fix": "Align the SQL code block and acceptance criteria with the Critical Conventions paragraph by adding spaces inside the delimiters: '{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}'. Both the example SQL and the AC bullet should match the actual codebase pattern."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Task 01 says to use `bufio.Scanner` as the file-reading pattern (referencing cpu.go), but cpu.go's reader function `readCPUStatLocal` accepts a file path string directly (enabling easy golden-file testing), while the task specifies `readProcPidStat(pid int)` which accepts only a PID. The task then acknowledges this problem and leaves the resolution vague: 'use an unexported variant of the reader that accepts a path string, or open the file and adapt as done in cpu_test.go; look at how existing tests pass file paths before deciding approach'. The ambiguity leaves the implementer to design the testability pattern from scratch, inconsistent with the concrete guidance given for everything else in the task.",
+      "fix": "Explicitly recommend following the cpu.go split: a private `readProcPidStatLocal(path string)` that does the actual file I/O, and a public-facing `readProcPidStat(pid int)` that calls it with `fmt.Sprintf('/proc/%d/stat', pid)`. Tests then call the Local variant directly with golden file paths. This matches readDiskstatsLocal and readCPUStatLocal patterns exactly."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "03",
+      "issue": "The Details section says 'strconv (already imported in stat.go)' as justification for not needing a new import. This is true at the package level, but each Go file requires its own import block. The statement may mislead a less experienced implementer into omitting the import from procpidstat.go. The new procpidstat.go file (created by task 01) will need its own `import \"strconv\"` regardless of what stat.go imports.",
+      "fix": "Change to: 'strconv — add to the import block in procpidstat.go; it is already used elsewhere in the package so no go.mod change is needed.'"
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 38,
+    "issues_found": 4
+  },
+  "verification_details": {
+    "file_existence": {
+      "internal/stat/cpu.go": "EXISTS — primary pattern file for task 01",
+      "internal/stat/diskstats.go": "EXISTS — secondary pattern file for task 01",
+      "internal/stat/stat.go": "EXISTS — sValue() and PGresult defined here",
+      "internal/stat/postgres.go": "EXISTS — PGresult struct definition confirmed",
+      "internal/stat/testdata/proc/": "EXISTS — directory present with golden files (diskstats, loadavg, meminfo, netdev, stat, uptime)",
+      "internal/query/activity.go": "EXISTS — QueryAgeThresh and ShowNoIdle template variables confirmed",
+      "internal/query/query.go": "EXISTS — Options struct, NewOptions(), Format() confirmed"
+    },
+    "functions_verified": {
+      "sValue(prev, curr, itv, ticks float64) float64": "EXISTS in internal/stat/stat.go line 305",
+      "parseDuration(s string) (int64, error)": "EXISTS in internal/stat/stat.go line 405",
+      "bufio.NewScanner pattern": "CONFIRMED in cpu.go line 53 and diskstats.go line 93",
+      "filepath.Clean + os.Open pattern": "CONFIRMED in diskstats.go line 80, cpu.go line 45",
+      "defer func() { _ = f.Close() }() pattern": "CONFIRMED in cpu.go lines 49-51",
+      "postgres.NewTestConnectVersion(version)": "EXISTS in internal/postgres/testing.go line 16",
+      "query.NewOptions(version, recovery, track, querylen, pgssSchema)": "EXISTS in internal/query/query.go line 37",
+      "query.Format(tmpl, opts)": "EXISTS in internal/query/query.go line 86"
+    },
+    "struct_fields_verified": {
+      "PGresult.Values [][]sql.NullString": "CORRECT — confirmed in postgres.go line 160",
+      "PGresult.Cols []string": "CORRECT",
+      "PGresult.Ncols int": "CORRECT",
+      "PGresult.Nrows int": "CORRECT",
+      "PGresult.Valid bool": "CORRECT",
+      "Options.QueryAgeThresh string": "CORRECT — confirmed in query.go line 28",
+      "Options.ShowNoIdle bool": "CORRECT — confirmed in query.go line 30",
+      "NewOptions default QueryAgeThresh": "'00:00:00.0' — confirmed in query.go line 43",
+      "NewOptions default ShowNoIdle": "true (show-no-idle = hide idle by default) — confirmed in query.go line 44"
+    },
+    "testdata_pattern": {
+      "golden_file_naming": "Existing pattern uses dot-separated suffixes: diskstats.v1.golden, loadavg.golden, loadavg.invalid. Task 01 proposes underscore names (pid_stat_space_comm) — different convention but not incorrect, just inconsistent.",
+      "test_directory": "internal/stat/testdata/proc/ EXISTS and is the correct location"
+    },
+    "proc_stat_field_indices": {
+      "parsing_method": "strings.LastIndex(line, ')') + 2 = includes state as suffix[0]",
+      "utime_index": "suffix[11] — verified with /proc/self/stat and /proc/1/stat on dev machine",
+      "stime_index": "suffix[12] — verified",
+      "task_claim": "CORRECT (indices 11 and 12 are right; only the explanatory prose is misleading)"
+    },
+    "sql_escaping": {
+      "regexp_replace_pattern": "E'\\\\s+' in raw backtick Go string sends E'\\s+' to PostgreSQL, which is correct POSIX regex whitespace class — matches existing working pattern in activity.go lines 12, 25, 38"
+    },
+    "runtime_NumCPU": {
+      "feasibility": "FEASIBLE — runtime package is stdlib with no conflicts; task correctly keeps buildProcPidResult pure by taking cpuCount as parameter"
+    },
+    "pg_version_list_in_test": {
+      "180000_in_test": "VALID — activity_test.go already includes 180000 in its version list"
+    }
+  }
+}

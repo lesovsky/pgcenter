@@ -1,0 +1,111 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
+  "tasks_checked": ["04", "05", "06", "07"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "hallucination",
+      "task": "04",
+      "issue": "Task states 'CollectLogtail = 4' and instructs adding 'CollectProcPidStat = 5'. In reality, the const block in internal/stat/stat.go mixes a string constant (pgProcUptimeQuery) before the iota group, so iota counts from position 0: pgProcUptimeQuery=iota(0, unused), CollectNone=iota(1), CollectDiskstats=2, CollectNetdev=3, CollectFsstats=4, CollectLogtail=5. Setting CollectProcPidStat=5 would collide with CollectLogtail. The next free value is 6.",
+      "fix": "Set CollectProcPidStat = 6 (next iota after CollectLogtail which is actually 5), or add it as the next iota entry after CollectLogtail in the const block. Update all references to the constant value in task descriptions and tests."
+    },
+    {
+      "severity": "critical",
+      "category": "tdd",
+      "task": "04",
+      "issue": "Adding 'procpidstat' to view.New() increases len(view.New()) from 21 to 22. Test_app_record in record/record_test.go (line 34) uses 'totalViews := len(view.New()) + 1' as the expected file count per snapshot. Since filterViews removes procpidstat (NotRecordable=true), the recorder only writes 21 data files + 1 metadata = 22 files, but the test expects 23 per snapshot. Test_app_record will fail with wrong file count assertion.",
+      "fix": "Task 04 must also update Test_app_record to account for NotRecordable views. Change line 34 to subtract NotRecordable views from the expected count, e.g. 'totalViews := len(view.New()) - notRecordableCount + 1', or restructure the test to count via filterViews output instead of len(view.New())."
+    },
+    {
+      "severity": "critical",
+      "category": "tdd",
+      "task": "04",
+      "issue": "Adding 'procpidstat' to view.New() (NotRecordable=true) increases the filtered count by 1 in every test case of Test_filterViews (record/record_test.go lines 98-118). All six hardcoded 'wantN' values (6, 0, 3, 6, 8, 8) will be off by 1 (should be 7, 1, 4, 7, 9, 9). Task 04 does not mention updating these expected values.",
+      "fix": "Task 04 must instruct updating all wantN values in Test_filterViews test cases to increment by 1, accounting for the procpidstat view filtered via NotRecordable=true."
+    },
+    {
+      "severity": "critical",
+      "category": "missing_file",
+      "task": "04",
+      "issue": "Task 04 (and task 05) depend on 'internal/query/procpidstat.go' providing the constant 'query.PgStatActivityProcPidStat'. This file does not exist in the codebase — it was to be created in Task 02, which is a wave-1 dependency. At the time tasks 04-07 are validated against the current codebase (before Task 02 runs), the file is absent. Compilation of the procpidstat view entry in view.New() will fail until Task 02 is complete.",
+      "fix": "This is a wave dependency, not a task error per se, but must be clearly tracked: Task 04 cannot compile until Task 02's output exists. The dependency 'depends_on: [\"02\"]' is declared, which is correct. No fix needed in the task itself, but the reality-check flags it for awareness."
+    },
+    {
+      "severity": "critical",
+      "category": "missing_file",
+      "task": "05",
+      "issue": "Task 05 depends on 'internal/stat/procpidstat.go' containing readProcPidStat(), readProcPidIO(), and buildProcPidResult() (from Tasks 01 and 03). This file does not exist in the codebase. The file is also not referenced by Task 05's depends_on which lists [\"03\", \"04\"], and Task 03 is in wave 2 while Task 05 is wave 3 — the dependency chain is declared correctly. But the file is absent in the current codebase state.",
+      "fix": "No task-level fix needed — the dependency is declared. Flagged as a wave-ordering awareness issue: Task 05 cannot compile without Task 03 output."
+    },
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "04",
+      "issue": "Task 04 (Details section) states 'The record package has no existing tests file — check with ls record/ first. If there is no record_test.go, create it.' In reality, record/record_test.go already exists with 119 lines including Test_app_setup, Test_app_record, and Test_filterViews.",
+      "fix": "Remove the hint about creating record_test.go. Instead instruct adding the new TestFilterViews_NotRecordable and TestFilterViews_Recordable test cases to the existing record/record_test.go. The existing Test_filterViews test must also be updated (see critical findings above)."
+    },
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "04",
+      "issue": "Task 04 states 'view.New() returns a map with 20 existing views'. The actual count is 21 views (verified by listing all map keys in internal/view/view.go).",
+      "fix": "Update the reference from '20 existing views' to '21 existing views'."
+    },
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "06",
+      "issue": "Task 06 states config_view.go is '349 lines' and toggleIdleConns is 'at line 302'. The actual file has 348 lines. toggleIdleConns is at line 300, not 302.",
+      "fix": "Update the line reference from 302 to 300. The structural description is correct, only the line number is off."
+    },
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "06",
+      "issue": "Task 06 states dialog.go has '179 lines'. The actual file has 178 lines.",
+      "fix": "Update the line reference from 179 to 178. Minor cosmetic issue, no functional impact."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "Task 06 says the compound guard in dialog.go is 'at line 51'. The actual guard 'if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != \"activity\"' is at line 51, which matches. However, the proposed split requires the first check to cover exactly dialogCancelQuery..dialogSetMask. The current range 'd > dialogFilter && d <= dialogChangeAge' includes dialogCancelQuery(2), dialogTerminateBackend(3), dialogCancelGroup(4), dialogTerminateGroup(5), dialogSetMask(6), and dialogChangeAge(7). The split requires an explicit list or adjusted range bounds. The task's proposed approach using 'if d is one of dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup, or dialogSetMask' (5-element switch/list) is functional but slightly more verbose than a range check. No blocking issue, but the implementation hint is less precise about the boundary.",
+      "fix": "Implementation hint could use 'd > dialogFilter && d < dialogChangeAge' as the range for the first guard (covers CancelQuery..SetMask without including ChangeAge), instead of an explicit five-element list. Both approaches work."
+    },
+    {
+      "severity": "major",
+      "category": "hints",
+      "task": "05",
+      "issue": "Task 05 implementation hints (Details section) contain a full algorithmic description of the PID cleanup-before-swap pattern: 'build newPrevStats map by iterating activity PIDs and copying from currProcPidStats if present; assign c.prevProcPidStats = newPrevStats; then assign c.currProcPidStats = make(map[int]ProcPidStat)'. This is a complete step-by-step algorithm, not a pointer to patterns.",
+      "fix": "Replace with a reference to the pattern: 'Follow the same prev/curr snapshot swap pattern used for Diskstats/Netdevs in collectDiskstats() and collectNetdevs(), but add a cleanup phase before swap to prune PIDs no longer in the activity result.'"
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "Task 06 states 'the stat package is already imported in top/stat.go so no cycle is introduced'. The stat import is needed in config_view.go (for stat.CheckIOAvailable() and stat.CollectProcPidStat). config_view.go currently does NOT import 'github.com/lesovsky/pgcenter/internal/stat' — it imports only fmt, gocui, math, query, view, regexp, strconv, time. The import must be added.",
+      "fix": "Add 'github.com/lesovsky/pgcenter/internal/stat' to config_view.go imports. The task does mention this ('Required imports: check if already imported'), but the statement 'already imported in top/stat.go so no cycle is introduced' could mislead — the check for cycle is correct (no cycle since config_view.go is in package top), but the import is not already present in config_view.go itself."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "Task 06 notes that 'I' (toggleIdleConns) is bound to the key 'I' (uppercase). In keybindings.go line 28, it is bound as 'I' (rune 73, uppercase I, Shift+I). The toggleIdleConns function currently guards with 'config.view.Name != \"activity\"' and returns nil (silently ignores) for other views. Task 06 changes this to also allow 'procpidstat'. The existing guard returns nil (no error, no feedback) for non-matching views — this silent return is the current pattern and the fix correctly mirrors it.",
+      "fix": "No fix needed. Noted for completeness."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "Task 07 says test container 'lesovsky/pgcenter-testing:0.0.9' provides PG 14-18 on ports 21914-21918. The tech-spec mentions PG 17 as the default test target. This is informational context for QA setup, but the task does not verify this container version exists or is running.",
+      "fix": "No code change needed. QA agent should verify the container is available before running make test."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "claims_verified": 38,
+    "issues_found": 14
+  }
+}

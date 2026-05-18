@@ -74,20 +74,7 @@ actual stats collection (Task 05) and view registration (Task 04) were completed
 
 ## TDD Anchor
 
-All changes in this task are in the `top/` package which is not covered by automated unit tests
-(TUI callbacks require `gocui.Gui` instances that cannot be constructed without a terminal).
-The verification path is `make build && make lint` (compilation + static analysis).
-
-There are no new exported functions with testable pure logic — `switchViewToProcPidStat` closes
-over `app` and calls gocui primitives. The guard logic (local-mode, IO check, dialog dispatch)
-is covered indirectly by build correctness and by the existing `internal/stat` and `record`
-tests from earlier tasks.
-
-If the project adds `top/` package tests in the future, the following cases would apply:
-- `switchViewToProcPidStat` with `db.Local = false` — verify no view switch occurs, warning printed.
-- `toggleIdleConns` called from `"procpidstat"` view — verify query is re-formatted and sent on `viewCh`.
-- `dialogOpen(dialogChangeAge)` from `"procpidstat"` — verify dialog opens (no early return).
-- `dialogOpen(dialogTerminateBackend)` from `"procpidstat"` — verify early return with message.
+TDD approach for this task: run `make build && make lint` after each function. No unit tests — TUI callbacks require a real terminal. Behavior verified via `make test` (compilation) and manual smoke test.
 
 ## Acceptance Criteria
 
@@ -107,8 +94,10 @@ If the project adds `top/` package tests in the future, the following cases woul
 **Feature artifacts:**
 - [001-feat-per-process-system-stats.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md) — user-spec
 - [001-feat-per-process-system-stats-tech-spec.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-tech-spec.md) — tech-spec
+- [001-feat-per-process-system-stats-decisions.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md) — decisions log
 
 **Project knowledge:**
+- [overview.md](.claude/skills/project-knowledge/overview.md)
 - [architecture.md](.claude/skills/project-knowledge/architecture.md)
 - [patterns.md](.claude/skills/project-knowledge/patterns.md)
 
@@ -163,7 +152,7 @@ Two changes:
    - Required imports: `"github.com/lesovsky/pgcenter/internal/stat"` — check if already imported;
      if not, add it. The package is already imported in `top/stat.go` so no cycle is introduced.
 
-2. `toggleIdleConns` guard (line 302): change `config.view.Name != "activity"` to
+2. `toggleIdleConns` guard (line 300): change `config.view.Name != "activity"` to
    `config.view.Name != "activity" && config.view.Name != "procpidstat"`.
    The rest of the function body is unchanged.
 

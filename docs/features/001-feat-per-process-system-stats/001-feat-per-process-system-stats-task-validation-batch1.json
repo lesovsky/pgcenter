@@ -1,0 +1,137 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 1,
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "05",
+      "section": "What to do",
+      "issue": "Cross-task type mismatch in buildProcPidResult() call. Task 03 defines the function signature as `func buildProcPidResult(..., ticks float64, itv int, cpuCount int) PGresult` (itv is int). Task 05 step 4 calls it as `buildProcPidResult(res, ..., c.config.ticks, float64(itv), runtime.NumCPU())` — passing float64(itv) for the int-typed parameter. This will not compile in Go.",
+      "fix": "Change the call in Task 05 to pass itv as int: `buildProcPidResult(res, prevProcPidStats, currProcPidStats, prevProcPidIO, currProcPidIO, view.IOAvailable, c.config.ticks, itv, runtime.NumCPU())`. Alternatively, change the function signature in Task 03 to accept `itv float64` — but then Task 03 must also be updated. The simplest fix is to align Task 05 to Task 03's declared signature."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "Mandatory context file `decisions.md` is missing from Context Files. The template requires `[{feature_base}-decisions.md]` as a mandatory feature artifact link.",
+      "fix": "Add `[001-feat-per-process-system-stats-decisions.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md) — decisions log` to the Feature artifacts subsection."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "Mandatory project context file `project.md` (or its equivalent `overview.md`) is missing from Context Files. Only `architecture.md` and `patterns.md` are present. The template mandates both `project.md` and `architecture.md` as always-required project knowledge.",
+      "fix": "Add `[project.md](.claude/skills/project-knowledge/overview.md)` to the Project knowledge subsection."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Mandatory context file `decisions.md` is missing from Context Files. The template requires `[{feature_base}-decisions.md]` as a mandatory feature artifact link.",
+      "fix": "Add `[001-feat-per-process-system-stats-decisions.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md) — decisions log` to the Feature artifacts subsection."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Mandatory project context file `project.md` (or its equivalent `overview.md`) is missing. Context Files only list architecture.md and patterns.md under Project knowledge.",
+      "fix": "Add `[project.md](.claude/skills/project-knowledge/overview.md)` to the Project knowledge subsection."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "Mandatory project context file `project.md` (or its equivalent `overview.md`) is missing. Context Files list architecture.md and patterns.md but not project.md/overview.md.",
+      "fix": "Add `[project.md](.claude/skills/project-knowledge/overview.md)` to the Project knowledge subsection."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Mandatory project context file `project.md` (or its equivalent `overview.md`) is missing. Context Files list architecture.md and patterns.md but not project.md/overview.md.",
+      "fix": "Add `[project.md](.claude/skills/project-knowledge/overview.md)` to the Project knowledge subsection."
+    },
+    {
+      "severity": "major",
+      "category": "decomposition",
+      "task": "03",
+      "section": "Frontmatter",
+      "issue": "depends_on lists only [\"01\"] but not [\"02\"]. The tech-spec places both Task 1 and Task 2 in Wave 1 and Task 3 in Wave 2. While Task 3's code only directly uses outputs from Task 1, both wave-1 tasks are supposed to complete before wave-2 tasks begin. More importantly, the Details section in Task 03 explicitly states the column order contract with Task 4 (which depends on Task 2's query file). If tasks run in parallel waves, the decomposition intent is that all wave-1 tasks finish before wave-2 starts — omitting Task 2 from depends_on allows a scheduler to start Task 3 before Task 2 finishes, which may cause inconsistencies in understanding the full picture.",
+      "fix": "Consider changing depends_on to [\"01\", \"02\"] to faithfully represent the wave-1 completion precondition, even if Task 3's direct code dependency is only on Task 1."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "TDD Anchor",
+      "issue": "Test `TestPgStatActivityProcPidStat_ShowNoIdle` verifies that the formatted SQL contains `state != 'idle'` — this is a string-presence check on template output, not a behavioral assertion. It tests template rendering structure rather than query behavior.",
+      "fix": "This is acceptable for a pure SQL constant with no runtime logic — the string-presence check is the appropriate level of test for a template constant. Flag as minor. No change required unless test-reviewer flags it."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Feature artifact links use short relative paths (`001-feat-per-process-system-stats.md`, `001-feat-per-process-system-stats-tech-spec.md`) without the directory prefix. All other tasks use full paths like `docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md`. While functionally equivalent when opened from the same directory, inconsistency makes links less reliable in tools that resolve paths from the repo root.",
+      "fix": "Prefix feature artifact paths with the full directory: `docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md`."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Feature artifact links use short relative paths (same issue as Task 03): `001-feat-per-process-system-stats.md`, `001-feat-per-process-system-stats-tech-spec.md`, `001-feat-per-process-system-stats-decisions.md`.",
+      "fix": "Prefix all feature artifact paths with `docs/features/001-feat-per-process-system-stats/` for consistency and reliability."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "05",
+      "section": "Post-completion",
+      "issue": "Post-completion checklist items are in Russian ('Записать краткий отчёт в...', 'Если отклонились от спека...', 'Обновить user-spec/tech-spec если что-то изменилось'). All other task files (01, 02, 03, 04) have Post-completion in English. Language inconsistency between tasks suggests Task 05 was generated from the raw Russian template without translation.",
+      "fix": "Translate Post-completion items to English to match tasks 01–04: '[ ] Write a brief report to [...] (1-3 sentence summary, review links, no finding tables or dumps)', '[ ] If deviated from spec — describe deviation and reason', '[ ] Update user-spec/tech-spec if anything changed'."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "05",
+      "section": "TDD Anchor",
+      "issue": "`TestCollectorUpdateNoEnrichment` asserts `s.Pgstat.Result.Ncols` does not equal 17, treating column count as a behavioral proxy. This is a structural check. It is technically the correct approach for verifying the enrichment branch did NOT fire, but the description of what behavior it proves is thin.",
+      "fix": "Expand the test description to clarify what behavior Ncols proxies: 'no enrichment branch fired, result reflects raw SQL columns only'. Minor documentation improvement, not a blocking issue."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Post-completion",
+      "issue": "Post-completion references decisions.md with a bare relative path `[001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md)` — no directory prefix. Consistent with the same issue in Context Files for this task.",
+      "fix": "Use the full path: `docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md`."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 14,
+    "by_severity": {
+      "critical": 7,
+      "major": 1,
+      "minor": 6
+    },
+    "by_task": {
+      "01": 2,
+      "02": 1,
+      "03": 4,
+      "04": 1,
+      "05": 6
+    }
+  }
+}

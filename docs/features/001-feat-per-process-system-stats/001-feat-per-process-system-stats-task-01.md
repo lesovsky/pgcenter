@@ -80,8 +80,10 @@ Write these tests first (they must fail before implementation, pass after):
 **Feature artifacts:**
 - [001-feat-per-process-system-stats.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md) — user-spec
 - [001-feat-per-process-system-stats-tech-spec.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-tech-spec.md) — tech-spec (Data Models section, Testing Strategy section)
+- [001-feat-per-process-system-stats-decisions.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md) — decisions log
 
 **Project knowledge:**
+- [overview.md](.claude/skills/project-knowledge/overview.md) — project overview
 - [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout and data flow
 - [patterns.md](.claude/skills/project-knowledge/patterns.md) — error wrapping, linting, naming conventions, testing conventions
 
@@ -140,7 +142,7 @@ Write these tests first (they must fail before implementation, pass after):
 - Follow `cpu.go` exactly for file open, defer close, and scanner loop patterns — the linter checks for `_ = f.Close()` form
 - For finding the last `)` use `strings.LastIndex(line, ")")` not `strings.Index`; slice from there+2 onward to get the suffix starting after `) `
 - The suffix fields are separated by single spaces; `strings.Fields` handles this correctly
-- Utime is kernel ABI field 14 (1-based), stime is field 15. After consuming `pid (comm) state` (3 fields), the zero-based suffix indices are 11 and 12 respectively — double-check with a real `/proc/self/stat` on the dev machine
+- The suffix starts immediately after the last `')'` + one space. Fields are 0-indexed in the suffix array: index 0 = state, index 1 = ppid, ... index 11 = utime, index 12 = stime. Verify against `/proc/self/stat` on the dev machine.
 - For `readProcPidIO`, using a boolean flag per key or a counter (increment when found, check == 2 at end) is cleaner than repeated string comparisons
 - `filepath.Clean` on the path before `os.Open` is required (gosec G304 lint rule) — follow `diskstats.go` pattern
 - Use `fmt.Sprintf("/proc/%d/stat", pid)` to construct the path — integer formatting avoids any path traversal; do NOT use string concatenation with the pid

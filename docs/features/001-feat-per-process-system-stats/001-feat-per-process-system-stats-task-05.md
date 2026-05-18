@@ -44,7 +44,7 @@ The task has three parts:
    - Cleanup: rebuild `prevProcPidStats` and `prevProcPidIO` as new maps retaining only PIDs present in the current activity result's curr maps
    - Swap: `prevProcPidStats = newPrevStats`, `prevProcPidIO = newPrevIO`, then `currProcPidStats = make(...)`, `currProcPidIO = make(...)`
    - Collect: for each valid PID, call `readProcPidStat(pid)` → `currProcPidStats[pid]` (skip on error); if `view.IOAvailable`, call `readProcPidIO(pid)` → `currProcPidIO[pid]` (skip on error)
-   - Build: `s.Pgstat.Result = buildProcPidResult(res, prevProcPidStats, currProcPidStats, prevProcPidIO, currProcPidIO, view.IOAvailable, c.config.ticks, float64(itv), runtime.NumCPU())`
+   - Build: `s.Pgstat.Result = buildProcPidResult(res, prevProcPidStats, currProcPidStats, prevProcPidIO, currProcPidIO, view.IOAvailable, c.config.ticks, itv, runtime.NumCPU())`
 
 5. In `top/stat.go`, in `collectStat()`:
    - Declare `prevCollectExtra int` alongside `extra := v.ShowExtra`
@@ -83,6 +83,7 @@ Write these tests first, verify they fail before implementation, then pass after
 - [001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md) — decisions log
 
 **Project knowledge:**
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md)
 - [architecture.md](../../../.claude/skills/project-knowledge/architecture.md)
 - [patterns.md](../../../.claude/skills/project-knowledge/patterns.md)
 
@@ -103,7 +104,7 @@ Write these tests first, verify they fail before implementation, then pass after
 
 **Files:**
 
-`internal/stat/stat.go` — current state: `Collector` has `prevPgStat`/`currPgStat Pgstat` for SQL snapshot management. `Reset()` clears only those two fields. `Update()` first collects system stats (CPU, disk, net, fs) via the `c.config.collectExtra` switch, then calls `collectPostgresStat()` and `calculateDelta()`. The variable `itv` is already computed as `int(refresh / time.Second)` near the top of `Update()` — use `float64(itv)` as the refresh interval for `buildProcPidResult()`. The enrichment branch goes AFTER `s.Pgstat.Result = res` and BEFORE the existing `c.prevPgStat = c.currPgStat` / `calculateDelta()` block. `c.config.ticks` is the CLK_TCK value stored from `getSysticksLocal()` in `NewCollector()`.
+`internal/stat/stat.go` — current state: `Collector` has `prevPgStat`/`currPgStat Pgstat` for SQL snapshot management. `Reset()` clears only those two fields. `Update()` first collects system stats (CPU, disk, net, fs) via the `c.config.collectExtra` switch, then calls `collectPostgresStat()` and `calculateDelta()`. The variable `itv` is `float64` (matching `buildProcPidResult`'s `itv float64` parameter from Task 03) and is computed near the top of `Update()`. Pass `itv` directly — no cast needed. The enrichment branch goes AFTER `s.Pgstat.Result = res` and BEFORE the existing `c.prevPgStat = c.currPgStat` / `calculateDelta()` block. `c.config.ticks` is the CLK_TCK value stored from `getSysticksLocal()` in `NewCollector()`.
 
 `top/stat.go` — current state: `collectStat()` tracks `extra := v.ShowExtra` and detects changes in `case v = <-viewCh:`. When `extra != v.ShowExtra`, it calls `c.ToggleCollectExtra(extra)` and `continue`s (skipping the full Reset). The full `c.Reset()` + `c.Update()` path runs for all other view changes. For `CollectExtra`, add a separate `prevCollectExtra` variable. The change-detection must fire when the user switches from `"procpidstat"` to another view (CollectExtra 5→0) or back (0→5), calling `c.Reset()` in each case to clear stale PID maps. This `c.Reset()` can be the same call as the one already in the fallthrough path — evaluate whether it needs to be an additional call or whether the existing `c.Reset()` in the fallthrough covers the case.
 
@@ -133,6 +134,6 @@ Write these tests first, verify they fail before implementation, then pass after
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
-- [ ] Если отклонились от спека — описать отклонение и причину
-- [ ] Обновить user-spec/tech-spec если что-то изменилось
+- [ ] Write report to [001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md) (summary: 1-3 sentences, review round links, no findings dumps)
+- [ ] If deviated from spec — describe the deviation and reason
+- [ ] Update user-spec/tech-spec if anything changed

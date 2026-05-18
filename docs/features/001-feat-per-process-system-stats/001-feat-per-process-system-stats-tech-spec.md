@@ -233,7 +233,7 @@ type ProcPidIO struct {
 ```go
 const (
     // existing constants...
-    CollectProcPidStat = 5 // or next available value in iota
+    CollectProcPidStat = 6 // after CollectLogtail=5 (iota offset: pgProcUptimeQuery string const shifts iota by 1)
 )
 ```
 
@@ -435,7 +435,7 @@ that is a no-op for all existing views.
 - **Files to read:** `internal/stat/stat.go` (sValue, Collector, ticks), `internal/stat/postgres.go` (PGresult), `internal/stat/cpu.go`
 
 #### Task 4: View registration, new View fields, and record skip
-- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct. Register `"procpidstat"` view in `view.New()` with `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, initialized `Filters` map, and `NotRecordable: true`. Add `CollectProcPidStat = 5` constant in `internal/stat/stat.go`. In `record/record.go:filterViews()`, skip views where `NotRecordable` is set. The `query` column gets remaining terminal width; all other columns are sized by `align.SetAlign()`.
+- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct. Register `"procpidstat"` view in `view.New()` with `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, initialized `Filters` map, and `NotRecordable: true`. Add `CollectProcPidStat = 6` constant in `internal/stat/stat.go` (value 6 — after CollectLogtail=5). In `record/record.go:filterViews()`, skip views where `NotRecordable` is set. The `query` column gets remaining terminal width; all other columns are sized by `align.SetAlign()`.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./record/... && make build`

@@ -112,7 +112,7 @@ ORDER BY pid
 
 **Critical conventions (from `internal/query/activity.go`):**
 - `QueryAgeThresh` appears unconditionally in the WHERE clause: `> '{{.QueryAgeThresh}}'::interval`. No `{{ if }}` guard. The default value `"00:00:00.0"` (set by `NewOptions`) means all rows pass.
-- `ShowNoIdle` is conditional: `{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}`. The existing activity query uses `{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}` with spaces inside — match this spacing.
+- `ShowNoIdle` is conditional: `{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}`. Use this exact form — no leading space before `AND`.
 - Both template variables come from `query.Options` (defined in `query.go`), rendered by `query.Format()`.
 
 **Column order matters:** Tasks 3–6 index into the SQL result by position (0–6). The order must be exactly: `pid(0), datname(1), usename(2), state(3), wait_etype(4), wait_event(5), query(6)`.

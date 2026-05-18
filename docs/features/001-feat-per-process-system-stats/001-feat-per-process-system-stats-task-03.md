@@ -1,6 +1,6 @@
 ---
 status: planned
-depends_on: ["01"]
+depends_on: ["01", "02"]
 wave: 2
 skills: [code-writing]
 verify: "bash — go test ./internal/stat/... -run BuildProcPid|FormatCPU"
@@ -79,8 +79,10 @@ Write these tests first, verify they fail, then implement until they pass.
 **Feature artifacts:**
 - [001-feat-per-process-system-stats.md](001-feat-per-process-system-stats.md) — user-spec
 - [001-feat-per-process-system-stats-tech-spec.md](001-feat-per-process-system-stats-tech-spec.md) — tech-spec
+- [001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md) — decisions log
 
 **Project knowledge:**
+- [overview.md](../../.claude/skills/project-knowledge/overview.md) — project overview
 - [architecture.md](../../.claude/skills/project-knowledge/architecture.md)
 - [patterns.md](../../.claude/skills/project-knowledge/patterns.md)
 
@@ -112,7 +114,7 @@ Write these tests first, verify they fail, then implement until they pass.
 - Task 01 must be complete before this task — the `ProcPidStat` and `ProcPidIO` types must exist in `procpidstat.go`.
 - `sValue(prev, curr, itv, ticks float64) float64` from `stat.go` — computes `(curr-prev)/itv*ticks`, returns 0 if curr <= prev. Use it for per-process CPU rate calculation, but note the CPU rate formula for per-process differs from the system-level CPU formula: per-process rate uses `float64(itv)*ticks` as denominator (refresh interval in seconds × CLK_TCK), not the total CPU time delta.
 - `runtime.NumCPU()` from stdlib `runtime` package — pass as `cpuCount int` argument to `buildProcPidResult` (caller will pass `runtime.NumCPU()`; keep the function pure/testable).
-- `strconv` (already imported in `stat.go`) — `strconv.Atoi` for PID parsing; `strconv.FormatFloat` for rate columns.
+- `strconv` is needed in `procpidstat.go` — add to the import block of the new file (each Go file requires its own import). Use `strconv.Atoi` for PID parsing and `strconv.FormatFloat` for rate columns.
 - `fmt` — `fmt.Sprintf` for `HH:MM:SS` formatting and float formatting.
 - `database/sql` — `sql.NullString{String: v, Valid: true}` is how all values are stored in `PGresult.Values`.
 
