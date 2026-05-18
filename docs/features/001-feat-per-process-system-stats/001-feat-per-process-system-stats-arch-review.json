@@ -1,7 +1,7 @@
 {
-  "status": "needs_revision",
+  "status": "approved",
   "checks": {
-    "architectural_fit": "fail",
+    "architectural_fit": "pass",
     "scalability": "pass",
     "database": "n/a",
     "coupling": "pass",
@@ -11,44 +11,30 @@
   "findings": [
     {
       "check": "architectural_fit",
-      "severity": "major",
-      "issue": "viewSwitchHandler signature incompatibility. The spec states switchViewToProcPidStat() builds a view.View{} with CollectExtra and IOAvailable set, then calls viewSwitchHandler(config, view). The actual signature in top/config_view.go is viewSwitchHandler(config *config, c string) — it takes a view name string, not a view.View. Internally it does config.view = config.views[c], which loads the static map entry and overwrites any runtime fields. CollectExtra and IOAvailable set in the caller would be silently discarded; Collector.Update() would see CollectExtra=0 every tick and the procpidstat enrichment branch would never execute.",
-      "location": "Section 'Architecture / How it works' — switchViewToProcPidStat flow; Section 'Implementation Tasks / Task 6'",
-      "fix": "Call viewSwitchHandler(config, \"procpidstat\") first (loads the view from the map), then set the runtime fields on config.view: config.view.CollectExtra = stat.CollectProcPidStat; config.view.IOAvailable = ioAvail; and finally send config.viewCh <- config.view. Alternatively, mutate the map entry before switching: v := config.views[\"procpidstat\"]; v.CollectExtra = ...; config.views[\"procpidstat\"] = v; viewSwitchHandler(config, \"procpidstat\"). The spec must document the two-step pattern explicitly in the task description."
+      "severity": "minor",
+      "issue": "switchViewToProcPidStat closure signature must capture g *gocui.Gui. The spec pseudocode sketches switchViewToProcPidStat(app) as a standalone call, but printCmdline(g, ...) requires the *gocui.Gui argument only available inside a gocui callback. All existing local-mode guards (showExtra/CollectLogtail, showPgLog) are closures registered directly in keybindings that receive g from the framework. switchViewToProcPidStat must follow the same pattern: func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error. This is a spec description gap, not a design flaw — the architecture is correct.",
+      "location": "Section 'How it works' — switchViewToProcPidStat flow; Task 6",
+      "fix": "Register 'S' in keybindings.go as: {\"sysstat\", 'S', switchViewToProcPidStat(app)}. Implement switchViewToProcPidStat as a closure returning func(g *gocui.Gui, _ *gocui.View) error, capturing g for printCmdline. This is the exact pattern used by showExtra and switchViewTo."
     },
     {
-      "check": "architectural_fit",
-      "severity": "major",
-      "issue": "CollectExtra on view.View diverges from the ShowExtra/ToggleCollectExtra dispatch path in a way that skips Reset() on view re-switch. ShowExtra is read in collectStat() after receiving from viewCh, compared to the previous value, and if changed, ToggleCollectExtra() is called followed by c.Reset() and a prefill Update(). CollectExtra is proposed to be read directly by Collector.Update() from the view argument — which bypasses the existing change-detection logic entirely. Consequence: when the user switches away from procpidstat and back, collectStat() sees view.ShowExtra unchanged (still 0), does not call Reset(), and prevProcPidStats/currProcPidStats retain stale entries from the prior session. The first tick back will compute incorrect rate values against stale prev snapshots.",
-      "location": "Section 'Decisions / Decision 1' and Section 'Architecture / How it works / Collector.Update() tick'; top/stat.go lines 80–95",
-      "fix": "Either (a) clear procpidstat maps in Collector.Reset() (add four make() assignments), or (b) fold CollectExtra into the ShowExtra change-detection loop in collectStat(): treat CollectProcPidStat like any other CollectExtra value, store it in c.config.collectExtra via ToggleCollectExtra(), and add the case CollectProcPidStat branch to the existing switch c.config.collectExtra block in Update(). Option (b) is the fully idiomatic approach and eliminates the divergence."
-    },
-    {
-      "check": "architectural_fit",
-      "severity": "major",
-      "issue": "procpidstat view entry omits Filters field initialization. All 21 existing view definitions in view.New() explicitly initialize Filters: map[int]*regexp.Regexp{}. The spec's procpidstat entry omits it, leaving Filters as nil. The '/' keybinding calls dialogOpen(dialogFilter) → dialogFinish() → setFilter() which assigns view.Filters[view.OrderKey] = re — assignment to a nil map panics at runtime. The isFilterRequired() range loop is nil-safe in Go and would not panic, but the assignment path will.",
-      "location": "Section 'Data Models / New view entry procpidstat in view.New()'",
-      "fix": "Add Filters: map[int]*regexp.Regexp{} to the procpidstat entry in view.New(), matching every other view definition in the file."
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The CollectExtra change-detection block in collectStat() uses continue after c.Reset(), skipping the current tick — same semantics as the existing ShowExtra block. The spec text ('add parallel change-detection') is correct but does not state that the continue is intentional and that no ToggleCollectExtra call is needed (CollectExtra is read directly from view.View inside Update(), not stored in c.config.collectExtra). Without this explicit note, an implementer may accidentally add a ToggleCollectExtra(v.CollectExtra) call and break the ShowExtra iota contract.",
+      "location": "Section 'CollectExtra vs ShowExtra flow'; Task 5",
+      "fix": "Add an implementation comment: 'Do not call ToggleCollectExtra here — CollectExtra is read from view.View directly in Collector.Update(), not from c.config.collectExtra. continue to re-run Update on the next tick with the new view after Reset.' No code change required beyond the comment."
     },
     {
       "check": "architectural_fit",
       "severity": "minor",
-      "issue": "Collector.Reset() does not clear procpidstat snapshot maps. Reset() zeros prevPgStat and currPgStat only. collectStat() calls Reset() on every view switch. If the user navigates away from procpidstat and returns, the four PID maps retain entries from the prior session. Even with the cleanup-before-swap logic in Update(), the very first tick after returning uses stale prev entries against newly collected curr, producing rate spikes for any PID that happened to have the same integer ID as a prior backend.",
-      "location": "Section 'Data Models / New Collector fields in internal/stat/stat.go'",
-      "fix": "Add reinitialisation of all four maps to Collector.Reset(): c.prevProcPidStats = make(map[int]ProcPidStat); c.currProcPidStats = make(map[int]ProcPidStat); c.prevProcPidIO = make(map[int]ProcPidIO); c.currProcPidIO = make(map[int]ProcPidIO). This is analogous to how Reset() zeroes Pgstat snapshots."
-    },
-    {
-      "check": "architectural_fit",
-      "severity": "minor",
-      "issue": "itv type is int in Update() but sValue() takes float64. In Collector.Update(), itv := int(refresh / time.Second). sValue(prev, curr, itv, ticks float64) requires float64. The spec states buildProcPidResult receives itv but does not document the required float64(itv) conversion at the call site. Implementers may pass the int directly, causing a compile error, or infer the cast without spec guidance.",
-      "location": "Section 'Architecture / itv source'",
-      "fix": "State explicitly in the spec that buildProcPidResult()'s itv parameter is float64 and that the call site in Update() must convert: float64(int(refresh / time.Second))."
+      "issue": "Collector.Reset() map clearing: the spec says 'map clearing in Collector.Reset()' but does not specify nil-assignment vs. make(). nil-assignment is safe (comma-ok reads on nil maps return zero value, no panic) and matches the existing Reset() style of struct zeroing; make() is also correct. The implementation must be consistent with NewCollector() initialization.",
+      "location": "Section 'Data Models — New Collector fields'; Task 5",
+      "fix": "Assign nil to all four maps in Reset() (consistent with struct zeroing), then guard writes in Update() with lazy make() if needed: if c.currProcPidStats == nil { c.currProcPidStats = make(map[int]ProcPidStat) }. Alternatively, use make() in Reset() to match NewCollector(). Either is correct; pick one pattern and apply it consistently."
     }
   ],
   "risk_assessment": {
     "performance": "low",
-    "complexity": "medium",
+    "complexity": "low",
     "tech_debt": "low"
   },
-  "summary": "Round 1 findings (IOAvailable path, string name detection, record/stat.go wrong path, dialogChangeAge compound guard, first-tick 17-col guarantee) are correctly resolved in this revision. Three new major issues surface: viewSwitchHandler takes a string not a view.View so CollectExtra/IOAvailable would be silently discarded as written; the CollectExtra dispatch bypasses the ShowExtra/ToggleCollectExtra/Reset() loop in collectStat() causing stale snapshot maps on view re-switch; and the procpidstat view entry omits Filters initialization causing a nil-map panic on the filter dialog. All three are one-to-five line fixes."
+  "summary": "All Round 2 fixes (manual load→patch→send pattern, direct CPU% computation, Filters initialized in view entry, CollectExtra change-detection in collectStat, map clearing in Reset) are correctly incorporated into the spec. No critical or major issues remain. Three minor findings are implementation-description gaps — all resolved with a comment or one-line clarification — and none represent architectural defects. Approved for implementation."
 }

@@ -20,27 +20,29 @@
     },
     "tech_spec": {
       "start_time": "2026-05-18T16:45:08Z",
-      "end_time": null,
-      "duration_min": null,
+      "end_time": "2026-05-18T17:23:12Z",
+      "duration_min": 38,
       "touch_time_min": null,
-      "human_wait_time_min": 0
+      "human_wait_time_min": 5
     },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "validation_rounds": {
+      "tech_spec": 3
+    },
+    "validation_findings": { "critical": 0, "major": 0, "minor": 4 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null
   },
   "volume": {
     "interview_questions": 22,
-    "tasks_count": 0,
-    "waves_count": 0,
-    "agents_spawned": 1,
-    "commits_count": 2
+    "tasks_count": 7,
+    "waves_count": 3,
+    "agents_spawned": 16,
+    "commits_count": 6
   }
 }

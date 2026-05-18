@@ -8,35 +8,23 @@
       "fix": "Create architecture.md and patterns.md under .claude/skills/project-knowledge/references/ to enable automated standards compliance checks in future specs."
     },
     {
-      "severity": "major",
+      "severity": "minor",
       "category": "task_quality",
-      "issue": "Task 3 description duplicates Decision 6: 'PID column (col 0) is validated via strconv.Atoi + pid > 0; invalid PIDs skip procfs reads.' The exact same mechanism (strconv.Atoi, guard pid > 0, skip on error) is already captured in Decision 6.",
-      "fix": "Remove the implementation-level detail from Task 3 description. Replace with a reference such as 'PID validation follows Decision 6.' Task descriptions should state scope, not repeat decision rationale."
-    },
-    {
-      "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 6 description duplicates Decision 1 and Decision 7: it spells out 'CollectExtra: stat.CollectProcPidStat' (already defined in Decision 1) and the dialogChangeAge guard isolation logic (already defined in Decision 7) inline in the task body.",
-      "fix": "Shorten Task 6 description to scope level. Example: 'Wire the S hotkey in top/keybindings.go, implement switchViewToProcPidStat() in top/config_view.go following Decisions 1-2, extend filter guards per Decisions 7-8, add help entry.' Specific field values and guard refactoring logic belong in the Decisions section, not the task body."
+      "issue": "Task 2 ('Simplified pg_stat_activity SQL query') lists reviewers dev-code-reviewer, dev-test-reviewer but omits dev-security-auditor. The catalog default for code-writing is dev-code-reviewer, dev-security-auditor, dev-test-reviewer. The SQL constant embeds template variables (ShowNoIdle, QueryAgeThresh) that feed into query construction — a surface worth auditing for injection patterns.",
+      "fix": "Add dev-security-auditor to Task 2 reviewers."
     },
     {
       "severity": "minor",
       "category": "task_quality",
-      "issue": "Tasks 2, 4, 5, and 6 use skill code-writing but omit dev-security-auditor from Reviewers. The catalog default for code-writing is [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]. Task 4 touches record/record.go (data-path filter) and Task 5 modifies Collector.Update() — both are security-relevant.",
-      "fix": "Add dev-security-auditor to Reviewers for Tasks 4 and 5 at minimum. Tasks 2 and 6 are lower risk but aligning with catalog defaults costs nothing."
+      "issue": "Task 2 description contains a specific template syntax instruction: 'use {{if ne .QueryAgeThresh \"\"}} not {{if gt ...}}'. This is an implementation-level detail (specific syntax choice with implicit rejection of an alternative) that belongs in the task file, not in the tech-spec task description which should describe scope only.",
+      "fix": "Remove the parenthetical template syntax directive from Task 2 description. Move it to the task file created during decomposition, or capture the underlying constraint as a named Decision in the Decisions section."
     },
     {
       "severity": "minor",
       "category": "task_quality",
-      "issue": "Task 1 description specifies the golden file path 'internal/stat/testdata/proc/' — an implementation-level detail that belongs in the task file, not the tech-spec.",
-      "fix": "Remove the specific testdata path from the task description. The Testing Strategy section already covers the golden-file approach; 'add unit tests with golden files' is sufficient scope."
-    },
-    {
-      "severity": "minor",
-      "category": "task_quality",
-      "issue": "Task 2 description contains an inline implementation constraint: 'use {{if ne .QueryAgeThresh \"\"}} not {{if gt ...}}'. This is a code-level detail that belongs in the task file.",
-      "fix": "Remove the specific template syntax comparison. 'Follow the exact conventions of the existing activity query' is sufficient at tech-spec level."
+      "issue": "Task 4 description contains the implementation detail: 'Column widths: query column (index 16) is allocated remaining width; other columns use their content-driven minimums via the existing align.SetAlign() mechanism.' This describes internal rendering mechanics rather than task scope.",
+      "fix": "Remove the column-width implementation detail from Task 4 description. If it is a load-bearing constraint, move it to the task file or document it in the Data Models section under the view entry definition."
     }
   ],
-  "summary": "Tech-spec passes round-2 validation with zero critical findings. The wave conflict (Tasks 6+7 merged) and line-number references from round 1 are fully resolved. Two major findings remain: Task 3 and Task 6 descriptions embed content already covered by Decisions 6 and 1/7 respectively — duplication that should be trimmed. Four minor findings: absent Project Knowledge files, missing dev-security-auditor on Tasks 2/4/5/6, and two task descriptions with implementation-level details (golden-file path in Task 1, template syntax in Task 2). No structural gaps, no wave conflicts, no time-based estimates, no circular dependencies. Status: approved."
+  "summary": "Tech-spec passes round-3 validation with zero critical findings. All round-2 major findings are resolved: Task 3 no longer duplicates Decision 6, Task 6 no longer duplicates Decisions 1/7, and dev-security-auditor has been added to Tasks 4, 5, and 6. Four minor findings remain: absent Project Knowledge reference files (structural gap unrelated to this spec), Task 2 missing dev-security-auditor, and two instances of implementation-level detail embedded in task descriptions (Task 2 template syntax instruction, Task 4 column-width mechanics). No structural gaps, no wave conflicts, no time-based estimates, no circular dependencies, no unknown skills or reviewers. Status: approved."
 }

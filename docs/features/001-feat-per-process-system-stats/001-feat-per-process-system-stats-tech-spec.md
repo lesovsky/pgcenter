@@ -1,6 +1,6 @@
 ---
 created: 2026-05-18
-status: draft
+status: approved
 branch: feature/per-process-system-stats
 size: L
 ---
@@ -417,9 +417,9 @@ that is a no-op for all existing views.
 - **Files to read:** `internal/stat/cpu.go`, `internal/stat/diskstats.go`, `internal/stat/stat.go`
 
 #### Task 2: Simplified pg_stat_activity SQL query
-- **Description:** Create `internal/query/procpidstat.go` with constant `PgStatActivityProcPidStat` — a 7-column query returning `pid, datname, usename, state, wait_etype, wait_event, query` with `ShowNoIdle` and `QueryAgeThresh` template variables following the exact conventions of the existing activity query (use `{{if ne .QueryAgeThresh ""}}` not `{{if gt ...}}`).
+- **Description:** Create `internal/query/procpidstat.go` with constant `PgStatActivityProcPidStat` — a 7-column query returning `pid, datname, usename, state, wait_etype, wait_event, query`. Template variables `ShowNoIdle` and `QueryAgeThresh` must follow the exact conventions of the existing activity query in `internal/query/activity.go`.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/...`
 - **Files to modify:** `internal/query/procpidstat.go` (new)
 - **Files to read:** `internal/query/activity.go`, `internal/query/query.go`
@@ -435,7 +435,7 @@ that is a no-op for all existing views.
 - **Files to read:** `internal/stat/stat.go` (sValue, Collector, ticks), `internal/stat/postgres.go` (PGresult), `internal/stat/cpu.go`
 
 #### Task 4: View registration, new View fields, and record skip
-- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct in `internal/view/view.go`. Add `CollectProcPidStat` constant in `internal/stat/stat.go`. Register `"procpidstat"` view in `view.New()` with `QueryTmpl`, `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, `Filters: map[int]*regexp.Regexp{}`, `NotRecordable: true`. In `record/record.go:filterViews()`, add skip for `NotRecordable` views. Column widths: `query` column (index 16) is allocated remaining width; other columns use their content-driven minimums via the existing `align.SetAlign()` mechanism.
+- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct. Register `"procpidstat"` view in `view.New()` with `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, initialized `Filters` map, and `NotRecordable: true`. Add `CollectProcPidStat = 5` constant in `internal/stat/stat.go`. In `record/record.go:filterViews()`, skip views where `NotRecordable` is set. The `query` column gets remaining terminal width; all other columns are sized by `align.SetAlign()`.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./record/... && make build`
