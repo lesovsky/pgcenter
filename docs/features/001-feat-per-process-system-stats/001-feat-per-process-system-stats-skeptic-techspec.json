@@ -1,0 +1,66 @@
+{
+  "status": "changes_required",
+  "summary": "Checked 25 claims, found 4 mirages",
+  "findings": [
+    {
+      "severity": "critical",
+      "type": "missing_file",
+      "claim": "tech-spec says: modify `record/stat.go` — add skip check for NotRecordable views (referenced in Architecture section line 43, Backward Compatibility section line 267, Risks table line 277, Task 4 description line 327, Task 4 Files-to-modify line 331, Task 4 Files-to-read line 332)",
+      "reality": "File `record/stat.go` does not exist. The record package contains: record/record.go, record/recorder.go, record/recorder_test.go, record/record_test.go. The filterViews() function that would be extended lives in record/record.go. All six references to record/stat.go in the tech-spec point to a non-existent file.",
+      "source": "001-feat-per-process-system-stats-tech-spec.md, Architecture section; Backward Compatibility section; Risks table; Implementation Task 4",
+      "fix": "Replace every occurrence of `record/stat.go` with `record/record.go`. The NotRecordable skip check should be added to the filterViews() function in record/record.go."
+    },
+    {
+      "severity": "critical",
+      "type": "missing_pattern",
+      "claim": "tech-spec SQL constant PgStatActivityProcPidStat uses template condition `{{if gt .QueryAgeThresh 0}}AND query_start < now() - '{{.QueryAgeThresh}} seconds'::interval{{end}}`",
+      "reality": "query.Options.QueryAgeThresh is typed as `string` (internal/query/query.go line 28: `QueryAgeThresh string`). The Go template function `gt` requires comparable numeric types; comparing a string to the integer 0 will cause a template execution error at runtime. Additionally, interpolating a HH:MM:SS string with ` seconds` produces invalid PostgreSQL interval syntax (e.g. `'00:00:30 seconds'::interval` is rejected by Postgres). The existing activity queries avoid this by always including the WHERE clause with the string value directly as an interval: `> '{{.QueryAgeThresh}}'::interval`.",
+      "source": "001-feat-per-process-system-stats-tech-spec.md, New SQL constant section (line ~181-188)",
+      "fix": "Replace the conditional block with the pattern used by existing activity queries: `AND (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval`. Remove the `{{if gt .QueryAgeThresh 0}}` wrapper entirely — the default value `00:00:00.0` already acts as a no-op filter, matching the existing convention."
+    },
+    {
+      "severity": "major",
+      "type": "name_mismatch",
+      "claim": "tech-spec Architecture section (line 34) says: add `CollectProcPidStat` constant to `internal/stat/stat.go`; Decision 1 (line 98) simultaneously says to detect view by `view.Name == \"procpidstat\"` inside Collector.Update() instead of using the collectExtra mechanism",
+      "reality": "The existing collectExtra iota in stat.go (CollectNone, CollectDiskstats, CollectNetdev, CollectFsstats, CollectLogtail) is the side-panel extra-stats mechanism. Decision 1 explicitly rejects using this mechanism for procpidstat enrichment. Adding a CollectProcPidStat constant to the same iota block would be logically inconsistent with Decision 1 and could mislead implementers into using ToggleCollectExtra() for the new screen. The two spec sections directly contradict each other.",
+      "source": "001-feat-per-process-system-stats-tech-spec.md, Architecture 'What we're building/modifying' line 34 vs. Decision 1 lines 97-101",
+      "fix": "Remove `CollectProcPidStat constant` from the list of changes to internal/stat/stat.go in the Architecture section. No new constant is needed — the view-name detection in Collector.Update() is the intended mechanism per Decision 1."
+    },
+    {
+      "severity": "major",
+      "type": "name_mismatch",
+      "claim": "tech-spec (Decision 7 and Task 7) describes extending the `dialogChangeAge` guard in top/dialog.go to include procpidstat, implying only the age-threshold dialog is gated",
+      "reality": "The actual guard at top/dialog.go line 51 is a compound range check: `(d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != \"activity\"`. This single condition gates ALL of: dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup, dialogSetMask, AND dialogChangeAge. Naively adding `|| config.view.Name == \"procpidstat\"` to this guard (as the tech-spec instructs) would also enable cancel/terminate/mask operations on the procpidstat screen, which is not the intended behavior. Only dialogChangeAge should be extended to procpidstat.",
+      "source": "001-feat-per-process-system-stats-tech-spec.md, Decision 7 (line 127-130), Task 7 description (line 352-358)",
+      "fix": "Split the range guard: keep the cancel/terminate/mask part gated exclusively to `activity`, and extract dialogChangeAge into a separate condition that allows both `activity` and `procpidstat`. Example: replace the single range-guard `if` with two separate checks — one for termination dialogs (activity only), one for dialogChangeAge (activity or procpidstat)."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 25,
+    "confirmed": 21,
+    "mirages_found": 4,
+    "verified_claims": [
+      "internal/stat/procpidstat.go (new file — correctly described as non-existent)",
+      "internal/stat/procpidstat_test.go (new file — correctly described as non-existent)",
+      "internal/query/procpidstat.go (new file — correctly described as non-existent)",
+      "internal/stat/stat.go (exists)",
+      "internal/view/view.go (exists)",
+      "top/keybindings.go (exists)",
+      "top/config_view.go (exists)",
+      "top/dialog.go (exists)",
+      "top/help.go (exists)",
+      "sValue() in internal/stat/stat.go line 305",
+      "parseDuration() in internal/stat/postgres.go line 405",
+      "printCmdline() in top/ui.go line 187",
+      "viewSwitchHandler() in top/config_view.go line 188",
+      "toggleIdleConns guard at line 302 in top/config_view.go",
+      "dialogChangeAge guard at line 51 in top/dialog.go",
+      "db.Local guard pattern in top/pglog.go line 15",
+      "Collector struct in internal/stat/stat.go",
+      "PGresult struct in internal/stat/postgres.go line 158",
+      "View struct and view.New() in internal/view/view.go",
+      "DiffIntvl [2]int field on View struct (view.go line 15)",
+      "utime=field14(1-indexed)/post-paren index 11 in /proc/[pid]/stat — correct per kernel ABI"
+    ]
+  }
+}

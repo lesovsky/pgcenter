@@ -1,0 +1,61 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 5,
+    "critical": 0,
+    "major": 2,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "major",
+      "category": "A03: Injection",
+      "title": "SQL template injection via QueryAgeThresh interpolated directly into query string",
+      "description": "The proposed SQL constant `PgStatActivityProcPidStat` embeds `QueryAgeThresh` directly into the query string using Go template interpolation: `AND query_start < now() - '{{.QueryAgeThresh}} seconds'::interval`. The `QueryAgeThresh` value originates from user keyboard input (the 'A' dialog), passes through `parseHumanTimeString()` which validates the HH:MM:SS format, and is then interpolated as a bare string into the SQL before the query is sent to PostgreSQL. Although `parseHumanTimeString` enforces a strict numeric regex (`^([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(\\.[0-9]{1,6})?$`), this validation exists in `top/config_view.go` and the `Options.QueryAgeThresh` field is a plain `string` — nothing in the type system or query package prevents a future caller from bypassing that guard. The same pattern exists in `PgStatActivityDefault` (existing code), so this is an inherited pattern rather than a new bug, but the new query replicates the risk. The correct fix is to use a parameterised query or, at minimum, cast the value to `interval` server-side via a placeholder, not string interpolation.",
+      "location": "Section: Data Models — New SQL constant `internal/query/procpidstat.go`, line: `{{if gt .QueryAgeThresh 0}}AND query_start < now() - '{{.QueryAgeThresh}} seconds'::interval{{end}}`",
+      "impact": "If `QueryAgeThresh` validation is bypassed or weakened in the future, an attacker with local TUI access could inject arbitrary SQL executed under the PostgreSQL monitor role. Immediate risk is low because the regex guard is strict; residual risk is that the pattern propagates.",
+      "recommendation": "Prefer parameterised queries. If the template approach is kept (consistent with existing code), document that `QueryAgeThresh` MUST remain validated by `parseHumanTimeString` before being placed in `Options`, and add a comment in `procpidstat.go` cross-referencing that invariant. Consider extracting a `validateQueryAgeThresh(s string) error` function called both in the dialog handler and in `Format()` as a belt-and-suspenders guard.",
+      "cwe": "CWE-89"
+    },
+    {
+      "severity": "major",
+      "category": "A01: Broken Access Control",
+      "title": "PID taken from pg_stat_activity column as raw string — no integer validation before constructing /proc/[pid]/stat path",
+      "description": "The spec describes reading `pid` from the SQL result as a string value from column 0 (`activity col 0 (string, as-is)`) and using it to construct the procfs path `/proc/[pid]/stat`. The tech-spec does not specify any integer validation step between extracting the string from the PGresult and calling `readProcPidStat(pid int)`. If the PID string is parsed with `strconv.Atoi` (or equivalent) without error-checking, a non-numeric value would cause a parse error that may be silently swallowed, resulting in reading `/proc/0/stat` or an empty path. More critically: if the pid column value were somehow manipulated to contain path-traversal characters (e.g., `../net/arp`), a naive `fmt.Sprintf(\"/proc/%s/stat\", pidStr)` call without integer parsing would produce a traversable path. PostgreSQL's `pid` column is `integer` typed, so under normal operation the value will be numeric, but the spec does not make this validation explicit in the implementation tasks.",
+      "location": "Section: Architecture — Collector.Update() step 2b: `for each pid in activity result: readProcPidStat(pid)`; Section: Implementation Tasks — Task 1 (procfs parsers), Task 5 (collector integration)",
+      "impact": "Under normal PostgreSQL operation the pid column is always a valid positive integer, so real-world exploitability is very low. However, if a superuser or compromised extension manipulates the `pg_stat_activity` view, path traversal into other `/proc/[N]/` files becomes possible. The blast radius is limited to read-only access to procfs files readable by the pgcenter process owner.",
+      "recommendation": "In the collector loop, parse the pid string to `int` using `strconv.Atoi` (or `strconv.ParseInt` with base 10 and bit size 32) and validate that the result is > 0 before constructing the path. Reject and log any row where the pid column is not a valid positive integer. Use `fmt.Sprintf(\"/proc/%d/stat\", pid)` with the integer variable — never interpolate the raw string from the SQL result. Add a unit test that feeds a non-numeric pid value and asserts it is skipped without panic.",
+      "cwe": "CWE-22"
+    },
+    {
+      "severity": "minor",
+      "category": "A09: Security Logging and Monitoring",
+      "title": "EACCES warning for /proc/self/io may expose runtime privilege level in logs",
+      "description": "The spec states that when `checkIOAvailable()` returns EACCES, a warning is printed once via `printCmdline()`. `printCmdline` writes to the TUI status bar, which is ephemeral. However, if pgcenter's output is captured or if future logging is added, the EACCES message implicitly reveals that the process is not running as the postgres OS user (or lacks CAP_SYS_PTRACE/CAP_DAC_READ_SEARCH). This is low-risk information disclosure in a local admin tool context, but the warning message should not include any path details beyond what is necessary for the operator.",
+      "location": "Section: Decisions — Decision 4: IO availability checked once per session; Section: Implementation Tasks — Task 6 (switchViewToProcPidStat warning message)",
+      "impact": "Minimal. An operator at the terminal learns that pgcenter lacks permissions to read `/proc/self/io`. No sensitive data is leaked. Risk is informational.",
+      "recommendation": "Keep the warning message generic: `'IO stats unavailable (insufficient permissions)'` — do not include the exact path or errno in the user-facing message. If debug logging is ever added, gate path/errno details behind a debug flag.",
+      "cwe": null
+    },
+    {
+      "severity": "minor",
+      "category": "A04: Insecure Design",
+      "title": "CAP_SYS_PTRACE not documented — running as postgres user may grant broader /proc access than expected",
+      "description": "The spec mentions CAP_SYS_PTRACE implicitly through the EACCES check for `/proc/self/io`. When pgcenter runs as the `postgres` OS user (the typical deployment), it can read `/proc/[pid]/stat` and `/proc/[pid]/io` for all postgres backend processes without any special capability, because those files are owned by the same UID. This is correct and intended. However, the spec does not document the expected privilege boundary: specifically, what happens if pgcenter is run as root or with CAP_SYS_PTRACE — in that case it would be able to read procfs entries for any PID on the system, not just postgres processes. The feature scope (pg_stat_activity PIDs only) limits exposure, but running as root with this feature active would allow reading CPU/IO stats for arbitrary PIDs if the SQL result is tampered.",
+      "location": "Section: Risks — `/proc/[pid]/io` EACCES on standard Linux; Section: Decisions — Decision 4",
+      "impact": "If pgcenter is run as root or with elevated capabilities AND the pg_stat_activity result is manipulated, the collector would read procfs for arbitrary PIDs. No write access; read-only procfs. Real-world impact is low for the intended use case.",
+      "recommendation": "Add a note in the implementation (code comment in `switchViewToProcPidStat` and in the feature README) that this screen requires pgcenter to run as the same OS user as PostgreSQL backends (typically `postgres`). Running as root is unnecessary and widens the attack surface. Consider asserting `os.Getuid() != 0` and printing a warning if root is detected.",
+      "cwe": "CWE-272"
+    },
+    {
+      "severity": "minor",
+      "category": "A04: Insecure Design",
+      "title": "Stale PID entries in snapshot maps not bounded — potential unbounded memory growth under churn",
+      "description": "The spec states: 'Stale entries in prev maps are harmless; they are overwritten next tick or garbage-collected when the PID reappears.' This is only partially correct: entries for PIDs that exit and never reappear are never removed from `prevProcPidStats` and `prevProcPidIO`. Under high backend churn (e.g., pgbouncer transaction-mode with thousands of short-lived connections per minute), these maps grow indefinitely for the lifetime of the pgcenter session. This is a resource exhaustion vector, not a memory safety bug, but it should be bounded.",
+      "location": "Section: Architecture — 'PID disappears: not present in activity result → skipped in procfs loop → not in output. Stale entries in prev maps are harmless'",
+      "impact": "Memory growth proportional to the total number of unique PIDs seen since screen activation. On a busy server this could accumulate tens of thousands of entries over hours. Each entry is two float64 values (~16 bytes), so the practical memory impact is low unless backend churn is extreme. No security exploit; denial-of-service via memory exhaustion is theoretical.",
+      "recommendation": "After the per-PID procfs collection loop, tombstone the prev maps to contain only PIDs present in the current activity result. The simplest fix: rebuild `prevProcPidStats` from `currProcPidStats` after the swap, keeping only keys present in the current SQL result. Alternatively, cap map size at a reasonable limit (e.g., `max_connections` value from PostgreSQL properties already available on `Collector`).",
+      "cwe": "CWE-400"
+    }
+  ]
+}

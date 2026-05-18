@@ -1,0 +1,36 @@
+{
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Tasks 6 (Hotkey binding and local-mode guard) and 7 (Idle and age filter guards + help text) both modify `top/config_view.go` in Wave 3, creating a merge conflict.",
+      "fix": "Move Task 7 to Wave 4 (after Wave 3 completes), or merge Tasks 6 and 7 into a single task since they both touch `top/config_view.go` and are logically related (both extend view-name guards)."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 7 description contains approximate line number references: '`top/config_view.go` (toggleIdleConns at line ~302)', '`top/dialog.go` (line ~51)'. Implementation details (line numbers) belong in task files, not in the tech-spec.",
+      "fix": "Remove line number references from task descriptions. The agent should locate the relevant guard by function name, not by line number."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 6 description contains step-by-step implementation logic (conditional branching: 'if false, print warning and return; if true, call checkIOAvailable(), store result in app.config.collector.ioAvailable (or pass through app state), then call viewSwitchHandler'). Tech-spec task descriptions should define scope, not implementation steps.",
+      "fix": "Rewrite Task 6 description to describe what the function achieves (local-mode guard, IO availability check, view switch) without specifying the conditional branching logic. Move the 'or pass through app state' architectural decision to the Decisions section."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 6 description embeds an unresolved architectural decision: 'store result in `app.config.collector.ioAvailable` (or pass through app state)'. The 'or' indicates the design is not settled. Decisions section (Decision 4) states ioAvailable is stored on Collector, but the task contradicts this with the alternative.",
+      "fix": "Resolve the ambiguity: if the decision is made (Decision 4 stores it on Collector), remove the alternative from the task description. If the decision is still open, add it as Decision 8 in the Decisions section and reference it from the task."
+    },
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Project Knowledge files `architecture.md` and `patterns.md` do not exist at `.claude/skills/project-knowledge/references/`. Standards compliance checks (directory structure consistency, naming conventions) could not be performed.",
+      "fix": "Consider creating project knowledge files via the `documentation-writing` skill to enable automated standards validation in future tech-specs."
+    }
+  ],
+  "summary": "Tech-spec is well-structured and thorough. Frontmatter, Decisions, Data Models, Testing Strategy, Agent Verification Plan, Risks, and Acceptance Criteria are all properly filled. Skill names are correct, reviewer agents exist. One critical finding: Tasks 6 and 7 both modify `top/config_view.go` in Wave 3 — merge conflict guaranteed. Two major findings: Task 7 contains line number references, and Task 6 embeds unresolved implementation-level decisions. These must be fixed before the spec can be approved."
+}

@@ -1,0 +1,54 @@
+{
+  "status": "needs_revision",
+  "checks": {
+    "architectural_fit": "fail",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "fail",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "coupling",
+      "severity": "major",
+      "issue": "ioAvailable propagation path is architecturally broken. The spec says switchViewToProcPidStat() in top/config_view.go should 'store result in app.config.collector.ioAvailable', but the config struct has no collector field. The Collector is created and lives entirely inside the collectStat() goroutine in top/stat.go (local variable c, never exposed). There is no existing mechanism to push ad-hoc boolean state into a running Collector from the top layer — only the view.View channel (viewCh) is used for communication. The spec does not resolve this: it says 'pass through app state' without specifying what that state is.",
+      "location": "Section 'Task 6: Hotkey binding and local-mode guard' and 'Decision 4: IO availability checked once per session'",
+      "fix": "Use the existing view-channel pattern: add an IOAvailable bool field to view.View, set it in switchViewToProcPidStat() before calling viewSwitchHandler(), and read it in Collector.Update() from the view argument. This mirrors how ShowExtra is already carried on the view and consumed by the collector via ToggleCollectExtra(). Alternatively, add a ToggleIOAvailable(bool) method on Collector (matching the ToggleCollectExtra pattern) and call it from collectStat() when it detects a view change to 'procpidstat' — but this still requires the boolean to travel through the view. The cleanest solution consistent with existing code is the view.View field approach."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "major",
+      "issue": "Detect view name in Collector.Update() is a pattern deviation. All existing view-specific behavior in Collector.Update() uses the collectExtra integer flag (switch c.config.collectExtra) or view-level fields (DiffIntvl, UniqueKey) — never a string name comparison. Introducing if view.Name == 'procpidstat' is the first place in the collector where a view name string is hard-coded. This couples internal/stat to the view naming convention of top/. The analogy with collectExtra (which the spec correctly notes was 'semantically meant for side-panel') shows the project already has a precedent for typed flags on the collector; rejecting it for 'less files touched' and accepting a string match instead trades structural cleanliness for brevity.",
+      "location": "Decision 1 and Collector.Update() integration in Task 5",
+      "fix": "Add a typed constant (e.g. CollectProcPidStat = 5) to the existing iota in stat.go alongside CollectDiskstats/CollectNetdev/etc. Set it via the view's ShowExtra field (same channel already used) when switching to the procpidstat screen. In Collector.Update(), handle it in the existing switch c.config.collectExtra block. This keeps the existing pattern intact and eliminates the string comparison."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Ncols: 17 is declared on the view but the 7-column SQL result is mutated in-place inside Collector.Update() to 17 columns. The view's Ncols is used in top/config_view.go for orderKeyLeft/orderKeyRight bounds checking, and in alignViewToResult() to decide whether to re-align. On the first tick after switching views, Collector.Update() returns the mutated 17-col PGresult, which is correct. However, on view switch, collectStat() calls c.Reset() + c.Update() to prefill; the very first call returns the raw 7-column SQL result (before procfs enrichment, since prev maps are empty). If Ncols on the view is already 17 at that point, alignViewToResult() will set column widths for 17 columns against a 7-column result — this is a latent panic source (slice index out of range) matching the pattern that caused issue #99.",
+      "location": "Architecture section 'Collector.Update() tick', Task 5, and view registration in Task 4",
+      "fix": "The result builder must always return a 17-column PGresult — even on the first tick where proc data is absent. Ensure buildProcPidResult() is always called (not conditionally skipped when prev is empty), and that it produces 17 columns with zeroes/empty strings for rate columns. Document in the task that the first-tick path must produce valid 17-col output to avoid alignment race."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "dialogChangeAge guard extension uses the range comparison (d > dialogFilter && d <= dialogChangeAge) which means the fix 'add || config.view.Name == procpidstat' must be applied inside this compound predicate, not after it. The spec says 'extend the dialogChangeAge view-name guard to also allow procpidstat' but the actual guard in dialog.go line 51 is a single condition covering multiple dialog types (cancel/terminate/mask/age). The fix as described — adding an OR for procpidstat — would accidentally allow cancel/terminate/mask dialogs on the procpidstat screen too, since they all share the same guard block.",
+      "location": "Decision 7 and Task 7: Idle and age filter guards",
+      "fix": "Separate the dialogChangeAge case from the compound guard. Add a specific inner check: if d == dialogChangeAge, allow both 'activity' and 'procpidstat'. Keep the existing guard for cancel/terminate/mask dialogs unchanged. The spec's 'extend the guard' instruction is underspecified — the implementation task must be more precise."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "record/stat.go skip logic uses NotRecordable on view.View. The record package (record/record.go filterViews) currently filters by VersionOK and pgss schema prefix — both structural view properties. Adding a behavioral flag NotRecordable follows the same pattern and is zero-value safe. However, the filter is applied in record/record.go:filterViews() which iterates over view.Views. If procpidstat is registered in view.New(), it will be included in the view map and reach filterViews(). The spec requires modifying record/stat.go but there is no record/stat.go file — the actual recorder logic is in record/record.go (filterViews) and record/recorder.go. This is a documentation error in the spec that could misdirect the implementing agent.",
+      "location": "Decision 2 and Task 4: 'Files to modify: record/stat.go'",
+      "fix": "Correct the file path: the skip logic should go into record/record.go filterViews() function, not a non-existent record/stat.go. The NotRecordable check belongs in the same loop that already filters by VersionOK."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "medium",
+    "tech_debt": "low"
+  },
+  "summary": "The spec is architecturally sound in its data model and rendering pipeline choices, but contains one unresolved critical path (ioAvailable propagation from top/ to Collector has no concrete mechanism in the existing architecture) and one pattern deviation (view name string matching in Collector.Update() versus the established typed-flag approach). Additionally, record/stat.go referenced in Tasks 4 and 7 does not exist — the correct file is record/record.go. These issues require revision before implementation."
+}
