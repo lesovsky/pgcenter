@@ -13,12 +13,18 @@
   "phases": {
     "user_spec": {
       "start_time": "2026-05-18T15:50:29Z",
-      "end_time": null,
-      "duration_min": null,
+      "end_time": "2026-05-18T16:30:00Z",
+      "duration_min": 40,
       "touch_time_min": null,
       "human_wait_time_min": 55
     },
-    "tech_spec": null,
+    "tech_spec": {
+      "start_time": "2026-05-18T16:45:08Z",
+      "end_time": null,
+      "duration_min": null,
+      "touch_time_min": null,
+      "human_wait_time_min": 0
+    },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
@@ -31,10 +37,10 @@
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 20,
+    "interview_questions": 22,
     "tasks_count": 0,
     "waves_count": 0,
-    "agents_spawned": 0,
-    "commits_count": 0
+    "agents_spawned": 1,
+    "commits_count": 2
   }
 }
