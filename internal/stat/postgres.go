@@ -412,11 +412,7 @@ func parseDuration(s string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("parse days in %q: %w", s, err)
 		}
-		rest := s[idx+len(" day"):]
-		if strings.HasPrefix(rest, "s") {
-			rest = rest[1:] // skip the 's' in "days"
-		}
-		rest = strings.TrimSpace(rest)
+		rest := strings.TrimSpace(strings.TrimPrefix(s[idx+len(" day"):], "s"))
 		if rest == "" {
 			return days * 86400, nil
 		}
