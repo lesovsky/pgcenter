@@ -30,3 +30,35 @@ func Test_StatSizesQueries(t *testing.T) {
 		})
 	}
 }
+
+// Test_StatSizesQueries_NonDefaultSchema reproduces issue #116: the old query used
+// (schemaname||'.'||relname)::regclass which failed for tables in non-default schemas
+// when the name required quoting (mixed case, special chars) or the schema wasn't in
+// search_path. The fix was to use s.relid (OID) instead.
+func Test_StatSizesQueries_NonDefaultSchema(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	if err != nil {
+		t.Skipf("postgres not available in test environment")
+	}
+	defer conn.Close()
+
+	// Create a non-default schema and a table inside it.
+	_, err = conn.Exec(`CREATE SCHEMA IF NOT EXISTS test_dbo`)
+	assert.NoError(t, err)
+
+	_, err = conn.Exec(`CREATE TABLE IF NOT EXISTS test_dbo.t1hlog (id int)`)
+	assert.NoError(t, err)
+
+	defer func() {
+		_, _ = conn.Exec(`DROP TABLE IF EXISTS test_dbo.t1hlog`)
+		_, _ = conn.Exec(`DROP SCHEMA IF EXISTS test_dbo`)
+	}()
+
+	opts := NewOptions(170000, "f", "off", 256, "public")
+	q, err := Format(PgTablesSizesDefault, opts)
+	assert.NoError(t, err)
+
+	// Must not error with "relation does not exist" for tables in non-default schemas.
+	_, err = conn.Exec(q)
+	assert.NoError(t, err)
+}
