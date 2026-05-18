@@ -1,57 +1,29 @@
 {
-  "status": "fail",
+  "status": "pass",
   "sources": {
     "user_spec": true,
     "tech_spec": true,
     "tasks": false
   },
   "requirements_total": 23,
-  "requirements_covered": 18,
-  "requirements_partial": 2,
-  "requirements_missing": 1,
+  "requirements_covered": 21,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
   "findings": [
     {
       "type": "gap",
       "source": "user-spec",
-      "requirement": "US-21: First tick — rate columns show 0; delta starts from second tick",
-      "detail": "Internal contradiction between Architecture section and Testing Strategy. Architecture states: 'ProcPidStat{} zero value produces sValue(0, curr, itv, ticks) which gives the current absolute rate from process start divided by itv — acceptable approximation for first tick.' This is NOT zero. Testing Strategy asserts a unit test 'first tick (empty prev map) → rate columns are 0'. An agent following Architecture will produce non-zero first-tick rates, breaking the unit test and the user-spec acceptance criterion. The two descriptions must be reconciled: either the first-tick behaviour is clamped to zero (return 0 when prev is missing) or the test expectation and user-spec are updated to document the approximation.",
-      "severity": "critical"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "Ticks (jiffies/s) value source for all CPU formulas",
-      "detail": "The tech-spec uses 'ticks' as a parameter in every CPU formula (formatCPUTime, sValue for CPU %, all_total,s) but never specifies where the value comes from. On Linux this is CLK_TCK (typically 100), obtainable via syscall.Getconf(\"CLK_TCK\") or os/exec sysconf. Hardcoding 100 is common but incorrect on non-standard kernels. Without specifying the source, two agents may choose differently and produce different results. This is a fundamental input to the feature's core calculation.",
-      "severity": "critical"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "US-2/US-3: Rate computation guarded against zero interval",
-      "detail": "The tech-spec passes 'itv' (elapsed time between ticks) to sValue() for all rate columns but does not specify what happens when itv=0 (e.g., two consecutive ticks in the same wall-clock second, or test setup). Division by zero in sValue() would panic. The tech-spec does not document whether sValue() already guards this, or whether the caller must check. For an L-size feature that performs arithmetic on every tick, this is a required guard that should be explicit in the spec.",
-      "severity": "major"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "readProcPidStat() — parse error handling",
-      "detail": "The tech-spec describes parsing /proc/[pid]/stat by finding the last ')' and splitting the remainder, but does not specify error handling for malformed content: truncated lines, unexpected field count, non-numeric values in utime/stime positions. The only error path documented is 'file missing → skip row'. A malformed-but-present /proc/[pid]/stat line (e.g., kernel bug, container environment) could cause strconv.ParseFloat panic or silent wrong values. For an L-size feature reading untrusted kernel data, parse error handling must be specified.",
-      "severity": "major"
-    },
-    {
-      "type": "gap",
-      "source": "user-spec",
       "requirement": "US-20: No horizontal scrolling; min 200-char terminal; query column truncated first",
-      "detail": "The user-spec explicitly defines the layout constraint: all 17 columns fit without horizontal scrolling on terminals >=200 chars wide, and 'query' is the first column to be truncated on narrower terminals. The tech-spec view definition has 'ColsWidth: map[int]int{}' (empty) and provides no column width assignments or truncation priority. An agent implementing from this spec has no basis for column sizing and would need to guess, risking a screen that overflows or truncates numeric columns instead of query.",
+      "detail": "The user-spec explicitly defines the layout constraint: all 17 columns fit without horizontal scrolling on terminals >=200 chars wide, and the 'query' column is truncated first on narrower terminals. The tech-spec view definition still has 'ColsWidth: map[int]int{}' (empty) and assigns no column widths. No discussion of column sizing or truncation priority exists anywhere in the tech-spec. An agent implementing from this spec has no basis for column sizing and would need to guess, risking a screen that overflows or truncates numeric columns instead of 'query'. Partially mitigated by the note that the existing rendering pipeline handles column alignment — but the pipeline needs ColsWidth populated to enforce any ordering.",
       "severity": "major"
     },
     {
       "type": "partial",
       "source": "user-spec",
       "requirement": "US-18: Aux processes (checkpointer, bgwriter, WAL writer, archiver) not shown",
-      "detail": "The user-spec calls this out as an explicit constraint with a rationale. The tech-spec does not document this constraint anywhere. It is implicitly satisfied (aux processes have no row in pg_stat_activity so they never enter the pipeline) but a reader of the tech-spec alone would not know this is a deliberate, documented decision. Low risk to implementation correctness, but the omission means this rationale is invisible to reviewers.",
+      "detail": "The user-spec calls this out as an explicit constraint with a documented rationale. The tech-spec satisfies it implicitly (aux processes have no row in pg_stat_activity so they never enter the pipeline) but does not document this as a deliberate decision anywhere in the Decisions section. A tech-spec reader cannot distinguish intentional exclusion from an oversight. Low risk to implementation correctness; risk to future reviewers misunderstanding the design.",
       "severity": "minor"
     }
   ],
-  "summary": "18/23 requirements fully covered, 2 partial, 1 missing. 2 critical findings: (1) internal contradiction on first-tick rate behaviour — Architecture says non-zero approximation, Testing Strategy says zero, user-spec says zero — one will be wrong; (2) ticks (CLK_TCK) source is never specified despite being used in every CPU formula. 3 major findings: itv=0 guard unspecified, procfs parse error handling unspecified, column widths absent for a 17-column screen. 1 minor: aux-process exclusion rationale not carried into tech-spec."
+  "summary": "21/23 requirements fully covered, 1 partial, 0 missing. Round 2 fixes resolved all 2 critical findings (first-tick rate=0 contradiction, ticks source) and both major findings from round 1 (itv=0 guard, procfs parse error handling). 1 major finding remains: column widths for the 17-column screen are unspecified — ColsWidth map is empty and there is no truncation priority defined for the 'query' column. 1 minor finding persists: aux-process exclusion rationale not carried into Decisions section. No critical findings — status: pass."
 }

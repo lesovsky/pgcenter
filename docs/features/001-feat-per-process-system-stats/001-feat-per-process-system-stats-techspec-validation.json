@@ -1,36 +1,42 @@
 {
-  "status": "changes_required",
+  "status": "approved",
   "findings": [
-    {
-      "severity": "critical",
-      "category": "wave_conflict",
-      "issue": "Tasks 6 (Hotkey binding and local-mode guard) and 7 (Idle and age filter guards + help text) both modify `top/config_view.go` in Wave 3, creating a merge conflict.",
-      "fix": "Move Task 7 to Wave 4 (after Wave 3 completes), or merge Tasks 6 and 7 into a single task since they both touch `top/config_view.go` and are logically related (both extend view-name guards)."
-    },
-    {
-      "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 7 description contains approximate line number references: '`top/config_view.go` (toggleIdleConns at line ~302)', '`top/dialog.go` (line ~51)'. Implementation details (line numbers) belong in task files, not in the tech-spec.",
-      "fix": "Remove line number references from task descriptions. The agent should locate the relevant guard by function name, not by line number."
-    },
-    {
-      "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 6 description contains step-by-step implementation logic (conditional branching: 'if false, print warning and return; if true, call checkIOAvailable(), store result in app.config.collector.ioAvailable (or pass through app state), then call viewSwitchHandler'). Tech-spec task descriptions should define scope, not implementation steps.",
-      "fix": "Rewrite Task 6 description to describe what the function achieves (local-mode guard, IO availability check, view switch) without specifying the conditional branching logic. Move the 'or pass through app state' architectural decision to the Decisions section."
-    },
-    {
-      "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 6 description embeds an unresolved architectural decision: 'store result in `app.config.collector.ioAvailable` (or pass through app state)'. The 'or' indicates the design is not settled. Decisions section (Decision 4) states ioAvailable is stored on Collector, but the task contradicts this with the alternative.",
-      "fix": "Resolve the ambiguity: if the decision is made (Decision 4 stores it on Collector), remove the alternative from the task description. If the decision is still open, add it as Decision 8 in the Decisions section and reference it from the task."
-    },
     {
       "severity": "minor",
       "category": "standards",
-      "issue": "Project Knowledge files `architecture.md` and `patterns.md` do not exist at `.claude/skills/project-knowledge/references/`. Standards compliance checks (directory structure consistency, naming conventions) could not be performed.",
-      "fix": "Consider creating project knowledge files via the `documentation-writing` skill to enable automated standards validation in future tech-specs."
+      "issue": "Project Knowledge files architecture.md and patterns.md do not exist at .claude/skills/project-knowledge/references/. Standards compliance check (directory structure, naming patterns) was skipped.",
+      "fix": "Create architecture.md and patterns.md under .claude/skills/project-knowledge/references/ to enable automated standards compliance checks in future specs."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 3 description duplicates Decision 6: 'PID column (col 0) is validated via strconv.Atoi + pid > 0; invalid PIDs skip procfs reads.' The exact same mechanism (strconv.Atoi, guard pid > 0, skip on error) is already captured in Decision 6.",
+      "fix": "Remove the implementation-level detail from Task 3 description. Replace with a reference such as 'PID validation follows Decision 6.' Task descriptions should state scope, not repeat decision rationale."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 6 description duplicates Decision 1 and Decision 7: it spells out 'CollectExtra: stat.CollectProcPidStat' (already defined in Decision 1) and the dialogChangeAge guard isolation logic (already defined in Decision 7) inline in the task body.",
+      "fix": "Shorten Task 6 description to scope level. Example: 'Wire the S hotkey in top/keybindings.go, implement switchViewToProcPidStat() in top/config_view.go following Decisions 1-2, extend filter guards per Decisions 7-8, add help entry.' Specific field values and guard refactoring logic belong in the Decisions section, not the task body."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Tasks 2, 4, 5, and 6 use skill code-writing but omit dev-security-auditor from Reviewers. The catalog default for code-writing is [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]. Task 4 touches record/record.go (data-path filter) and Task 5 modifies Collector.Update() — both are security-relevant.",
+      "fix": "Add dev-security-auditor to Reviewers for Tasks 4 and 5 at minimum. Tasks 2 and 6 are lower risk but aligning with catalog defaults costs nothing."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 1 description specifies the golden file path 'internal/stat/testdata/proc/' — an implementation-level detail that belongs in the task file, not the tech-spec.",
+      "fix": "Remove the specific testdata path from the task description. The Testing Strategy section already covers the golden-file approach; 'add unit tests with golden files' is sufficient scope."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 2 description contains an inline implementation constraint: 'use {{if ne .QueryAgeThresh \"\"}} not {{if gt ...}}'. This is a code-level detail that belongs in the task file.",
+      "fix": "Remove the specific template syntax comparison. 'Follow the exact conventions of the existing activity query' is sufficient at tech-spec level."
     }
   ],
-  "summary": "Tech-spec is well-structured and thorough. Frontmatter, Decisions, Data Models, Testing Strategy, Agent Verification Plan, Risks, and Acceptance Criteria are all properly filled. Skill names are correct, reviewer agents exist. One critical finding: Tasks 6 and 7 both modify `top/config_view.go` in Wave 3 — merge conflict guaranteed. Two major findings: Task 7 contains line number references, and Task 6 embeds unresolved implementation-level decisions. These must be fixed before the spec can be approved."
+  "summary": "Tech-spec passes round-2 validation with zero critical findings. The wave conflict (Tasks 6+7 merged) and line-number references from round 1 are fully resolved. Two major findings remain: Task 3 and Task 6 descriptions embed content already covered by Decisions 6 and 1/7 respectively — duplication that should be trimmed. Four minor findings: absent Project Knowledge files, missing dev-security-auditor on Tasks 2/4/5/6, and two task descriptions with implementation-level details (golden-file path in Task 1, template syntax in Task 2). No structural gaps, no wave conflicts, no time-based estimates, no circular dependencies. Status: approved."
 }

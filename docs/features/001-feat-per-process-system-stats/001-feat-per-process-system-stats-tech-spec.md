@@ -15,12 +15,12 @@ The screen produces a 17-column `PGresult` (7 SQL columns + 5 accumulated + 4 ra
 that flows through the existing rendering pipeline unchanged.
 
 The screen is registered as a regular view with a 7-column `pg_stat_activity` SQL query.
-The enrichment step is triggered via `view.CollectExtra == stat.CollectProcPidStat`
-(a new typed integer constant, parallel to how `CollectDiskstats` / `CollectNetdev` work).
-After collecting the SQL result, `Collector.Update()` reads procfs for each PID, computes
-rate/accumulated metrics, and replaces the SQL result with the merged 17-column one.
+The enrichment step is triggered by `view.CollectExtra == stat.CollectProcPidStat` — a new
+typed integer constant stored on `view.View` and read directly by `Collector.Update()`.
 `view.IOAvailable bool` carries the IO capability flag from the screen-open handler to the
-Collector via the existing view channel (same mechanism as `view.ShowExtra`).
+Collector, also stored on `view.View` and sent on `config.viewCh`. Both fields are patched
+onto the view record after `viewSwitchHandler` loads it from the views map, since
+`viewSwitchHandler` takes a string and overwrites `config.view` from the static map.
 
 ## Architecture
 
@@ -29,7 +29,8 @@ Collector via the existing view channel (same mechanism as `view.ShowExtra`).
 - **`internal/stat/procpidstat.go`** (new) — parser types, reader functions, IO check, result builder
 - **`internal/stat/procpidstat_test.go`** (new) — unit and integration tests
 - **`internal/query/procpidstat.go`** (new) — 7-column `pg_stat_activity` SQL constant
-- **`internal/stat/stat.go`** — new `CollectProcPidStat` constant; new snapshot fields on `Collector`; enrichment branch in `Collector.Update()`
+- **`internal/stat/stat.go`** — new `CollectProcPidStat` constant; new snapshot fields on `Collector`; enrichment branch in `Collector.Update()`; map cleanup in `Collector.Reset()`
+- **`top/stat.go`** — add `CollectExtra` change-detection in `collectStat()` to trigger `Reset()` on view switch
 - **`internal/view/view.go`** — new `"procpidstat"` view; new `CollectExtra int` and `IOAvailable bool` fields on `View`; new `NotRecordable bool` field
 - **`top/keybindings.go`** — add `'S'` binding
 - **`top/config_view.go`** — add `switchViewToProcPidStat()` with local-mode guard; extend `toggleIdleConns` guard
@@ -44,14 +45,14 @@ User presses 'S'
   → switchViewToProcPidStat(app)        [guard: db.Local == true]
       ioErr := checkIOAvailable()        [reads /proc/self/io once]
       if ioErr != nil → printCmdline(warning), ioAvail = false
-      else ioAvail = true
-      build view.View{
-          Name:         "procpidstat",
-          CollectExtra: stat.CollectProcPidStat,
-          IOAvailable:  ioAvail,
-          ...           (other fields from view.Views["procpidstat"])
-      }
-  → viewSwitchHandler(config, view)     [sends view on config.viewCh]
+      // 1. Save current view, load procpidstat from static map (viewSwitchHandler pattern)
+      config.views[config.view.Name] = config.view
+      v := config.views["procpidstat"]
+      // 2. Patch runtime fields BEFORE sending on channel
+      v.CollectExtra = stat.CollectProcPidStat
+      v.IOAvailable  = ioAvail
+      config.view    = v
+      config.viewCh <- v
 
 Collector.Update(view) tick:
   1. collectPostgresStat(db, view.Query) → activity PGresult (7 cols)
@@ -99,11 +100,11 @@ c.prevProcPidStats = newPrev
 | sy_total,s | `formatCPUTime(curr.Stime, ticks)` | |
 | read_total,KiB | `curr.ReadBytes/1024` | `""` if !IOAvailable |
 | write_total,KiB | `curr.WriteBytes/1024` | `""` if !IOAvailable |
-| %all | `sValue(prev.Utime+prev.Stime, curr.Utime+curr.Stime, itv, ticks)/cpuCount` | 0 if no prev |
-| %us | `sValue(prev.Utime, curr.Utime, itv, ticks)/cpuCount` | 0 if no prev |
-| %sy | `sValue(prev.Stime, curr.Stime, itv, ticks)/cpuCount` | 0 if no prev |
-| read,KiB/s | `sValue(prev.ReadBytes, curr.ReadBytes, itv, 1)/1024` | `""` if !IOAvailable |
-| write,KiB/s | `sValue(prev.WriteBytes, curr.WriteBytes, itv, 1)/1024` | `""` if !IOAvailable |
+| %all | `(Δutime+Δstime) / (refresh_s * ticks) * 100 / cpuCount` | 0 if no prev or itv=0 |
+| %us | `Δutime / (refresh_s * ticks) * 100 / cpuCount` | 0 if no prev or itv=0 |
+| %sy | `Δstime / (refresh_s * ticks) * 100 / cpuCount` | 0 if no prev or itv=0 |
+| read,KiB/s | `ΔReadBytes / refresh_s / 1024` | `""` if !IOAvailable |
+| write,KiB/s | `ΔWriteBytes / refresh_s / 1024` | `""` if !IOAvailable |
 | query | activity col 6 | |
 
 **First tick (no prev entry):** rate columns (`%all`, `%us`, `%sy`, `read,KiB/s`, `write,KiB/s`)
@@ -118,12 +119,22 @@ On parse error (unexpected format, non-numeric fields) — return error → skip
 **`/proc/[pid]/io` parsing:** read key-value pairs line by line; extract `read_bytes` and
 `write_bytes`. On parse error — return error → IO columns for this row are `""`.
 
-**`ticks` source:** `c.config.ticks` (already stored in `Collector` from `getSysticksLocal()`
-called in `NewCollector()`). Passed as argument to `buildProcPidResult`.
+**`ticks` source:** `c.config.ticks` (CLK_TCK, stored in `Collector` from `getSysticksLocal()`
+in `NewCollector()`). Passed as argument to `buildProcPidResult`.
 
-**`itv` source:** elapsed duration between current and previous `Update()` call, in seconds,
-already computed in the existing `Update()` loop (used for diskstats/netdev). Guard: if `itv == 0`,
-rate columns = `"0"` (same as first-tick behavior) to avoid division by zero.
+**`itv` (refresh_s) source:** `float64(itv)` where `itv = int(refresh / time.Second)` — the
+refresh interval in seconds already computed at the top of `Collector.Update()`. This is
+different from how diskstats/netdev compute their own itv from `/proc/uptime` deltas; per-pid
+stats use the configured refresh interval as the denominator. Guard: if `itv == 0` or `refresh_s == 0`,
+rate columns = `"0"` to avoid division by zero.
+
+**CollectExtra vs ShowExtra flow:** `view.CollectExtra` is read directly from the `view.View`
+argument in `Collector.Update()`, unlike `ShowExtra` which goes through `ToggleCollectExtra()`.
+Therefore, when the user switches away from procpidstat and back, the existing change-detection
+in `collectStat()` (which calls `c.Reset()` on `ShowExtra` changes) does NOT trigger for
+`CollectExtra`. Fix: in `collectStat()`, add parallel change-detection for `CollectExtra`;
+on change, call `c.Reset()` so the four PID maps are cleared and the first-tick rate=0
+invariant holds.
 
 **First-tick 17-column guarantee:** `buildProcPidResult` always returns a `PGresult` with
 `Ncols = 17`. On first tick, prev maps are empty; rate cols are `"0"`. This prevents the
@@ -132,17 +143,20 @@ actual column count in result.
 
 ## Decisions
 
-### Decision 1: CollectExtra int on View — parallel to ShowExtra, avoids string coupling
+### Decision 1: CollectExtra int on View — typed constant, read directly in Update()
 **Decision:** Add `CollectExtra int` field to `view.View`. Define `CollectProcPidStat` constant
 in `internal/stat/stat.go`. Set `CollectExtra: stat.CollectProcPidStat` on the view in
-`switchViewToProcPidStat()`. In `Collector.Update()`, `switch view.CollectExtra`.
-**Rationale:** Follows the established project pattern (`CollectDiskstats`, `CollectNetdev` etc.
-are typed int constants checked via switch). Avoids string-coupling between `internal/stat`
-and view names. No import cycles: `internal/view` stays independent, `top/` sets the constant.
-**Alternatives considered:** String comparison `view.Name == "procpidstat"` (rejected — not the
-established pattern, couples `internal/stat` to string names from another package); reuse
-`ShowExtra` iota (rejected — `ShowExtra != 0` triggers side-panel creation in `top/ui.go`,
-which is wrong for a main-area view).
+`switchViewToProcPidStat()` after loading from the static map. In `Collector.Update()`,
+check `view.CollectExtra == CollectProcPidStat`. In `collectStat()` (top/stat.go), add
+change-detection for `CollectExtra` to call `c.Reset()` on view switch (same pattern as
+the existing `ShowExtra` change-detection, which calls `c.ToggleCollectExtra`).
+**Rationale:** Avoids string-coupling between `internal/stat` and view names. No import cycles.
+`CollectExtra` uses the same field-on-View pattern as `ShowExtra`, but is read differently
+in Update() — directly rather than via `ToggleCollectExtra` — because this enrichment runs
+on the main stat result, not as a side-panel toggle.
+**Alternatives considered:** String comparison `view.Name == "procpidstat"` (rejected —
+couples `internal/stat` to string names); reuse `ShowExtra` iota (rejected — `ShowExtra != 0`
+triggers side-panel creation in `top/ui.go`).
 
 ### Decision 2: IOAvailable carried via view.View.IOAvailable bool
 **Decision:** Add `IOAvailable bool` to `view.View`. Check `checkIOAvailable()` once in
@@ -245,6 +259,7 @@ type View struct {
     OrderKey:      0,
     OrderDesc:     false,
     ColsWidth:     map[int]int{},
+    Filters:       map[int]*regexp.Regexp{},  // required — nil map panics on '/' filter
     Msg:           "Show per-process system stats",
     NotRecordable: true,
     // CollectExtra and IOAvailable are set at runtime in switchViewToProcPidStat
@@ -257,6 +272,9 @@ type View struct {
 // PgStatActivityProcPidStat selects 7 columns for the per-process system stats screen.
 // Column order: pid, datname, usename, state, wait_etype, wait_event, query.
 // Reuses the same ShowNoIdle and QueryAgeThresh template conventions as the activity query.
+// PgStatActivityProcPidStat follows the exact same template conventions as the
+// existing activity query: QueryAgeThresh is always embedded (no guard — default value
+// "00:00:00.0" means all queries pass); ShowNoIdle is conditional.
 const PgStatActivityProcPidStat = `SELECT pid,
     coalesce(datname, '') AS datname,
     coalesce(usename, '') AS usename,
@@ -266,8 +284,8 @@ const PgStatActivityProcPidStat = `SELECT pid,
     regexp_replace(coalesce(query, ''), E'\\s+', ' ', 'g') AS query
 FROM pg_stat_activity
 WHERE pid != pg_backend_pid()
-{{if .ShowNoIdle}}AND state != 'idle'{{end}}
-{{if ne .QueryAgeThresh ""}}AND query_start < now() - '{{.QueryAgeThresh}}'::interval{{end}}
+AND ((clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval)
+{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}
 ORDER BY pid`
 ```
 
@@ -417,30 +435,30 @@ that is a no-op for all existing views.
 - **Files to read:** `internal/stat/stat.go` (sValue, Collector, ticks), `internal/stat/postgres.go` (PGresult), `internal/stat/cpu.go`
 
 #### Task 4: View registration, new View fields, and record skip
-- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct in `internal/view/view.go`. Add `CollectProcPidStat` constant in `internal/stat/stat.go`. Register `"procpidstat"` view in `view.New()` with `QueryTmpl: query.PgStatActivityProcPidStat`, `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, `NotRecordable: true`. In `record/record.go:filterViews()`, add skip for `NotRecordable` views.
+- **Description:** Add `CollectExtra int`, `IOAvailable bool`, `NotRecordable bool` fields to the `View` struct in `internal/view/view.go`. Add `CollectProcPidStat` constant in `internal/stat/stat.go`. Register `"procpidstat"` view in `view.New()` with `QueryTmpl`, `DiffIntvl: [2]int{0,0}`, `Ncols: 17`, `Filters: map[int]*regexp.Regexp{}`, `NotRecordable: true`. In `record/record.go:filterViews()`, add skip for `NotRecordable` views. Column widths: `query` column (index 16) is allocated remaining width; other columns use their content-driven minimums via the existing `align.SetAlign()` mechanism.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./record/... && make build`
 - **Files to modify:** `internal/view/view.go`, `internal/stat/stat.go`, `record/record.go`
-- **Files to read:** `internal/view/view.go` (View struct, view.New()), `record/record.go` (filterViews), `internal/query/procpidstat.go`
+- **Files to read:** `internal/view/view.go` (View struct, view.New(), Filters field), `record/record.go` (filterViews), `internal/query/procpidstat.go`
 
 ### Wave 3 (depends on Wave 2)
 
-#### Task 5: Collector integration — snapshot management and enrichment
-- **Description:** Add `prevProcPidStats`, `currProcPidStats map[int]ProcPidStat`, `prevProcPidIO`, `currProcPidIO map[int]ProcPidIO` fields to `Collector`. Initialize as empty maps in `NewCollector()`. In `Collector.Update()`, add a `case CollectProcPidStat` branch: cleanup stale PIDs from prev maps, swap prev←curr, collect new procfs snapshots per PID, call `buildProcPidResult()`, replace the SQL result. Pass `c.config.ticks` and computed `itv` to the builder.
+#### Task 5: Collector integration — snapshot management, enrichment, and Reset()
+- **Description:** Add `prevProcPidStats`, `currProcPidStats map[int]ProcPidStat`, `prevProcPidIO`, `currProcPidIO map[int]ProcPidIO` fields to `Collector`; initialize as empty maps in `NewCollector()`. In `Collector.Update()`, add enrichment branch for `CollectProcPidStat`: cleanup stale PIDs, swap prev←curr, collect procfs per PID, call `buildProcPidResult()` with `c.config.ticks` and `float64(itv)`. Add map-clearing to `Collector.Reset()`. In `top/stat.go:collectStat()`, add `CollectExtra` change-detection that calls `c.Reset()` on change.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/... -run TestCollector`
-- **Files to modify:** `internal/stat/stat.go`
-- **Files to read:** `internal/stat/stat.go` (Collector, Update, collectExtra switch), `internal/stat/procpidstat.go`
+- **Files to modify:** `internal/stat/stat.go`, `top/stat.go`
+- **Files to read:** `internal/stat/stat.go` (Collector, Update, Reset), `top/stat.go` (collectStat, ShowExtra change-detection), `internal/stat/procpidstat.go`
 
 #### Task 6: Hotkey, local-mode guard, and filter guard extensions
-- **Description:** In `top/keybindings.go`, add `{"sysstat", 'S', switchViewToProcPidStat(app)}`. Implement `switchViewToProcPidStat(app)` in `top/config_view.go`: guard `db.Local`, call `checkIOAvailable()`, build a `view.View` with `CollectExtra: stat.CollectProcPidStat` and `IOAvailable` set, then call `viewSwitchHandler`. Extend `toggleIdleConns` guard to also allow `"procpidstat"`. In `top/dialog.go`, isolate the `dialogChangeAge` guard into a separate check that also allows `"procpidstat"` — without extending cancel/terminate/mask dialogs.
+- **Description:** Add `'S'` keybinding in `top/keybindings.go`. Implement `switchViewToProcPidStat(app)` in `top/config_view.go` following Decision 2: guard `db.Local`, call `checkIOAvailable()`, load view from static map, patch `CollectExtra` and `IOAvailable`, set as current view, send on `viewCh`. Extend `toggleIdleConns` guard for `"procpidstat"`. In `top/dialog.go`, isolate `dialogChangeAge` guard per Decision 7. Update `top/help.go`.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `make build && make lint`
 - **Files to modify:** `top/keybindings.go`, `top/config_view.go`, `top/dialog.go`, `top/help.go`
-- **Files to read:** `top/config_view.go` (switchViewTo, toggleIdleConns, viewSwitchHandler), `top/dialog.go` (compound guard), `top/pglog.go` (db.Local guard pattern), `top/ui.go` (printCmdline), `top/help.go`
+- **Files to read:** `top/config_view.go` (viewSwitchHandler signature, toggleIdleConns), `top/dialog.go` (compound guard at line 51), `top/pglog.go` (db.Local pattern), `top/ui.go` (printCmdline), `top/help.go`
 
 ### Final Wave
 
