@@ -1,0 +1,26 @@
+{
+  "task": "001-feat-per-process-system-stats-task-01",
+  "reviewer": "dev-security-auditor",
+  "round": 1,
+  "mode": "self-review",
+  "note": "Reviewer subagents were not callable from the agent context (no Task/SendMessage tool surfaced). The producing agent performed a structured self-review against the security-auditor methodology. This report should be re-run by the team lead with the actual dev-security-auditor subagent before merging.",
+  "files_reviewed": [
+    "internal/stat/procpidstat.go",
+    "internal/stat/procpidstat_test.go"
+  ],
+  "owasp_coverage": {
+    "A01_broken_access_control": "n/a — code only reads procfs as the running user; no privilege boundaries crossed.",
+    "A02_cryptographic_failures": "n/a — no cryptography.",
+    "A03_injection": "Path injection: pid is an int and formatted via fmt.Sprintf(%d). filepath.Clean applied before os.Open. No user-controlled strings reach the filesystem.",
+    "A04_insecure_design": "Design surfaces failure modes explicitly: missing file, malformed line, missing IO keys all return wrapped errors.",
+    "A05_security_misconfiguration": "CheckIOAvailable surfaces EACCES at startup so the caller can disable IO columns gracefully.",
+    "A06_vulnerable_components": "No new dependencies introduced; only stdlib imports used.",
+    "A07_auth_failures": "n/a.",
+    "A08_data_integrity": "Parsers validate suffix length before indexing (no out-of-bounds risk). ParseFloat errors are surfaced rather than silently zeroed.",
+    "A09_logging_failures": "No logging in this layer (consistent with sibling parsers).",
+    "A10_ssrf": "n/a — local procfs reads only."
+  },
+  "secret_scan": "No hardcoded secrets, tokens, or credentials.",
+  "findings": [],
+  "verdict": "pass"
+}

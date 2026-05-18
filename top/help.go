@@ -15,6 +15,7 @@ general actions:
     d,D               'd' pg_stat_database switch, 'D' pg_stat_database menu.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
     p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
+    S                 'S' per-process system stats (local mode only; Shift+S).
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.

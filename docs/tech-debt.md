@@ -1,0 +1,48 @@
+# Tech Debt Register
+
+Known shortcuts, deferred improvements, and fragile areas. Updated after each feature.
+Reviewed at the start of tech-spec planning to avoid worsening existing debt.
+
+---
+
+## Active Debt
+
+### [001] procpidstat iodelay — Netlink taskstats not implemented
+
+**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Severity:** Low
+**Area:** `internal/stat/procpidstat.go`, issues #118/#123
+
+**What:** Per-process iowait (`wa%`, `iodelay` columns) is absent from the procpidstat screen. Delay accounting data lives behind the Netlink taskstats API (`AF_NETLINK/NETLINK_GENERIC`), which is not in the codebase. Placeholder issues #118 and #123 originally requested this metric.
+
+**Why deferred:** Implementing a Netlink taskstats client from scratch would have doubled the feature scope. The most actionable metrics (CPU%, IO throughput) are available without it.
+
+---
+
+### [002] procpidstat record/report — not integrated with recorder
+
+**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Severity:** Low
+**Area:** `record/`, `internal/view/view.go` (`NotRecordable: true` on procpidstat)
+
+**What:** The procpidstat screen cannot be recorded with `pgcenter record` or replayed in `pgcenter report`. The recorder only works with SQL-sourced views; the procpidstat enrichment (procfs join) happens in the TUI layer and is not captured.
+
+**Why deferred:** Supporting record/report requires either extending the recorder to handle mixed SQL+procfs sources or redesigning the enrichment pipeline. Both significantly exceed the scope of the initial feature.
+
+---
+
+### [003] All task reviews were self-reviews — real reviewer agents not run
+
+**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Severity:** Low
+**Area:** Entire feature codebase
+
+**What:** All task reviewer subagents (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) were run as structured self-reviews because the `Task`/`SendMessage` tools were not available in worktree agent contexts. Self-review JSON reports are present but were not produced by independent reviewer agents.
+
+**Why deferred:** Tool availability constraint in the worktree agent execution environment. Code was manually verified via `make test`, `make lint`, `make vuln`, and user TUI testing.
+
+---
+
+## Resolved Debt
+
+*(none yet)*

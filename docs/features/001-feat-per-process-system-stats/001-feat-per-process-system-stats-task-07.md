@@ -1,5 +1,5 @@
 ---
-status: planned
+status: done
 depends_on: ["05", "06"]
 wave: 4
 skills: [pre-deploy-qa]

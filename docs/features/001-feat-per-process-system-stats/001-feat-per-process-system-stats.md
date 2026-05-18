@@ -233,6 +233,24 @@ DBA при troubleshooting видит долгоживущий запрос в `
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-05-19
+
+### Divergences from original spec
+
+- **IO availability probe:** spec said "pgcenter проверяет доступность `/proc/[pid]/io` попыткой прочитать `/proc/self/io`" → actual: `CheckIOAvailable(pid int)` receives a real PG backend PID from `pg_stat_activity`; `/proc/self/io` is always readable by the owner and is not a valid cross-process probe. Reason: discovered during manual testing — warning never appeared for unprivileged users.
+
+- **Warning display:** spec said warning is shown when EACCES — actual: two `printCmdline` calls in the same handler caused the warning to be immediately overwritten by the view name message. Fixed by making warning and view name mutually exclusive (`if/else`). Reason: `printCmdline` triggers `g.Update + v.Clear` on each call; sequential calls discard the earlier message.
+
+- **`CheckIOAvailable` signature:** spec described a zero-argument function → actual: `CheckIOAvailable(pid int) error` to accept a foreign PID. API is internal to `internal/stat` package, no public contract broken.
+
+### Added during implementation
+
+- `View.NotRecordable bool` field added to skip views in `pgcenter record` (zero-value safe, no existing views changed).
+- `View.CollectExtra int` and `View.IOAvailable bool` fields added to carry runtime-only state through the view channel without modifying the static view map entries.
+- `Collector.Reset()` extended to clear four new PID snapshot maps (`prevProcPidStats`, `currProcPidStats`, `prevProcPidIO`, `currProcPidIO`).
+- `prevCollectExtra` change-detection added to `top/stat.go:collectStat()` to clear stale maps on view switches.
+
+### Descoped / Deferred
+
+- **iodelay (`wa%`, per-process iowait):** requires Netlink taskstats API not in codebase. Tracked in tech-debt.md [001].
+- **`pgcenter record`/`report` support:** recorder architecture supports SQL-only sources. Tracked in tech-debt.md [002].

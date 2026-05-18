@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ const (
 	CollectNetdev
 	CollectFsstats
 	CollectLogtail
+	CollectProcPidStat
 )
 
 // Stat defines all stats collected during single reading.
@@ -63,6 +65,12 @@ type Collector struct {
 	// postgres stats snapshots for previous and current intervals
 	prevPgStat Pgstat
 	currPgStat Pgstat
+	// per-process CPU stats snapshots for previous and current intervals
+	prevProcPidStats map[int]ProcPidStat
+	currProcPidStats map[int]ProcPidStat
+	// per-process IO stats snapshots for previous and current intervals
+	prevProcPidIO map[int]ProcPidIO
+	currProcPidIO map[int]ProcPidIO
 }
 
 // Config defines collector's runtime configuration.
@@ -93,6 +101,10 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 			ticks:              systicks,
 			PostgresProperties: props,
 		},
+		prevProcPidStats: make(map[int]ProcPidStat),
+		currProcPidStats: make(map[int]ProcPidStat),
+		prevProcPidIO:    make(map[int]ProcPidIO),
+		currProcPidIO:    make(map[int]ProcPidIO),
 	}, nil
 }
 
@@ -100,6 +112,10 @@ func NewCollector(db *postgres.DB) (*Collector, error) {
 func (c *Collector) Reset() {
 	c.prevPgStat = Pgstat{}
 	c.currPgStat = Pgstat{}
+	c.prevProcPidStats = make(map[int]ProcPidStat)
+	c.currProcPidStats = make(map[int]ProcPidStat)
+	c.prevProcPidIO = make(map[int]ProcPidIO)
+	c.currProcPidIO = make(map[int]ProcPidIO)
 }
 
 // Update implements stats collecting.
@@ -191,6 +207,71 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	}
 
 	s.Pgstat.Result = res
+
+	// Per-process system stats enrichment. When the active view requests
+	// per-PID procfs data, replace the 7-column SQL result with the 17-column
+	// joined result produced by buildProcPidResult(). Individual PID errors
+	// (process exited mid-tick, EACCES on /proc/[pid]/io) are skipped silently.
+	if view.CollectExtra == CollectProcPidStat {
+		// Build cleanup-before-swap: keep in prev only PIDs that are present
+		// in the current activity result, then move curr → prev and start curr fresh.
+		newPrevStats := make(map[int]ProcPidStat)
+		newPrevIO := make(map[int]ProcPidIO)
+		for _, row := range res.Values {
+			if len(row) == 0 {
+				continue
+			}
+			pid, err := strconv.Atoi(strings.TrimSpace(row[0].String))
+			if err != nil || pid <= 0 {
+				continue
+			}
+			if v, ok := c.currProcPidStats[pid]; ok {
+				newPrevStats[pid] = v
+			}
+			if v, ok := c.currProcPidIO[pid]; ok {
+				newPrevIO[pid] = v
+			}
+		}
+		c.prevProcPidStats = newPrevStats
+		c.prevProcPidIO = newPrevIO
+		c.currProcPidStats = make(map[int]ProcPidStat)
+		c.currProcPidIO = make(map[int]ProcPidIO)
+
+		// Collect fresh procfs data per PID present in the activity result.
+		for _, row := range res.Values {
+			if len(row) == 0 {
+				continue
+			}
+			pid, err := strconv.Atoi(strings.TrimSpace(row[0].String))
+			if err != nil || pid <= 0 {
+				continue
+			}
+			if st, err := readProcPidStat(pid); err == nil {
+				c.currProcPidStats[pid] = st
+			}
+			if view.IOAvailable {
+				if io, err := readProcPidIO(pid); err == nil {
+					c.currProcPidIO[pid] = io
+				}
+			}
+		}
+
+		// Replace the 7-col SQL result with the 17-col enriched one. The same
+		// 17-col PGresult flows through calculateDelta() below — with
+		// DiffIntvl=[0,0] (set on the procpidstat view) calculateDelta() acts
+		// as identity, leaving the column count intact.
+		enriched := buildProcPidResult(
+			res,
+			c.prevProcPidStats, c.currProcPidStats,
+			c.prevProcPidIO, c.currProcPidIO,
+			view.IOAvailable,
+			c.config.ticks,
+			float64(itv),
+			runtime.NumCPU(),
+		)
+		s.Pgstat.Result = enriched
+		res = enriched
+	}
 
 	c.prevPgStat = c.currPgStat
 	c.currPgStat = Pgstat{Activity: activity, Result: res}

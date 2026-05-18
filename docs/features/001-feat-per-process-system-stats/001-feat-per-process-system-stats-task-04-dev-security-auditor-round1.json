@@ -1,0 +1,26 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "Task 04 introduces three new View struct fields, a constant CollectProcPidStat=6, a new view map entry referencing an existing query template, and a one-line skip in filterViews(). No user input handling, no I/O paths, no auth/access control, no new dependencies. The SQL template referenced (query.PgStatActivityProcPidStat) was security-audited in Task 02. OWASP Top 10 coverage: no vectors introduced.",
+  "criticalIssues": [],
+  "findings": [],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0
+  },
+  "owaspCoverage": {
+    "A01_BrokenAccessControl": "n/a — no access control surfaces touched",
+    "A02_CryptographicFailures": "n/a — no crypto",
+    "A03_Injection": "n/a — query template is a static const reference; no new template variables; QueryAgeThresh sanitization is owned by Task 02 audit",
+    "A04_InsecureDesign": "pass — NotRecordable flag is opt-in (default false), preserves existing behavior; no privilege boundaries crossed",
+    "A05_SecurityMisconfiguration": "pass — view map entry uses initialized map literals (Filters, ColsWidth) avoiding nil-deref panics",
+    "A06_VulnerableComponents": "n/a — no new dependencies",
+    "A07_AuthFailures": "n/a — no auth",
+    "A08_SoftwareDataIntegrity": "n/a — no deserialization",
+    "A09_LoggingMonitoring": "n/a — no security events",
+    "A10_SSRF": "n/a — no outbound HTTP"
+  },
+  "hardcodedSecrets": "none — no credentials, keys, tokens, or connection strings in the diff"
+}

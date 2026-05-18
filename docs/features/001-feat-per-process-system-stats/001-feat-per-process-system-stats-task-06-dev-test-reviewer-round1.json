@@ -1,0 +1,36 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "approved",
+  "summary": "Task spec explicitly waives unit tests for this layer: 'TUI callbacks require a real terminal' (TDD Anchor). Acceptance criteria are verified via make build (compilation), make lint (no warnings), and manual smoke test of hotkey, local-mode guard, IO-EACCES warning, idle-conns toggle on procpidstat, age dialog on procpidstat, and cancel/terminate dialogs still blocked on procpidstat. Existing tests in package top must continue to pass — confirmed via go test -race ./top/... (no regression). No tests added, none removed.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 4,
+    "newTestsAdded": 0,
+    "existingTestsUpdated": 0,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "n/a — TUI presentation layer, no testable pure logic introduced"
+  },
+  "checks": {
+    "pyramidPlacement": "n/a — no new pure functions; switchViewToProcPidStat is a closure over *app that drives gocui side-effects and a channel send, which cannot be unit-tested without a real gocui.Gui",
+    "behaviorNotImplementation": "n/a — no tests added",
+    "edgeCases": "covered by manual smoke test per acceptance criteria — local-mode-only (covered by Local==false branch), IO-EACCES (covered by ioErr != nil branch), happy path (both branches false)",
+    "redundantTesting": "n/a",
+    "tddSequence": "n/a — task explicitly waives TDD anchor for TUI callbacks",
+    "testNaming": "n/a",
+    "fixturesAndMocks": "n/a",
+    "regressionRisk": "low — existing top package tests cover dialog.go and config_view.go non-UI paths; race-enabled go test -race ./top/... passes with the diff applied (9.163s, ok). The dialog.go restructure preserves the exact existing message strings, so any test asserting on those would still pass.",
+    "assertionsRealBehavior": "n/a",
+    "isolation": "n/a",
+    "compilationVerification": "make build succeeds — confirms the new symbol (switchViewToProcPidStat), the new stat package import, the constant references (stat.CollectProcPidStat, stat.CheckIOAvailable) all resolve",
+    "lintVerification": "make lint (golangci-lint + gosec) reports 0 warnings — confirms no errcheck violation on stat.CheckIOAvailable, no unused-variable warning, no revive complaint on the new function"
+  },
+  "filesReviewed": [
+    "top/keybindings.go",
+    "top/config_view.go",
+    "top/dialog.go",
+    "top/help.go"
+  ]
+}

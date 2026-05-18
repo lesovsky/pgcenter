@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "Task 06 is a presentation-layer wiring change: one keybinding entry, one view-switch handler, one filter-guard widening, one dialog-guard restructure, one help-text line. No user-controlled input flows into SQL, shell, or filesystem paths. The /proc/self/io probe uses a static path with filepath.Clean inside stat.CheckIOAvailable (audited in Task 01). The local-mode guard correctly fails closed on remote connections. OWASP Top 10: no new vectors introduced.",
+  "criticalIssues": [],
+  "findings": [],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0
+  },
+  "owaspCoverage": {
+    "A01_BrokenAccessControl": "pass — db.Local guard blocks the screen on remote connections before any IO probe runs; the cancel/terminate/mask dialogs still require view.Name == 'activity', so widening dialogChangeAge to include procpidstat does NOT grant terminate/cancel access on the new view",
+    "A02_CryptographicFailures": "n/a — no crypto",
+    "A03_Injection": "n/a — no new query template variables; QueryAgeThresh sanitization on dialogChangeAge is owned by changeQueryAge() which already validates input via parseHumanTimeString; widening the dialog entry-point does not bypass validation",
+    "A04_InsecureDesign": "pass — handler implements defense in depth: db.Local check first (cheap, no syscall), then IO probe (one syscall, error informational only). Static map mutation is deliberately scoped: the runtime CollectExtra/IOAvailable patches are applied to a local value copy then assigned to config.view, leaving the static views map unaffected until viewSwitchHandler is invoked elsewhere",
+    "A05_SecurityMisconfiguration": "pass — printCmdline messages are static strings, no format-string injection (the %s wrapper is used where needed); no debug logging added",
+    "A06_VulnerableComponents": "n/a — no new dependencies",
+    "A07_AuthFailures": "n/a — no auth",
+    "A08_SoftwareDataIntegrity": "n/a — no deserialization",
+    "A09_LoggingMonitoring": "n/a — only cmdline UI messages, no log sinks",
+    "A10_SSRF": "n/a — no outbound HTTP"
+  },
+  "hardcodedSecrets": "none — no credentials, keys, tokens, or connection strings in the diff",
+  "additionalNotes": {
+    "guardCorrectness": "Verified the original (d > dialogFilter && d <= dialogChangeAge) compound covered exactly {dialogCancelQuery=3, dialogTerminateBackend=4, dialogCancelGroup=5, dialogTerminateGroup=6, dialogSetMask=7, dialogChangeAge=8} from the iota declaration in dialog.go. The new explicit enumeration in the first guard preserves the activity-only constraint for the five destructive dialogs. The second guard isolates dialogChangeAge with the allowlist {activity, procpidstat}. This split cannot accidentally grant termination capability on procpidstat — failure mode is fail-closed.",
+    "ioProbeFailureMode": "stat.CheckIOAvailable returns the OS error verbatim; the handler discards the error after the boolean check (ioErr == nil). Permission-denied is the expected and only meaningful failure; no error wrapping needed because the warning string is fixed by the tech-spec to a deterministic user-facing message. No information leak (error text is not printed)."
+  }
+}

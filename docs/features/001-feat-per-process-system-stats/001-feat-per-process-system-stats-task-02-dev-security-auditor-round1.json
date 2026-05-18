@@ -1,0 +1,22 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 0,
+    "critical": 0,
+    "major": 0,
+    "minor": 0
+  },
+  "findings": [],
+  "coverage": {
+    "owaspChecked": [
+      "A03:2021 Injection — SQL template variables {{.QueryAgeThresh}} and {{.ShowNoIdle}}",
+      "A05:2021 Security Misconfiguration — hardcoded credentials, secret leakage",
+      "A08:2021 Software and Data Integrity Failures — third-party deps"
+    ],
+    "rationale": {
+      "sqlInjection": "Two template variables embed into SQL via text/template (no parameterization): QueryAgeThresh (literal in single-quoted interval) and ShowNoIdle (boolean gate, no string substitution). QueryAgeThresh is validated upstream by `parseHumanTimeString()` in top/config_view.go before reaching query.Format(). ShowNoIdle is a bool — no string content reaches the SQL. WHERE pid != pg_backend_pid() is a constant. No new injection surface vs. the pre-existing PgStatActivityDefault constant which uses the same template variables identically.",
+      "secrets": "No credentials, tokens, or environment variables present in either file. SQL constant is static; test uses postgres.NewTestConnectVersion which sources config from the project test helper.",
+      "dependencies": "Test file imports only `fmt`, `strings`, `testing` (stdlib), `github.com/lesovsky/pgcenter/internal/postgres`, and `github.com/stretchr/testify/assert` — all pre-existing project dependencies, no new third-party packages introduced."
+    }
+  }
+}

@@ -31,8 +31,10 @@ func Test_app_setup(t *testing.T) {
 
 func Test_app_record(t *testing.T) {
 	filename := "/tmp/pgcenter-record-testing.stat.tar"
-	totalViews := len(view.New()) + 1 // stats + metadata
-	count, itv := 2, time.Second      // recording settings
+	// view.New() includes views with NotRecordable=true (e.g. procpidstat) which
+	// filterViews strips before recording. Count only recordable views + metadata file.
+	totalViews := countRecordable(view.New()) + 1 // stats + metadata
+	count, itv := 2, time.Second                  // recording settings
 
 	testcases := []struct {
 		name      string
@@ -102,12 +104,15 @@ func Test_filterViews(t *testing.T) {
 		wantN      int
 		wantV      int
 	}{
-		{version: 140000, pgssSchema: "", wantN: 6, wantV: 15},
-		{version: 140000, pgssSchema: "public", wantN: 0, wantV: 21},
-		{version: 130000, pgssSchema: "public", wantN: 3, wantV: 18},
-		{version: 120000, pgssSchema: "public", wantN: 6, wantV: 15},
-		{version: 110000, pgssSchema: "public", wantN: 8, wantV: 13},
-		{version: 100000, pgssSchema: "public", wantN: 8, wantV: 13},
+		// wantN counts filtered views (version-incompatible + statements_* + NotRecordable);
+		// wantV counts remaining views after filtering. procpidstat (NotRecordable) is always
+		// filtered out, so wantN includes +1 for it and wantV stays at 21 max recordable.
+		{version: 140000, pgssSchema: "", wantN: 7, wantV: 15},
+		{version: 140000, pgssSchema: "public", wantN: 1, wantV: 21},
+		{version: 130000, pgssSchema: "public", wantN: 4, wantV: 18},
+		{version: 120000, pgssSchema: "public", wantN: 7, wantV: 15},
+		{version: 110000, pgssSchema: "public", wantN: 9, wantV: 13},
+		{version: 100000, pgssSchema: "public", wantN: 9, wantV: 13},
 	}
 
 	for _, tc := range testcases {
@@ -115,4 +120,54 @@ func Test_filterViews(t *testing.T) {
 		assert.Equal(t, tc.wantN, n)
 		assert.Equal(t, tc.wantV, len(v))
 	}
+}
+
+func TestFilterViews_NotRecordable(t *testing.T) {
+	// A view explicitly marked NotRecordable must be removed by filterViews
+	// regardless of version compatibility or pg_stat_statements availability.
+	views := view.Views{
+		"procpidstat": {
+			Name:          "procpidstat",
+			NotRecordable: true,
+		},
+	}
+
+	n, v := filterViews(0, "", views)
+	assert.Equal(t, 1, n)
+	assert.Equal(t, 0, len(v))
+	assert.NotContains(t, v, "procpidstat")
+
+	// Sanity check: view.New() registers procpidstat with NotRecordable=true and Ncols=17.
+	all := view.New()
+	pp, ok := all["procpidstat"]
+	assert.True(t, ok)
+	assert.True(t, pp.NotRecordable)
+	assert.Equal(t, 17, pp.Ncols)
+}
+
+func TestFilterViews_Recordable(t *testing.T) {
+	// A view with NotRecordable=false (zero value) and no version requirement
+	// must pass through filterViews unchanged.
+	views := view.Views{
+		"sample": {
+			Name: "sample",
+		},
+	}
+
+	n, v := filterViews(0, "", views)
+	assert.Equal(t, 0, n)
+	assert.Equal(t, 1, len(v))
+	assert.Contains(t, v, "sample")
+}
+
+// countRecordable returns the number of views that filterViews will keep,
+// i.e. excluding any with NotRecordable=true.
+func countRecordable(views view.Views) int {
+	var n int
+	for _, v := range views {
+		if !v.NotRecordable {
+			n++
+		}
+	}
+	return n
 }

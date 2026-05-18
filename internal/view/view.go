@@ -24,6 +24,9 @@ type View struct {
 	Filters            map[int]*regexp.Regexp // Filter patterns: key is the column index, value - regexp pattern
 	Refresh            time.Duration          // Number of seconds between update view.
 	ShowExtra          int                    // Specifies extra stats should be enabled on the view.
+	CollectExtra       int                    // Specifies non-SQL enrichment kind for Collector.Update(); 0 means no enrichment.
+	IOAvailable        bool                   // True when /proc/[pid]/io is readable; carries the capability flag to the Collector.
+	NotRecordable      bool                   // When true, record/record.go:filterViews() skips this view.
 }
 
 // Views is a list of all used context units.
@@ -277,6 +280,18 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show basebackup progress statistics",
 			Filters:            map[int]*regexp.Regexp{},
+		},
+		"procpidstat": {
+			Name:          "procpidstat",
+			QueryTmpl:     query.PgStatActivityProcPidStat,
+			DiffIntvl:     [2]int{0, 0},
+			Ncols:         17,
+			OrderKey:      0,
+			OrderDesc:     false,
+			ColsWidth:     map[int]int{},
+			Msg:           "Show per-process system stats",
+			Filters:       map[int]*regexp.Regexp{},
+			NotRecordable: true,
 		},
 	}
 }

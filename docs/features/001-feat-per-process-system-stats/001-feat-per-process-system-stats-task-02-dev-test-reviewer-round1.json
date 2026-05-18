@@ -1,0 +1,35 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Five unit tests plus one parameterized integration test (11 PG versions, with t.Skipf for unavailable ones). Unit tests verify SQL template structure (column order, required clauses, conditional ShowNoIdle, embedded QueryAgeThresh); behavioral correctness is verified by the integration test which actually executes the formatted query against PostgreSQL. The substring-presence assertions in unit tests are appropriate here because (a) the task's contract IS the SQL template structure — downstream tasks index columns positionally, and (b) live PG execution provides the behavioral signal.",
+  "findings": [],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 6,
+      "failed": 0,
+      "rationale": "If the SQL constant were broken (wrong column order, missing clause, malformed template), unit tests would fail on substring/ordering assertions AND the integration test would fail with a Postgres error. Removing any single test removes a specific signal: ShowNoIdle toggling, default QueryAgeThresh value, custom QueryAgeThresh value, column order, integration smoke against each PG version."
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  },
+  "checks": {
+    "tddAnchorQuality": "pass — substring assertions are scoped to SQL structural contract that downstream tasks depend on; behavioral verification delegated to integration test (real PG execution).",
+    "litmusPerTest": [
+      {"test": "TestPgStatActivityProcPidStat", "signal": "column order + presence of required clauses; if SELECT list reordered, the ordered-substring loop fails"},
+      {"test": "TestPgStatActivityProcPidStat_ShowNoIdle", "signal": "ShowNoIdle=true branch emits idle filter"},
+      {"test": "TestPgStatActivityProcPidStat_ShowNoIdleDisabled", "signal": "ShowNoIdle=false branch suppresses idle filter (guards against accidental {{ end }} omission)"},
+      {"test": "TestPgStatActivityProcPidStat_QueryAgeThresh", "signal": "custom threshold value is embedded verbatim"},
+      {"test": "TestPgStatActivityProcPidStat_QueryAgeThreshDefault", "signal": "NewOptions default threshold is embedded even without explicit set (guards against accidental {{ if }} guard added later)"},
+      {"test": "Test_StatProcPidStatQuery", "signal": "formatted query is a syntactically valid SQL statement on every supported PG version; catches regressions in regexp_replace escape syntax, alias names, and pg_stat_activity column existence per version"}
+    ],
+    "redundantTesting": "no — each test catches a specific failure mode no other catches",
+    "pyramidBalance": "appropriate for SQL constant: small unit surface, integration covers cross-version behavior"
+  }
+}

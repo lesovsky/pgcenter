@@ -1,0 +1,34 @@
+{
+  "task": "001-feat-per-process-system-stats-task-03",
+  "reviewer": "dev-security-auditor",
+  "round": 1,
+  "mode": "self-review",
+  "note": "Reviewer subagents were not callable from the agent context (no Task/SendMessage tool surfaced). The producing agent performed a structured self-review against the security-auditor methodology. This report should be re-run by the team lead with the actual dev-security-auditor subagent before merging.",
+  "files_reviewed": [
+    "internal/stat/procpidstat.go",
+    "internal/stat/procpidstat_test.go"
+  ],
+  "owasp_coverage": {
+    "A01_broken_access_control": "n/a — no privilege boundaries crossed; the function operates on already-collected maps.",
+    "A02_cryptographic_failures": "n/a — no cryptography.",
+    "A03_injection": "PID validation via strconv.Atoi + pid > 0 is the explicit security guard mandated by tech-spec. Invalid PIDs (non-numeric, zero, negative) are caught and never used as a map key or pathname. Although buildProcPidResult itself does not construct a path, the validation here aligns with the readProcPidStat(pid)/readProcPidIO(pid) callers in task 05; defense-in-depth.",
+    "A04_insecure_design": "Defensive design: validPID flag short-circuits all procfs-derived cells; haveCPU/havePrevCPU/haveIO/havePrevIO guards prevent stale map lookups; itv > 0 and ticks > 0 and cpuCount > 0 guards prevent division by zero and division by negative.",
+    "A05_security_misconfiguration": "n/a — no configuration surface.",
+    "A06_vulnerable_components": "No new third-party dependencies introduced. database/sql, fmt, strconv, strings are stdlib.",
+    "A07_auth_failures": "n/a.",
+    "A08_data_integrity": "delta() returns 0 for non-monotonic counter (curr <= prev), protecting downstream rendering from negative percentages. Integer division in formatCPUTime uses int64 cast — no overflow up to 2^63 / 100 jiffies (more than enough for any plausible CPU time).",
+    "A09_logging_failures": "No logging in this layer (consistent with sibling stat readers).",
+    "A10_ssrf": "n/a — no network operations."
+  },
+  "secret_scan": "No hardcoded secrets, tokens, or credentials.",
+  "input_validation": {
+    "pid": "strconv.Atoi + pid > 0; rows with invalid PID still rendered but procfs columns blanked. strings.TrimSpace applied before Atoi to tolerate accidental whitespace from CSV-style activity rows.",
+    "itv": "Checked > 0 before division (both CPU rate and IO rate paths).",
+    "ticks": "Checked > 0 before CPU rate division. formatCPUTime requires positive ticks per its godoc; non-positive ticks would produce Inf/NaN — caller responsibility, not exploitable by user input.",
+    "cpuCount": "Checked > 0 before division.",
+    "src_len": "len(src) checked before indexing src[0] and src[6] to tolerate malformed activity rows."
+  },
+  "denial_of_service": "buildProcPidResult is O(activity.Nrows) with bounded per-row work (constant 17 sql.NullString allocations + a few strconv calls). Map lookups are O(1). No unbounded loops, no recursion.",
+  "findings": [],
+  "verdict": "pass"
+}
