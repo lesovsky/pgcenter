@@ -363,20 +363,32 @@ func (r *PGresult) sort(key int, desc bool) {
 		return /* nothing to sort */
 	}
 
-	_, err := strconv.ParseFloat(r.Values[0][key].String, 64)
-	if err == nil {
-		// value is numeric
+	sample := r.Values[0][key].String
+
+	if _, err := strconv.ParseFloat(sample, 64); err == nil {
+		// numeric sort
 		sort.SliceStable(r.Values, func(i, j int) bool {
 			// TODO: handle errors
 			l, _ := strconv.ParseFloat(r.Values[i][key].String, 64)
-			r, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
+			m, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
 			if desc {
-				return l > r /* desc order: 10 -> 0 */
+				return l > m /* desc order: 10 -> 0 */
 			}
-			return l < r /* asc order: 0 -> 10 */
+			return l < m /* asc order: 0 -> 10 */
+		})
+	} else if _, err := parseDuration(sample); err == nil {
+		// duration sort: handles "HH:MM:SS" and "N days HH:MM:SS" so that values
+		// with 3+ digit hours (e.g. "791:04:45") sort correctly instead of as strings.
+		sort.SliceStable(r.Values, func(i, j int) bool {
+			li, _ := parseDuration(r.Values[i][key].String)
+			lj, _ := parseDuration(r.Values[j][key].String)
+			if desc {
+				return li > lj
+			}
+			return li < lj
 		})
 	} else {
-		// value is string
+		// string sort (fallback)
 		sort.SliceStable(r.Values, func(i, j int) bool {
 			if desc {
 				return r.Values[i][key].String > r.Values[j][key].String /* desc order: 'z' -> 'a' */
@@ -384,6 +396,49 @@ func (r *PGresult) sort(key int, desc bool) {
 			return r.Values[i][key].String < r.Values[j][key].String /* asc order: 'a' -> 'z' */
 		})
 	}
+}
+
+// parseDuration parses a PostgreSQL interval string into total seconds.
+// Supported formats:
+//   - "HH:MM:SS" where HH may have any number of digits (e.g. "791:04:45")
+//   - "N days HH:MM:SS" / "N day HH:MM:SS" (PostgreSQL interval text output)
+func parseDuration(s string) (int64, error) {
+	var days, hours, minutes, seconds int64
+
+	if idx := strings.Index(s, " day"); idx != -1 {
+		dayStr := strings.TrimSpace(s[:idx])
+		var err error
+		days, err = strconv.ParseInt(dayStr, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("parse days in %q: %w", s, err)
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(s[idx+len(" day"):], "s"))
+		if rest == "" {
+			return days * 86400, nil
+		}
+		s = rest
+	}
+
+	parts := strings.SplitN(s, ":", 3)
+	if len(parts) != 3 {
+		return 0, fmt.Errorf("not a duration %q: expected HH:MM:SS", s)
+	}
+	var err error
+	hours, err = strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse hours in %q: %w", s, err)
+	}
+	minutes, err = strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse minutes in %q: %w", s, err)
+	}
+	// seconds may carry fractional part; truncate to integer
+	secStr := strings.SplitN(parts[2], ".", 2)[0]
+	seconds, err = strconv.ParseInt(secStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse seconds in %q: %w", s, err)
+	}
+	return days*86400 + hours*3600 + minutes*60 + seconds, nil
 }
 
 // diffPair produces a delta of two string values.

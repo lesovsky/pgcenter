@@ -457,6 +457,74 @@ func Test_sort(t *testing.T) {
 	assert.Equal(t, emptyRes.Values, [][]sql.NullString{})
 }
 
+// Test_sort_duration reproduces issue #50: time columns like "791:04:45" were sorted
+// as strings, placing them between "79:..." values instead of at the top.
+// String comparison: "791..." < "79:..." because '1' (49) < ':' (58).
+func Test_sort_duration(t *testing.T) {
+	ns := func(s string) sql.NullString { return sql.NullString{String: s, Valid: true} }
+
+	// Reproduces the exact scenario from the issue report (desc sort by t_all_t).
+	// Without duration-aware sort "791:04:45" would land between "79:18:40" and "77:20:25".
+	res := PGresult{
+		Valid: true, Ncols: 2, Nrows: 6,
+		Cols: []string{"t_all_t", "query"},
+		Values: [][]sql.NullString{
+			{ns("96:58:35"), ns("q1")},
+			{ns("80:39:06"), ns("q2")},
+			{ns("79:18:40"), ns("q3")},
+			{ns("791:04:45"), ns("q4")}, // 791 hours — must sort above all others
+			{ns("74:42:21"), ns("q5")},
+			{ns("00:05:23"), ns("q6")},
+		},
+	}
+
+	res.sort(0, true) // descending by t_all_t
+	want := []string{"791:04:45", "96:58:35", "80:39:06", "79:18:40", "74:42:21", "00:05:23"}
+	got := make([]string, len(res.Values))
+	for i, row := range res.Values {
+		got[i] = row[0].String
+	}
+	assert.Equal(t, want, got)
+
+	res.sort(0, false) // ascending
+	wantAsc := []string{"00:05:23", "74:42:21", "79:18:40", "80:39:06", "96:58:35", "791:04:45"}
+	gotAsc := make([]string, len(res.Values))
+	for i, row := range res.Values {
+		gotAsc[i] = row[0].String
+	}
+	assert.Equal(t, wantAsc, gotAsc)
+}
+
+func Test_parseDuration(t *testing.T) {
+	testcases := []struct {
+		input string
+		want  int64
+		valid bool
+	}{
+		{"00:00:00", 0, true},
+		{"00:05:23", 323, true},
+		{"01:00:00", 3600, true},
+		{"96:58:35", 349115, true},
+		{"791:04:45", 2847885, true},        // the value from issue #50
+		{"1 day 00:00:00", 86400, true},
+		{"11 days 10:10:10", 987010, true},
+		{"2 days 03:30:45", 185445, true},
+		{"invalid", 0, false},
+		{"10:20", 0, false},                  // missing seconds — not a valid HH:MM:SS
+		{"abc:de:fg", 0, false},
+	}
+
+	for _, tc := range testcases {
+		got, err := parseDuration(tc.input)
+		if tc.valid {
+			assert.NoError(t, err, "input: %q", tc.input)
+			assert.Equal(t, tc.want, got, "input: %q", tc.input)
+		} else {
+			assert.Error(t, err, "input: %q", tc.input)
+		}
+	}
+}
+
 func Test_diffPair(t *testing.T) {
 	testcases := []struct {
 		valid bool
