@@ -335,6 +335,53 @@ func Test_diff(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// Test_diff_pg18_wal_stats_age reproduces issue #132: when showing WAL statistics on PG 18,
+// the stats_age column ('19 days 02:52:00') was incorrectly included in the diff interval
+// and caused a parse error. The correct DiffIntvl for PG 18 WAL view is [2, 5].
+func Test_diff_pg18_wal_stats_age(t *testing.T) {
+	// PG 18 pg_stat_wal columns: source, waldir_size, wal_KiB, records, fpi, buffers_full, stats_age
+	prev := PGresult{
+		Valid: true, Ncols: 7, Nrows: 1,
+		Cols: []string{"source", "waldir_size", "wal,KiB", "records", "fpi", "buffers_full", "stats_age"},
+		Values: [][]sql.NullString{
+			{
+				{String: "WAL", Valid: true},
+				{String: "64 MB", Valid: true},
+				{String: "12000.00", Valid: true},
+				{String: "1000", Valid: true},
+				{String: "50", Valid: true},
+				{String: "10", Valid: true},
+				{String: "19 days 02:52:00", Valid: true},
+			},
+		},
+	}
+	curr := PGresult{
+		Valid: true, Ncols: 7, Nrows: 1,
+		Cols: []string{"source", "waldir_size", "wal,KiB", "records", "fpi", "buffers_full", "stats_age"},
+		Values: [][]sql.NullString{
+			{
+				{String: "WAL", Valid: true},
+				{String: "64 MB", Valid: true},
+				{String: "12100.00", Valid: true},
+				{String: "1010", Valid: true},
+				{String: "55", Valid: true},
+				{String: "11", Valid: true},
+				{String: "19 days 03:01:38", Valid: true},
+			},
+		},
+	}
+
+	// Old (buggy) interval [2, 9]: stats_age at col 6 is inside the diff range and causes parse error.
+	_, err := diff(curr, prev, 1, [2]int{2, 9}, 0)
+	assert.Error(t, err, "stats_age should not be diffable with interval [2,9] on PG18 WAL data")
+
+	// Correct interval [2, 5]: stats_age at col 6 is outside the diff range.
+	got, err := diff(curr, prev, 1, [2]int{2, 5}, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, "19 days 03:01:38", got.Values[0][6].String, "stats_age should be copied as-is")
+	assert.Equal(t, "100.00", got.Values[0][2].String, "wal,KiB delta should be computed")
+}
+
 func Test_sort(t *testing.T) {
 	res := newTestPGresult()
 	testcases := []struct {

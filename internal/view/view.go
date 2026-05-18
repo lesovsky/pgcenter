@@ -304,7 +304,7 @@ func (v Views) Configure(opts query.Options) error {
 			view.QueryTmpl = query.SelectStatStatementsTimingQuery(opts.Version)
 			v[k] = view
 		case "wal":
-			view.QueryTmpl, view.Ncols = query.SelectStatWALQuery(opts.Version)
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatWALQuery(opts.Version)
 			v[k] = view
 		}
 	}
