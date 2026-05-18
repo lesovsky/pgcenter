@@ -1,92 +1,69 @@
 {
   "validator": "dev-reality-checker",
+  "round": 3,
   "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
-  "tasks_checked": ["01", "02", "03"],
+  "tasks_checked": ["01", "05", "06"],
   "status": "approved",
   "findings": [
     {
-      "severity": "major",
-      "category": "hints",
-      "task": "01",
-      "issue": "Implementation Hints section contains an internally contradictory explanation for the utime/stime suffix indices. The hint text says 'After consuming `pid (comm) state` (3 fields), the zero-based suffix indices are 11 and 12 respectively', but 'consuming 3 fields' implies the suffix starts after the state field, which would place utime at index 10, not 11. In reality the correct parsing slices from `last ) + 2` (as described in the What-to-do and Details sections), meaning the suffix INCLUDES the state token at suffix[0], making utime=suffix[11] and stime=suffix[12] — which is correct and verified against live /proc/[pid]/stat. The indices 11 and 12 are correct; only the explanatory phrase 'After consuming pid (comm) state (3 fields)' is misleading because it implies state is excluded from the suffix. An implementer following the hint text literally could derive wrong indices.",
-      "fix": "Rewrite the hint explanation to: 'The suffix is everything after the last `)` plus a space — it starts with the state character as suffix[0]. utime is at suffix[11] (kernel ABI field 14), stime is at suffix[12] (kernel ABI field 15). Verify with: python3 -c \"import re; s=open('/proc/self/stat').read(); idx=s.rfind(')'); print(s[idx+2:].split()[11], s[idx+2:].split()[12])\"'"
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "TDD Anchor test TestCollectorUpdateProcPidStat17Cols references 'NewTestConnect()' as the helper to open a real PG connection. This name does not match the existing helper pattern in the stat package. The stat package uses postgres.NewTestConnectVersion(version) from internal/postgres/testing.go. If the implementer uses a non-existent 'NewTestConnect()' name the test will fail to compile.",
+      "fix": "Replace 'NewTestConnect()' with 'postgres.NewTestConnectVersion(<version>)' (from internal/postgres/testing.go). Check existing stat_test.go or postgres_test.go for the exact call pattern already used in the package."
     },
     {
       "severity": "minor",
-      "category": "hints",
-      "task": "02",
-      "issue": "The Acceptance Criteria and the SQL code block in the Details section both show '{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}' (no spaces inside the delimiters), but the Critical Conventions sub-section says 'The existing activity query uses `{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}` with spaces inside — match this spacing.' These two instructions within the same task contradict each other. The actual existing code in internal/query/activity.go uses the spaced form: '{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}'.",
-      "fix": "Align the SQL code block and acceptance criteria with the Critical Conventions paragraph by adding spaces inside the delimiters: '{{ if .ShowNoIdle }} AND state != 'idle' {{ end }}'. Both the example SQL and the AC bullet should match the actual codebase pattern."
+      "category": "feasibility",
+      "task": "06",
+      "issue": "config_view.go does not currently import 'github.com/lesovsky/pgcenter/internal/stat'. Task 06 details section notes the import must be added. The statement 'The package is already imported in top/stat.go so no cycle is introduced' is technically correct (same top package, no cycle), but the import must still be added to config_view.go explicitly — Go requires per-file imports.",
+      "fix": "When implementing switchViewToProcPidStat, add 'github.com/lesovsky/pgcenter/internal/stat' to the import block in top/config_view.go. No circular import risk: internal/stat does not import top/."
     },
     {
       "severity": "minor",
-      "category": "hints",
-      "task": "01",
-      "issue": "Task 01 says to use `bufio.Scanner` as the file-reading pattern (referencing cpu.go), but cpu.go's reader function `readCPUStatLocal` accepts a file path string directly (enabling easy golden-file testing), while the task specifies `readProcPidStat(pid int)` which accepts only a PID. The task then acknowledges this problem and leaves the resolution vague: 'use an unexported variant of the reader that accepts a path string, or open the file and adapt as done in cpu_test.go; look at how existing tests pass file paths before deciding approach'. The ambiguity leaves the implementer to design the testability pattern from scratch, inconsistent with the concrete guidance given for everything else in the task.",
-      "fix": "Explicitly recommend following the cpu.go split: a private `readProcPidStatLocal(path string)` that does the actual file I/O, and a public-facing `readProcPidStat(pid int)` that calls it with `fmt.Sprintf('/proc/%d/stat', pid)`. Tests then call the Local variant directly with golden file paths. This matches readDiskstatsLocal and readCPUStatLocal patterns exactly."
-    },
-    {
-      "severity": "minor",
-      "category": "hints",
-      "task": "03",
-      "issue": "The Details section says 'strconv (already imported in stat.go)' as justification for not needing a new import. This is true at the package level, but each Go file requires its own import block. The statement may mislead a less experienced implementer into omitting the import from procpidstat.go. The new procpidstat.go file (created by task 01) will need its own `import \"strconv\"` regardless of what stat.go imports.",
-      "fix": "Change to: 'strconv — add to the import block in procpidstat.go; it is already used elsewhere in the package so no go.mod change is needed.'"
+      "category": "feasibility",
+      "task": "06",
+      "issue": "dialog.go guard restructuring: the task's step 4 description of the 'first check' uses the phrase 'range (dialogFilter, dialogCancelQuery..dialogSetMask]' which is ambiguous. The intent is d > dialogFilter (=2) AND d < dialogChangeAge (=8), i.e., d in {3,4,5,6,7}. An implementer could misread this and use 'd >= dialogCancelQuery && d <= dialogSetMask' (explicit enum list) which is equivalent but fragile if new dialog types are inserted. The condition 'd > dialogFilter && d < dialogChangeAge' is the most robust expression.",
+      "fix": "When implementing, use 'd > dialogFilter && d < dialogChangeAge' as the range condition for the first check. This is equivalent to the named-constant list and survives insertion of new dialog types."
     }
   ],
+  "verification_notes": {
+    "task_01": {
+      "CheckIOAvailable_exported": "CONFIRMED — task correctly exports CheckIOAvailable() for use from top/config_view.go (Task 06). readProcPidStat and readProcPidIO remain unexported and are only consumed within internal/stat by Tasks 03 and 05. No other unexported functions are called cross-package.",
+      "all_unexported_functions_cross_package_audit": "CLEAN — only CheckIOAvailable() is called from outside internal/stat. readProcPidStat() and readProcPidIO() are called from buildProcPidResult() (Task 03) and Collector.Update() (Task 05), both within internal/stat.",
+      "file_patterns": "CONFIRMED — cpu.go defer func() { _ = f.Close() }(), bufio.Scanner, filepath.Clean patterns correctly referenced.",
+      "testdata_path": "CONFIRMED — internal/stat/testdata/ directory exists; new proc/ subdirectory is appropriate.",
+      "dependency_declarations": "CONFIRMED — depends_on: [] is correct; task has no predecessor dependencies.",
+      "stdlib_imports": "CONFIRMED — bufio, fmt, os, path/filepath, strconv, strings all present in existing stat package files."
+    },
+    "task_05": {
+      "itv_type_and_cast": "CONFIRMED — itv = int(refresh / time.Second) at stat.go line 162. float64(itv) cast at the buildProcPidResult call site is correctly documented in both the task Details section and the tech-spec 'itv (refresh_s) source' paragraph. Consistent across both documents.",
+      "CollectProcPidStat_value_6": "CONFIRMED — iota sequence in the same const block: pgProcUptimeQuery (string const at iota=0), CollectNone=iota→1, CollectDiskstats→2, CollectNetdev→3, CollectFsstats→4, CollectLogtail→5. Therefore CollectProcPidStat=6 is correct (next in sequence). Tech-spec note 'pgProcUptimeQuery string const shifts iota by 1' is accurate — verified by running Go iota evaluation.",
+      "Collector_struct": "CONFIRMED — current Collector has prevCPUStat/currCPUStat, prevDiskstats/currDiskstats, prevNetdevs/currNetdevs, currFsstats, prevPgStat/currPgStat. Four new PID map fields follow the same prev/curr snapshot pattern.",
+      "Reset_function": "CONFIRMED — current Reset() at stat.go lines 100-103 clears only prevPgStat/currPgStat. Task correctly extends it to also clear all four PID maps.",
+      "Update_insert_point": "CONFIRMED — enrichment branch position after 's.Pgstat.Result = res' (line 193) and before 'c.prevPgStat = c.currPgStat' (line 195) is feasible. The DiffIntvl=[0,0] passthrough via calculateDelta leaves the 17-col result intact.",
+      "collectStat_change_detection": "CONFIRMED — collectStat() in top/stat.go has ShowExtra change-detection at lines 81-85 (extra != v.ShowExtra → ToggleCollectExtra + continue). Parallel CollectExtra detection with prevCollectExtra variable follows same pattern. The task correctly notes this does NOT use continue, because the standard fallthrough c.Reset()+c.Update() already handles full view switches.",
+      "depends_on_correct": "CONFIRMED — depends_on: ['03', '04'] is correct. Task 03 provides buildProcPidResult/readProcPidStat/readProcPidIO; Task 04 provides CollectProcPidStat constant and CollectExtra/IOAvailable on View."
+    },
+    "task_06": {
+      "CheckIOAvailable_exported": "CONFIRMED — Task 01 exports CheckIOAvailable(). Task 06 correctly references stat.CheckIOAvailable().",
+      "db_Local_pattern": "CONFIRMED — top/pglog.go line 15 uses 'if !db.Local'. Task 06 uses 'app.db.Local' which is correct per app struct at top/top.go line 39: 'db *postgres.DB'.",
+      "viewSwitchHandler_must_not_be_called": "CONFIRMED — viewSwitchHandler() overwrites config.view from the static map and discards runtime patches. Task correctly implements the save/load/patch sequence inline.",
+      "toggleIdleConns_guard": "CONFIRMED — current guard at config_view.go line 302: 'if config.view.Name != activity { return nil }'. ProcPidStat SQL template uses ShowNoIdle and QueryAgeThresh variables (verified in tech-spec), so the query.Format() call inside toggleIdleConns will work correctly for procpidstat.",
+      "dialog_guard_current": "CONFIRMED — current guard at dialog.go line 51: '(d > dialogFilter && d <= dialogChangeAge) && name != activity'. dialog constants: dialogFilter=2, dialogCancelQuery=3, dialogTerminateBackend=4, dialogCancelGroup=5, dialogTerminateGroup=6, dialogSetMask=7, dialogChangeAge=8. Restructuring as described is feasible.",
+      "keybindings_uppercase": "CONFIRMED — keybindings.go lines 47-50 use 'B', 'N', 'F', 'L' as rune literals for uppercase bindings. 'S' follows the same pattern with no special modifier config.",
+      "stat_import_missing_in_config_view": "CONFIRMED MISSING — stat package not imported in config_view.go. Must be added for stat.CheckIOAvailable() and stat.CollectProcPidStat references.",
+      "printCmdline_signature": "CONFIRMED — printCmdline(g *gocui.Gui, format string, s ...any) at top/ui.go line 187. Task usage matches signature.",
+      "no_compilation_blockers": "All symbols referenced by Task 06 exist or will exist after prior waves complete: stat.CheckIOAvailable (Task 01), stat.CollectProcPidStat (Task 04), view.CollectExtra/IOAvailable fields (Task 04), 'procpidstat' view entry in view.New() (Task 04).",
+      "depends_on_correct": "CONFIRMED — depends_on: ['04'] covers all compile-time requirements. Task 01 (CheckIOAvailable) is a transitive dependency via Task 04's dependency, satisfied by Wave 1 execution order."
+    }
+  },
   "stats": {
     "tasks_checked": 3,
-    "claims_verified": 38,
-    "issues_found": 4
-  },
-  "verification_details": {
-    "file_existence": {
-      "internal/stat/cpu.go": "EXISTS — primary pattern file for task 01",
-      "internal/stat/diskstats.go": "EXISTS — secondary pattern file for task 01",
-      "internal/stat/stat.go": "EXISTS — sValue() and PGresult defined here",
-      "internal/stat/postgres.go": "EXISTS — PGresult struct definition confirmed",
-      "internal/stat/testdata/proc/": "EXISTS — directory present with golden files (diskstats, loadavg, meminfo, netdev, stat, uptime)",
-      "internal/query/activity.go": "EXISTS — QueryAgeThresh and ShowNoIdle template variables confirmed",
-      "internal/query/query.go": "EXISTS — Options struct, NewOptions(), Format() confirmed"
-    },
-    "functions_verified": {
-      "sValue(prev, curr, itv, ticks float64) float64": "EXISTS in internal/stat/stat.go line 305",
-      "parseDuration(s string) (int64, error)": "EXISTS in internal/stat/stat.go line 405",
-      "bufio.NewScanner pattern": "CONFIRMED in cpu.go line 53 and diskstats.go line 93",
-      "filepath.Clean + os.Open pattern": "CONFIRMED in diskstats.go line 80, cpu.go line 45",
-      "defer func() { _ = f.Close() }() pattern": "CONFIRMED in cpu.go lines 49-51",
-      "postgres.NewTestConnectVersion(version)": "EXISTS in internal/postgres/testing.go line 16",
-      "query.NewOptions(version, recovery, track, querylen, pgssSchema)": "EXISTS in internal/query/query.go line 37",
-      "query.Format(tmpl, opts)": "EXISTS in internal/query/query.go line 86"
-    },
-    "struct_fields_verified": {
-      "PGresult.Values [][]sql.NullString": "CORRECT — confirmed in postgres.go line 160",
-      "PGresult.Cols []string": "CORRECT",
-      "PGresult.Ncols int": "CORRECT",
-      "PGresult.Nrows int": "CORRECT",
-      "PGresult.Valid bool": "CORRECT",
-      "Options.QueryAgeThresh string": "CORRECT — confirmed in query.go line 28",
-      "Options.ShowNoIdle bool": "CORRECT — confirmed in query.go line 30",
-      "NewOptions default QueryAgeThresh": "'00:00:00.0' — confirmed in query.go line 43",
-      "NewOptions default ShowNoIdle": "true (show-no-idle = hide idle by default) — confirmed in query.go line 44"
-    },
-    "testdata_pattern": {
-      "golden_file_naming": "Existing pattern uses dot-separated suffixes: diskstats.v1.golden, loadavg.golden, loadavg.invalid. Task 01 proposes underscore names (pid_stat_space_comm) — different convention but not incorrect, just inconsistent.",
-      "test_directory": "internal/stat/testdata/proc/ EXISTS and is the correct location"
-    },
-    "proc_stat_field_indices": {
-      "parsing_method": "strings.LastIndex(line, ')') + 2 = includes state as suffix[0]",
-      "utime_index": "suffix[11] — verified with /proc/self/stat and /proc/1/stat on dev machine",
-      "stime_index": "suffix[12] — verified",
-      "task_claim": "CORRECT (indices 11 and 12 are right; only the explanatory prose is misleading)"
-    },
-    "sql_escaping": {
-      "regexp_replace_pattern": "E'\\\\s+' in raw backtick Go string sends E'\\s+' to PostgreSQL, which is correct POSIX regex whitespace class — matches existing working pattern in activity.go lines 12, 25, 38"
-    },
-    "runtime_NumCPU": {
-      "feasibility": "FEASIBLE — runtime package is stdlib with no conflicts; task correctly keeps buildProcPidResult pure by taking cpuCount as parameter"
-    },
-    "pg_version_list_in_test": {
-      "180000_in_test": "VALID — activity_test.go already includes 180000 in its version list"
-    }
+    "claims_verified": 31,
+    "issues_found": 3,
+    "critical_issues": 0,
+    "major_issues": 0,
+    "minor_issues": 3
   }
 }

@@ -1,121 +1,109 @@
 {
   "validator": "dev-task-validator",
+  "iteration": 3,
   "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
-  "tasks_checked": ["01", "02", "03", "04", "05"],
-  "iteration": 2,
+  "tasks_checked": ["01", "02", "03", "04", "05", "06", "07"],
   "status": "changes_required",
   "findings": [
     {
       "severity": "critical",
       "category": "consistency",
-      "task": "05",
-      "section": "Details / Files",
-      "issue": "itv type contradiction persists between tasks. Task 03 defines buildProcPidResult with signature `func buildProcPidResult(..., ticks float64, itv int, cpuCount int) PGresult` — itv is int. Task 05 Details/Files states 'The variable itv is float64 (matching buildProcPidResult's itv float64 parameter from Task 03)' and 'Pass itv directly — no cast needed.' This is factually wrong: the parameter is int in Task 03, not float64. An implementer following Task 05 would either fail to compile (type mismatch) or introduce an incorrect cast.",
-      "fix": "In Task 05 Details/Files section for stat.go, correct the itv description to: 'The variable itv is int (matching buildProcPidResult's itv int parameter from Task 03). Pass itv directly — no cast needed.' Remove the claim that itv is float64."
-    },
-    {
-      "severity": "critical",
-      "category": "consistency",
-      "task": "05",
-      "section": "Details / Dependencies",
-      "issue": "Stale constant value not fixed: Dependencies section still says 'Task 04: CollectProcPidStat = 5 constant in internal/stat/stat.go'. The round 1 fix was applied to Task 04 (correct value is 6 there), but Task 05 was not updated. Additionally, the top/stat.go description in Details mentions 'CollectExtra 5→0 or back (0→5)' — same stale value.",
-      "fix": "Replace all three occurrences of value '5' referring to CollectProcPidStat in Task 05: (1) Dependencies line → 'CollectProcPidStat = 6'; (2) and (3) top/stat.go description 'CollectExtra 5→0' and '0→5' → 'CollectExtra 6→0' and '0→6'."
-    },
-    {
-      "severity": "major",
-      "category": "content",
-      "task": "01",
-      "section": "Context Files",
-      "issue": "Mandatory project.md link is absent. Template requires both project.md and architecture.md under Project knowledge as always-required entries. Task 01 has overview.md, architecture.md, and patterns.md — but no project.md entry.",
-      "fix": "Add a project.md entry to the Project knowledge subsection. If the file exists at .claude/skills/project-knowledge/project.md, use '[project.md](.claude/skills/project-knowledge/project.md) — project context'. If it does not exist at that path, use '[overview.md](.claude/skills/project-knowledge/overview.md)' with clear labeling (do not mislabel it as project.md)."
-    },
-    {
-      "severity": "major",
-      "category": "content",
       "task": "03",
-      "section": "Context Files",
-      "issue": "Mandatory project.md link is absent (same issue as Task 01). Only overview.md, architecture.md, patterns.md present under Project knowledge.",
-      "fix": "Add project.md entry to Project knowledge subsection. Match the pattern from Task 04 which correctly includes '[project.md](.claude/skills/project-knowledge/project.md) — project context'."
-    },
-    {
-      "severity": "major",
-      "category": "content",
-      "task": "05",
-      "section": "Context Files",
-      "issue": "Mandatory project.md link is absent. Only overview.md, architecture.md, patterns.md present under Project knowledge.",
-      "fix": "Add project.md entry to Project knowledge subsection, same as Task 04."
+      "section": "What to do (cross-task with Task 05)",
+      "issue": "buildProcPidResult signature in Task 03 'What to do' step 2 declares `itv int`, but Task 05 Details explicitly states 'buildProcPidResult expects itv float64, so pass float64(itv) at the call site'. The round-2 fix note also confirms 'itv is int, float64(itv) cast at call site', meaning buildProcPidResult must accept float64. Task 03 signature with `itv int` contradicts this. Additionally, Task 05 'What to do' step 4 passes raw `itv` (no cast), contradicting its own Details section which says to cast. An implementer following these tasks as written will face a compile error or silent type confusion.",
+      "fix": "In Task 03 'What to do' step 2: change `itv int` to `itv float64` in the buildProcPidResult signature. In Task 05 'What to do' step 4: change `itv` to `float64(itv)` at the buildProcPidResult call site to match the Details section and the round-2 fix intent."
     },
     {
       "severity": "minor",
       "category": "content",
       "task": "02",
       "section": "Context Files",
-      "issue": "Link name/path mismatch: '[project.md](.claude/skills/project-knowledge/overview.md)' — the link text says 'project.md' but the href points to overview.md. These are different documents. The entry is misleading.",
-      "fix": "Either rename to '[overview.md](.claude/skills/project-knowledge/overview.md)' to match the actual file, or use the correct path '.claude/skills/project-knowledge/project.md' if project.md exists at that location. Do not combine a project.md name with an overview.md path."
+      "issue": "Link text/path mismatch: `[project.md](.claude/skills/project-knowledge/overview.md)` — the link text says 'project.md' but the file referenced is 'overview.md'. The project knowledge directory has no project.md file.",
+      "fix": "Change link text to match the file: `[overview.md](.claude/skills/project-knowledge/overview.md)`."
     },
     {
       "severity": "minor",
       "category": "content",
       "task": "03",
       "section": "Context Files",
-      "issue": "Feature artifact links use broken relative paths without the docs/features/... directory prefix. E.g., '[001-feat-per-process-system-stats.md](001-feat-per-process-system-stats.md)'. Tasks 01, 02, and 04 correctly use full paths like 'docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md'.",
-      "fix": "Prefix all three feature artifact link paths with 'docs/features/001-feat-per-process-system-stats/' to match the convention used in other tasks."
-    },
-    {
-      "severity": "minor",
-      "category": "content",
-      "task": "05",
-      "section": "Context Files",
-      "issue": "Feature artifact links use broken relative paths (same issue as Task 03). User-spec, tech-spec, and decisions.md links use bare filenames without the full docs/features/... prefix.",
-      "fix": "Prefix all three feature artifact link paths with 'docs/features/001-feat-per-process-system-stats/'."
+      "issue": "Feature artifact links use bare relative paths without the docs/features/... directory prefix: `[001-feat-per-process-system-stats.md](001-feat-per-process-system-stats.md)`, etc. Links are broken from the task file's location in docs/features/001-feat-per-process-system-stats/. Tasks 01, 02, 04, 06, 07 all use the full path.",
+      "fix": "Prefix all three feature artifact link hrefs with 'docs/features/001-feat-per-process-system-stats/'."
     },
     {
       "severity": "minor",
       "category": "content",
       "task": "03",
-      "section": "Post-completion",
-      "issue": "decisions.md link uses a bare relative path: '[001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md)'. Same problem as the Context Files links in this task.",
-      "fix": "Use full path in href: 'docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md'."
+      "section": "Details",
+      "issue": "Details section describes Task 01's output with lowercase `checkIOAvailable()`: 'It already contains ... `checkIOAvailable()`.' The round-2 fix exported the function as `CheckIOAvailable()` (uppercase C). This stale reference contradicts Task 01's corrected exported symbol.",
+      "fix": "Replace `checkIOAvailable()` with `CheckIOAvailable()` in the Details/Files description."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "`[project.md](.claude/skills/project-knowledge/project.md)` references a non-existent file. The project knowledge directory contains overview.md, architecture.md, patterns.md, deployment.md — no project.md. The overview.md is already listed separately in this task, making this a broken duplicate entry.",
+      "fix": "Remove the `[project.md](.claude/skills/project-knowledge/project.md)` line. The existing `[overview.md](.claude/skills/project-knowledge/overview.md)` already covers project context."
     },
     {
       "severity": "minor",
       "category": "content",
       "task": "05",
-      "section": "Post-completion",
-      "issue": "decisions.md link uses a bare relative path: '[001-feat-per-process-system-stats-decisions.md](001-feat-per-process-system-stats-decisions.md)'.",
-      "fix": "Use full path in href: 'docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md'."
+      "section": "Context Files",
+      "issue": "Feature artifact links use bare relative paths without the docs/features/... prefix (same issue as Task 03): `[001-feat-per-process-system-stats.md](001-feat-per-process-system-stats.md)`, etc. Links are broken from the task file's actual location.",
+      "fix": "Prefix all three feature artifact link hrefs with 'docs/features/001-feat-per-process-system-stats/'."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "06",
+      "section": "TDD Anchor",
+      "issue": "TDD Anchor section is present for a code-writing task but contains zero test entries — only a prose justification for why unit tests are impossible for TUI callbacks. The section header signals implementers to write tests first, but there is nothing to write. The absence of any test anchor is confusing for a code task.",
+      "fix": "Either remove the TDD Anchor section entirely (acceptable when TUI prevents all unit testing) and move the justification to Details, or add at minimum a build-time check that can be stated as an anchor, e.g., '`make build` — confirms switchViewToProcPidStat compiles and all required symbols from Tasks 01/04 are resolved'."
     },
     {
       "severity": "minor",
       "category": "content",
-      "task": "01",
-      "section": "Context Files",
-      "issue": "Files to create are listed as plain backtick text rather than markdown links: '`internal/stat/procpidstat.go` (new)', '`internal/stat/procpidstat_test.go` (new)'. Template requires all file entries in Context Files as markdown links '[name](path)'.",
-      "fix": "Convert to markdown links: '[internal/stat/procpidstat.go](internal/stat/procpidstat.go) (new)' etc. Or move new-file entries to the Details/Files section, and keep Context Files to readable/existing files only."
+      "task": "06",
+      "section": "Post-completion",
+      "issue": "The decisions.md reference in the first post-completion checklist item uses a bare backtick path rather than a markdown link: `docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md`. All other tasks use the `[name](path)` format here.",
+      "fix": "Replace the backtick path with a markdown link: `[001-feat-per-process-system-stats-decisions.md](docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-decisions.md)`."
     }
   ],
-  "round1_fixes_verified": {
-    "decisions_md_added_all_tasks": "CONFIRMED — all 5 tasks now have decisions.md in Context Files",
-    "task03_depends_on": "CONFIRMED — task 03 depends_on is now [\"01\", \"02\"]",
-    "task04_collect_proc_pid_stat_value": "CONFIRMED — Task 04 correctly states CollectProcPidStat = 6; also correctly updates record_test.go view count 21→22",
-    "task04_21_views_corrected": "CONFIRMED — Task 04 Details correctly states view.New() returns 21 existing views, new total becomes 22",
-    "task05_itv_type": "PARTIAL — Task 05 step 4 What to do no longer says float64(itv) (the explicit cast was removed), but the Details/Files section still contradicts Task 03 by claiming itv is float64. The contradiction moved from What to do into Details but was not resolved.",
-    "task04_project_md_added": "CONFIRMED — Task 04 now has project.md entry in Context Files"
+  "round2_fixes_verified": {
+    "task01_check_io_available_exported": "CONFIRMED — Task 01 correctly uses CheckIOAvailable() (uppercase) throughout",
+    "task05_itv_is_int_in_details": "CONFIRMED — Task 05 Details states 'The variable itv is int ... pass float64(itv) at the call site'",
+    "task05_collect_proc_pid_stat_value_6": "CONFIRMED — Task 05 Details references CollectProcPidStat with value 6 in the top/stat.go description ('CollectExtra 6→0' and '0→6')",
+    "all_tasks_have_decisions_md": "CONFIRMED — Tasks 01-07 all include decisions.md in Context Files",
+    "all_tasks_have_overview_md": "CONFIRMED — all tasks include overview.md in Context Files",
+    "tasks_06_07_validated_new": "NEW in iteration 3 — Tasks 06 and 07 validated for the first time"
+  },
+  "decomposition_checks": {
+    "dependency_cycles": "NONE — DAG is acyclic",
+    "wave_consistency": "CORRECT — 01:w1, 02:w1, 03:w2(deps w1), 04:w2(deps w1), 05:w3(deps w2), 06:w3(deps w2), 07:w4(deps w3)",
+    "file_conflicts_between_parallel_tasks": "NONE — Tasks 03 and 04 (both wave 2) touch different files; Tasks 05 and 06 (both wave 3) touch different files",
+    "atomicity": "PASS — all tasks within 1-4 file scope; single logical unit each",
+    "over_decomposition": "PASS — 7 tasks for feature with 5 user stories; within norms",
+    "traceability_to_tech_spec": "PASS — all tech-spec Implementation Task files accounted for across tasks 01-06",
+    "ac_carry_forward": "PASS — Task 07 AC covers all tech-spec acceptance criteria",
+    "tdd_carry_forward": "PASS — all tech-spec TDD anchors appear in Tasks 01 and 03"
   },
   "stats": {
-    "tasks_checked": 5,
-    "issues_found": 11,
+    "tasks_checked": 7,
+    "issues_found": 8,
     "by_severity": {
-      "critical": 2,
-      "major": 3,
-      "minor": 6
+      "critical": 1,
+      "major": 0,
+      "minor": 7
     },
     "by_task": {
-      "01": 2,
+      "01": 0,
       "02": 1,
       "03": 3,
-      "04": 0,
-      "05": 5
+      "04": 1,
+      "05": 1,
+      "06": 2,
+      "07": 0
     }
   }
 }

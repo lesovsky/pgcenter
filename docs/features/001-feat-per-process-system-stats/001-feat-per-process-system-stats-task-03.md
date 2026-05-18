@@ -30,7 +30,7 @@ CPU times are formatted as `HH:MM:SS` (familiar to DBA from `ps` output) via `fo
 1. Add `formatCPUTime(jiffies, ticks float64) string` to `internal/stat/procpidstat.go`. Converts accumulated jiffies to `HH:MM:SS`: `secs = int64(jiffies/ticks)`, then format as `fmt.Sprintf("%02d:%02d:%02d", secs/3600, (secs%3600)/60, secs%60)`.
 
 2. Add `buildProcPidResult()` to `internal/stat/procpidstat.go`. Signature:
-   `func buildProcPidResult(activity PGresult, prevStats, currStats map[int]ProcPidStat, prevIO, currIO map[int]ProcPidIO, ioAvailable bool, ticks float64, itv int, cpuCount int) PGresult`
+   `func buildProcPidResult(activity PGresult, prevStats, currStats map[int]ProcPidStat, prevIO, currIO map[int]ProcPidIO, ioAvailable bool, ticks float64, itv float64, cpuCount int) PGresult`
 
    The function iterates over activity rows and for each row:
    - Validates PID from col 0 via `strconv.Atoi` + `pid > 0`; on failure sets all procfs columns to `"0"` / `""`
@@ -105,7 +105,7 @@ Write these tests first, verify they fail, then implement until they pass.
 
 **Files:**
 
-- `internal/stat/procpidstat.go` — Created by task 01. It already contains `ProcPidStat`, `ProcPidIO` structs, `readProcPidStat(pid int)`, `readProcPidIO(pid int)`, and `checkIOAvailable()`. Add `formatCPUTime` and `buildProcPidResult` here. The file is in `package stat`.
+- `internal/stat/procpidstat.go` — Created by task 01. It already contains `ProcPidStat`, `ProcPidIO` structs, `readProcPidStat(pid int)`, `readProcPidIO(pid int)`, and `CheckIOAvailable()`. Add `formatCPUTime` and `buildProcPidResult` here. The file is in `package stat`.
 
 - `internal/stat/procpidstat_test.go` — Created by task 01. Extend with new test functions for `formatCPUTime` and `buildProcPidResult`.
 

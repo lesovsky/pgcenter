@@ -59,7 +59,7 @@ Write these tests first, verify they fail before implementation, then pass after
 
 - `internal/stat/stat_test.go::TestCollectorResetClearsPIDMaps` — after populating all four PID maps manually via direct struct field assignment (requires test in same package), call `c.Reset()`; assert all four maps have `len == 0` and are non-nil
 - `internal/stat/stat_test.go::TestCollectorUpdateNoEnrichment` — call `c.Update()` with a view where `CollectExtra == CollectNone` and a real PG test connection; assert `s.Pgstat.Result.Ncols` does not equal 17 (it equals the column count of the SQL query for that view)
-- `internal/stat/stat_test.go::TestCollectorUpdateProcPidStat17Cols` — call `c.Update()` with a view where `CollectExtra == CollectProcPidStat`, `IOAvailable == true`, using a real local PG connection (`NewTestConnect()`); assert `s.Pgstat.Result.Ncols == 17` and no panic occurs
+- `internal/stat/stat_test.go::TestCollectorUpdateProcPidStat17Cols` — call `c.Update()` with a view where `CollectExtra == CollectProcPidStat`, `IOAvailable == true`, using a real local PG connection (`postgres.NewTestConnect()`); assert `s.Pgstat.Result.Ncols == 17` and no panic occurs
 
 ## Acceptance Criteria
 
