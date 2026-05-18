@@ -286,6 +286,22 @@ func formatInfoString(cfg postgres.Config, state, version, uptime, recovery stri
 	)
 }
 
+// alignViewToResult ensures config.view.ColsWidth is consistent with r.Ncols.
+// It is called before every render. The Aligned flag alone is insufficient because
+// after a view switch the first stat batch may still carry the OLD view's column
+// count: SetAlign then populates ColsWidth for the wrong number of columns, and the
+// next batch (with the correct column count) skips realignment and reads zero widths
+// for missing keys — causing "slice bounds out of range [:-1]" (issue #99).
+func alignViewToResult(config *config, r stat.PGresult) {
+	if config.view.Aligned && len(config.view.ColsWidth) == r.Ncols {
+		return
+	}
+	widthes, cols := align.SetAlign(r, 1000, false) // high limit avoids truncating the last value
+	config.view.Cols = cols
+	config.view.ColsWidth = widthes
+	config.view.Aligned = true
+}
+
 // printDbstat prints main Postgres stats on UI.
 func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	// If reading stats failed, print the error occurred and return.
@@ -299,12 +315,7 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	}
 
 	// Align values within columns, use fixed aligning instead of dynamic.
-	if !config.view.Aligned {
-		widthes, cols := align.SetAlign(s.Result, 1000, false) // use high limit (1000) to avoid truncating last value.
-		config.view.Cols = cols
-		config.view.ColsWidth = widthes
-		config.view.Aligned = true
-	}
+	alignViewToResult(config, s.Result)
 
 	// Print header.
 	err := printStatHeader(v, s, config)
