@@ -1,0 +1,494 @@
+interview_metadata:
+  feature_name: "per-process-system-stats"
+  feature_base: "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats"
+  work_type: "feature"
+  started: "2026-05-18 15:50:29"
+  last_updated: "2026-05-18 15:50:29"
+  status: "completed"
+  can_resume: false
+  current_question_num: 22
+  feature_size: "L"
+
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-05-18 15:00:00"
+    topic: "feature_description"
+    agent_question: |
+      Опиши, что хочешь сделать — issues #118 и #123?
+    user_answer: |
+      Нужно добавить отдельный экран в pgcenter top, который показывает список
+      postgres-бэкендов с утилизацией CPU и IO из procfs. Статистика блочных устройств
+      (Shift+B) не привязана к процессам — нужна per-process статистика.
+    summary: "Новый TUI-экран: PG-бэкенды + CPU/IO из /proc"
+
+  - question_num: 2
+    timestamp: "2026-05-18 15:05:00"
+    topic: "scope_backends"
+    agent_question: |
+      Какие бэкенды показывать — только активные или все?
+    user_answer: |
+      Все бэкенды. Фильтры через хоткеи: I — скрыть idle-процессы, A — фильтр по возрасту
+      (пользователь вводит значение, как на activity-экране).
+    summary: "Все бэкенды; I=filter idle, A=filter by age"
+
+  - question_num: 3
+    timestamp: "2026-05-18 15:08:00"
+    topic: "remote_mode"
+    agent_question: |
+      Remote mode — читать через PL/Perl?
+    user_answer: |
+      Нет, только local mode. Ограничение фиксируем в документации.
+    summary: "Local mode only, ограничение документируем"
+
+  - question_num: 4
+    timestamp: "2026-05-18 15:12:00"
+    topic: "cpu_columns"
+    agent_question: |
+      Какие колонки CPU? /proc/[pid]/stat даёт utime/stime, /proc/[pid]/delays — iowait.
+    user_answer: |
+      all (non-idle), us (user), sy (system), wa (iowait через delay accounting).
+      "ot" (other) не нужен — ni/si/st недоступны на уровне процесса.
+    summary: "CPU: all, us, sy, wa (delay accts)"
+
+  - question_num: 5
+    timestamp: "2026-05-18 15:15:00"
+    topic: "io_columns"
+    agent_question: |
+      IO-колонки по pidstat -d?
+    user_answer: |
+      kB_rd/s, kB_wr/s, kB_ccwr/s, iodelay — но с неймингом, характерным для pgcenter.
+    summary: "IO: read/write/ccwr KiB rates + iodelay"
+
+  - question_num: 6
+    timestamp: "2026-05-18 15:18:00"
+    topic: "parallel_workers"
+    agent_question: |
+      Параллельные воркеры — агрегировать или отдельными строками?
+    user_answer: |
+      Каждый воркер отдельной строкой.
+    summary: "Каждый воркер отдельной строкой"
+
+  - question_num: 7
+    timestamp: "2026-05-18 15:20:00"
+    topic: "pg_columns"
+    agent_question: |
+      Какие колонки из pg_stat_activity?
+    user_answer: |
+      pid, datname, usename, state, wait_event_type, wait_event, query (последней).
+    summary: "7 колонок из pg_stat_activity"
+
+  - question_num: 8
+    timestamp: "2026-05-18 15:25:00"
+    topic: "delay_accts"
+    agent_question: |
+      CONFIG_TASK_DELAY_ACCTS — что делать если выключен?
+    user_answer: |
+      Определять при старте. Если выключен — писать warning при запуске, wa/iodelay
+      показывать пустыми. all = us + sy в этом случае.
+    summary: "Детект при старте, warning, empty wa/iodelay если нет delay_accts"
+
+  - question_num: 9
+    timestamp: "2026-05-18 15:28:00"
+    topic: "aux_processes"
+    agent_question: |
+      Checkpointer, bgwriter, WAL writer — они не в pg_stat_activity?
+    user_answer: |
+      Смириться, что их нет. Фиксируем как ограничение.
+    summary: "Aux-процессы не показываем, это ограничение"
+
+  - question_num: 10
+    timestamp: "2026-05-18 15:30:00"
+    topic: "hotkey"
+    agent_question: |
+      Shift+B занят. Какой хоткей для открытия экрана?
+    user_answer: |
+      Shift+S (System Stats). Показывать в главной области, не в нижней панели.
+    summary: "Shift+S, главная область"
+
+  - question_num: 11
+    timestamp: "2026-05-18 15:32:00"
+    topic: "age_filter"
+    agent_question: |
+      Фильтр по возрасту — порог фиксированный или пользователь вводит?
+    user_answer: |
+      Пользователь вводит значение, логика как на activity-экране.
+    summary: "A-фильтр: user input, как на activity"
+
+  - question_num: 12
+    timestamp: "2026-05-18 15:34:00"
+    topic: "default_sort"
+    agent_question: |
+      Сортировка по умолчанию?
+    user_answer: |
+      По pid — обычное поведение для всех экранов.
+    summary: "Default sort: pid ascending"
+
+  - question_num: 13
+    timestamp: "2026-05-18 15:38:00"
+    topic: "cpu_normalization"
+    agent_question: |
+      На multi-core: 400% или нормализуем?
+    user_answer: |
+      Нормализуем, 0–100% легче воспринимается.
+    summary: "CPU normalized 0-100% by CPU count"
+
+  - question_num: 14
+    timestamp: "2026-05-18 15:40:00"
+    topic: "summary_header"
+    agent_question: |
+      Строка-заголовок с агрегатами над таблицей?
+    user_answer: |
+      Да, показывается всегда — независимо от выбранного экрана (существующее поведение).
+    summary: "Summary header row — стандартное поведение, не меняем"
+
+  - question_num: 15
+    timestamp: "2026-05-18 15:42:00"
+    topic: "record_report"
+    agent_question: |
+      Record/report поддерживать?
+    user_answer: |
+      Да, поддерживаем. Интервал — тот же механизм.
+    summary: "Record/report поддерживается, стандартный интервал"
+
+  - question_num: 16
+    timestamp: "2026-05-18 15:45:00"
+    topic: "iodelay_format"
+    agent_question: |
+      iodelay — rate (ms/s) или accumulated (HH:MM:SS)?
+    user_answer: |
+      Оба — как на statements-экране: accumulated + rate группы. 19 колонок итого.
+    summary: "Паттерн statements: accumulated + rate группы"
+
+  - question_num: 17
+    timestamp: "2026-05-18 15:48:00"
+    topic: "cpu_rate_units"
+    agent_question: |
+      CPU rate — ms или %?
+    user_answer: |
+      Проценты (%). Была ошибка в именовании.
+    summary: "CPU rate: %, не ms"
+
+  - question_num: 18
+    timestamp: "2026-05-18 15:52:00"
+    topic: "column_layout"
+    agent_question: |
+      19 колонок — горизонтальный скроллинг есть?
+    user_answer: |
+      Нет. Но на t-экране тоже 19 колонок — влезает. Используем один экран.
+      wait_event_type → wait_etype чтобы сэкономить ширину.
+    summary: "Один экран, 19 колонок, wait_etype"
+
+  - question_num: 19
+    timestamp: "2026-05-18 15:55:00"
+    topic: "accumulated_cpu_units"
+    agent_question: |
+      all_total/us_total/sy_total — единицы?
+    user_answer: |
+      HH:MM:SS — как ps показывает accumulated CPU time.
+    summary: "Accumulated CPU: HH:MM:SS format"
+
+  - question_num: 20
+    timestamp: "2026-05-18 15:57:00"
+    topic: "process_disappear"
+    agent_question: |
+      Бэкенд исчез между тиками — что делаем?
+    user_answer: |
+      Строка пропадает на следующем обновлении, как на activity-экране.
+    summary: "Строка пропадает — стандартное поведение"
+
+  - question_num: 21
+    timestamp: "2026-05-18 16:10:00"
+    topic: "iodelay_scope_change"
+    agent_question: |
+      В ходе валидации спецификации обнаружено: /proc/[pid]/delays не существует в Linux.
+      Delay accounting доступен только через Netlink taskstats API (AF_NETLINK/NETLINK_GENERIC),
+      которого нет в codebase. Это значит iodelay_total и iodelay требуют существенно
+      большего объёма работ. Предлагаю варианты: оставить в scope (принять сложность),
+      убрать из v1 (только CPU + read/write), или частичный аналог.
+    user_answer: |
+      Убрать iodelay из v1, добавить только CPU + basic IO (read/write). ccwr — НЕ нужен.
+    summary: "iodelay убран из v1 (нет /proc/[pid]/delays, нужен Netlink). ccwr тоже убран. wa% исключается вместе с iodelay."
+    alternatives_considered: |
+      Рассматривали реализацию через Netlink taskstats — отклонено (нет в codebase, большой scope).
+      Рассматривали прокси-метрики — отклонено (нет адекватного аналога в procfs).
+
+  - question_num: 22
+    timestamp: "2026-05-18 16:15:00"
+    topic: "record_report_scope_change"
+    agent_question: |
+      Record/report: рекордер pgcenter работает только через SQL-запросы к view.Views.
+      Слияние PG + procfs происходит в TUI-слое, а не в рекордере. Интеграция потребует
+      расширения архитектуры рекордера. Что делаем: исключить из v1, записывать только
+      SQL-часть, или расширять рекордер?
+    user_answer: |
+      Давай исключим из v1.
+    summary: "Record/report исключён из v1 — несовместимо с архитектурой рекордера. Отдельный issue для следующей версии."
+    alternatives_considered: |
+      Запись только SQL-части (pg_stat_activity без CPU/IO) — отклонено (неполная картина, вводит в заблуждение).
+      Расширение архитектуры рекордера — отклонено (большой scope для v1).
+
+phase1_feature_overview:
+  feature_description:
+    score: 95
+    status: complete
+    value: |
+      Новый TUI-экран "Per-process system stats" (Shift+S) в pgcenter top.
+      Показывает все PostgreSQL-бэкенды из pg_stat_activity с метриками CPU и IO
+      из procfs (/proc/[pid]/stat, /proc/[pid]/io, /proc/[pid]/delays).
+      Closes issues #118 и #123.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: complete
+    value: |
+      DBA видит долгий запрос в pg_stat_activity, но не может понять — процесс жрёт CPU
+      или ждёт IO. Существующий Shift+B показывает статистику блочных устройств целиком,
+      без привязки к отдельным процессам. Нужна per-process диагностика.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 85
+    status: complete
+    value: "PostgreSQL DBA, занимающиеся troubleshooting производительности на Linux"
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: complete
+    value: |
+      - Shift+S открывает новый экран с 19 колонками
+      - CPU и IO метрики совпадают с данными pidstat для тех же PID
+      - Фильтры I и A работают корректно
+      - Данные пишутся в record и читаются в report
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 95
+    status: complete
+    value: |
+      - Только local mode (procfs недоступен при remote monitoring)
+      - Aux-процессы (checkpointer, bgwriter, WAL writer, archiver) не отображаются —
+        они отсутствуют в pg_stat_activity
+      - wa и iodelay недоступны без CONFIG_TASK_DELAY_ACCTS=y в ядре
+      - Нет горизонтального скроллинга в TUI
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 85
+    status: complete
+    value: |
+      L (новая архитектура: новый экран, новый источник данных).
+      Unit-тесты: парсинг /proc/[pid]/stat, /proc/[pid]/io, /proc/[pid]/delays,
+      детект CONFIG_TASK_DELAY_ACCTS, вычисление rate/accumulated метрик.
+      Интеграционные тесты: сбор данных с реального procfs (своим PID процесса тестов).
+      E2E: ручная проверка TUI (агент не может тестировать TUI).
+    gaps: ""
+    required: true
+
+phase2_user_experience:
+  user_stories:
+    score: 90
+    status: complete
+    value: |
+      1. Как DBA, я хочу видеть утилизацию CPU каждого PG-бэкенда в реальном времени,
+         чтобы быстро найти виновника CPU-нагрузки без переключения на внешние инструменты.
+      2. Как DBA, я хочу видеть IO-активность каждого бэкенда (read/write/iodelay),
+         чтобы отличить CPU-bound запросы от IO-bound.
+      3. Как DBA, я хочу видеть накопленные (accumulated) метрики CPU и IO с момента
+         старта бэкенда, чтобы понять общий вклад процесса в нагрузку за всё время жизни.
+      4. Как DBA, я хочу фильтровать idle-процессы хоткеем I, чтобы сосредоточиться
+         на активных бэкендах.
+      5. Как DBA, я хочу фильтровать бэкенды по возрасту (хоткей A), чтобы видеть
+         только долгоживущие процессы.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 90
+    status: complete
+    value: |
+      - Shift+S открывает экран "Per-process system stats" в главной области
+      - Экран отображает 19 колонок в порядке: pid, datname, usename, state, wait_etype,
+        wait_event, all_total, us_total, sy_total, read_total, write_total, iodelay_total,
+        all%, us%, sy%, read, write, iodelay, query
+      - CPU rate-колонки нормализованы 0–100% с учётом числа CPU
+      - Accumulated CPU колонки в формате HH:MM:SS
+      - Accumulated IO колонки в KiB, iodelay в ms
+      - При отсутствии CONFIG_TASK_DELAY_ACCTS — wa-колонки пустые, выводится warning
+      - Хоткей I скрывает/показывает idle-бэкенды (state='idle')
+      - Хоткей A запрашивает порог возраста, фильтрует бэкенды моложе порога
+      - Сортировка по умолчанию — по pid по возрастанию
+      - Данные экрана пишутся pgcenter record и отображаются в pgcenter report
+      - При remote-подключении экран недоступен (предупреждение пользователю)
+      - Бэкенд, завершившийся между тиками, исчезает на следующем обновлении
+      - Параллельные воркеры отображаются отдельными строками
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 85
+    status: complete
+    value: |
+      - CONFIG_TASK_DELAY_ACCTS выключен: wa/iodelay пустые, all% = us% + sy%
+      - Бэкенд завершился между двумя тиками: строка пропадает (нет аварий)
+      - Параллельный запрос: N воркеров видны как N строк с разными PID
+      - Remote mode: экран недоступен, показываем предупреждение
+      - Idle-бэкенд с CPU=0 и IO=0: корректно отображается, фильтруется по I
+      - Очень большое количество бэкендов (>100): отображается стандартная прокрутка TUI
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 85
+    status: complete
+    value: |
+      - /proc/[pid]/stat недоступен (процесс завершился в момент чтения): пропускаем,
+        строка исчезнет на следующем тике
+      - /proc/[pid]/delays недоступен (нет прав или нет CONFIG_TASK_DELAY_ACCTS):
+        wa/iodelay = пусто, warning при старте
+      - Remote подключение: экран не активируется, показываем сообщение об ограничении
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 85
+    status: complete
+    value: |
+      Агент: unit-тесты парсинга procfs, unit-тесты вычисления метрик.
+      Пользователь: запустить pgcenter top → Shift+S, сравнить CPU% с `pidstat -u 1 -p <pid>`,
+      сравнить IO с `pidstat -d 1 -p <pid>`, проверить фильтры I и A.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: complete
+    value: |
+      Экран "Per-process system stats":
+      - Открывается по Shift+S, занимает главную область TUI (не нижняя панель)
+      - Строка-заголовок (summary row) отображается всегда — стандартное поведение
+      - 19 колонок в одну строку: pid, datname, usename, state, wait_etype, wait_event,
+        [accumulated: all_total(HH:MM:SS), us_total(HH:MM:SS), sy_total(HH:MM:SS),
+        read_total(KiB), write_total(KiB), iodelay_total(ms)],
+        [rate: all(%), us(%), sy(%), read(KiB/s), write(KiB/s), iodelay(ms)],
+        query
+      - Ширина колонок адаптирована под терминал (как на t-экране с 19 колонками)
+      - Сортировка кликом или стрелками — стандартный механизм pgcenter
+      - Фильтр I — toggle (включён/выключен, индикатор в строке состояния)
+      - Фильтр A — диалог ввода порога (секунды), аналогично age-фильтру на activity
+      - При недоступности delay accounting: в заголовке колонок wa/iodelay пометка "n/a"
+        или пустые значения, warning в строке статуса при открытии экрана
+    gaps: ""
+    required: true
+
+  risks:
+    score: 85
+    status: complete
+    value: |
+      - CONFIG_TASK_DELAY_ACCTS может быть выключен на production-ядрах: митигация —
+        graceful degradation (empty wa/iodelay + warning)
+      - 19 колонок могут не влезть на узких терминалах (<200 символов):
+        митигация — тест на разных размерах, при необходимости уменьшить ширину колонок
+      - /proc/[pid]/io требует CAP_NET_ADMIN или прав на чтение: обычно доступен
+        для своего пользователя; если нет — graceful empty
+      - Точность IO-метрик: /proc/[pid]/io считает syscall bytes, а не фактический
+        дисковый IO (page cache может скрывать реальный диск): документируем семантику
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: complete
+    value: |
+      - Только local mode (не PL/Perl) — procfs физически недоступен удалённо
+      - Aux-процессы (checkpointer и др.) не показываем — их нет в pg_stat_activity;
+        документируем как ограничение
+      - CPU нормализован 0–100% — диапазон интуитивнее для DBA, чем N*100%
+      - Паттерн accumulated + rate (как statements-экран) — даёт полную картину
+      - Каждый параллельный воркер — отдельная строка (не агрегируем под лидера)
+      - Единицы accumulated CPU — HH:MM:SS (как ps, привычно для DBA)
+      - wait_event_type сокращён до wait_etype для экономии ширины
+      - Детект CONFIG_TASK_DELAY_ACCTS при старте, не при переключении экрана
+    gaps: ""
+    required: false
+
+phase3_integration:
+  integration_points:
+    score: 90
+    status: complete
+    value: |
+      - Новый экран интегрируется в top/ наравне с activity, tables, indexes и др.
+      - Данные из двух источников: pg_stat_activity (SQL) + procfs (filesystem)
+      - Ключ JOIN: pid из pg_stat_activity → /proc/[pid]/ в procfs
+      - Вписывается в существующий цикл: collect → diff → view → render
+      - Участвует в record/report подсистеме как именованная секция
+      - Хоткей Shift+S регистрируется в общем хоткей-маппинге top
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 85
+    status: complete
+    value: |
+      - pg_stat_activity (существующий SQL-запрос, возможно расширить колонками)
+      - internal/stat/ — добавить procfs-ридер
+      - internal/view/ — добавить определение нового экрана
+      - top/ — регистрация хоткея Shift+S и логика переключения
+      - pgcenter record/report — регистрация нового источника данных
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 90
+    status: complete
+    value: |
+      Из pg_stat_activity: pid, datname, usename, state, wait_event_type, wait_event,
+      backend_start (для accumulated расчётов), query_start, query.
+      Из /proc/[pid]/stat: utime (jiffies), stime (jiffies); плюс uptime для нормализации.
+      Из /proc/[pid]/io: read_bytes, write_bytes, cancelled_write_bytes.
+      Из /proc/[pid]/delays: blkio_delay_total (nanoseconds); требует CONFIG_TASK_DELAY_ACCTS.
+      Из /proc/stat: cpu_count (для нормализации CPU%).
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 90
+    status: complete
+    value: "Нет. Новый экран, существующие данные и конфиги не меняются."
+    gaps: ""
+    required: false
+
+phase4_completion:
+  userspec_file: "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats.md"
+  status: "created"
+
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+
+progress:
+  current_phase: "phase4_completion"
+  questions_asked: 20
+  last_question: "accumulated CPU units format"
+  completion_estimate: "100%"
+
+notes: |
+  Вся информация получена в ходе buddy-сессии (brainstorming) до запуска spec-writer.
+  Ключевые решения:
+  - 19 колонок допустимо — аналог t-экрана (tables) который тоже имеет 19 колонок
+  - CONFIG_TASK_DELAY_ACCTS: graceful degradation, не блокирует фичу
+  - Паттерн accumulated+rate взят со statements-экрана
+  - Hotkey Shift+S свободен
+  - Issues: #118 (CPU per backend), #123 (IO per backend)
