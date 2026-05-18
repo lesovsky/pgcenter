@@ -33,7 +33,7 @@ This task produces no behavior visible to the user yet. The parsers are consumed
    - `ProcPidIO` struct with fields `ReadBytes float64` and `WriteBytes float64` (from `/proc/[pid]/io`)
    - `readProcPidStat(pid int) (ProcPidStat, error)` — opens `/proc/<pid>/stat`, finds the last `)` to handle comm names with spaces, splits the suffix, extracts utime (suffix index 11) and stime (suffix index 12)
    - `readProcPidIO(pid int) (ProcPidIO, error)` — opens `/proc/<pid>/io`, reads key-value pairs line by line, extracts `read_bytes` and `write_bytes`
-   - `checkIOAvailable() error` — opens `/proc/self/io` and returns nil if readable, or the OS error (expected: `EACCES` when not running as the postgres user)
+   - `CheckIOAvailable() error` — opens `/proc/self/io` and returns nil if readable, or the OS error (expected: `EACCES` when not running as the postgres user)
 
 2. Create golden test data files in `internal/stat/testdata/proc/`:
    - A golden file for `/proc/[pid]/stat` with a comm name that includes spaces (e.g., `(my proc name)`)
@@ -45,7 +45,7 @@ This task produces no behavior visible to the user yet. The parsers are consumed
 3. Create `internal/stat/procpidstat_test.go` with:
    - Unit tests for `readProcPidStat` using each golden file (space-in-comm, normal, malformed)
    - Unit tests for `readProcPidIO` using each golden file (valid, missing key)
-   - Integration tests: `readProcPidStat(os.Getpid())` returns non-error with Utime+Stime >= 0; `readProcPidIO(os.Getpid())` returns non-error with ReadBytes+WriteBytes >= 0; `checkIOAvailable()` returns nil
+   - Integration tests: `readProcPidStat(os.Getpid())` returns non-error with Utime+Stime >= 0; `readProcPidIO(os.Getpid())` returns non-error with ReadBytes+WriteBytes >= 0; `CheckIOAvailable()` returns nil
 
 ## TDD Anchor
 
@@ -58,7 +58,7 @@ Write these tests first (they must fail before implementation, pass after):
 - `internal/stat/procpidstat_test.go::TestReadProcPidIOMissingKey` — golden file missing `write_bytes`; verifies error is returned
 - `internal/stat/procpidstat_test.go::TestReadProcPidStatIntegration` — calls `readProcPidStat(os.Getpid())`; verifies no error and Utime+Stime >= 0
 - `internal/stat/procpidstat_test.go::TestReadProcPidIOIntegration` — calls `readProcPidIO(os.Getpid())`; verifies no error and ReadBytes+WriteBytes >= 0
-- `internal/stat/procpidstat_test.go::TestCheckIOAvailable` — calls `checkIOAvailable()`; verifies no error (test process can always read `/proc/self/io`)
+- `internal/stat/procpidstat_test.go::TestCheckIOAvailable` — calls `CheckIOAvailable()`; verifies no error (test process can always read `/proc/self/io`)
 
 ## Acceptance Criteria
 
@@ -68,7 +68,7 @@ Write these tests first (they must fail before implementation, pass after):
 - [ ] `readProcPidStat(pid int)` returns an error on malformed input (no panic, no silent zero)
 - [ ] `readProcPidIO(pid int)` correctly extracts `read_bytes` and `write_bytes` from key-value pairs
 - [ ] `readProcPidIO(pid int)` returns an error when a required key is missing
-- [ ] `checkIOAvailable()` returns nil when `/proc/self/io` is readable
+- [ ] `CheckIOAvailable()` returns nil when `/proc/self/io` is readable
 - [ ] All unit tests pass using golden files from `internal/stat/testdata/proc/`
 - [ ] Integration tests pass: `readProcPidStat(os.Getpid())` and `readProcPidIO(os.Getpid())` return no error
 - [ ] `go test ./internal/stat/... -run ProcPid` passes with no failures
@@ -114,7 +114,7 @@ Write these tests first (they must fail before implementation, pass after):
 - `ProcPidIO` — two float64 fields: `ReadBytes`, `WriteBytes` (raw bytes)
 - `readProcPidStat(pid int)`: open `/proc/<pid>/stat` via `fmt.Sprintf` with integer pid; read the single line; find the last `)`; everything after `") "` is the suffix; split suffix by whitespace; utime is at suffix index 11, stime at index 12 (0-based); parse both as float64 via `strconv.ParseFloat`
 - `readProcPidIO(pid int)`: open `/proc/<pid>/io`; scan line by line; split each line on `": "`; accumulate `read_bytes` and `write_bytes` values; return error if either key is not found
-- `checkIOAvailable()`: open `/proc/self/io` and close it immediately; return the error (nil = readable, EACCES = not permitted)
+- `CheckIOAvailable()`: open `/proc/self/io` and close it immediately; return the error (nil = readable, EACCES = not permitted)
 
 `internal/stat/testdata/proc/` (new directory):
 - `pid_stat_space_comm` — realistic `/proc/[pid]/stat` line where field 2 is `(my proc name)` with spaces; must have at least 15 fields after stripping `pid (comm) state`
@@ -135,7 +135,7 @@ Write these tests first (they must fail before implementation, pass after):
 **Edge cases:**
 - Comm with spaces: `(my great process)` — naive `strings.Fields` split would miscount field indices; must use last `)` to find the boundary
 - Process disappears between `pg_stat_activity` query and procfs read: `os.Open` returns an error; caller (Task 3/5) skips the row — this parser just returns the error
-- `/proc/[pid]/io` EACCES: `checkIOAvailable()` surfaces this; individual `readProcPidIO` calls may also fail per-PID if the race is between startup check and collection tick
+- `/proc/[pid]/io` EACCES: `CheckIOAvailable()` surfaces this; individual `readProcPidIO` calls may also fail per-PID if the race is between startup check and collection tick
 - Empty or zero-byte procfs lines are not expected on Linux, but a short line should still return an error rather than index out of bounds
 
 **Implementation hints:**

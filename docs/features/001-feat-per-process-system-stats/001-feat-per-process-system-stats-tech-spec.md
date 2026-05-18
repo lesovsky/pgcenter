@@ -43,7 +43,7 @@ onto the view record after `viewSwitchHandler` loads it from the views map, sinc
 ```
 User presses 'S'
   → switchViewToProcPidStat(app)        [guard: db.Local == true]
-      ioErr := checkIOAvailable()        [reads /proc/self/io once]
+      ioErr := CheckIOAvailable()        [reads /proc/self/io once]
       if ioErr != nil → printCmdline(warning), ioAvail = false
       // 1. Save current view, load procpidstat from static map (viewSwitchHandler pattern)
       config.views[config.view.Name] = config.view
@@ -159,7 +159,7 @@ couples `internal/stat` to string names); reuse `ShowExtra` iota (rejected — `
 triggers side-panel creation in `top/ui.go`).
 
 ### Decision 2: IOAvailable carried via view.View.IOAvailable bool
-**Decision:** Add `IOAvailable bool` to `view.View`. Check `checkIOAvailable()` once in
+**Decision:** Add `IOAvailable bool` to `view.View`. Check `CheckIOAvailable()` once in
 `switchViewToProcPidStat()`, set the field, send the view on `viewCh`. Collector reads
 `view.IOAvailable` each tick.
 **Rationale:** `Collector` is not accessible from `top/` — it lives inside the `collectStat`
@@ -338,7 +338,7 @@ is read from `view.IOAvailable` each tick (re-read from view in case of future v
 
 - `readProcPidStat(os.Getpid())` → Utime+Stime > 0, no error
 - `readProcPidIO(os.Getpid())` → ReadBytes+WriteBytes ≥ 0, no error
-- `checkIOAvailable()` → no error (test process always reads `/proc/self/io`)
+- `CheckIOAvailable()` → no error (test process always reads `/proc/self/io`)
 
 ### E2E tests
 None — TUI cannot be automated.
@@ -377,7 +377,7 @@ that is a no-op for all existing views.
 | Risk | Mitigation |
 |------|-----------|
 | `/proc/[pid]/stat` comm with spaces → wrong field indices | Parse by finding last `)`, split suffix; golden file test covers this |
-| `/proc/[pid]/io` EACCES (default Linux ptrace_scope=1) | `checkIOAvailable()` on screen open, single warning, graceful empty IO columns |
+| `/proc/[pid]/io` EACCES (default Linux ptrace_scope=1) | `CheckIOAvailable()` on screen open, single warning, graceful empty IO columns |
 | `itv=0` division by zero in `sValue` | Guard in `buildProcPidResult`: if `itv==0` → rate = "0" |
 | First-tick 17-col vs 7-col Ncols mismatch → panic (#99 class) | `buildProcPidResult` always returns 17-col result; guaranteed by test |
 | Stale PID memory growth at high churn | Snapshot map cleanup before each swap (Decision 5) |
@@ -409,7 +409,7 @@ that is a no-op for all existing views.
 ### Wave 1 (independent)
 
 #### Task 1: Procfs parser types and reader functions
-- **Description:** Create `internal/stat/procpidstat.go` with `ProcPidStat`, `ProcPidIO` structs, `readProcPidStat(pid int)` parsing `/proc/[pid]/stat` (handle comm with spaces via last-`)` method), `readProcPidIO(pid int)` parsing `/proc/[pid]/io`, and `checkIOAvailable()` reading `/proc/self/io`. Add unit tests with golden files in `internal/stat/testdata/proc/` and integration tests using `os.Getpid()`.
+- **Description:** Create `internal/stat/procpidstat.go` with `ProcPidStat`, `ProcPidIO` structs, `readProcPidStat(pid int)` parsing `/proc/[pid]/stat` (handle comm with spaces via last-`)` method), `readProcPidIO(pid int)` parsing `/proc/[pid]/io`, and `CheckIOAvailable()` reading `/proc/self/io`. Add unit tests with golden files in `internal/stat/testdata/proc/` and integration tests using `os.Getpid()`.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/... -run ProcPid`
@@ -453,7 +453,7 @@ that is a no-op for all existing views.
 - **Files to read:** `internal/stat/stat.go` (Collector, Update, Reset), `top/stat.go` (collectStat, ShowExtra change-detection), `internal/stat/procpidstat.go`
 
 #### Task 6: Hotkey, local-mode guard, and filter guard extensions
-- **Description:** Add `'S'` keybinding in `top/keybindings.go`. Implement `switchViewToProcPidStat(app)` in `top/config_view.go` following Decision 2: guard `db.Local`, call `checkIOAvailable()`, load view from static map, patch `CollectExtra` and `IOAvailable`, set as current view, send on `viewCh`. Extend `toggleIdleConns` guard for `"procpidstat"`. In `top/dialog.go`, isolate `dialogChangeAge` guard per Decision 7. Update `top/help.go`.
+- **Description:** Add `'S'` keybinding in `top/keybindings.go`. Implement `switchViewToProcPidStat(app)` in `top/config_view.go` following Decision 2: guard `db.Local`, call `CheckIOAvailable()`, load view from static map, patch `CollectExtra` and `IOAvailable`, set as current view, send on `viewCh`. Extend `toggleIdleConns` guard for `"procpidstat"`. In `top/dialog.go`, isolate `dialogChangeAge` guard per Decision 7. Update `top/help.go`.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `make build && make lint`
