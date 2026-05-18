@@ -289,8 +289,11 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 }
 
 // readMeta creates metadata object from stat.PGresult.
+// The metadata query SelectCommonProperties had 7 columns before cbfa0a4 (without
+// shared_preload_libraries) and 8 columns after. Accept any result with at least 2
+// columns so that tar files recorded with either version can be read.
 func readMeta(res stat.PGresult) (metadata, error) {
-	if res.Nrows != 1 || res.Ncols != 7 {
+	if res.Nrows != 1 || res.Ncols < 2 {
 		return metadata{}, fmt.Errorf("invalid result")
 	}
 
