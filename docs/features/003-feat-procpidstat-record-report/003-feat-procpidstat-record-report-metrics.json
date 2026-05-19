@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "003",
+    "feature_name": "procpidstat-record-report",
+    "feature_base": "docs/features/003-feat-procpidstat-record-report/003-feat-procpidstat-record-report",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "claude-sonnet-4-6",
+    "date_started": "2026-05-19",
+    "date_completed": ""
+  },
+  "phases": {
+    "user_spec": {
+      "started_at": "2026-05-19 17:18:34",
+      "completed_at": null,
+      "duration_min": null
+    },
+    "tech_spec": null,
+    "task_decomposition": null,
+    "feature_execution": null,
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": {},
+    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_rounds": {},
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 0,
+    "tasks_count": 0,
+    "waves_count": 0,
+    "agents_spawned": 0,
+    "commits_count": 0
+  }
+}

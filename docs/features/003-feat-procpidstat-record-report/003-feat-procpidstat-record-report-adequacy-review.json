@@ -1,0 +1,28 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "sizing",
+      "severity": "minor",
+      "issue": "MVC split of buildProcPidResult is mentioned as an architectural deliverable but its scope is still underspecified relative to round 1 fix",
+      "why_matters": "Spec says 'MVC-разрез ограничен одной функцией (buildProcPidResult), остальные треки атомарны' in the Risks section but never states whether the split changes the public function signature or is purely internal. Code research confirms only one production call site. If the split is internal-only (private helpers extracted, public API unchanged), existing TestBuildProcPidResult_* pass without modification. If the public signature changes, the one call site in Collector.Update() and all existing tests need updating. The scope ambiguity affects sizing accuracy for the task decomposition.",
+      "fix": "Add one sentence clarifying: 'MVC split = extract private buildProcPidResultRaw() and formatProcPidResultForDisplay() helpers; public buildProcPidResult() signature is preserved; no callers change.' This removes the ambiguity without growing the spec."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "Сортировка по IO-колонкам при пустых IO-значениях не задокументирована как явно допустимый кейс",
+      "why_matters": "Scenario 4 specifies that IO columns are stored as empty string '' when IO is unavailable. The align package and sort logic in stat.Compare operate on string values. Empty string sorts before all numeric strings in lexicographic order. If a user runs -o 'read,KiB/s' when IO was unavailable during recording, all rows will appear in a potentially misleading order. This is a common UX edge case when partial data is involved — the spec acknowledges the columns are empty but does not address the sort consequence.",
+      "fix": "Add one bullet under 'Граничные случаи': 'Сортировка по IO-колонкам при пустых значениях: пустые строки оказываются в начале при лексикографической сортировке — поведение ожидаемое, дополнительной обработки не требуется.' A statement that this is acceptable is sufficient."
+    },
+    {
+      "category": "overengineering",
+      "severity": "minor",
+      "issue": "sysinfo is written per-tick but under Option B its values (ticks, cpuCount) are not used for any computation at report time",
+      "why_matters": "Under Option B (display strings stored, DiffIntvl=[0,0] pass-through), rates are pre-baked by the recorder. The report does a pure pass-through — it never reads ticks or cpuCount to recompute anything. Writing a sysinfo entry every tick adds tar entries without delivering user-visible benefit. If the purpose is environment documentation or future Option-A compatibility, it should be stated and the frequency justified. Per-tick is unnecessary if the values are constant per recording session.",
+      "fix": "Either write sysinfo once at recorder open (not per tick), or add a note in the spec stating why per-tick frequency is chosen (e.g., 'future-proofing for Option A replay'). The current per-tick approach is not justified by any stated requirement."
+    }
+  ],
+  "worst_category": "underengineering",
+  "summary": "Both major findings from round 1 are resolved: sysinfo fallback defaults removed (Option B correctly stated as pass-through), first-tick suppression correctly described via !prevStat.Valid → continue. Remaining findings are minor: MVC split scope still ambiguous but non-blocking, IO sort edge case unaddressed, and per-tick sysinfo writes are slightly wasteful under Option B. The spec is buildable and adequately defined for tech-spec authoring."
+}
