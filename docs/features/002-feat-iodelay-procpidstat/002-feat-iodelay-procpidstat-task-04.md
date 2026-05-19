@@ -89,9 +89,9 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 - [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
-- [project.md](../../.claude/skills/project-knowledge/project.md) — project overview, goals, tech stack
+- [project.md](.claude/skills/project-knowledge/project.md) — project overview, goals, tech stack
 - [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, data flow, PG version handling
-- [deployment.md](../../.claude/skills/project-knowledge/deployment.md) — release process, CI/CD, make targets
+- [deployment.md](.claude/skills/project-knowledge/deployment.md) — release process, CI/CD, make targets
 
 ## Verification Steps
 

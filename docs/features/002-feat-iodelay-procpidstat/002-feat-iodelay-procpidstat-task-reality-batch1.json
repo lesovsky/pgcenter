@@ -1,0 +1,95 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "hints",
+      "task": "02",
+      "issue": "TestBuildProcPidResult_DelayAvailable concrete values in Details are internally contradictory. The section states 'IODelay=500 in currStats and IODelay=400 in prevStats' (delta=100), then says 'col 17 = \"1.00\"', then immediately contradicts itself: 'delta=100 / (1*100) * 100 = 100.00 -- or use delta=1 with itv=1, ticks=100, result=1.00'. With the stated prevStats=400/currStats=500, the correct result is 100.00, not 1.00. The implementor must pick one consistent set of values; the hint presents two incompatible scenarios without resolution.",
+      "fix": "Replace the contradictory paragraph with a single deterministic scenario. Either: (a) keep IODelay prev=400 curr=500 (delta=100) and assert col 17 == '100.00'; or (b) use IODelay prev=499 curr=500 (delta=1) and assert col 17 == '1.00'. The cpuCount=4 non-normalization sanity check (ensure result is 100.00 not 25.00) is most clearly demonstrated with scenario (a)."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_file",
+      "task": "01",
+      "issue": "Task 01 post-completion section references 'docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md' but this file does not exist in the repository. All four tasks reference this same path in their Post-completion section.",
+      "fix": "Either create an empty decisions.md stub before Task 01 starts, or update the post-completion instructions to say the file should be created (not just written to). Current state: the file does not exist, so the first agent to try to append to it must create it first."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Task 01 TDD Anchor instructs writing TestBuildProcPidResult_DelayUnavailable as a failing test 'before step 4', but also states TestCheckDelayAcctAvailable is part of the TDD anchor for Task 01 while simultaneously placing all five test functions under Task 02. The TDD Anchor section of Task 01 says to write two tests (TestCheckDelayAcctAvailable and TestBuildProcPidResult_DelayUnavailable) but notes 'the two additional iodelay tests... are written in Task 2' — creating ambiguity about which task actually writes TestCheckDelayAcctAvailable.",
+      "fix": "Clarify the split: Task 01 TDD Anchor should only reference TestBuildProcPidResult_DelayUnavailable (the compilation-gating test). Remove TestCheckDelayAcctAvailable from Task 01's TDD Anchor section since it appears in Task 02's TDD Anchor and implementation steps."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Task 02 step 3 says to update 'lines 142, 146, 181, 182, 220, 287, 289, 291, 323, 349, 352' in procpidstat_test.go. All these lines are confirmed to contain '17' assertions, which is correct. However, line 323 contains 'assert.Equal(t, 17, got.Ncols)' in TestBuildProcPidResult_TwoTicks — this test also asserts specific row[N] values (row[11]='37.50', row[12]='25.00', etc.) that will need index-shifting too. The task's shift table correctly documents this but the line list for index-shifting updates is not separately called out; the agent must infer it from the shift table.",
+      "fix": "No change strictly required — the shift table in the Details section is accurate. But adding an explicit note that TestBuildProcPidResult_TwoTicks and TestBuildProcPidResult_InvalidPID also need row[N] index updates (in addition to Ncols) would reduce implementation risk. The task already mentions TestBuildProcPidResult_InvalidPID by name, but TestBuildProcPidResult_TwoTicks is not explicitly called out."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "02",
+      "issue": "TestCheckDelayAcctAvailable approach hint in Task 02 says 'the simplest compliant approach: call CheckDelayAcctAvailable(), read the live sysctl value separately via os.ReadFile, and assert equality. This is what TestCheckIOAvailable does for its analogous probe.' However, TestCheckIOAvailable does NOT assert equality against a reference value — it only asserts no panic and that a non-nil error is os.IsPermission. The test pattern is different from what the hint implies.",
+      "fix": "Correct the hint: TestCheckIOAvailable does not compare against a reference value, it only verifies the return type on error. For TestCheckDelayAcctAvailable, the equivalent approach would be: call the function, assert it returns a bool, and if the sysctl file exists assert the bool matches the file content. The 'read separately via os.ReadFile and assert equality' approach is valid but is not analogous to TestCheckIOAvailable."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "claims_verified": 61,
+    "issues_found": 5
+  },
+  "verification_details": {
+    "task_01": {
+      "files_referenced": {
+        "internal/stat/procpidstat.go": "EXISTS — ProcPidStat has {Utime, Stime} (no IODelay yet); procPidResultNcols=17; 17-col procPidResultCols; buildProcPidResult has 9 params (no delayAcctAvailable); CheckDelayAcctAvailable does not exist — all consistent with 'pre-implementation' state described in task Details",
+        "internal/view/view.go": "EXISTS — View struct has IOAvailable bool before NotRecordable bool; procpidstat entry has Ncols:17; no DelayAcctAvailable field — consistent with task description",
+        "internal/stat/stat.go": "EXISTS — buildProcPidResult called with 9 args: res, prevProcPidStats, currProcPidStats, prevProcPidIO, currProcPidIO, view.IOAvailable, c.config.ticks, float64(itv), runtime.NumCPU() — task correctly identifies insertion point between view.IOAvailable and c.config.ticks",
+        "top/config_view.go": "EXISTS — switchViewToProcPidStat has 2-branch if/else for printCmdline; does not call CheckDelayAcctAvailable; consistent with pre-implementation state",
+        "record/record.go": "EXISTS — filterViews comment says '7 of 17 columns' — consistent with task step 8",
+        "internal/stat/procpidstat_test.go": "EXISTS — 7 calls to buildProcPidResult with 9 args each; all assert 17 cols; consistent with task step 9 (add false as 10th arg)"
+      },
+      "imports_verified": "strings and os already imported in procpidstat.go — no new imports needed",
+      "functions_verified": {
+        "formatCPUTime": "EXISTS at line 172 — correct signature formatCPUTime(jiffies, ticks float64) string",
+        "delta": "EXISTS at line 315 — correct signature delta(prev, curr float64) float64",
+        "nullString": "EXISTS at line 310 — correct signature nullString(s string) sql.NullString",
+        "CheckIOAvailable": "EXISTS at line 160 — correct pattern for CheckDelayAcctAvailable to follow"
+      },
+      "security": "No hardcoded secrets; input validation correct (4-byte buffer read, TrimSpace check for '1')",
+      "column_index_mapping": "Task table correctly documents shift: old index 11(%all)->12, 12(%us)->13, 13(%sy)->14, 14(read,KiB/s)->15, 15(write,KiB/s)->16, 16(query)->18; new 11=iodelay_total,s; new 17=%iodelay"
+    },
+    "task_02": {
+      "golden_file_pid_stat_normal_comm": "EXISTS — line confirmed: '5678 (bash) S 1 5678 5678 0 -1 4194304 200 0 0 0 2500 1250 0 0 20 0 1 0 2000 16384000 200 18446744073709551615 1 1 0 0 0 0 0 0 0 0 0 0 17 0 0 0 0 0 0 0 0 0 0 0 0 0 0'; suffix length=50; suffix[11]=2500(utime), suffix[12]=1250(stime), suffix[39]=0(current delayacct_blkio_ticks)",
+      "golden_file_pid_stat_iodelay": "DOES NOT EXIST — to be created in Task 02; suffix[39] changed from 0 to 500",
+      "golden_file_pid_stat_truncated": "DOES NOT EXIST — to be created in Task 02 with 39 suffix fields",
+      "line_numbers_verified": {
+        "procpidstat_test.go_17_assertions": "Lines 142,146,181,182,220,287,289,291,323,349,352 all confirmed to contain '17' assertions — accurate",
+        "stat_test.go": "TestCollectorUpdateProcPidStat17Cols at line 221; Ncols:17 at line 234; assert.Equal(t,17,...) at line 255; assert.Len at line 257; assert.NotEqual(t,17,...) at line 215 (in TestCollectorUpdateNoEnrichment) — all accurate",
+        "record_test.go_line_145": "assert.Equal(t, 17, pp.Ncols) is at line 145 — confirmed accurate"
+      },
+      "math_verification": {
+        "formatCPUTime_500_100": "= 00:00:05 (5 seconds) — correct",
+        "iodelay_pct_delta100_itv1_ticks100": "= 100.00 — the '1.00' value in task hint is achievable only with delta=1, not with the stated IODelay prev=400 curr=500 scenario; contradiction confirmed"
+      }
+    },
+    "task_03": {
+      "docs/tech-debt.md": "EXISTS — [001] is in Active Debt section; Resolved section says '*(none yet)*' — consistent with task description",
+      "docs/decisions-log.md": "EXISTS — contains 5 ADR entries for [001-feat-per-process-system-stats]; last entry is 'iodelay deferred' with Status: Accepted — task correctly describes supersession requirement",
+      "docs/features-catalog.md": "EXISTS — [001] entry has 17 columns reference and 'Per-process iowait not available without Netlink taskstats API' limitation — consistent with task description",
+      "depends_on": "Task 03 correctly declares depends_on: ['01'] — documentation can be written once core impl (Task 01) is done; does not need tests (Task 02) to be complete"
+    },
+    "task_04": {
+      "verify_command": "make test && make lint && make vuln — correct per CLAUDE.md project constitution",
+      "depends_on": "Correctly declares depends_on: ['02', '03'] — all implementation, tests, and docs must be done before QA",
+      "manual_steps": "Feasible — requires local PostgreSQL and root/sudo access to toggle kernel.task_delayacct; these prerequisites are documented",
+      "warning_text_consistency": "Task 04 warning text for delayacct-only: 'iodelay unavailable (task_delayacct=0): run sysctl -w kernel.task_delayacct=1, then re-open screen' matches tech-spec Decision 5 exactly"
+    }
+  }
+}
