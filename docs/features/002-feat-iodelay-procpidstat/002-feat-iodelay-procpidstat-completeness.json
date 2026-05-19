@@ -1,0 +1,22 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 23,
+  "requirements_covered": 22,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "US-16: Warning text for delayacct-only unavailable case",
+      "detail": "User-spec Scenario 2 (line 45) quotes the combined-unavailable warning string ('iodelay and IO stats unavailable: task_delayacct=0; run: sysctl -w kernel.task_delayacct=1, then re-open screen'). Tech-spec Decision 5 correctly separates combined vs. delayacct-only messages but does not derive the exact delayacct-only wording from user-spec — it uses 'iodelay unavailable (task_delayacct=0): ...' instead. The split itself is correctly specified in user-spec prose ('если только delayacct — только про delayacct'), but the exact delayacct-only message text is implicit in user-spec, leaving a minor wording ambiguity.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "22/23 requirements covered, 1 partial. The tech-spec provides thorough coverage of all user-spec requirements: 19-column layout, new iodelay columns with correct formulas, availability probe, first-tick and PID-gone boundary cases, old-kernel guard, warning mutual-exclusion logic, no-cpuCount-normalization rationale, reuse of existing helpers, unit test list, and documentation tasks. One minor partial: the exact warning text for the delayacct-only case is not verbatim from user-spec (user-spec implies it but does not state it explicitly for the single-probe case). No scope creep, no YAGNI violations, no missing error handling, no structural gaps, no shallow solution."
+}

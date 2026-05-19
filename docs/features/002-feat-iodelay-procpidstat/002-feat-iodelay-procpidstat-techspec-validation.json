@@ -1,0 +1,18 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task 4 (Pre-deploy QA) is missing an explicit `Files to modify` field. All other tasks include this field. A QA task does not modify files, but the field should be explicit for consistency and unambiguous orchestrator parsing.",
+      "fix": "Add `Files to modify: none` to Task 4."
+    },
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Project Knowledge files `architecture.md` and `patterns.md` were not found at `.claude/skills/project-knowledge/references/`. Standards compliance check (section 3) was skipped.",
+      "fix": "Create `.claude/skills/project-knowledge/references/architecture.md` and `patterns.md` so future tech-spec validations can verify directory structure and naming conventions automatically."
+    }
+  ],
+  "summary": "Tech-spec passes re-validation. All three previously reported fixable issues are resolved: Task 1 description is now 4 sentences (within the 5-sentence limit), Task 4 now has both a `Verify` field and a `Files to read` field. One minor finding remains: Task 4 is still missing an explicit `Files to modify: none` field. The ongoing minor finding about absent project-knowledge reference files is unchanged. Zero critical findings — status is approved."
+}

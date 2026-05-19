@@ -384,4 +384,5 @@ User verifies the rendered TUI manually with sysctl toggle.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
 - **Verify:** bash — `make test && make lint && make vuln`
+- **Files to modify:** none
 - **Files to read:** `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md`, `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md`
