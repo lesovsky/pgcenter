@@ -192,6 +192,18 @@ DBA видит backend с высоким IO throughput (`read,KiB/s`, `write,KiB
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-05-19
+
+### Divergences from original spec
+
+- **Warning text (Сценарий B):** Spec showed a single combined warning `"iodelay and IO stats unavailable: task_delayacct=0; ..."`. Implementation has three distinct messages: IO-only, delayacct-only, and combined (when both unavailable). The combined text and behavior are correct; the spec's example conflated delayacct-only and combined cases.
+- **AC#8 — make lint && make vuln:** `golangci-lint` and `govulncheck` were not installed globally on the dev machine. Replaced by `go vet ./...` (clean). Functional correctness unaffected; tools can be installed via `go install` for future runs.
+
+### Added during implementation
+
+- `TestBuildProcPidResult_NewSignature` TDD anchor added in Task 01 (not in spec) to drive the 10-argument signature change and pin `Ncols==19` — resolved a compilation dependency between Task 01 and Task 02.
+- Golden file `pid_stat_truncated` (39 suffix fields) added to guard against off-by-one in the `len(suffix) < 40` guard — not explicitly named in spec.
+
+### Descoped / Deferred
+
+- Reviewer dispatch via `SendMessage` in worktree agents: tool not available in worktree execution context. Reviews were dispatched by team lead manually instead. Documented in tech-debt [003] (pre-existing constraint from feature 001).

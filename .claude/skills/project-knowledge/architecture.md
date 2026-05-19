@@ -35,11 +35,19 @@ postgres connection
 
 ## Per-process System Stats (procpidstat view)
 
-The `"procpidstat"` view (`Shift+S`) is a hybrid: it runs a 7-column `pg_stat_activity` SQL query, then enriches each row with procfs metrics from `/proc/[pid]/stat` and `/proc/[pid]/io`, producing a 17-column `PGresult`. This enrichment is local-only (procfs is not available over remote connections).
+The `"procpidstat"` view (`Shift+S`) is a hybrid: it runs a 7-column `pg_stat_activity` SQL query, then enriches each row with procfs metrics from `/proc/[pid]/stat` and `/proc/[pid]/io`, producing a **19-column** `PGresult`. This enrichment is local-only (procfs is not available over remote connections).
+
+Columns: pid, datname, usename, state, wait_etype, wait_event (SQL), accumulated CPU (`all_total,s`, `us_total,s`, `sy_total,s`), accumulated IO (`read_total,KiB`, `write_total,KiB`), accumulated iodelay (`iodelay_total,s`), CPU rates (`%all`, `%us`, `%sy`), IO rates (`read,KiB/s`, `write,KiB/s`), iodelay rate (`%iodelay`), query (SQL).
 
 **CollectExtra mechanism:** `view.View.CollectExtra int` carries a typed constant (`CollectProcPidStat = 6`) from the `switchViewToProcPidStat` handler through `viewCh` to `Collector.Update()`. The collector checks `view.CollectExtra` directly — not via `ToggleCollectExtra` — so `top/stat.go:collectStat()` maintains a separate `prevCollectExtra` variable to call `c.Reset()` on view switches.
 
-**IO availability probe:** `stat.CheckIOAvailable(pid int)` opens `/proc/[pid]/io` for a real PG backend PID queried from `pg_stat_activity`. `/proc/self/io` is always accessible to the owner process and is NOT a valid probe for cross-process IO access. On Linux with `ptrace_scope=1` (the default on Ubuntu/Debian), `/proc/[pid]/io` is readable only when the caller's effective UID matches the target process UID or the caller has `CAP_SYS_PTRACE`. Because pgcenter and the PG backends run under different OS users (`postgres` vs the invoking user), the probe must use an actual backend PID — a probe against the caller's own PID will always succeed and will never reveal the real permission constraint.
+**Availability probes** (both run once at `Shift+S`, stored in `view.View`):
+- `stat.CheckIOAvailable(pid int)` — opens `/proc/[pid]/io` for a real PG backend PID. Must use an actual backend PID, not `/proc/self/io` (always readable by the owner, giving a false positive). Sets `v.IOAvailable`.
+- `stat.CheckDelayAcctAvailable()` — reads `/proc/sys/kernel/task_delayacct` (4-byte bounded read). Returns true iff content is `"1"`. Sets `v.DelayAcctAvailable`. No PID needed — it's a kernel sysctl.
+
+When a probe fails, the corresponding columns render as `""`. `switchViewToProcPidStat` uses a 4-branch `if/else` for `printCmdline` covering all combinations of IO × delayacct availability (mutual exclusion — exactly one call per code path).
+
+**iodelay source:** `/proc/[pid]/stat` field 42 (`delayacct_blkio_ticks`, `suffix[39]` after stripping pid and comm). Requires `CONFIG_TASK_DELAY_ACCT=y`. `%iodelay` is NOT normalized by `runtime.NumCPU()` — it is wall-clock blocked time, not CPU utilization.
 
 **procpidstat is not recordable** (`NotRecordable: true` on the view). The recorder skips it via `filterViews()` in `record/record.go`.
 

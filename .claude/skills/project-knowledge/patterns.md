@@ -44,6 +44,10 @@ exclusive — use an `if/else` branch, not two sequential calls. Calling `printC
 and then `printCmdline(v.Msg)` in the same code path will always discard the warning before
 the user can read it.
 
+When multiple independent availability probes can fail (e.g., IO + delay accounting in
+`switchViewToProcPidStat`), use a 4-branch `switch` covering all combinations, with a combined
+message for the case where both are unavailable — still exactly one `printCmdline` call per path.
+
 ## Adding a Hybrid View (SQL + procfs enrichment)
 
 When a view combines SQL and local system data (e.g., procpidstat = pg_stat_activity + /proc):
