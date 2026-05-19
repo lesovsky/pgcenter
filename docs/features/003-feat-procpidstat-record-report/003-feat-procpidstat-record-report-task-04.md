@@ -65,11 +65,9 @@ The task is purely test code — no production logic changes.
 
 ## TDD Anchor
 
-Write the new tests first, verify they fail (because task 02/03 code is not yet merged or because
-the assertions are wrong in the old state), then confirm they pass after all wave-2 changes are in.
+Write the new test first, verify it fails (because task 02/03 code is not yet merged or because
+the assertions are wrong in the old state), then confirm it passes after all wave-2 changes are in.
 
-- `report/report_test.go::Test_readMeta_with_sysinfo` — `readTar` on a synthetic tar with a
-  `sysinfo.*` entry populates `metadata.ticks` and `metadata.cpuCount` correctly
 - `report/report_test.go::Test_app_doReport_procpidstat` — `doReport` on a synthetic tar with
   two procpidstat snapshots + sysinfo + meta produces non-empty output (timestamp line + data row)
 

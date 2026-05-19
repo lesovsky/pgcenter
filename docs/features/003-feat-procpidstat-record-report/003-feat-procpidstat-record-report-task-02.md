@@ -47,9 +47,9 @@ The task depends on Task 01 which exports `GetSysticksLocal`, adds `stat.SysInfo
 
 4. **Implement the procpidstat branch in `collect()`** in `record/recorder.go`. Inside the views loop, after the standard SQL query for each view, add a dedicated branch executed when the view key is `"procpidstat"` and `c.config.isLocal` is true:
    - Run the map-rotation protocol: build `newPrev` by keeping only PIDs from the SQL result that exist in `currProcPidStats`; assign `prevProcPidStats = newPrev`; reset `currProcPidStats` to a fresh empty map. Repeat for the IO maps.
-   - For each PID in the SQL result (skip if `pid <= 0`): call `readProcPidStat(pid)` and store in `currProcPidStats`; if `c.config.ioAvailable`, call `readProcPidIO(pid)` and store in `currProcPidIO`. Silently skip per-PID errors.
+   - For each PID in the SQL result (skip if `pid <= 0`): call `stat.ReadProcPidStat(pid)` and store in `currProcPidStats`; if `c.config.ioAvailable`, call `stat.ReadProcPidIO(pid)` and store in `currProcPidIO`. Silently skip per-PID errors.
    - Compute `itv = time.Since(c.lastCollect).Seconds()` and update `c.lastCollect = time.Now()`.
-   - Call `stat.BuildProcPidResult` (or the package-level `buildProcPidResult`; check exact export from Task 01) with the SQL result, prev/curr maps, `c.config.ioAvailable`, `c.config.delayAcctAvailable`, `c.config.ticks`, `itv`, `c.config.cpuCount`.
+   - Call `stat.BuildProcPidResult` with the SQL result, prev/curr maps, `c.config.ioAvailable`, `c.config.delayAcctAvailable`, `c.config.ticks`, `itv`, `c.config.cpuCount`.
    - Store the 19-column result as `stats["procpidstat"]`, replacing the 7-column SQL result.
 
 5. **Implement the sysinfo entry in `write()`** in `record/recorder.go`. After writing all stats entries, marshal `stat.SysInfo{Ticks: c.config.ticks, CPUCount: c.config.cpuCount}` to JSON and write it as a tar entry named `sysinfo.TIMESTAMP.json` with the same `now` timestamp used for the other entries in that write call.
@@ -94,7 +94,7 @@ This is the primary new test for this task. Additional tests covering `app.setup
 - [record/record.go](../../../../record/record.go) — extend `app.setup()` with locality probe, IO/delayacct probes, and remote-mode guard
 
 **Code files to read for context:**
-- [internal/stat/procpidstat.go](../../../../internal/stat/procpidstat.go) — `buildProcPidResult`, `readProcPidStat`, `readProcPidIO`, `CheckIOAvailable`, `CheckDelayAcctAvailable`, `SysInfo` (added by Task 01)
+- [internal/stat/procpidstat.go](../../../../internal/stat/procpidstat.go) — `stat.BuildProcPidResult`, `stat.ReadProcPidStat`, `stat.ReadProcPidIO`, `CheckIOAvailable`, `CheckDelayAcctAvailable`, `SysInfo` (exported by Task 01)
 - [internal/stat/stat.go](../../../../internal/stat/stat.go) — `Collector.Update` procpidstat branch (map rotation and enrichment logic to mirror), `GetSysticksLocal` (exported by Task 01)
 - [internal/postgres/postgres.go](../../../../internal/postgres/postgres.go) — `DB.Local` field and `isLocalhost` implementation
 
@@ -118,7 +118,7 @@ This is the primary new test for this task. Additional tests covering `app.setup
 
 Changes needed:
 - Extend both structs as described in What to do.
-- Inside `collect()`, after the views loop, add the procpidstat enrichment branch (guarded by `c.config.isLocal && stats["procpidstat"].Valid`). The branch replaces the 7-column entry with the 19-column one.
+- Inside `collect()`, after the views loop, add the procpidstat enrichment branch (guarded by `c.config.isLocal && stats["procpidstat"].Valid`). The branch calls `stat.ReadProcPidStat`, `stat.ReadProcPidIO`, and `stat.BuildProcPidResult` to replace the 7-column SQL entry with the 19-column enriched result.
 - Inside `write()`, after the stats loop, add a single extra tar entry for sysinfo using the same `now` timestamp.
 - Add imports: `runtime`, `time` (already imported), `strconv` (check if needed). The `stat` package is already imported.
 
@@ -137,7 +137,7 @@ The `filterViews` function is NOT changed in this task — `NotRecordable` remov
 
 ### Dependencies
 
-- Depends on **Task 01** for: `stat.GetSysticksLocal()` (exported), `stat.SysInfo` struct (defined in `internal/stat/procpidstat.go`), `buildProcPidResult` callable from the `record` package.
+- Depends on **Task 01** for: `stat.GetSysticksLocal()` (exported), `stat.SysInfo` struct (defined in `internal/stat/procpidstat.go`), `stat.BuildProcPidResult`, `stat.ReadProcPidStat`, `stat.ReadProcPidIO` (all exported by Task 01).
 - New imports in `record/recorder.go`: `runtime` (stdlib).
 - New imports in `record/record.go`: `runtime` (stdlib), `database/sql` (for `sql.ErrNoRows`).
 
@@ -154,9 +154,9 @@ The `filterViews` function is NOT changed in this task — `NotRecordable` remov
 
 - The map-rotation logic in `Collector.Update` (lines 218–238 of `internal/stat/stat.go`) is the exact pattern to copy into `collect()`. Read it carefully — the rotation builds `newPrev` from `currStats` (not `prevStats`), then assigns and resets.
 - `stat.CheckIOAvailable(pid)` returns `error`; nil means available. `stat.CheckDelayAcctAvailable()` returns `bool` directly.
-- For the sysinfo tar entry in `write()`, capture `now := time.Now()` once at the start of the function (before the stats loop) and use the same timestamp for all entries including sysinfo — this ensures all entries from the same write call share an identical timestamp string.
+- In `write()`, hoist `now := time.Now()` to the very top of the function, before the per-entry stats loop. Use this same `now` for all tar entry names in that write call, including the sysinfo entry — this ensures all entries from the same write call share an identical timestamp string.
 - `newFilenameString(now, "sysinfo")` produces `sysinfo.20060102T150405.000.json` — the correct format expected by the report pipeline's `isFilenameOK` (after Task 03 adds `"sysinfo"` to accepted prefixes).
-- The `collect()` method currently declares `now` implicitly inside `write()`. The procpidstat branch in `collect()` needs its own `time.Now()` call for `itv` calculation — do not mix these timestamps.
+- The `collect()` method uses its own separate `time.Now()` call solely for computing `itv = time.Since(c.lastCollect).Seconds()` and updating `c.lastCollect`. This is independent of the `now` in `write()` — do not mix these two timestamps.
 
 ## Reviewers
 

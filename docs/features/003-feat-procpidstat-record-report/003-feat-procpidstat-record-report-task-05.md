@@ -85,6 +85,10 @@ The task does not modify any code files. If any check fails, the agent must repo
 
 ## Details
 
+**Files:** N/A — QA task, no code changes
+
+**Implementation hints:** Run verification steps in order. Local PostgreSQL must be running on port 21917 (test default). If make test fails on golden tar, run: go test ./report/... -update to regenerate. Stale /tmp/test.tar from previous runs must be deleted before each record invocation.
+
 **No code files to modify.** This task is pure acceptance testing. If any check fails, identify which prior task (01–04) owns the broken component and report the failure with actual vs expected output.
 
 **Dependencies:**
