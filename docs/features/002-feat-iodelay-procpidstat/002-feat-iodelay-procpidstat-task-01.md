@@ -44,12 +44,11 @@ The task covers the full vertical slice of changes that must land together to ke
 
 ## TDD Anchor
 
-Write these failing tests first, then implement until they pass. All tests are in `internal/stat/procpidstat_test.go` (call-site parameter additions are part of the compilation fix, not new tests).
+Write this failing test first, then implement until it passes.
 
-- `internal/stat/procpidstat_test.go::TestCheckDelayAcctAvailable` — call `CheckDelayAcctAvailable()` against the live `/proc/sys/kernel/task_delayacct` path; assert that the function returns a bool without panicking, and that the value matches the actual sysctl state (the test can read the file independently to verify). This test must compile after step 2 of implementation.
-- `internal/stat/procpidstat_test.go::TestBuildProcPidResult_DelayUnavailable` — call `buildProcPidResult` with `delayAcctAvailable=false`, assert that `result.Ncols == 19`, `result.Values[0][11].String == ""`, and `result.Values[0][17].String == ""`. Must compile and fail before step 4 (function still has 17 cols), then pass after.
+- `internal/stat/procpidstat_test.go::TestBuildProcPidResult_NewSignature` — call `buildProcPidResult` with the new 9-argument signature (adding `delayAcctAvailable bool` after `ioAvailable bool`) and assert that `result.Ncols == 19`. This test will fail to compile until the signature change in step 4 lands, and will fail the assertion until `procPidResultNcols` is updated to 19 in step 3. It drives the core signature and column-count changes for this task.
 
-Note: the two additional iodelay tests (`TestReadProcPidStatIODelay`, `TestReadProcPidStatTruncated`, `TestBuildProcPidResult_DelayAvailable`) and their golden files are written in Task 2.
+Note: `TestCheckDelayAcctAvailable`, `TestBuildProcPidResult_DelayUnavailable`, `TestBuildProcPidResult_DelayAvailable`, and golden-file tests belong to Task 2, which focuses on iodelay-specific behavior verification.
 
 ## Acceptance Criteria
 
@@ -135,6 +134,12 @@ Note: the two additional iodelay tests (`TestReadProcPidStatIODelay`, `TestReadP
 | `delayAcctAvailable && validPID && havePrevCPU && itv > 0 && ticks > 0` | `formatCPUTime(curr.IODelay, ticks)` | `delta(prevCPU.IODelay, curCPU.IODelay) / (itv * ticks) * 100` formatted `"%.2f"` |
 
 Note: `iodelay_total,s` uses `curr.IODelay` (accumulated counter, not delta). `%iodelay` uses the `delta()` helper. No `cpuCount` division — IO delay is per-process wall-clock time (Decision 3 in tech-spec).
+
+**Implementation hints:**
+
+- Implement steps in order: struct field → parser guard → column definitions → `buildProcPidResult` signature → `view.View` field → `Collector.Update` wiring → `switchViewToProcPidStat` 4-branch logic → `record.go` comment → test call-site fixes. This ordering keeps the codebase compilable at each step.
+- The column shift (17→19 entries, two inserts) is purely additive — existing column indices 0–10 are unchanged; indices 11–16 shift to 12–18. Verify the mapping table in this file before editing `procPidResultCols`.
+- When writing the 4-branch `printCmdline` if/else, derive the two boolean flags (`ioAvailable`, `delayAcctAvailable`) before the block and use them directly; avoid calling `stat.CheckDelayAcctAvailable()` more than once.
 
 **Dependencies:** No new Go packages required. `strings` is already imported in `procpidstat.go`. `os` is already imported.
 

@@ -102,21 +102,21 @@ files — write them first, then write the test functions to verify them):
 ## Context Files
 
 **Feature artifacts:**
-- [002-feat-iodelay-procpidstat.md](002-feat-iodelay-procpidstat.md) — user-spec
-- [002-feat-iodelay-procpidstat-tech-spec.md](002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
+- [002-feat-iodelay-procpidstat.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md) — user-spec
+- [002-feat-iodelay-procpidstat-tech-spec.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
 - [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
-- [project.md](../../../../.claude/skills/project-knowledge/project.md)
-- [architecture.md](../../../../.claude/skills/project-knowledge/architecture.md)
-- [patterns.md](../../../../.claude/skills/project-knowledge/patterns.md)
+- [project.md](.claude/skills/project-knowledge/project.md)
+- [architecture.md](.claude/skills/project-knowledge/architecture.md)
+- [patterns.md](.claude/skills/project-knowledge/patterns.md)
 
 **Code files (read for context):**
-- [internal/stat/procpidstat.go](../../../../internal/stat/procpidstat.go) — parser and builder implementation from Task 01
-- [internal/stat/procpidstat_test.go](../../../../internal/stat/procpidstat_test.go) — existing tests; add new functions here and update column counts
-- [internal/stat/testdata/proc/pid_stat_normal_comm](../../../../internal/stat/testdata/proc/pid_stat_normal_comm) — baseline golden file format; base both new golden files on this
-- [internal/stat/stat_test.go](../../../../internal/stat/stat_test.go) — rename test, update Ncols and assertions
-- [record/record_test.go](../../../../record/record_test.go) — update Ncols assertion at line 145
+- [internal/stat/procpidstat.go](internal/stat/procpidstat.go) — parser and builder implementation from Task 01
+- [internal/stat/procpidstat_test.go](internal/stat/procpidstat_test.go) — existing tests; add new functions here and update column counts
+- [internal/stat/testdata/proc/pid_stat_normal_comm](internal/stat/testdata/proc/pid_stat_normal_comm) — baseline golden file format; base both new golden files on this
+- [internal/stat/stat_test.go](internal/stat/stat_test.go) — rename test, update Ncols and assertions
+- [record/record_test.go](record/record_test.go) — update Ncols assertion at line 145
 
 ## Verification Steps
 
@@ -128,6 +128,15 @@ files — write them first, then write the test functions to verify them):
 - Confirm `record.TestFilterViews_NotRecordable` passes with updated `Ncols == 19`
 
 ## Details
+
+**Files:**
+- `internal/stat/testdata/proc/pid_stat_iodelay` — new golden file; create by setting suffix[39]=500 in the `pid_stat_normal_comm` baseline
+- `internal/stat/testdata/proc/pid_stat_truncated` — new golden file; same line but only 39 suffix fields (triggers `len(suffix) < 40` guard)
+- `internal/stat/procpidstat_test.go` — add 5 new test functions; update `expectedProcPidCols` (17→19), column count assertions, and `row[N]` index shifts
+- `internal/stat/stat_test.go` — rename test, update `Ncols: 17` → `Ncols: 19`, add `DelayAcctAvailable: true`, fix count assertions
+- `record/record_test.go` — update `pp.Ncols` assertion from 17 to 19 (line 145)
+
+**Implementation hints:**
 
 **Golden file `pid_stat_iodelay`:**
 Based on `pid_stat_normal_comm` which currently reads:
@@ -220,6 +229,6 @@ Note: dev-security-auditor omitted — task adds test code and golden fixture fi
 
 ## Post-completion
 
-- [ ] Write a brief report to [002-feat-iodelay-procpidstat-decisions.md](002-feat-iodelay-procpidstat-decisions.md) (summary: 1-3 sentences, review rounds with links to JSON, no finding tables or dumps)
+- [ ] Write a brief report to [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) (summary: 1-3 sentences, review rounds with links to JSON, no finding tables or dumps)
 - [ ] If deviated from spec — describe deviation and reason
 - [ ] Update user-spec/tech-spec if anything changed

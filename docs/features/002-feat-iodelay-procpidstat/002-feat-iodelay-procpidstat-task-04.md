@@ -84,12 +84,13 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 ## Context Files
 
 **Feature artifacts:**
-- [002-feat-iodelay-procpidstat.md](002-feat-iodelay-procpidstat.md) — user-spec
-- [002-feat-iodelay-procpidstat-tech-spec.md](002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
+- [002-feat-iodelay-procpidstat.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md) — user-spec
+- [002-feat-iodelay-procpidstat-tech-spec.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
 - [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
 - [project.md](../../.claude/skills/project-knowledge/project.md) — project overview, goals, tech stack
+- [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, data flow, PG version handling
 - [deployment.md](../../.claude/skills/project-knowledge/deployment.md) — release process, CI/CD, make targets
 
 ## Verification Steps
@@ -140,6 +141,6 @@ No automated reviewers for this task.
 
 ## Post-completion
 
-- [ ] Write brief QA report to [002-feat-iodelay-procpidstat-decisions.md](002-feat-iodelay-procpidstat-decisions.md) — summary of what was verified (automated + manual), any deviations found
+- [ ] Write brief QA report to [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — summary of what was verified (automated + manual), any deviations found
 - [ ] If any acceptance criteria failed — describe what failed, which task needs a fix, and why
 - [ ] If the feature behaves differently from the spec in any observable way — document the deviation and reason
