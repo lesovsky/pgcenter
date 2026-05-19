@@ -12,7 +12,8 @@ size: S
 Добавляем две колонки в S-скрин (Shift+S, per-process stats): `iodelay_total,s` — накопленное
 время ожидания блочного IO в формате `HH:MM:SS`, и `%iodelay` — доля времени, проведённого
 в D-state между тиками, в процентах. Источник данных — `/proc/[pid]/stat` поле 42
-(`delayacct_blkio_ticks`). Итого экран показывает 19 колонок вместо 17.
+(`delayacct_blkio_ticks`; ядро нумерует поля с 1, в коде это `suffix[39]` после отбрасывания
+`pid` и `comm`). Итого экран показывает 19 колонок вместо 17.
 
 ## Зачем
 
@@ -103,8 +104,10 @@ DBA видит backend с высоким IO throughput (`read,KiB/s`, `write,KiB
 ### Граничные случаи
 
 - **Первый тик** (нет предыдущего сэмпла): `iodelay_total,s` показывает текущее накопленное
-  значение; `%iodelay = ""`.
-- **PID исчез между тиками** (backend завершился): `iodelay_total,s = "0:00:00"`, `%iodelay = "0.00"` — аналогично CPU колонкам.
+  значение; `%iodelay = ""` — нет предыдущего сэмпла для вычисления дельты.
+- **PID исчез между тиками** (backend завершился): `iodelay_total,s = "00:00:00"`,
+  `%iodelay = "0.00"` — `IODelay` в текущем сэмпле равен 0, предыдущий сэмпл есть,
+  дельта нулевая. Поведение аналогично CPU-колонкам (те же условия, тот же файл-источник).
 - **`/proc/[pid]/stat` содержит меньше 40 полей** (очень старое ядро): `IODelay = 0`, без паники.
 - **`/proc/sys/kernel/task_delayacct` отсутствует** (ядро без `CONFIG_TASK_DELAY_ACCT`):
   probe возвращает false, колонки `""`, предупреждение.
@@ -119,7 +122,7 @@ DBA видит backend с высоким IO throughput (`read,KiB/s`, `write,KiB
 - [ ] При `kernel.task_delayacct=0`: обе iodelay-колонки `""` + предупреждение в cmdline area
 - [ ] При `kernel.task_delayacct=1`: iodelay-колонки показывают реальные значения
 - [ ] Первый тик после `Shift+S`: `iodelay_total,s` = накопленное значение, `%iodelay = ""`
-- [ ] `%iodelay` не нормализуется на число CPU
+- [ ] `%iodelay` не нормализуется на число CPU: при полной IO-блокировке одной нити `%iodelay ≈ 100%` независимо от числа ядер (unit-тест с `cpuCount=4` и `delayDelta = itv*ticks` должен давать `100.00`, не `25.00`)
 - [ ] `make test && make lint && make vuln` проходят без ошибок
 - [ ] Tech debt `[001]` помечен как resolved в `docs/tech-debt.md`
 
