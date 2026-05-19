@@ -149,6 +149,12 @@ exactly what's needed (`getconf CLK_TCK`). Exporting avoids duplicating the logi
 **Rationale:** Co-located with `ProcPidStat` / `ProcPidIO` structs; logically part of
 the same "system metrics" domain. Recorder and report both import `internal/stat`.
 
+**Alternatives considered:**
+- Define in `record` package: report would need to import `record` to decode sysinfo —
+  creates an import cycle (report→record→stat). Rejected.
+- Define in a new `internal/sysinfo` package: over-engineering for a 2-field struct
+  with a single use site. Rejected.
+
 ### Decision 5: Local/remote gate in app.setup(), not in filterViews
 
 **Decision:** `app.setup()` removes `procpidstat` from `views` and prints INFO when
@@ -175,6 +181,13 @@ Sysinfo is informational under Option B — absent sysinfo has no effect on repo
 
 **Decision:** Description entry: `"Per-process system stats: CPU utilization, IO
 activity, and IO delay per PostgreSQL backend. Local mode only."`
+
+**Rationale:** Consistent with other describe entries in the map (one-line, lists key
+metrics, notes constraints). Matches the format already used by `activity`,
+`statements_timings`, etc.
+
+**Alternatives considered:** Multi-line describe with column-by-column detail — out of
+scope for user-spec; other entries don't do this.
 
 ### Decision 8: IO/delayacct probes in app.setup(), not per-tick
 
@@ -365,7 +378,7 @@ on an old tar prints INFO "no procpidstat data" and exits cleanly. Existing `-A`
 - [ ] `make lint` passes (no new warnings)
 - [ ] `TestFilterViews_NotRecordable` asserts procpidstat passes through filter
 - [ ] `Test_filterViews` table counts updated to match new recordable set
-- [ ] `Test_app_record` expected file count includes +1 sysinfo entry per tick
+- [ ] `Test_app_record` formula updated from `countRecordable()+1` to `countRecordable()+2` (procpidstat via countRecordable + sysinfo extra entry)
 
 ## Implementation Tasks
 
@@ -431,7 +444,7 @@ on an old tar prints INFO "no procpidstat data" and exits cleanly. Existing `-A`
   `pgcenter.stat.golden.tar` if needed. This closes the test coverage gap and ensures
   no silent count regressions from the recorder and report changes in tasks 02–03.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `make test` → all green; `make lint` → no new warnings; `./bin/pgcenter record -c 3 -i 1s -f /tmp/test.tar && ./bin/pgcenter report -N -f /tmp/test.tar` → ≥1 line output
 - **Files to modify:** `record/record_test.go`, `report/report_test.go`, `report/testdata/` (golden tar)
 - **Files to read:** `record/record.go` (filterViews), `report/report.go` (readTar, processData)
