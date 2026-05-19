@@ -50,14 +50,10 @@ Every refresh tick (Collector.Update):
                         prevIO, currIO,
                         ioAvailable, delayAcctAvailable,   // delayAcctAvailable new
                         ticks, itv, cpuCount)
-      → 19-column PGresult:
-          cols 0–5:   SQL passthrough
-          cols 6–8:   CPU accumulated (formatCPUTime)
-          cols 9–10:  IO accumulated (KiB)
-          col  11:    iodelay_total,s = formatCPUTime(curr.IODelay, ticks)   // new
-          cols 12–14: CPU rates (%all, %us, %sy)
-          cols 15–16: IO rates (KiB/s)
-          col  17:    %iodelay = ΔIODelay / (itv × ticks) × 100              // new
+      → 19-column PGresult (see Data Models for canonical index→name mapping):
+          cols 0–5:   SQL passthrough (pid…wait_event)
+          cols 6–11:  accumulated stats (CPU: 6–8, IO bytes: 9–10, iodelay: 11)
+          cols 12–17: rate stats (CPU%: 12–14, IO KiB/s: 15–16, iodelay%: 17)
           col  18:    query (SQL passthrough)
   → render via gocui
 ```
@@ -68,11 +64,13 @@ Every refresh tick (Collector.Update):
 |-----------|-------------------|------------|
 | `!delayAcctAvailable` | `""` | `""` |
 | `delayAcctAvailable && !validPID` | `"00:00:00"` | `"0.00"` |
-| `delayAcctAvailable && validPID && !havePrevCPU` (first tick) | `formatCPUTime(curr.IODelay, ticks)` | `""` |
-| `delayAcctAvailable && validPID && havePrevCPU && itv > 0` | `formatCPUTime(curr.IODelay, ticks)` | `ΔIODelay/(itv×ticks)×100` formatted `%.2f` |
+| `delayAcctAvailable && validPID && (!havePrevCPU \|\| ticks <= 0)` (first tick) | `formatCPUTime(curr.IODelay, ticks)` if `ticks > 0`, else `"0:00:00"` | `""` |
+| `delayAcctAvailable && validPID && havePrevCPU && itv > 0 && ticks > 0` | `formatCPUTime(curr.IODelay, ticks)` | `ΔIODelay/(itv×ticks)×100` formatted `%.2f` |
 
 Note: `iodelay_total,s` uses `curr.IODelay` (not delta) — it's an accumulated counter.
 `%iodelay` uses `delta(prev.IODelay, curr.IODelay)` via existing `delta()` helper.
+Guard `ticks > 0` required before `formatCPUTime` to prevent division-by-zero producing
+`int64(+Inf) = MinInt64` and a corrupt `HH:MM:SS` string.
 
 ## Decisions
 
@@ -229,13 +227,19 @@ func buildProcPidResult(
 // It reads /proc/sys/kernel/task_delayacct; returns false if the file is absent
 // (CONFIG_TASK_DELAY_ACCT=n or kernel < 2.6.18) or contains "0".
 func CheckDelayAcctAvailable() bool {
-    data, err := os.ReadFile("/proc/sys/kernel/task_delayacct")
+    f, err := os.Open("/proc/sys/kernel/task_delayacct")
     if err != nil {
         return false
     }
-    return strings.TrimSpace(string(data)) == "1"
+    defer func() { _ = f.Close() }()
+    var buf [4]byte
+    n, _ := f.Read(buf[:])
+    return strings.TrimSpace(string(buf[:n])) == "1"
 }
 ```
+
+Read is bounded to 4 bytes (sufficient for `"0\n"` or `"1\n"`) to avoid unbounded
+`os.ReadFile` on a procfs virtual file (defensive practice consistent with existing parsers).
 
 ## Dependencies
 
@@ -262,6 +266,7 @@ None.
 - Add `delayAcctAvailable bool` parameter to all existing `buildProcPidResult` call sites in tests
 - Add `TestCheckDelayAcctAvailable`: call with a synthetic sysctl path (or test against live `/proc/sys/kernel/task_delayacct`), assert bool result
 - Add `TestReadProcPidStatIODelay`: read new golden file `pid_stat_iodelay`, assert `IODelay == 500`
+- Add `TestReadProcPidStatTruncated`: golden file with exactly 39 suffix fields; assert graceful return (`IODelay == 0`, no panic) — guards against off-by-one in the `len(suffix) < 40` guard
 - Add `TestBuildProcPidResult_DelayAvailable`: `delayAcctAvailable=true`, non-zero IODelay in currStats; assert col 11 is `HH:MM:SS` and col 17 is `"%.2f"` string
 - Add `TestBuildProcPidResult_DelayUnavailable`: `delayAcctAvailable=false`; assert col 11 and col 17 are `""`
 
@@ -322,7 +327,9 @@ User verifies the rendered TUI manually with sysctl toggle.
 | `Ncols` mismatch between `view.go` and `procPidResultNcols` causes panic in `align.SetAlign()` | Updated synchronously in Task 1; `TestCollectorUpdateProcPidStat19Cols` in Task 2 catches divergence |
 | `printCmdline` mutual exclusion: calling it twice in one handler silently discards the first message | 4-branch `if/else` guarantees exactly one call per execution path; covered by code review |
 | `dev` machine has `kernel.task_delayacct=0` — iodelay columns always `""` during development | Enable with `sysctl -w kernel.task_delayacct=1` for manual testing; unit tests use golden files and don't depend on live sysctl |
-| `suffix[39]` field index: off-by-one error during implementation | Explicit guard `len(suffix) < 40`; `TestReadProcPidStatIODelay` golden file test catches wrong index |
+| `suffix[39]` field index: off-by-one error during implementation | Explicit guard `len(suffix) < 40`; `TestReadProcPidStatIODelay` and `TestReadProcPidStatTruncated` golden file tests catch wrong index |
+| `formatCPUTime` called with `ticks=0` produces corrupt `HH:MM:SS` via `int64(+Inf)=MinInt64` | Guard `ticks > 0` on all `iodelay_total,s` rendering paths (see Architecture rendering table) |
+| `probePID` from `pg_stat_activity` used to probe `/proc/<pid>/io` (pre-existing behavior, not introduced by this feature) | Out of scope — pre-existing risk in `switchViewToProcPidStat`; fallback to PID 1 caps worst case |
 
 ## Acceptance Criteria
 
@@ -342,23 +349,23 @@ User verifies the rendered TUI manually with sysctl toggle.
 
 #### Task 1: Extend procpidstat stat layer and screen handler
 
-- **Description:** Add `IODelay float64` to `ProcPidStat`, parse `suffix[39]` in `readProcPidStatFile` with `len(suffix) < 40` guard, and add `CheckDelayAcctAvailable()` function. Update `procPidResultCols` to 19 names and `procPidResultNcols` to 19. Extend `buildProcPidResult` with `delayAcctAvailable bool` parameter and add rendering logic for columns 11 (`iodelay_total,s`) and 17 (`%iodelay`), shifting former cols 11–16 to 12–17. Add `DelayAcctAvailable bool` to `view.View`, update procpidstat `Ncols` to 19 in `view.go`, wire `view.DelayAcctAvailable` through `stat.go`. In `switchViewToProcPidStat`, call `CheckDelayAcctAvailable()`, set `v.DelayAcctAvailable`, and replace the existing 2-branch warning with a 4-branch `if/else` (`printCmdline` mutual exclusion). Update the cosmetic comment in `record/record.go`.
+- **Description:** Extend the procpidstat data layer with iodelay support: add `IODelay` to `ProcPidStat`, parse `suffix[39]`, add `CheckDelayAcctAvailable()`, grow `buildProcPidResult` to 19 columns with `delayAcctAvailable` parameter. Wire `DelayAcctAvailable` through `view.View` and `stat.go`. Replace the 2-branch warning in `switchViewToProcPidStat` with a 4-branch `if/else`. Also update all existing `buildProcPidResult` call sites in test files to add the new parameter (required for package compilation — `make lint` runs golangci-lint which compiles `_test.go`).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `make build && make lint`
-- **Files to modify:** `internal/stat/procpidstat.go`, `internal/view/view.go`, `internal/stat/stat.go`, `top/config_view.go`, `record/record.go`
+- **Files to modify:** `internal/stat/procpidstat.go`, `internal/view/view.go`, `internal/stat/stat.go`, `top/config_view.go`, `record/record.go`, `internal/stat/procpidstat_test.go` (call-site updates only)
 - **Files to read:** `internal/stat/procpidstat.go`, `internal/stat/stat.go`, `internal/view/view.go`, `top/config_view.go`, `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md`
 
 ### Wave 2: Tests and documentation
 
-#### Task 2: Update test suite and add golden file
+#### Task 2: Add new tests and golden files
 
-- **Description:** Update `procpidstat_test.go`: shift all column index assertions (former 11–16 → 12–17), update all `== 17` assertions to `== 19`, add `delayAcctAvailable` parameter to all `buildProcPidResult` calls, and add 4 new test functions (`TestCheckDelayAcctAvailable`, `TestReadProcPidStatIODelay`, `TestBuildProcPidResult_DelayAvailable`, `TestBuildProcPidResult_DelayUnavailable`). Create golden file `internal/stat/testdata/proc/pid_stat_iodelay` with `suffix[39]=500`. Update `stat_test.go` (rename test, Ncols 17→19, add `DelayAcctAvailable: true`). Update `record/record_test.go` (Ncols 17→19).
+- **Description:** Add new test functions to `procpidstat_test.go` (`TestCheckDelayAcctAvailable`, `TestReadProcPidStatIODelay`, `TestReadProcPidStatTruncated`, `TestBuildProcPidResult_DelayAvailable`, `TestBuildProcPidResult_DelayUnavailable`) and two golden files (`pid_stat_iodelay` with `suffix[39]=500`, `pid_stat_truncated` with 39 suffix fields). Update `stat_test.go` (rename test `17Cols→19Cols`, `Ncols 17→19`, add `DelayAcctAvailable: true`, fix `assert.NotEqual(t, 17, ...)` → `19` at line 215). Update `record/record_test.go` (`Ncols 17→19`).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `make test`
-- **Files to modify:** `internal/stat/procpidstat_test.go`, `internal/stat/testdata/proc/pid_stat_iodelay` (new), `internal/stat/stat_test.go`, `record/record_test.go`
-- **Files to read:** `internal/stat/procpidstat_test.go`, `internal/stat/stat_test.go`, `internal/stat/testdata/proc/pid_stat_normal_comm`, `internal/stat/procpidstat.go`
+- **Files to modify:** `internal/stat/procpidstat_test.go`, `internal/stat/testdata/proc/pid_stat_iodelay` (new), `internal/stat/testdata/proc/pid_stat_truncated` (new), `internal/stat/stat_test.go`, `record/record_test.go`
+- **Files to read:** `internal/stat/procpidstat_test.go`, `internal/stat/stat_test.go`, `internal/stat/testdata/proc/pid_stat_normal_comm`, `internal/stat/procpidstat.go`, `record/record_test.go`
 
 #### Task 3: Update project knowledge and ADR log
 
@@ -376,3 +383,5 @@ User verifies the rendered TUI manually with sysctl toggle.
 - **Description:** Acceptance testing: run full test suite, verify all acceptance criteria from user-spec and tech-spec, perform manual TUI verification with `kernel.task_delayacct=1` (positive) and `=0` (negative) scenarios.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
+- **Verify:** bash — `make test && make lint && make vuln`
+- **Files to read:** `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md`, `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md`
