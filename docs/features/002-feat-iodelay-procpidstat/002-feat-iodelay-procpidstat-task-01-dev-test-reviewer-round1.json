@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Task 01 test scope is correctly executed. All 7 existing buildProcPidResult call sites have the new 'false' delayAcctAvailable argument added. TestBuildProcPidResult_NewSignature compiles with the 10-arg signature and asserts Ncols==19, fulfilling the TDD anchor contract. The 11 stale '== 17' / row-index assertions and the stale expectedProcPidCols (17-entry) slice are pre-existing tests that are intentionally deferred to Task 02 per spec — they do not constitute Task 01 findings. One minor gap: the TDD anchor does not assert column names or the positions of 'iodelay_total,s' / '%iodelay', but this is within the stated minimal scope of the anchor.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/procpidstat_test.go:374 (TestBuildProcPidResult_NewSignature)",
+      "issue": "The TDD anchor asserts Ncols==19 but does not assert that the 19-column slice contains 'iodelay_total,s' at index 11 and '%iodelay' at index 17. If the column list were populated with 19 arbitrary entries, the assertion would still pass. The IODelay:200 value in currStats is silently irrelevant because delayAcctAvailable=false — the iodelay rendering path is never executed by this anchor.",
+      "recommendation": "Add two column-name assertions to pin the correct positions: assert.Equal(t, \"iodelay_total,s\", got.Cols[11]) and assert.Equal(t, \"%iodelay\", got.Cols[17]). This makes the anchor sensitive to wrong column ordering, not just wrong column count. Alternatively, assert.Equal(t, procPidResultCols, got.Cols) covers all 19 names in one line. The IODelay:200 in currStats is harmless but misleading — consider removing it or adding a comment that iodelay rendering is tested in Task 02.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 8,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

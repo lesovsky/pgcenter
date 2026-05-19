@@ -7,18 +7,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
-### [001] procpidstat iodelay — Netlink taskstats not implemented
-
-**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
-**Severity:** Low
-**Area:** `internal/stat/procpidstat.go`, issues #118/#123
-
-**What:** Per-process iowait (`wa%`, `iodelay` columns) is absent from the procpidstat screen. Delay accounting data lives behind the Netlink taskstats API (`AF_NETLINK/NETLINK_GENERIC`), which is not in the codebase. Placeholder issues #118 and #123 originally requested this metric.
-
-**Why deferred:** Implementing a Netlink taskstats client from scratch would have doubled the feature scope. The most actionable metrics (CPU%, IO throughput) are available without it.
-
----
-
 ### [002] procpidstat record/report — not integrated with recorder
 
 **Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
@@ -45,4 +33,15 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Resolved Debt
 
-*(none yet)*
+### [001] procpidstat iodelay — Netlink taskstats not implemented
+
+**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Resolved:** 2026-05-19 (feature: 002-feat-iodelay-procpidstat)
+**Severity:** Low
+**Area:** `internal/stat/procpidstat.go`, issues #118/#123
+
+**What:** Per-process iowait (`wa%`, `iodelay` columns) was absent from the procpidstat screen. Delay accounting data was assumed to require the Netlink taskstats API (`AF_NETLINK/NETLINK_GENERIC`), which is not in the codebase. Placeholder issues #118 and #123 originally requested this metric.
+
+**Why deferred:** Implementing a Netlink taskstats client from scratch would have doubled the feature scope. The most actionable metrics (CPU%, IO throughput) are available without it.
+
+**Resolution:** Resolved by 002-feat-iodelay-procpidstat: implemented via `/proc/[pid]/stat` field 42 (`delayacct_blkio_ticks`) — no Netlink required. Availability is probed once at screen open via `/proc/sys/kernel/task_delayacct` (`CheckDelayAcctAvailable()`). The procpidstat screen now exposes two new columns (`iodelay_total,s` and `%iodelay`).

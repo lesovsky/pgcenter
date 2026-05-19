@@ -214,6 +214,8 @@ func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 			probePID = 1 // fallback: init/systemd is always running under a different user
 		}
 		ioErr := stat.CheckIOAvailable(probePID)
+		ioAvailable := ioErr == nil
+		delayAcctAvailable := stat.CheckDelayAcctAvailable()
 
 		// Save current view back to the views map so per-view state (sort, filters, etc.) is preserved.
 		app.config.views[app.config.view.Name] = app.config.view
@@ -221,15 +223,23 @@ func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 		// Load the procpidstat view and patch runtime-only fields.
 		v := app.config.views["procpidstat"]
 		v.CollectExtra = stat.CollectProcPidStat
-		v.IOAvailable = (ioErr == nil)
+		v.IOAvailable = ioAvailable
+		v.DelayAcctAvailable = delayAcctAvailable
 
 		app.config.view = v
 		app.config.viewCh <- v
 
-		// Show IO access warning if the probe failed; otherwise show the view name.
-		if ioErr != nil {
+		// Show a warning combining IO and iodelay availability. printCmdline must
+		// be called exactly once per execution path (calling it twice overwrites
+		// the first message before the user can read it).
+		switch {
+		case !ioAvailable && !delayAcctAvailable:
+			printCmdline(g, "IO stats and iodelay unavailable: run as postgres user + sysctl -w kernel.task_delayacct=1, then re-open screen")
+		case !ioAvailable:
 			printCmdline(g, "IO stats unavailable (cannot read /proc/%d/io): run as postgres user or via sudo.", probePID)
-		} else {
+		case !delayAcctAvailable:
+			printCmdline(g, "iodelay unavailable (task_delayacct=0): run sysctl -w kernel.task_delayacct=1, then re-open screen")
+		default:
 			printCmdline(g, "%s", v.Msg)
 		}
 		return nil

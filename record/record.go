@@ -151,7 +151,7 @@ func filterViews(version int, pgssSchema string, views view.Views) (int, view.Vi
 
 	for k, v := range views {
 		// Skip views explicitly marked as not recordable (e.g. procpidstat — its
-		// SQL query produces only 7 of 17 columns; the remaining columns require
+		// SQL query produces only 7 of 19 columns; the remaining columns require
 		// procfs enrichment which never runs in the record context).
 		if v.NotRecordable {
 			delete(views, k)

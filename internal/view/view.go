@@ -26,6 +26,7 @@ type View struct {
 	ShowExtra          int                    // Specifies extra stats should be enabled on the view.
 	CollectExtra       int                    // Specifies non-SQL enrichment kind for Collector.Update(); 0 means no enrichment.
 	IOAvailable        bool                   // True when /proc/[pid]/io is readable; carries the capability flag to the Collector.
+	DelayAcctAvailable bool                   // True when /proc/sys/kernel/task_delayacct == "1"; enables iodelay columns in procpidstat view.
 	NotRecordable      bool                   // When true, record/record.go:filterViews() skips this view.
 }
 
@@ -285,7 +286,7 @@ func New() Views {
 			Name:          "procpidstat",
 			QueryTmpl:     query.PgStatActivityProcPidStat,
 			DiffIntvl:     [2]int{0, 0},
-			Ncols:         17,
+			Ncols:         19,
 			OrderKey:      0,
 			OrderDesc:     false,
 			ColsWidth:     map[int]int{},

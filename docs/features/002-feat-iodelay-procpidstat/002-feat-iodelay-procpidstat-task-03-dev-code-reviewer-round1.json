@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "All three documentation files correctly implement the task-03 acceptance criteria. Tech debt [001] is properly resolved with an accurate resolution note, the prior ADR is correctly marked Superseded with a cross-reference, three new ADR entries cover all required decisions, and the features-catalog has both the updated [001] entry and an accurate new [002] entry. No critical or major issues found.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "docs/decisions-log.md",
+      "line": 116,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The [002-feat-iodelay-procpidstat] `%iodelay` normalization ADR entry adds the statement '`%iodelay` may legitimately exceed 100% on multi-threaded blocking patterns; this is documented behavior, not a bug' inside the Decision field. This fact is accurate and valuable, but it sits more naturally in the Rationale section (which already explains the wall-clock vs. CPU-time distinction). Consider moving that sentence to the end of the Rationale paragraph to keep Decision focused on the chosen formula.",
+      "benefit": "Cleaner ADR structure — Decision states the choice, Rationale explains consequences. Easier for future readers to scan.",
+      "optional": true
+    },
+    {
+      "file": "docs/features-catalog.md",
+      "line": 13,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The [001-feat-per-process-system-stats] key-scenarios bullet now enumerates all 19 columns inline, making the sentence quite long. The parenthetical '(The two `iodelay*` columns are added by [002-feat-iodelay-procpidstat])' is clear and correct, but the full column list could alternatively live in the [002] entry with the [001] bullet simply saying '19 columns (including iodelay columns from [002-feat-iodelay-procpidstat])'. No change required — readability trade-off, either form is acceptable.",
+      "benefit": "Slightly shorter key-scenarios bullet in [001], avoiding repetition of column names that are already detailed in [002].",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  },
+  "dimensionNotes": {
+    "techDebt001Resolution": "PASS — [001] absent from Active Debt; present in Resolved section with date 2026-05-19, resolution note citing 002-feat-iodelay-procpidstat, /proc/[pid]/stat field 42, CheckDelayAcctAvailable(), and both new columns. Active items [002] and [003] untouched.",
+    "decisionsLogSupersession": "PASS — Prior [001-feat] 'iodelay deferred' ADR has Status updated to 'Superseded by [002-feat-iodelay-procpidstat]' and a 'Superseded by:' line added. Entry preserved (not deleted), satisfying the historical-record requirement.",
+    "decisionsLogNewEntries": "PASS — Three new ADR entries added under [002-feat-iodelay-procpidstat] header: (1) /proc/[pid]/stat field 42 vs Netlink with explicit Supersedes field; (2) CheckDelayAcctAvailable() via /proc/sys/kernel/task_delayacct with rationale and two rejected alternatives; (3) %iodelay not normalized by cpuCount with wall-clock vs CPU-time rationale. All three required decisions covered per tech-spec.",
+    "featuresCatalog001Update": "PASS — 'Netlink taskstats' limitation sentence removed. Column count updated 17→19 in key-scenarios. Cross-reference to [002-feat-iodelay-procpidstat] added.",
+    "featuresCatalog002Entry": "PASS — New [002] entry present with: what-it-does description (data source, column names, use case); key scenarios covering positive path, negative path (both disabled and kernel absent), and >100% edge case; limitations covering CONFIG_TASK_DELAY_ACCT, local-mode-only, single-shot probe, and inherited [001] limitations; Touches line.",
+    "crossFileConsistency": "PASS — Resolution note in tech-debt.md, Superseded note in decisions-log.md, and features-catalog [001]→[002] cross-references are mutually consistent. Column count 19 stated consistently across all three files. Warning text in features-catalog [002] matches tech-spec Decision 5 verbatim.",
+    "factualAccuracy": "PASS — Field index 'suffix[39]' consistent with tech-spec. Formula ΔIODelay/(itv×ticks)×100 stated correctly. CheckDelayAcctAvailable() probe semantics (absent=false, '0'=false, '1'=true) accurately described. Probe-once-at-screen-open behavior documented correctly in features-catalog limitations."
+  }
+}

@@ -1,5 +1,5 @@
 ---
-status: planned
+status: done
 depends_on: ["01"]
 wave: 2
 skills: [code-writing]

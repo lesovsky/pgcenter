@@ -65,10 +65,62 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 
 **Date:** 2026-05-19
 **Feature:** 001-feat-per-process-system-stats
-**Status:** Accepted
+**Status:** Superseded by [002-feat-iodelay-procpidstat]
 
 **Context:** Per-process iowait was planned but `/proc/[pid]/delays` does not exist in Linux. Delay accounting is only available via Netlink taskstats (`AF_NETLINK/NETLINK_GENERIC`), which is not in the codebase.
 
 **Decision:** Defer iodelay to a separate future issue. v1 ships with CPU + IO bytes only.
 
 **Rationale:** Implementing Netlink taskstats from scratch would significantly increase scope. The most valuable troubleshooting metrics (CPU%, IO throughput) are available without it.
+
+**Superseded by:** [002-feat-iodelay-procpidstat] data source ADR — `delayacct_blkio_ticks` turned out to be available in `/proc/[pid]/stat` field 42, so Netlink was not required after all.
+
+---
+
+## [002-feat-iodelay-procpidstat] `/proc/[pid]/stat` field 42 instead of Netlink taskstats
+
+**Date:** 2026-05-19
+**Feature:** 002-feat-iodelay-procpidstat
+**Status:** Accepted
+**Supersedes:** [001-feat-per-process-system-stats] "iodelay (per-process iowait) deferred — requires Netlink taskstats"
+
+**Context:** The prior ADR for [001-feat-per-process-system-stats] deferred iodelay on the assumption that delay accounting required the Netlink taskstats API. Re-investigation showed `delayacct_blkio_ticks` is exposed as field 42 of `/proc/[pid]/stat` (kernel-numbered from 1; `suffix[39]` after dropping `pid` and `comm`) — the same file already parsed each tick for CPU times.
+
+**Decision:** Read `delayacct_blkio_ticks` from `suffix[39]` in `/proc/[pid]/stat`. Add `IODelay float64` to the existing `ProcPidStat` struct; no new collector maps or transport.
+
+**Rationale:** No new dependencies (no Netlink socket, no `golang.org/x/sys/unix` package), minimal implementation delta (one extra field parsed from a file already opened each tick), and sufficient precision (clock ticks) for DBA troubleshooting.
+
+**Alternatives considered:**
+- Netlink taskstats (`AF_NETLINK/NETLINK_GENERIC`): nanosecond precision, but requires Generic Netlink socket, a new dependency, and significantly larger implementation scope. Rejected.
+
+---
+
+## [002-feat-iodelay-procpidstat] Availability probe via `/proc/sys/kernel/task_delayacct` sysctl
+
+**Date:** 2026-05-19
+**Feature:** 002-feat-iodelay-procpidstat
+**Status:** Accepted
+
+**Context:** The screen handler needs to decide at open time whether the iodelay columns can be populated. `delayacct_blkio_ticks` is always present in `/proc/[pid]/stat` but reads as `0` when delay accounting is disabled, so the field value itself is not a reliable signal.
+
+**Decision:** `stat.CheckDelayAcctAvailable()` reads `/proc/sys/kernel/task_delayacct` and returns `true` iff the content is `"1"`. No PID argument needed. Called once in `switchViewToProcPidStat`; result is stored on the view.
+
+**Rationale:** This sysctl is the authoritative runtime state of delay accounting — readable without root (`-rw-r--r-- 1 root root`). A single probe covers all cases: kernel built without `CONFIG_TASK_DELAY_ACCT` (file absent → read error → `false`), sysctl disabled (`"0"` → `false`), sysctl enabled (`"1"` → `true`).
+
+**Alternatives considered:**
+- Parse `/boot/config-$(uname -r)` for `CONFIG_TASK_DELAY_ACCT=y`: brittle, requires shell invocation, not authoritative for runtime state. Rejected.
+- Check field 42 value after two ticks (non-zero = available): unreliable — zero is a valid accumulated value for a new or non-IO process. Rejected.
+
+---
+
+## [002-feat-iodelay-procpidstat] `%iodelay` not normalized by `cpuCount`
+
+**Date:** 2026-05-19
+**Feature:** 002-feat-iodelay-procpidstat
+**Status:** Accepted
+
+**Context:** CPU rate columns (`%all`, `%us`, `%sy`) in the procpidstat screen are normalized by `runtime.NumCPU()` to keep them in the 0–100% range — see ADR [001-feat-per-process-system-stats] "CPU normalization 0–100% via runtime.NumCPU()". The question for `%iodelay` was whether to apply the same normalization.
+
+**Decision:** Formula `ΔIODelay / (itv × ticks) × 100` with no division by `cpuCount`. `%iodelay` may legitimately exceed 100% on multi-threaded blocking patterns; this is documented behavior, not a bug.
+
+**Rationale:** `delayacct_blkio_ticks` counts wall-clock ticks the process spent blocked in D-state, regardless of CPU count. A single-threaded process can be 100% IO-blocked whether the machine has 1 or 64 cores. Normalizing by `cpuCount` would produce misleadingly small numbers (e.g., 1.56% on a 64-core machine for a fully IO-blocked process). The CPU-rate columns normalize correctly because CPU time is shared across cores; IO-blocked time is not.

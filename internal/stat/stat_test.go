@@ -211,14 +211,14 @@ func TestCollectorUpdateNoEnrichment(t *testing.T) {
 
 	s, err := c.Update(conn, views["activity"], time.Second)
 	assert.NoError(t, err)
-	// With CollectExtra==CollectNone, result must NOT be the 17-col procpidstat shape.
-	assert.NotEqual(t, 17, s.Pgstat.Result.Ncols)
+	// With CollectExtra==CollectNone, result must NOT be the 19-col procpidstat shape.
+	assert.NotEqual(t, 19, s.Pgstat.Result.Ncols)
 	// PID maps stay empty when enrichment is not active.
 	assert.Equal(t, 0, len(c.currProcPidStats))
 	assert.Equal(t, 0, len(c.currProcPidIO))
 }
 
-func TestCollectorUpdateProcPidStat17Cols(t *testing.T) {
+func TestCollectorUpdateProcPidStat19Cols(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
 	defer conn.Close()
@@ -228,18 +228,19 @@ func TestCollectorUpdateProcPidStat17Cols(t *testing.T) {
 
 	views := view.Views{
 		"procpidstat": {
-			Name:         "procpidstat",
-			QueryTmpl:    query.PgStatActivityProcPidStat,
-			DiffIntvl:    [2]int{0, 0},
-			Ncols:        17,
-			OrderKey:     0,
-			OrderDesc:    false,
-			ColsWidth:    map[int]int{},
-			Msg:          "Show per-process system stats",
-			Filters:      map[int]*regexp.Regexp{},
-			Refresh:      1 * time.Second,
-			CollectExtra: CollectProcPidStat,
-			IOAvailable:  true,
+			Name:               "procpidstat",
+			QueryTmpl:          query.PgStatActivityProcPidStat,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              19,
+			OrderKey:           0,
+			OrderDesc:          false,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show per-process system stats",
+			Filters:            map[int]*regexp.Regexp{},
+			Refresh:            1 * time.Second,
+			CollectExtra:       CollectProcPidStat,
+			IOAvailable:        true,
+			DelayAcctAvailable: true,
 		},
 	}
 	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
@@ -249,10 +250,10 @@ func TestCollectorUpdateProcPidStat17Cols(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
 
-	// Must not panic and must produce a 17-column result.
+	// Must not panic and must produce a 19-column result.
 	s, err := c.Update(conn, views["procpidstat"], time.Second)
 	assert.NoError(t, err)
-	assert.Equal(t, 17, s.Pgstat.Result.Ncols)
+	assert.Equal(t, 19, s.Pgstat.Result.Ncols)
 	assert.True(t, s.Pgstat.Result.Valid)
-	assert.Len(t, s.Pgstat.Result.Cols, 17)
+	assert.Len(t, s.Pgstat.Result.Cols, 19)
 }

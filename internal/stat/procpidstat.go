@@ -12,25 +12,28 @@ import (
 	"strings"
 )
 
-// procPidResultCols is the canonical 17-column header used by buildProcPidResult.
+// procPidResultCols is the canonical 19-column header used by buildProcPidResult.
 // The order matches the view config in internal/view; any deviation here causes
-// a panic in align.SetAlign() because the view declares Ncols=17.
+// a panic in align.SetAlign() because the view declares Ncols=19.
 var procPidResultCols = []string{
 	"pid", "datname", "usename", "state", "wait_etype", "wait_event",
 	"all_total,s", "us_total,s", "sy_total,s",
 	"read_total,KiB", "write_total,KiB",
+	"iodelay_total,s",
 	"%all", "%us", "%sy",
 	"read,KiB/s", "write,KiB/s",
+	"%iodelay",
 	"query",
 }
 
-const procPidResultNcols = 17
+const procPidResultNcols = 19
 
 // ProcPidStat describes raw per-process CPU usage values from /proc/[pid]/stat.
 // Values are unscaled (jiffies), not seconds.
 type ProcPidStat struct {
-	Utime float64 // user mode time
-	Stime float64 // kernel mode time
+	Utime   float64 // user mode time
+	Stime   float64 // kernel mode time
+	IODelay float64 // block IO delay (delayacct_blkio_ticks), /proc/[pid]/stat field 42
 }
 
 // ProcPidIO describes raw per-process IO bytes from /proc/[pid]/io.
@@ -79,7 +82,7 @@ func readProcPidStatFile(statfile string) (ProcPidStat, error) {
 	// Indexes inside the suffix (0-based, comm and pid stripped):
 	//   0 = state, 1 = ppid, 2 = pgrp, 3 = session, 4 = tty_nr, 5 = tpgid,
 	//   6 = flags, 7 = minflt, 8 = cminflt, 9 = majflt, 10 = cmajflt,
-	//   11 = utime, 12 = stime
+	//   11 = utime, 12 = stime, ..., 39 = delayacct_blkio_ticks (field 42).
 	if len(suffix) < 13 {
 		return stat, fmt.Errorf("%s bad content: not enough fields in '%s'", statfile, line)
 	}
@@ -95,6 +98,18 @@ func readProcPidStatFile(statfile string) (ProcPidStat, error) {
 
 	stat.Utime = utime
 	stat.Stime = stime
+
+	// delayacct_blkio_ticks lives at suffix[39] (field 42). Older kernels or
+	// truncated proc files may not include it — return what we have without an
+	// error so callers degrade gracefully (IODelay stays at 0).
+	if len(suffix) >= 40 {
+		iodelay, err := strconv.ParseFloat(suffix[39], 64)
+		if err != nil {
+			return stat, fmt.Errorf("%s bad content: parse delayacct_blkio_ticks: %w", statfile, err)
+		}
+		stat.IODelay = iodelay
+	}
+
 	return stat, nil
 }
 
@@ -165,6 +180,23 @@ func CheckIOAvailable(pid int) error {
 	return f.Close()
 }
 
+// CheckDelayAcctAvailable reports whether delay accounting is active at runtime.
+// It reads /proc/sys/kernel/task_delayacct; returns false if the file is absent
+// (CONFIG_TASK_DELAY_ACCT=n or kernel < 2.6.18) or contains "0". The read is
+// bounded to 4 bytes — sufficient for "0\n" or "1\n" — to avoid unbounded reads
+// on a procfs virtual file.
+func CheckDelayAcctAvailable() bool {
+	f, err := os.Open("/proc/sys/kernel/task_delayacct")
+	if err != nil {
+		return false
+	}
+	defer func() { _ = f.Close() }()
+
+	var buf [4]byte
+	n, _ := f.Read(buf[:])
+	return strings.TrimSpace(string(buf[:n])) == "1"
+}
+
 // formatCPUTime converts accumulated CPU jiffies to a HH:MM:SS string. Hours
 // are not capped — values >= 100h render with extra digits, matching the
 // behaviour of ps(1). ticks is CLK_TCK obtained at startup; callers must pass
@@ -175,24 +207,27 @@ func formatCPUTime(jiffies, ticks float64) string {
 }
 
 // buildProcPidResult joins a 7-column pg_stat_activity PGresult with prev/curr
-// procfs snapshots (CPU + IO) and produces the 17-column PGresult consumed by
-// the rendering pipeline. The function never returns fewer than 17 columns —
-// missing data is rendered as "0" (CPU/rate) or "" (IO). Callers pass:
+// procfs snapshots (CPU + IO) and produces the 19-column PGresult consumed by
+// the rendering pipeline. The function never returns fewer than 19 columns —
+// missing data is rendered as "0" (CPU/rate) or "" (IO/iodelay). Callers pass:
 //
-//   - activity      — 7-column PGresult from pg_stat_activity.
-//   - prevStats     — utime/stime from the previous tick keyed by PID; may be nil.
-//   - currStats     — utime/stime from the current tick keyed by PID.
-//   - prevIO/currIO — read/write bytes; may be nil when ioAvailable=false.
-//   - ioAvailable   — false on PG <17 or when /proc/[pid]/io is not readable;
+//   - activity            — 7-column PGresult from pg_stat_activity.
+//   - prevStats           — utime/stime/iodelay from the previous tick keyed by PID; may be nil.
+//   - currStats           — utime/stime/iodelay from the current tick keyed by PID.
+//   - prevIO/currIO       — read/write bytes; may be nil when ioAvailable=false.
+//   - ioAvailable         — false on PG <17 or when /proc/[pid]/io is not readable;
 //     causes IO columns to render as "" (empty string with Valid=true).
-//   - ticks         — CLK_TCK from sysconf.
-//   - itv           — refresh interval in seconds; 0 skips rate columns.
-//   - cpuCount      — number of CPUs used to normalize %all/%us/%sy.
+//   - delayAcctAvailable  — false when /proc/sys/kernel/task_delayacct is absent
+//     or set to "0"; causes iodelay columns to render as "".
+//   - ticks               — CLK_TCK from sysconf.
+//   - itv                 — refresh interval in seconds; 0 skips rate columns.
+//   - cpuCount            — number of CPUs used to normalize %all/%us/%sy.
 func buildProcPidResult(
 	activity PGresult,
 	prevStats, currStats map[int]ProcPidStat,
 	prevIO, currIO map[int]ProcPidIO,
 	ioAvailable bool,
+	delayAcctAvailable bool,
 	ticks float64,
 	itv float64,
 	cpuCount int,
@@ -253,43 +288,72 @@ func buildProcPidResult(
 			row[10] = nullString("")
 		}
 
-		// Cols 11..13 — CPU rate %all, %us, %sy. "0" on first tick / itv==0 / invalid PID.
+		// Col 11 — accumulated iodelay (HH:MM:SS). "" when delay accounting is
+		// unavailable; "00:00:00" / "0:00:00" on invalid PID or ticks<=0.
+		switch {
+		case !delayAcctAvailable:
+			row[11] = nullString("")
+		case !validPID:
+			row[11] = nullString("00:00:00")
+		case ticks > 0:
+			row[11] = nullString(formatCPUTime(curCPU.IODelay, ticks))
+		default:
+			row[11] = nullString("0:00:00")
+		}
+
+		// Cols 12..14 — CPU rate %all, %us, %sy. "0" on first tick / itv==0 / invalid PID.
 		// Formula: Δjiffies / (itv * ticks) * 100 / cpuCount.
 		if validPID && haveCPU && havePrevCPU && itv > 0 && ticks > 0 && cpuCount > 0 {
 			denom := itv * ticks
 			scale := 100.0 / float64(cpuCount)
 			dUtime := delta(prevCPU.Utime, curCPU.Utime)
 			dStime := delta(prevCPU.Stime, curCPU.Stime)
-			row[11] = nullString(strconv.FormatFloat((dUtime+dStime)/denom*scale, 'f', 2, 64))
-			row[12] = nullString(strconv.FormatFloat(dUtime/denom*scale, 'f', 2, 64))
-			row[13] = nullString(strconv.FormatFloat(dStime/denom*scale, 'f', 2, 64))
+			row[12] = nullString(strconv.FormatFloat((dUtime+dStime)/denom*scale, 'f', 2, 64))
+			row[13] = nullString(strconv.FormatFloat(dUtime/denom*scale, 'f', 2, 64))
+			row[14] = nullString(strconv.FormatFloat(dStime/denom*scale, 'f', 2, 64))
 		} else {
-			row[11] = nullString("0")
 			row[12] = nullString("0")
 			row[13] = nullString("0")
+			row[14] = nullString("0")
 		}
 
-		// Cols 14..15 — IO rate read,KiB/s, write,KiB/s. "" if !ioAvailable, "0.00" if no prev / itv==0.
+		// Cols 15..16 — IO rate read,KiB/s, write,KiB/s. "" if !ioAvailable, "0.00" if no prev / itv==0.
 		switch {
 		case !ioAvailable || !validPID:
-			row[14] = nullString("")
 			row[15] = nullString("")
+			row[16] = nullString("")
 		case haveIO && havePrevIO && itv > 0:
 			dRead := delta(prevIOs.ReadBytes, curIOs.ReadBytes)
 			dWrite := delta(prevIOs.WriteBytes, curIOs.WriteBytes)
-			row[14] = nullString(strconv.FormatFloat(dRead/itv/1024, 'f', 2, 64))
-			row[15] = nullString(strconv.FormatFloat(dWrite/itv/1024, 'f', 2, 64))
+			row[15] = nullString(strconv.FormatFloat(dRead/itv/1024, 'f', 2, 64))
+			row[16] = nullString(strconv.FormatFloat(dWrite/itv/1024, 'f', 2, 64))
 		default:
-			row[14] = nullString("0.00")
 			row[15] = nullString("0.00")
+			row[16] = nullString("0.00")
 		}
 
-		// Col 16 — query (last column of activity, index 6).
+		// Col 17 — %iodelay rate. "" when delay accounting unavailable or first
+		// tick / itv<=0 / ticks<=0; "0.00" on invalid PID. Not normalised by
+		// cpuCount: delayacct_blkio_ticks is wall-clock time spent blocked, not
+		// per-CPU time (see tech-spec Decision 3).
+		switch {
+		case !delayAcctAvailable:
+			row[17] = nullString("")
+		case !validPID:
+			row[17] = nullString("0.00")
+		case haveCPU && havePrevCPU && itv > 0 && ticks > 0:
+			dIO := delta(prevCPU.IODelay, curCPU.IODelay)
+			row[17] = nullString(strconv.FormatFloat(dIO/(itv*ticks)*100, 'f', 2, 64))
+		default:
+			row[17] = nullString("")
+		}
+
+		// Col 18 — query (last column of activity, index 6).
 		var q string
 		if len(src) > 6 {
 			q = src[6].String
 		}
-		row[16] = sql.NullString{String: q, Valid: true}
+		row[18] = sql.NullString{String: q, Valid: true}
 
 		values = append(values, row)
 	}

@@ -1,0 +1,98 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "changes_required",
+  "summary": "The core implementation is architecturally sound and matches the tech-spec precisely: struct extension, parser guard, probe function, column definitions, buildProcPidResult signature, view wiring, 4-branch printCmdline, and record.go comment update are all correctly done. However, the test file (procpidstat_test.go) was updated only for call-site compilation — the existing row-index assertions were NOT shifted to account for the two new columns inserted at positions 11 and 17, causing 9 tests to assert against wrong column indices and producing systematically incorrect validation. Additionally, expectedProcPidCols and several Ncols/Len assertions remain at the pre-task 17-column baseline, making those tests actively misleading.",
+  "criticalIssues": [
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 76,
+      "severity": "critical",
+      "category": "cross-file-consistency",
+      "issue": "expectedProcPidCols still describes the 17-column layout (missing 'iodelay_total,s' at index 11 and '%iodelay' at index 17). The variable is used in TestBuildProcPidResult_FirstTick at line 144 (assert.Equal(t, expectedProcPidCols, got.Cols)), which will fail at runtime because buildProcPidResult now returns 19 columns but expectedProcPidCols contains 17 entries.",
+      "impact": "TestBuildProcPidResult_FirstTick panics or fails with a wrong-length slice comparison, giving a false signal about basic output correctness.",
+      "recommendation": "Update expectedProcPidCols to the 19-entry list matching procPidResultCols in procpidstat.go: insert 'iodelay_total,s' after 'write_total,KiB' and '%iodelay' before 'query'. Update the comment on line 76 from '17-column' to '19-column'."
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 142,
+      "severity": "critical",
+      "category": "cross-file-consistency",
+      "issue": "Multiple Ncols and Len assertions throughout the file still assert 17, but buildProcPidResult now returns 19 columns. Affected lines: 142 (assert.Equal(t, 17, got.Ncols)), 146 (assert.Len(t, got.Values[0], 17)), 181, 182, 220, 287, 289, 291, 323, 349, 352.",
+      "impact": "All affected test functions will fail at the Ncols/Len assertion, producing build-visible failures in 'make test' that are not the pre-existing == 17 failures mentioned in the task scope — they cover wrong semantics (the result truly is 19-col now).",
+      "recommendation": "Change every 'assert.Equal(t, 17, ...)' and 'assert.Len(t, ..., 17)' referencing buildProcPidResult output to 19. Task description explicitly calls this out: 'Update all == 17 / Len(..., 17) assertions → 19 (lines 142, 146, 181, 182, 220, 287, 289, 291, 323, 349, 352)'."
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 163,
+      "severity": "critical",
+      "category": "cross-file-consistency",
+      "issue": "Row-index assertions in TestBuildProcPidResult_FirstTick, TestBuildProcPidResult_ItvZero, TestBuildProcPidResult_TwoTicks, and TestBuildProcPidResult_InvalidPID use the OLD column mapping (pre-shift). After inserting 'iodelay_total,s' at index 11, the former index 11 (%all) is now at index 12, former 12 (%us) at 13, former 13 (%sy) at 14, former 14 (read,KiB/s) at 15, former 15 (write,KiB/s) at 16, and former 16 (query) at 18. Affected assertions: lines 163-168 (FirstTick), 222-226 (ItvZero), 188-192 (IOUnavailable), 330-335 (TwoTicks), 363-366 (InvalidPID).",
+      "impact": "Tests pass values at wrong column positions. For example TestBuildProcPidResult_FirstTick asserts row[11]='0' (expecting %all rate=0 on first tick), but row[11] is now 'iodelay_total,s' with value '' (delayAcctAvailable=false), so the test passes for the wrong reason. TestBuildProcPidResult_TwoTicks is worst: it asserts row[11]='37.50' but row[11] is now iodelay_total,s=''; the assertion would fail, and the real %all value at row[12] goes unchecked.",
+      "impact": "Tests either produce false positives (wrong index coincidentally matches expected value) or false negatives that mask real regressions.",
+      "recommendation": "Shift all row[N] index assertions: former N=11..15 → N+1; former N=16 → N+2 (query is now at 18). Use the column index mapping table from the task file to validate each assertion: %all→12, %us→13, %sy→14, read,KiB/s→15, write,KiB/s→16, query→18."
+    },
+    {
+      "file": "internal/stat/stat_test.go",
+      "line": 221,
+      "severity": "critical",
+      "category": "cross-file-consistency",
+      "issue": "TestCollectorUpdateProcPidStat17Cols uses Ncols: 17 in the view literal and asserts assert.Equal(t, 17, s.Pgstat.Result.Ncols) at line 255. Since buildProcPidResult always returns procPidResultNcols=19 regardless of the view's Ncols field, the assertion will fail. The test name also embeds '17Cols', which is now misleading.",
+      "impact": "This is an integration-level test that drives Collector.Update through the full enrichment path. Failing here blocks 'make test' and obscures whether the enrichment pipeline itself works correctly.",
+      "recommendation": "Rename TestCollectorUpdateProcPidStat17Cols → TestCollectorUpdateProcPidStat19Cols. Change Ncols: 17 → Ncols: 19 and add DelayAcctAvailable: true in the view literal. Change assert.Equal(t, 17, ...) → assert.Equal(t, 19, ...) and assert.Len(t, ..., 17) → assert.Len(t, ..., 19) at lines 255-257. This is explicitly described in tech-spec Testing Strategy."
+    },
+    {
+      "file": "record/record_test.go",
+      "line": 140,
+      "severity": "critical",
+      "category": "cross-file-consistency",
+      "issue": "Comment on line 140 says 'view.New() registers procpidstat with NotRecordable=true and Ncols=17' and the assertion assert.Equal(t, 17, pp.Ncols) at line 145 will fail because view.New() now returns Ncols=19 for procpidstat.",
+      "impact": "This test documents the public contract of view.New() for the procpidstat view. A failing assertion here makes the record package's test suite fail.",
+      "recommendation": "Update comment to reference Ncols=19. Change assert.Equal(t, 17, pp.Ncols) → assert.Equal(t, 19, pp.Ncols)."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "internal/stat/procpidstat.go",
+      "line": 260,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The variable haveCPU is declared alongside havePrevCPU on line 260 but is never used in a meaningful guard for col 11 (iodelay_total,s). The col 11 switch uses only validPID and ticks > 0 — if currStats does not contain the PID (haveCPU=false), curCPU is zero-valued, so formatCPUTime(0, ticks) renders '00:00:00'. This is spec-compliant but the relationship between haveCPU and col 11 rendering is not commented.",
+      "benefit": "A brief comment near col 11 clarifying that haveCPU=false renders as '00:00:00' (zero jiffies) rather than triggering a separate branch would prevent future maintainers from adding a spurious haveCPU guard.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat.go",
+      "line": 51,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The comment on readProcPidStatFile at line 51 says 'parses utime/stime' — it now also parses IODelay (delayacct_blkio_ticks). The doc comment is stale.",
+      "benefit": "Accurate godoc for the function prevents confusion when reading the parser's documented scope.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 76,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "TestBuildProcPidResult_NewSignature at line 374 is the TDD anchor from task 01 and only asserts Ncols==19 with delayAcctAvailable=false. Once the Task 02 tests land, TestBuildProcPidResult_NewSignature will be a subset of TestBuildProcPidResult_DelayUnavailable with no unique assertions. Consider whether to keep it as a named anchor test or fold it into the Task 02 test for avoiding duplication.",
+      "benefit": "Reduces test redundancy without losing coverage.",
+      "optional": true
+    },
+    {
+      "file": "top/config_view.go",
+      "line": 235,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The 4-branch switch correctly enforces printCmdline mutual exclusion. The warning text for the combined case ('IO stats and iodelay unavailable: run as postgres user + sysctl -w kernel.task_delayacct=1, then re-open screen') is long enough that it may be truncated in narrow terminals. This is a cosmetic concern; the logic is correct.",
+      "benefit": "Consider splitting the combined message across two shorter sentences or using a shorter phrasing to ensure visibility in 80-column terminals.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 5,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "insufficient"
+  }
+}

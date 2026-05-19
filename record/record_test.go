@@ -137,12 +137,12 @@ func TestFilterViews_NotRecordable(t *testing.T) {
 	assert.Equal(t, 0, len(v))
 	assert.NotContains(t, v, "procpidstat")
 
-	// Sanity check: view.New() registers procpidstat with NotRecordable=true and Ncols=17.
+	// Sanity check: view.New() registers procpidstat with NotRecordable=true and Ncols=19.
 	all := view.New()
 	pp, ok := all["procpidstat"]
 	assert.True(t, ok)
 	assert.True(t, pp.NotRecordable)
-	assert.Equal(t, 17, pp.Ncols)
+	assert.Equal(t, 19, pp.Ncols)
 }
 
 func TestFilterViews_Recordable(t *testing.T) {

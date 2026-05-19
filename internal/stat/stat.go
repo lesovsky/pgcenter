@@ -209,7 +209,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	s.Pgstat.Result = res
 
 	// Per-process system stats enrichment. When the active view requests
-	// per-PID procfs data, replace the 7-column SQL result with the 17-column
+	// per-PID procfs data, replace the 7-column SQL result with the 19-column
 	// joined result produced by buildProcPidResult(). Individual PID errors
 	// (process exited mid-tick, EACCES on /proc/[pid]/io) are skipped silently.
 	if view.CollectExtra == CollectProcPidStat {
@@ -256,8 +256,8 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			}
 		}
 
-		// Replace the 7-col SQL result with the 17-col enriched one. The same
-		// 17-col PGresult flows through calculateDelta() below — with
+		// Replace the 7-col SQL result with the 19-col enriched one. The same
+		// 19-col PGresult flows through calculateDelta() below — with
 		// DiffIntvl=[0,0] (set on the procpidstat view) calculateDelta() acts
 		// as identity, leaving the column count intact.
 		enriched := buildProcPidResult(
@@ -265,6 +265,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			c.prevProcPidStats, c.currProcPidStats,
 			c.prevProcPidIO, c.currProcPidIO,
 			view.IOAvailable,
+			view.DelayAcctAvailable,
 			c.config.ticks,
 			float64(itv),
 			runtime.NumCPU(),
