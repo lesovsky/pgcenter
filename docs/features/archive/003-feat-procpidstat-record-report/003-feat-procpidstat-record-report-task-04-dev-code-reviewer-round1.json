@@ -1,0 +1,53 @@
+{
+  "reviewer": "dev-code-reviewer-04",
+  "round": 1,
+  "status": "approved_with_suggestions",
+  "summary": "Pure test-code update. The three required record_test.go edits match the task spec exactly: +2 formula for Test_app_record (meta + sysinfo per tick), wantN/wantV decrement/increment across every Test_filterViews row, and TestFilterViews_NotRecordable inverted to assert procpidstat passes through filterViews. The supplementary TestFilterViews_dropsExplicitNotRecordable preserves coverage of the NotRecordable=true drop branch (production code path at record.go:210) that would otherwise be untested after task 03. The new Test_app_doReport_procpidstat exercises the full readTar -> processData pipeline against an in-memory tar with two ticks (meta + procpidstat + sysinfo per tick), matching the per-tick layout produced by tarRecorder.write(). Test_describeReport gains the procpidstat case. Comments are accurate and reference the correct task numbers. No production code touched; the task constraint is honored.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/report_test.go",
+      "line": 624,
+      "severity": "minor",
+      "category": "test_clarity",
+      "suggestion": "The column header slice in Test_app_doReport_procpidstat is a copy-paste of internal/stat.procPidResultCols. If the canonical header is ever reordered, this fixture will drift silently — the test will still pass because Compare uses positional indices, not column names. Consider importing the canonical slice (or asserting equality against it) so a header drift fails this test loudly.",
+      "benefit": "Pins the fixture to the production header definition. Reduces the chance of a misleading green test after a header reorder.",
+      "optional": true
+    },
+    {
+      "file": "report/report_test.go",
+      "line": 700,
+      "severity": "minor",
+      "category": "test_clarity",
+      "suggestion": "The first tick's row values (statPrev) are passed through mkRow with the same shape as snapshot 2, but the comment says 'discarded as prev by processData's first-snapshot rule, values irrelevant beyond shape'. Since procpidstat's DiffIntvl is [0,0] (no diff — delta is curr verbatim), the prev values truly do not affect output; the test relies on this. A one-line note in the comment that DiffIntvl=[0,0] is the reason values are pass-through would make the contract explicit.",
+      "benefit": "Documents the implicit dependency on procpidstat's diff-free configuration. If DiffIntvl ever changes, the test author will know to revisit the fixture.",
+      "optional": true
+    },
+    {
+      "file": "record/record_test.go",
+      "line": 36,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Comment 'sysinfo is emitted unconditionally so the report pipeline always has CLK_TCK/cpu_count' is accurate for the current tarRecorder.write() (record/recorder.go line 262). If the recorder were ever changed to skip sysinfo in remote mode, this test's +2 formula would over-count. Not actionable today; flagging for awareness.",
+      "benefit": "Future-proofing note. No code change required now.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "complete"
+  },
+  "checklist": {
+    "Test_app_record_formula_plus2": "PASS — countRecordable(view.New()) + 2 matches tarRecorder.write() output (stats + meta + sysinfo per tick)",
+    "Test_filterViews_table_updated": "PASS — all six rows decremented wantN by 1, incremented wantV by 1; comment updated; arithmetic internally consistent with view.New() having 22 recordable views",
+    "TestFilterViews_NotRecordable_inverted": "PASS — view constructed with NotRecordable=false; assertions n==0, len(v)==1, Contains(v, procpidstat), assert.False(pp.NotRecordable), Ncols==19 all correct",
+    "TestFilterViews_NotRecordable_trailing_assert": "PASS — assert.False(t, pp.NotRecordable) present",
+    "TestFilterViews_dropsExplicitNotRecordable_exists": "PASS — new test pins the NotRecordable=true drop branch (record.go:210) that would otherwise have zero coverage",
+    "Test_app_doReport_procpidstat_exists": "PASS — exercises doReport end-to-end on in-memory tar; asserts non-empty output, '/' in timestamp line, 'SELECT 1' from data row",
+    "Test_describeReport_procpidstat_case": "PASS — case added at line 1052",
+    "no_production_code_changes": "PASS — git diff HEAD~1 shows only record_test.go and report_test.go modified"
+  }
+}

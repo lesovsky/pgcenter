@@ -1,0 +1,61 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 5,
+    "critical": 0,
+    "major": 2,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "major",
+      "category": "best-practice",
+      "title": "Integer overflow in jiffies-to-seconds conversion in formatCPUTime",
+      "description": "formatCPUTime converts jiffies to seconds via int64(jiffies / ticks). A process that has accumulated more than ~9.2e18 jiffies (2^63-1 / CLK_TCK=100 ≈ 2.9e9 years of CPU time) would overflow int64, but that is not the real risk. The real risk is when ticks <= 0: division by zero produces +Inf or NaN as a float64 result, and int64(math.Inf) or int64(math.NaN) is implementation-defined in Go (produces math.MinInt64 in practice), yielding a wildly wrong HH:MM:SS string in the TUI. The same risk applies to the %iodelay formula ΔIODelay / (itv × ticks) × 100 when ticks is 0. The existing buildProcPidResult guard 'ticks > 0' covers the rate columns (col 17) but formatCPUTime itself has no guard — it is called unconditionally for col 11 (iodelay_total,s) whenever delayAcctAvailable && validPID, including on the first tick where ticks could theoretically be 0 at startup before CLK_TCK is read.",
+      "location": "internal/stat/procpidstat.go:172 (formatCPUTime), Section: Architecture — col 11 rendering",
+      "impact": "Incorrect accumulated IO delay displayed in the TUI; no security boundary crossed, but incorrect information could mislead a DBA diagnosing a production issue.",
+      "recommendation": "Add a ticks > 0 guard before calling formatCPUTime for IODelay, consistent with the existing guard already in buildProcPidResult for rate columns. Example:\n  if delayAcctAvailable && validPID && haveCPU && ticks > 0 {\n      row[11] = nullString(formatCPUTime(curCPU.IODelay, ticks))\n  } else {\n      row[11] = nullString(\"00:00:00\")\n  }\nAlternatively, guard inside formatCPUTime itself: if ticks <= 0 { return \"00:00:00\" }",
+      "cwe": "CWE-369"
+    },
+    {
+      "severity": "major",
+      "category": "A01: Broken Access Control",
+      "title": "PID supplied by PostgreSQL used to open /proc/[pid]/io — TOCTOU possible but low-impact",
+      "description": "CheckIOAvailable(probePID) opens /proc/<probePID>/io where probePID comes from a SELECT against pg_stat_activity. A malicious or compromised PostgreSQL server could return an arbitrary integer as the pid column. The constructed path is /proc/<integer>/io and filepath.Clean is applied. However, because the integer is decimal-only (Atoi in buildProcPidResult, Scan in switchViewToProcPidStat), path traversal characters cannot be injected. The risk is narrower: a rogue PID value such as 0 or a PID that belongs to a privileged process on the local system could cause pgcenter to attempt reading /proc/0/io or /proc/1/io (init), leaking whether those files are readable. The spec acknowledges the fallback to PID 1 explicitly, but does not address the case where the server supplies an arbitrary PID designed to probe whether pgcenter's effective UID can read a specific process's /proc/<pid>/io.",
+      "location": "top/config_view.go:212-216 (switchViewToProcPidStat), internal/stat/procpidstat.go:160-166 (CheckIOAvailable)",
+      "impact": "Low: an attacker controlling the PG server can determine whether pgcenter's OS user can read the /proc/io of specific PIDs, enabling a limited capability-probing oracle. No data from /proc/<pid>/io is returned to the attacker — only the bool side-channel of whether the open succeeded.",
+      "recommendation": "Validate that probePID > 1 and is a reasonable PID value (e.g. < 4194304, the Linux default PID_MAX) before passing it to CheckIOAvailable. Example:\n  if probePID <= 1 || probePID > 4194304 {\n      probePID = 1 // or skip the probe and set ioAvailable = false\n  }\nThis is defense-in-depth; the current fallback to 1 already caps the worst case.",
+      "cwe": "CWE-610"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "CheckDelayAcctAvailable reads entire sysctl file without size limit",
+      "description": "os.ReadFile(\"/proc/sys/kernel/task_delayacct\") reads the full file into memory. On a normal Linux system this file contains a single byte ('0' or '1') plus a newline. However, /proc is a virtual filesystem and the kernel can in theory return more data. More practically, if pgcenter is run in a container or on a kernel with unusual proc emulation, the file could be unexpectedly large. There is no size cap before reading, and no validation beyond TrimSpace + == \"1\".",
+      "location": "Section: Data Models — CheckDelayAcctAvailable function",
+      "impact": "Negligible in practice on standard Linux kernels. In exotic environments: unexpected memory consumption if the kernel returns an oversized procfs response.",
+      "recommendation": "Cap the read to a small buffer (e.g., 16 bytes) using os.Open + io.LimitReader instead of os.ReadFile. Example:\n  f, err := os.Open(\"/proc/sys/kernel/task_delayacct\")\n  if err != nil { return false }\n  defer f.Close()\n  buf := make([]byte, 16)\n  n, _ := f.Read(buf)\n  return strings.TrimSpace(string(buf[:n])) == \"1\"\nThis matches the pattern used by procfs parsers in the Linux kernel tools ecosystem.",
+      "cwe": "CWE-400"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "suffix[39] index access: guard len(suffix) < 40 not yet in spec text for the new field",
+      "description": "The spec's Risks table mentions the guard 'len(suffix) < 40' for suffix[39] (IODelay, field 42 of /proc/[pid]/stat), and correctly states that TestReadProcPidStatIODelay will catch an off-by-one. However, the current readProcPidStatFile implementation only checks len(suffix) < 13 (for utime/stime). The extension must raise this guard. If the guard is omitted or set incorrectly (e.g., < 39 instead of < 40), accessing suffix[39] on a truncated /proc line will panic with an index-out-of-range runtime error, crashing pgcenter. The spec's wording is clear but the guard is implementation-dependent and no test currently exercises a stat file with fewer than 40 fields.",
+      "location": "internal/stat/procpidstat.go:83-85 (existing guard), Section: Implementation Tasks — Task 1",
+      "impact": "If a PostgreSQL backend produces a truncated /proc/[pid]/stat (e.g., via a kernel bug, container seccomp filtering, or proc emulation), pgcenter panics and exits, causing a denial of service for the DBA session.",
+      "recommendation": "Explicitly add the guard in Task 1 and add a dedicated golden file test with fewer than 40 suffix fields to confirm the error path is returned rather than a panic. The guard should read:\n  if len(suffix) < 40 {\n      return stat, fmt.Errorf(\"%s bad content: not enough fields for IODelay in '%s'\", statfile, line)\n  }\nThe existing test 'pid_stat_malformed' should be extended or a new file added covering this boundary.",
+      "cwe": "CWE-129"
+    },
+    {
+      "severity": "minor",
+      "category": "A09: Security Logging and Monitoring",
+      "title": "sysctl probe failure is silently swallowed — no distinguishable error path for unexpected failures",
+      "description": "CheckDelayAcctAvailable() returns a plain bool. Any error from os.ReadFile — whether the file is absent (CONFIG_TASK_DELAY_ACCT=n), permission denied (non-standard kernel hardening), or an unexpected I/O error — maps to the same return value: false. The caller in switchViewToProcPidStat cannot distinguish 'feature not compiled in' from 'permission denied reading sysctl' from 'I/O error'. A permission-denied scenario on the sysctl file would silently render the columns as empty with the generic 'task_delayacct=0' message, providing no diagnostic signal to the DBA that the file was unreadable for a security reason rather than being disabled.",
+      "location": "Section: Data Models — CheckDelayAcctAvailable function, Section: Decisions — Decision 2",
+      "impact": "Operational: a DBA running pgcenter with unusual kernel hardening (e.g., sysctl read restricted to root) would see iodelay columns silently blank and receive a misleading warning suggesting the feature is disabled rather than inaccessible. No security boundary is crossed, but the opacity could delay diagnosis.",
+      "recommendation": "Return (bool, error) from CheckDelayAcctAvailable so the caller can log or display a more precise warning when the failure reason is not 'file absent' or 'value is 0'. The 4-branch warning logic in switchViewToProcPidStat can then surface a distinct message such as 'iodelay unavailable: cannot read /proc/sys/kernel/task_delayacct (permission denied)' to help the DBA understand the root cause.",
+      "cwe": "CWE-778"
+    }
+  ]
+}

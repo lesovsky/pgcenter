@@ -419,6 +419,9 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
 
+	// procPidStatDescription is the detailed description of the procpidstat report.
+	procPidStatDescription = `Per-process system stats: CPU utilization, IO activity, and IO delay per PostgreSQL backend. Local mode only.`
+
 	// pgStatStatementsWalDescription is the detailed description of pg_stat_statements section about WAL usage
 	pgStatStatementsWalDescription = `Statements WAL usage statistics based on pg_stat_statements:
 

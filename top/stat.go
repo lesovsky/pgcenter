@@ -47,6 +47,10 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 
 	// Set settings related to extra stats.
 	extra := v.ShowExtra
+	// Track CollectExtra separately — it is read directly from view.View in
+	// Collector.Update() (not via ToggleCollectExtra), so changes must trigger
+	// a Reset() to discard stale per-PID snapshots.
+	prevCollectExtra := v.CollectExtra
 
 	// Collect stat in loop and send it to stat channel.
 	for {
@@ -82,6 +86,16 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 				extra = v.ShowExtra
 				c.ToggleCollectExtra(extra)
 				continue
+			}
+
+			// Detect CollectExtra change. CollectExtra is read directly from
+			// view.View by Collector.Update() (it does not flow through
+			// ToggleCollectExtra), so a change here means the per-PID snapshot
+			// maps belong to a different enrichment kind and must be cleared
+			// before the next Update() to avoid stale-PID rate values.
+			if prevCollectExtra != v.CollectExtra {
+				c.Reset()
+				prevCollectExtra = v.CollectExtra
 			}
 
 			// When view has been updated, stop the ticker and re-initialize stats.

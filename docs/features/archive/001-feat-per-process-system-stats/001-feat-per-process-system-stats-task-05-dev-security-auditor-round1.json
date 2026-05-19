@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "Task 05 wires per-PID procfs enrichment into Collector.Update(). New surface is contained: PIDs parsed from a trusted PG query result, fed into readProcPidStat/readProcPidIO (Task 03) via fmt.Sprintf with %d. No new external inputs, no new dependencies, no secrets. All read sites are validated (pid > 0 guard) and procfs reads use filepath.Clean (in Task 03). Per-PID read errors are silently dropped, which is correct: failures from /proc/[pid]/{stat,io} are expected during normal operation (process exit, EACCES) and logging would create noise.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "owaspCoverage": "complete"
+  },
+  "owaspChecks": {
+    "A01_BrokenAccessControl": "n/a — no auth/authz code touched. The PID list comes from pg_stat_activity, which the PG-connected user already has visibility into. Reading /proc/[pid]/stat or /proc/[pid]/io is gated by OS-level permissions; the code silently skips PIDs it cannot read, which is the correct behavior.",
+    "A02_CryptographicFailures": "n/a — no cryptographic operations introduced.",
+    "A03_Injection": "pass — strconv.Atoi parses the pid column from a trusted PG query result. The resulting int is interpolated via fmt.Sprintf with %d in readProcPidStat/readProcPidIO (Task 03), which produces only digits. The pid > 0 guard rejects negative and zero values before the procfs lookup. No SQL queries are built from procfs data.",
+    "A04_InsecureDesign": "pass — pid validation (strconv.Atoi err check + pid > 0) appears on both iterations (cleanup and collection). Cleanup-before-swap design correctly evicts stale PIDs that no longer appear in the activity result.",
+    "A05_SecurityMisconfiguration": "pass — no new config surface.",
+    "A06_VulnerableComponents": "pass — only stdlib imports added (runtime). strconv and strings already imported. No third-party deps.",
+    "A07_AuthFailures": "n/a — no auth code.",
+    "A08_DataIntegrity": "pass — no deserialization of untrusted data. PG query results are deserialized via the existing pgx flow (pre-existing trust boundary).",
+    "A09_LoggingMonitoring": "pass — per-PID read failures are intentionally silent. Spec mandates silent drop (process-exit races, EACCES on other users' /proc/[pid]/io are routine and would spam logs). The PID is still kept in the activity result; buildProcPidResult renders 0/empty for the missing procfs columns.",
+    "A10_SSRF": "n/a — no outbound HTTP/network calls."
+  },
+  "additionalChecks": {
+    "hardcodedSecrets": "none — no credentials, tokens, or keys in the diff.",
+    "pathTraversal": "pass — pid is integer (strconv.Atoi + > 0 guard); fmt.Sprintf(\"/proc/%d/stat\", pid) cannot escape the prefix. filepath.Clean is applied inside readProcPidStatFile / readProcPidIOFile.",
+    "raceConditions": "pass — Collector.Update is invoked from a single goroutine (top/stat.go collectStat) per Collector instance. The PID maps are read and written by Update only. No concurrent access surface added.",
+    "resourceLeaks": "pass — file handles are opened and closed via defer in Task 03 functions. New code does not open any file descriptors directly.",
+    "errorPropagation": "pass — per-PID errors silently dropped per spec. Update() does not abort on per-PID errors. Errors from collectActivityStat / collectPostgresStat / db.PQstatus continue to propagate as before."
+  }
+}

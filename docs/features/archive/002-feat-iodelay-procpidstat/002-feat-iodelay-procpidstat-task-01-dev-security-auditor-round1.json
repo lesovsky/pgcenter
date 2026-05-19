@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "formatCPUTime called without ticks>0 guard for cols 6–8 (Utime/Stime)",
+      "description": "In buildProcPidResult, the calls to formatCPUTime at lines 273–275 (cols 6, 7, 8 — all_total,s, us_total,s, sy_total,s) are guarded only by validPID, not by ticks > 0. formatCPUTime divides by ticks via int64(jiffies / ticks); if ticks is 0 (theoretical edge case from a broken getconf CLK_TCK result), this produces int64(+Inf) = MinInt64, yielding a corrupt HH:MM:SS string. The new col 11 (iodelay_total,s, line 298) correctly guards with ticks > 0 before calling formatCPUTime, and col 17 (%iodelay, line 344) also guards. The inconsistency is a pre-existing gap that this task did not fix. In practice, getSysticksLocal returns an error when getconf CLK_TCK fails, causing NewCollector to refuse startup, so ticks reaching buildProcPidResult as 0 is extremely unlikely at runtime.",
+      "location": "internal/stat/procpidstat.go:273-275",
+      "impact": "Corrupt HH:MM:SS display values (e.g., '-2562047788015215:30:08') for the three accumulated CPU columns if ticks were somehow 0. No memory safety issue — the corrupt value is formatted and displayed, not parsed or executed. No impact on the new iodelay columns which are correctly guarded.",
+      "recommendation": "Apply the same ticks > 0 guard that was added for col 11 to the existing cols 6–8 block:\n\nif validPID && ticks > 0 {\n    row[6] = nullString(formatCPUTime(curCPU.Utime+curCPU.Stime, ticks))\n    row[7] = nullString(formatCPUTime(curCPU.Utime, ticks))\n    row[8] = nullString(formatCPUTime(curCPU.Stime, ticks))\n} else if validPID {\n    row[6] = nullString(\"0:00:00\")\n    row[7] = nullString(\"0:00:00\")\n    row[8] = nullString(\"0:00:00\")\n} else {\n    row[6] = nullString(\"0\")\n    ...\n}\n\nAlternatively, add a ticks > 0 check inside formatCPUTime itself and return \"0:00:00\" on zero ticks to enforce the contract at the function boundary.",
+      "cwe": "CWE-369"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Error messages embed raw /proc/[pid]/stat line content without sanitization",
+      "description": "readProcPidStatFile wraps raw line content from /proc/[pid]/stat into error messages at lines 78 and 87 (e.g., fmt.Errorf(\"%s bad content: missing comm boundary in '%s'\", statfile, line)). The line content is fully controlled by the OS kernel and the process being observed. A process can set its own comm name (via prctl(PR_SET_NAME, ...)) to arbitrary bytes, including terminal escape sequences. In the current production code path, these errors are silently discarded at stat.go:249 (if st, err := readProcPidStat(pid); err == nil) — they never reach any UI output or log sink. However, if a future caller were to log or display these errors, a malicious process name could inject escape sequences into a terminal.",
+      "location": "internal/stat/procpidstat.go:78, internal/stat/procpidstat.go:87",
+      "impact": "No current user-visible impact — errors are dropped silently in the production path. Latent risk: if error surfacing is added in future (e.g., debug logging), terminal escape injection via crafted process names could affect the operator's terminal. CVSS would be negligible given current code flow.",
+      "recommendation": "Sanitize or truncate the line content before embedding in error messages. A simple approach: replace non-printable bytes, or limit the embedded content to a fixed width. For example:\n\nconst maxLineInErr = 80\nsnippet := line\nif len(snippet) > maxLineInErr {\n    snippet = snippet[:maxLineInErr] + \"...\"\n}\nreturn stat, fmt.Errorf(\"%s bad content: missing comm boundary in %q\", statfile, snippet)\n\nUsing %q (Go's quoted-string verb) automatically escapes non-printable bytes, which is the safest option.",
+      "cwe": "CWE-116"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "CheckDelayAcctAvailable ignores the error return value of f.Read",
+      "description": "In CheckDelayAcctAvailable (line 196), the error from f.Read(buf[:]) is explicitly discarded with n, _ := f.Read(buf[:]). The function then evaluates strings.TrimSpace(string(buf[:n])) == \"1\". If Read returns an error with n=0, the function correctly returns false (empty string != \"1\"). If Read returns a partial read with n>0 but err!=nil (e.g., EIO on a degraded kernel), the function evaluates whatever partial bytes were read. For /proc/sys/kernel/task_delayacct this is inconsequential because a partial read of 0 bytes from a one-byte sysctl file would correctly produce false, but the pattern of silently ignoring the error is inconsistent with the error handling style used elsewhere in the same file (all other Read/Open errors are returned or checked).",
+      "location": "internal/stat/procpidstat.go:196",
+      "impact": "No exploitable impact: a partial read that returns 0 bytes produces false (safe default — iodelay columns disabled). A partial read of 1 byte that happens to be '1' would produce a false positive (iodelay enabled when kernel state is uncertain), but this is a theoretical edge case with no security consequence for a read-only monitoring tool.",
+      "recommendation": "For consistency with the error-handling style in the file, capture and check the Read error:\n\nn, readErr := f.Read(buf[:])\nif readErr != nil && n == 0 {\n    return false\n}\nreturn strings.TrimSpace(string(buf[:n])) == \"1\"\n\nAlternatively, since the function uses os.ReadFile semantics conceptually, rewrite as os.ReadFile with a length check, matching the tech-spec description.",
+      "cwe": "CWE-252"
+    }
+  ]
+}

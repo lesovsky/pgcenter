@@ -5,6 +5,7 @@ import (
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/query"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"regexp"
 	"strconv"
@@ -191,6 +192,60 @@ func viewSwitchHandler(config *config, c string) {
 	config.viewCh <- config.view
 }
 
+// switchViewToProcPidStat switches to the per-process system stats view.
+// The handler enforces the local-mode guard, probes /proc/[pid]/io availability
+// using a real PG backend PID from pg_stat_activity, and patches
+// CollectExtra/IOAvailable onto the view before sending it on viewCh.
+// It must NOT delegate to viewSwitchHandler — that helper reloads the view from
+// the static map and would discard the runtime patches.
+func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		if !app.db.Local {
+			printCmdline(g, "Per-process stats available in local mode only")
+			return nil
+		}
+
+		// Probe IO access using the first real PG backend PID from pg_stat_activity.
+		// /proc/self/io is always readable by the owner process, so it is not a
+		// useful probe — we need a PID that belongs to a different OS user (postgres).
+		var probePID int
+		_ = app.db.QueryRow("SELECT pid FROM pg_stat_activity WHERE pid != pg_backend_pid() LIMIT 1").Scan(&probePID)
+		if probePID == 0 {
+			probePID = 1 // fallback: init/systemd is always running under a different user
+		}
+		ioErr := stat.CheckIOAvailable(probePID)
+		ioAvailable := ioErr == nil
+		delayAcctAvailable := stat.CheckDelayAcctAvailable()
+
+		// Save current view back to the views map so per-view state (sort, filters, etc.) is preserved.
+		app.config.views[app.config.view.Name] = app.config.view
+
+		// Load the procpidstat view and patch runtime-only fields.
+		v := app.config.views["procpidstat"]
+		v.CollectExtra = stat.CollectProcPidStat
+		v.IOAvailable = ioAvailable
+		v.DelayAcctAvailable = delayAcctAvailable
+
+		app.config.view = v
+		app.config.viewCh <- v
+
+		// Show a warning combining IO and iodelay availability. printCmdline must
+		// be called exactly once per execution path (calling it twice overwrites
+		// the first message before the user can read it).
+		switch {
+		case !ioAvailable && !delayAcctAvailable:
+			printCmdline(g, "IO stats and iodelay unavailable: run as postgres user + sysctl -w kernel.task_delayacct=1, then re-open screen")
+		case !ioAvailable:
+			printCmdline(g, "IO stats unavailable (cannot read /proc/%d/io): run as postgres user or via sudo.", probePID)
+		case !delayAcctAvailable:
+			printCmdline(g, "iodelay unavailable (task_delayacct=0): run sysctl -w kernel.task_delayacct=1, then re-open screen")
+		default:
+			printCmdline(g, "%s", v.Msg)
+		}
+		return nil
+	}
+}
+
 // toggleSysTables toggles showing system tables/indexes.
 func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
@@ -296,10 +351,10 @@ func parseHumanTimeString(t string) error {
 	return nil
 }
 
-// A toggle to show 'idle' connections (pg_stat_activity only)
+// A toggle to show 'idle' connections (pg_stat_activity and procpidstat views).
 func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		if config.view.Name != "activity" {
+		if config.view.Name != "activity" && config.view.Name != "procpidstat" {
 			return nil
 		}
 

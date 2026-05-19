@@ -99,7 +99,7 @@ func TestCollector_collectNetdevs(t *testing.T) {
 }
 
 func Test_readUptimeLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -111,10 +111,11 @@ func Test_readUptimeLocal(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func Test_getSysticksLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+func TestGetSysticksLocal(t *testing.T) {
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
+	assert.Greater(t, ticks, float64(0))
 }
 
 func Test_sValue(t *testing.T) {
@@ -134,4 +135,126 @@ func Test_sValue(t *testing.T) {
 	for _, tc := range testcases {
 		assert.Equal(t, tc.want, sValue(tc.prev, tc.curr, tc.itv, tc.ticks))
 	}
+}
+
+func TestCollectorResetClearsPIDMaps(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	c, err := NewCollector(conn)
+	assert.NoError(t, err)
+	assert.NotNil(t, c)
+
+	// All four PID maps must be initialized as non-nil empty maps.
+	assert.NotNil(t, c.prevProcPidStats)
+	assert.NotNil(t, c.currProcPidStats)
+	assert.NotNil(t, c.prevProcPidIO)
+	assert.NotNil(t, c.currProcPidIO)
+	assert.Equal(t, 0, len(c.prevProcPidStats))
+	assert.Equal(t, 0, len(c.currProcPidStats))
+	assert.Equal(t, 0, len(c.prevProcPidIO))
+	assert.Equal(t, 0, len(c.currProcPidIO))
+
+	// Populate the maps directly via struct field access (same-package test).
+	c.prevProcPidStats[1] = ProcPidStat{Utime: 10, Stime: 5}
+	c.currProcPidStats[1] = ProcPidStat{Utime: 20, Stime: 10}
+	c.prevProcPidIO[1] = ProcPidIO{ReadBytes: 100, WriteBytes: 200}
+	c.currProcPidIO[1] = ProcPidIO{ReadBytes: 300, WriteBytes: 400}
+
+	assert.Equal(t, 1, len(c.prevProcPidStats))
+	assert.Equal(t, 1, len(c.currProcPidStats))
+	assert.Equal(t, 1, len(c.prevProcPidIO))
+	assert.Equal(t, 1, len(c.currProcPidIO))
+
+	// Reset must clear all four maps but keep them non-nil.
+	c.Reset()
+
+	assert.NotNil(t, c.prevProcPidStats)
+	assert.NotNil(t, c.currProcPidStats)
+	assert.NotNil(t, c.prevProcPidIO)
+	assert.NotNil(t, c.currProcPidIO)
+	assert.Equal(t, 0, len(c.prevProcPidStats))
+	assert.Equal(t, 0, len(c.currProcPidStats))
+	assert.Equal(t, 0, len(c.prevProcPidIO))
+	assert.Equal(t, 0, len(c.currProcPidIO))
+}
+
+func TestCollectorUpdateNoEnrichment(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	views := view.Views{
+		"activity": {
+			Name:      "activity",
+			QueryTmpl: query.PgStatActivityDefault,
+			DiffIntvl: [2]int{0, 0},
+			Ncols:     14,
+			OrderKey:  0,
+			OrderDesc: true,
+			ColsWidth: map[int]int{},
+			Msg:       "Show activity statistics",
+			Filters:   map[int]*regexp.Regexp{},
+			Refresh:   1 * time.Second,
+			// CollectExtra not set -> CollectNone (0), no enrichment.
+		},
+	}
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
+	assert.NoError(t, views.Configure(opts))
+
+	c, err := NewCollector(conn)
+	assert.NoError(t, err)
+	assert.NotNil(t, c)
+
+	s, err := c.Update(conn, views["activity"], time.Second)
+	assert.NoError(t, err)
+	// With CollectExtra==CollectNone, result must NOT be the 19-col procpidstat shape.
+	assert.NotEqual(t, 19, s.Pgstat.Result.Ncols)
+	// PID maps stay empty when enrichment is not active.
+	assert.Equal(t, 0, len(c.currProcPidStats))
+	assert.Equal(t, 0, len(c.currProcPidIO))
+}
+
+func TestCollectorUpdateProcPidStat19Cols(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	views := view.Views{
+		"procpidstat": {
+			Name:               "procpidstat",
+			QueryTmpl:          query.PgStatActivityProcPidStat,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              19,
+			OrderKey:           0,
+			OrderDesc:          false,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show per-process system stats",
+			Filters:            map[int]*regexp.Regexp{},
+			Refresh:            1 * time.Second,
+			CollectExtra:       CollectProcPidStat,
+			IOAvailable:        true,
+			DelayAcctAvailable: true,
+		},
+	}
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
+	assert.NoError(t, views.Configure(opts))
+
+	c, err := NewCollector(conn)
+	assert.NoError(t, err)
+	assert.NotNil(t, c)
+
+	// Must not panic and must produce a 19-column result.
+	s, err := c.Update(conn, views["procpidstat"], time.Second)
+	assert.NoError(t, err)
+	assert.Equal(t, 19, s.Pgstat.Result.Ncols)
+	assert.True(t, s.Pgstat.Result.Valid)
+	assert.Len(t, s.Pgstat.Result.Cols, 19)
 }

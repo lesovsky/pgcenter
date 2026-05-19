@@ -1,0 +1,54 @@
+{
+  "status": "approved",
+  "summary": "Round 3 validation. Checked 19 claims across all 5 targeted items. Found 0 mirages. All round-2 fixes are correctly reflected in the current tech-spec.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 19,
+    "confirmed": 19,
+    "mirages_found": 0,
+    "verified_claims": [
+      "top/config.go:14 — config.viewCh chan view.View exists, accessible from any function with *config",
+      "top/config_view.go:188-191 — viewSwitchHandler(config *config, c string): saves current, loads from map, sends on viewCh immediately",
+      "spec manual patch pattern (save→load→patch CollectExtra/IOAvailable→set config.view→send viewCh) is the correct workaround for viewSwitchHandler's string signature",
+      "internal/query/activity.go:14-15 — PgStatActivityDefault embeds '{{.QueryAgeThresh}}'::interval unconditionally, no conditional guard",
+      "internal/query/activity.go:27-28 — PgStatActivity96 same unconditional embedding",
+      "internal/query/activity.go:40-41 — PgStatActivity95 same unconditional embedding",
+      "internal/query/query.go:43 — QueryAgeThresh default is '00:00:00.0', never empty",
+      "spec SQL constant (tech-spec line 288) uses unconditional QueryAgeThresh embedding — matches existing convention",
+      "internal/stat/stat.go:100-103 — Collector.Reset() exists, clears prevPgStat and currPgStat",
+      "internal/stat/stat.go:100-103 — Reset() does not yet clear PID maps (they do not exist yet); spec Task 5 correctly states to extend Reset()",
+      "top/stat.go:81-85 — ShowExtra change-detection calls c.ToggleCollectExtra(extra) then continue, does NOT call c.Reset()",
+      "top/stat.go:87-94 — c.Reset() is called in view-switch branch (new view on viewCh), not in ShowExtra branch",
+      "spec CollectExtra change-detection (parallel to ShowExtra branch, calling c.Reset()) is architecturally correct",
+      "internal/stat/stat.go:25-29 — CollectNone=0 CollectDiskstats=1 CollectNetdev=2 CollectFsstats=3 CollectLogtail=4",
+      "spec states CollectProcPidStat = 5 — correct next iota value, no collision",
+      "internal/view/view.go:24 — View.Filters map[int]*regexp.Regexp{} initialized in all existing views",
+      "internal/view/view.go:26 — View.ShowExtra int exists; spec CollectExtra int is a new separate field",
+      "top/dialog.go:51 — compound guard '(d > dialogFilter && d <= dialogChangeAge) && name != activity' confirmed; Decision 7 isolation is required",
+      "record/record.go:147-165 — filterViews() filters by version and pgss schema only; NotRecordable skip is new addition"
+    ]
+  },
+  "round": 3,
+  "targeted_items": {
+    "q1_view_patching": {
+      "result": "confirmed_correct",
+      "detail": "viewSwitchHandler(config *config, c string) at top/config_view.go:188-191 takes a string, loads view from map, sends on viewCh. The spec's manual load→patch→send pattern is the only viable approach. config.viewCh is accessible from switchViewToProcPidStat via app.config. Pattern is consistent with how toggleSysTables (config_view.go:221-227) and changeQueryAge (config_view.go:259-260) directly manipulate config.view and send on viewCh without going through viewSwitchHandler."
+    },
+    "q2_queryagethresh": {
+      "result": "confirmed_correct",
+      "detail": "All three activity query variants embed QueryAgeThresh unconditionally. Default is '00:00:00.0' (never empty). The SQL constant in the spec (line 288) correctly follows this convention with no conditional guard. Note: Task 2 description body mentions '{{if ne .QueryAgeThresh \"\"}}' — this is an internal inconsistency in the spec text, but the SQL constant shown is authoritative and correct."
+    },
+    "q3_reset_exists": {
+      "result": "confirmed_correct",
+      "detail": "Collector.Reset() exists at internal/stat/stat.go:100-103. Currently clears prevPgStat/currPgStat only. Spec Task 5 correctly describes extending Reset() to also clear the four PID maps after they are added to Collector."
+    },
+    "q4_collectstat_change_detection": {
+      "result": "confirmed_correct_with_clarification",
+      "detail": "top/stat.go:81-85: ShowExtra change-detection calls c.ToggleCollectExtra(extra) and continues — it does NOT call c.Reset(). c.Reset() is called at lines 87-94 in the view-switch branch (when any new view arrives on viewCh). The spec's CollectExtra change-detection (trigger c.Reset() when CollectExtra changes) is architecturally sound: it adds a parallel branch in the same select that tracks v.CollectExtra changes separately from ShowExtra, because CollectExtra is read directly from view.View in Collector.Update() while ShowExtra goes through ToggleCollectExtra/c.config.collectExtra."
+    },
+    "q5_iota_value": {
+      "result": "confirmed_correct",
+      "detail": "internal/stat/stat.go:25-29 shows CollectNone=iota(0), CollectDiskstats(1), CollectNetdev(2), CollectFsstats(3), CollectLogtail(4). CollectProcPidStat=5 is the correct next value. No collision."
+    }
+  }
+}

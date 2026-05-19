@@ -1,0 +1,26 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 04 implementation extends View struct with three zero-value-safe fields (CollectExtra, IOAvailable, NotRecordable), registers procpidstat in view.New(), adds CollectProcPidStat=6 iota entry, and adds a NotRecordable skip in filterViews(). All changes match the tech-spec contract and follow existing patterns in the codebase (view entry format, iota block, filterViews delete-and-continue idiom). Tests cover both branches of the new filter check and validate the registered view metadata.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  },
+  "dimensionsChecked": {
+    "architecturalPatterns": "pass — new View entry mirrors existing entries (Name, QueryTmpl, DiffIntvl, Ncols, Filters init); CollectProcPidStat continues existing iota block; filterViews skip mirrors the version-check pattern (delete+filtered++ +continue)",
+    "separationOfConcerns": "pass — each file change limited to its concern (struct fields in view.go, constant in stat.go, filter logic in record.go)",
+    "readability": "pass — three new View fields have godoc comments explaining purpose and zero-value semantics; filterViews skip has a 3-line comment explaining the why (7 of 17 cols come from procfs enrichment that doesn't run in record context)",
+    "errorHandling": "n/a — no new error paths",
+    "typeSafety": "pass — Go static typing; new fields use primitive int/bool types with safe zero values",
+    "testingCoverage": "adequate — TestFilterViews_NotRecordable covers the new positive branch and asserts the registered procpidstat view has the correct Ncols/NotRecordable; TestFilterViews_Recordable covers the negative branch; existing Test_filterViews table updated for the +1 filtered count across all version cases; Test_app_record uses a helper countRecordable() to compute the expected file count from the actual map content (resilient to future view additions)",
+    "dependenciesManagement": "pass — no new external deps; uses query.PgStatActivityProcPidStat which is exported from internal/query/procpidstat.go (verified existence)",
+    "security": "pass — no user-controlled input handling added; see dev-security-auditor",
+    "performance": "n/a — adds one map entry and one branch in filterViews; negligible cost",
+    "crossFileConsistency": "pass — verified query.PgStatActivityProcPidStat exists in internal/query/procpidstat.go; verified view.Views type alias is map[string]View (matches new test fixtures); verified CollectLogtail still equals 5 and CollectProcPidStat equals 6 (validated with a throwaway test, then removed)"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "validator": "dev-reality-checker",
+  "round": 3,
+  "feature_base": "docs/features/003-feat-procpidstat-record-report/003-feat-procpidstat-record-report",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "round2_resolution": {
+    "resolved": [
+      "Task 03 critical (linesPrinted==0): task 03 step 3f now uses anyDataPrinted bool instead of linesPrinted. Confirmed: step 3f text and Details section both state anyDataPrinted pattern explicitly and explain why linesPrinted cannot be used.",
+      "Task 01 critical (TestCollector_collectDiskstats hallucination): task 01 Details section no longer mentions that function. It now says 'approximately 2 calls in the test file' without naming the wrong function. The stat_test.go call-site count is correct (2 calls at lines 102 and 115).",
+      "Task 01 critical (procpidstat_test.go call-site update absent from What to do): task 01 step 9 now explicitly says 'rename buildProcPidResult → BuildProcPidResult in all existing TestBuildProcPidResult_* tests (approximately 8 tests)'.",
+      "Task 02 major (sql.ErrNoRows hallucination): task 02 Details section now says 'Use pgx.ErrNoRows (from github.com/jackc/pgx/v5) detection' and lists pgx/v5 in new imports. Confirmed correct: the codebase already uses pgx.ErrNoRows in top/report.go and DB.QueryRow returns pgx.Row.",
+      "Task 01 major (prescriptive hints): Implementation Hints in task 01 are now high-level ('store raw jiffies as float strings', 'parse each raw float string back and apply conversion') without full code expressions.",
+      "Task 02 minor (in-loop vs post-loop): task 02 step 4 now says 'After the views loop completes (not inside it), add a dedicated branch'.",
+      "Task 03 minor (Test_readMeta_with_sysinfo goroutine deadlock): TDD Anchor now has explicit goroutine warning with detailed correct pattern.",
+      "Task 02 minor (time.Now() hoist): task 02 step 5 is now a named step 'Hoist now := time.Now() to the top of write()...'"
+    ],
+    "not_resolved": []
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 step 9 says 'rename buildProcPidResult → BuildProcPidResult in all existing TestBuildProcPidResult_* tests (approximately 8 tests)'. Actual count in procpidstat_test.go is 9 call sites (lines 142, 186, 225, 297, 332, 362, 404, 472, 496). The count is 'approximately 8' but is actually 9. Off-by-one in the description only — the action itself (rename all calls) is unambiguous and correct.",
+      "fix": "Update the count from 'approximately 8' to '9' or 'approximately 9'. No change to the action required."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 step 9 only mentions updating 'TestBuildProcPidResult_*' call sites to BuildProcPidResult. It does not mention updating the readProcPidStat call at line 46 (TestReadProcPidStatIntegration) and readProcPidIO call at line 52 (TestReadProcPidIOIntegration) in procpidstat_test.go. These are package-internal calls that will also become compile errors after renaming readProcPidStat → ReadProcPidStat and readProcPidIO → ReadProcPidIO. The AC does mention ReadProcPidStat/ReadProcPidIO being exported, and the Files to modify lists procpidstat_test.go, so a careful implementer will catch this — but the What to do step does not enumerate these call sites.",
+      "fix": "Add to step 9: 'Also update the readProcPidStat call in TestReadProcPidStatIntegration (line 46) → ReadProcPidStat and readProcPidIO call in TestReadProcPidIOIntegration (line 52) → ReadProcPidIO.'",
+      "severity": "minor"
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Task 02 AC item says 'tarRecorder.collect() when isLocal=true and \"procpidstat\" is in views: produces stats[\"procpidstat\"] with Ncols=19 and Valid=true'. This AC is currently untestable in isolation because NotRecordable:true on the view means filterViews removes procpidstat before collect() runs — until task 03 removes NotRecordable. The task notes this in the Details section ('This task only prepares the recorder struct and setup() so that when Task 03 removes NotRecordable, everything works correctly end-to-end'). The AC is aspirational for the feature complete state, not for task 02 alone. The TDD anchor (TestTarRecorder_WriteSysinfo) wisely tests write() only, avoiding this issue.",
+      "fix": "No code change needed. Consider annotating the AC item as 'verified end-to-end after Task 03 completes' to avoid confusion for the implementer testing task 02 in isolation."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "03",
+      "issue": "Test_processData_no_procpidstat_data: task 03 TDD Anchor says to call processData with a 'procpidstat' report type and simulate a tar with no procpidstat entries by using an empty data channel. The doneCh in the actual code is a send channel (readTar does 'doneCh <- struct{}{}' via defer). A test goroutine must send one struct{} to doneCh without closing it. processData will then close dataCh internally (line 285: 'close(dataCh)'). The task TDD Anchor note about goroutine deadlock (added for Test_readMeta_with_sysinfo) is not repeated for this test. If the test goroutine also tries to close doneCh (not just send to it), processData's select on doneCh will receive a zero-value instead of a signal — which still works but is subtly different. The risk is low because the go runtime panics on a second close, not on an extra receive. No actual error unless the test tries to do two sends.",
+      "fix": "Minor: confirm the test goroutine only sends exactly once to doneCh. Referencing the same goroutine pattern note from Test_readMeta_with_sysinfo is sufficient."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 51,
+    "issues_found": 4
+  }
+}

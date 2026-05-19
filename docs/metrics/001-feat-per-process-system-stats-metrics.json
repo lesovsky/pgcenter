@@ -1,0 +1,71 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "001-feat-per-process-system-stats",
+    "feature_name": "per-process-system-stats",
+    "feature_base": "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats",
+    "project": "pgcenter",
+    "feature_size": "L",
+    "model": "Sonnet 4.6",
+    "date_started": "2026-05-18T15:50:29Z",
+    "date_completed": "2026-05-18T20:35:20Z"
+  },
+  "phases": {
+    "user_spec": {
+      "start_time": "2026-05-18T15:50:29Z",
+      "end_time": "2026-05-18T16:30:00Z",
+      "duration_min": 40,
+      "touch_time_min": 40,
+      "human_wait_time_min": 55
+    },
+    "tech_spec": {
+      "start_time": "2026-05-18T16:45:08Z",
+      "end_time": "2026-05-18T17:23:12Z",
+      "duration_min": 38,
+      "touch_time_min": 33,
+      "human_wait_time_min": 5
+    },
+    "task_decomposition": {
+      "start_time": "2026-05-18T17:26:10Z",
+      "end_time": "2026-05-18T17:52:12Z",
+      "duration_min": 26,
+      "touch_time_min": 24,
+      "human_wait_time_min": 2
+    },
+    "feature_execution": {
+      "start_time": "2026-05-18T17:53:51Z",
+      "end_time": "2026-05-18T20:00:00Z",
+      "duration_min": 126,
+      "touch_time_min": 126,
+      "human_wait_time_min": 20
+    },
+    "done": {
+      "start_time": "2026-05-18T20:35:20Z",
+      "end_time": "2026-05-18T20:35:20Z",
+      "duration_min": 15,
+      "touch_time_min": 15,
+      "human_wait_time_min": 0
+    }
+  },
+  "quality": {
+    "validation_rounds": {
+      "user_spec": 4,
+      "tech_spec": 3,
+      "task_decomposition": 3
+    },
+    "validation_findings": { "critical": 0, "major": 2, "minor": 11 },
+    "review_rounds": {
+      "task_01": 1, "task_02": 1, "task_03": 1,
+      "task_04": 1, "task_05": 1, "task_06": 1
+    },
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": 100
+  },
+  "volume": {
+    "interview_questions": 22,
+    "tasks_count": 7,
+    "waves_count": 4,
+    "agents_spawned": 45,
+    "commits_count": 39
+  }
+}

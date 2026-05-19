@@ -1,0 +1,26 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Single-purpose SQL constant added in package `query`, mirroring the existing PgStatActivityDefault template conventions. Godoc explains positional column order, template variable rules, and the rationale for coalesce/regexp_replace. Tests cover format correctness, both ShowNoIdle branches, QueryAgeThresh embedding, and integration against every supported PG version with t.Skipf for unavailable ones.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  },
+  "dimensionsChecked": {
+    "architecturalPatterns": "pass — follows existing `internal/query/*.go` convention (single exported const, package query, godoc on const)",
+    "separationOfConcerns": "pass — file contains only SQL template definition, no logic",
+    "readability": "pass — raw string literal for SQL avoids backslash double-escaping; godoc documents positional column indices (0–6) which downstream tasks depend on",
+    "errorHandling": "n/a — no runtime code paths in this task",
+    "typeSafety": "n/a — Go, no generics, single string constant",
+    "testingCoverage": "adequate — 5 unit tests (default opts, ShowNoIdle on/off, QueryAgeThresh custom and default) plus integration test against 11 PG versions with t.Skipf for unavailable ones; matches `activity_test.go` pattern",
+    "dependenciesManagement": "pass — uses only existing internal packages (postgres, query) and stdlib (fmt, strings, testing)",
+    "security": "pass — see dev-security-auditor; QueryAgeThresh is the only template variable that becomes literal SQL, source is internal Options struct not user-controlled in this layer",
+    "performance": "pass — single query, indexed on pid via ORDER BY pid",
+    "crossFileConsistency": "pass — verified `query.Options.QueryAgeThresh` and `query.Options.ShowNoIdle` exist in internal/query/query.go; verified `postgres.NewTestConnectVersion` signature matches usage in test file"
+  }
+}

@@ -1,0 +1,92 @@
+feature: "docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats"
+status: closed
+started: "2026-05-19"
+environment: local
+
+symptom:
+  expected: >
+    Shift+S открывает экран "Per-process system stats" с 17 колонками:
+    7 из pg_stat_activity (pid, datname, usename, state, wait_etype, wait_event, query)
+    + 5 накопленных procfs-метрик (all_total,s / us_total,s / sy_total,s / read_total,KiB / write_total,KiB)
+    + 4 rate-метрики (%all / %us / %sy / read,KiB/s / write,KiB/s)
+    + query (последней).
+  observed: >
+    Открылось только 7 колонок — те что есть в pg_stat_activity.
+    Колонок с системной procfs-статистикой нет.
+    Признаки: enrichment-ветка в Collector.Update() не выполняется,
+    или buildProcPidResult() не вызывается, или 17-кол результат
+    перезаписывается 7-кол до рендеринга.
+
+attempts:
+  - n: 1
+    hypothesis: >
+      Стale бинарник: Task 05 (enrichment в Collector.Update) был cherry-picked после
+      последней явной сборки ./bin/pgcenter, поэтому бинарник содержал Tasks 01-04 и 06
+      (view registration + hotkey), но НЕ содержал обогащения procfs в Collector.Update().
+      При нажатии Shift+S открывался procpidstat view с Ncols=17, SQL-запрос возвращал
+      7 колонок, enrichment не выполнялся → пользователь видел 7 колонок.
+      Паника при стрелке влево возникала потому что OrderKey устанавливался в 16
+      (Ncols-1 = 17-1), но sort() получал result с 7 колонками.
+    action:
+      - "internal/stat/stat.go: добавлен debug-вывод для диагностики (временно)"
+      - "make build: пересобран бинарник из полной feature-ветки (все 6 tasks)"
+      - "internal/stat/stat.go: debug-вывод удалён"
+    result: pass
+    observed: >
+      После пересборки бинарника открылись все 17 колонок (7 SQL + 10 procfs).
+      Паника при стрелке влево воспроизвести не удалось — исчезла.
+      Debug-лог подтвердил: enriched.Ncols=17, res.Ncols=17, view.DiffIntvl=[0 0].
+
+  - n: 2
+    hypothesis: >
+      CheckIOAvailable() читал /proc/self/io — файл собственного процесса, который
+      ВСЕГДА доступен владельцу. Это неверный зонд для проверки доступа к чужим
+      процессам. Нужно проверять /proc/[pg-backend-pid]/io — реальный PID из
+      pg_stat_activity, принадлежащий пользователю postgres.
+    action:
+      - "internal/stat/procpidstat.go: CheckIOAvailable(pid int) принимает PID вместо /proc/self/io"
+      - "top/config_view.go: switchViewToProcPidStat запрашивает первый PID из pg_stat_activity, fallback PID=1"
+      - "internal/stat/procpidstat_test.go: тест обновлён — оба исхода (nil/EACCES) допустимы"
+    result: pass
+    observed: >
+      Warning появляется при запуске от непривилегированного пользователя.
+      IO-колонки пустые. CPU-колонки работают нормально.
+
+  - n: 3
+    hypothesis: >
+      printCmdline(g, warning) вызывался, а затем сразу printCmdline(g, v.Msg)
+      перезаписывал его — оба вызывают g.Update+v.Clear, поэтому warning
+      исчезал немедленно, до того как пользователь успевал его прочитать.
+    action:
+      - "top/config_view.go: warning и v.Msg стали взаимоисключающими — либо warning, либо имя вью"
+    result: pass
+    observed: >
+      Warning корректно отображается при запуске от непривилегированного пользователя.
+      Все остальные пункты ручной проверки (п.1–7) пройдены успешно.
+
+root_cause: >
+  Три независимых дефекта: (1) бинарник не пересобирался после cherry-pick Task 05,
+  поэтому enrichment-ветка в Collector.Update() отсутствовала и экран показывал 7 колонок;
+  (2) CheckIOAvailable() зондировал /proc/self/io, который всегда доступен владельцу
+  процесса, вместо реального PID PG-бэкенда — warning о нехватке прав никогда не срабатывал;
+  (3) printCmdline(warning) немедленно перезаписывался printCmdline(v.Msg) в том же handler,
+  поэтому warning исчезал раньше, чем пользователь успевал его прочитать.
+
+documentation_gap:
+  description: >
+    В tech-spec и task-файлах не было явного шага "пересобрать бинарник после
+    каждого cherry-pick". Инструкция по проверке в user-spec ("Как проверить")
+    предполагала актуальный бинарник, но feature-execution skill не содержит
+    явного make build перед фазой user review. Также в tech-spec не было указано,
+    что /proc/self/io неподходящий зонд для кросс-процессного доступа —
+    это неочевидное свойство Linux procfs, которое агент-исполнитель упустил.
+  affected_artifacts:
+    - docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-tech-spec.md
+    - docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-task-06.md
+    - docs/features/001-feat-per-process-system-stats/001-feat-per-process-system-stats-task-07.md
+  proposed_changes: >
+    В tech-spec добавить в раздел "Risks": риск "stale binary during manual testing —
+    always rebuild before user verification". В task-07 (pre-deploy QA) добавить
+    явный шаг "make build" перед ручными проверками. В tech-spec уточнить семантику
+    CheckIOAvailable: "must probe a PID owned by a different OS user — /proc/self/io
+    is always accessible and is not a valid probe for cross-process IO access".

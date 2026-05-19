@@ -29,9 +29,10 @@ pgCenter's main goal is to help Postgres DBA working with statistics and provide
 
 #### Key features
 - Top-like interface that allows you to monitor stats changes as you go. See details [here](doc/pgcenter-top-readme.md).
+- **Per-process system stats** (`Shift+S`): see CPU utilization, IO throughput, and IO wait time per PostgreSQL backend alongside query text — without leaving pgcenter. Instantly identify whether a slow query is CPU-bound or IO-bound.
 - Configuration management function  allows viewing and editing of current configuration files and reloading the service, if needed.
 - Logfiles functions allow you to quickly check Postgres logs without stopping statistics monitoring.
-- "Poor man’s monitoring" allows you to collect Postgres statistics into files and build reports later on. See details [here](doc/pgcenter-record-readme.md).
+- "Poor man’s monitoring" allows you to collect Postgres statistics into files and build reports later on. See details [here](doc/pgcenter-record-readme.md). Per-process stats are recorded automatically and can be replayed with `pgcenter report -N` for post-mortem analysis.
 - Wait events profiler allows seeing what wait events occur during queries execution. See details [here](doc/pgcenter-profile-readme.md).
 
 #### Quick start
@@ -68,7 +69,12 @@ docker run -it --rm lesovsky/pgcenter:latest pgcenter top -h 1.2.3.4 -U user -d 
 - memory and swap usage, amount of cached and dirty memory, writeback activity;
 - storage devices statistics: IOPS, throughput, latencies, average queue and requests size, devices utilization;
 - network interfaces statistics: throughput in bytes and packets, different kind of errors, saturation and utilization.
-- mounted filesystems' usage statistics: total size, amount of free/used/reserved space and inodes. 
+- mounted filesystems' usage statistics: total size, amount of free/used/reserved space and inodes.
+
+##### Per-process system stats (`Shift+S`)
+`pgcenter top` includes a per-process stats screen (press `Shift+S`) that combines `pg_stat_activity` with per-backend CPU and IO metrics from `/proc/[pid]/stat` and `/proc/[pid]/io`. Shows CPU utilization (`%all`, `%us`, `%sy`), IO throughput (`read,KiB/s`, `write,KiB/s`), IO delay (`%iodelay`), and accumulated totals since process start. Available in local mode only.
+
+These metrics are also captured by `pgcenter record` and can be replayed with `pgcenter report -N` for post-mortem analysis. 
 
 In the case of connecting to remote Postgres, there is possibility to use additional SQL functions used for retrieving `/proc` statistics from a remote host. For more information, see details [here](doc/pgcenter-config-readme.md).
 

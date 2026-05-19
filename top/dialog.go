@@ -47,18 +47,24 @@ func dialogOpen(app *app, d dialogType) func(g *gocui.Gui, _ *gocui.View) error 
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		prompt := dialogPrompts(d)
 
-		// some types of actions allowed only in specifics stats contexts.
-		if (d > dialogFilter && d <= dialogChangeAge) && app.config.view.Name != "activity" {
+		// Cancel/terminate/mask dialogs are allowed in pg_stat_activity view only.
+		if (d == dialogCancelQuery || d == dialogTerminateBackend ||
+			d == dialogCancelGroup || d == dialogTerminateGroup ||
+			d == dialogSetMask) && app.config.view.Name != "activity" {
 			var msg string
 			switch d {
 			case dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup:
 				msg = "Terminate backends or cancel queries allowed in pg_stat_activity view only."
 			case dialogSetMask:
 				msg = "State mask setup allowed in pg_stat_activity view only."
-			case dialogChangeAge:
-				msg = "Changing queries age threshold allowed in pg_stat_activity view only."
 			}
 			printCmdline(g, "%s", msg)
+			return nil
+		}
+
+		// Changing queries age threshold is allowed in pg_stat_activity and procpidstat views.
+		if d == dialogChangeAge && app.config.view.Name != "activity" && app.config.view.Name != "procpidstat" {
+			printCmdline(g, "%s", "Changing queries age threshold allowed in pg_stat_activity view only.")
 			return nil
 		}
 

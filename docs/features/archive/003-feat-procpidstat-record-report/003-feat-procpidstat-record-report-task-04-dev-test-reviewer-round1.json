@@ -1,0 +1,71 @@
+{
+  "reviewer": "dev-test-reviewer-04",
+  "round": 1,
+  "status": "passed",
+  "summary": "Three existing tests correctly updated and two new tests added. Each new test exercises observable behavior, not implementation. Litmus check: removing each affected production line of code (tarRecorder.write() sysinfo emission, view.go NotRecordable=false on procpidstat, filterViews() NotRecordable check, isFilenameOK sysinfo prefix, describeReport map entry for procpidstat, processData/readTar pipeline for procpidstat) causes at least one assertion to fail. Test pyramid unchanged — all updates and additions live at the unit level, consistent with existing record_test.go and report_test.go style. Two minor coverage observations (see findings); neither blocks acceptance.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "test_robustness",
+      "location": "report/report_test.go:Test_app_doReport_procpidstat",
+      "issue": "Output assertions are weak: assert.Contains(out, \"/\") and assert.Contains(out, \"SELECT 1\"). Both substrings appear exactly once in the expected output (the timestamp line '2026/05/19 10:00:01, rate: 1s' and the query column), so the assertions are correct today. However, if a future change accidentally suppressed the data row but kept the timestamp header, the test would still pass on '/'. A tighter assertion (e.g. matching the timestamp via regex '\\d{4}/\\d{2}/\\d{2}' and counting at least one occurrence of the pid '1234' in addition to 'SELECT 1') would catch a wider class of regressions.",
+      "recommendation": "Optional: add assert.Regexp(t, regexp.MustCompile(`\\d{4}/\\d{2}/\\d{2}`), out) and assert.Contains(t, out, \"1234\") to pin the timestamp format and the data-row presence independently of the query column.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "test_isolation",
+      "location": "record/record_test.go:Test_app_record",
+      "issue": "The totalViews formula now depends on countRecordable(view.New()) which is computed once at test-function entry. If a future task adds another non-recordable view, the formula keeps working; if a task adds a new per-tick non-stat tar entry (like a second sysinfo-style metadata blob), the +2 constant becomes wrong. The risk is low because the test will fail loudly (filesCount mismatch), but the +2 itself is not self-documenting — only the comment ties it to 'meta + sysinfo'.",
+      "recommendation": "Optional: replace the magic '+2' with named constants (e.g. metaEntriesPerTick + sysinfoEntriesPerTick) or comment that lists each non-stat entry explicitly. Not blocking — the comment already explains the +2 origin clearly.",
+      "litmusTestFailed": false
+    }
+  ],
+  "litmusChecks": [
+    {
+      "production_line": "record/recorder.go: sysinfo entry written in tarRecorder.write() (line ~262)",
+      "failing_test": "Test_app_record (filesCount = countRecordable()*count + meta + sysinfo)",
+      "verified": true
+    },
+    {
+      "production_line": "internal/view/view.go: NotRecordable field removed from procpidstat (now false)",
+      "failing_test": "Test_filterViews (every row's wantN and wantV would mismatch); TestFilterViews_NotRecordable (assert.False on pp.NotRecordable)",
+      "verified": true
+    },
+    {
+      "production_line": "record/record.go: NotRecordable drop branch in filterViews() (line 210)",
+      "failing_test": "TestFilterViews_dropsExplicitNotRecordable (n==1, len(v)==0)",
+      "verified": true
+    },
+    {
+      "production_line": "report/report.go: procpidstat entry in describeReport map (line 627)",
+      "failing_test": "Test_describeReport (procpidstat case asserts procPidStatDescription)",
+      "verified": true
+    },
+    {
+      "production_line": "report/report.go: sysinfo prefix in isFilenameOK; sysinfo branch in readTar; processData full pipeline for procpidstat",
+      "failing_test": "Test_app_doReport_procpidstat (non-empty output, timestamp line, data row)",
+      "verified": true
+    }
+  ],
+  "coverage": {
+    "newOrUpdatedTests": [
+      "record/record_test.go::Test_app_record (formula updated to +2)",
+      "record/record_test.go::Test_filterViews (table updated)",
+      "record/record_test.go::TestFilterViews_NotRecordable (inverted)",
+      "record/record_test.go::TestFilterViews_dropsExplicitNotRecordable (new — restores coverage of drop branch)",
+      "report/report_test.go::Test_app_doReport_procpidstat (new — end-to-end pipeline)",
+      "report/report_test.go::Test_describeReport (procpidstat case added)"
+    ],
+    "acceptanceCriteriaCoverage": "all 8 AC items from the task spec verified via test runs"
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "newTests": 2,
+    "updatedTests": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "litmusTestsPassed": "5/5"
+  }
+}

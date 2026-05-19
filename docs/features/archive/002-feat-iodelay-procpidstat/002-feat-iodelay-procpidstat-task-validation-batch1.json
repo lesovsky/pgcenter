@@ -1,0 +1,75 @@
+{
+  "validator": "dev-task-validator",
+  "iteration": 3,
+  "feature_base": "docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "01",
+      "section": "What to do",
+      "issue": "Task 01 touches 6 files (procpidstat.go, view.go, stat.go, config_view.go, record.go, procpidstat_test.go), exceeding the 1-3 file atomicity guideline. Tech-spec explicitly scopes all six to this task because they must land together for compilation. The logical cohesion is sound — removing any file would leave the codebase in a non-compilable state.",
+      "fix": "No action required. The scope is justified by the compilation constraint documented in the tech-spec and the task Description. Flag is informational."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "TDD Anchor",
+      "issue": "The single TDD anchor (TestBuildProcPidResult_NewSignature) verifies result.Ncols == 19 and the new function signature compiles, but does not assert any column values or rendering behavior. It is a structural/compilation guard rather than a behavioral test. The task rationale is that behavioral tests belong to Task 02, which is acceptable per the task split — but the anchor is weak as a behavior driver.",
+      "fix": "Consider adding an assertion that col 11 and col 17 are empty strings when delayAcctAvailable=false inside TestBuildProcPidResult_NewSignature. This would make the anchor exercise the rendering path as well without duplicating Task 02 scope. Optional — current anchor is still a valid TDD entry."
+    },
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "02",
+      "section": "What to do",
+      "issue": "Task 02 touches 5 source files plus 2 new golden files (7 artifacts total), exceeding the 1-3 file guideline. As with Task 01, the tech-spec explicitly assigns these files to a single test-coverage wave. Cohesion is sound — all changes contribute to making make test pass for the iodelay feature.",
+      "fix": "No action required. Scope is dictated by the tech-spec test wave decomposition. Flag is informational."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "TDD Anchor",
+      "issue": "TestCheckDelayAcctAvailable is described as 'asserts function returns a bool without panic; at minimum covers the code path'. This tests structure (no crash) rather than behavior (correct return value for a given sysctl state). An anchor that verifies the correct bool result for a known input would be more meaningful.",
+      "fix": "Strengthen the description: 'TestCheckDelayAcctAvailable — returns true when /proc/sys/kernel/task_delayacct contains \"1\", false when absent or contains \"0\"; result matches live sysctl value read separately via os.ReadFile'. The Details section already describes the correct approach via os.ReadFile comparison — align the TDD Anchor description with it."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "project.md and deployment.md links use '../../.claude/skills/project-knowledge/' prefix (e.g., '[project.md](../../.claude/skills/project-knowledge/project.md)'). From the repository root, '../../' navigates two directories above the repo root, making these paths incorrect. architecture.md correctly uses '.claude/skills/project-knowledge/architecture.md'. The inconsistency was partially fixed in iteration 2 (architecture.md added), but project.md and deployment.md retain the broken '../../' prefix.",
+      "fix": "Change both paths to repo-relative form: '[project.md](.claude/skills/project-knowledge/project.md)' and '[deployment.md](.claude/skills/project-knowledge/deployment.md)'."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 5,
+    "by_severity": {
+      "critical": 0,
+      "major": 0,
+      "minor": 5
+    },
+    "by_task": {
+      "01": 2,
+      "02": 2,
+      "03": 0,
+      "04": 1
+    },
+    "previous_findings_fixed": [
+      "Task 01 TDD Anchor: TestCheckDelayAcctAvailable and TestBuildProcPidResult_DelayUnavailable ownership conflict — FIXED (removed from Task 01; Task 01 now has only TestBuildProcPidResult_NewSignature)",
+      "Task 01 Details: missing Implementation hints heading — FIXED (heading present with ticks guard, mutual exclusion, and column table reference)",
+      "Task 02 Context Files: bare relative paths without feature directory prefix — FIXED (full repo-relative paths used)",
+      "Task 02 Context Files: '../../../../' prefix on project knowledge links — FIXED (now uses '.claude/...' prefix)",
+      "Task 02 Details: missing Files and Implementation hints headings — FIXED (both headings present)",
+      "Task 02 Post-completion: bare relative path for decisions.md — FIXED (full repo-relative path used)",
+      "Task 04 Context Files: bare relative paths for feature artifacts — FIXED (full repo-relative paths used)",
+      "Task 04 Context Files: architecture.md missing — FIXED (added)",
+      "Task 04 Post-completion: bare relative path for decisions.md — FIXED (full repo-relative path used)"
+    ]
+  }
+}

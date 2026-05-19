@@ -1,0 +1,72 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "002",
+    "feature_name": "iodelay-procpidstat",
+    "feature_base": "docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat",
+    "project": "pgcenter",
+    "feature_size": "S",
+    "model": "claude-sonnet-4-6",
+    "date_started": "2026-05-19",
+    "date_completed": "2026-05-19"
+  },
+  "phases": {
+    "user_spec": {
+      "started_at": "2026-05-19T00:00:00",
+      "completed_at": "2026-05-19T01:00:00",
+      "duration_min": 60,
+      "touch_time_min": 45,
+      "human_wait_time_min": 15
+    },
+    "tech_spec": {
+      "started_at": "2026-05-19T01:00:00",
+      "completed_at": "2026-05-19T02:30:00",
+      "duration_min": 90,
+      "touch_time_min": 70,
+      "human_wait_time_min": 20
+    },
+    "task_decomposition": {
+      "started_at": "2026-05-19T02:30:00",
+      "completed_at": "2026-05-19T03:30:00",
+      "duration_min": 60,
+      "touch_time_min": 50,
+      "human_wait_time_min": 10
+    },
+    "feature_execution": {
+      "started_at": "2026-05-19T03:30:00",
+      "completed_at": "2026-05-19T06:00:00",
+      "duration_min": 150,
+      "touch_time_min": 120,
+      "human_wait_time_min": 30
+    },
+    "done": {
+      "started_at": "2026-05-19T06:00:00",
+      "completed_at": "2026-05-19T06:30:00",
+      "duration_min": 30,
+      "touch_time_min": 25,
+      "human_wait_time_min": 5
+    }
+  },
+  "quality": {
+    "validation_rounds": {
+      "user_spec": 2,
+      "tech_spec": 2,
+      "task_decomposition": 3
+    },
+    "validation_findings": { "critical": 1, "major": 8, "minor": 18 },
+    "review_rounds": {
+      "task_01": 1,
+      "task_02": 1,
+      "task_03": 1
+    },
+    "review_findings": { "critical": 0, "major": 7, "minor": 9 },
+    "first_pass_rate_pct": 67
+  },
+  "volume": {
+    "interview_questions": 9,
+    "tasks_count": 4,
+    "waves_count": 3,
+    "agents_spawned": 35,
+    "commits_count": 18
+  }
+}

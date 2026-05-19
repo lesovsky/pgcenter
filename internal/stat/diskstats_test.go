@@ -11,7 +11,7 @@ func Test_readDiskstats(t *testing.T) {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -34,7 +34,7 @@ func Test_readDiskstats(t *testing.T) {
 }
 
 func Test_readDiskstatsLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -142,7 +142,7 @@ func Test_readDiskstatsRemote(t *testing.T) {
 }
 
 func Test_countDiskstatsUsage(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 

@@ -1,0 +1,40 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "switchViewToProcPidStat closure signature must capture g *gocui.Gui. The spec pseudocode sketches switchViewToProcPidStat(app) as a standalone call, but printCmdline(g, ...) requires the *gocui.Gui argument only available inside a gocui callback. All existing local-mode guards (showExtra/CollectLogtail, showPgLog) are closures registered directly in keybindings that receive g from the framework. switchViewToProcPidStat must follow the same pattern: func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error. This is a spec description gap, not a design flaw — the architecture is correct.",
+      "location": "Section 'How it works' — switchViewToProcPidStat flow; Task 6",
+      "fix": "Register 'S' in keybindings.go as: {\"sysstat\", 'S', switchViewToProcPidStat(app)}. Implement switchViewToProcPidStat as a closure returning func(g *gocui.Gui, _ *gocui.View) error, capturing g for printCmdline. This is the exact pattern used by showExtra and switchViewTo."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The CollectExtra change-detection block in collectStat() uses continue after c.Reset(), skipping the current tick — same semantics as the existing ShowExtra block. The spec text ('add parallel change-detection') is correct but does not state that the continue is intentional and that no ToggleCollectExtra call is needed (CollectExtra is read directly from view.View inside Update(), not stored in c.config.collectExtra). Without this explicit note, an implementer may accidentally add a ToggleCollectExtra(v.CollectExtra) call and break the ShowExtra iota contract.",
+      "location": "Section 'CollectExtra vs ShowExtra flow'; Task 5",
+      "fix": "Add an implementation comment: 'Do not call ToggleCollectExtra here — CollectExtra is read from view.View directly in Collector.Update(), not from c.config.collectExtra. continue to re-run Update on the next tick with the new view after Reset.' No code change required beyond the comment."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Collector.Reset() map clearing: the spec says 'map clearing in Collector.Reset()' but does not specify nil-assignment vs. make(). nil-assignment is safe (comma-ok reads on nil maps return zero value, no panic) and matches the existing Reset() style of struct zeroing; make() is also correct. The implementation must be consistent with NewCollector() initialization.",
+      "location": "Section 'Data Models — New Collector fields'; Task 5",
+      "fix": "Assign nil to all four maps in Reset() (consistent with struct zeroing), then guard writes in Update() with lazy make() if needed: if c.currProcPidStats == nil { c.currProcPidStats = make(map[int]ProcPidStat) }. Alternatively, use make() in Reset() to match NewCollector(). Either is correct; pick one pattern and apply it consistently."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "All Round 2 fixes (manual load→patch→send pattern, direct CPU% computation, Filters initialized in view entry, CollectExtra change-detection in collectStat, map clearing in Reset) are correctly incorporated into the spec. No critical or major issues remain. Three minor findings are implementation-description gaps — all resolved with a comment or one-line clarification — and none represent architectural defects. Approved for implementation."
+}

@@ -1,0 +1,29 @@
+{
+  "task": "001-feat-per-process-system-stats-task-01",
+  "reviewer": "dev-test-reviewer",
+  "round": 1,
+  "mode": "self-review",
+  "note": "Reviewer subagents were not callable from the agent context (no Task/SendMessage tool surfaced). The producing agent performed a structured self-review against the test-master methodology. This report should be re-run by the team lead with the actual dev-test-reviewer subagent before merging.",
+  "files_reviewed": [
+    "internal/stat/procpidstat_test.go",
+    "internal/stat/testdata/proc/"
+  ],
+  "tdd_anchors_check": {
+    "TestReadProcPidStatSpaceInComm": "present, asserts Utime=1500, Stime=750 from a (my proc name) golden file",
+    "TestReadProcPidStatNormalComm": "present, asserts Utime=2500, Stime=1250 from a (bash) golden file",
+    "TestReadProcPidStatMalformed": "present, asserts error returned and zero ProcPidStat",
+    "TestReadProcPidIOValid": "present, asserts ReadBytes=4096, WriteBytes=8192",
+    "TestReadProcPidIOMissingKey": "present, asserts error returned and zero ProcPidIO",
+    "TestReadProcPidStatIntegration": "present, calls readProcPidStat(os.Getpid()) and asserts Utime+Stime >= 0",
+    "TestReadProcPidIOIntegration": "present, calls readProcPidIO(os.Getpid()) and asserts ReadBytes+WriteBytes >= 0",
+    "TestCheckIOAvailable": "present, asserts CheckIOAvailable() returns nil"
+  },
+  "extra_coverage": [
+    "TestReadProcPidStatFileMissing — covers os.Open error path for stat reader",
+    "TestReadProcPidIOFileMissing — covers os.Open error path for io reader"
+  ],
+  "test_pyramid_position": "Unit tests with golden files dominate; integration tests are kept minimal (os.Getpid only) to avoid environmental coupling. Matches existing internal/stat/ test conventions (cpu_test.go).",
+  "verify_command_check": "TestCheckIOAvailable does not match the -run ProcPid regex from the task verify clause. The test still runs under default `go test` and `make test`. Documented in decisions.md.",
+  "findings": [],
+  "verdict": "pass"
+}

@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 20,
+  "requirements_covered": 17,
+  "requirements_partial": 3,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-12: Accumulated columns (all_total,s, read_total,KiB) show absolute values since process start, not deltas",
+      "detail": "User-spec explicitly distinguishes accumulated columns from rate columns in 'Дизайн и интерфейс' and 'Ограничения'. Tech-spec Decision 1 and DiffIntvl=[0,0] imply these columns pass through unchanged, but the spec never states explicitly that accumulated columns are stored and reported as-is without any diff treatment. An implementer reading only the tech-spec could miss this distinction. No AC item verifies the accumulated-column pass-through behavior.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-20: -s/-e time range filtering does not recompute rate columns (rates reflect recording interval, not view interval)",
+      "detail": "User-spec Limitations section explicitly surfaces this constraint for users. Tech-spec Decision 1 covers DiffIntvl=[0,0] (pass-through, no column subtraction), which architecturally implies the correct behavior. However, there is no AC item verifying that rate columns in a filtered time range retain recording-interval values and are not recomputed. The limitation is invisible to an implementer reviewing AC alone.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-2 / Scenario 3: pgcenter report -N on tar recorded in remote mode prints INFO 'no procpidstat data in this archive'",
+      "detail": "Tech-spec AC covers 'report -N on tar without procpidstat: INFO message, exit 0'. The exact message text ('INFO: no procpidstat data in this archive') specified in user-spec Scenarios 3 and 5 is not pinned in any AC item or Decision. This is a low-risk gap — behavior is specified, only the exact wording is unverifiable from the tech-spec.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "Round 2 validation. Both round-1 critical findings are resolved: (1) map-rotation protocol for exited backends is now fully specified in Architecture data flow with explicit newPrev construction logic; (2) WARNING detection in report is now covered by Decision 10 with column-inspection mechanism and Architecture data flow showing the exact check. The round-1 major finding (US-5: formatting flags with -N) is resolved — AC now has explicit items for -o, -g, -l, -s/-e. US-6 (-d -N describe) AC item is present. Test_app_record sysinfo count AC item is present. Status upgraded to pass. 3 minor partials remain: accumulated-column pass-through semantics not stated explicitly (US-12), rate-recompute limitation not verifiable from AC (US-20), exact INFO message text not pinned (US-2/Scenario 3). 17/20 requirements fully covered, 3 partial (all minor), 0 missing."
+}

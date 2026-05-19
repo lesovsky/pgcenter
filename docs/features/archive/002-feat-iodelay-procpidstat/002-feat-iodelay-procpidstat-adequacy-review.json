@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "overengineering",
+      "severity": "minor",
+      "issue": "The spec contains implementation-level detail that belongs in a tech-spec, not a user-spec.",
+      "why_matters": "User-spec should define WHAT and WHY; HOW (specific field indices like `suffix[39]`, function names like `formatCPUTime`, struct fields like `IODelay float64`, exact file paths and line numbers) is tech-spec territory. The sections 'Как должно работать', 'Технические решения', and 'Тестирование' cross this boundary substantially.",
+      "fix": "Move implementation mechanics (field index references, function reuse decisions, specific file change list) to the tech-spec. Keep the user-spec focused on observable behaviour: what the user sees, what happens on failure, what the acceptance criteria are."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "The edge case for PID disappearing between ticks specifies `iodelay_total,s = \"0:00:00\"` and `%iodelay = \"0.00\"` as the displayed values, but the rationale for this choice is missing.",
+      "why_matters": "Showing `\"0:00:00\"` for a process that no longer exists is potentially misleading — it looks like valid data rather than a stale/absent sample. CPU columns behave this way already, but it is not explained whether that behaviour is intentional or inherited. Without a stated reason, implementors may diverge.",
+      "fix": "Add one sentence explaining why a vanished PID shows zero rather than empty string (e.g., 'mirrors existing CPU column behaviour for consistency')."
+    }
+  ],
+  "worst_category": "overengineering",
+  "summary": "The feature is well-scoped (S), technically sound, uses no new dependencies, fits cleanly into the existing procpidstat enrichment pattern, and covers the important edge cases. Minor issue: the spec bleeds into tech-spec territory with implementation details (field indices, function names, file paths), and one edge-case rationale is unexplained. Neither finding blocks implementation."
+}

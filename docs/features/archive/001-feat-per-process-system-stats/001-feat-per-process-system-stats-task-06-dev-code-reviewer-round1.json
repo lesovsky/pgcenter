@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 06 wires the procpidstat screen into the TUI interaction layer. The new switchViewToProcPidStat handler follows the closure pattern used by every other top-level handler in this file (switchViewTo, toggleSysTables, toggleIdleConns). The local-mode guard mirrors showPgLog in top/pglog.go. Patching CollectExtra/IOAvailable inline (not via viewSwitchHandler) is required and documented in a comment. The toggleIdleConns guard extension is a minimal and obvious widening. The dialog.go restructure split a single boolean compound into two semantically distinct guards, preserving the exact existing messages for the activity-only path and adding the explicit (activity OR procpidstat) allowlist for dialogChangeAge. help.go uses a new subsection consistent with the existing format.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "n/a — TUI callbacks require a real terminal; task-spec explicitly waives unit tests for this layer"
+  },
+  "dimensionsChecked": {
+    "architecturalPatterns": "pass — switchViewToProcPidStat follows the existing closure-returning-handler pattern (switchViewTo, showExtra, toggleIdleConns); keybindings entry uses the same {viewname,key,handler} tuple shape as adjacent uppercase bindings",
+    "separationOfConcerns": "pass — keybindings.go only registers a binding; config_view.go owns the handler and the idle-conns guard; dialog.go owns dialog dispatch; help.go owns the help text. No cross-file leakage.",
+    "readability": "pass — handler has a 4-line doc comment explaining the contract (local-mode guard, IO probe, runtime patch, no viewSwitchHandler); each step has an inline comment; toggleIdleConns comment updated to reflect new allowlist",
+    "errorHandling": "pass — stat.CheckIOAvailable() error is captured into ioErr and used both for the warning message and to set v.IOAvailable; warning is informational, not fatal, matching tech-spec edge-case note that the screen must still open when IO is unavailable",
+    "typeSafety": "pass — Go static typing; v is a value copy of the View struct, so mutations to CollectExtra/IOAvailable do not affect the static map entry until viewSwitchHandler is called elsewhere",
+    "testingCoverage": "n/a — TUI callback layer; existing top package tests still pass (race-enabled run clean)",
+    "dependenciesManagement": "pass — adds 'github.com/lesovsky/pgcenter/internal/stat' import to config_view.go; the package was already imported by top/keybindings.go and top/stat.go so no new cycle is introduced",
+    "security": "pass — see dev-security-auditor",
+    "performance": "n/a — keypress-time handler; one syscall (os.Open /proc/self/io + close) per S press",
+    "crossFileConsistency": "pass — verified stat.CheckIOAvailable() and stat.CollectProcPidStat exist (procpidstat.go:158, stat.go:30); verified view.View has CollectExtra/IOAvailable fields (view.go:27-28); verified 'procpidstat' is registered in view.New() with Msg='Show per-process system stats'; verified app.db.Local exists (postgres.go:25); verified printCmdline signature matches (ui.go:187)",
+    "dialogGuardRestructure": "pass — the original compound (d > dialogFilter && d <= dialogChangeAge) covered exactly {dialogCancelQuery, dialogTerminateBackend, dialogCancelGroup, dialogTerminateGroup, dialogSetMask, dialogChangeAge}; the replacement enumerates the first five explicitly and isolates dialogChangeAge with the wider allowlist. Message strings preserved verbatim, including the existing 'allowed in pg_stat_activity view only' wording for the age path so manual smoke tests against prior baselines continue to match. dialogPgReload and dialogQueryReport are correctly unaffected.",
+    "helpTextPlacement": "pass — new 'per-process stats' subsection placed between 'extra stats actions' and 'activity actions', which preserves the section ordering most adjacent to the related extra-stats hotkeys (B/N/F/L)"
+  },
+  "verification": {
+    "build": "make build → success",
+    "lint": "make lint (golangci-lint + gosec) → 0 warnings",
+    "tests": "go test -race -count=1 ./top/... ./internal/stat/... ./internal/view/... ./record/... → all pass"
+  }
+}

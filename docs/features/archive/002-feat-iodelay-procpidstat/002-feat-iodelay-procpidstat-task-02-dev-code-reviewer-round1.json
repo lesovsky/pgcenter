@@ -1,0 +1,51 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "All five mandatory test functions are present and correct, column index assertions match the 19-column layout, and all tests pass. The golden file pid_stat_iodelay contains an extra trailing field (51 suffix fields instead of 50), making it structurally diverge from the real /proc/pid/stat format, though all parser-visible fields (suffix[11], [12], [39]) are correct and tests pass. Two rendering paths required by the tech-spec table (delayAcctAvailable=true && !validPID; delayAcctAvailable=true && first-tick) are not tested, which is acceptable given the task acceptance criteria only mandates the DelayAvailable and DelayUnavailable tests.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/testdata/proc/pid_stat_iodelay",
+      "line": 1,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The file has 51 suffix fields (53 total words) instead of the 50 suffix fields (52 total words) in pid_stat_normal_comm. A field was inserted at position 39 rather than the value at position 39 being replaced — the file ends with an extra trailing zero not present in the baseline. The spec says 'all other fields identical'. Since the parser only reads suffix[11], suffix[12], and suffix[39], all assertions pass, but the golden file does not faithfully represent the real /proc/pid/stat format (which has exactly 52 fields). Correct by replacing the zero at suffix[39] instead of inserting: the resulting line should have 52 total words, ending with '...0 17 0 0 0 500 0 0 0 0 0 0 0 0 0 0' (not '...0 17 0 0 0 500 0 0 0 0 0 0 0 0 0 0 0').",
+      "benefit": "Golden file serves as accurate documentation of the kernel format and prevents confusion if future tests read fields beyond index 39.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 353,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "TestBuildProcPidResult_InvalidPID passes delayAcctAvailable=false for all three invalid-PID rows. The tech-spec rendering table defines a separate condition 'delayAcctAvailable && !validPID → row[11]=00:00:00, row[17]=0.00' that is not exercised anywhere. Consider adding a sub-test or a dedicated test function that passes delayAcctAvailable=true with an invalid PID ('abc', '0', '-7') and asserts row[11].String==\"00:00:00\" and row[17].String==\"0.00\". This closes the gap between the spec rendering table and the test suite.",
+      "benefit": "Prevents regression if the invalid-PID branch in the delayAcctAvailable=true path is accidentally changed.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 460,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "TestBuildProcPidResult_DelayAvailable only exercises the normal-tick path (prevStats present, itv>0). The first-tick path with delayAcctAvailable=true (prevStats=nil, itv=1) is not covered: col 11 should be formatCPUTime(curr.IODelay, ticks) and col 17 should be \"\" (no delta). This is the third rendering condition in the tech-spec table. A short additional sub-test or inline assertion would cover it without duplicating the fixture setup.",
+      "benefit": "Provides deterministic confirmation that the first-tick iodelay_total,s renders correctly without panicking when prevStats is nil.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 297,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "TestBuildProcPidResult_NcolsGuarantee hardcodes delayAcctAvailable=false in the table-driven call site (seventh positional argument). The guarantee that Ncols==19 is independent of delayAcctAvailable, but adding at least one sub-case with delayAcctAvailable=true would demonstrate that the column count remains stable regardless of the flag. This is cosmetic since the functional invariant is already tested.",
+      "benefit": "Makes the NcolsGuarantee test self-documenting about the invariant being delayAcct-independent.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "adequate"
+  }
+}

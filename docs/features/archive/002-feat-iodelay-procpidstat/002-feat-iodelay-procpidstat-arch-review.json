@@ -1,0 +1,33 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "pass",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "Task 1 now correctly includes call-site updates to procpidstat_test.go (adding delayAcctAvailable to existing buildProcPidResult calls). However, Task 1 also changes procPidResultNcols 17→19 and the column slice, which shifts row index assertions in all existing test functions (e.g. row[11..16] → row[12..17], query col 16 → 18). These assertion updates are deferred to Task 2. Between Task 1 completion and Task 2 start, make test will fail (wrong column count / wrong index assertions) even though make build && make lint pass. The spec explicitly accepts this by scoping Task 1 verification to make build && make lint only. This is correct and safe as long as CI does not auto-trigger make test between tasks — which is not the case in the agent wave model.",
+      "location": "Implementation Tasks — Wave 1, Task 1 / Wave 2, Task 2",
+      "fix": "No action required. The current wave-split is acceptable. For extra safety, document in the task description that make test is intentionally excluded from Task 1 verification, or collapse the two waves if CI runs tests on every intermediate commit."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The procpidstat view entry in view.New() (view.go line 284-295) does not set CollectExtra: stat.CollectProcPidStat in the static map — it is patched at runtime by switchViewToProcPidStat. The spec correctly relies on this runtime-patch pattern (matches existing code). However, if the view were ever reached via viewSwitchHandler instead of switchViewToProcPidStat, CollectExtra would be 0 and the enrichment would silently not run. The constraint against using viewSwitchHandler is stated in the spec and in comments, but is not enforced by the type system. This is a pre-existing design fragility, not introduced by this feature.",
+      "location": "Architecture — How it works / top/config_view.go",
+      "fix": "No action required for this feature. Setting CollectExtra in the static view.New() definition would make the invariant self-documenting and type-safe — record as technical debt for a future cleanup."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "Both previous major findings have been resolved: (1) Task 1 now includes the mechanical call-site updates to procpidstat_test.go so the package compiles after the signature change, with make test explicitly deferred to Task 2; (2) the column index narrative in 'How it works' now uses the grouped notation that matches the authoritative procPidResultCols table. The spec is architecturally sound, fits the codebase cleanly, and can proceed to execution."
+}

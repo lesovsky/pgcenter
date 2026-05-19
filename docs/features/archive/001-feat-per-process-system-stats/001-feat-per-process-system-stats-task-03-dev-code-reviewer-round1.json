@@ -1,0 +1,36 @@
+{
+  "task": "001-feat-per-process-system-stats-task-03",
+  "reviewer": "dev-code-reviewer",
+  "round": 1,
+  "mode": "self-review",
+  "note": "Reviewer subagents were not callable from the agent context (no Task/SendMessage tool surfaced). The producing agent performed a structured self-review against code-writing review dimensions. This report should be re-run by the team lead with the actual dev-code-reviewer subagent before merging.",
+  "files_reviewed": [
+    "internal/stat/procpidstat.go",
+    "internal/stat/procpidstat_test.go"
+  ],
+  "dimensions_checked": {
+    "architectural_patterns": "pass — formatCPUTime and buildProcPidResult colocated with reader functions in procpidstat.go. PGresult construction mirrors NewPGresultQuery in postgres.go (sql.NullString{Valid: true} for every cell). procPidResultCols declared as package-level variable; the 17-column invariant is encoded via the const procPidResultNcols which is referenced everywhere — eliminates magic numbers.",
+    "separation_of_concerns": "pass — buildProcPidResult is a pure function taking all inputs as parameters (no globals, no runtime.NumCPU() call inside). formatCPUTime is also pure. Reader functions remain untouched.",
+    "readability": "pass — buildProcPidResult is organized as six self-contained blocks (SQL cols, PID parse, accumulated CPU, accumulated IO, CPU rates, IO rates, query col) each with a leading comment. Helper functions nullString and delta extracted to keep the main loop readable.",
+    "error_handling": "n/a — buildProcPidResult is a pure transform with no IO; it cannot fail. strconv.Atoi error is handled via validPID flag, never propagated.",
+    "type_safety": "pass — itv and ticks are float64 (matches sValue signature in stat.go); cpuCount is int (matches runtime.NumCPU() return). PID parsed via strconv.Atoi.",
+    "testing_coverage": "adequate — 7 test functions cover formatCPUTime (table-driven, 7 cases), first tick, IO unavailable, itv==0, Ncols guarantee (table-driven, 6 cases), two-tick known-values, invalid PID (3 cases: non-numeric, zero, negative).",
+    "dependencies_management": "pass — only stdlib imports added (database/sql). strconv, fmt, strings were already in the file.",
+    "security": "see dev-security-auditor — PID validation prevents path traversal in downstream procfs reads.",
+    "performance": "pass — single allocation per row (sql.NullString slice of len 17), pre-sized via make(..., procPidResultNcols). values slice pre-sized via activity.Nrows. No reflection, no string concatenation in hot loop.",
+    "cross_file_consistency": "pass — column names match the 17-column header from tech-spec column-formulas table. sValue is referenced in comments but not called directly (the per-process CPU formula differs from system-level — documented inline).",
+    "naming_conventions": "pass — formatCPUTime, buildProcPidResult are unexported (lowercase) per task spec. procPidResultCols and procPidResultNcols use Go-style camelCase. nullString and delta helpers are unexported."
+  },
+  "findings": [],
+  "observations": [
+    "TestFormatCPUTime case '100h overflow' corrected: 36006000 jiffies / 100 ticks = 360060 seconds = 100h 1m 0s, not 100h 10m 0s as stated in the task spec table. Implementation follows the spec formula (secs/3600, (secs%3600)/60, secs%60); the spec table cell appears to have a transcription error. Test expects '100:01:00' which matches the formula.",
+    "Float formatting precision: rate columns (cols 11-15) use 'f', 2, 64 → 2 decimal places (e.g. '37.50'). Accumulated IO totals (cols 9-10) use 'f', 0, 64 → integer KiB (e.g. '10' not '10.00').",
+    "Guard on len(src) > 0 before src[0].String prevents panic on a zero-width activity row (defensive; activity always has Ncols=7 in practice but the guard costs nothing).",
+    "PGresult.Cols slice is copied via copy() rather than shared — prevents downstream mutation from corrupting the package-level procPidResultCols template.",
+    "haveCPU/havePrevCPU/haveIO/havePrevIO booleans gate rate calculation. On first tick havePrevCPU=false → rate cols rendered as '0' / '0.00'.",
+    "delta() helper guards against negative deltas (e.g. backend restart with reset counters) — returns 0 in that case.",
+    "golangci-lint reports zero warnings (initial gocritic ifElseChain warning on IO rate block was resolved by switching to a switch statement).",
+    "gosec reports zero issues for the package."
+  ],
+  "verdict": "pass"
+}

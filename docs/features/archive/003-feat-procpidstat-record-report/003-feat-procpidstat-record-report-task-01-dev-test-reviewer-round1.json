@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Four new tests (TestBuildProcPidResultRaw, TestFormatProcPidResultForDisplay, TestFormatProcPidResultForDisplay_Sentinels, TestSysInfoRoundTrip) plus the renamed TestGetSysticksLocal all assert behavior rather than implementation. Each new assertion fails if its corresponding line of production code is removed. The pre-existing TestBuildProcPidResult_* suite (8 tests) continues to pass without behavior changes, confirming the MVC split is bit-for-bit faithful. One minor coverage gap (ticks<=0 fallback in formatIODelayCell).",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/procpidstat.go:528 (formatIODelayCell ticks<=0 branch)",
+      "issue": "The defensive 'ticks <= 0 → return \"0:00:00\"' branch in formatIODelayCell is not exercised by any test. The branch mirrors a pre-existing dead-code path from buildProcPidResult ('case ticks > 0: ...; default: \"0:00:00\"'), so behavior is preserved, but no test pins it.",
+      "recommendation": "Optional: add a one-liner subtest under TestFormatProcPidResultForDisplay that calls formatProcPidResultForDisplay(raw, 0) on a row with col 11 = '100' and asserts row[11].String == '0:00:00'. Not blocking — the branch is a defensive guard, and getSysticksLocal() is documented to return >0.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/procpidstat_test.go (TestBuildProcPidResultRaw)",
+      "issue": "TestBuildProcPidResultRaw verifies 'no \":\" separator' in cols 6-8 but only checks one case (Utime+Stime+IODelay all non-zero, valid PID). The 'invalid PID → \"0\" sentinel' path through buildProcPidResultRaw is not directly asserted (it is indirectly covered via TestBuildProcPidResult_InvalidPID, which still passes through the composed BuildProcPidResult).",
+      "recommendation": "Optional: add a second subtest within TestBuildProcPidResultRaw with an invalid PID row, asserting row[6..8].String == \"0\" and row[11].String == \"0\" (when delayAcct=true) or \"\" (when delayAcct=false). Not blocking — the existing TestBuildProcPidResult_InvalidPID composition test catches the same regression via the format stage.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 17,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

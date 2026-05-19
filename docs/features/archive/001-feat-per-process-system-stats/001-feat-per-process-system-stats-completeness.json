@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 23,
+  "requirements_covered": 21,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "gap",
+      "source": "user-spec",
+      "requirement": "US-20: No horizontal scrolling; min 200-char terminal; query column truncated first",
+      "detail": "The user-spec explicitly defines the layout constraint: all 17 columns fit without horizontal scrolling on terminals >=200 chars wide, and the 'query' column is truncated first on narrower terminals. The tech-spec view definition still has 'ColsWidth: map[int]int{}' (empty) and assigns no column widths. No discussion of column sizing or truncation priority exists anywhere in the tech-spec. An agent implementing from this spec has no basis for column sizing and would need to guess, risking a screen that overflows or truncates numeric columns instead of 'query'. Partially mitigated by the note that the existing rendering pipeline handles column alignment — but the pipeline needs ColsWidth populated to enforce any ordering.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-18: Aux processes (checkpointer, bgwriter, WAL writer, archiver) not shown",
+      "detail": "The user-spec calls this out as an explicit constraint with a documented rationale. The tech-spec satisfies it implicitly (aux processes have no row in pg_stat_activity so they never enter the pipeline) but does not document this as a deliberate decision anywhere in the Decisions section. A tech-spec reader cannot distinguish intentional exclusion from an oversight. Low risk to implementation correctness; risk to future reviewers misunderstanding the design.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "21/23 requirements fully covered, 1 partial, 0 missing. Round 2 fixes resolved all 2 critical findings (first-tick rate=0 contradiction, ticks source) and both major findings from round 1 (itv=0 guard, procfs parse error handling). 1 major finding remains: column widths for the 17-column screen are unspecified — ColsWidth map is empty and there is no truncation priority defined for the 'query' column. 1 minor finding persists: aux-process exclusion rationale not carried into Decisions section. No critical findings — status: pass."
+}

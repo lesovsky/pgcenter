@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 05 wires per-PID procfs enrichment into the Collector. Four new map fields (prev/curr ProcPidStat and ProcPidIO) are added to the Collector struct, initialized as non-nil empty maps in NewCollector(), and cleared via fresh make() calls in Reset() (preserving the non-nil contract). Update() detects view.CollectExtra==CollectProcPidStat and runs cleanup-before-swap of PID snapshots, then collects fresh procfs data per activity-row PID, then replaces s.Pgstat.Result with the 17-col joined result from buildProcPidResult. The assignment `res = enriched` is required so that the subsequent c.currPgStat.Result snapshot stores the 17-col result and calculateDelta() (with DiffIntvl=[0,0]) returns it intact. In top/stat.go, a prevCollectExtra int is tracked alongside extra and a Reset is performed when it changes, mirroring the ShowExtra change-detection pattern.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "severity": "minor",
+      "title": "Double c.Reset() in collectStat view-switch path",
+      "location": "top/stat.go:96-104",
+      "description": "When prevCollectExtra != v.CollectExtra and the code falls through to the full-reset path, c.Reset() is called twice (once in the new if block, once on line 104). Reset is idempotent, so this is harmless, but it is redundant. Keeping the explicit Reset is defensive in case future early-continue paths are added before the fallthrough Reset; preserved as-is for that reason.",
+      "action": "Optional. Either remove the explicit Reset (relying on fallthrough) or document the rationale inline; not blocking."
+    },
+    {
+      "severity": "minor",
+      "title": "Two-pass iteration over res.Values in enrichment branch",
+      "location": "internal/stat/stat.go:215-257",
+      "description": "Two for-loops iterate res.Values: the first parses PIDs and builds prev maps from prior curr maps; the second parses PIDs again and reads procfs. The duplicate strconv.Atoi calls are O(N) where N is the activity row count (typically dozens-hundreds), so the cost is negligible. The two-loop split mirrors the tech-spec language (cleanup before swap, then collect) and improves readability. Acceptable.",
+      "action": "No change required."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  },
+  "dimensionsChecked": {
+    "architecturalPatterns": "pass — cleanup-before-swap pattern matches the existing prev/curr snapshot style used for CPUStat, Diskstats, Netdevs. Enrichment hook lives in Collector.Update() exactly where the tech-spec prescribes (after s.Pgstat.Result = res, before the snapshot swap).",
+    "separationOfConcerns": "pass — enrichment branch is fully contained inside the `if view.CollectExtra == CollectProcPidStat` block; raw SQL collection (collectPostgresStat), enrichment, and delta calculation remain in distinct steps.",
+    "readability": "pass — comments explain why (per-PID errors silently skipped; rationale for res = enriched; CollectExtra change-detection rationale in top/stat.go). Variable names match the rest of the package (prevX/currX, res, itv).",
+    "errorHandling": "pass — per-PID readProcPidStat / readProcPidIO errors silently dropped per spec; PID parse failures (Atoi error or pid <= 0) skip the row; downstream buildProcPidResult handles missing curr entries by rendering 0/empty.",
+    "typeSafety": "pass — itv (int) is explicitly cast to float64 at call site; runtime.NumCPU() returns int as expected by buildProcPidResult signature.",
+    "testingCoverage": "adequate — TestCollectorResetClearsPIDMaps covers Reset semantics (non-nil and len==0 post-reset). TestCollectorUpdateNoEnrichment proves CollectNone path leaves PID maps empty and ncols != 17. TestCollectorUpdateProcPidStat17Cols covers happy path: runs Update against a real PG connection, asserts ncols==17, valid, and cols length. Existing buildProcPidResult unit tests cover edge cases (first tick, IO unavailable, itv==0, invalid pid).",
+    "dependenciesManagement": "pass — only standard library imports added: runtime, strconv, strings (strconv and strings were already imported). No new third-party dependencies.",
+    "security": "pass — see dev-security-auditor.",
+    "performance": "pass — N is bounded by number of pg_stat_activity rows (typically <1000). Each PID triggers up to two filesystem reads. Two-loop iteration over the same slice is O(N) extra arithmetic, negligible.",
+    "crossFileConsistency": "pass — verified ProcPidStat / ProcPidIO / readProcPidStat / readProcPidIO / buildProcPidResult exist in internal/stat/procpidstat.go with matching signatures. Verified view.CollectExtra and view.IOAvailable fields exist on view.View (internal/view/view.go). Verified CollectProcPidStat=6 constant in stat.go.",
+    "buildAndTest": "make build succeeds. go test ./internal/stat/... and ./top/... pass under race detector."
+  }
+}

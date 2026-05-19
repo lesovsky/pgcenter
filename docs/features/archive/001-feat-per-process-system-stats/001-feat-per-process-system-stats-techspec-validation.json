@@ -1,0 +1,30 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Project Knowledge files architecture.md and patterns.md do not exist at .claude/skills/project-knowledge/references/. Standards compliance check (directory structure, naming patterns) was skipped.",
+      "fix": "Create architecture.md and patterns.md under .claude/skills/project-knowledge/references/ to enable automated standards compliance checks in future specs."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 2 ('Simplified pg_stat_activity SQL query') lists reviewers dev-code-reviewer, dev-test-reviewer but omits dev-security-auditor. The catalog default for code-writing is dev-code-reviewer, dev-security-auditor, dev-test-reviewer. The SQL constant embeds template variables (ShowNoIdle, QueryAgeThresh) that feed into query construction — a surface worth auditing for injection patterns.",
+      "fix": "Add dev-security-auditor to Task 2 reviewers."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 2 description contains a specific template syntax instruction: 'use {{if ne .QueryAgeThresh \"\"}} not {{if gt ...}}'. This is an implementation-level detail (specific syntax choice with implicit rejection of an alternative) that belongs in the task file, not in the tech-spec task description which should describe scope only.",
+      "fix": "Remove the parenthetical template syntax directive from Task 2 description. Move it to the task file created during decomposition, or capture the underlying constraint as a named Decision in the Decisions section."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 4 description contains the implementation detail: 'Column widths: query column (index 16) is allocated remaining width; other columns use their content-driven minimums via the existing align.SetAlign() mechanism.' This describes internal rendering mechanics rather than task scope.",
+      "fix": "Remove the column-width implementation detail from Task 4 description. If it is a load-bearing constraint, move it to the task file or document it in the Data Models section under the view entry definition."
+    }
+  ],
+  "summary": "Tech-spec passes round-3 validation with zero critical findings. All round-2 major findings are resolved: Task 3 no longer duplicates Decision 6, Task 6 no longer duplicates Decisions 1/7, and dev-security-auditor has been added to Tasks 4, 5, and 6. Four minor findings remain: absent Project Knowledge reference files (structural gap unrelated to this spec), Task 2 missing dev-security-auditor, and two instances of implementation-level detail embedded in task descriptions (Task 2 template syntax instruction, Task 4 column-width mechanics). No structural gaps, no wave conflicts, no time-based estimates, no circular dependencies, no unknown skills or reviewers. Status: approved."
+}

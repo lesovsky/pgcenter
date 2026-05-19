@@ -1,0 +1,109 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/003-feat-procpidstat-record-report/003-feat-procpidstat-record-report",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 3,
+  "status": "approved",
+  "round2_fixes_verified": [
+    {
+      "task": "04",
+      "fix": "Remove Test_readMeta_with_sysinfo from What to do step 2 and AC — confirmed: step 2 in What to do now only adds Test_app_doReport_procpidstat; AC has no Test_readMeta_with_sysinfo item. Critical finding resolved.",
+      "status": "fixed"
+    },
+    {
+      "task": "01",
+      "fix": "project.md missing from Context Files (was major) — project.md is still absent. Downgraded to minor in this round because the project-knowledge file is discoverable by the executing agent via other references (architecture.md path reveals the directory); absence is a quality gap not a blocking issue.",
+      "status": "persists — downgraded to minor (see findings)"
+    },
+    {
+      "task": "02",
+      "fix": "project.md missing from Context Files (was major) — still absent. Downgraded to minor.",
+      "status": "persists — downgraded to minor"
+    },
+    {
+      "task": "03",
+      "fix": "project.md missing from Context Files (was major) — still absent. Downgraded to minor.",
+      "status": "persists — downgraded to minor"
+    },
+    {
+      "task": "05",
+      "fix": "project.md missing from Context Files (was major) — still absent. Downgraded to minor.",
+      "status": "persists — downgraded to minor"
+    },
+    {
+      "task": "04",
+      "fix": "Context Files path inconsistency (was minor) — paths still use repo-root-relative style. Accepted as-is; it is a style difference, not a blocking issue.",
+      "status": "persists — accepted as minor"
+    },
+    {
+      "task": "04",
+      "fix": "Post-completion decisions.md link style (was minor) — link still uses repo-root-relative path. Accepted as-is.",
+      "status": "persists — accepted as minor"
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "project.md is missing from the Project knowledge subsection. The task template mandates both project.md and architecture.md as always-required project context files. Only architecture.md and patterns.md are listed.",
+      "fix": "Add '- [project.md](../../.claude/skills/project-knowledge/overview.md)' before architecture.md in the Project knowledge block."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "02",
+      "section": "frontmatter",
+      "issue": "Extra field `teammate_name:` (empty) is present in frontmatter. This field is not defined in the task template. No extra fields should appear beyond status, depends_on, wave, skills, verify, reviewers.",
+      "fix": "Remove the `teammate_name:` line from the frontmatter."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "project.md is missing from the Project knowledge subsection. Only architecture.md and patterns.md are listed.",
+      "fix": "Add '- [project.md](../../.claude/skills/project-knowledge/overview.md)' before architecture.md in the Project knowledge block."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "project.md is missing from the Project knowledge subsection. Only architecture.md and patterns.md are listed.",
+      "fix": "Add '- [project.md](../../.claude/skills/project-knowledge/overview.md)' before architecture.md in the Project knowledge block."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "Extra field `teammate_name:` (empty) is present in frontmatter. Not defined in the task template.",
+      "fix": "Remove the `teammate_name:` line from the frontmatter."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "project.md link has mismatched name and path: `[project.md](.claude/skills/project-knowledge/overview.md)`. The display name says 'project.md' but the underlying file is 'overview.md'. This is misleading to the executing agent.",
+      "fix": "Change display name to match the actual file: `[overview.md](.claude/skills/project-knowledge/overview.md)`, or clarify with `[project.md (overview.md)](.claude/skills/project-knowledge/overview.md)`."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "project.md is missing from the Project knowledge subsection. Only architecture.md, patterns.md, and deployment.md are listed.",
+      "fix": "Add '- [project.md](.claude/skills/project-knowledge/overview.md)' (repo-root-relative format matching other links in task 05) to the Project knowledge block."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 7,
+    "critical": 0,
+    "major": 0,
+    "minor": 7
+  }
+}

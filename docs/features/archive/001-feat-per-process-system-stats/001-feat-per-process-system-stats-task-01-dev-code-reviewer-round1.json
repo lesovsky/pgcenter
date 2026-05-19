@@ -1,0 +1,27 @@
+{
+  "task": "001-feat-per-process-system-stats-task-01",
+  "reviewer": "dev-code-reviewer",
+  "round": 1,
+  "mode": "self-review",
+  "note": "Reviewer subagents were not callable from the agent context (no Task/SendMessage tool surfaced). The producing agent performed a structured self-review against code-writing review dimensions. This report should be re-run by the team lead with the actual dev-code-reviewer subagent before merging.",
+  "files_reviewed": [
+    "internal/stat/procpidstat.go",
+    "internal/stat/procpidstat_test.go",
+    "internal/stat/testdata/proc/pid_stat_space_comm",
+    "internal/stat/testdata/proc/pid_stat_normal_comm",
+    "internal/stat/testdata/proc/pid_stat_malformed",
+    "internal/stat/testdata/proc/pid_io_valid",
+    "internal/stat/testdata/proc/pid_io_missing_key"
+  ],
+  "findings": [],
+  "observations": [
+    "Pattern adherence: file open, defer close, scanner loop, error wrapping match cpu.go and diskstats.go exactly.",
+    "filepath.Clean applied before os.Open in all three reader functions (gosec G304 compliance).",
+    "Path construction uses fmt.Sprintf with %d integer formatting — no string concatenation with user input.",
+    "Error wrapping uses fmt.Errorf with %w as required by patterns.md.",
+    "Documentation comments on every exported type and function. Internal helpers (readProcPidStatFile, readProcPidIOFile) documented as test seams.",
+    "golangci-lint reports zero warnings for the new files.",
+    "gosec reports zero issues for the package."
+  ],
+  "verdict": "pass"
+}

@@ -3,13 +3,16 @@
 package record
 
 import (
+	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -66,6 +69,12 @@ func (app *app) setup() error {
 	}
 	defer db.Close()
 
+	// Capture locality before the deferred close — the procpidstat enrichment
+	// branch in tarRecorder.collect() needs to know whether /proc is the same
+	// host as Postgres. db.Local is a static property derived from the host
+	// string in dbConfig, so reading it once at setup is sufficient.
+	isLocal := db.Local
+
 	props, err := stat.GetPostgresProperties(db)
 	if err != nil {
 		return err
@@ -79,6 +88,44 @@ func (app *app) setup() error {
 		fmt.Println("INFO: some statistics is not supported by the current version of Postgres and will be skipped")
 	}
 
+	// Local/remote gate for procpidstat — runtime locality is orthogonal to
+	// the static NotRecordable filter in filterViews(). On a remote target the
+	// /proc data would belong to the wrong host, so we strip the view here
+	// regardless of whether filterViews kept it.
+	var (
+		ticks              float64
+		cpuCount           int
+		ioAvailable        bool
+		delayAcctAvailable bool
+	)
+	if !isLocal {
+		delete(views, "procpidstat")
+		fmt.Println("INFO: procpidstat skipped (remote mode: /proc not available)")
+	} else {
+		ticks, err = stat.GetSysticksLocal()
+		if err != nil {
+			return fmt.Errorf("get systicks failed: %w", err)
+		}
+		cpuCount = runtime.NumCPU()
+
+		// Probe IO accounting visibility against a real backend PID — the
+		// owner process's own /proc/self/io is always readable and would
+		// produce a false-positive availability signal. Skip the probe when
+		// no other backends are active; ioAvailable stays false and IO
+		// columns render as the "" sentinel.
+		var firstPID int
+		row := db.QueryRow("SELECT pid FROM pg_stat_activity WHERE pid > 0 AND pid != pg_backend_pid() LIMIT 1")
+		if scanErr := row.Scan(&firstPID); scanErr != nil {
+			if !errors.Is(scanErr, pgx.ErrNoRows) {
+				return fmt.Errorf("probe backend pid: %w", scanErr)
+			}
+		} else {
+			ioAvailable = stat.CheckIOAvailable(firstPID) == nil
+		}
+
+		delayAcctAvailable = stat.CheckDelayAcctAvailable()
+	}
+
 	err = views.Configure(opts)
 	if err != nil {
 		return err
@@ -88,8 +135,13 @@ func (app *app) setup() error {
 
 	// Create tar recorder.
 	app.recorder = newTarRecorder(tarConfig{
-		filename: app.config.OutputFile,
-		append:   app.config.AppendFile,
+		filename:           app.config.OutputFile,
+		append:             app.config.AppendFile,
+		isLocal:            isLocal,
+		ticks:              ticks,
+		cpuCount:           cpuCount,
+		ioAvailable:        ioAvailable,
+		delayAcctAvailable: delayAcctAvailable,
 	})
 
 	return nil
@@ -150,6 +202,15 @@ func filterViews(version int, pgssSchema string, views view.Views) (int, view.Vi
 	var pgssNotfound bool
 
 	for k, v := range views {
+		// Skip views explicitly marked as not recordable (e.g. procpidstat — its
+		// SQL query produces only 7 of 19 columns; the remaining columns require
+		// procfs enrichment which never runs in the record context).
+		if v.NotRecordable {
+			delete(views, k)
+			filtered++
+			continue
+		}
+
 		if !v.VersionOK(version) {
 			delete(views, k)
 			filtered++
