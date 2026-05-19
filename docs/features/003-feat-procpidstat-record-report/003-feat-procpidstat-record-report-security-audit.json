@@ -1,0 +1,48 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 4,
+    "critical": 0,
+    "major": 1,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "major",
+      "category": "A04: Insecure Design",
+      "title": "CheckIOAvailable uses a PID sourced from pg_stat_activity without bounds or liveness validation",
+      "description": "The tech-spec states that app.setup() queries pg_stat_activity to obtain 'first backend PID' and passes it to CheckIOAvailable(pid). The existing CheckIOAvailable implementation constructs the path /proc/<pid>/io directly from the integer and opens the file. There is no validation that the PID is positive, non-zero, or that it actually belongs to the expected PostgreSQL process before the path is opened. A race condition exists between the query and the open: the backend may exit between the two calls, causing pid reuse by an unrelated process — in this case the probe result (ioAvailable=true/false) is misleading. Additionally, pg_stat_activity may legitimately return a PID of 0 for certain backend types (autovacuum workers, walsender, etc.) on some PostgreSQL versions. A zero PID would open /proc/0/io, which on Linux refers to the swapper/idle task and is unreadable; the resulting EACCES or ENOENT would incorrectly mark IO unavailable. A negative or very large PID (from a corrupt query result) would construct a malformed path that filepath.Clean cannot fully sanitize.",
+      "location": "Section: Architecture — Data flow (app.setup() block); internal/stat/procpidstat.go:CheckIOAvailable",
+      "impact": "Probe result may incorrectly be false (IO columns suppressed for the entire recording session) or true (columns enabled when not readable). On a system with PID reuse this is a correctness issue; it is not a privilege escalation vector because the recorder already runs as the same user as the pgcenter process, and procfs opens are sandboxed to that user's readable set.",
+      "recommendation": "Before calling CheckIOAvailable, validate that the PID obtained from pg_stat_activity is > 0 and < /proc/sys/kernel/pid_max (or use a conservative upper bound such as 4194304). Add an explicit pid > 0 guard inside CheckIOAvailable itself as a defence-in-depth measure, matching the pattern already in readProcPidStat/readProcPidIO. Example guard in CheckIOAvailable:\n\n  if pid <= 0 {\n    return fmt.Errorf(\"invalid pid: %d\", pid)\n  }\n\nIn app.setup(), after parsing the PID from the query result:\n\n  if pid <= 0 || pid > 4194304 {\n    // skip probe, ioAvailable = false\n  }"
+    },
+    {
+      "severity": "minor",
+      "category": "A08: Software and Data Integrity",
+      "title": "sysinfo JSON deserialization from tar has no size limit",
+      "description": "The tech-spec specifies that readTar handles sysinfo.* entries by calling json.Unmarshal on their content decoded via stat.NewPGresultFile(r, hdr.Size). The hdr.Size field comes from the tar header, which is under control of whoever created the tar file. A maliciously crafted tar with hdr.Size=math.MaxInt64 and a sysinfo entry containing a giant JSON body would cause the reader to allocate a very large buffer before json.Unmarshal is called. While pgcenter record writes these files itself and the typical use-case is a trusted local tar file, the report subcommand accepts an arbitrary -f path — a user may open a tar received from an untrusted source. SysInfo is only two numeric fields (ticks float64, cpu_count int), so a well-formed payload is at most ~50 bytes. There is no size cap enforced at the sysinfo branch in readTar.",
+      "location": "Section: Architecture — Modified components (report/report.go: readTar handles sysinfo.* entries)",
+      "impact": "Denial-of-service via memory exhaustion if an attacker can supply a crafted tar file to a user running pgcenter report -N. Requires local file delivery — not remotely exploitable.",
+      "recommendation": "Add a maximum size check before reading sysinfo entries. Given that SysInfo has only two numeric fields, 512 bytes is a generous upper bound:\n\n  const maxSysinfoSize = 512\n  if strings.HasPrefix(hdr.Name, \"sysinfo.\") {\n    if hdr.Size > maxSysinfoSize {\n      return fmt.Errorf(\"sysinfo entry too large: %d bytes\", hdr.Size)\n    }\n    // decode...\n  }\n\nThis mirrors the bounded read already used in CheckDelayAcctAvailable."
+    },
+    {
+      "severity": "minor",
+      "category": "A09: Security Logging and Monitoring",
+      "title": "Silent discard of per-PID procfs errors during record collection",
+      "description": "The tech-spec states: 'Individual PID errors (process exited mid-tick, EACCES on /proc/[pid]/io) are skipped silently.' While this is the established TUI pattern, the record context is different: a multi-tick recording session should surface persistent EACCES errors (e.g. kernel security policy changed, or the recorder is running as a user that consistently cannot read /proc/<pid>/io) rather than silently producing empty IO columns across all captured snapshots. Without any log output, the user has no signal that IO data is missing from the recorded archive.",
+      "location": "Section: Architecture — Data flow (per-tick collect() block); Section: Decisions — Decision 8",
+      "impact": "A user replaying the archive with pgcenter report -N sees empty IO columns with no explanation. The root cause (EACCES, changed kernel configuration) is invisible. Not a direct security risk, but reduces observability of the security boundary around /proc/<pid>/io.",
+      "recommendation": "Emit a one-time INFO log when ioAvailable was true at setup but every PID read returns EACCES during the first collect() tick. A simple counter approach:\n\n  // After the PID loop in collect()\n  if c.config.ioAvailable && ioSuccessCount == 0 && len(pids) > 0 {\n    fmt.Println(\"INFO: /proc/[pid]/io not readable — IO columns will be empty\")\n  }"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "GetSysticksLocal shells out to getconf — PATH-dependent execution",
+      "description": "The existing getSysticksLocal() (to be exported as GetSysticksLocal) uses exec.Command(\"getconf\", \"CLK_TCK\"). exec.Command with a bare command name resolves the binary through PATH. If PATH is manipulated in the environment where pgcenter record runs, a crafted getconf binary could be executed instead of the system one. This risk already exists in the TUI code path (NewCollector), and the tech-spec correctly notes this (Risk table, row 3). The export makes this path reachable from one additional call site (app.setup()) without any additional hardening.",
+      "location": "Section: Decisions — Decision 3: Export GetSysticksLocal; internal/stat/stat.go:getSysticksLocal",
+      "impact": "If PATH is attacker-controlled (e.g., the binary is run via sudo with an inherited PATH, or in a compromised CI environment), a rogue getconf could return an arbitrary CLK_TCK value, causing all CPU rate columns in the recording to be wrong. This is a pre-existing risk, not introduced by this feature, but the export increases surface area.",
+      "recommendation": "Use an absolute path for the getconf binary, or read CLK_TCK directly via syscall.SysctlRaw / C.sysconf(_SC_CLK_TCK) via cgo, or parse /proc/sys/kernel/hz. The simplest safe fix is to use the full path:\n\n  exec.Command(\"/usr/bin/getconf\", \"CLK_TCK\")\n\nAlternatively, on Linux, CLK_TCK can be read from the auxiliary vector (AT_CLKTCK) without spawning a subprocess, which is both faster and PATH-independent. This fix should be applied to the existing unexported function before it is exported, so both call sites benefit.",
+      "cwe": "CWE-426"
+    }
+  ]
+}

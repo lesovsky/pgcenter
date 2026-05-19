@@ -18,15 +18,15 @@
     },
     "tech_spec": {
       "started_at": "2026-05-19 18:30:00",
-      "completed_at": null,
-      "duration_min": null
+      "completed_at": "2026-05-19 19:45:00",
+      "duration_min": 75
     },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
+    "validation_rounds": { "tech_spec": 2 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },

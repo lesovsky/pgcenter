@@ -1,0 +1,39 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "pass",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "Task 04 description states '+2 per tick: one procpidstat entry + one sysinfo entry' but the semantics are slightly asymmetric: procpidstat's count increase comes from countRecordable(view.New()) growing automatically when NotRecordable flips to false, while sysinfo requires an explicit formula change from '+ 1' to '+ 2'. The description is correct in net effect but an implementor who reads '+2' as two separate explicit additions may add '+2' to the old formula instead of changing '+ 1' to '+ 2', producing totalViews = countRecordable(view.New()) + 3. Wording is sufficient but slightly ambiguous.",
+      "location": "Task 04 description — 'update Test_app_record expected file count (+2 per tick)'",
+      "fix": "Clarify: 'Change formula from countRecordable(view.New()) + 1 to countRecordable(view.New()) + 2 (the extra +1 is sysinfo; procpidstat is already covered by countRecordable once NotRecordable=false).'"
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The recorder detects procpidstat enrichment via tarRecorder.config.isLocal rather than by inspecting view.CollectExtra on the procpidstat view entry. CollectExtra is always 0 in the recorder context because top/config_view.go sets it at TUI runtime, not in view.New(). Using isLocal is the only correct approach, but the asymmetry between TUI (CollectExtra) and recorder (isLocal) enrichment triggers is undocumented and will confuse future maintainers.",
+      "location": "Decision 2: isLocal propagated through tarConfig",
+      "fix": "Add a comment in tarRecorder.collect() explaining why isLocal is used instead of view.CollectExtra: CollectExtra is zero in recorder context because top/config_view.go sets it at TUI runtime."
+    }
+  ],
+  "round2_resolution": {
+    "finding_major_1_getSysticksLocal_call_sites": "resolved — Task 01 Files to modify now explicitly lists internal/stat/netdev_test.go, internal/stat/diskstats_test.go, internal/stat/stat_test.go. All 9 call sites (3 per file) will be updated as part of Task 01 scope.",
+    "finding_major_2_Test_app_record_count": "resolved — Task 04 description now states '+2 per tick: one procpidstat entry + one sysinfo entry', correctly identifying the compound count increase. Formula change (+ 1 → + 2) is properly scoped to Task 04.",
+    "finding_minor_TestFilterViews_trailing_assert": "resolved — Task 04 description now explicitly calls out 'including its trailing assert.True(t, pp.NotRecordable) which must become False'.",
+    "finding_minor_map_rotation_protocol": "resolved — Architecture section now includes explicit map-rotation pseudocode mirroring Collector.Update logic. Task 02 Files to read explicitly references internal/stat/stat.go (Collector.Update procpidstat block — map rotation and enrichment logic)."
+  },
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "medium",
+    "tech_debt": "low"
+  },
+  "summary": "Both major findings from round 1 are resolved: getSysticksLocal rename now covers all 9 test call sites via Task 01 scope, and Test_app_record expected count correctly accounts for +2 per tick. The map-rotation protocol is documented in the Architecture section. Two minor findings remain (Test_app_record formula wording ambiguity, undocumented isLocal vs CollectExtra asymmetry) but neither blocks implementation. The spec is approved."
+}
