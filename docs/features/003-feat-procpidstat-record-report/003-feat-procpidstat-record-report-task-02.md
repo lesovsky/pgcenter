@@ -45,16 +45,18 @@ The task depends on Task 01 which exports `GetSysticksLocal`, adds `stat.SysInfo
    - Call `stat.CheckDelayAcctAvailable()` to get `delayAcctAvailable`.
    - Pass all five values into `tarConfig{isLocal, ticks, cpuCount, ioAvailable, delayAcctAvailable, ...}`.
 
-4. **Implement the procpidstat branch in `collect()`** in `record/recorder.go`. Inside the views loop, after the standard SQL query for each view, add a dedicated branch executed when the view key is `"procpidstat"` and `c.config.isLocal` is true:
+4. **Implement the procpidstat branch in `collect()`** in `record/recorder.go`. After the views loop completes (not inside it), add a dedicated branch executed when the view key is `"procpidstat"` is present in stats and `c.config.isLocal` is true:
    - Run the map-rotation protocol: build `newPrev` by keeping only PIDs from the SQL result that exist in `currProcPidStats`; assign `prevProcPidStats = newPrev`; reset `currProcPidStats` to a fresh empty map. Repeat for the IO maps.
    - For each PID in the SQL result (skip if `pid <= 0`): call `stat.ReadProcPidStat(pid)` and store in `currProcPidStats`; if `c.config.ioAvailable`, call `stat.ReadProcPidIO(pid)` and store in `currProcPidIO`. Silently skip per-PID errors.
    - Compute `itv = time.Since(c.lastCollect).Seconds()` and update `c.lastCollect = time.Now()`.
    - Call `stat.BuildProcPidResult` with the SQL result, prev/curr maps, `c.config.ioAvailable`, `c.config.delayAcctAvailable`, `c.config.ticks`, `itv`, `c.config.cpuCount`.
    - Store the 19-column result as `stats["procpidstat"]`, replacing the 7-column SQL result.
 
-5. **Implement the sysinfo entry in `write()`** in `record/recorder.go`. After writing all stats entries, marshal `stat.SysInfo{Ticks: c.config.ticks, CPUCount: c.config.cpuCount}` to JSON and write it as a tar entry named `sysinfo.TIMESTAMP.json` with the same `now` timestamp used for the other entries in that write call.
+5. **In `write()`, hoist `now := time.Now()` to the top of the function**, before the per-entry stats loop. Use this single `now` value for all tar entry names in that write call — stats entries and the sysinfo entry — so all entries from the same write call share an identical timestamp string.
 
-6. **Write the TDD anchor test first** (`TestTarRecorder_WriteSysinfo`) before implementing `write()` changes — see TDD Anchor section below.
+6. **Implement the sysinfo entry in `write()`** in `record/recorder.go`. After writing all stats entries, marshal `stat.SysInfo{Ticks: c.config.ticks, CPUCount: c.config.cpuCount}` to JSON and write it as a tar entry named `sysinfo.TIMESTAMP.json` using the same `now` hoisted above.
+
+7. **Write the TDD anchor test first** (`TestTarRecorder_WriteSysinfo`) before implementing `write()` changes — see TDD Anchor section below.
 
 ## TDD Anchor
 
@@ -130,7 +132,7 @@ Changes needed in `setup()`:
 - Capture `db.Local` after `postgres.Connect` but before any deferred close (use a local `isLocal` variable, NOT defer — the defer runs after the function returns).
 - After `views.Configure(opts)` but before creating the recorder: if `!isLocal`, run the remote-mode guard.
 - If `isLocal`: obtain ticks, cpuCount, firstPID, ioAvailable, delayAcctAvailable.
-- For the first-PID query, use `db.QueryRow(...)` directly — the DB object is still open at this point (the defer hasn't fired). Use `sql.ErrNoRows` detection to handle the case of no active backends.
+- For the first-PID query, use `db.QueryRow(...)` directly — the DB object is still open at this point (the defer hasn't fired). Use `pgx.ErrNoRows` (from `github.com/jackc/pgx/v5`) detection to handle the case of no active backends.
 - Pass all five values into `tarConfig`.
 
 The `filterViews` function is NOT changed in this task — `NotRecordable` removal is in Task 03. The `procpidstat` view with `NotRecordable: true` is therefore still removed by `filterViews` at this point. The local/remote gate in `setup()` is an additional deletion (for remote mode). The `NotRecordable` path in `filterViews` means that in the current state, `procpidstat` never reaches `collect()` even if local. Task 03 removes `NotRecordable: true` from the view definition, which is the actual enablement. This task only prepares the recorder struct and `setup()` so that when Task 03 removes `NotRecordable`, everything works correctly end-to-end.
@@ -139,7 +141,7 @@ The `filterViews` function is NOT changed in this task — `NotRecordable` remov
 
 - Depends on **Task 01** for: `stat.GetSysticksLocal()` (exported), `stat.SysInfo` struct (defined in `internal/stat/procpidstat.go`), `stat.BuildProcPidResult`, `stat.ReadProcPidStat`, `stat.ReadProcPidIO` (all exported by Task 01).
 - New imports in `record/recorder.go`: `runtime` (stdlib).
-- New imports in `record/record.go`: `runtime` (stdlib), `database/sql` (for `sql.ErrNoRows`).
+- New imports in `record/record.go`: `runtime` (stdlib), `github.com/jackc/pgx/v5` (for `pgx.ErrNoRows`).
 
 ### Edge Cases
 
@@ -154,8 +156,7 @@ The `filterViews` function is NOT changed in this task — `NotRecordable` remov
 
 - The map-rotation logic in `Collector.Update` (lines 218–238 of `internal/stat/stat.go`) is the exact pattern to copy into `collect()`. Read it carefully — the rotation builds `newPrev` from `currStats` (not `prevStats`), then assigns and resets.
 - `stat.CheckIOAvailable(pid)` returns `error`; nil means available. `stat.CheckDelayAcctAvailable()` returns `bool` directly.
-- In `write()`, hoist `now := time.Now()` to the very top of the function, before the per-entry stats loop. Use this same `now` for all tar entry names in that write call, including the sysinfo entry — this ensures all entries from the same write call share an identical timestamp string.
-- `newFilenameString(now, "sysinfo")` produces `sysinfo.20060102T150405.000.json` — the correct format expected by the report pipeline's `isFilenameOK` (after Task 03 adds `"sysinfo"` to accepted prefixes).
+- The single hoisted `now` in `write()` (see step 5 in What to do) must be used for every `newFilenameString` call in that function. `newFilenameString(now, "sysinfo")` produces `sysinfo.20060102T150405.000.json` — the correct format expected by the report pipeline's `isFilenameOK` (after Task 03 adds `"sysinfo"` to accepted prefixes).
 - The `collect()` method uses its own separate `time.Now()` call solely for computing `itv = time.Since(c.lastCollect).Seconds()` and updating `c.lastCollect`. This is independent of the `now` in `write()` — do not mix these two timestamps.
 
 ## Reviewers

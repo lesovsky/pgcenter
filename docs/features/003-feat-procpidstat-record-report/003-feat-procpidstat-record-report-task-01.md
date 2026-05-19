@@ -61,7 +61,9 @@ This task:
 
 8. In `internal/stat/netdev_test.go`, `internal/stat/diskstats_test.go`, and `internal/stat/stat_test.go`, replace all calls to `getSysticksLocal()` with `GetSysticksLocal()`.
 
-9. Run all tests — verify all pass including the existing `TestBuildProcPidResult_*` suite.
+9. Update call sites in `internal/stat/procpidstat_test.go`: rename `buildProcPidResult` → `BuildProcPidResult` in all existing `TestBuildProcPidResult_*` tests (approximately 8 tests).
+
+10. Run all tests — verify all pass including the existing `TestBuildProcPidResult_*` suite.
 
 ## TDD Anchor
 
@@ -128,7 +130,7 @@ Write these tests in `internal/stat/procpidstat_test.go` BEFORE implementation. 
 
 `internal/stat/diskstats_test.go` — current state: 3 calls to `getSysticksLocal()` at lines 14, 37, 145 inside `Test_readDiskstats`, `Test_readDiskstatsLocal`, `Test_countDiskstatsUsage`. Change: rename all 3 calls to `GetSysticksLocal()`.
 
-`internal/stat/stat_test.go` — current state: has 2 calls to `getSysticksLocal()` (line 102 inside `TestCollector_collectDiskstats`, and line 115 inside the existing `Test_getSysticksLocal`). Change: rename both calls to `GetSysticksLocal()`. Also rename `Test_getSysticksLocal` to `TestGetSysticksLocal` to match the new exported name convention.
+`internal/stat/stat_test.go` — current state: has approximately 2 calls to `getSysticksLocal()`. Change: update all call sites in `stat_test.go` that reference `getSysticksLocal` — there are approximately 2 calls in the test file. Also rename `Test_getSysticksLocal` to `TestGetSysticksLocal` to match the new exported name convention.
 
 `internal/stat/procpidstat_test.go` — current state: has `TestBuildProcPidResult_*` suite (7 tests), `TestFormatCPUTime`, `TestReadProcPidStat*`, `TestCheckIOAvailable`, `TestCheckDelayAcctAvailable`. Add `TestBuildProcPidResultRaw`, `TestFormatProcPidResultForDisplay`, `TestSysInfoRoundTrip`.
 
@@ -145,8 +147,8 @@ Write these tests in `internal/stat/procpidstat_test.go` BEFORE implementation. 
 
 **Implementation hints:**
 
-- In `buildProcPidResultRaw` for cols 6–8: use `strconv.FormatFloat(curCPU.Utime+curCPU.Stime, 'f', 6, 64)` — exact float representation. The `formatProcPidResultForDisplay` will then parse this back and call `formatCPUTime`.
-- In `formatProcPidResultForDisplay` for cols 9–10: parse the raw bytes float, divide by 1024, then `strconv.FormatFloat(..., 'f', 0, 64)` (integer KiB). This matches the current `buildProcPidResult` behavior: `strconv.FormatFloat(curIOs.ReadBytes/1024, 'f', 0, 64)`.
+- Cols 6–8 store raw utime, stime, and their sum as float64 strings; cols 9–10 store read_bytes and write_bytes as float64 strings; col 11 stores iodelay_ticks as float64 string.
+- `formatProcPidResultForDisplay` parses each raw float string back and applies the appropriate conversion: CPU cols via `formatCPUTime`, IO byte cols divided by 1024 formatted as integer KiB strings.
 
 ## Reviewers
 

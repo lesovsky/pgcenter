@@ -22,8 +22,8 @@ was filtered out by `filterViews` because `NotRecordable=true` — task 03 remov
 entry per tick in addition to stats entries, changing the file count from `countRecordable()+1`
 to `countRecordable()+2` per tick.
 
-This task fixes those breakages and adds the two new unit tests specified in the tech-spec
-(`Test_readMeta_with_sysinfo`, `Test_app_doReport_procpidstat`) using synthetic in-memory tars,
+This task fixes those breakages and adds the new unit test specified in the tech-spec
+(`Test_app_doReport_procpidstat`) using a synthetic in-memory tar,
 so no real PostgreSQL connection or live procfs data is required. If the existing golden tar
 `report/testdata/pgcenter.stat.golden.tar` triggers failures in `Test_app_doReport` after task 03
 changes to `isFilenameOK` (it now accepts `sysinfo` prefix), the golden file must be regenerated
@@ -43,10 +43,6 @@ The task is purely test code — no production logic changes.
      to `countRecordable(view.New()) + 2` (meta + sysinfo per tick). Update the comment above it.
 
 2. In `report/report_test.go`:
-   - Add `Test_readMeta_with_sysinfo`: build an in-memory `tar.Writer` with a single
-     `sysinfo.20260519T100000.000.json` entry containing `{"ticks":100,"cpu_count":4}` and a
-     matching `meta.*` entry; run `readTar`; assert `metadata.ticks==100` and
-     `metadata.cpuCount==4`.
    - Add `Test_app_doReport_procpidstat`: build an in-memory tar with two `procpidstat.*` entries
      (snapshot 1: first-tick zeros for rate cols; snapshot 2: real non-zero values) plus one
      `sysinfo.*` entry and one `meta.*` entry; construct `Config{ReportType: "procpidstat", ...}`;
@@ -83,7 +79,6 @@ then fix them.
 - [ ] The trailing assertion in `TestFilterViews_NotRecordable` is `assert.False(t, pp.NotRecordable)`
 - [ ] `Test_filterViews` table rows: each `wantN` decreased by 1, each `wantV` increased by 1
 - [ ] `Test_app_record` formula: `countRecordable(view.New()) + 2` (not +1)
-- [ ] `Test_readMeta_with_sysinfo` exists and passes
 - [ ] `Test_app_doReport_procpidstat` exists and passes
 - [ ] E2E smoke: `./bin/pgcenter report -N -f /tmp/test.tar` produces ≥1 line of output
 
@@ -101,7 +96,7 @@ then fix them.
 
 **Code files (modify):**
 - [record/record_test.go](record/record_test.go) — fix `TestFilterViews_NotRecordable`, `Test_filterViews`, `Test_app_record`
-- [report/report_test.go](report/report_test.go) — add `Test_readMeta_with_sysinfo`, `Test_app_doReport_procpidstat`
+- [report/report_test.go](report/report_test.go) — add `Test_app_doReport_procpidstat`
 - [report/testdata/](report/testdata/) — regenerate `pgcenter.stat.golden.tar` if needed
 
 **Code files (read for context):**
@@ -141,17 +136,7 @@ then fix them.
   adds sysinfo per tick, change to `countRecordable(view.New()) + 2`. Also update the comment
   (line 34-35) to say `+2` accounts for meta + sysinfo.
 
-`report/report_test.go` — two new tests to add:
-
-- `Test_readMeta_with_sysinfo`: needs `archive/tar`, `bytes`, `encoding/json`. Create a
-  `bytes.Buffer`, wrap with `tar.NewWriter`. Add a `meta.*` entry (use an existing valid
-  PGresult JSON from `Test_readMeta` as payload). Add a `sysinfo.20260519T100000.000.json`
-  entry with content `{"ticks":100,"cpu_count":4}`. Close the tar writer. Wrap the buffer
-  with `tar.NewReader`. Call `readTar` with a `Config{ReportType: "procpidstat", ...}` and
-  collect `data` items from the channel. Assert the `metadata` in the received data item has
-  `ticks==100.0` and `cpuCount==4`. Note: `readTar` sends on `dataCh` only when both `metaOK`
-  and `statOK` are true — for procpidstat report the stat entry has prefix `"procpidstat"`, so
-  add a `procpidstat.20260519T100000.000.json` entry alongside meta and sysinfo.
+`report/report_test.go` — one new test to add:
 
 - `Test_app_doReport_procpidstat`: needs two snapshots so `processData` has a prev/curr pair.
   Snapshot 1 (first tick): a valid 19-col `PGresult` for procpidstat with all rate columns set
@@ -167,7 +152,6 @@ then fix them.
 
 **Edge cases:**
 - `Test_app_doReport_procpidstat` uses in-memory tar — no filesystem or DB dependency
-- `Test_readMeta_with_sysinfo` must add a procpidstat stat entry so `statOK` becomes true and `readTar` actually sends on the channel; otherwise the test hangs waiting for data
 - Golden tar regeneration: only needed if `Test_app_doReport` subtests fail after task 03 changes. The `-update` flag is already wired in `report_test.go` (line 22: `var update = flag.Bool("update", false, "update golden files")`). Run: `go test ./report/... -update -run Test_app_doReport`
 - `countRecordable` is a helper defined at the bottom of `record_test.go` (line 165): it counts views with `NotRecordable==false`. After task 03 flips procpidstat to `NotRecordable=false`, `countRecordable(view.New())` automatically includes it — the `+2` in `Test_app_record` accounts for meta and sysinfo (the extra two non-stat entries per tick)
 
