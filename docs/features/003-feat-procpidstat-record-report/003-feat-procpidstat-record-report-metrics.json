@@ -21,7 +21,11 @@
       "completed_at": "2026-05-19 19:45:00",
       "duration_min": 75
     },
-    "task_decomposition": null,
+    "task_decomposition": {
+      "started_at": "2026-05-19 19:50:00",
+      "completed_at": null,
+      "duration_min": null
+    },
     "feature_execution": null,
     "done": null
   },
