@@ -1,0 +1,291 @@
+interview_metadata:
+  feature_name: "iodelay-procpidstat"
+  feature_base: "docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat"
+  work_type: "feature"
+  started: "2026-05-19 00:00:00"
+  last_updated: "2026-05-19 00:30:00"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 9
+  feature_size: "S"
+
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-05-19 00:05:00"
+    topic: "constraints / detection"
+    agent_question: "Как детектируем CONFIG_TASK_DELAY_ACCT? A) parse+0-check B) отдельный probe"
+    user_answer: "вариант B"
+    summary: "Probe через /proc/sys/kernel/task_delayacct, '' при недоступности"
+
+  - question_num: 2
+    timestamp: "2026-05-19 00:05:00"
+    topic: "ui_ux / column names"
+    agent_question: "iodelay_total,s и %iodelay?"
+    user_answer: "согласен"
+    summary: "Колонки: iodelay_total,s и %iodelay"
+
+  - question_num: 3
+    timestamp: "2026-05-19 00:05:00"
+    topic: "ui_ux / column position"
+    agent_question: "iodelay_total после write_total; %iodelay после write,KiB/s перед query"
+    user_answer: "да, именно так"
+    summary: "iodelay_total в группе accumulated (col 11), %iodelay в группе rate (col 17)"
+
+  - question_num: 4
+    timestamp: "2026-05-19 00:05:00"
+    topic: "testing_strategy"
+    agent_question: "Только unit-тесты, без integration?"
+    user_answer: "согласен"
+    summary: "Unit-тесты только"
+
+  - question_num: 5
+    timestamp: "2026-05-19 00:15:00"
+    topic: "user_stories / scenario_b"
+    agent_question: "Сценарий B: пустые колонки без сообщения?"
+    user_answer: "выводим варнинг что данные не доступны"
+    summary: "Warning при delayAcctAvailable=false"
+
+  - question_num: 6
+    timestamp: "2026-05-19 00:15:00"
+    topic: "edge_cases"
+    agent_question: "Первый тик: %iodelay=''? PID исчез: как CPU? Re-probe не нужен?"
+    user_answer: "по всем моментам ок, ре-проб не нужен"
+    summary: "Первый тик %iodelay='', PID исчез → как CPU, probe один раз при Shift+S"
+
+  - question_num: 7
+    timestamp: "2026-05-19 00:15:00"
+    topic: "verification_strategy"
+    agent_question: "make build+test+lint + ручной тест с sysctl=1 и sysctl=0?"
+    user_answer: "ок"
+    summary: "Автоматика + ручной TUI тест"
+
+  - question_num: 8
+    timestamp: "2026-05-19 00:25:00"
+    topic: "acceptance_criteria"
+    agent_question: |
+      Предложенный список из 9 критериев:
+      1) 19 колонок  2) HH:MM:SS  3) %2f  4) sysctl=0→''+warning  5) sysctl=1→значения
+      6) первый тик %iodelay=''  7) не нормализуется на cpuCount  8) make test/lint/vuln  9) techdebt resolved
+    user_answer: "ок"
+    summary: "Все 9 критериев подтверждены"
+
+  - question_num: 9
+    timestamp: "2026-05-19 00:25:00"
+    topic: "error_scenarios"
+    agent_question: "sysctl=1 но CONFIG_TASK_DELAY_ACCT=n: файл отсутствует → probe=false → '' автоматически?"
+    user_answer: "да"
+    summary: "Probe через sysctl покрывает все случаи, включая отсутствующий файл"
+
+phase1_feature_overview:
+
+  feature_description:
+    score: 95
+    status: "complete"
+    value: |
+      Добавить в S-скрин (Shift+S) две колонки из /proc/[pid]/stat поле 42:
+      - iodelay_total,s — накопленное IO-ожидание (HH:MM:SS)
+      - %iodelay — доля времени в ожидании блочного IO между тиками (%)
+      При kernel.task_delayacct=0: '' + предупреждение в cmdline. Итого 19 колонок.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      DBA не может отличить backend, читающий через page cache, от реально ждущего диска.
+      iodelay показывает процент и накопленное время блокировки в D-state.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 90
+    status: "complete"
+    value: "PostgreSQL DBA, мониторящие Postgres локально на Linux."
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      19 колонок в S-скрин; HH:MM:SS и % работают корректно;
+      graceful fallback при недоступном delay acct; make test/lint/vuln зелёные.
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      Только Linux, local mode. Probe: /proc/sys/kernel/task_delayacct (один раз при Shift+S).
+      %iodelay НЕ нормализуется на cpuCount. %iodelay НЕ входит в %all.
+      Warning при delayacct=false конфликтует с IO warning — приоритизация в tech-spec.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Unit-тесты: parser (golden file suffix[39]!=0), buildProcPidResult 19 cols,
+      CheckDelayAcctAvailable, DelayAvailable/Unavailable cases. Без integration/E2E.
+    gaps: ""
+    required: true
+
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      Story 1 (диагностика IO-bound backend):
+      1. DBA видит медленный запрос → Shift+S
+      2. Видит %iodelay=72%, iodelay_total=00:04:12 vs %all=3%
+      3. Вывод: IO-bound, смотреть дисковую подсистему
+
+      Story 2 (недоступный delay acct):
+      1. DBA открывает Shift+S, task_delayacct=0
+      2. Warning в cmdline + '' в обеих iodelay-колонках
+      3. IO-колонки работают нормально
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      1. S-скрин показывает 19 колонок (было 17)
+      2. iodelay_total,s: HH:MM:SS для каждого backend
+      3. %iodelay: процент с 2 знаками после запятой
+      4. kernel.task_delayacct=0: '' + warning в cmdline
+      5. kernel.task_delayacct=1: реальные значения из /proc/[pid]/stat
+      6. Первый тик: iodelay_total,s = accumulated, %iodelay = ''
+      7. %iodelay не нормализуется на cpuCount
+      8. make test && make lint && make vuln — зелёные
+      9. Tech debt [001] помечен resolved в docs/tech-debt.md
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 90
+    status: "complete"
+    value: |
+      - Первый тик: iodelay_total,s=accumulated, %iodelay=''
+      - PID исчез между тиками: '' / 0:00:00 (как CPU-колонки)
+      - Runtime toggle sysctl: не re-probe, данные до следующего Shift+S могут быть неактуальны
+      - /proc/[pid]/stat < 40 полей: IODelay=0, без паники
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 87
+    status: "complete"
+    value: |
+      - /proc/sys/kernel/task_delayacct отсутствует (нет CONFIG_TASK_DELAY_ACCT): probe=false → ''
+      - sysctl=1 но поле всегда 0 (ядро без поддержки): покрывается probe=false автоматически
+      - /proc/[pid]/stat слишком короткий: IODelay=0, graceful
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Авто: make build && make test && make lint && make vuln
+      Ручной +: sysctl -w kernel.task_delayacct=1 → Shift+S → IO-нагружающий запрос → %iodelay>0
+      Ручной -: sysctl -w kernel.task_delayacct=0 → '' + warning
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      19 колонок: pid, datname, usename, state, wait_etype, wait_event,
+      all_total,s, us_total,s, sy_total,s, read_total,KiB, write_total,KiB, iodelay_total,s,
+      %all, %us, %sy, read,KiB/s, write,KiB/s, %iodelay, query
+
+      delayAcctAvailable=false: iodelay_total,s='', %iodelay='', warning в cmdline
+      delayAcctAvailable=true, первый тик: iodelay_total,s=HH:MM:SS, %iodelay=''
+    gaps: ""
+    required: true
+
+  risks:
+    score: 85
+    status: "complete"
+    value: |
+      - Ncols 17→19: panic в align.SetAlign при расхождении (проверяется тестом)
+      - printCmdline mutual exclusion: IO+delayacct warning нельзя одновременно (tech-spec)
+      - dev-машина: task_delayacct=0, нужен sysctl для ручного теста
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      /proc/[pid]/stat field 42 вместо Netlink (Netlink: крупный scope, новая dep).
+      Probe: /proc/sys/kernel/task_delayacct (без PID, без root, runtime state).
+      %iodelay не нормализуется на cpuCount. formatCPUTime переиспользуется.
+      IODelay в ProcPidStat — те же prevProcPidStats maps, без новых структур.
+    gaps: ""
+    required: false
+
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      internal/stat/procpidstat.go: ProcPidStat+IODelay, parser+suffix[39],
+        CheckDelayAcctAvailable(), procPidResultCols/Ncols 19, buildProcPidResult+param
+      internal/view/view.go: View+DelayAcctAvailable, Ncols 17→19
+      internal/stat/stat.go: pass DelayAcctAvailable
+      top/config_view.go: CheckDelayAcctAvailable() + warning
+      record/record.go + tests: comment+assert 17→19
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 90
+    status: "complete"
+    value: "001-feat-per-process-system-stats. formatCPUTime, delta, nullString."
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 90
+    status: "complete"
+    value: "/proc/[pid]/stat suffix[39]. /proc/sys/kernel/task_delayacct для probe."
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 90
+    status: "complete"
+    value: "Нет."
+    gaps: ""
+    required: false
+
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+
+phase4_completion:
+  userspec_file: ""
+  status: "pending"
+
+progress:
+  current_phase: "phase6_devils_advocate"
+  questions_asked: 9
+  last_question: "error_scenarios"
+  completion_estimate: "90%"
+
+notes: |
+  Buddy session 2026-05-19:
+  - field 42 вместо Netlink; formatCPUTime; %iodelay НЕ в %all, НЕ нормализуется на cpuCount
+  - probe: /proc/sys/kernel/task_delayacct (runtime sysctl, без root)
+  - dev-машина task_delayacct=0 — нужен sysctl -w kernel.task_delayacct=1 для ручного теста
+  - Warning при delayacct=false (конфликт с IO warning → tech-spec)
+  - probe один раз при Shift+S, re-probe не нужен

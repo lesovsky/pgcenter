@@ -1,0 +1,17 @@
+{
+  "status": "complete",
+  "confidence": "high",
+  "gaps": [
+    {
+      "dimension": "pk_alignment",
+      "severity": "minor",
+      "area": "printCmdline mutual exclusion — explicit resolution not specified",
+      "why": "patterns.md содержит явное предупреждение: два последовательных вызова printCmdline в одном обработчике уничтожают первый вывод. Интервью зафиксировало конфликт IO-warning vs delayacct-warning как риск и сослалось на tech-spec, но конкретное решение (if/else ветка, приоритет warning) не зафиксировано в interview-items — оно остаётся открытым до tech-spec. Для user-spec этого достаточно, но если spec-writer не переведёт риск в явное AC или дизайн-решение, разработчик может пропустить паттерн.",
+      "suggested_questions": [
+        "Если одновременно нужно показать IO-warning и delayacct-warning — какое из них приоритетнее, или они объединяются в одно сообщение?",
+        "Зафиксировать явное решение: if/else в switchViewToProcPidStat с приоритетом delayacct-warning над IO-warning (или наоборот)."
+      ]
+    }
+  ],
+  "summary": "Интервью покрывает все обязательные аспекты фичи размера S: описание, проблему, критерии приёмки, edge cases, error scenarios, UI/UX, интеграционные точки, стратегию тестирования и верификации. Единственный незакрытый момент — конкретное решение конфликта двух printCmdline-предупреждений — минорный и уже помечен как риск; для написания user-spec этого достаточно."
+}
