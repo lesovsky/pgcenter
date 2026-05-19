@@ -4,7 +4,7 @@ interview_metadata:
   work_type: "feature"
   started: "2026-05-19 00:00:00"
   last_updated: "2026-05-19 00:30:00"
-  status: "in_progress"
+  status: "completed"
   can_resume: true
   current_question_num: 9
   feature_size: "S"
@@ -273,8 +273,8 @@ decision_rules:
   optional_threshold: 50
 
 phase4_completion:
-  userspec_file: ""
-  status: "pending"
+  userspec_file: "docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md"
+  status: "approved"
 
 progress:
   current_phase: "phase6_devils_advocate"
