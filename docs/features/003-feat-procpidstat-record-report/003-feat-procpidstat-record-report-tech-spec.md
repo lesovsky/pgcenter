@@ -18,7 +18,7 @@ Resolves tech-debt [002].
 
 ## Architecture
 
-### New components
+### What we're building/modifying
 
 - **`stat.SysInfo` struct** — JSON-serializable container for `ticks` (CLK_TCK) and
   `cpu_count` recorded at the time of collection. Written per-tick as `sysinfo.TIMESTAMP.json`.
@@ -29,7 +29,7 @@ Resolves tech-debt [002].
   `prevProcPidIO / currProcPidIO map[int]stat.ProcPidIO`.
   All persist across the `open→collect→write→close` loop iterations.
 
-### Modified components
+### How it works — modified components
 
 | Component | Change |
 |-----------|--------|
@@ -41,7 +41,7 @@ Resolves tech-debt [002].
 | `report/report.go` | `metadata` struct gains `ticks float64` and `cpuCount int`. `isFilenameOK` accepts `sysinfo` prefix. `readTar` handles `sysinfo.*` entries by decoding into `SysInfo` and merging into `metadata`. `describeReport` map gains `"procpidstat"` entry. |
 | `cmd/report/report.go` | New `showProcPidStat bool` option, `-N` / `--proc-stats` flag, `case opts.showProcPidStat: return "procpidstat"` in `selectReport`. |
 
-### Data flow
+### How it works — data flow
 
 ```
 pgcenter record (local mode):
@@ -57,12 +57,19 @@ pgcenter record (local mode):
   per-tick collect():
     ├─ SQL views (activity, tables, …) → PGresult per view
     └─ if c.isLocal && "procpidstat" in views:
-         SQL pg_stat_activity → 7-col result
-         rotate prevStats←currStats
-         for each PID: readProcPidStat → currStats[pid]
-                       readProcPidIO  → currIO[pid]   (if ioAvailable)
+         SQL pg_stat_activity → 7-col result (PIDs of active backends)
+         map rotation (mirrors Collector.Update logic):
+           newPrev = {pid: currStats[pid] for pid in SQL result if pid in currStats}
+           prevProcPidStats ← newPrev   // only PIDs still alive
+           currProcPidStats ← fresh empty map
+           (same rotation for prevProcPidIO / currProcPidIO)
+         for each PID in SQL result (pid > 0):
+           readProcPidStat(pid) → currStats[pid]       (always)
+           readProcPidIO(pid)  → currIO[pid]           (if ioAvailable)
+         itv = time.Since(c.lastCollect).Seconds(); c.lastCollect = now
          buildProcPidResult(result, prev, curr, io, delay, ticks, itv, cpuCount)
          → stats["procpidstat"] = 19-col display PGresult
+         (first tick: itv=0 → rate cols = "0"; processData skips first snapshot)
 
   write():
     ├─ stats entries → VIEWNAME.TIMESTAMP.json
@@ -74,8 +81,12 @@ pgcenter report -N:
     ├─ sysinfo.* → json.Unmarshal → metadata.{ticks, cpuCount}
     └─ procpidstat.* → stat.NewPGresultFile → PGresult
 
-  processData():
-    DiffIntvl=[0,0] → countDiff returns curr unchanged
+  processData() — on first valid data pair:
+    if cols 9,10 (read_total,KiB / write_total,KiB) all "" in first result:
+      fmt.Fprintf(writer, "WARNING: IO stats unavailable in recorded data\n")
+    if col 11 (iodelay_total,s) all "" in first result:
+      fmt.Fprintf(writer, "WARNING: iodelay stats unavailable in recorded data\n")
+    DiffIntvl=[0,0] → countDiff returns curr unchanged (pass-through)
     printStatHeader / printStatSample → 19-col output
 ```
 
@@ -173,6 +184,31 @@ setup time, `CheckIOAvailable` is skipped and `ioAvailable = false`.
 
 **Rationale:** Probe status does not change within a recording session. Per-tick probing
 is wasteful and inconsistent with TUI behavior (probed once at screen open).
+
+### Decision 9: PID validation before procfs path construction
+
+**Decision:** Before calling `CheckIOAvailable(pid)` and before constructing
+`/proc/[pid]/stat` paths in `collect()`, validate `pid > 0`. Skip PIDs that fail
+validation silently (the row will appear in the SQL result with no procfs data).
+
+**Rationale:** `pg_stat_activity` can theoretically return a zero or null PID for
+walsender/autovacuum workers before they fully initialize. `readProcPidStat(0)` would
+open `/proc/0/stat` (swapper), producing nonsense data. `buildProcPidResult` already
+guards `pid > 0` internally, but the outer collection loop must validate before the
+filesystem path is constructed.
+
+### Decision 10: WARNING detection in report via column inspection
+
+**Decision:** After the first valid data pair is received in `processData`, scan the
+first result's IO columns (9–10: `read_total,KiB`, `write_total,KiB`) and iodelay
+column (11: `iodelay_total,s`). If all values in a column set are `""` (empty string,
+`Valid=true`), emit a WARNING line before printing the first data row. Check is
+one-shot per report run (set a flag after first pair).
+
+**Rationale:** Report has no separate metadata flag for IO/delayacct availability.
+The `""` sentinel is the only signal stored in the tar. Column inspection is
+consistent with how the TUI communicates availability via the same `""` pattern.
+Checking only the first result avoids scanning every snapshot.
 
 ## Data Models
 
@@ -319,10 +355,17 @@ on an old tar prints INFO "no procpidstat data" and exits cleanly. Existing `-A`
 - [ ] `isFilenameOK` accepts `sysinfo` prefix without error
 - [ ] `metadata.ticks` and `metadata.cpuCount` populated from `sysinfo.*` entries
 - [ ] `-N` flag accepted by `cmd/report`; `-A` unchanged
+- [ ] `report -N -o "%all"` output rows are sorted by `%all` descending within each snapshot
+- [ ] `report -N -g "state:active"` output contains only rows where state matches pattern
+- [ ] `report -N -l 3` output contains at most 3 rows per snapshot
+- [ ] `report -N -s HH:MM -e HH:MM` output excludes snapshots outside the time range
+- [ ] `report -N` on tar with empty IO columns: WARNING printed before first data row
+- [ ] `report -d -N` outputs procpidstat column descriptions
 - [ ] `make test` passes (no new failures)
 - [ ] `make lint` passes (no new warnings)
 - [ ] `TestFilterViews_NotRecordable` asserts procpidstat passes through filter
 - [ ] `Test_filterViews` table counts updated to match new recordable set
+- [ ] `Test_app_record` expected file count includes +1 sysinfo entry per tick
 
 ## Implementation Tasks
 
@@ -340,27 +383,25 @@ on an old tar prints INFO "no procpidstat data" and exits cleanly. Existing `-A`
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/... -run BuildProcPidResult\|FormatProc\|GetSysticks\|SysInfo` → all pass
-- **Files to modify:** `internal/stat/procpidstat.go`, `internal/stat/procpidstat_test.go`, `internal/stat/stat.go`
-- **Files to read:** `internal/stat/stat.go` (getSysticksLocal, NewCollector, Collector.Update procpidstat block)
+- **Files to modify:** `internal/stat/procpidstat.go`, `internal/stat/procpidstat_test.go`, `internal/stat/stat.go`, `internal/stat/netdev_test.go`, `internal/stat/diskstats_test.go`, `internal/stat/stat_test.go`
+- **Files to read:** `internal/stat/stat.go` (getSysticksLocal, NewCollector, Collector.Update procpidstat block), `internal/stat/netdev_test.go`, `internal/stat/diskstats_test.go` (call sites of getSysticksLocal)
 
 ### Wave 2 — Recorder + Report (parallel, independent of each other)
 
 #### Task 02: tarRecorder — stateful procfs enrichment + sysinfo write + local/remote gate
 
-- **Description:** Extend `tarRecorder` with stateful fields for procpidstat
-  (`prevProcPidStats`, `currProcPidStats`, `prevProcPidIO`, `currProcPidIO`,
-  `lastCollect`). Extend `tarConfig` with `isLocal`, `ticks`, `cpuCount`,
-  `ioAvailable`, `delayAcctAvailable`. In `app.setup()`, capture `db.Local`, call
-  `GetSysticksLocal()`, probe IO/delayacct availability, populate `tarConfig`; if
-  `!db.Local`, delete `procpidstat` from `views` and print INFO. In `collect()`, add
-  procfs enrichment branch mirroring `Collector.Update()` procpidstat block. In
-  `write()`, append `sysinfo.TIMESTAMP.json`. This makes procpidstat recordable for
-  local-mode sessions with correct per-interval rates.
+- **Description:** Make `tarRecorder` stateful for procpidstat collection: add prev/curr
+  `ProcPidStat`/`ProcPidIO` maps, `lastCollect` timestamp, and locality/availability
+  flags to the struct; propagate them from `app.setup()` via `tarConfig`. In
+  `collect()`, enrich the procpidstat SQL result with per-tick procfs data using the
+  map-rotation protocol (see Architecture data flow). In `write()`, append a
+  `sysinfo.TIMESTAMP.json` entry. This makes procpidstat recordable for local-mode
+  sessions with correct per-interval rates.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./record/... -run TarRecorder\|FilterViews\|app_record` → pass; `go build ./cmd/pgcenter` → clean
 - **Files to modify:** `record/recorder.go`, `record/record.go`
-- **Files to read:** `internal/stat/procpidstat.go` (buildProcPidResult, readProcPidStat, readProcPidIO, CheckIOAvailable, CheckDelayAcctAvailable, SysInfo), `internal/stat/stat.go` (Collector.Update procpidstat block lines 215–275), `internal/postgres/postgres.go` (DB.Local field)
+- **Files to read:** `internal/stat/procpidstat.go` (buildProcPidResult, readProcPidStat, readProcPidIO, CheckIOAvailable, CheckDelayAcctAvailable, SysInfo), `internal/stat/stat.go` (Collector.Update procpidstat block — map rotation and enrichment logic), `internal/postgres/postgres.go` (DB.Local field)
 
 #### Task 03: Report pipeline + -N flag + view config
 
@@ -382,13 +423,13 @@ on an old tar prints INFO "no procpidstat data" and exits cleanly. Existing `-A`
 #### Task 04: Test suite update
 
 - **Description:** Update `record/record_test.go`: invert `TestFilterViews_NotRecordable`
-  (procpidstat now passes filter), decrement `wantN` / increment `wantV` in
-  `Test_filterViews` table. Update `report/report_test.go`: add synthetic tar with
-  `procpidstat.*` + `sysinfo.*` entries for `Test_app_doReport_procpidstat` and
-  `Test_readMeta_with_sysinfo`; regenerate `pgcenter.stat.golden.tar` if needed via
-  `-update` flag. Run E2E verification: `pgcenter record -c 3 -i 1s` then
-  `pgcenter report -N`. This closes the test coverage gap opened by the recorder and
-  report changes in tasks 02–03.
+  (including its trailing `assert.True(t, pp.NotRecordable)` which must become `False`);
+  update `Test_filterViews` table (`wantN -= 1`, `wantV += 1` per row); update
+  `Test_app_record` expected file count (+2 per tick: one procpidstat entry + one sysinfo
+  entry). Update `report/report_test.go`: add `Test_app_doReport_procpidstat` and
+  `Test_readMeta_with_sysinfo` using synthetic in-memory tar; regenerate
+  `pgcenter.stat.golden.tar` if needed. This closes the test coverage gap and ensures
+  no silent count regressions from the recorder and report changes in tasks 02–03.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `make test` → all green; `make lint` → no new warnings; `./bin/pgcenter record -c 3 -i 1s -f /tmp/test.tar && ./bin/pgcenter report -N -f /tmp/test.tar` → ≥1 line output
