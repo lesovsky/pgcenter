@@ -5,7 +5,6 @@ wave: 2
 skills: [documentation-writing]
 verify: "bash — git diff --stat docs/"
 reviewers: [dev-code-reviewer]
-teammate_name:
 ---
 
 # Task 03: Update project knowledge and ADR log
@@ -58,6 +57,7 @@ This task runs in Wave 2, after Task 01 (core implementation) completes. No code
 - [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
+- [project.md](.claude/skills/project-knowledge/project.md)
 - [overview.md](.claude/skills/project-knowledge/overview.md)
 - [architecture.md](.claude/skills/project-knowledge/architecture.md)
 

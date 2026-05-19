@@ -5,6 +5,7 @@ wave: 2
 skills: [code-writing]
 verify: "bash — make test"
 reviewers: [dev-code-reviewer, dev-test-reviewer]
+# dev-security-auditor omitted — task adds test code and golden fixture files only, no production logic.
 ---
 
 # Task 02: Add new tests and golden files
@@ -80,7 +81,8 @@ files — write them first, then write the test functions to verify them):
 - `internal/stat/procpidstat_test.go::TestCheckDelayAcctAvailable` — asserts function returns
   a bool without panic; at minimum covers the code path.
 - `internal/stat/procpidstat_test.go::TestBuildProcPidResult_DelayAvailable` — asserts
-  `row[11]` is `HH:MM:SS` and `row[17]` is non-empty `"%.2f"` when `delayAcctAvailable=true`.
+  `row[11]` is `HH:MM:SS` (e.g. `"00:00:01"`) and `row[17]` is `"100.00"` when `delayAcctAvailable=true`
+  (prevIODelay=0, currIODelay=100, itv=1.0, ticks=100).
 - `internal/stat/procpidstat_test.go::TestBuildProcPidResult_DelayUnavailable` — asserts
   `row[11] == ""` and `row[17] == ""` when `delayAcctAvailable=false`.
 
@@ -90,7 +92,7 @@ files — write them first, then write the test functions to verify them):
 - [ ] `TestReadProcPidStatIODelay` passes: `IODelay == 500.0` from golden file
 - [ ] `TestReadProcPidStatTruncated` passes: `IODelay == 0`, no panic, no error
 - [ ] `TestCheckDelayAcctAvailable` passes: no panic; result matches live sysctl state
-- [ ] `TestBuildProcPidResult_DelayAvailable` passes: col 11 is `HH:MM:SS`, col 17 is `"%.2f"`
+- [ ] `TestBuildProcPidResult_DelayAvailable` passes: col 11 is `"00:00:01"`, col 17 is `"100.00"`
 - [ ] `TestBuildProcPidResult_DelayUnavailable` passes: col 11 and col 17 are `""`
 - [ ] `TestCollectorUpdateProcPidStat19Cols` passes: result has 19 columns
 - [ ] `record.TestFilterViews_NotRecordable` passes: `pp.Ncols == 19`
@@ -102,8 +104,10 @@ files — write them first, then write the test functions to verify them):
 **Feature artifacts:**
 - [002-feat-iodelay-procpidstat.md](002-feat-iodelay-procpidstat.md) — user-spec
 - [002-feat-iodelay-procpidstat-tech-spec.md](002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
+- [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
+- [project.md](../../../../.claude/skills/project-knowledge/project.md)
 - [architecture.md](../../../../.claude/skills/project-knowledge/architecture.md)
 - [patterns.md](../../../../.claude/skills/project-knowledge/patterns.md)
 
@@ -183,9 +187,9 @@ separately via `os.ReadFile`, and assert equality. This is what `TestCheckIOAvai
 for its analogous probe — follow the same pattern.
 
 **`TestBuildProcPidResult_DelayAvailable` — concrete values:**
-Use `ticks=100`, `itv=1`, `cpuCount=4`, `IODelay=500` in `currStats` and `IODelay=400` in
-`prevStats`. Expected: col 11 = `formatCPUTime(500, 100)` = `"00:00:05"`, col 17 = `"1.00"`
-(delta=100 / (1*100) * 100 = 100.00 — or use delta=1 with itv=1, ticks=100, result=1.00).
+Use `ticks=100`, `itv=1.0`, `cpuCount=4`, `IODelay=100` in `currStats` and `IODelay=0` in
+`prevStats`. Expected: col 11 = `formatCPUTime(100, 100)` = `"00:00:01"`, col 17 = `"100.00"`
+(delta=100 / (1.0*100) * 100 = 100.00).
 Choose values that produce a deterministic, non-zero result.
 
 **Dependencies:**
@@ -211,6 +215,8 @@ Choose values that produce a deterministic, non-zero result.
 
 - **dev-code-reviewer** → `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-task-02-dev-code-reviewer-review.json`
 - **dev-test-reviewer** → `docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-task-02-dev-test-reviewer-review.json`
+
+Note: dev-security-auditor omitted — task adds test code and golden fixture files only, no production logic.
 
 ## Post-completion
 

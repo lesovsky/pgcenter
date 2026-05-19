@@ -5,7 +5,6 @@ wave: 3
 skills: [pre-deploy-qa]
 verify: "bash — make test && make lint && make vuln"
 reviewers: []
-teammate_name:
 ---
 
 # Task 04: Pre-deploy QA
@@ -87,9 +86,10 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 **Feature artifacts:**
 - [002-feat-iodelay-procpidstat.md](002-feat-iodelay-procpidstat.md) — user-spec
 - [002-feat-iodelay-procpidstat-tech-spec.md](002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
-- [002-feat-iodelay-procpidstat-decisions.md](002-feat-iodelay-procpidstat-decisions.md) — decisions log
+- [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
 
 **Project knowledge:**
+- [project.md](../../.claude/skills/project-knowledge/project.md) — project overview, goals, tech stack
 - [deployment.md](../../.claude/skills/project-knowledge/deployment.md) — release process, CI/CD, make targets
 
 ## Verification Steps
@@ -104,6 +104,8 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 
 ## Details
 
+**Files:** none (read-only QA task — no source files are modified)
+
 **Dependencies:**
 - Task 01 must be complete: core implementation in `internal/stat/procpidstat.go`, `internal/view/view.go`, `internal/stat/stat.go`, `top/config_view.go`, `record/record.go`
 - Task 02 must be complete: new unit tests in `internal/stat/procpidstat_test.go`, golden files `internal/stat/testdata/proc/pid_stat_iodelay` and `pid_stat_truncated`, updated `internal/stat/stat_test.go` and `record/record_test.go`
@@ -114,7 +116,8 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 - Root or sudo access to toggle `kernel.task_delayacct` via sysctl
 - The feature branch checked out locally (binary built from `make build`)
 
-**Key behaviours to probe manually:**
+**Implementation hints:**
+- Run `make build` before `make test` to ensure the binary under test reflects the latest source.
 - The probe runs once at screen-open (`Shift+S`). Changing sysctl after opening does not take effect until the screen is closed and reopened.
 - On the very first tick after opening the screen: `%iodelay` must be `""` (no prev sample), `iodelay_total,s` must show the accumulated counter as `HH:MM:SS`.
 - `%iodelay` is NOT normalized by `cpuCount` — a single fully IO-blocked backend on a 4-core machine shows `~100%`, not `~25%`. This is correct by design (Decision 3 in tech-spec).
@@ -125,7 +128,7 @@ or absent, both columns render as `""` and a warning appears in the cmdline area
 - delayacct-only: `"iodelay unavailable (task_delayacct=0): run sysctl -w kernel.task_delayacct=1, then re-open screen"`
 - combined (IO + delayacct): `"IO stats and iodelay unavailable: run as postgres user + sysctl -w kernel.task_delayacct=1, then re-open screen"`
 
-**Edge cases to exercise:**
+**Edge cases:**
 - Open S-screen when running as a non-postgres user (IO unavailable) AND `task_delayacct=0` — verify combined warning appears
 - Verify the binary exits cleanly (no panic) when pgcenter is pointed at a PostgreSQL instance with no active sessions (empty `pg_stat_activity`)
 

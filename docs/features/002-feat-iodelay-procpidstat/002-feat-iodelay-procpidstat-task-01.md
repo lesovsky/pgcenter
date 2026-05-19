@@ -24,23 +24,23 @@ The task covers the full vertical slice of changes that must land together to ke
 
 ## What to do
 
-1. **`internal/stat/procpidstat.go` — struct and parser.** Add `IODelay float64` field to `ProcPidStat`. In `readProcPidStatFile`, after parsing `stime` (currently at `suffix[12]`), add a guard `if len(suffix) >= 40` and parse `suffix[39]` as `IODelay`. The current guard is `len(suffix) < 13`; do not change that existing guard — add a separate one for the new field only.
+1. Add `IODelay float64` field to `ProcPidStat` and parse `suffix[39]` (field 42 in `/proc/[pid]/stat`, `delayacct_blkio_ticks`) in `readProcPidStatFile` — guarded so truncated proc files are handled safely.
 
-2. **`internal/stat/procpidstat.go` — probe function.** Add `CheckDelayAcctAvailable() bool` that opens `/proc/sys/kernel/task_delayacct`, reads up to 4 bytes, and returns `true` iff `strings.TrimSpace(string(buf[:n])) == "1"`. Return `false` on any error. Use a fixed-size `[4]byte` buffer (not `os.ReadFile`) consistent with the defensive procfs reading pattern in the existing parsers.
+2. Add `CheckDelayAcctAvailable() bool` probe function that reads `/proc/sys/kernel/task_delayacct` and returns whether delay accounting is active on this kernel.
 
-3. **`internal/stat/procpidstat.go` — column definitions.** Update `procPidResultCols` from 17 to 19 names by inserting `"iodelay_total,s"` at index 11 and `"%iodelay"` at index 17, shifting `"query"` to index 18. Update the constant `procPidResultNcols` from `17` to `19`. Update the package-level comment on `buildProcPidResult` to reflect 19 columns and the new parameter.
+3. Extend `procPidResultCols` to 19 entries by inserting `"iodelay_total,s"` at index 11 and `"%iodelay"` at index 17; update `procPidResultNcols` constant accordingly.
 
-4. **`internal/stat/procpidstat.go` — `buildProcPidResult` signature and body.** Add `delayAcctAvailable bool` as a new parameter after `ioAvailable bool`. Shift the existing cols 11–16 (%all/%us/%sy, read,KiB/s, write,KiB/s) to cols 12–17. Shift the query column from index 16 to 18. Insert col 11 (`iodelay_total,s`) and col 17 (`%iodelay`) rendering using the four-branch table from the tech-spec. Guard `ticks > 0` before every `formatCPUTime(curr.IODelay, ticks)` call to prevent `int64(+Inf) = MinInt64` corruption. Use `delta(prevCPU.IODelay, curCPU.IODelay)` for the `%iodelay` rate (no `cpuCount` division — IO delay is per-process wall-clock time, not CPU utilization).
+4. Add `delayAcctAvailable bool` parameter to `buildProcPidResult` after `ioAvailable bool`; render the two new columns using the four-branch logic from the tech-spec (empty when unavailable, formatted when available).
 
-5. **`internal/view/view.go` — `View` struct.** Add `DelayAcctAvailable bool` field after `IOAvailable bool`. In `New()`, update the `"procpidstat"` entry: change `Ncols: 17` to `Ncols: 19`. No other view entries need changes.
+5. Add `DelayAcctAvailable bool` field to `view.View` struct; update the `"procpidstat"` entry in `New()` to `Ncols: 19`.
 
-6. **`internal/stat/stat.go` — `Collector.Update`.** In the `CollectProcPidStat` branch, add `view.DelayAcctAvailable` as the new argument when calling `buildProcPidResult`, positioned after `view.IOAvailable`.
+6. Wire `view.DelayAcctAvailable` through `Collector.Update` to the `buildProcPidResult` call in the `CollectProcPidStat` branch.
 
-7. **`top/config_view.go` — `switchViewToProcPidStat`.** After the existing `ioErr := stat.CheckIOAvailable(probePID)` call, add `delayAcctAvailable := stat.CheckDelayAcctAvailable()`. Set `v.DelayAcctAvailable = delayAcctAvailable` on the view before sending it on `viewCh`. Replace the current 2-branch if/else for `printCmdline` with a 4-branch if/else: `!ioAvailable && !delayAcctAvailable` → combined message; `!ioAvailable` → existing IO-only message; `!delayAcctAvailable` → delayacct-only message; else → `printCmdline(g, "%s", v.Msg)`.
+7. In `switchViewToProcPidStat`, call `stat.CheckDelayAcctAvailable()`, set `v.DelayAcctAvailable`, and replace the current 2-branch `printCmdline` if/else with a 4-branch one covering all combinations of IO and delay accounting availability.
 
-8. **`record/record.go` — comment update.** In `filterViews`, update the comment `"7 of 17 columns"` to `"7 of 19 columns"`.
+8. Update the `filterViews` comment in `record/record.go` from `"7 of 17 columns"` to `"7 of 19 columns"`.
 
-9. **`internal/stat/procpidstat_test.go` — call-site updates only.** Add `false` as the `delayAcctAvailable` argument to every existing `buildProcPidResult` call in the test file. Do not add new test functions — those belong to Task 2.
+9. Add `false` as the `delayAcctAvailable` argument to every existing `buildProcPidResult` call in `procpidstat_test.go` (call-site fix only — new iodelay test functions belong to Task 2).
 
 ## TDD Anchor
 
@@ -72,9 +72,10 @@ Note: the two additional iodelay tests (`TestReadProcPidStatIODelay`, `TestReadP
 **Feature artifacts:**
 - [002-feat-iodelay-procpidstat.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat.md) — user-spec
 - [002-feat-iodelay-procpidstat-tech-spec.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-tech-spec.md) — tech-spec
-- [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log
+- [002-feat-iodelay-procpidstat-decisions.md](docs/features/002-feat-iodelay-procpidstat/002-feat-iodelay-procpidstat-decisions.md) — decisions log (created by Post-completion of this task)
 
 **Project knowledge:**
+- [project.md](.claude/skills/project-knowledge/project.md) — project overview, goals, tech stack
 - [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, procpidstat hybrid view description, IO availability probe pattern
 - [patterns.md](.claude/skills/project-knowledge/patterns.md) — `printCmdline` mutual exclusion rule, hybrid view wiring steps
 
