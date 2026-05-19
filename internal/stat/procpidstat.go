@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-// procPidResultCols is the canonical 19-column header used by buildProcPidResult.
+// procPidResultCols is the canonical 19-column header used by BuildProcPidResult.
 // The order matches the view config in internal/view; any deviation here causes
 // a panic in align.SetAlign() because the view declares Ncols=19.
 var procPidResultCols = []string{
@@ -42,8 +42,17 @@ type ProcPidIO struct {
 	WriteBytes float64 // bytes physically written to storage
 }
 
-// readProcPidStat reads /proc/<pid>/stat and returns ProcPidStat.
-func readProcPidStat(pid int) (ProcPidStat, error) {
+// SysInfo is the JSON-serializable container for runtime values captured by
+// the recorder at session start and replayed by the reporter: CLK_TCK ticks
+// and the local CPU count. One sysinfo.TIMESTAMP.json entry is written per
+// tick alongside the procpidstat result.
+type SysInfo struct {
+	Ticks    float64 `json:"ticks"`
+	CPUCount int     `json:"cpu_count"`
+}
+
+// ReadProcPidStat reads /proc/<pid>/stat and returns ProcPidStat.
+func ReadProcPidStat(pid int) (ProcPidStat, error) {
 	return readProcPidStatFile(fmt.Sprintf("/proc/%d/stat", pid))
 }
 
@@ -113,8 +122,8 @@ func readProcPidStatFile(statfile string) (ProcPidStat, error) {
 	return stat, nil
 }
 
-// readProcPidIO reads /proc/<pid>/io and returns ProcPidIO.
-func readProcPidIO(pid int) (ProcPidIO, error) {
+// ReadProcPidIO reads /proc/<pid>/io and returns ProcPidIO.
+func ReadProcPidIO(pid int) (ProcPidIO, error) {
 	return readProcPidIOFile(fmt.Sprintf("/proc/%d/io", pid))
 }
 
@@ -206,7 +215,7 @@ func formatCPUTime(jiffies, ticks float64) string {
 	return fmt.Sprintf("%02d:%02d:%02d", secs/3600, (secs%3600)/60, secs%60)
 }
 
-// buildProcPidResult joins a 7-column pg_stat_activity PGresult with prev/curr
+// BuildProcPidResult joins a 7-column pg_stat_activity PGresult with prev/curr
 // procfs snapshots (CPU + IO) and produces the 19-column PGresult consumed by
 // the rendering pipeline. The function never returns fewer than 19 columns —
 // missing data is rendered as "0" (CPU/rate) or "" (IO/iodelay). Callers pass:
@@ -222,7 +231,49 @@ func formatCPUTime(jiffies, ticks float64) string {
 //   - ticks               — CLK_TCK from sysconf.
 //   - itv                 — refresh interval in seconds; 0 skips rate columns.
 //   - cpuCount            — number of CPUs used to normalize %all/%us/%sy.
-func buildProcPidResult(
+//
+// BuildProcPidResult is a composition: it assembles raw numeric values via
+// buildProcPidResultRaw (cols 6-11 hold float strings, cols 12-17 hold
+// already-display rate strings), then formats raw cols 6-11 for display via
+// formatProcPidResultForDisplay. The split keeps recorder-side raw assembly
+// reusable while preserving the established display contract.
+func BuildProcPidResult(
+	activity PGresult,
+	prevStats, currStats map[int]ProcPidStat,
+	prevIO, currIO map[int]ProcPidIO,
+	ioAvailable bool,
+	delayAcctAvailable bool,
+	ticks float64,
+	itv float64,
+	cpuCount int,
+) PGresult {
+	raw := buildProcPidResultRaw(
+		activity,
+		prevStats, currStats,
+		prevIO, currIO,
+		ioAvailable, delayAcctAvailable,
+		ticks, itv, cpuCount,
+	)
+	return formatProcPidResultForDisplay(raw, ticks)
+}
+
+// buildProcPidResultRaw is the model stage of the BuildProcPidResult pipeline.
+// It produces the same 19-column PGresult as BuildProcPidResult except that
+// cols 6-11 hold *raw* numeric values as float strings instead of
+// display-formatted ones:
+//
+//   - cols 6-8  — accumulated CPU jiffies (utime+stime, utime, stime) as
+//     decimal float strings; "0" sentinel when the PID is invalid.
+//   - cols 9-10 — accumulated IO bytes (read, write) as decimal float strings;
+//     "" sentinel when ioAvailable=false or the PID is invalid.
+//   - col 11    — accumulated iodelay ticks as a decimal float string; "0"
+//     sentinel when the PID is invalid; "" sentinel when delay accounting
+//     is unavailable.
+//
+// Cols 12-17 are computed as today (delta rates) and already display-ready;
+// formatProcPidResultForDisplay passes them through unchanged. SQL-derived
+// cols 0-5 and col 18 (query) are copied verbatim.
+func buildProcPidResultRaw(
 	activity PGresult,
 	prevStats, currStats map[int]ProcPidStat,
 	prevIO, currIO map[int]ProcPidIO,
@@ -268,37 +319,39 @@ func buildProcPidResult(
 			}
 		}
 
-		// Cols 6..8 — accumulated CPU times (HH:MM:SS). "0" if PID invalid.
+		// Cols 6..8 — accumulated CPU jiffies as float strings.
+		// "0" sentinel when the PID is invalid (no procfs data).
 		if validPID {
-			row[6] = nullString(formatCPUTime(curCPU.Utime+curCPU.Stime, ticks))
-			row[7] = nullString(formatCPUTime(curCPU.Utime, ticks))
-			row[8] = nullString(formatCPUTime(curCPU.Stime, ticks))
+			row[6] = nullString(strconv.FormatFloat(curCPU.Utime+curCPU.Stime, 'f', 6, 64))
+			row[7] = nullString(strconv.FormatFloat(curCPU.Utime, 'f', 6, 64))
+			row[8] = nullString(strconv.FormatFloat(curCPU.Stime, 'f', 6, 64))
 		} else {
 			row[6] = nullString("0")
 			row[7] = nullString("0")
 			row[8] = nullString("0")
 		}
 
-		// Cols 9..10 — accumulated IO totals in KiB; "" if !ioAvailable or PID invalid.
+		// Cols 9..10 — accumulated IO bytes as float strings.
+		// "" sentinel when ioAvailable=false or PID invalid.
 		if ioAvailable && validPID {
-			row[9] = nullString(strconv.FormatFloat(curIOs.ReadBytes/1024, 'f', 0, 64))
-			row[10] = nullString(strconv.FormatFloat(curIOs.WriteBytes/1024, 'f', 0, 64))
+			row[9] = nullString(strconv.FormatFloat(curIOs.ReadBytes, 'f', 6, 64))
+			row[10] = nullString(strconv.FormatFloat(curIOs.WriteBytes, 'f', 6, 64))
 		} else {
 			row[9] = nullString("")
 			row[10] = nullString("")
 		}
 
-		// Col 11 — accumulated iodelay (HH:MM:SS). "" when delay accounting is
-		// unavailable; "00:00:00" / "0:00:00" on invalid PID or ticks<=0.
+		// Col 11 — accumulated iodelay ticks as a float string.
+		// "" sentinel when delay accounting is unavailable; "0" sentinel when
+		// PID is invalid. The format stage maps "0" → "00:00:00" and the
+		// float-string path through formatCPUTime.
 		switch {
 		case !delayAcctAvailable:
 			row[11] = nullString("")
 		case !validPID:
-			row[11] = nullString("00:00:00")
-		case ticks > 0:
-			row[11] = nullString(formatCPUTime(curCPU.IODelay, ticks))
+			row[11] = nullString("0")
 		default:
-			row[11] = nullString("0:00:00")
+			row[11] = nullString(strconv.FormatFloat(curCPU.IODelay, 'f', 6, 64))
 		}
 
 		// Cols 12..14 — CPU rate %all, %us, %sy. "0" on first tick / itv==0 / invalid PID.
@@ -368,6 +421,133 @@ func buildProcPidResult(
 		Cols:   cols,
 		Values: values,
 	}
+}
+
+// formatProcPidResultForDisplay is the view stage of the BuildProcPidResult
+// pipeline. It converts raw cols 6-11 into display strings:
+//
+//   - cols 6-8  — raw jiffies float string → HH:MM:SS via formatCPUTime.
+//     The "0" sentinel (invalid PID) is passed through unchanged so the
+//     display row distinguishes "no data" from "00:00:00".
+//   - cols 9-10 — raw bytes float string → integer KiB string (raw/1024).
+//     The "" sentinel (IO unavailable / invalid PID) is passed through.
+//   - col 11    — raw iodelay ticks float string → HH:MM:SS via formatCPUTime
+//     when ticks > 0. The "" sentinel (delay accounting unavailable) is
+//     passed through. When ticks <= 0 (defensive — getSysticksLocal always
+//     yields >0 in production) the format falls back to "0:00:00".
+//
+// All other cols (0-5, 12-17, 18) are passed through unchanged: cols 12-17
+// are already display-ready rate strings produced by buildProcPidResultRaw.
+//
+// Invariant for callers: cells in cols 6-11 of a raw PGresult are either the
+// documented sentinel ("0" for cols 6-8/11, "" for cols 9-11) or a valid
+// strconv.ParseFloat-parseable float string. The formatXxxCell helpers below
+// pass through any other value unchanged — silent passthrough is intentional
+// for sentinel safety; an unexpected value indicates a bug in the raw stage,
+// not a runtime condition to format.
+func formatProcPidResultForDisplay(raw PGresult, ticks float64) PGresult {
+	values := make([][]sql.NullString, 0, raw.Nrows)
+
+	for _, src := range raw.Values {
+		row := make([]sql.NullString, procPidResultNcols)
+		// Cols 0..5: pass-through SQL labels.
+		for i := 0; i < 6; i++ {
+			if i < len(src) {
+				row[i] = src[i]
+			} else {
+				row[i] = nullString("")
+			}
+		}
+
+		// Cols 6..8 — raw jiffies → HH:MM:SS.
+		for _, idx := range []int{6, 7, 8} {
+			row[idx] = formatJiffiesCell(src[idx], ticks)
+		}
+
+		// Cols 9..10 — raw bytes → KiB integer string.
+		row[9] = formatBytesCell(src[9])
+		row[10] = formatBytesCell(src[10])
+
+		// Col 11 — raw iodelay ticks → HH:MM:SS.
+		row[11] = formatIODelayCell(src[11], ticks)
+
+		// Cols 12..17 — pass-through rate strings (already display-ready).
+		for i := 12; i <= 17; i++ {
+			if i < len(src) {
+				row[i] = src[i]
+			} else {
+				row[i] = nullString("")
+			}
+		}
+
+		// Col 18 — pass-through query text.
+		if len(src) > 18 {
+			row[18] = src[18]
+		} else {
+			row[18] = nullString("")
+		}
+
+		values = append(values, row)
+	}
+
+	cols := make([]string, procPidResultNcols)
+	copy(cols, procPidResultCols)
+
+	return PGresult{
+		Valid:  true,
+		Ncols:  procPidResultNcols,
+		Nrows:  raw.Nrows,
+		Cols:   cols,
+		Values: values,
+	}
+}
+
+// formatJiffiesCell converts a raw CPU-jiffies float string to HH:MM:SS.
+// The "0" sentinel (used by buildProcPidResultRaw to mark an invalid PID)
+// is passed through unchanged. Parse failures are also passed through to
+// avoid silently corrupting unexpected upstream values.
+func formatJiffiesCell(cell sql.NullString, ticks float64) sql.NullString {
+	if cell.String == "0" {
+		return cell
+	}
+	v, err := strconv.ParseFloat(cell.String, 64)
+	if err != nil {
+		return cell
+	}
+	return nullString(formatCPUTime(v, ticks))
+}
+
+// formatBytesCell converts a raw IO-bytes float string to an integer KiB
+// string. Empty-string ("" sentinel: IO unavailable / invalid PID) is passed
+// through. Parse failures are passed through unchanged for the same reason as
+// formatJiffiesCell.
+func formatBytesCell(cell sql.NullString) sql.NullString {
+	if cell.String == "" {
+		return cell
+	}
+	v, err := strconv.ParseFloat(cell.String, 64)
+	if err != nil {
+		return cell
+	}
+	return nullString(strconv.FormatFloat(v/1024, 'f', 0, 64))
+}
+
+// formatIODelayCell converts a raw iodelay-ticks float string to HH:MM:SS.
+// Empty-string ("" sentinel: delay accounting unavailable) passes through.
+// ticks <= 0 falls back to "0:00:00" matching the pre-split behaviour for the
+// defensive divide-by-zero guard.
+func formatIODelayCell(cell sql.NullString, ticks float64) sql.NullString {
+	if cell.String == "" {
+		return cell
+	}
+	v, err := strconv.ParseFloat(cell.String, 64)
+	if err != nil {
+		return cell
+	}
+	if ticks <= 0 {
+		return nullString("0:00:00")
+	}
+	return nullString(formatCPUTime(v, ticks))
 }
 
 // nullString wraps s in a Valid sql.NullString.

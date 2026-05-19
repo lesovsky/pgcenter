@@ -23,13 +23,15 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 
 **Date:** 2026-05-19
 **Feature:** 001-feat-per-process-system-stats
-**Status:** Accepted
+**Status:** Superseded by [003-feat-procpidstat-record-report]
 
 **Context:** The procpidstat view uses a hybrid data source (SQL + procfs). The recorder only collects SQL results and cannot capture the enriched 17-column result. Adding procpidstat to recording would produce misleading 7-column output.
 
 **Decision:** Add `NotRecordable bool` field to `view.View` with zero-value `false` (all existing views remain recordable). Set `NotRecordable: true` on procpidstat. `record/record.go:filterViews()` skips views where `NotRecordable` is set.
 
 **Rationale:** Go zero value makes this backwards-compatible — no existing view definitions need to change. Cleaner than checking by view name in the recorder.
+
+**Superseded by:** [003-feat-procpidstat-record-report] — procpidstat recording is now supported via a stateful recorder. `NotRecordable: true` removed from procpidstat view; local/remote gate moved to `record.app.setup()` via `db.Local`.
 
 ---
 
@@ -124,3 +126,62 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Decision:** Formula `ΔIODelay / (itv × ticks) × 100` with no division by `cpuCount`. `%iodelay` may legitimately exceed 100% on multi-threaded blocking patterns; this is documented behavior, not a bug.
 
 **Rationale:** `delayacct_blkio_ticks` counts wall-clock ticks the process spent blocked in D-state, regardless of CPU count. A single-threaded process can be 100% IO-blocked whether the machine has 1 or 64 cores. Normalizing by `cpuCount` would produce misleadingly small numbers (e.g., 1.56% on a 64-core machine for a fully IO-blocked process). The CPU-rate columns normalize correctly because CPU time is shared across cores; IO-blocked time is not.
+
+---
+
+## [003-feat-procpidstat-record-report] Option B: store display strings, DiffIntvl=[0,0] for procpidstat recording
+
+**Date:** 2026-05-19
+**Feature:** 003-feat-procpidstat-record-report
+**Status:** Accepted
+
+**Context:** procpidstat enrichment produces a 19-column PGresult where cols 6–11 contain display strings (`HH:MM:SS`, KiB) and cols 12–17 contain pre-computed rate strings. Two approaches were considered for what to store in the tar archive.
+
+**Decision:** Recorder stores the display-ready 19-column PGresult (Option B). Report reads with `DiffIntvl=[0,0]` — pass-through, no column subtraction. Rate columns are pre-computed at recording time.
+
+**Rationale:** Established pgcenter pattern for snapshot views (`activity`, `progress_*`). No report pipeline changes needed beyond sysinfo reading. Cols 6–11 contain `HH:MM:SS` strings that `diffPair` cannot parse — Option A (raw jiffies + DiffIntvl=[6,11]) would require a second formatter in the report pipeline.
+
+**Alternatives considered:**
+- Option A (store raw jiffies, recompute in report via DiffIntvl=[6,11]): rejected — `HH:MM:SS` strings in cols 6–11 are not parseable by `diffPair`. Would require additional formatter in report.
+
+---
+
+## [003-feat-procpidstat-record-report] isLocal propagated through tarConfig, not checked per-tick
+
+**Date:** 2026-05-19
+**Feature:** 003-feat-procpidstat-record-report
+**Status:** Accepted
+
+**Context:** `tarRecorder.collect()` opens a fresh DB connection per tick and has no access to the `app.db` struct (which doesn't exist — `app` only stores `dbConfig`). Need to know at collect time whether recording is local.
+
+**Decision:** `db.Local` is captured in `app.setup()` before `db.Close()` and passed into `tarConfig.isLocal`, stored as `tarRecorder.isLocal`. The procfs enrichment branch in `collect()` gates on `c.isLocal`.
+
+**Rationale:** `isLocalhost()` is a string test on `Config.Host` — re-checking per tick is wasteful and architecturally wrong (not a live probe). Struct fields on `tarRecorder` persist across ticks since the same instance is reused by the `record()` loop.
+
+---
+
+## [003-feat-procpidstat-record-report] sysinfo as separate tar entry, not merged into meta
+
+**Date:** 2026-05-19
+**Feature:** 003-feat-procpidstat-record-report
+**Status:** Accepted
+
+**Context:** `ticks` (CLK_TCK) and `cpuCount` are system properties needed to document the recording environment. The existing `meta.*` entry holds PostgreSQL properties (version, recovery status, etc.).
+
+**Decision:** Write `sysinfo.TIMESTAMP.json` as a separate tar entry per tick containing `stat.SysInfo{Ticks float64, CPUCount int}`. Report reads it alongside `meta.*` and merges into `metadata` struct.
+
+**Rationale:** System properties and PostgreSQL metadata are different bounded contexts. Keeping them separate avoids widening `SelectCommonProperties` SQL with non-PG values. Under Option B, sysinfo is informational — rates are pre-computed and absent sysinfo has no effect on report output.
+
+---
+
+## [003-feat-procpidstat-record-report] Local/remote gate in app.setup(), not in filterViews
+
+**Date:** 2026-05-19
+**Feature:** 003-feat-procpidstat-record-report
+**Status:** Accepted
+
+**Context:** After removing `NotRecordable: true` from procpidstat view, needed a runtime mechanism to skip procpidstat when recording against a remote PostgreSQL (where procfs is not available).
+
+**Decision:** `app.setup()` removes `procpidstat` from `views` and prints INFO when `!db.Local`, before `filterViews()` is called. `filterViews()` handles only static unsuitability (PG version, missing extension).
+
+**Rationale:** Local/remote is a runtime property, not a static view property. Keeps `filterViews()` focused on one concern. `db.Local` is already computed by `postgres.Connect()` via `isLocalhost()`.

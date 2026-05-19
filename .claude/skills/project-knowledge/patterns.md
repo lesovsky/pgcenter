@@ -57,8 +57,20 @@ When a view combines SQL and local system data (e.g., procpidstat = pg_stat_acti
 3. The switch handler (`top/config_view.go`) must save/load/patch/send the view manually — NOT via `viewSwitchHandler`, which reloads from the static map and discards runtime patches.
 4. In `Collector.Update()`, add a `view.CollectExtra == CollectXxx` branch after `collectPostgresStat` to enrich and replace the SQL result.
 5. In `top/stat.go:collectStat()`, add `prevCollectExtra` change-detection alongside `ShowExtra` to call `c.Reset()` on view switches.
-6. Add `NotRecordable` skip in `record/record.go:filterViews()`.
+6. If the view should NOT be recordable: set `NotRecordable: true` in view definition; `filterViews()` skips it automatically.
+   If the view SHOULD be recordable with procfs enrichment: leave `NotRecordable` at default `false` and follow the tarRecorder stateful pattern (step 7 below).
 7. Reference implementation: `internal/stat/procpidstat.go`, `top/config_view.go:switchViewToProcPidStat`.
+
+## Recording a Hybrid View (SQL + procfs, with pgcenter record)
+
+When a hybrid view needs record/report support (reference: 003-feat-procpidstat-record-report):
+
+1. Leave `NotRecordable: false` (default) on the view. Add local/remote gate in `record.app.setup()`: if `!db.Local`, delete the view from `views` and print INFO — procfs is not available over remote connections.
+2. Add `isLocal`, `ticks`, `cpuCount`, availability flags, and `prev`/`curr` procfs maps to `tarRecorder` struct. Initialize in `app.setup()` via `GetSysticksLocal()`, `runtime.NumCPU()`, and `stat.CheckIOAvailable()` / `stat.CheckDelayAcctAvailable()` probes.
+3. In `tarRecorder.collect()`, add an enrichment branch **after** the main views loop. Mirror the map-rotation protocol from `Collector.Update()`: build `newPrev` from current map filtered to PIDs in the SQL result, rotate maps, then read procfs for each PID (`stat.ReadProcPidStat`, `stat.ReadProcPidIO`). Compute `itv` via `time.Since(lastCollect)`.
+4. In `tarRecorder.write()`, hoist `now := time.Now()` to the function top so all entries share the same timestamp. Append a `sysinfo.TIMESTAMP.json` entry (`stat.SysInfo{Ticks, CPUCount}`) for each tick — needed by the report pipeline to document recording environment.
+5. In `report/report.go`: extend `isFilenameOK` to accept the new entry prefix; handle the entry in `readTar`; extend `metadata` struct if report-side metadata is needed. Use `DiffIntvl=[0,0]` if rates are pre-computed by the recorder (same as `activity` pattern).
+6. Detect "no data" in `processData` via `anyDataPrinted bool` (not `linesPrinted` — initialized to `repeatHeaderAfter = 20`). Detect unavailable columns via empty-string sentinel on first result.
 
 ## Git Workflow
 

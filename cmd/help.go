@@ -168,6 +168,7 @@ Report options:
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
  -W, --wal				show pg_stat_wal statistics
+ -N, --proc-stats		show per-process system stats (procpidstat); local recordings only
  -D, --databases SELECTOR	show pg_stat_database statistics, use additional selector to choose stats:
 				'g' - general; 's' - sessions
  -X, --statements SELECTOR	show pg_stat_statements statistics, use additional selector to choose stats:

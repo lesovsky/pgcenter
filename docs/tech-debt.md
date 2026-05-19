@@ -7,15 +7,15 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
-### [002] procpidstat record/report — not integrated with recorder
+### [004] procpidstat col-index constants duplicated in report package
 
-**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Added:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)
 **Severity:** Low
-**Area:** `record/`, `internal/view/view.go` (`NotRecordable: true` on procpidstat)
+**Area:** `report/report.go`, `internal/stat/procpidstat.go`
 
-**What:** The procpidstat screen cannot be recorded with `pgcenter record` or replayed in `pgcenter report`. The recorder only works with SQL-sourced views; the procpidstat enrichment (procfs join) happens in the TUI layer and is not captured.
+**What:** Column indices for procpidstat IO columns (9 = `read_total,KiB`, 10 = `write_total,KiB`, 11 = `iodelay_total,s`) are declared as local constants `procPidStatColReadTotal`, `procPidStatColWriteTotal`, `procPidStatColIODelay` in `report/report.go`. The authoritative source (`internal/stat/procpidstat.go`) does not export these indices. If column order changes, both places need updating.
 
-**Why deferred:** Supporting record/report requires either extending the recorder to handle mixed SQL+procfs sources or redesigning the enrichment pipeline. Both significantly exceed the scope of the initial feature.
+**Why deferred:** Non-blocking; report package has its own test coverage for the WARNING detection path. A small cleanup — export the constants from `internal/stat` and import them in report.
 
 ---
 
@@ -32,6 +32,19 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [002] procpidstat record/report — not integrated with recorder
+
+**Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
+**Resolved:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)
+**Severity:** Low
+**Area:** `record/`, `report/`, `internal/stat/procpidstat.go`
+
+**What:** The procpidstat screen could not be recorded with `pgcenter record` or replayed in `pgcenter report`. The recorder only worked with SQL-sourced views; the procpidstat enrichment (procfs join) happened in the TUI layer and was not captured.
+
+**Resolution:** Resolved by 003-feat-procpidstat-record-report: `tarRecorder` is now stateful (prev/curr procfs maps); `collect()` runs procfs enrichment after the SQL loop; `write()` appends `sysinfo.TIMESTAMP.json`; `report -N` flag reads the recorded data. Local/remote gate in `app.setup()` via `db.Local`.
+
+---
 
 ### [001] procpidstat iodelay — Netlink taskstats not implemented
 

@@ -18,7 +18,6 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Local mode only — procfs is not available over remote PostgreSQL connections
 - Auxiliary PostgreSQL processes (checkpointer, bgwriter, WAL writer, archiver) are not shown — they are absent from `pg_stat_activity`
 - IO metrics are syscall-level bytes (includes page cache), not actual disk IO
-- `pgcenter record` / `pgcenter report` do not record this screen's data (deferred to a future version)
 
 **Touches:** Activity screen (shares `I` and `A` filter hotkeys and their guard logic in `top/config_view.go` and `top/dialog.go`).
 
@@ -37,6 +36,26 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Requires `CONFIG_TASK_DELAY_ACCT=y` in the kernel and `kernel.task_delayacct=1` at runtime
 - Local mode only — procfs is not available over remote PostgreSQL connections
 - Availability probe is single-shot at screen open (`switchViewToProcPidStat`); flipping the sysctl in runtime requires closing the screen and pressing `Shift+S` again to re-probe
-- Inherits the [001-feat-per-process-system-stats] limitations: not shown for auxiliary PostgreSQL processes, not recorded by `pgcenter record` / `pgcenter report`
+- Inherits the [001-feat-per-process-system-stats] limitations: not shown for auxiliary PostgreSQL processes
+- iodelay columns are included when recording with `pgcenter record` (see [003-feat-procpidstat-record-report])
 
 **Touches:** Per-process stats screen from [001-feat-per-process-system-stats] (column count 17→19, screen handler grows a 4-branch warning composition, `ProcPidStat` struct gains an `IODelay` field).
+
+---
+
+### [003-feat-procpidstat-record-report] Per-process Stats Record/Report
+
+**What it does:** Enables `pgcenter record` to automatically capture per-process system stats (CPU, IO, iodelay) alongside all other statistics, and `pgcenter report -N` to replay recorded data for post-mortem analysis. Each recorded snapshot contains the full 19-column procpidstat result with pre-computed per-interval rates.
+
+**Key scenarios:**
+- Run `pgcenter record -f stats.tar -i 10s` overnight; next morning run `pgcenter report -N -f stats.tar -s 03:10 -e 03:50 -o "%all"` to see which backend was CPU-heavy during an incident window
+- Filter by query pattern: `pgcenter report -N -f stats.tar -g "query:SELECT.*orders"` to see history of a specific query's resource usage
+- All formatting options (`-s`, `-e`, `-o`, `-g`, `-l`, `-t`) work with `-N` the same as with `-A`
+
+**Limitations:**
+- Local mode only — `pgcenter record` skips procpidstat automatically when connecting to a remote PostgreSQL; the tar will contain all other stats but not procpidstat
+- Rate columns (`%all`, `read,KiB/s`, `%iodelay`) reflect the recording interval — the report does not recompute rates for custom `-s`/`-e` windows
+- Accumulated columns (`all_total,s`, `read_total,KiB`) show absolute values since process start, not per-interval deltas
+- IO and iodelay columns are empty (`""`) if the recorder lacked permissions or kernel support; report shows WARNING in header
+
+**Touches:** [001-feat-per-process-system-stats] (uses the same procpidstat 19-column pipeline); [002-feat-iodelay-procpidstat] (iodelay columns included in recorded data).

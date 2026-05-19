@@ -49,7 +49,9 @@ When a probe fails, the corresponding columns render as `""`. `switchViewToProcP
 
 **iodelay source:** `/proc/[pid]/stat` field 42 (`delayacct_blkio_ticks`, `suffix[39]` after stripping pid and comm). Requires `CONFIG_TASK_DELAY_ACCT=y`. `%iodelay` is NOT normalized by `runtime.NumCPU()` — it is wall-clock blocked time, not CPU utilization.
 
-**procpidstat is not recordable** (`NotRecordable: true` on the view). The recorder skips it via `filterViews()` in `record/record.go`.
+**MVC split (003-feat-procpidstat-record-report):** `buildProcPidResult` (exported: `BuildProcPidResult`) is composed of two private functions: `buildProcPidResultRaw` (assembles 19-col PGresult with raw float strings in cols 6–11: jiffies for CPU, bytes for IO, ticks for iodelay) and `formatProcPidResultForDisplay` (converts cols 6–11 to display strings: `HH:MM:SS`, KiB). The TUI uses `BuildProcPidResult` directly; the recorder stores the display-ready result. Also exported: `ReadProcPidStat`, `ReadProcPidIO`, `GetSysticksLocal` (calls `getconf CLK_TCK`), `SysInfo{Ticks float64, CPUCount int}`.
+
+**procpidstat in record/report (003-feat-procpidstat-record-report):** The recorder enriches procpidstat per-tick using the same map-rotation protocol as `Collector.Update()`. `tarRecorder` is stateful: it holds `prevProcPidStats`, `currProcPidStats`, `prevProcPidIO`, `currProcPidIO` maps and `lastCollect` timestamp across ticks. Each tick produces one `procpidstat.TIMESTAMP.json` (19-col display PGresult) and one `sysinfo.TIMESTAMP.json` (`SysInfo` JSON). Local/remote gate lives in `record.app.setup()` via `db.Local` (`isLocalhost()` check in `postgres.Connect`): if remote, `procpidstat` is removed from views before recording and an INFO message is printed. Report uses `DiffIntvl=[0,0]` (pass-through, same pattern as `activity` view) — rates are pre-computed by the recorder. `report -N` (`--proc-stats`) flag activates procpidstat report; `-d -N` shows describe.
 
 ## PostgreSQL Version Handling
 

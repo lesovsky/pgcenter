@@ -85,7 +85,7 @@ type Config struct {
 
 // NewCollector creates new collector.
 func NewCollector(db *postgres.DB) (*Collector, error) {
-	systicks, err := getSysticksLocal()
+	systicks, err := GetSysticksLocal()
 	if err != nil {
 		return nil, fmt.Errorf("get systicks failed: %w", err)
 	}
@@ -210,7 +210,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 
 	// Per-process system stats enrichment. When the active view requests
 	// per-PID procfs data, replace the 7-column SQL result with the 19-column
-	// joined result produced by buildProcPidResult(). Individual PID errors
+	// joined result produced by BuildProcPidResult(). Individual PID errors
 	// (process exited mid-tick, EACCES on /proc/[pid]/io) are skipped silently.
 	if view.CollectExtra == CollectProcPidStat {
 		// Build cleanup-before-swap: keep in prev only PIDs that are present
@@ -246,11 +246,11 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			if err != nil || pid <= 0 {
 				continue
 			}
-			if st, err := readProcPidStat(pid); err == nil {
+			if st, err := ReadProcPidStat(pid); err == nil {
 				c.currProcPidStats[pid] = st
 			}
 			if view.IOAvailable {
-				if io, err := readProcPidIO(pid); err == nil {
+				if io, err := ReadProcPidIO(pid); err == nil {
 					c.currProcPidIO[pid] = io
 				}
 			}
@@ -260,7 +260,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		// 19-col PGresult flows through calculateDelta() below — with
 		// DiffIntvl=[0,0] (set on the procpidstat view) calculateDelta() acts
 		// as identity, leaving the column count intact.
-		enriched := buildProcPidResult(
+		enriched := BuildProcPidResult(
 			res,
 			c.prevProcPidStats, c.currProcPidStats,
 			c.prevProcPidIO, c.currProcPidIO,
@@ -368,8 +368,10 @@ func readUptimeLocal(procfile string, ticks float64) (float64, error) {
 	return (float64(sec) * ticks) + (float64(csec) * ticks / 100), nil
 }
 
-// getSysticksLocal return local value of ticks returned by 'getconf CLK_TCK' command.
-func getSysticksLocal() (float64, error) {
+// GetSysticksLocal returns local value of ticks returned by 'getconf CLK_TCK'
+// command. Exported so the record package can capture ticks at session start
+// and persist them via SysInfo for the report stage.
+func GetSysticksLocal() (float64, error) {
 	cmdOutput, err := exec.Command("getconf", "CLK_TCK").Output()
 	if err != nil {
 		return 0, err

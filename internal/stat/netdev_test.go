@@ -11,7 +11,7 @@ func Test_readNetdevs(t *testing.T) {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -34,7 +34,7 @@ func Test_readNetdevs(t *testing.T) {
 }
 
 func Test_readNetdevsLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -103,7 +103,7 @@ func Test_readNetdevsRemote(t *testing.T) {
 }
 
 func Test_countNetdevsUsage(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 

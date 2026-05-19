@@ -2,6 +2,7 @@ package report
 
 import (
 	"archive/tar"
+	"encoding/json"
 	"fmt"
 	"github.com/lesovsky/pgcenter/internal/align"
 	"github.com/lesovsky/pgcenter/internal/query"
@@ -92,7 +93,9 @@ func newApp(config Config) *app {
 
 // metadata defines metadata of stats snapshot
 type metadata struct {
-	version int // version reflects Postgres version
+	version  int     // version reflects Postgres version
+	ticks    float64 // CLK_TCK captured at recording time (sourced from sysinfo.* tar entry); informational under Option B
+	cpuCount int     // local CPU count captured at recording time (sourced from sysinfo.* tar entry); informational under Option B
 }
 
 // data defines unit of stats portion transmitted through channel from stats reader to stats processor.
@@ -162,7 +165,8 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 		}
 
 		// Read metadata from file.
-		if strings.HasPrefix(hdr.Name, "meta.") {
+		switch {
+		case strings.HasPrefix(hdr.Name, "meta."):
 			res, err := stat.NewPGresultFile(r, hdr.Size)
 			if err != nil {
 				return err
@@ -173,8 +177,28 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 				return err
 			}
 
+			// Preserve any sysinfo fields already merged into the running
+			// meta (sysinfo entry may have been read before meta in the tar).
+			m.ticks = meta.ticks
+			m.cpuCount = meta.cpuCount
+
 			metaOK, meta = true, m
-		} else {
+		case strings.HasPrefix(hdr.Name, "sysinfo."):
+			// Read sysinfo blob: small JSON with ticks and cpu_count. Merged
+			// into the metadata struct; does not gate the data channel send
+			// (metaOK is set only by the meta.* branch — sysinfo is
+			// supplementary under Option B).
+			buf, err := io.ReadAll(io.LimitReader(r, hdr.Size))
+			if err != nil {
+				return fmt.Errorf("read sysinfo entry %s failed: %w", hdr.Name, err)
+			}
+			var si stat.SysInfo
+			if err := json.Unmarshal(buf, &si); err != nil {
+				return fmt.Errorf("decode sysinfo entry %s failed: %w", hdr.Name, err)
+			}
+			meta.ticks = si.Ticks
+			meta.cpuCount = si.CPUCount
+		default:
 			// Read stats from file.
 			res, err = stat.NewPGresultFile(r, hdr.Size)
 			if err != nil {
@@ -204,6 +228,8 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 	var prevTs time.Time
 	linesPrinted := repeatHeaderAfter // initial value means print header at the beginning of all output
 	orderConfigured := false          // flag tells about order is not configured.
+	warningChecked := false           // one-shot guard for procpidstat IO/iodelay availability warnings
+	anyDataPrinted := false           // tracks whether at least one data row was printed; used to emit no-data INFO for procpidstat
 
 	// waiting for stats, or message about reader is done
 	for {
@@ -231,6 +257,17 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 				v = views[config.ReportType]
 
 				continue
+			}
+
+			// One-shot WARNING check for procpidstat: inspect raw current
+			// result (not the computed diff) for empty IO / iodelay columns.
+			// The "" sentinel is the only signal that the recorder dropped
+			// IO/iodelay readings due to permissions or kernel availability.
+			if !warningChecked && config.ReportType == "procpidstat" {
+				if err := emitProcPidStatAvailabilityWarnings(app.writer, d.res); err != nil {
+					return err
+				}
+				warningChecked = true
 			}
 
 			// Calculate interval and rate.
@@ -277,15 +314,76 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 				return err
 			}
 			linesPrinted += n
+			if n > 0 {
+				anyDataPrinted = true
+			}
 
 			// Swap previous with current
 			prevStat = d.res
 			prevTs = d.ts
 		case <-doneCh:
 			close(dataCh)
+			// When running `report -N` against a tar that contains no
+			// procpidstat entries (older recordings, recorder ran in remote
+			// mode, etc.), emit an INFO line so the user knows the archive
+			// is valid but carries no procpidstat data. linesPrinted cannot
+			// be used here — it is seeded with repeatHeaderAfter (20), not 0.
+			if !anyDataPrinted && config.ReportType == "procpidstat" {
+				if _, err := fmt.Fprint(app.writer, "INFO: no procpidstat data in this archive\n"); err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 	}
+}
+
+// procpidstat column indices for IO and iodelay metrics (see internal/stat/procpidstat.go).
+const (
+	procPidStatColReadTotalKiB  = 9
+	procPidStatColWriteTotalKiB = 10
+	procPidStatColIODelayTotalS = 11
+)
+
+// emitProcPidStatAvailabilityWarnings inspects the first procpidstat result
+// for empty IO / iodelay columns and writes a WARNING line per affected
+// column group. A column is considered "unavailable" when every row's value
+// at the given index is an empty string with Valid=true — the sentinel the
+// recorder stores when /proc/<pid>/io is unreadable or delayacct is off.
+// Empty results (Nrows == 0) emit no warnings. Called at most once per
+// report run.
+func emitProcPidStatAvailabilityWarnings(w io.Writer, res stat.PGresult) error {
+	if res.Nrows == 0 {
+		return nil
+	}
+	if res.Ncols <= procPidStatColIODelayTotalS {
+		return nil
+	}
+
+	allEmpty := func(col int) bool {
+		for _, row := range res.Values {
+			if col >= len(row) {
+				return false
+			}
+			cell := row[col]
+			if !cell.Valid || cell.String != "" {
+				return false
+			}
+		}
+		return true
+	}
+
+	if allEmpty(procPidStatColReadTotalKiB) || allEmpty(procPidStatColWriteTotalKiB) {
+		if _, err := fmt.Fprint(w, "WARNING: IO stats unavailable in recorded data\n"); err != nil {
+			return err
+		}
+	}
+	if allEmpty(procPidStatColIODelayTotalS) {
+		if _, err := fmt.Fprint(w, "WARNING: iodelay stats unavailable in recorded data\n"); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // readMeta creates metadata object from stat.PGresult.
@@ -315,7 +413,9 @@ func isFilenameOK(name string, report string) error {
 	}
 
 	// Check the filename corresponds to user-requested report or metadata.
-	if s[0] != report && s[0] != "meta" {
+	// "sysinfo" is treated as supplementary metadata under Option B and is
+	// merged into the metadata struct alongside the meta.* version.
+	if s[0] != report && s[0] != "meta" && s[0] != "sysinfo" {
 		return fmt.Errorf("skip sample")
 	}
 
@@ -525,6 +625,7 @@ func describeReport(w io.Writer, report string) error {
 		"statements_local":    pgStatStatementsLocalDescription,
 		"statements_temp":     pgStatStatementsTempDescription,
 		"statements_wal":      pgStatStatementsWalDescription,
+		"procpidstat":         procPidStatDescription,
 	}
 
 	if description, ok := m[report]; ok {

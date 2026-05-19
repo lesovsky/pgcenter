@@ -1,0 +1,109 @@
+{
+  "status": "passed",
+  "environment": {
+    "status": "healthy",
+    "rebuildAttempts": 1,
+    "services": [
+      "local PostgreSQL 17.7 on /var/run/postgresql:5432 — accepts connections (db.Local=true path)",
+      "test container PostgreSQL on 127.0.0.1:21917 — accepts connections (not used for AC verification — local mode required for procpidstat)"
+    ],
+    "fixCommits": [
+      "fix: address golangci-lint warnings introduced in tasks 02/03 (record/record.go S1033, report/report.go gocritic ifElseChain)"
+    ]
+  },
+  "summary": {
+    "totalChecks": 11,
+    "passed": 10,
+    "failed": 0,
+    "notVerifiable": 1,
+    "criticals": 0,
+    "majors": 0,
+    "minors": 0
+  },
+  "testSuite": {
+    "status": "passed",
+    "details": "make test — all packages green (race detector, p=1, 300s timeout). Total coverage 65.0%. Key packages: record 69.4%, report 82.2%, internal/stat 86.0%, internal/view 95.8%, cmd/report 94.0%."
+  },
+  "acceptanceCriteria": [
+    {
+      "criterion": "AC1: make build succeeds — ./bin/pgcenter binary produced",
+      "status": "passed",
+      "evidence": "make build → exit 0; ./bin/pgcenter exists (18MB, freshly rebuilt with feature commits)."
+    },
+    {
+      "criterion": "AC2: make test passes — all tests green, no new failures",
+      "status": "passed",
+      "evidence": "make test → exit 0; all packages PASS (record, report, internal/stat, internal/view, cmd/report, etc.); total coverage 65.0%."
+    },
+    {
+      "criterion": "AC3: make lint passes — no new warnings",
+      "status": "passed",
+      "evidence": "make lint → exit 0 after fixing two warnings introduced in tasks 02 (S1033 unnecessary guard around delete) and 03 (gocritic ifElseChain). Baseline master = 0 warnings; feature branch now also = 0 warnings."
+    },
+    {
+      "criterion": "AC4: pgcenter record -c 3 -i 1s -f /tmp/test.tar creates the tar file without errors",
+      "status": "passed",
+      "evidence": "./bin/pgcenter record -U postgres -d postgres -c 3 -i 1s -f /tmp/test.tar → exit 0; /tmp/test.tar created (12MB). tar -tf shows 3 procpidstat.* + 3 sysinfo.* entries (one per tick)."
+    },
+    {
+      "criterion": "AC5: pgcenter report -N -f /tmp/test.tar outputs ≥1 data row with timestamp and numeric %all values",
+      "status": "passed",
+      "evidence": "Output contains 'INFO: report procpidstat', 'WARNING: IO stats unavailable in recorded data', column header, two timestamp lines '2026/05/19 20:02:02, rate: 1s' and '2026/05/19 20:02:03, rate: 990ms', each followed by a data row (pid=33369, query='SELECT pg_sleep(10);', %all=0.00). First snapshot is dropped per rate-calculation contract (Decision 6 — first tick has no prev to diff)."
+    },
+    {
+      "criterion": "AC6: pgcenter report -d -N shows the procpidstat describe text",
+      "status": "passed",
+      "evidence": "./bin/pgcenter report -d -N → 'Per-process system stats: CPU utilization, IO activity, and IO delay per PostgreSQL backend. Local mode only.' (matches Decision 7 wording from tech-spec / Task 03 procPidStatDescription constant)."
+    },
+    {
+      "criterion": "AC7: pgcenter report -A -f /tmp/test.tar produces the activity report unchanged (backward compat)",
+      "status": "passed",
+      "evidence": "Output contains 'INFO: report activity' + standard activity column header (pid, cl_addr, cl_port, datname, usename, appname, backend_type, ...) + 2 timestamp blocks with multiple backends rendered correctly. No errors, exit 0."
+    },
+    {
+      "criterion": "AC8: pgcenter report -N -f report/testdata/pgcenter.stat.golden.tar outputs 'no procpidstat data', exits 0, no panic",
+      "status": "passed",
+      "evidence": "Output: 'INFO: reading from report/testdata/pgcenter.stat.golden.tar / INFO: report procpidstat / INFO: start from: ... / INFO: no procpidstat data in this archive'. exit 0. Golden tar (Dec 2024) confirmed to contain 0 procpidstat entries — the no-data INFO branch in processData fires correctly."
+    },
+    {
+      "criterion": "AC9: pgcenter report -N -f /tmp/test.tar -o '%all' rows within each snapshot are sorted by %all descending",
+      "status": "passed",
+      "evidence": "Recorded with 2 CPU-heavy backends (generate_series, %all≈8.3) + 1 idle pg_sleep backend (%all=0.00). Each snapshot block shows: row1 (%all=8.33), row2 (%all=8.33), row3 (%all=0.00) — descending order maintained across 3 snapshots."
+    },
+    {
+      "criterion": "AC10: pgcenter report -N -f /tmp/test.tar -l 2 outputs at most 2 rows per snapshot",
+      "status": "passed",
+      "evidence": "Same tar (3 backends total), -l 2 → each of the 3 snapshot blocks contains exactly 2 data rows (6 data rows total). No block exceeds 2 rows."
+    },
+    {
+      "criterion": "AC11: TUI regression — pgcenter top → Shift+S opens per-process screen with 19 columns, no panic",
+      "status": "not_verifiable",
+      "evidence": "Cannot launch interactive TUI from this QA shell ('create UI failed: open /dev/tty: no such device or address'). Indirect verification: 19 unit tests in internal/stat (TestBuildProcPidResult_*, TestFormatProcPidResultForDisplay_*, TestBuildProcPidResult_NcolsGuarantee with 6 sub-cases that explicitly assert 19 columns) all PASS. The MVC split in Task 01 preserved the public buildProcPidResult signature used by top.Collector.Update — covered by integration-level static guarantees. Interactive Shift+S verification must be performed by the user."
+    }
+  ],
+  "findings": [],
+  "deferredToPostDeploy": [
+    {
+      "criterion": "AC11: TUI Shift+S manual verification",
+      "reason": "Requires interactive TTY which is not available in QA agent shell",
+      "verificationCondition": "User runs ./bin/pgcenter top connected to local PostgreSQL and presses Shift+S",
+      "verificationSteps": "1. ./bin/pgcenter top -U postgres -d postgres  2. Press Shift+S  3. Verify per-process screen opens, shows 19 columns (pid, datname, usename, state, wait_etype, wait_event, all_total,s, us_total,s, sy_total,s, read_total,KiB, write_total,KiB, iodelay_total,s, %all, %us, %sy, read,KiB/s, write,KiB/s, %iodelay, query), no panic, screen refreshes once per second."
+    }
+  ],
+  "coverageVerification": {
+    "filesInScope": [
+      "internal/stat/procpidstat.go — covered by TestBuildProcPidResult_*, TestFormatProcPidResultForDisplay_*, TestBuildProcPidResultRaw_*, TestSysInfo_* (19+ unit tests, 86.0% pkg coverage)",
+      "record/recorder.go — covered by Test_tarRecorder_*, TestTarRecorder_WriteSysinfo (record pkg 69.4%)",
+      "record/record.go — covered by Test_app_record, Test_app_setup, Test_filterViews, TestFilterViews_Recordable, TestFilterViews_NotRecordable, TestFilterViews_dropsExplicitNotRecordable",
+      "report/report.go — covered by Test_readTar, Test_isFilenameOK_sysinfo, Test_readMeta_with_sysinfo, Test_processData_no_procpidstat_data, Test_emitProcPidStatAvailabilityWarnings, Test_app_doReport_procpidstat (report pkg 82.2%)",
+      "cmd/report/report.go — covered by cmd/report tests (94.0% pkg coverage)",
+      "internal/view/view.go — NotRecordable change covered by internal/view tests (95.8% pkg coverage)"
+    ],
+    "edgeCasesCovered": [
+      "No-data path (AC8) — Test_processData_no_procpidstat_data + live golden tar verification",
+      "Sysinfo before meta (out-of-order) — Test_readMeta_with_sysinfo (two-tick fixture)",
+      "IO unavailable warning emission — Test_emitProcPidStatAvailabilityWarnings (6 sub-cases)",
+      "First-tick rate skip — preserved by !prevStat.Valid → continue in processData; first snapshot dropped in live E2E"
+    ]
+  }
+}

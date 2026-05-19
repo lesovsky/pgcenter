@@ -25,6 +25,7 @@ type options struct {
 	showWAL         bool   // Show stats from pg_stat_wal
 	showStatements  string // Show stats from pg_stat_statements
 	showProgress    string // Show stats from pg_stat_progress_* stats
+	showProcPidStat bool   // Show per-process system stats (procpidstat)
 
 	inputFile      string // Input file with statistics
 	tsStart, tsEnd string // Show stats within an interval
@@ -67,6 +68,7 @@ func init() {
 	CommandDefinition.Flags().StringVarP(&opts.showDatabases, "databases", "D", "", "show pg_stat_database report")
 	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
 	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
+	CommandDefinition.Flags().BoolVarP(&opts.showProcPidStat, "proc-stats", "N", false, "show per-process system stats report")
 
 	CommandDefinition.Flags().StringVarP(&opts.inputFile, "file", "f", "pgcenter.stat.tar", "read stats from file")
 	CommandDefinition.Flags().StringVarP(&opts.tsStart, "start", "s", "", "starting time of the report")
@@ -142,6 +144,8 @@ func selectReport(opts options) string {
 		return "functions"
 	case opts.showWAL:
 		return "wal"
+	case opts.showProcPidStat:
+		return "procpidstat"
 	case opts.showSizes:
 		return "sizes"
 	case opts.showStatements != "":

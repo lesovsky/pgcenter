@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -92,6 +93,54 @@ func Test_tarRecorder_write(t *testing.T) {
 	assert.Equal(t, stats, map[string]stat.PGresult{"pgcenter_record_testing": got}) // compare unmarshalled with origin
 
 	// Cleanup.
+	assert.NoError(t, os.Remove(filename))
+}
+
+// TestTarRecorder_WriteSysinfo verifies write() emits a sysinfo.TIMESTAMP.json
+// entry containing the recorder's ticks/cpuCount. The entry is the data the
+// report-side pipeline relies on to populate metadata.{ticks,cpuCount}.
+func TestTarRecorder_WriteSysinfo(t *testing.T) {
+	filename := "/tmp/pgcenter-record-testing-sysinfo.stat.tar"
+
+	tc := newTarRecorder(tarConfig{filename: filename, append: false, ticks: 100, cpuCount: 4})
+	assert.NoError(t, tc.open())
+	assert.NoError(t, tc.write(map[string]stat.PGresult{}))
+	assert.NoError(t, tc.close())
+
+	f, err := os.Open(filepath.Clean(filename))
+	assert.NoError(t, err)
+	defer func() { _ = f.Close() }()
+
+	tr := tar.NewReader(f)
+
+	var (
+		sysinfoCount int
+		sysinfoBody  []byte
+		sysinfoName  string
+	)
+	re := regexp.MustCompile(`^sysinfo\.\d{8}T\d{6}\.\d{3}\.json$`)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		assert.NoError(t, err)
+		if re.MatchString(hdr.Name) {
+			sysinfoCount++
+			sysinfoName = hdr.Name
+			sysinfoBody = make([]byte, hdr.Size)
+			_, err = io.ReadFull(tr, sysinfoBody)
+			assert.NoError(t, err)
+		}
+	}
+
+	assert.Equal(t, 1, sysinfoCount, "expected exactly one sysinfo entry, got %d (last name: %q)", sysinfoCount, sysinfoName)
+
+	var got stat.SysInfo
+	assert.NoError(t, json.Unmarshal(sysinfoBody, &got))
+	assert.Equal(t, float64(100), got.Ticks)
+	assert.Equal(t, 4, got.CPUCount)
+
 	assert.NoError(t, os.Remove(filename))
 }
 

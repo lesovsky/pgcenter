@@ -99,7 +99,7 @@ func TestCollector_collectNetdevs(t *testing.T) {
 }
 
 func Test_readUptimeLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
 
@@ -111,10 +111,11 @@ func Test_readUptimeLocal(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func Test_getSysticksLocal(t *testing.T) {
-	ticks, err := getSysticksLocal()
+func TestGetSysticksLocal(t *testing.T) {
+	ticks, err := GetSysticksLocal()
 	assert.NoError(t, err)
 	assert.NotEqual(t, float64(0), ticks)
+	assert.Greater(t, ticks, float64(0))
 }
 
 func Test_sValue(t *testing.T) {

@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "MVC split is implemented cleanly: BuildProcPidResult is now a thin composition over buildProcPidResultRaw + formatProcPidResultForDisplay, sentinel contracts ('0' for invalid-PID CPU, '' for unavailable IO/iodelay) are preserved bit-for-bit, and all internal call sites are migrated to the new exported names. Cross-file consistency is intact (build clean, vet clean, full internal/stat suite green). Minor suggestions on function length and helper placement.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/procpidstat.go",
+      "line": 271,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "buildProcPidResultRaw is ~140 lines (same body as the pre-split function). Consider, in a follow-up refactor outside Task 01 scope, factoring the per-row inner loop into a helper (e.g. buildProcPidResultRowRaw) — the function is well-commented but exceeds the 100-line heuristic. Not in scope for this task because it would change observable behaviour risk surface; preserving the existing body verbatim is the safer split.",
+      "benefit": "Lower cognitive load; easier to add new columns in future without expanding the loop body further.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat.go",
+      "line": 463,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "formatJiffiesCell, formatBytesCell, formatIODelayCell silently pass through cells that fail strconv.ParseFloat. The comments document this as 'avoid silently corrupting unexpected upstream values', which is correct intent for sentinel-aware code. Consider adding a package-level invariant note: 'cells in cols 6-11 of a raw PGresult are either the documented sentinel or a valid strconv-parseable float; any other value is a bug'. This makes the silent-passthrough policy auditable.",
+      "benefit": "Future maintainers will not be tempted to 'fix' the silent passthrough by adding a panic or log.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/procpidstat_test.go",
+      "line": 532,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "TestBuildProcPidResultRaw asserts 'no \":\" separator' in cols 6-8/11 — good signal. Add a positive assertion that the float values round-trip correctly through ParseFloat back to the source jiffies (Utime+Stime=150, Utime=100, Stime=50). This catches a future regression where the raw stage starts emitting e.g. '1.5e+02' that satisfies 'no colon' but breaks the format stage.",
+      "benefit": "Stronger contract on the raw stage output shape; cheaper than a separate integration test.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  }
+}
