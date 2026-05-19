@@ -16,7 +16,11 @@
       "completed_at": null,
       "duration_min": null
     },
-    "tech_spec": null,
+    "tech_spec": {
+      "started_at": "2026-05-19 18:30:00",
+      "completed_at": null,
+      "duration_min": null
+    },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null

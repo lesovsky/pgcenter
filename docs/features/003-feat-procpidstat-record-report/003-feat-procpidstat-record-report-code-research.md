@@ -295,6 +295,333 @@ No new external libraries required.
 
 ---
 
+---
+
+## Updated: 2026-05-19 — Implementation-Level Deepening
+
+### IQ1 — postgres.DB struct; how db.Local is accessed in record/record.go
+
+`/home/lesovsky/Git/github.com/lesovsky/pgcenter/internal/postgres/postgres.go` defines:
+
+```go
+type Config struct {
+    Config *pgx.ConnConfig
+}
+
+type DB struct {
+    Config Config
+    Conn   *pgx.Conn
+    Local  bool // is Postgres running on localhost?
+}
+```
+
+`Local` is set in `Connect()` at line 101: `Local: isLocalhost(config.Config.Host)`.
+
+In `record/record.go:setup()`, `postgres.Connect(app.dbConfig)` is called and the returned `*postgres.DB` is used **only** inside `setup()` for `stat.GetPostgresProperties(db)` and then immediately `defer db.Close()`-d. The `db` variable is local to `setup()`; it is **never stored in `app`** and never passed to `tarRecorder`. The `app` struct only stores `dbConfig postgres.Config` (the connection config, not the live connection).
+
+`tarRecorder.collect()` receives `dbConfig postgres.Config` (the config value, not a `*DB`). It calls `postgres.Connect(dbConfig)` internally to open a fresh connection per tick, but does **not** access `db.Local`.
+
+**Consequence for procpidstat recording**: The recorder has no access to `db.Local` at collect time. To gate procfs enrichment on "is local?", the recorder must either:
+- Check `db.Local` from the freshly opened connection inside `collect()` — it calls `postgres.Connect(dbConfig)` and gets back a `*postgres.DB` whose `.Local` field is already set, so `db.Local` is directly readable there.
+- Or store `isLocal bool` as a field of `tarRecorder`, populated once during `app.setup()` before `db.Close()`.
+
+The second approach (store once at setup) is cleaner and avoids a per-tick check. `app.setup()` already has a live `db *postgres.DB` with `Local` populated — it can pass `db.Local` into `tarRecorder` fields via `newTarRecorder(tarConfig{..., local: db.Local})`.
+
+---
+
+### IQ2 — recorder.go collect(): exact operation sequence and procpidstat insertion point
+
+Full body of `tarRecorder.collect()` (`record/recorder.go` lines 95–124):
+
+```
+1. postgres.Connect(dbConfig)  → *postgres.DB (defer Close)
+2. stat.NewPGresultQuery(db, query.SelectCommonProperties)  → stats["meta"]
+3. for k, v := range views {
+       stat.NewPGresultQuery(db, v.Query)  → stats[k]
+   }
+4. return stats, nil
+```
+
+The map iteration order is non-deterministic. There is no ordering requirement between views.
+
+**Insertion point for procpidstat enrichment**: After step 3, but gated on `k == "procpidstat"`:
+
+```go
+for k, v := range views {
+    res, err := stat.NewPGresultQuery(db, v.Query)
+    if err != nil {
+        return nil, err
+    }
+    // Procpidstat special handling: enrich the 7-col SQL result with procfs data.
+    if k == "procpidstat" && c.isLocal {
+        // rotate maps
+        // collect procfs per PID
+        // enriched := buildProcPidResult(res, c.prev*, c.curr*, ...)
+        // stats[k] = enriched
+    } else {
+        stats[k] = res
+    }
+}
+```
+
+The `tarRecorder` struct must gain fields: `isLocal bool`, `ticks float64`, `cpuCount int`, `ioAvailable bool`, `delayAcctAvailable bool`, `prevProcPidStats map[int]ProcPidStat`, `currProcPidStats map[int]ProcPidStat`, `prevProcPidIO map[int]ProcPidIO`, `currProcPidIO map[int]ProcPidIO`.
+
+These fields survive between `collect()` calls because `tarRecorder` is a single struct reused across the record loop (only `file` and `writer` are recreated per `open()`/`close()`).
+
+---
+
+### IQ3 — getSysticksLocal() signature; runtime.NumCPU() location; Collector.Update() procpidstat block
+
+**getSysticksLocal** (`internal/stat/stat.go` lines 372–384):
+```go
+func getSysticksLocal() (float64, error)
+```
+Executes `getconf CLK_TCK`, parses as float64, returns it. Unexported. Called only from `NewCollector()`. The recorder must call it once in `newTarRecorder()` or in `app.setup()` before the recorder is created.
+
+**runtime.NumCPU()** is used in `internal/stat/stat.go` at line 271, inside `Collector.Update()`:
+```go
+enriched := buildProcPidResult(
+    res,
+    c.prevProcPidStats, c.currProcPidStats,
+    c.prevProcPidIO, c.currProcPidIO,
+    view.IOAvailable,
+    view.DelayAcctAvailable,
+    c.config.ticks,
+    float64(itv),
+    runtime.NumCPU(),   // ← line 271
+)
+```
+The `runtime` package is already imported in `stat.go`. The recorder will need the same call.
+
+**Collector.Update() procpidstat enrichment block** (`internal/stat/stat.go` lines 215–275): exact sequence:
+
+```
+1. if view.CollectExtra == CollectProcPidStat {
+2.   Build newPrevStats, newPrevIO by iterating res.Values:
+       for each row: parse pid from row[0]; if currProcPidStats[pid] exists → newPrevStats[pid]=it
+3.   c.prevProcPidStats = newPrevStats; c.prevProcPidIO = newPrevIO
+4.   c.currProcPidStats = make(map[int]ProcPidStat{}); c.currProcPidIO = make(map[int]ProcPidIO{})
+5.   for each row in res.Values: parse pid; readProcPidStat(pid) → c.currProcPidStats[pid]
+       if view.IOAvailable: readProcPidIO(pid) → c.currProcPidIO[pid]
+6.   enriched := buildProcPidResult(res, c.prevProcPidStats, c.currProcPidStats, c.prevProcPidIO, c.currProcPidIO,
+         view.IOAvailable, view.DelayAcctAvailable, c.config.ticks, float64(itv), runtime.NumCPU())
+7.   s.Pgstat.Result = enriched; res = enriched
+```
+
+The recorder's `collect()` should mirror this exact pattern (steps 2–7) using `tarRecorder` fields instead of `Collector` fields.
+
+---
+
+### IQ4 — report/report.go readTar(): gating logic and sysinfo insertion point
+
+**isFilenameOK** (`report/report.go` lines 309–323):
+```go
+func isFilenameOK(name string, report string) error {
+    s := strings.Split(name, ".")
+    if len(s) != 4 {
+        return fmt.Errorf("bad file name format %s, skip", name)
+    }
+    if s[0] != report && s[0] != "meta" {
+        return fmt.Errorf("skip sample")
+    }
+    return nil
+}
+```
+
+A `sysinfo.20260519T120000.000.json` entry has `len(s)==4` and `s[0]=="sysinfo"`. It passes the length check but fails the `s[0] != report && s[0] != "meta"` check → **skipped silently**.
+
+**readTar gating** (`report/report.go` lines 137–198):
+```go
+var metaOK, statOK bool
+...
+if strings.HasPrefix(hdr.Name, "meta.") {
+    // reads meta, sets metaOK=true
+} else {
+    // reads stat, sets statOK=true
+}
+if !metaOK || !statOK { continue }
+dataCh <- data{ts, res, meta}
+metaOK, statOK = false, false
+```
+
+**Insertion point for sysinfo**: Two options:
+- Option B-simple: treat `sysinfo.*` as an extension of `meta.*` — when `strings.HasPrefix(hdr.Name, "sysinfo.")` is detected, decode the JSON into a `SysInfo` struct and merge its fields into the current `metadata` value. This requires no change to the `data` channel struct or the `metaOK`/`statOK` pairing logic. The `metadata` struct gains `ticks float64` and `cpuCount int` fields.
+- Option B-alt: add a third flag `sysinfoOK` and require all three before sending. More robust but changes the pairing invariant.
+
+Option B-simple is lower risk. The `isFilenameOK` function must be extended to also accept `"sysinfo"` as a valid prefix (alongside `"meta"`).
+
+---
+
+### IQ5 — view.go Configure(): procpidstat special cases
+
+`Configure()` (`internal/view/view.go` lines 303–339) uses a `switch k` over view names. There is **no `case "procpidstat":` branch**. The procpidstat view falls through to the default `query.Format(view.QueryTmpl, opts)` call.
+
+`query.PgStatActivityProcPidStat` is the query template. Calling `query.Format` on it with a `query.Options` that has `QueryAgeThresh` and `ShowNoIdle` fields works correctly (the template uses both). No version branching is needed for procpidstat.
+
+`Configure()` also has no special handling for `IOAvailable` or `DelayAcctAvailable` — those flags are set interactively by the TUI (`top/config_view.go:switchViewToProcPidStat`). In the recorder context, these flags must be set on the view **before** `views.Configure()` is called, or separately after. The recorder's `app.setup()` currently does not set them.
+
+**Full procpidstat view definition** (lines 285–296 of `internal/view/view.go`):
+```go
+"procpidstat": {
+    Name:          "procpidstat",
+    QueryTmpl:     query.PgStatActivityProcPidStat,
+    DiffIntvl:     [2]int{0, 0},
+    Ncols:         19,
+    OrderKey:      0,
+    OrderDesc:     false,
+    ColsWidth:     map[int]int{},
+    Msg:           "Show per-process system stats",
+    Filters:       map[int]*regexp.Regexp{},
+    NotRecordable: true,
+},
+```
+`CollectExtra`, `IOAvailable`, `DelayAcctAvailable`, `ShowExtra` all have zero/false values in `New()`. They are set dynamically by the TUI.
+
+---
+
+### IQ6 — record/record_test.go: test bodies and table structure
+
+**TestFilterViews_NotRecordable** (lines 125–146):
+```go
+func TestFilterViews_NotRecordable(t *testing.T) {
+    views := view.Views{
+        "procpidstat": {Name: "procpidstat", NotRecordable: true},
+    }
+    n, v := filterViews(0, "", views)
+    assert.Equal(t, 1, n)
+    assert.Equal(t, 0, len(v))
+    assert.NotContains(t, v, "procpidstat")
+
+    all := view.New()
+    pp, ok := all["procpidstat"]
+    assert.True(t, ok)
+    assert.True(t, pp.NotRecordable)
+    assert.Equal(t, 19, pp.Ncols)
+}
+```
+
+When `NotRecordable` is changed to `false`, this test must be updated: the `filterViews` call on a single `NotRecordable:true` view is a unit test for the filter, so the input view definition and expected values must change together. The sanity-check assertions at the bottom (`pp.NotRecordable == true`) will also fail.
+
+**Test_filterViews table** (lines 100–123):
+```go
+testcases := []struct {
+    version    int
+    pgssSchema string
+    wantN      int
+    wantV      int
+}{
+    {version: 140000, pgssSchema: "",       wantN: 7, wantV: 15},
+    {version: 140000, pgssSchema: "public", wantN: 1, wantV: 21},
+    {version: 130000, pgssSchema: "public", wantN: 4, wantV: 18},
+    {version: 120000, pgssSchema: "public", wantN: 7, wantV: 15},
+    {version: 110000, pgssSchema: "public", wantN: 9, wantV: 13},
+    {version: 100000, pgssSchema: "public", wantN: 9, wantV: 13},
+}
+```
+Comments in the file state: "procpidstat (NotRecordable) is always filtered out, so wantN includes +1 for it and wantV stays at 21 max recordable." When `NotRecordable` becomes `false`, each `wantN` decreases by 1 and each `wantV` increases by 1.
+
+**Test_app_record** (lines 32–98): uses `countRecordable(view.New()) + 1` (stats + metadata). `countRecordable` (lines 163–173) counts views with `!v.NotRecordable`. When procpidstat becomes recordable, `countRecordable` automatically returns one more — no direct change needed in this test body.
+
+---
+
+### IQ7 — SysInfo-like struct
+
+No `SysInfo` struct exists anywhere in the codebase (`grep -rn "SysInfo\|sysinfo\|Sysinfo"` returns zero results in production code). It must be defined from scratch. Minimum definition:
+
+```go
+// SysInfo holds host-level parameters needed to interpret procpidstat rate columns.
+type SysInfo struct {
+    Ticks    float64 `json:"ticks"`
+    CPUCount int     `json:"cpu_count"`
+}
+```
+
+This can live in `record/recorder.go` (write side) and `report/report.go` (read side), or in `internal/stat/` if shared. Given it is a serialization-only struct, placing it in `record/` and `report/` separately (or a shared `internal/stat/sysinfo.go`) is equally valid. No existing code needs to be changed to accommodate it.
+
+---
+
+### IQ8 — report/report.go: metadata struct and readMeta() full body
+
+**metadata struct** (lines 94–96):
+```go
+type metadata struct {
+    version int
+}
+```
+Single unexported field. The `data` channel struct (lines 99–103):
+```go
+type data struct {
+    ts   time.Time
+    res  stat.PGresult
+    meta metadata
+}
+```
+
+**readMeta() full body** (lines 295–306):
+```go
+func readMeta(res stat.PGresult) (metadata, error) {
+    if res.Nrows != 1 || res.Ncols < 2 {
+        return metadata{}, fmt.Errorf("invalid result")
+    }
+    version, err := strconv.ParseInt(res.Values[0][1].String, 10, 64)
+    if err != nil {
+        return metadata{}, err
+    }
+    return metadata{version: int(version)}, nil
+}
+```
+
+Reads column index 1 (`version_num`) only. Accepts `Ncols >= 2` (tolerates both 7-col and 8-col meta). Is completely decoupled from sysinfo — adding `ticks` and `cpuCount` to `metadata` and populating them from a separate `sysinfo.*` tar entry will not touch `readMeta()`.
+
+---
+
+### IQ9 — CheckIOAvailable and CheckDelayAcctAvailable exact signatures
+
+From `internal/stat/procpidstat.go` lines 171–198:
+
+```go
+func CheckIOAvailable(pid int) error
+```
+Opens `/proc/<pid>/io`. Returns `nil` on success, OS error (typically `EACCES`) on failure. The caller supplies a PID of a different-user process (a PostgreSQL backend). Returns error if that file is not readable by the current user.
+
+```go
+func CheckDelayAcctAvailable() bool
+```
+Opens `/proc/sys/kernel/task_delayacct`, reads up to 4 bytes, returns `true` iff content trims to `"1"`. Returns `false` if file is absent or contains `"0"`. No error return — failures are silently mapped to `false`.
+
+Both are exported (uppercase first letter). Both live in `internal/stat/procpidstat.go`.
+
+**How they are called in the TUI** (`top/config_view.go:switchViewToProcPidStat`, not shown here): the TUI calls `CheckIOAvailable(somePid)` and `CheckDelayAcctAvailable()` and stores results in `view.IOAvailable` and `view.DelayAcctAvailable`. The recorder must do the same before running `buildProcPidResult`. The PID to probe for `CheckIOAvailable` can be the first PID from the initial `pg_stat_activity` result.
+
+---
+
+### IQ10 — recorder app struct; db.Local accessibility from tarRecorder
+
+`record/record.go` `app` struct (lines 46–51):
+```go
+type app struct {
+    config   Config
+    dbConfig postgres.Config
+    views    view.Views
+    recorder recorder
+}
+```
+
+The `recorder` interface is `open/collect/write/close`. `tarRecorder` implements it. `app` holds the `recorder` as an interface value — `app` does not expose `tarRecorder` fields directly.
+
+`db.Local` is **not accessible from `tarRecorder`** at `collect()` time via the `app` struct. The `tarRecorder` receives only `(dbConfig postgres.Config, views view.Views)` in `collect()`.
+
+**Access path at collect time**: Inside `tarRecorder.collect()`, a fresh `*postgres.DB` is created via `postgres.Connect(dbConfig)`. That `db.Local` field is already correctly set (it calls `isLocalhost` on `dbConfig.Config.Host`). So `c.isLocal := db.Local` can be captured right there — but it's redundant to check every tick.
+
+**Recommended approach**: Capture `db.Local` once in `app.setup()` before `defer db.Close()`, pass it into `newTarRecorder` via `tarConfig`. This requires:
+1. Adding `isLocal bool` to `tarConfig`.
+2. Setting `app.recorder = newTarRecorder(tarConfig{filename: ..., append: ..., isLocal: db.Local})`.
+3. Adding `isLocal bool` to `tarRecorder` struct, set from `tarConfig` in `newTarRecorder`.
+
+If `isLocal` is false (remote Postgres), procfs enrichment is skipped in `collect()` and `stats["procpidstat"]` gets the raw 7-col SQL result. This matches the TUI behavior where procpidstat is disabled for remote connections.
+
+---
+
 ## Answers to Research Questions
 
 **Q1: Exact column layout of buildProcPidResult output?**
