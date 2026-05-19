@@ -23,14 +23,14 @@
     },
     "task_decomposition": {
       "started_at": "2026-05-19 19:50:00",
-      "completed_at": null,
-      "duration_min": null
+      "completed_at": "2026-05-19 21:00:00",
+      "duration_min": 70
     },
     "feature_execution": null,
     "done": null
   },
   "quality": {
-    "validation_rounds": { "tech_spec": 2 },
+    "validation_rounds": { "tech_spec": 2, "task_decomposition": 3 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
@@ -38,9 +38,9 @@
   },
   "volume": {
     "interview_questions": 0,
-    "tasks_count": 0,
-    "waves_count": 0,
-    "agents_spawned": 0,
+    "tasks_count": 5,
+    "waves_count": 4,
+    "agents_spawned": 5,
     "commits_count": 0
   }
 }
