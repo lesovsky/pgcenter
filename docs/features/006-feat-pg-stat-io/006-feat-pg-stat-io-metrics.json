@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "006",
+    "feature_name": "pg-stat-io",
+    "feature_base": "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "claude-opus-4-8[1m]",
+    "date_started": "2026-06-21",
+    "date_completed": ""
+  },
+  "phases": {
+    "user_spec": { "start_time": "2026-06-21T11:31:14Z", "human_wait_time_min": 0, "steps": {} },
+    "tech_spec": null,
+    "task_decomposition": null,
+    "feature_execution": null,
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": {},
+    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_rounds": {},
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 5,
+    "tasks_count": 0,
+    "waves_count": 0,
+    "agents_spawned": 0,
+    "commits_count": 0
+  }
+}
