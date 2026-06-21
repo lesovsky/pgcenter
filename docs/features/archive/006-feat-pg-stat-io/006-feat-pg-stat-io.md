@@ -239,6 +239,28 @@ PG 18 — реальный гейт нативных `*_bytes` и строк `ob
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-06-21
+
+### Divergences from original spec
+
+- **io_key visibility:** original spec assumed the synthetic row-matching key could be a hidden
+  service column → it is **displayed** as the first column (like `pg_stat_statements`' `queryid`).
+  Reason: pgcenter has no column-hide mechanism — `internal/align.SetAlign` floors every column at
+  width 8 and `ColsWidth` is a runtime cache, not a preset. Discovered during tech-spec code
+  verification; the spec body was updated before implementation.
+- **track_io_timing hint:** AC8 described "when all timing columns are zero, show a hint"; implemented
+  (Decision 9) as a **static cmdline `Msg`** on the time view ("requires track_io_timing=on"), shown
+  on switch rather than computed by scanning each sample. Same user intent, simpler.
+- **Column order:** count-screen columns were reordered during validation so lower-priority
+  `writebacks`/`reuses`/`fsyncs` trail `hits`/`evictions` (priority-based clipping on narrow terminals).
+
+### Added during implementation
+
+- Nothing beyond the spec. `PostgresV15/16/17/18` constants and the test files are enabling code.
+- A CI-only regression fix: adding two `NotRecordable` views required updating `record`'s
+  `Test_filterViews` expected counts (caught by CI, not the sandbox). Lesson recorded in `patterns.md`.
+
+### Descoped / Deferred
+
+- record/report support — deliberately a separate 0.11.0 feature (TUI-first), not a regression.
+- Behavioral `diff()` NULL-safety test — logged as tech-debt [007] (import-cycle constraint).

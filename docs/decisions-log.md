@@ -343,3 +343,51 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** The defensive skip removes a fragile ordering dependency between the manual image push and the code merge. `test_decoding` ships in the PGDG `postgresql-NN` packages, so no extra package is needed. Verified live: tier-1/2 pass on `replica`, tier-3 passes on `logical` across PG 14–18.
 
 **Alternatives considered:** Hard ordering (push image, then merge code that assumes `wal_level=logical`) — rejected: any gap leaves CI red on transient infra state.
+
+---
+
+## [006-feat-pg-stat-io] Split one wide stats view into two registered sub-views
+
+**Date:** 2026-06-21
+**Feature:** 006-feat-pg-stat-io
+**Status:** Accepted
+
+**Context:** `pg_stat_io` has ~20 counters. pgcenter has no horizontal column scroll — columns past the terminal width are silently cut. The same constraint is why `pg_stat_statements` is split into sub-screens.
+
+**Decision:** Register two views, `stat_io` (count: operations + KiB) and `stat_io_time` (timings), navigated by a lowercase toggle (`j` → `statioNextView`) plus an uppercase menu (`J` → `menuStatIO`), mirroring the `databases`/`pgss` lowercase-switch / uppercase-menu idiom.
+
+**Rationale:** Keeps each screen readable within a normal terminal without inventing a horizontal-scroll mechanism in the shared align/print path. A DBA's questions are sequential anyway ("how much IO" then "how slow"), so not seeing `reads` and `read_time` on one row is acceptable.
+
+**Alternatives considered:** One wide table (columns cut — unreadable); aggregation by `backend_type` (loses the `object`/`context` breakdown, the core value); a reduced single-screen column set (kills the evictions/reuses and WAL-fsync stories). All rejected.
+
+---
+
+## [006-feat-pg-stat-io] Synthetic md5 io_key for composite row identity; column hiding is not available
+
+**Date:** 2026-06-21
+**Feature:** 006-feat-pg-stat-io
+**Status:** Accepted
+
+**Context:** `view.UniqueKey` is a single column index and `stat.diff()` matches rows across samples on exactly one column. `pg_stat_io` identity is composite (`backend_type × object × context`). The user-spec assumed the key column could be hidden.
+
+**Decision:** Emit `left(md5(backend_type||object||context),10) AS io_key` as column 0 and point `UniqueKey` at it (the `statements_io` `queryid` precedent). Display it like the pgss `queryid`; keep the three dimensions as separate sortable/filterable columns.
+
+**Rationale:** Collapsing the composite identity into one column is mandatory for correct cross-sample deltas (matching on `backend_type` alone would be a silent correctness bug). Column hiding is impossible without new code: `internal/align.SetAlign` floors every column at width 8 and `ColsWidth` is a runtime width cache, not a preset — a hide mechanism would touch the shared align/print path for every screen (scope creep).
+
+**Alternatives considered:** `ColsWidth[0]=0` to hide the key (does not work — see above); a single readable `backend_type/object/context` concat column instead of separate dims (loses per-dimension filtering — `/vacuum` would match both `context=vacuum` and `autovacuum worker`). Rejected.
+
+---
+
+## [006-feat-pg-stat-io] Per-version query branch PG 16/17 vs PG 18; time selector version-independent
+
+**Date:** 2026-06-21
+**Feature:** 006-feat-pg-stat-io
+**Status:** Accepted
+
+**Context:** PG 18 removed `op_bytes` (always BLCKSZ) in favor of native `read_bytes`/`write_bytes`/`extend_bytes`, and added `object='wal'` rows. PG 16 and 17 expose an identical `pg_stat_io` column set.
+
+**Decision:** `SelectStatIOQuery(version)` branches at `PostgresV18`: pre-18 derives KiB as `count*op_bytes/1024`, 18+ uses native `*_bytes/1024`; the logical column shape, `Ncols`, and `DiffIntvl` are identical across branches. `SelectStatIOTimeQuery` is version-independent (timing columns are identical PG 16–18). Both screens use the same count-based `WHERE sum(counters)>0` and `coalesce(...,0)` on every diffed column.
+
+**Rationale:** Follows the [004] per-version-branch ADR (not NULL-padded). Identical headers keep the DBA's table stable across versions. `coalesce` is mandatory — `pg_stat_io` returns NULL pervasively (e.g. `fsyncs` for `temp relation`), and a NULL inside `DiffIntvl` aborts the whole sample ([005] lesson).
+
+**Alternatives considered:** Single NULL-padded query across versions (rejected by [004]); a separate PG 17 branch (unnecessary — 16==17).

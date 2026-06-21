@@ -100,3 +100,25 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - `pg_stat_subscription_stats` (subscriber-side) is out of scope — a separate future feature.
 
 **Touches:** Shares the multi-row sort/filter/diff view model with the `pg_stat_replication` and `tables` screens; second view (after [004-feat-bgwriter-checkpointer]) registered `NotRecordable`.
+
+---
+
+### [006-feat-pg-stat-io] pg_stat_io Screen
+
+**What it does:** Adds a new multi-row TUI screen for `pg_stat_io` (PostgreSQL 16+) showing the unified IO breakdown by `backend_type × object × context` — one row per combination, cumulative counters as per-interval rates. Because the view is too wide for one screen (pgcenter has no horizontal scroll), it is split into two sub-screens: **count** (operations + KiB throughput) and **time** (read/write/fsync latencies). Lets a DBA see during an IO spike who drives the IO (vacuum vs client backends vs checkpointer) and through which context, and — on PG 18 — watch WAL IO that left `pg_stat_wal`.
+
+**Key scenarios:**
+- Press `j` to open the count screen (sorted by `reads` desc); press `j` again to toggle to the time screen; press `J` for the 2-item mode menu. Columns: `io_key`, `backend_type`, `object`, `context` (identity); count screen adds `reads`/`read,KiB`/`writes`/`write,KiB`/`extends`/`ext,KiB`/`hits`/`evictions`/`writebacks`/`reuses`/`fsyncs`; time screen adds `read_time`/`write_time`/`writeback_time`/`extend_time`/`fsync_time`; both end with `stats_age`.
+- Triage an IO spike: filter (`/`) by `backend_type` or `object` to isolate, e.g., `autovacuum worker` reads in the `vacuum` context vs client-backend reads.
+- See WAL IO on PG 18: filter `object=wal` to watch WAL write/fsync pressure that is no longer in `pg_stat_wal`.
+- Judge buffer pressure: sort by `evictions`/`reuses` for ring-buffer churn.
+- Find slow IO paths: on the time screen (with `track_io_timing=on`), sort by `read_time`/`fsync_time`.
+
+**Limitations:**
+- TUI-only in 0.11.0 — both views are `NotRecordable`, so `pgcenter record`/`report` skip them. Record/report is a separate planned 0.11.0 feature.
+- PG 16+ only (the view does not exist on PG 14/15 — those show "not supported"). PG 16 and 17 share one column shape; PG 18 differs (native `*_bytes`, `object='wal'`, `context='init'`).
+- The time screen is empty (all zeros) unless `track_io_timing=on`; a cmdline hint says so. WAL timings on PG 18 also need `track_wal_io_timing=on`.
+- Rows where all operation counters are zero are hidden in SQL. The synthetic `io_key` (md5 of the three dimensions) is shown like the `pg_stat_statements` `queryid`; per-dimension columns are shown separately for sorting/filtering.
+- `Q` does not reset `pg_stat_io` (it is shared/cluster-wide stats) — noted in the help screen.
+
+**Touches:** Shares the multi-row view model with `replslots`/`tables`; third + fourth `NotRecordable` views. Closes the visibility gaps left by [004-feat-bgwriter-checkpointer] (`buffers_backend` on PG 17+) and the `pg_stat_wal` screen (WAL IO timings on PG 18).
