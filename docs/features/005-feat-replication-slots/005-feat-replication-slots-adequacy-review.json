@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "The spec defers record/report (NotRecordable: true) but explicitly notes in Ограничения that WAL-retention incidents are usually analyzed post-factum, so the retrospective view (how retained,KiB grew, when wal_status became lost) is exactly what TUI-only cannot provide. This is the one new 0.11.0 view where the TUI-first trade-off bites hardest.",
+      "why_matters": "Unlike bgwriter, the primary user story here (find the slot that filled the disk) is frequently a forensic/after-the-fact task. A live-only screen helps least precisely when the incident is already over.",
+      "fix": "No spec change required for this iteration — the trade-off is already named honestly and record/report is a planned follow-up. Keep it on the backlog with this view called out as a priority candidate. Flagged only so the deferral is a conscious, revisited decision rather than a silent default."
+    },
+    {
+      "category": "overengineering",
+      "severity": "minor",
+      "issue": "The selector is specified as a version-keyed function SelectStatReplicationSlotsQuery(version) with per-version unit tests for PG 14-18, even though the chosen column subset is provably stable across 14-18 and returns a single query string for all versions (confirmed in code-research section 6).",
+      "why_matters": "A version parameter and a 5-row version test matrix that always return the same value is slightly more machinery than the problem needs. It is borderline premature generalization for the (real, planned) future case of adding conflicting/invalidation_reason.",
+      "fix": "Acceptable as-is: it matches the established bgwriter/wal selector signature (consistency has value) and the version key is the documented extension point for conflicting (PG16+) / invalidation_reason (PG18+). Keep the signature; just ensure the tech-spec does not add real per-version branches that do not yet exist. No change required to the user-spec."
+    }
+  ],
+  "worst_category": "underengineering",
+  "summary": "Solution is sound, right-sized at M, and buildable on the existing stack with zero new dependencies — the hybrid LEFT JOIN and the mandatory coalesce(...,0) are both verified correct against internal/stat/postgres.go (diffPair on an empty-string NULL would otherwise abort stats collection). Approved with two minor advisory findings (TUI-only deferral bites this forensic view hardest; selector is mildly over-generalized but consistent with precedent); no critical or major issues."
+}
