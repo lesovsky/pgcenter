@@ -1,0 +1,30 @@
+{
+  "status": "approved",
+  "summary": "Checked 18 factual claims against the codebase; found 0 mirages. Every file path, function, struct field, pattern, line reference, and version-constant assertion in the tech-spec matches reality.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 18,
+    "confirmed": 18,
+    "mirages_found": 0,
+    "verified_claims": [
+      "internal/query/wal.go exists with PgStatWALPG14/PgStatWALDefault consts",
+      "SelectStatWALQuery(version int) (string, int, [2]int) at wal.go:25",
+      "SelectStatWALQuery returns PgStatWALDefault,7,[2,5] for >=180000 else PgStatWALPG14,11,[2,9]",
+      "internal/view/view.go has 'wal' view entry at view.go:128-139",
+      "view.go Configure() switch has case \"wal\" at view.go:321-322 calling SelectStatWALQuery",
+      "View struct has NotRecordable bool field at view.go:30",
+      "top/keybindings.go uses {\"sysstat\", 'w', switchViewTo(app, \"wal\")} at line 35",
+      "lowercase 'b' is genuinely unbound in keybindings.go (only 'B' bound at line 47)",
+      "internal/stat/postgres.go diff() at line 303 applies interval as contiguous [interval[0],interval[1]] range (line 331)",
+      "diff() copies value as-is when l < interval[0] || l > interval[1]",
+      "record/record.go filterViews() at line 200 skips NotRecordable views (line 208 delete+continue)",
+      "query.PostgresV14 = 140000 exists in query.go:17",
+      "No PostgresV17 or PostgresV18 constant exists (query.go:9-18 ends at V14)",
+      "internal/postgres/testing.go NewTestConnectVersion at testing.go:16",
+      "port map 140000:21914..180000:21918 in testing.go:18-23",
+      "top/help.go mode-key row at help.go:13 (currently 'a,f,r,w')",
+      "internal/query/bgwriter.go does not yet exist (correct: it is a NEW file)",
+      "ViewType/Format pipeline and DiffIntvl mechanics match code-research description"
+    ]
+  }
+}

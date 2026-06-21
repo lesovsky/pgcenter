@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 9,
+  "requirements_covered": 9,
+  "requirements_partial": 0,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-4: PG 18 extra column slru_written",
+      "detail": "User-spec AC requires that the PG18 column added in pg_stat_checkpointer is included AND its presence verified on a live PG18 cluster. The tech-spec correctly defers the exact PG18 column set to live verification (Risks, Data Models note, integration test). This is a deliberate planning gap, not a spec omission: the PG18 query branch and Ncols/DiffIntvl ([6,12], 14 cols) are written against PostgreSQL docs and must be confirmed before the query const is finalized. Tracked and mitigated, but the requirement is only fully satisfiable after live verification.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "Integration test on live PG containers",
+      "detail": "The integration test (Test_StatBgwriterQueries) uses t.Skipf when a PG version is unavailable. For an M feature whose primary risk is cross-version schema drift (explicitly the stated main risk), a silently-skipped PG18 test means the single most important verification can pass-by-absence in CI if the PG18 container is missing. The user-spec AC and tech-spec both make PG18 live verification a hard gate, but the skip mechanism does not enforce that PG18 was actually exercised. Recommend the CI matrix guarantee PG18 availability (fail, not skip, if the mandated version is absent) so the gate is real. Not a coverage gap in the spec — an enforcement weakness in the test strategy.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "9/9 user-spec requirements covered by tech-spec tasks: hotkey b (Task 3), PG14-16 / PG17 / PG18 column sets (Task 1 + Decisions 2,3), absolute-vs-diff-vs-text semantics (Decision 3 via DiffIntvl placement), NotRecordable/TUI-only (Task 3 view.go), help-row b (Task 3 help.go), unit+integration tests PG14-18 (Task 1, Testing Strategy), overview.md fix (Task 2). Reverse traceability clean: all 5 Decisions and Tasks 1-4 trace to a requirement or are acceptable engineering (tests, no-security-reviewer process call). No scope creep. No overengineering: Decision 1 explicitly rejects a multi-row/CollectExtra view type and Decision 2 rejects NULL-padded unified columns, both YAGNI-correct; mirroring wal.go reuses the existing collector/diff/render path with zero new abstractions. No structural gaps: all decisions are self-contained in the Decisions section, tasks are brief scope descriptions without pseudocode. Two minor findings only, both around enforcing the PG18 live-verification gate (a known, mitigated risk). No critical findings -> pass."
+}

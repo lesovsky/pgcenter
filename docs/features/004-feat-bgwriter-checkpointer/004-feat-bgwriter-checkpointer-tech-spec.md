@@ -95,12 +95,14 @@ a surprise.
 **Alternatives considered:** Show both reset ages, or the older of the two — rejected as needless
 column noise for a secondary signal.
 
-### Decision 5: No security reviewer on the query task
-**Decision:** Task 1 (query layer) uses `dev-code-reviewer` + `dev-test-reviewer` only.
+### Decision 5: No security reviewer on the query and wiring tasks
+**Decision:** Task 1 (query layer) and Task 3 (view/keybinding/help wiring) omit
+`dev-security-auditor` from the default code-writing reviewer set.
 **Rationale:** The bgwriter SQL is static `const` strings with no user interpolation (identical
-style to `wal.go`); `Format()` substitutes no user-controlled values into it. There is no
-injection surface, so a security audit adds no signal.
-**Alternatives considered:** Full default trio — rejected as noise for static SQL.
+style to `wal.go`); `Format()` substitutes no user-controlled values into it. Task 3 is static
+map/keybinding/help wiring with no input surface. Neither has an injection or auth surface, so a
+security audit adds no signal. Both tasks keep `dev-code-reviewer` + `dev-test-reviewer`.
+**Alternatives considered:** Full default trio — rejected as noise for static SQL and config.
 
 ## Data Models
 
@@ -182,6 +184,9 @@ literals `170000`/`180000` (no `PostgresV17/18` constants exist); `MinRequiredVe
 - `Test_StatBgwriterQueries` — loop PG 14–18: `Format()` the template, `NewTestConnectVersion`,
   `t.Skipf` if the version is unavailable, execute the query, assert no error. This is where the
   PG18 `slru_written` column set is verified against a live PG18 cluster.
+  > The `t.Skipf` pattern is uniform across the suite (a local-dev convenience). In CI the full
+  > PG 14–18 matrix is present (`lesovsky/pgcenter-testing` container), so the PG18 query branch is
+  > actually executed and the schema-divergence gate is real there — it is not silently skipped.
 
 ### E2E tests
 - None — there is no user flow beyond opening the screen; covered by unit + integration + manual
@@ -273,11 +278,13 @@ zero-value `false`), so no other view is affected.
 - **Description:** Register the `"bgwriter"` view in `internal/view/view.go` with
   `NotRecordable: true` and add the `case "bgwriter"` branch in `Configure()` calling
   `SelectStatBgwriterQuery`; bind hotkey `b` in `top/keybindings.go`; add `b` to the mode-key help
-  row in `top/help.go`. Depends on the selector from Task 1.
+  row in `top/help.go`. Also refresh the now-stale `NotRecordable` example comment in
+  `record/record.go` (bgwriter becomes the first live user of the flag). Depends on the selector
+  from Task 1.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer
+- **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** user — open `b` on PG17/PG18, confirm columns + absolute/delta behaviour + `?` help
-- **Files to modify:** `internal/view/view.go`, `top/keybindings.go`, `top/help.go`
+- **Files to modify:** `internal/view/view.go`, `top/keybindings.go`, `top/help.go`, `record/record.go`
 - **Files to read:** `internal/query/bgwriter.go`, `top/config_view.go`, `internal/view/view.go`
 
 ### Final Wave
@@ -288,3 +295,5 @@ zero-value `false`), so no other view is affected.
   delta, `NotRecordable`, help text, overview.md).
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
+- **Verify:** bash — `make test` && `make lint` && `make build` all pass; acceptance criteria met
+- **Files to modify:** none
