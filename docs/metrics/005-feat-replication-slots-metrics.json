@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "005-feat-replication-slots",
+    "feature_name": "replication-slots",
+    "feature_base": "docs/features/005-feat-replication-slots/005-feat-replication-slots",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "Opus 4.8",
+    "date_started": "2026-06-21T09:38:00Z",
+    "date_completed": "2026-06-21T11:20:27Z"
+  },
+  "phases": {
+    "user_spec": {
+      "start_time": "2026-06-21T09:38:00Z",
+      "end_time": "2026-06-21T10:16:05Z",
+      "duration_min": 38,
+      "touch_time_min": 20,
+      "human_wait_time_min": 18,
+      "steps": {}
+    },
+    "tech_spec": {
+      "start_time": "2026-06-21T10:17:35Z",
+      "end_time": "2026-06-21T10:30:09Z",
+      "duration_min": 12,
+      "touch_time_min": 8,
+      "human_wait_time_min": 4,
+      "steps": {}
+    },
+    "task_decomposition": {
+      "start_time": "2026-06-21T10:31:01Z",
+      "end_time": "2026-06-21T10:39:54Z",
+      "duration_min": 8,
+      "touch_time_min": 6,
+      "human_wait_time_min": 2,
+      "steps": {}
+    },
+    "feature_execution": {
+      "start_time": "2026-06-21T10:39:54Z",
+      "end_time": "2026-06-21T11:00:50Z",
+      "duration_min": 21,
+      "touch_time_min": 19,
+      "human_wait_time_min": 2,
+      "steps": {
+        "waves_executed": 4,
+        "wave1": "task-01 query+selector+tests, task-04 image bump",
+        "wave2": "task-02 view+hotkey+help, task-05 physical/logical integration",
+        "wave3": "task-03 Test_filterViews bump",
+        "wave4": "task-06 pre-deploy QA (live PG 14-18 verification)"
+      }
+    },
+    "done": {
+      "start_time": "2026-06-21T11:00:50Z",
+      "end_time": "2026-06-21T11:20:27Z",
+      "duration_min": 20,
+      "touch_time_min": 20,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
+  },
+  "totals": {
+    "total_lead_time_min": 102,
+    "total_touch_time_min": 74,
+    "total_human_wait_time_min": 26,
+    "flow_efficiency_pct": 73
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1 },
+    "validation_findings": { "critical": 0, "major": 0, "minor": 23 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_04": 1, "task_05": 1 },
+    "review_findings": { "critical": 0, "major": 0, "minor": 9 },
+    "first_pass_rate_pct": 100
+  },
+  "volume": {
+    "interview_questions": 12,
+    "tasks_count": 6,
+    "waves_count": 4,
+    "agents_spawned": 38,
+    "commits_count": 16
+  }
+}

@@ -59,3 +59,44 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - IO and iodelay columns are empty (`""`) if the recorder lacked permissions or kernel support; report shows WARNING in header
 
 **Touches:** [001-feat-per-process-system-stats] (uses the same procpidstat 19-column pipeline); [002-feat-iodelay-procpidstat] (iodelay columns included in recorded data).
+
+---
+
+### [004-feat-bgwriter-checkpointer] Background Writer / Checkpointer Screen
+
+**What it does:** Adds a new single-row TUI screen (`bgwriter`, hotkey `b`) showing background-writer and checkpoint activity from `pg_stat_bgwriter` and (on PG 17+) `pg_stat_checkpointer`. Lets DBA watch checkpoint frequency, the timed-vs-requested ratio, checkpoint write/sync cost, and who flushes buffers (checkpointer / bgwriter / backends) without leaving pgcenter for `psql`.
+
+**Key scenarios:**
+- Press `b` to open the screen. Event counters (`ckpt_timed`, `ckpt_req`, and on PG 17+ `rstpt_timed`/`rstpt_req`/`rstpt_done`) show as absolute cumulative values; work/time/buffer columns (`ckpt_write,ms`, `ckpt_sync,ms`, `buf_ckpt`, `buf_clean`, `maxwritten`, `buf_alloc`, …) update as per-interval deltas; `stats_age` shows how long counters have accumulated.
+- Diagnose forced checkpoints: watch `ckpt_req` climb faster than `ckpt_timed` — checkpoints are forced by WAL pressure, raise `max_wal_size`.
+- Tune bgwriter on PG ≤ 16 by comparing `buf_clean` (bgwriter) against `buf_backend` (backends) and watching `maxwritten`.
+- Monitor restartpoints on a standby (PG 17+): `ckpt_*` stay 0 while `rstpt_*` accumulate.
+
+**Limitations:**
+- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record` skips it and it does not appear in `pgcenter report`. Record/report support is deferred to a backlog feature.
+- `buf_backend` / `buf_backend_fsync` columns appear only on PG ≤ 16 (the data moved to `pg_stat_io` on PG 17+).
+- The column set differs per server version (PG 18 adds a `slru_written` column); no NULL placeholders for columns absent on a given version.
+- `stats_age` on PG 17+ comes from `pg_stat_checkpointer`; a separate `pg_stat_bgwriter` reset is not reflected.
+
+**Touches:** Shares the single-row version-aware view model with the `pg_stat_wal` screen.
+
+---
+
+### [005-feat-replication-slots] Replication Slots Screen
+
+**What it does:** Adds a new multi-row TUI screen (`replslots`, hotkey `o`) showing one row per replication slot — physical and logical — from a hybrid `pg_replication_slots` + `pg_stat_replication_slots` query. Lets a DBA find which slot is retaining WAL (the classic disk-fill incident) and watch logical-decoding spill/stream pressure without dropping to `psql`. Same 15 columns on PostgreSQL 14–18.
+
+**Key scenarios:**
+- Press `o` to open the screen, sorted by `retained,KiB` descending — the slot holding the most WAL is on top. Columns: `slot_name`, `slot_type`, `active`, `wal_status` (reserved/extended/unreserved/lost), `retained,KiB`, `safe,KiB` (absolute state); `spill_txns/count`, `spill,KiB`, `stream_txns/count`, `stream,KiB`, `total_txns`, `total,KiB` (per-interval deltas); `stats_age`.
+- Diagnose a disk-fill incident: a slot with high `retained,KiB` and `active=false` (a disconnected standby or subscription) is the culprit — revive the consumer or drop the slot.
+- Catch a slot before it breaks: watch `wal_status` move to `unreserved`/`lost`.
+- Tune logical decoding: rising `spill,KiB` per interval means decoding spills to disk — raise `logical_decoding_work_mem`.
+- Re-sort (arrows) and filter (`/`) like the other multi-row screens.
+
+**Limitations:**
+- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record` skips it and it does not appear in `pgcenter report`. This hurts retrospective analysis most for this feature (disk-fill incidents are often forensic); record/report is the planned next phase.
+- Physical slots show `0` (not blank) in the spill/stream/total columns — those metrics are logical-decoding-only; the adjacent `slot_type=physical` disambiguates.
+- Invalidation **cause** is not shown (`conflicting`/`invalidation_reason` omitted to keep one query across PG 14–18); `wal_status` conveys the state (`lost`/`unreserved`).
+- `pg_stat_subscription_stats` (subscriber-side) is out of scope — a separate future feature.
+
+**Touches:** Shares the multi-row sort/filter/diff view model with the `pg_stat_replication` and `tables` screens; second view (after [004-feat-bgwriter-checkpointer]) registered `NotRecordable`.

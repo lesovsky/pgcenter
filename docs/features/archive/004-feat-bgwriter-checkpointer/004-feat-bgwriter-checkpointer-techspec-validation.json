@@ -1,0 +1,18 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 3 (code-writing) lists only `dev-code-reviewer`. The default reviewer set for `code-writing` is `dev-code-reviewer, dev-security-auditor, dev-test-reviewer`. Omitting `dev-security-auditor` is reasonable here (Decision 5 establishes the bgwriter code has no injection/security surface, and Task 3 is static view/keybinding/help wiring), but the absence of `dev-test-reviewer` is not justified — Task 3 modifies code (view.go, keybindings.go, help.go) and its tests/regression coverage would benefit from review.",
+      "fix": "Either add `dev-test-reviewer` to Task 3 reviewers, or add a one-line rationale (analogous to Decision 5) explaining why test review is unnecessary for this pure-wiring task. Optionally extend Decision 5 to cover Task 3's security-auditor omission explicitly, since it currently only names Task 1."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Task 4 (Pre-deploy QA, Final Wave) has no `Verify` line and no `Files to modify` / `Files to read`, unlike Tasks 1-3. The Per-task verification table covers it (`Final (QA): bash`), but the task block itself is thinner than the others.",
+      "fix": "Add an explicit `Verify:` line to the Task 4 block (e.g. `bash — full make test + make lint + make build; user-spec acceptance criteria`) for symmetry with the other tasks. Files-to-modify is legitimately empty for a QA task."
+    }
+  ],
+  "summary": "Tech-spec is template-compliant and ready for decomposition. Frontmatter (created, status: draft, branch: develop, size: M) is correct; all required sections are present and filled (Solution, Architecture with both subsections, Decisions with Decision/Rationale/Alternatives each, Data Models, Dependencies, Testing Strategy with size M, Agent Verification Plan with all three subsections, Risks as a table, Acceptance Criteria, Implementation Tasks by waves). Final Wave with Pre-deploy QA is present. 4 tasks (well under 15). Skills are valid per the catalog (code-writing, documentation-writing, pre-deploy-qa); all named reviewers exist (dev-code-reviewer, dev-test-reviewer). No wave conflicts: Wave 1 Task 1 (internal/query/*) and Task 2 (overview.md) touch disjoint files; Task 3 sits correctly in Wave 2 since it depends on Task 1's selector; no circular dependencies. Task descriptions are scope-level (WHAT+WHY), with no step-by-step HOW, no line numbers, no embedded AC/TDD anchors, and no technical decisions leaking out of the Decisions section. No time-based estimates. Zero critical findings -> approved. Two minor findings concern reviewer-set completeness on Task 3 and the thin Task 4 block."
+}

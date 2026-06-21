@@ -1,0 +1,40 @@
+{
+  "feature": "005-feat-replication-slots",
+  "phase": "pre-deploy-qa (task-06, Final Wave)",
+  "date": "2026-06-21",
+  "branch": "feature/replication-slots",
+  "gates": {
+    "make_build": "pass",
+    "make_lint": "pass (golangci-lint + gosec, clean)",
+    "make_vuln": "pass in CI (Go 1.25.11); local go1.25.10 reports pre-existing GO-2026-5037 (crypto/x509, fixed in 1.25.11 which both workflows pin) — not a feature-005 regression",
+    "make_test": "feature code 100% green on live PG 14-18 (see live_verification); the only failures under `make test` are pre-existing, container-dependent tests unrelated to 005 (see known_unrelated_failures)"
+  },
+  "live_verification": {
+    "environment": "lesovsky/pgcenter-testing:0.0.9 container, PG 14/15/16/17/18 clusters, ports 21914-21918",
+    "unit_selector": "PASS x5 (Ncols=15, DiffIntvl=[6,13] identical across PG 14-18 — no version divergence)",
+    "tier1_schema_gate": "PASS x5 (live FieldDescriptions()==15 on every version — hybrid LEFT JOIN executes, exact 15-column shape)",
+    "tier2_physical_slot": "PASS x5 (real pg_create_physical_replication_slot: row present, retained,KiB non-NULL, 8 diffed counters render '0' via coalesce — Decision 2 verified live)",
+    "tier3_logical_slot": "PASS x5 after setting wal_level=logical on the clusters (real pg_create_logical_replication_slot + test_decoding: row present, spill/stream columns present). test_decoding.so confirmed shipped in the PGDG postgresql-NN packages, so the 0.0.10 image needs only wal_level=logical (task-04). On the unmodified 0.0.9 image (wal_level=replica) tier-3 SKIPs gracefully (Decision 5).",
+    "manual_query_eyeball": "PG17 with a physical + logical slot: demo_phys -> slot_type=physical, active=false, wal_status=reserved, retained,KiB=348, safe empty, counters=0, stats_age empty; demo_logical -> retained=0, counters=0. Sorted retained,KiB desc. Matches the spec exactly."
+  },
+  "acceptance_criteria": {
+    "hotkey_o_opens_replslots": "pass (view registered, keybinding bound, TestNew_ReplslotsView)",
+    "15_columns_single_query_pg14_18": "pass (live tier-1 FieldDescriptions==15 on all versions, no branch)",
+    "physical_shows_0_empty_safe_stats_age": "pass (tier-2 + live eyeball)",
+    "retained_default_sort_desc": "pass (OrderKey=4 OrderDesc=true; SQL ORDER BY retained DESC NULLS LAST)",
+    "retained_recovery_aware": "pass-by-construction (WalFunction template; standby leg deferred-to-post-deploy, needs a live standby)",
+    "notrecordable_record_skips_filterviews_green": "pass (Test_filterViews + 3 adjacent NotRecordable tests green)",
+    "o_in_help": "pass (help.go mode line)",
+    "unit_tier1_tier2_green_tier3_gated": "pass (all green live; tier-3 green with wal_level=logical, else skipped)"
+  },
+  "known_unrelated_failures": [
+    "top/reload_test.go Test_doReload — pre-existing tech-debt [005]: panics instead of t.Skipf when the PG fixture is absent; surfaced in feature 004, not caused by 005. Green when containers are up.",
+    "record/record_test.go Test_app_record — requires a live DB; fails locally only because containers were down during part of QA. Green when containers are up."
+  ],
+  "reviews": {
+    "wave1": "task-01 code+test approved; task-04 code+deploy approved (deployment.md synced to 0.0.10)",
+    "wave2": "task-02 code approved (0 findings); task-05 test passed + code approved_with_suggestions (slot-name $1 binding + assertion hardening applied)",
+    "wave3": "task-03 — Test_filterViews bump verified by passing test (mechanical)"
+  },
+  "verdict": "PASS — ready to merge. Maintainer action before CI exercises tier-3: docker build && docker push lesovsky/pgcenter-testing:0.0.10. Until then tier-3 skips and CI stays green (Decision 5)."
+}

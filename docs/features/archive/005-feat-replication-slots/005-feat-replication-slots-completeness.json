@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 13,
+  "requirements_covered": 13,
+  "requirements_partial": 0,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-7: default sort by retained,KiB descending + arrow re-sort + filter '/'",
+      "detail": "Default sort (OrderKey=4, OrderDesc, SQL ORDER BY) is fully covered by Task 1/Task 2 and Decision 3. Arrow re-sort and '/' filter are inherited from the existing multi-row machinery (replication/tables) and are not explicitly asserted in any test of any task; they are taken as given by reuse. Acceptable for a reuse-based feature, but no task verifies them.",
+      "severity": "minor"
+    },
+    {
+      "type": "overengineering",
+      "source": "tech-spec",
+      "requirement": "Decision 4: version parameter kept on selector despite single version-independent query",
+      "detail": "SelectStatReplicationSlotsQuery(_ int) carries an unused version parameter and the unit test still iterates PG 14-18 asserting identical output. This is a deliberate YAGNI-adjacent choice, but it is explicitly justified by signature symmetry with SelectStatBgwriterQuery/SelectStatWALQuery (established codebase convention) and pins the no-divergence invariant. Justified, flagged for record only.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "13/13 user-spec requirements covered by the tech-spec's embedded Implementation Tasks (no separate task-*.md files). All five touched code areas are covered: query+selector (T1), view registration + hotkey + help (T2), record_test.go bump (T3), test-image + workflow bump (T4), physical+logical integration tests (T5), plus QA (T6). Hybrid source, 15 columns, recovery-aware retained WAL, coalesce->0, retained-desc default sort, stable PG14-18 subset (no version branch), NotRecordable, both integration tiers incl. image bump, Test_filterViews bump, help entry, and the pg_stat_subscription_stats deferral all map cleanly. Reverse traceability: every task and decision traces to a user-spec requirement or acceptable engineering infra (tests, image bump, workflow tags); no scope creep. Solution section has real technical substance (single hybrid query design, diff-interval placement, recovery-aware template reuse, coalesce rationale). Underengineering: error/NULL handling explicitly addressed via coalesce (Decision 2) with the diffPair/ParseInt risk verified in code; no gaps. No critical findings. 2 minor findings (arrow/filter not test-asserted; intentional unused version param). Status: pass."
+}

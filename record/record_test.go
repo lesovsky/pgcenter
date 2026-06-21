@@ -110,12 +110,18 @@ func Test_filterViews(t *testing.T) {
 		// NotRecordable=false in view.New() (the local/remote gate moved to
 		// app.setup() in task 02), so it passes through filterViews and joins
 		// wantV — every row's wantN decreases by 1 and wantV increases by 1.
-		{version: 140000, pgssSchema: "", wantN: 6, wantV: 16},
-		{version: 140000, pgssSchema: "public", wantN: 0, wantV: 22},
-		{version: 130000, pgssSchema: "public", wantN: 3, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 6, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 8, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 8, wantV: 14},
+		// The bgwriter view (feature 004) and the replslots view (feature 005) are both
+		// NotRecordable=true, so each is always dropped by filterViews on every version —
+		// together adding 2 to wantN on each row versus the pre-bgwriter baseline, while
+		// wantV is unchanged (neither ever joins the remaining set). replslots has
+		// MinRequiredVersion=PostgresV14 but the NotRecordable branch fires before the
+		// version gate, so its +1 applies uniformly on all rows including PG<14.
+		{version: 140000, pgssSchema: "", wantN: 8, wantV: 16},
+		{version: 140000, pgssSchema: "public", wantN: 2, wantV: 22},
+		{version: 130000, pgssSchema: "public", wantN: 5, wantV: 19},
+		{version: 120000, pgssSchema: "public", wantN: 8, wantV: 16},
+		{version: 110000, pgssSchema: "public", wantN: 10, wantV: 14},
+		{version: 100000, pgssSchema: "public", wantN: 10, wantV: 14},
 	}
 
 	for _, tc := range testcases {

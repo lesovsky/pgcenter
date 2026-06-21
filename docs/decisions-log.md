@@ -185,3 +185,161 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Decision:** `app.setup()` removes `procpidstat` from `views` and prints INFO when `!db.Local`, before `filterViews()` is called. `filterViews()` handles only static unsuitability (PG version, missing extension).
 
 **Rationale:** Local/remote is a runtime property, not a static view property. Keeps `filterViews()` focused on one concern. `db.Local` is already computed by `postgres.Connect()` via `isLocalhost()`.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Per-version column sets, not NULL-padded unified columns
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** `pg_stat_bgwriter` changes shape across versions: PG 17 splits checkpoint metrics into `pg_stat_checkpointer`, drops `buffers_backend`/`buffers_backend_fsync`, and PG 18 adds `slru_written`. The bgwriter screen had to decide whether to present one unified column set (NULL-padding versions that lack a column) or version-specific sets.
+
+**Decision:** Each version branch returns only the columns that exist on that version; shared columns keep identical headers and order. `Ncols`/`DiffIntvl` differ per version (PG 14–16: 12 cols / `[3,10]`; PG 17: 13 / `[6,11]`; PG 18: 14 / `[6,12]`).
+
+**Rationale:** Follows the `wal.go` precedent, which already returns different `Ncols`/`DiffIntvl` per version. NULL-padding pre-17 with empty restartpoint columns would show misleading blank columns to a PG 15 DBA.
+
+**Alternatives considered:** Unified header set with `NULL AS rstpt_*` placeholders on PG 14–16 — rejected: clutters the screen with always-empty columns and contradicts the wal precedent.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Absolute event counters via DiffIntvl placement
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** Checkpoint/restartpoint event counters (`ckpt_timed`, `ckpt_req`, and PG 17+ `rstpt_timed/req/done`) must render as absolute cumulative values — the timed-vs-requested ratio is the signal, and a per-interval delta on a short refresh is almost always 0. The work/time/buffer columns must render as deltas.
+
+**Decision:** Place the event counters in a contiguous block right after the `source` label, **outside** the `DiffIntvl` range; the diffed work/time/buffer columns form the single contiguous diff range; `stats_age` is last, also outside the range.
+
+**Rationale:** `DiffIntvl` is a single contiguous `[lo,hi]` range (`internal/stat/postgres.go:diff()`), which copies out-of-range columns as-is and subtracts in-range ones. Keeping event counters outside the range is the only way to render them absolute without changing the diff machinery.
+
+**Alternatives considered:** Diff everything (wal-style) — rejected for event counters; they would flicker between 0 and 1.
+
+---
+
+## [004-feat-bgwriter-checkpointer] NotRecordable: true for TUI-only scope
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** Supporting `record`/`report` for the bgwriter screen pulls in the storage format and the report pipeline — a separate layer that would roughly double the feature. The 0.11.0 roadmap mandates TUI-first for every new view.
+
+**Decision:** Register the view with `NotRecordable: true`; `record/record.go:filterViews()` skips it. Record/report support is deferred to a backlog feature (`docs/roadmap-0.11.0.md`, "Out of scope / backlog").
+
+**Rationale:** Keeps the feature size-M. Reuses the `NotRecordable` field whose lineage is in ADR [001-feat-per-process-system-stats] / [003-feat-procpidstat-record-report]; after procpidstat dropped the flag in feature 003, bgwriter is its sole live user.
+
+**Alternatives considered:** Ship record/report in the same feature — rejected as scope creep.
+
+---
+
+## [004-feat-bgwriter-checkpointer] stats_age sourced from pg_stat_checkpointer on PG 17+
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** On PG 17+ there are two independent `stats_reset` timestamps — `pg_stat_bgwriter.stats_reset` and `pg_stat_checkpointer.stats_reset` — reset separately via `pg_stat_reset_shared('bgwriter'|'checkpointer')`. The single-column `stats_age` must derive from one of them.
+
+**Decision:** On PG 17+ `stats_age` derives from `pg_stat_checkpointer.stats_reset`.
+
+**Rationale:** The screen's primary content on modern versions is checkpoint data; one column is cleaner than two reset ages. Documented in the user-spec so an independently-reset bgwriter is not a surprise.
+
+**Alternatives considered:** Show both reset ages, or the older of the two — rejected as needless column noise for a secondary signal.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Go toolchain bump 1.25.10 → 1.25.11 in CI
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** `govulncheck` in CI flagged GO-2026-5037, a `crypto/x509` stdlib vulnerability fixed in Go 1.25.11. Surfaced during feature 004 execution; unrelated to the feature code.
+
+**Decision:** Bump the Go toolchain from 1.25.10 to 1.25.11 in the CI workflows to close GO-2026-5037.
+
+**Rationale:** Stdlib vuln in a transitive code path; the cheapest fix is the patch-version toolchain bump the CI gate requires.
+
+---
+
+## [005-feat-replication-slots] Hybrid pg_replication_slots ⟕ pg_stat_replication_slots, not the literal view
+
+**Date:** 2026-06-21
+**Feature:** 005-feat-replication-slots
+**Status:** Accepted
+
+**Context:** The roadmap line item named `pg_stat_replication_slots` but framed the value as retained-WAL / disk-fill triage. Retained WAL (`restart_lsn`, `wal_status`, `safe_wal_size`) lives in `pg_replication_slots`, and physical slots are absent from `pg_stat_replication_slots` entirely — so the literally-named view cannot deliver the stated value.
+
+**Decision:** Source the screen from `pg_replication_slots s LEFT JOIN pg_stat_replication_slots ss ON s.slot_name = ss.slot_name` — one row per slot (physical + logical). State columns absolute; the eight logical-decoding counters diffed.
+
+**Rationale:** Only the hybrid covers all slots plus retained WAL, which is the disk-fill signal the feature exists for.
+
+**Alternatives considered:** Pure `pg_stat_replication_slots` (logical-only spill/stream, no retained WAL, no physical slots) — rejected: does not solve the disk-fill use case.
+
+---
+
+## [005-feat-replication-slots] coalesce(...,0) on the diffed counters for LEFT-JOIN-NULL safety
+
+**Date:** 2026-06-21
+**Feature:** 005-feat-replication-slots
+**Status:** Accepted
+
+**Context:** Physical slots are absent from `pg_stat_replication_slots`, so the LEFT JOIN yields NULL for the 8 counter columns. A physical slot matches itself across samples by `slot_name`, entering the diff branch; an empty-string NULL inside `DiffIntvl` reaches `diffPair` → `strconv.ParseInt("")` → error → the whole sample is aborted (`internal/stat/postgres.go`).
+
+**Decision:** Wrap the 8 diffed counters in `coalesce(..., 0)` in SQL. Physical slots render `0`. Absolute columns (retained/safe/stats_age, outside `DiffIntvl`) stay nullable and render blank.
+
+**Rationale:** Mandatory for correctness, verified live (a physical slot would otherwise blank the screen). Rendering `-`/blank for physical rows would need per-cell view logic pgcenter lacks; the adjacent `slot_type` column disambiguates the `0`.
+
+**Alternatives considered:** Per-cell custom rendering of physical-slot counters — rejected as scope creep.
+
+---
+
+## [005-feat-replication-slots] Single query for PG 14–18, no version branching
+
+**Date:** 2026-06-21
+**Feature:** 005-feat-replication-slots
+**Status:** Accepted
+
+**Context:** `pg_replication_slots` gained `conflicting` (PG 16), `failover`/`synced` (PG 17), `invalidation_reason` (PG 18). Including any of them would force per-version query strings (the [004] ADR situation).
+
+**Decision:** Use only the subset stable across PG 14–18 (`slot_name, slot_type, active, wal_status, restart_lsn, safe_wal_size` + the whole of `pg_stat_replication_slots`). `SelectStatReplicationSlotsQuery(_ int)` returns one query, `15`, `[2]int{6,13}` for all versions (param kept for signature symmetry / future branch point).
+
+**Rationale:** Invalidation **state** is carried by `wal_status` (`lost`/`unreserved`); the finer **cause** columns are version-fragmented and a niche signal. One query keeps the feature size-M and avoids upgrade-surprise column shifts.
+
+**Alternatives considered:** Add `invalidation_reason` (PG 18 branch) / `conflicting` (PG 16 branch) — rejected; deferrable if cause-attribution is ever requested.
+
+---
+
+## [005-feat-replication-slots] Default sort by retained,KiB desc (OrderKey=4), deviating from col-0
+
+**Date:** 2026-06-21
+**Feature:** 005-feat-replication-slots
+**Status:** Accepted
+
+**Context:** Every other multi-row view defaults `OrderKey=0`. The replslots feature exists for disk-fill triage, where the most relevant slot is the one holding the most WAL.
+
+**Decision:** `OrderKey=4` (`retained,KiB`), `OrderDesc=true`; SQL `ORDER BY "retained,KiB" DESC NULLS LAST` for the first frame. Documented so it is not read as a bug.
+
+**Rationale:** Incident-first ordering puts the offender on top without the DBA re-sorting. The Go-side `sort()` governs each subsequent frame.
+
+**Alternatives considered:** `OrderKey=0` (slot_name) for consistency — rejected: buries the offender.
+
+---
+
+## [005-feat-replication-slots] Test image wal_level=logical + bump 0.0.10, decoupled by defensive t.Skipf
+
+**Date:** 2026-06-21
+**Feature:** 005-feat-replication-slots
+**Status:** Accepted
+
+**Context:** Exercising a real logical slot (`pg_create_logical_replication_slot(..., 'test_decoding')`) needs `wal_level=logical`, which the `pgcenter-testing` image did not set. The image build/push is a manual maintainer step (no CI image-build job).
+
+**Decision:** Add `wal_level=logical` to `testing/prepare-test-environment.sh` and bump the image `0.0.9 → 0.0.10` (Dockerfile + both workflows + deployment.md). The tier-3 logical-slot test `t.Skipf`s unless `wal_level=logical`, so CI stays green on the old image until the maintainer publishes `0.0.10`.
+
+**Rationale:** The defensive skip removes a fragile ordering dependency between the manual image push and the code merge. `test_decoding` ships in the PGDG `postgresql-NN` packages, so no extra package is needed. Verified live: tier-1/2 pass on `replica`, tier-3 passes on `logical` across PG 14–18.
+
+**Alternatives considered:** Hard ordering (push image, then merge code that assumes `wal_level=logical`) — rejected: any gap leaves CI red on transient infra state.

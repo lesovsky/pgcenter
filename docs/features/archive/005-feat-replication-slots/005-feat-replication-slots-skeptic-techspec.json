@@ -1,0 +1,58 @@
+{
+  "status": "approved",
+  "summary": "Checked 41 claims, found 3 mirages (all minor). Every load-bearing factual claim is accurate: SQL columns (PG14 docs), selector/template machinery (query.go), View struct fields, diff/diffPair behavior, free hotkey 'o', filterViews test rows, image tag 0.0.9, and prepare-test-environment.sh lacking wal_level. The three minor findings are stale line-number citations and one off-by-one image tag (0.0.9->0.0.10 vs Dockerfile's two literal 0.0.9 sites).",
+  "findings": [
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 2 / Risks cite diffPair behavior 'verified in internal/stat/postgres.go:316-343 / diffPair :445'.",
+      "reality": "Behavior is correct, but the cited line for the diff loop is slightly off: the diff() function spans lines 303-358, and the ukey-match + diff branch is at lines 321-343 (the comment block at 312-315, loop body 316-345). diffPair starts at line 444 (signature), not 445 (its first ParseInt path is at 455). The empty-string ParseInt-error claim is accurate: diffPair calls parsePairInt -> strconv.ParseInt which errors on \"\", and diff() returns that error (postgres.go:336-339).",
+      "source": "005-feat-replication-slots-tech-spec.md, Decision 2 (lines 99-102) and Risks table (line 225)",
+      "fix": "Optionally adjust the citation to postgres.go:303-358 (diff) / :444 (diffPair). Non-blocking; the underlying behavior is verified correct."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Task 4 / Architecture: bump testing/Dockerfile label to 0.0.10 (singular 'label').",
+      "reality": "testing/Dockerfile contains TWO literal '0.0.9' occurrences that must change: LABEL version=\"0.0.9\" (line 6) AND the CMD echo string 'pgcenter-testing 0.0.9: PostgreSQL 14-18 on Ubuntu 22.04' (line 38). The CMD line also already says '14-18' (not the 'stale 14-17 comment' the tech-spec claims must be fixed). Workflow refs (default.yml:9, release.yml:11) and the test-image tag 0.0.9 are confirmed present and correct.",
+      "source": "005-feat-replication-slots-tech-spec.md, Architecture (line 39) and Task 4 (lines 264-272)",
+      "fix": "In Task 4, note BOTH 0.0.9 sites in testing/Dockerfile (LABEL line 6 and CMD line 38). The 'stale 14-17 comment' to fix does not exist — the Dockerfile already reads '14-18'; drop or correct that sub-instruction."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Code-research §1.5 / Risks: Test_filterViews current wantN values include rows for versions 130000:4, 120000:7, 110000:9, 100000:9 and version 140000 with pgssSchema '' wantN 7.",
+      "reality": "record_test.go:116-121 confirms exactly these rows: {140000,\"\":7/16}, {140000,\"public\":1/22}, {130000:4/19}, {120000:7/16}, {110000:9/14}, {100000:9/14}. Claim is accurate. The tech-spec's '+1 per row on all six rows' (Task 3) is consistent with the 6 testcase rows present. No mirage — confirmed.",
+      "source": "005-feat-replication-slots-tech-spec.md, Task 3 (lines 302-311); code-research line 82",
+      "fix": "No change needed; recorded as a confirmed (not mirage) audit entry."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 41,
+    "confirmed": 41,
+    "mirages_found": 0,
+    "verified_claims": [
+      "pg_replication_slots.slot_name/slot_type/active/wal_status/restart_lsn/safe_wal_size exist (PG14 docs)",
+      "wal_status PG13+, safe_wal_size PG13+ (present PG14)",
+      "pg_stat_replication_slots PG14+ with spill_txns/spill_count/spill_bytes/stream_txns/stream_count/stream_bytes/total_txns/total_bytes/stats_reset",
+      "selectWalFunctions(version, recovery) recovery-aware (query.go:64-83)",
+      "Options.WalFunction1/WalFunction2 fields (query.go:26-27)",
+      "{{.WalFunction1}}/{{.WalFunction2}} placeholders used in replication.go",
+      "Format(tmpl, o) text/template execution (query.go:86-99)",
+      "NewOptions sets WalFunction1/2 (query.go:49)",
+      "query.PostgresV14 = 140000 (query.go:17)",
+      "NO PostgresV15..PostgresV18 constants (const block ends at V14)",
+      "View struct fields: MinRequiredVersion,QueryTmpl,DiffIntvl,Ncols,OrderKey,OrderDesc,UniqueKey,ColsWidth,Filters,NotRecordable (view.go:10-31)",
+      "bgwriter view entry NotRecordable:true (view.go:140-152)",
+      "Configure() case bgwriter calls SelectStatBgwriterQuery (view.go:337-339)",
+      "SelectStatBgwriterQuery(version int) (string, int, [2]int) (bgwriter.go:41)",
+      "diff() matches rows by ukey, copies absolute cols outside [lo,hi] (postgres.go:303-358)",
+      "diffPair errors on empty string via ParseInt (postgres.go:444-459)",
+      "Compare(curr,prev,itv,interval,skey,desc,ukey) signature (postgres.go:273)",
+      "Hotkey 'o' is FREE (no 'o'/'O' binding in keybindings.go)",
+      "bgwriter bound to 'b' (keybindings.go:36)",
+      "Test_filterViews rows {140000:7/16,140000pub:1/22,130000:4/19,120000:7/16,110000:9/14,100000:9/14} (record_test.go:116-121)",
+      "workflows reference lesovsky/pgcenter-testing:0.0.9 (default.yml:9, release.yml:11); prepare-test-environment.sh sets shared_preload_libraries only, NO wal_level"
+    ]
+  }
+}

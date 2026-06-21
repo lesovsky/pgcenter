@@ -7,6 +7,30 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [006] replslots retained,KiB standby path not verified on a live standby
+
+**Added:** 2026-06-21 (feature: 005-feat-replication-slots)
+**Severity:** Low
+**Area:** `internal/query/replication_slots.go`, integration tests
+
+**What:** `retained,KiB` uses the recovery-aware `{{.WalFunction2}}()` template, which resolves to `pg_last_wal_receive_lsn()` on a standby. The integration tests (tier-1/2/3) run only against primaries, so the standby branch is correct-by-construction (same template the `replication` screen already uses on standbys) but not exercised by a dedicated live-standby test. Recorded as deferred-to-post-deploy in the QA report.
+
+**Why deferred:** The test harness has no standby cluster; adding one is disproportionate for a path that reuses an already-proven template. Manual standby check is the practical verification.
+
+---
+
+### [005] Test_doReload panics instead of skipping when PG fixture is absent
+
+**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
+**Severity:** Low
+**Area:** `top/reload_test.go`
+
+**What:** `Test_doReload` panics (instead of `t.Skipf`) when the PG fixture on port 21917 is not running, so `make test` fails locally whenever the test clusters are down — unlike the rest of the suite, which skips unavailable versions gracefully. Pre-existing (confirmed on a clean baseline via `git stash`), not caused by feature 004. During feature 004 this panic masked local detection of a `record`-package test regression that CI later caught.
+
+**Why deferred:** Pre-existing and environmental; the fix is to replace the panic with a `t.Skipf` guard matching the rest of the suite. Non-blocking for the feature.
+
+---
+
 ### [004] procpidstat col-index constants duplicated in report package
 
 **Added:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)

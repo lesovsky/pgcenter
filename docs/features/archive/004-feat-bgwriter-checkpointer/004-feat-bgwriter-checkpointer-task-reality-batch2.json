@@ -1,0 +1,38 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer",
+  "tasks_checked": ["04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Acceptance Criteria require 'make lint' to pass. The Makefile 'lint' target runs golangci-lint + gosec, but the task description (line 41) also implies gosec runs as part of 'make lint'. The Makefile has a separate 'vuln' target (govulncheck) that the QA checklist does not invoke. This is not an error (vuln is not in scope per tech-spec Agent Verification Plan, which lists only test/lint/build), but the QA verdict should not silently treat govulncheck as covered.",
+      "fix": "No change required. Optionally note in the acceptance report that 'make vuln' is out of scope for this QA gate (tech-spec lists test/lint/build only)."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 14,
+    "issues_found": 1
+  },
+  "verified_claims": [
+    "Makefile targets test/lint/build all exist (lint=golangci-lint+gosec, vuln=govulncheck separate)",
+    "internal/query/wal.go template exists with SelectStatWALQuery selector (line 24-25) — correct template for SelectStatBgwriterQuery",
+    "internal/query/wal_test.go template exists",
+    "NotRecordable is a real field on the View struct (internal/view/view.go:30) with doc comment pointing to filterViews",
+    "filterViews() exists in record/record.go:200 and honors NotRecordable: drop branch at lines 208-212",
+    "record/record_test.go already pins NotRecordable behavior (TestFilterViews_dropsExplicitNotRecordable) — QA can rely on it",
+    "switchViewTo(app, \"...\") pattern exists in top/keybindings.go (e.g. 'w' -> wal); 'b' is NOT yet bound (correctly Task 03's job)",
+    "help row 'a,f,r,w' exists at top/help.go:13 — target for inserting 'b' to form a,b,f,r,w; currently absent (correctly Task 03's job)",
+    "Configure() exists at internal/view/view.go:302 with case \"wal\" at line 321 — template for case \"bgwriter\"",
+    "overview.md false claim exists exactly as described: line 21 '- pg_stat_bgwriter — background writer stats' listed under Supported PostgreSQL Statistics (Task 02 target)",
+    "PostgresV14 = 140000 exists in internal/query/query.go:17; PostgresV15/16/17/18 do NOT exist — tech-spec/task correctly use literals 170000/180000",
+    "NewTestConnectVersion exists at internal/postgres/testing.go:16 — integration test helper as referenced",
+    "record/record.go NotRecordable example comment exists (lines 88-94 region) and is the stale comment Task 03 refreshes",
+    "bgwriter.go / bgwriter_test.go absent — expected: created by Task 01 (status: planned). QA correctly depends_on [01,02,03]"
+  ],
+  "dependency_check": "depends_on: [\"01\",\"02\",\"03\"] is CORRECT. Task 04 reads/verifies files created or modified by all three wave tasks: bgwriter.go/bgwriter_test.go (Task 01), overview.md (Task 02), view.go/keybindings.go/help.go/record.go (Task 03). All currently-absent artifacts (bgwriter.go, key 'b' binding, help 'b', overview fix) map to declared dependencies — no undeclared dependency.",
+  "notes": "Task 04 is a final-wave pre-deploy-qa task: no TDD anchor and empty reviewers are correct per skill semantics. No hallucinated commands found: make test/lint/build are real Makefile targets. No hallucinated verification steps: every referenced symbol (NotRecordable, filterViews, SelectStatWALQuery template, switchViewTo, Configure, NewTestConnectVersion) exists in the codebase. The PG18 slru_written live-check is correctly described as a CI-matrix gate with explicit t.Skipf fallback for local absence. Acceptance criteria reference real, version-correct values (Ncols 12/13/14, DiffIntvl [3,10]/[6,11]/[6,12]) consistent with tech-spec Data Models. Zero critical findings -> approved."
+}

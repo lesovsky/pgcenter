@@ -1,0 +1,47 @@
+{
+  "status": "needs_work",
+  "checks": {
+    "clarity": "pass",
+    "value": "pass",
+    "scope": "fail",
+    "risks": "pass"
+  },
+  "findings": [
+    {
+      "check": "scope",
+      "severity": "major",
+      "issue": "15 columns on a multi-row view is wider than any existing pgcenter screen. The 8 logical-decoding diffed counters (spill_txns, spill_count, spill_bytes, stream_txns, stream_count, stream_bytes, total_txns, total_bytes) are all variants of the same two signals: WAL spill and stream pressure. A DBA diagnosing disk fill primarily needs retained_wal,KiB and wal_status, not the granular 4-column spill breakdown. The *_count columns (spill_count, stream_count) tell 'how many times' but rarely change the diagnosis compared to the *_bytes columns. The interview records 'Q5 keep all, 15 cols fine' but this was accepted without pushback on terminal-width impact. On a standard 80-column or even 132-column terminal the header row alone will overflow or cause column truncation, degrading readability for all users regardless of slot type.",
+      "fix": "Before writing the spec, decide explicitly whether to keep all 8 or trim to 4 (spill_bytes, stream_bytes, total_txns, total_bytes). If kept, add an explicit acceptance criterion: 'columns are readable at terminal width >= N chars'. Document the resulting minimum usable terminal width. The interview should have challenged this with a specific width estimate, not just declared it 'fine'."
+    },
+    {
+      "check": "scope",
+      "severity": "major",
+      "issue": "Physical slots showing '0' (not empty/dash) in all 8 logical-decoding counter columns is a UX issue that may mislead DBAs. A DBA looking at a physical replication slot that shows spill_txns=0, spill_count=0, spill_bytes=0 etc. has to remember that these zeros mean 'not applicable, this is physical' rather than 'no spill has occurred'. This distinction matters: a logical slot with zero spill is healthy; a physical slot with zero spill is uninformative. The interview discussion (Q6, 'Q6 accepted') took the technical path (coalesce is mandatory) but skipped the UX question: should the cell display '—' or be blank rather than '0'? The existing replication screen (pg_stat_replication) shows empty cells for N/A columns; '0' deviates from that convention.",
+      "fix": "Either: (a) accept '0' but document it explicitly in the spec as a known limitation with a rationale; or (b) investigate whether the diff layer can render a blank/dash for coalesced physical-slot counters (e.g. by routing them through the absolute branch). If (a), add a user-facing note. This decision is product-level, not technical, and must appear in the spec's Limitations section so a DBA reading the screen for the first time is not confused."
+    },
+    {
+      "check": "risks",
+      "severity": "major",
+      "issue": "NotRecordable is the right call for 0.11.0, but the interview did not address the post-incident analysis gap it creates for THIS specific feature. For bgwriter (004), losing record/report means you cannot graph checkpoint frequency over time — inconvenient but not blocking: you can see it in real time. For replication slots, the primary incident scenario is a disk-fill event that already happened (or is happening gradually). A DBA coming to pgcenter AFTER the disk filled cannot use the TUI to reconstruct which slot caused it, how long the WAL retention grew, or when wal_status transitioned to 'lost'. This is a materially different value loss compared to bgwriter's NotRecordable decision, and it was not surfaced in the interview. The interview (Q10) only discussed empty screen when no slots — it never challenged 'what happens after the incident is over'.",
+      "fix": "Add an explicit finding to the spec's Risks or Limitations section: 'Without record/report, post-incident reconstruction is impossible — a DBA who did not have pgcenter running during the disk-fill event gets no historical retained-WAL trend from pgcenter.' Acknowledge this as a deliberate deferral, not an oversight. This is also an argument for prioritizing the record/report backlog feature immediately after 0.11.0 rather than treating it as indefinitely deferred."
+    },
+    {
+      "check": "scope",
+      "severity": "minor",
+      "issue": "Default sort by retained,KiB desc (col 4, OrderKey=4, OrderDesc=true) deviates from every other multi-row view in pgcenter, which default to col 0 (the name column). The interview (Q7) confirms the decision was accepted with 'agreed', but the justification ('incident-first') is correct for daily-ops use. However, this inconsistency will surprise users who switch between screens and expect arrows to start from the leftmost column. The code-research note itself flags this: 'the established default across all multi-row views is col 0'. This is a minor inconsistency risk, not a blocker.",
+      "fix": "Document the deviation explicitly in the spec's Technical Decisions section with the rationale ('retained WAL is the primary incident signal; starting at col 0 / slot_name means the most important column is not visible by default'). Consider whether the same convention should be applied to future multi-row views (pg_stat_io) for consistency."
+    },
+    {
+      "check": "risks",
+      "severity": "minor",
+      "issue": "Excluding invalidation_reason (PG 18+) and conflicting (PG 16+) was decided on the basis that 'wal_status carries the signal'. This is partially true: wal_status='lost' means the slot was invalidated. But wal_status does NOT tell the DBA WHY — was it max_slot_wal_keep_size exceeded, wal_level changed, or a row_removal conflict? For incident triage, knowing the cause is as important as knowing the fact. The interview (Q8) explains the PG-version branching complexity as the reason to exclude them, which is a valid technical constraint — but the business impact was not stated: a DBA on PG 18 will still need to drop to psql to find the invalidation_reason after seeing wal_status='lost' in pgcenter.",
+      "fix": "Add to the spec's Limitations: 'On PG 16+, conflicting (slot conflict indicator) is not shown; on PG 18+, invalidation_reason is not shown. A DBA investigating a lost/invalidated slot must query pg_replication_slots directly to find the cause. These columns can be added in a follow-up with per-version branching.' This is a documented gap, not a blocker."
+    }
+  ],
+  "questions": [
+    "What is the minimum terminal width required to display the 15-column replslots screen without truncation? Has this been measured? If it exceeds 200 chars, a significant portion of the target audience (DBAs on shared terminals or narrow splits) will see a degraded layout.",
+    "Is there any DBA workflow where retaining all 4 spill-counter columns (spill_txns AND spill_count AND spill_bytes AND total_txns AND total_bytes) provides actionable information that spill_bytes alone does not? If the answer is 'tune logical_decoding_work_mem', then spill_bytes is sufficient and the count variants are noise.",
+    "Given that this feature's primary value is disk-fill incident response, and given that disk-fill events are often discovered after the fact (alerting, monitoring), is there a plan to unblock the record/report backlog feature before or immediately after 0.11.0? Without it, pgcenter adds zero value to post-incident analysis for replication slots."
+  ],
+  "summary": "The feature is well-reasoned and solves a real, frequent problem (slot-driven disk fills). The hybrid join approach is justified. However, three business-level concerns need resolution before spec writing: (1) 15 columns on a multi-row TUI screen risks readability on realistic terminals and the *_count columns may be trimable without losing diagnostic value; (2) physical slots showing '0' (not blank) in logical-only counters needs an explicit UX decision, not just a technical rationale; (3) the NotRecordable choice eliminates post-incident analysis value that is more significant for this feature than for bgwriter, and this tradeoff was not surfaced in the interview."
+}

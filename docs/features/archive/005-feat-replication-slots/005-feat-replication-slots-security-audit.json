@@ -1,0 +1,31 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A05: Security Misconfiguration",
+      "title": "wal_level=logical broadens WAL detail in the shared test image, but stays within test scope",
+      "description": "Task 4 enables wal_level=logical in testing/prepare-test-environment.sh and bumps the test image to 0.0.10 so the tier-3 logical-slot test can create a test_decoding slot. wal_level=logical writes additional row-level information into the WAL stream and permits logical decoding plugins. This is confined to the disposable CI/test PostgreSQL clusters (ports 219xx, trust auth, snakeoil SSL) defined in the same script; it is not a production setting and does not touch the pgcenter binary, which is read-only. The only side effects are a marginally larger WAL footprint per test cluster and the ability to load decoding output plugins (here only test_decoding, a stock contrib module). No data leaves the container; pg_hba.conf already uses 'trust' for all local/host connections, so wal_level=logical does not weaken an otherwise-hardened posture. Verify the change is applied only to the test environment script and not propagated to any sample/production config or documentation that users might copy.",
+      "location": "Section: Architecture (testing/prepare-test-environment.sh, testing/Dockerfile); Decision 5; Task 4",
+      "impact": "Negligible outside test scope. If the relaxed wal_level snippet were ever copied into user-facing config examples it could become an unintended default, but no such propagation is specified.",
+      "recommendation": "Keep wal_level=logical strictly inside testing/prepare-test-environment.sh. Add a short comment noting it exists only for the logical-slot integration test so it is not mistaken for a recommended production value. No code-path change required.",
+      "cwe": "CWE-1188"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Test replication slots retain WAL on the shared fixture if defer-drop fails",
+      "description": "Tier-2/tier-3 integration tests create named replication slots (pg_create_physical_replication_slot('pgcenter_test_phys', true) and pg_create_logical_replication_slot('pgcenter_test_logical', 'test_decoding')) and drop them in defer. A replication slot pins WAL: restart_lsn prevents WAL recycling until the slot is dropped or advanced. The spec already calls out this risk and mitigates it with defer-drop teardown (Risks table; Decisions 2 and 5). defer runs even on test assertion failure, so the normal-failure path is covered. The residual gap is the hard-kill case: if the test process is SIGKILLed or the container is torn down mid-test, the defer never executes and the slot persists, retaining WAL until the next run. Because slot names are fixed literals, a re-run will also collide (pg_create_*_replication_slot errors on a duplicate name) and abort unless the leftover is cleaned. The physical slot uses immediately_reserve=true, so it reserves WAL from creation. shared_buffers=16MB and a disposable CI cluster bound this to a low practical impact, but a self-restarting/long-lived test container could slowly accumulate retained WAL across crashed runs.",
+      "location": "Section: Testing Strategy (Tier 2/Tier 3); Risks table row 'Tier-2 physical slot retains WAL'; internal/query/replication_slots_test.go (new)",
+      "impact": "On an abnormally terminated test run the named slot survives and retains WAL on the shared test cluster; a subsequent run hits a duplicate-name error and/or continued WAL retention until manual cleanup. Disk-fill is unlikely on the bounded CI fixture but possible on a persistent local test environment.",
+      "recommendation": "Make slot creation idempotent and self-healing rather than relying on defer alone: before creating, drop any pre-existing slot of the same name (SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots WHERE slot_name = 'pgcenter_test_phys'), or unique-ify the name per run (e.g. append a PID/timestamp suffix) so a stale slot never blocks a re-run. Keep the existing defer-drop as the primary teardown. This eliminates both the duplicate-name failure and unbounded WAL retention across crashed runs.",
+      "cwe": "CWE-459"
+    }
+  ]
+}

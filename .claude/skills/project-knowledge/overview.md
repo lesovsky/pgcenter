@@ -18,7 +18,8 @@ It reads PostgreSQL internal statistics views and presents them in a top-like in
 - `pg_stat_database` — per-database metrics (commits, rollbacks, tuples, deadlocks, temp files)
 - `pg_stat_replication` — connected standbys and replication lag
 - `pg_stat_user_tables`, `pg_stat_user_indexes` — table/index access stats
-- `pg_stat_bgwriter` — background writer stats
+- `pg_stat_bgwriter` (+ `pg_stat_checkpointer` on PG 17+) — background writer / checkpointer screen (hotkey `b`; PG 14–18; TUI-only, not recordable in 0.11.0)
+- `pg_replication_slots` (+ `pg_stat_replication_slots`) — replication slots screen (hotkey `o`; PG 14–18; multi-row, all slots; retained WAL + wal_status + spill/stream; TUI-only, not recordable in 0.11.0)
 - `pg_stat_wal` — WAL generation stats (PG 14+; reduced schema in PG 18)
 - `pg_stat_statements` — top queries by various metrics (requires extension)
 - System stats — CPU, memory, disk, network (read from /proc or via PL/Perl schema)

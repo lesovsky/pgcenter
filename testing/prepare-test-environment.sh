@@ -28,6 +28,8 @@ log_filename = 'postgresql-${v}.log'
 track_io_timing = on
 track_functions = all
 shared_preload_libraries = 'pg_stat_statements'
+# test-only: enables logical replication slots for integration tests; do NOT copy into production configs
+wal_level = logical
 EOF
 
   # Allow all local connections

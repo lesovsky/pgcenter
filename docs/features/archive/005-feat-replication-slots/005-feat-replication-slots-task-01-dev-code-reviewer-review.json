@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "The hybrid query layer is a clean, faithful implementation of tech-spec Decisions 1/2/4. The SQL matches the canonical string verbatim (15 columns, correct 0-based layout, coalesce on the 8 diffed counters, WAL-function placeholders, KiB divisions, ORDER BY \"retained,KiB\" DESC NULLS LAST), the selector contract returns (query, 15, [2]int{6,13}) with the version param named _ for revive, and style/naming mirror bgwriter.go/replication.go. Formatted query verified to produce valid 15-column SQL; gofmt/vet/build clean. No critical or major issues.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/replication_slots_test.go",
+      "line": 56,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "After assert.NoError(t, err) on conn.Query, the code dereferences rows.FieldDescriptions() unconditionally. If a future schema change made Query return an error, rows could be nil and the next line would panic instead of failing cleanly. This exactly mirrors the reference Test_StatBgwriterQueries, so it is an intentional pattern match, not a regression. Optional: guard with require.NoError if you want a clean failure instead of a panic on query error.",
+      "benefit": "Slightly clearer failure mode if the live schema ever diverges and Query errors.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/replication_slots.go",
+      "line": 39,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "OrderKey=4 and UniqueKey=0 (Decision 3) are not expressible in this selector's return tuple and live only in the Task 2 view registration. The doc comment here does not mention that the retained-DESC default sort and slot_name unique key are wired elsewhere. A one-line pointer would help a future reader who sees ORDER BY \"retained,KiB\" here and wonders where the Go-side sort key is set.",
+      "benefit": "Easier cross-task navigation between the query layer and the view registration that consumes OrderKey/UniqueKey.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}
