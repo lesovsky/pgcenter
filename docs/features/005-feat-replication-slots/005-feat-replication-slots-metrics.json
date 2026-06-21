@@ -35,7 +35,20 @@
       "human_wait_time_min": 2,
       "steps": {}
     },
-    "feature_execution": null,
+    "feature_execution": {
+      "start_time": "2026-06-21T10:39:54Z",
+      "end_time": "2026-06-21T11:00:50Z",
+      "duration_min": 21,
+      "touch_time_min": 19,
+      "human_wait_time_min": 2,
+      "steps": {
+        "waves_executed": 4,
+        "wave1": "task-01 query+selector+tests, task-04 image bump",
+        "wave2": "task-02 view+hotkey+help, task-05 physical/logical integration",
+        "wave3": "task-03 Test_filterViews bump",
+        "wave4": "task-06 pre-deploy QA (live PG 14-18 verification)"
+      }
+    },
     "done": null
   },
   "quality": {
@@ -49,7 +62,7 @@
     "interview_questions": 12,
     "tasks_count": 6,
     "waves_count": 4,
-    "agents_spawned": 6,
-    "commits_count": 0
+    "agents_spawned": 23,
+    "commits_count": 14
   }
 }
