@@ -163,6 +163,34 @@ func New() Views {
 			Filters:            map[int]*regexp.Regexp{},
 			NotRecordable:      true,
 		},
+		"stat_io": {
+			Name:               "stat_io",
+			MinRequiredVersion: query.PostgresV16,
+			QueryTmpl:          query.PgStatIOPG16,
+			DiffIntvl:          [2]int{4, 14},
+			Ncols:              16,
+			OrderKey:           4,
+			OrderDesc:          true,
+			UniqueKey:          0,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show pg_stat_io operations statistics",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
+		"stat_io_time": {
+			Name:               "stat_io_time",
+			MinRequiredVersion: query.PostgresV16,
+			QueryTmpl:          query.PgStatIOTime,
+			DiffIntvl:          [2]int{4, 8},
+			Ncols:              10,
+			OrderKey:           4,
+			OrderDesc:          true,
+			UniqueKey:          0,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show pg_stat_io timings statistics (requires track_io_timing=on)",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
 		"statements_timings": {
 			Name:      "statements_timings",
 			QueryTmpl: query.PgStatStatementsTimingPG13,
@@ -323,8 +351,9 @@ func New() Views {
 }
 
 // Configure performs adjusting of queries accordingly to Postgres version.
-//   IN opts Options: struct with additional Postgres properties required for formatting necessary queries
-//   IN gucTrackCommitTS string: value of track_commit_timestamp GUC (on/off)
+//
+//	IN opts Options: struct with additional Postgres properties required for formatting necessary queries
+//	IN gucTrackCommitTS string: value of track_commit_timestamp GUC (on/off)
 func (v Views) Configure(opts query.Options) error {
 	var track bool
 	if opts.GucTrackCommitTS == "on" {
@@ -352,6 +381,12 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "replslots":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatReplicationSlotsQuery(opts.Version)
+			v[k] = view
+		case "stat_io":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatIOQuery(opts.Version)
+			v[k] = view
+		case "stat_io_time":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatIOTimeQuery(opts.Version)
 			v[k] = view
 		}
 	}

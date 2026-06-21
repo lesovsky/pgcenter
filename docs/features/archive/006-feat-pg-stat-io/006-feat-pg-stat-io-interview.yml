@@ -1,0 +1,494 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Updated after EACH user response with scoring, values, and remaining gaps.
+#
+# Location: {feature_base}-interview.yml
+#   e.g.  docs/features/001-feat-add-auth-interview.yml
+#
+# Scoring: 0-100% (how well we understand this aspect)
+# Status: pending → partial → complete
+# Required: true = must reach threshold, false = cover if relevant
+
+# ============================================================================
+# Interview Metadata (Session Recovery)
+# ============================================================================
+interview_metadata:
+  feature_name: "pg-stat-io"
+  feature_base: "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io"
+  work_type: "feature"
+  started: "2026-06-21 16:30:34"
+  last_updated: "2026-06-21 17:48:00"
+  status: "completed"
+  can_resume: true
+  current_question_num: 5
+  feature_size: "M"     # S | M | L
+
+# ============================================================================
+# Conversation History (for session recovery)
+# ============================================================================
+# Preserves complete Q&A. Update after EVERY user response.
+#
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-06-21 16:35:00"
+    topic: "display_model + columns + version_behavior + testing"
+    agent_question: |
+      Batch 1 (Cycle 1): (1) display model — proposed multi-row table like
+      tables/replslots, show all rows, hide all-NULL rows, rely on existing
+      `/` filter + sort; (2) column subset (variant A stable across versions);
+      (3) version behavior — PG16+ only, PG14/15 "not supported" message, include
+      PG18 WAL IO rows/timings; (4) success criteria + testing strategy.
+    user_answer: |
+      Agreed multi-row + hide NULL rows. On columns proposed a TWO-SCREEN split:
+      count-based and time-based (cf. pg_stat_statements sub-screens). Both share
+      base cols backend_type/object/context/stats_age. count-based:
+      reads,writes,writebacks,extends,hits,evictions,reuses,fsyncs. time-based:
+      read_time,write_time,writeback_time,extend_time,fsync_time. Noted the
+      downside (can't see reads+read_time together). Floated pgss-style
+      absolute-total + diff-delta pattern. Agreed on (3) and (4). Flagged that
+      bytes-specific fields were added in PG18 -> version-dependent queries needed.
+    summary: "multi-row + hide-NULL agreed; user proposes count/time two-screen split; PG18 bytes-fields => version-dependent queries"
+  - question_num: 2
+    timestamp: "2026-06-21 16:45:00"
+    topic: "blocks-vs-bytes + navigation + hotkey + row-hiding rule"
+    agent_question: |
+      Batch 2: (1) count-screen blocks vs bytes vs hybrid; (2) navigation
+      count/time — pgss menu vs toggle key; (3) hotkey choice; (4) row-hiding
+      rule consistent across both screens. Endorsed two-screen split (forced by
+      pgcenter having NO horizontal column scroll — same reason pgss is split).
+      Argued AGAINST absolute+delta (live tool => rates are the signal, doubles
+      width). Raised track_io_timing=off caveat for time-screen.
+    user_answer: |
+      (1) leans HYBRID — column set stays ~uniform across versions: pre-18 bytes
+      columns computed via op_bytes, 18+ native. (2) likes lowercase/uppercase
+      pattern (x/X for pgss, d/D for databases) — proposes j = main toggle/selector
+      (cycle to next sub-screen), J = open menu + select. (3) j and J. (4) agreed:
+      hide rows where all count counters NULL/0, keep same row-set on both screens,
+      do NOT hide rows just for zero timings.
+    summary: "hybrid bytes (version-dependent source); nav j=toggle count<->time, J=menu (matches x/X,d/D pattern, both free); row-hiding by count-NULL applies to both screens"
+  - question_num: 3
+    timestamp: "2026-06-21 17:05:00"
+    topic: "width/columns/sort/user-stories (Cycle 2, code-research-informed)"
+    agent_question: |
+      Batch 3 with ASCII mockups: (1) single readable io_key column vs 3 separate
+      sortable dims; (2) full counter set vs trim for ~120 cols; (3) default OrderKey;
+      (4) confirm 4 proposed user stories.
+    user_answer: |
+      (1) THREE separate sortable columns (backend_type/object/context) — keeps the
+      per-column `/` filter useful for trimming the ~30 rows (single concat would
+      degrade filtering). (2) keep FULL counter set (like statements). (3) sort by
+      reads — "just the first numeric column". (4) all 4 user stories confirmed.
+    summary: "separate dims (filter > single-key sort grouping); full counters; OrderKey=reads (first numeric, desc); 4 user stories confirmed; count-screen ~16 cols/~165 wide accepted"
+  - question_num: 4
+    timestamp: "2026-06-21 17:20:00"
+    topic: "acceptance criteria + edge/error scenarios + verification + risks (Cycle 2/3 wrap)"
+    agent_question: |
+      Batch 4: proposed full A-E synthesis — A) 7 acceptance criteria, B) edge cases
+      (NULL coalesce, standby, Q-no-reset, narrow terminal, PG18 init), C) error
+      scenarios (PG<16 gate, NULL-abort), D) verification (unit per-version + CI live
+      + manual QA), E) 4 risks with mitigations. Asked to add/remove/correct.
+    user_answer: |
+      "все ок" — full A-E synthesis approved without changes.
+    summary: "AC/edge/error/verification/risks all confirmed as proposed; interview content complete, ready for Devil's Advocate + completeness check"
+  - question_num: 5
+    timestamp: "2026-06-21 17:45:00"
+    topic: "Devil's Advocate + completeness findings resolution"
+    agent_question: |
+      dev-customer (needs_work: M1 two-screens-vs-reduced-single, M2 record/report
+      horizon, minor track_io_timing hint + Q-reset doc) and completeness-checker
+      (verdict complete; 5 minors: PostgresVxx consts, help string, io_key visibility,
+      stat/help.go, hybrid-bytes cross-version test). Self-resolved the minors; asked
+      user to confirm M1 (keep two screens) and decide M2 (record/report horizon).
+    user_answer: |
+      M1: CONFIRMED keep two screens (loss of reads+read_time cohesion is a conscious
+      tradeoff; reduced single screen would kill US3 evictions/reuses + US2 WAL fsync).
+      M2: record/report ships as a SEPARATE feature within v0.11.0 — implement top
+      first, then record/report. Doing both at once would make the feature XL.
+    summary: "two screens confirmed as deliberate; record/report = separate 0.11.0 feature (top-first). All DA/completeness findings resolved."
+# Format:
+# - question_num: 1
+#   timestamp: "2025-11-12 15:20:33"
+#   topic: "user_problem"
+#   agent_question: |
+#     [Full question text]
+#   user_answer: |
+#     [Full answer text]
+#   summary: "Brief summary"
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+# Interview Cycle 1 scope
+phase1_feature_overview:
+
+  feature_description:
+    score: 90
+    status: "complete"
+    value: |
+      New TUI screen for pg_stat_io (PG16+). Multi-row table (one row per
+      backend_type x object x context), cumulative counters shown as per-interval
+      rates. Split into TWO sub-screens to fit terminal width (pgcenter has no
+      horizontal scroll): count-based (operation counts + bytes throughput) and
+      time-based (read/write/writeback/extend/fsync timings). Base columns on both:
+      backend_type, object, context, stats_age. Rows where all count counters are
+      NULL/0 are hidden. Version-dependent queries (PG18 added native *_bytes fields
+      and WAL IO). Modeled on replslots (multi-row) + pgss (sub-screen menu).
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 85
+    status: "complete"
+    value: |
+      No way today in pgcenter to see the unified IO breakdown by
+      backend_type x object x context. During incidents a DBA cannot tell whether
+      heavy IO comes from vacuum vs client backends vs checkpointer, or via which
+      context (normal/vacuum/bulkread/bulkwrite). PG18 also moved WAL IO timings
+      out of pg_stat_wal into pg_stat_io — currently invisible. bgwriter screen
+      already had to drop buffers_backend on PG17+ because the data moved here.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 85
+    status: "complete"
+    value: "Practicing PostgreSQL DBA doing incident triage / routine IO monitoring."
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      - Hotkey j opens pg_stat_io; toggles count<->time. J opens a 2-item menu.
+      - Both screens show correct per-interval rates for all non-empty rows.
+      - Rows with all-NULL count counters hidden; same row-set on both screens.
+      - Correct version branching PG16/17 vs PG18 (native *_bytes, WAL object).
+      - PG14/15: clear "not supported on this version" message, no crash.
+      - track_io_timing=off handled gracefully (time-screen may be mostly zero).
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      - TUI (top) only; view NotRecordable:true (release 0.11.0 TUI-first principle;
+        record/report deferred).
+      - pg_stat_io is PG16+; pgcenter supports PG14-18.
+      - pgcenter has NO horizontal column scroll => wide view must be split into
+        sub-screens (this is why pgss is split; same forces apply here).
+      - Cumulative counters fit pgcenter rate model; stats_age absolute (not diffed),
+        like wal/bgwriter.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 85
+    status: "complete"
+    value: |
+      Same as bgwriter/replslots: unit tests for the query selector on each version
+      branch (PG16/17 vs PG18) + integration tests on live clusters across the CI
+      matrix (PG14-18). Locally only PG17 is up -> other versions use t.Skipf;
+      full gate (incl. PG18 native bytes + WAL IO) runs in CI.
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 3)
+phase2_user_experience:
+
+  user_stories:
+    score: 88
+    status: "complete"
+    value: |
+      US1 (count): As a DBA during an IO spike, I want reads/writes broken down by
+      backend_type x context, so I can distinguish vacuum-driven vs client-driven IO.
+        Flow: press j -> count-screen -> sort by reads (default) -> read io_key dims
+        -> filter `/` on backend_type or context to isolate (e.g. autovacuum worker).
+      US2 (count, PG18): As a DBA on PG18, I want WAL IO (object='wal') visibility
+      since it left pg_stat_wal, so I can watch WAL write/fsync pressure.
+        Flow: count-screen -> `/` filter object=wal -> watch write,KiB / fsyncs rows.
+      US3 (count): As a DBA, I want to spot high evictions/reuses, so I can judge
+      shared_buffers adequacy / ring-buffer churn.
+        Flow: count-screen -> sort by evictions -> inspect top rows.
+      US4 (time): As a DBA with track_io_timing=on, I want read/write/fsync latency
+      per source, so I can find slow IO paths.
+        Flow: press j again (toggle) -> time-screen -> sort by read_time/fsync_time.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      AC1: j opens count-screen; repeat j toggles count<->time; J opens a 2-item menu.
+      AC2: both screens show correct per-interval rates for all non-empty rows;
+           counters diffed, dims + stats_age absolute.
+      AC3: rows where all count counters NULL/0 are hidden (SQL WHERE); identical
+           row-set on both screens.
+      AC4: PG16/17 bytes = reads*op_bytes/1024 etc.; PG18 native *_bytes/1024 +
+           object='wal' rows present; per-branch Ncols/DiffIntvl correct (unit tests).
+      AC5: PG14/15 -> generic "not supported" message, no panic / no blank screen.
+      AC6: track_io_timing=off -> time-screen shows zeros (rows NOT hidden), no error.
+      AC7: cross-sample row-matching via synthetic io_key -> correct deltas when >=2
+           rows share a backend_type.
+      AC8: when all timing columns are zero (track_io_timing=off), time-screen shows a
+           cmdline hint "track_io_timing is off — timings unavailable".
+      AC9: help screen (h/F1) documents that Q does NOT reset pg_stat_io (shared stats).
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 88
+    status: "complete"
+    value: |
+      - NULL in diffed cols (fsyncs for temp relation, reads for background writer)
+        -> coalesce(...,0), else sample aborts.
+      - Standby: pg_stat_io populated (backend_type='startup'); no special handling.
+      - Q (reset) does NOT reset pg_stat_io (shared stats) -> document, not a bug.
+      - Narrow terminal -> trailing columns clip (standard pgcenter behavior).
+      - PG18 context='init' (WAL segment init) appears as extra rows -> handled by
+        generic row rendering (no special-case).
+      - track_io_timing=off -> time-screen all zeros: show cmdline hint (AC8), don't
+        treat as error, don't hide rows.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 88
+    status: "complete"
+    value: |
+      - pg_stat_io unavailable (PG<16) -> existing MinRequiredVersion gate ->
+        "ERROR: selected statistics is not supported by current version of Postgres".
+      - One NULL inside DiffIntvl without coalesce -> blank screen (the main risk;
+        closed by coalesce on all diffed cols + a NULL-row unit test).
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      - Unit: io_test.go selector over versions {14,15,16,17,18}, assert
+        (Ncols, DiffIntvl) per branch; include a NULL-row diff-safety test.
+      - Integration: live query on CI matrix PG14-18; PG18 run is the real gate for
+        native *_bytes + object='wal'. Local PG17 only; others t.Skipf.
+      - Manual QA: make build, walk US1-US4 on live PG17 (and PG18 if up). Also
+        sanity-check hybrid bytes magnitude on PG17 (reads*op_bytes) vs PG18 (native
+        read_bytes) under comparable load — exact divergence from io_combine_limit is
+        expected, not a bug.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      Two sub-screens of one logical pg_stat_io view. FINAL column layouts:
+      count-screen (~16 cols, ~165 wide; default on entry):
+        [0] io_key (synthetic md5(backend_type||object||context), UniqueKey, HIDDEN via
+            ColsWidth[0]=0 — service key only), [1] backend_type, [2] object,
+            [3] context  -- absolute
+        [4..14] DIFFED counters: reads, read,KiB, writes, write,KiB, extends, ext,KiB,
+            writebacks, hits, evictions, reuses, fsyncs   (DiffIntvl=[4,14])
+        [15] stats_age -- absolute, outside diff.
+        bytes cols (read,KiB/write,KiB/ext,KiB) hybrid: reads*op_bytes/1024 pre-18,
+        native *_bytes/1024 on PG18.
+      time-screen (~10 cols):
+        [0] io_key, [1] backend_type, [2] object, [3] context  -- absolute
+        [4..8] DIFFED: read_time, write_time, writeback_time, extend_time, fsync_time
+            (DiffIntvl=[4,8]); [9] stats_age.
+      UniqueKey=0 (io_key) both screens. OrderKey=4 (reads / read_time), OrderDesc=true.
+      3 separate dims chosen over single concat so per-column `/` filter stays useful
+      (~30 rows). Navigation: j = switchViewTo "statio" + statioNextView 2-way toggle;
+      J = menuOpen(menuStatIO) 2 items. Hide all-NULL count rows in SQL (WHERE
+      sum(counts)>0), same row-set both screens. Edge states: PG14/15 -> generic
+      "not supported" via MinRequiredVersion=160000; track_io_timing=off -> time-screen
+      zeros (not hidden). Width <165 -> trailing cols clip (standard pgcenter behavior).
+    gaps: ""
+    required: true
+    required: true
+
+  risks:
+    score: 90
+    status: "complete"
+    value: |
+      R1 (high): NULL inside DiffIntvl aborts the sample (blank screen). Mitigation:
+        coalesce(...,0) on every diffed col + NULL-row unit test. (ADR [005].)
+      R2 (med): count-screen ~165 wide -> clips on narrow terminals. Mitigation:
+        accepted consciously; full set like statements; dims sortable for relevance.
+      R3 (low): PG18 numeric *_bytes render with decimals. Mitigation: integer /1024
+        in SQL keeps them integer-typed.
+      R4 (low): forgetting synthetic io_key -> silent wrong deltas. Mitigation:
+        explicit AC7 + cross-sample matching test.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 65
+    status: "partial"
+    value: |
+      D1: Two sub-screens (count/time) instead of one wide table.
+        Chosen because pgcenter has no horizontal scroll; mirrors pgss split.
+        Rejected: single wide table (cols would be cut, unreadable); aggregation by
+        backend_type (loses context breakdown = the main value).
+      D2: Rates only, no absolute totals.
+        Rejected pgss-style absolute+delta — live tool, rate is the signal, and it
+        would double width. stats_age stays absolute (wal/bgwriter pattern).
+      D3: count-screen = operations AND bytes-throughput (CONFIRMED hybrid, not
+        bytes-only). Bytes version-dependent: computed reads*op_bytes etc. pre-18,
+        native read_bytes/write_bytes/extend_bytes on 18+. Bytes only for data-moving
+        ops (reads/writes/extends, maybe writebacks); hits/evictions/reuses/fsyncs are
+        counts-only. Include PG18 WAL IO (object=wal). WIDTH RISK: count-screen ~15
+        cols -> may need trimming; finalize column list + width budget in Cycle 2.
+      D4: Hotkeys j (toggle count<->time) + J (menu). Both free.
+      D5: Hide rows where all count counters NULL/0 (SQL WHERE sum>0); coalesce diffed
+        cols to 0 to stay diff-safe (replslots pattern, internal/stat/postgres.go).
+      D6: THREE separate display dims (backend_type/object/context) + a synthetic md5
+        io_key as UniqueKey (visible, pgss-style). Chosen over single concat so the
+        per-column `/` filter stays useful for trimming ~30 rows. Cost: ~16 cols/~165
+        wide; trailing cols clip on narrow terminals (accepted, standard pgcenter).
+      D7: OrderKey=4 (reads / read_time = first numeric col), OrderDesc=true.
+      D8: Two query branches PG16/17 vs PG18 (NOT three; PG16==PG17). Selector
+        SelectStatIOQuery/SelectStatIOTimeQuery returns (query, Ncols, DiffIntvl) per
+        version, bgwriter-style. Convert bytes->KiB via integer /1024 in SQL.
+      D9: io_key column HIDDEN via ColsWidth[0]=0 (service-only row-matching key, md5;
+        user sees readable backend_type/object/context, not the hash). Bonus: frees
+        ~10 cols of width.
+      D10: record/report ships as a SEPARATE 0.11.0 feature (top-first); this feature
+        is top-only, NotRecordable:true. Confirmed with user (avoids XL scope).
+      D11 (-> tech-spec): add PostgresV16/17/18 consts to query.go (map already uses
+        query.PostgresVxx) vs literals — deferred to tech-spec, non-blocking.
+      D12: helpTemplate line = "j/J - pg_stat_io operations/timings" (single line).
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 2)
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      9 registration sites (from code-research.md):
+      1. internal/query/io.go (new): query consts + SelectStatIOQuery /
+         SelectStatIOTimeQuery (bgwriter-style, per-version Ncols/DiffIntvl).
+      2. internal/view/view.go New(): two map entries "stat_io" / "stat_io_time"
+         (NotRecordable:true, MinRequiredVersion 160000, UniqueKey=0, OrderKey=4).
+      3. internal/view/view.go Configure(): two switch cases wiring the selectors.
+      4. top/keybindings.go: j -> switchViewTo "statio"; J -> menuOpen(menuStatIO).
+      5. top/menu.go: menuStatIO type + 2-item style + menuSelect cases.
+      6. top/config_view.go: statioNextView 2-way toggle + case "statio" in switchViewTo.
+      7. top/help.go: helpTemplate line for j/J.
+      8. internal/query/io_test.go (new): selector + live tests.
+      9. top/menu_test.go: assert {menuStatIO:2}.
+      10. internal/stat/help.go: optional PgStatIODescription doc block (other views
+          have one) + help-screen line that Q does not reset pg_stat_io (AC9).
+      Plus: internal/query/query.go add PostgresV16/17/18 consts (or use literals).
+      No new external libs (pgx/v5 + existing query/format/diff pipeline).
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 0
+    status: "pending"
+    value: ""
+    gaps: "Existing features/services this depends on"
+    required: false
+
+  data_requirements:
+    score: 0
+    status: "pending"
+    value: ""
+    gaps: "What data needed, where from, how stored"
+    required: false
+
+  migration_needs:
+    score: 0
+    status: "pending"
+    value: ""
+    gaps: "Migration plan for existing users/data"
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io.md"
+  status: "approved"  # pending | created | approved
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase8_create_user_spec"
+  questions_asked: 5
+  last_question: "Devil's Advocate M1/M2 resolution"
+  completion_estimate: "100%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  Code research DONE (2026-06-21) -> 006-feat-pg-stat-io-code-research.md. Key facts:
+  - PG16==PG17 (op_bytes constant); PG18 diverges (op_bytes removed; native
+    read_bytes/write_bytes/extend_bytes numeric; object='wal'; context='init').
+    => TWO query branches (PG16/17 vs PG18), bgwriter-style selector returning
+    per-version (query, Ncols, DiffIntvl).
+  - bytes only for read/write/extend (3 cols). On PG<18 derive reads*op_bytes etc.;
+    convert to KiB via integer /1024 to avoid numeric/float formatting.
+  - Composite identity -> synthetic col `backend_type||'/'||object||'/'||context AS
+    io_key`, UniqueKey=its index (precedent statements_io queryid md5; view.go:197).
+    OMITTING IT = silent wrong-delta bug.
+  - coalesce(...,0) MANDATORY on every diffed col (pg_stat_io NULLs pervasive:
+    fsyncs for temp relation, reads for background writer). ADR [005].
+  - Hide empty rows in SQL (WHERE sum(counts)>0); keeps row-set identical on both
+    sub-screens; no client-side hook exists.
+  - PG14/15 UX = existing MinRequiredVersion gate -> generic "not supported" error in
+    main pane. No custom message mechanism needed.
+  - Registration checklist (9 sites): io.go, view.New x2, Configure x2, keybindings
+    j/J, menu.go menuStatIO, config_view.go statioNextView toggle, help.go, io_test.go,
+    menu_test.go {menuStatIO:2}.
+  - j/J both free. j = switchViewTo "statio" + statioNextView 2-way toggle
+    (copy databasesNextView). J = menuOpen(menuStatIO).
+  - No PostgresV16/17/18 constants (query.go stops at V14) -> tech-spec: add them or
+    use literals. Lean: add PostgresV16/17/18 (map uses query.PostgresVxx).
+  - reset.go: pg_stat_io is shared stats, NOT reset by Q (like bgwriter) -> document.
+  - Standby OK (startup backend does IO); no recovery-aware function needed.
+  OPEN (Cycle 2): count-screen width budget (15 cols, ~160 terminal) -> trim?; display
+  io_key-concat vs 3 separate dims; default OrderKey per screen; user stories/AC.
+  -- ALL RESOLVED in Cycle 2 (see ui_ux/technical_decisions). --
+
+  Phase 6 (dev-customer): needs_work. M1 two-screens-vs-reduced-single -> user CONFIRMED
+  two screens (reduced single kills US3 evictions/reuses + US2 WAL fsync). M2
+  record/report horizon -> SEPARATE 0.11.0 feature, top-first. Minors (track_io_timing
+  hint, Q-reset doc) -> AC8/AC9.
+  Phase 7 (completeness): COMPLETE (high conf), 5 minors all self-resolved: PostgresVxx
+  consts (D11 -> tech-spec), help string (D12), io_key visibility (D9 hidden), stat/help.go
+  (integration #10), hybrid-bytes cross-version QA (verification). No blockers.

@@ -7,6 +7,18 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [007] pg_stat_io NULL-safety covered structurally, no behavioral diff() test
+
+**Added:** 2026-06-21 (feature: 006-feat-pg-stat-io)
+**Severity:** Low
+**Area:** `internal/query/io.go`, `internal/stat/postgres.go`, tests
+
+**What:** Every diffed column in `io.go` is wrapped in `coalesce(...,0)` so a NULL `pg_stat_io` cell (e.g. `fsyncs` for `temp relation`) cannot reach `diffPair → ParseInt("")` and abort the sample. The unit test asserts the protection **structurally** (the SQL string contains `coalesce` on each diffed column), not behaviorally — `internal/query` cannot import `internal/stat` (import cycle), so a test that feeds a NULL-bearing `PGresult` through `diff()` cannot live next to the query. The behavioral half of the contract (`diff()` survives an empty diffed cell and does not blank the screen) is unverified anywhere.
+
+**Why deferred:** Out of scope for the query-layer task; the structural assertion guards the real production source (the SQL). The follow-up is a behavioral test in `internal/stat/postgres_test.go` (where `diff()` is reachable and `PGresult{}` literals are already built), plus a live assertion that `io_key` is unique/non-NULL.
+
+---
+
 ### [006] replslots retained,KiB standby path not verified on a live standby
 
 **Added:** 2026-06-21 (feature: 005-feat-replication-slots)

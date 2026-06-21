@@ -1,0 +1,24 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Project Knowledge files live at .claude/skills/project-knowledge/{architecture,patterns}.md, not under a references/ subdirectory as the validation process expects. Files were located and used; standards compliance was verified successfully (file paths internal/query/io.go, internal/view/view.go, top/* all match the documented package layout; the replslots/bgwriter NotRecordable + coalesce + non-default OrderKey precedents are cited accurately).",
+      "fix": "No action needed for the tech-spec. Optional: align the validation tooling path with the actual project-knowledge layout."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Configuration values are duplicated between the Decisions/Data Models sections and Task 2's description. Task 2 repeats `Ncols`/`DiffIntvl`/`UniqueKey:0`/`OrderKey:4`/`OrderDesc:true`/`NotRecordable:true`/`MinRequiredVersion:PostgresV16`, all already specified in Decision 2/8/10/11 and the Data Models tables.",
+      "fix": "Trim Task 2 to scope (WHAT+WHY): 'Register views stat_io and stat_io_time in view.New() and wire selectors in Configure(), applying the view config contracted in the Decisions/Data Models sections.' Keep the concrete values in Decisions/Data Models only."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 1's last sentence ('This task carries both correctness traps (composite key, NULL-safety) and their tests.') is meta-commentary/rationale rather than scope. It restates risk reasoning that already lives in Decision 2 and Decision 5.",
+      "fix": "Drop the sentence; the NULL-safety and composite-key requirements are already covered by the SQL-behavior sentence and the Verify line."
+    }
+  ],
+  "summary": "Tech-spec for feature 006 (pg_stat_io TUI screen) passes template-compliance and task-quality validation. Zero critical findings -> status approved. Frontmatter correct (created 2026-06-21, status draft, branch feature/pg-stat-io, size M). All required sections present and non-empty, including Decisions (11 decisions each with Decision+Rationale+Alternatives), Data Models tables, Dependencies (New packages / Using existing), Testing Strategy (size M), Agent Verification Plan (3 subsections + concrete bash verify steps), Risks (realistic table with mitigations), Acceptance Criteria, and Implementation Tasks by waves. 4 tasks (<=15); Final Wave has Pre-deploy QA. All skills (code-writing x3, pre-deploy-qa) match the catalog; all reviewers (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) exist and are standard. No time-based estimates. Wave conflict check: Wave 2 tasks touch disjoint files (internal/view/view.go vs top/*) -> no merge conflicts; wave ordering matches dependencies (Wave 2 depends on Wave 1 selectors/view-names, Task 3 depends on Task 2 view names). No AC/TDD anchors/line-number references inside tasks. Two non-blocking findings: config-value duplication between Decisions and Task 2 (major), and a meta-commentary sentence in Task 1 (minor)."
+}

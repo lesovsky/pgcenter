@@ -16,6 +16,7 @@ general actions:
     d,D               'd' pg_stat_database switch, 'D' pg_stat_database menu.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
     p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
+    j,J               'j' pg_stat_io switch (operations/timings), 'J' pg_stat_io menu.
     S                 'S' per-process system stats (local mode only; Shift+S).
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
@@ -35,7 +36,8 @@ activity actions:
     G           get query report.
 
 other actions:
-    , Q         ',' show system tables on/off, 'Q' reset postgresql statistics counters.
+    , Q         ',' show system tables on/off, 'Q' reset postgresql statistics counters
+                      ('Q' does not reset shared stats: pg_stat_io, bgwriter, wal).
     z           'z' set refresh interval.
     h,F1        show this tab.
     q,Ctrl+Q    quit.

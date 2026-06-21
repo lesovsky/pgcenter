@@ -1,0 +1,41 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Test changes for Task 02 are correct and meaningful. The TestNew count 24->26 is right (verified: all 24 pre-existing views are available on PG16, plus the 2 new PG16-gated views). Both guard tests (TestNew_StatIOView/TestNew_StatIOTimeView) pin the correct stable map fields matching tech-spec Data Models (stat_io: Ncols 16, DiffIntvl [4,14], OrderKey 4, UniqueKey 0; stat_io_time: Ncols 10, DiffIntvl [4,8]) and pass the litmus test under mutation. The {version:160000, total:26} row is correct (verified 26 available on PG16, 24 on PG14). The Configure dispatch for both new views is exercised by TestViews_Configure via the v.Query != \"\" invariant. One non-blocking gap: the PG18 branch of SelectStatIOQuery is not asserted at the view layer (no PG16+/PG18 row checks views[\"stat_io\"].QueryTmpl), unlike how the test pins QueryTmpl/Ncols for replication and databases_general.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go:80 (TestViews_Configure) and :205 (TestView_VersionOK)",
+      "issue": "The TestViews_Configure version matrix tops out at PG14, so the Configure() dispatch for stat_io/stat_io_time is only weakly exercised: on PG14 both SelectStatIOQuery (returns PgStatIOPG16) and SelectStatIOTimeQuery resolve to the same constants already present in the static map, and the only assertion touching them is the generic `assert.NotEqual(t, \"\", v.Query)` invariant. The version-aware branch of SelectStatIOQuery — `if version >= PostgresV18 { return PgStatIOPG18, ... }` — is never selected by any test row at the view layer. There is no row asserting `views[\"stat_io\"].QueryTmpl == query.PgStatIOPG18` on PG18, unlike the explicit QueryTmpl/Ncols pinning done for `replication` (e.g. PgStatReplicationExtended) and `databases_general` (PgStatDatabaseGeneralPG11). Mutation check confirmed: breaking the `case \"stat_io\"` dispatch to an empty template IS caught by TestViews_Configure (empty Query fails the invariant), but a wrong-but-non-empty template on the PG18 branch would pass undetected. Note this PG18 selector logic is unit-owned by Task 01 (internal/query); if Task 01 tests assert the PG18 vs PG16 split, this view-layer gap is acceptable.",
+      "recommendation": "Add a PG18 row to the TestViews_Configure matrix (e.g. `{version: 180000, recovery: \"f\", trackCommit: \"on\", querylen: 256}`) and a `case 180000:` asserting `assert.Equal(t, query.PgStatIOPG18, views[\"stat_io\"].QueryTmpl)`, `assert.Equal(t, 16, views[\"stat_io\"].Ncols)`, and `assert.Equal(t, [2]int{4,14}, views[\"stat_io\"].DiffIntvl)`. Optionally add a PG16 row asserting `views[\"stat_io\"].QueryTmpl == query.PgStatIOPG16` to lock the lower branch. This makes the Configure dispatch assert the selected version-aware constant rather than only its non-emptiness.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go:205 (TestView_VersionOK)",
+      "issue": "TestView_VersionOK includes {version:160000} but has no {version:150000} row. The boundary between gated (PG15) and available (PG16) for the new views is the key behavior introduced by this task (MinRequiredVersion=PostgresV16). PG15 (150000 < 160000) would still gate the 2 new views, so total should remain 24 — this exact boundary case is asserted only on one side (160000 passes, the immediately-below 150000 is untested). The litmus is partly satisfied since 140000->24 and 160000->26 already bracket the threshold, so this is a completeness nicety, not a real gap.",
+      "recommendation": "Optionally add `{version: 150000, total: 24}` to make the gating boundary explicit (PG15 must NOT count the two new PG16 views). Low value given 140000/160000 already bracket the threshold; include only if cheap.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 5,
+      "failed": 0,
+      "notes": "Mutation-verified: TestNew_StatIOView catches wrong Ncols (16->99) and static-map DiffIntvl ([4,14]->[0,0]); TestNew_StatIOTimeView catches removal of the track_io_timing hint from Msg; TestNew catches the 24/26 count; TestView_VersionOK count verified against runtime enumeration (26 on PG16, 24 on PG14). The `assert.Contains(t, Msg, \"track_io_timing\")` is behaviorally load-bearing (tech-spec Decision 9 mandates the hint), not a shallow string-presence anti-pattern."
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

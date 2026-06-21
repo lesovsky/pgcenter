@@ -1,0 +1,28 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "overengineering",
+      "severity": "major",
+      "issue": "The user-spec carries implementation-level (HOW) detail that belongs in the tech-spec: synthetic column index/role of `io_key`, the literal SQL `WHERE coalesce(...)+... > 0` clause, `coalesce(...,0)` on diff columns, per-branch `Ncols`/`DiffIntvl` values, and named test files (`io_test.go`, `menu_test.go`, `Test_selectMenuStyle`). Sections 'Технические решения', 'Риски', 'Граничные случаи', 'Критерии приёмки' and 'Тестирование' repeatedly prescribe the mechanism rather than the observable behavior.",
+      "why_matters": "User-spec defines WHAT/WHY; binding it to a specific implementation (synthetic key, SQL-side WHERE, exact column indices, test file names) prematurely locks design decisions, duplicates tech-spec content, and makes the acceptance criteria brittle (e.g. AC 'строки скрыты (SQL-WHERE)' fails any equally-valid client-side approach even if user-visible behavior is identical).",
+      "fix": "Reframe acceptance criteria and risks in terms of observable behavior: 'rows with all-zero counters are not shown', 'deltas are correct when ≥2 rows share a backend_type', 'a NULL counter does not blank the screen'. Move `io_key`, the SQL WHERE text, coalesce, Ncols/DiffIntvl and test-file names into the tech-spec. Keep the user-spec's two-sub-screen and version-branch decisions (they are user-visible/scope decisions) but drop the SQL/column-index mechanics."
+    },
+    {
+      "category": "sizing",
+      "severity": "minor",
+      "issue": "Declared size M sits at the upper M/L boundary. The change spans ~9 files (new query file + selector with three version branches, two new view-map entries, two Configure switch cases, new menuStatIO type + style + select cases, j/J keybindings, a statioNextView toggle helper, help template line, plus selector unit tests and a live integration test across the PG 14-18 matrix).",
+      "why_matters": "If estimated as a light M the feature may be under-resourced; the cross-cutting touch points (menu + keybindings + view registration + version-branched SQL + multi-version CI tests) each carry their own failure mode (e.g. the silent wrong-delta bug if io_key is forgotten, the sample-abort bug if a coalesce is missed).",
+      "fix": "Acknowledge this as a full/heavy M (or M-leaning-L). No split needed — the two sub-screens are not independently shippable and share the selector — but plan for the integration-test matrix and the two known correctness traps (composite-key matching, NULL coalesce) as first-class work items, not afterthoughts."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "Width of the count sub-screen (~165 cols) is accepted as 'tail columns truncated', but the spec does not state a minimum viable column set or a fallback when the most diagnostically important columns (e.g. reads/writes/context) fall off the right edge on a typical 120-160 col terminal. Code research §8.5 explicitly flags that the chosen set may not fit and suggests dropping derived bytes columns if needed.",
+      "why_matters": "The primary user story (triage an IO spike, sort by reads, filter by backend_type) depends on the operator actually seeing the rate columns. If long backend_type labels push reads/writes past the visible width on a common terminal, the headline use case degrades silently with no guidance.",
+      "fix": "State an ordering priority for columns (identity + reads/writes/context visible first, derived bytes/less-critical counters last so truncation costs the least), or define a minimum terminal width assumption. This stays at the WHAT level (which signals must remain visible) without prescribing SQL."
+    }
+  ],
+  "worst_category": "overengineering",
+  "summary": "The proposed solution is feasible and well-grounded — every key decision (two sub-screens, synthetic composite key, per-version op_bytes vs native *_bytes branches, NotRecordable TUI-only scope, SQL-side row hiding) maps to an existing, verified pgcenter pattern (replslots, statements, bgwriter/wal, ADR [005]) with no new dependencies and reuse of the existing pgx/v5 query->format->diff pipeline. Not over- or under-engineered in substance. The one real adequacy issue is leakage of tech-spec-level HOW detail (io_key, SQL WHERE, coalesce, Ncols/DiffIntvl, test-file names) into the user-spec and its acceptance criteria; sizing is a heavy M and column-width prioritization deserves an explicit decision. No critical findings — approved."
+}

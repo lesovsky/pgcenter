@@ -24,6 +24,14 @@ For a **multi-row hybrid view** that LEFT JOINs two stats views, see `internal/q
 - **Recovery-aware WAL distance for free** via the `{{.WalFunction1}}({{.WalFunction2}}(), lsn)` template (`selectWalFunctions` in `query.go` picks `pg_current_wal_lsn` on a primary, `pg_last_wal_receive_lsn` on a standby) — no recovery branch in the query.
 A multi-row view sets `UniqueKey` to the stable row identity (slot_name, col 0) for cross-sample row matching, and may set a non-default `OrderKey` (replslots: 4 = retained,KiB desc) for a domain-appropriate default sort.
 
+When the row identity is **composite** (more than one column), emit a synthetic key column and point `UniqueKey` at it — `internal/query/io.go` (the `pg_stat_io` screen) does `left(md5(backend_type||object||context),10) AS io_key` at column 0, following `statements_io`'s `queryid`. Column hiding is not available (`internal/align` floors width at 8), so the key column is shown, not hidden. `io.go` is also the reference for splitting one wide stats view into two registered sub-views (`stat_io` count / `stat_io_time` time) navigated by a lowercase toggle (`statioNextView`) plus an uppercase menu (`menuStatIO`) — the pattern to copy when a view has too many columns for one screen.
+
+## Adding a New View — test counts that must be updated
+
+Registering a view in `view.New()` couples to two count-based tests that fail in CI (not always locally) if missed:
+- `internal/view/view_test.go: TestNew` pins the total view count (and `TestView_VersionOK` pins per-version availability).
+- `record/record_test.go: Test_filterViews` pins, per version, how many views `filterViews` drops vs keeps. A `NotRecordable: true` view is always dropped, so every `wantN` row increases by the number of new `NotRecordable` views (feature 006 added 2 → `+2` each row; `wantV` unchanged). This test runs without Postgres, so a stale count is a real failure even though the rest of the `record` package skips/fails on a missing PG fixture — do not assume a red `record` package is only the connection-refused tests.
+
 ## Error Wrapping
 
 Use `fmt.Errorf("context: %w", err)` for all error wrapping in production code.

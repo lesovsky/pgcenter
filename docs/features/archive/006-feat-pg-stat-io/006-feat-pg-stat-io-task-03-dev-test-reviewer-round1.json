@@ -1,0 +1,40 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Task 03 test additions are sound and litmus-clean. The three new tests (menuStatIO item-count, Test_statioNextView, statio rows in Test_switchViewTo) each exercise real behavior and fail if the corresponding production logic is removed. The {menuStatIO, 2} count is correct (selectMenuStyle returns exactly 2 items). Test_switchViewTo statio rows genuinely drive the toggle through the real switchViewTo dispatch and the live view map (stat_io / stat_io_time are registered by the already-merged Task 02), so default->stat_io and stat_io<->stat_io_time are verified end-to-end at the config layer. The genuinely-untestable surfaces (keybinding registration, interactive menu rendering, menuSelect cy-branch, the j/J keypress flow) are correctly left to manual QA in Task 04 rather than faked — this matches the package-wide convention (no menuSelect/keybinding harness exists for any menu). Only minor, convention-consistent observations.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/menu_test.go:18 (Test_selectMenuStyle)",
+      "issue": "The {menuStatIO, 2} row asserts only len(got.items) == 2 — the item count. It does not assert the item text ('pg_stat_io operations', 'pg_stat_io timings') or the title, even though the TDD anchor in task-03.md describes the test as asserting those two specific labels. A regression that swaps, mistranslates, or reorders the two labels (e.g. count<->time mislabeling, which would silently send users to the wrong sub-view) keeps the test green. Litmus still passes for the count itself (removing case menuStatIO falls through to default/menuNone -> 0 items -> fail), so this is a depth, not a correctness, gap. Pre-existing convention: all sibling rows ({menuPgss,6}, {menuDatabases,2}, {menuConf,4}) are equally count-only, so this is not a regression introduced by Task 03.",
+      "recommendation": "Optional hardening, consistent with leaving the rest of the table as-is: add one focused assertion for menuStatIO, e.g. style := selectMenuStyle(menuStatIO); assert.Equal(t, []string{\" pg_stat_io operations\", \" pg_stat_io timings\"}, style.items). This pins the count branch (cy 0 -> operations, cy 1 -> timings) ordering that menuSelect relies on. Not required to pass; the count assertion already satisfies the AC.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/menu.go:191 (menuSelect case menuStatIO) and top/keybindings.go:46-47 (j/J bindings)",
+      "issue": "menuSelect's cy 0/1/default -> viewSwitchHandler('stat_io'/'stat_io_time'/'stat_io') branch and the j/J keybinding registration have no automated coverage. These require a live gocui *gocui.View (for cy) and a running UI, so they are genuinely untestable as unit tests in this package — correctly deferred to the Task 04 manual US walk rather than mocked into a fake test. This is acknowledged in the task TDD-anchor note and is the long-standing package convention (no existing menu/keybinding has a menuSelect harness). Flagged only for traceability: the mapping is currently only structurally verified by make build, and behaviorally only by Test_switchViewTo (which covers the lowercase j toggle path, not the uppercase J menu-select path).",
+      "recommendation": "No action required for this task. Ensure Task 04 manual QA explicitly walks J -> select 'operations' (-> stat_io) and J -> select 'timings' (-> stat_io_time), since that menuSelect cy-branch is the one path with neither unit coverage nor a sibling-tested precedent. Consider tracking a package-level 'menuSelect untestable without gocui harness' note in tech-debt if a fakeable seam is ever desired.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

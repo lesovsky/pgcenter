@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "006",
+    "feature_name": "pg-stat-io",
+    "feature_base": "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "claude-opus-4-8[1m]",
+    "date_started": "2026-06-21",
+    "date_completed": "2026-06-21",
+    "total_lead_time_min": 291,
+    "total_touch_time_min": 283,
+    "total_human_wait_time_min": 0,
+    "flow_efficiency_pct": 97
+  },
+  "phases": {
+    "user_spec": { "start_time": "2026-06-21T11:31:14Z", "end_time": "2026-06-21T14:48:26Z", "duration_min": 197, "touch_time_min": 197, "human_wait_time_min": 0, "steps": {} },
+    "tech_spec": { "start_time": "2026-06-21T14:50:03Z", "end_time": "2026-06-21T15:08:38Z", "duration_min": 18, "touch_time_min": 18, "human_wait_time_min": 0, "steps": {} },
+    "task_decomposition": { "start_time": "2026-06-21T15:09:26Z", "end_time": "2026-06-21T15:20:46Z", "duration_min": 11, "touch_time_min": 11, "human_wait_time_min": 0, "steps": {} },
+    "feature_execution": { "start_time": "2026-06-21T15:22:25Z", "end_time": "2026-06-21T16:06:28Z", "duration_min": 44, "touch_time_min": 44, "human_wait_time_min": 0, "steps": {} },
+    "done": { "start_time": "2026-06-21T16:09:00Z", "end_time": "2026-06-21T16:23:00Z", "duration_min": 14, "touch_time_min": 14, "human_wait_time_min": 0, "steps": {} }
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1 },
+    "validation_findings": { "critical": 0, "major": 2, "minor": 19 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_03": 1 },
+    "review_findings": { "critical": 0, "major": 0, "minor": 16 },
+    "first_pass_rate_pct": 100
+  },
+  "volume": {
+    "interview_questions": 5,
+    "tasks_count": 4,
+    "waves_count": 3,
+    "agents_spawned": 18,
+    "commits_count": 17
+  }
+}

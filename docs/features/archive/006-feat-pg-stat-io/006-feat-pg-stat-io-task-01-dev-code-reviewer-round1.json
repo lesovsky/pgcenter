@@ -1,0 +1,56 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "task": "006-feat-pg-stat-io / Task 01 — pg_stat_io query layer",
+  "commit": "e1888fc",
+  "round": 1,
+  "status": "approved",
+  "tech_debt": false,
+  "summary": "Clean, idiomatic implementation that faithfully realizes tech-spec Decisions 2/3/5/6/8 and the Data Models column layouts. Count screen emits the exact 16-column order with DiffIntvl [4,14]; time screen emits 10 columns with [4,8]; every diffed column (and every NULL-able KiB byte source) is coalesce-guarded; KiB uses integer /1024 with bigint cast on PG18; synthetic io_key is built via left(md5(...),10) with object/context coalesced inside md5; both screens share the identical count-based WHERE. Naming, comment style, and selector signatures match the reference files. No critical, major, or tech-debt findings; only minor observations.",
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "internal/query/io.go",
+      "line": 88,
+      "category": "best-practices",
+      "description": "The PG16/17 branch is reached via an implicit else (return after the `if version >= PostgresV18` block) rather than an explicit `if version >= PostgresV16` guard. Decision 8 phrases the contract as 'version >= PostgresV18 / >= PostgresV16'. This is functionally correct and intentional (the task body explicitly says versions < PG16 must still return the PG16 form because the MinRequiredVersion gate lives at the view layer and Format must stay safe), and it mirrors SelectStatBgwriterQuery's trailing fallthrough. PostgresV15/16/17 are therefore declared in this task but consumed by later waves (view map MinRequiredVersion), not by io.go.",
+      "suggestion": "No change required. The fallthrough-to-PG16 form is correct and documented; leaving an unconditional final return matches the bgwriter reference and keeps the selector Format-safe for PG14/15. If desired purely for symmetry with the Decision 8 wording, a clarifying inline comment on the final return already exists in the function doc-comment — sufficient."
+    },
+    {
+      "severity": "minor",
+      "file": "internal/query/io.go",
+      "line": 17,
+      "category": "maintainability",
+      "description": "The count-based WHERE clause (the long coalesce-sum predicate) is duplicated verbatim across all three SQL constants (PgStatIOPG16, PgStatIOPG18, PgStatIOTime). Decision 5 mandates the WHERE be identical on every screen so the row-sets match, so the duplication is semantically required and correct — but it is hand-copied in three places, which is a latent drift risk if a counter is ever added/renamed.",
+      "suggestion": "Acceptable as-is given the reference files also inline their SQL and pgcenter does not compose SQL from fragments. Optional: extract the predicate into an unexported `const pgStatIOCountWhere = \"WHERE coalesce(reads,0)+...\"` and concatenate it into all three constants, guaranteeing the three screens can never diverge. Low priority; the NULL-safety test already pins the coalesced columns, and a row-set-parity assertion could be added in a later wave if drift is a concern."
+    },
+    {
+      "severity": "minor",
+      "file": "internal/query/io.go",
+      "line": 70,
+      "category": "readability",
+      "description": "SelectStatIOTimeQuery ignores its version parameter (named `_`). This is correct and intentional — the timing column set is schema-stable across PG16/17/18, matching the SelectStatReplicationSlotsQuery precedent — and the doc-comment explains it well. Noting only that a future PG version changing a *_time column would require revisiting this single-branch assumption.",
+      "suggestion": "No change required. The `_` parameter and the explanatory comment match the replslots reference idiom exactly. The assumption is sound for PG16-18; revisit only if a future PG release alters the *_time schema."
+    }
+  ],
+  "spec_conformance_checks": {
+    "count_ncols_16_diffintvl_4_14": "pass — SelectStatIOQuery returns (query, 16, [2]int{4,14}) on all branches; verified by Test_SelectStatIOQuery over {14,15,16,17,18}",
+    "time_ncols_10_diffintvl_4_8": "pass — SelectStatIOTimeQuery returns (query, 10, [2]int{4,8}); verified by Test_SelectStatIOTimeQuery",
+    "column_order_count": "pass — io_key,backend_type,object,context,reads,read,KiB,writes,write,KiB,extends,ext,KiB,hits,evictions,writebacks,reuses,fsyncs,stats_age matches Data Models exactly (KiB interleaved at idx 5/7/9)",
+    "column_order_time": "pass — io_key,backend_type,object,context,read_time,write_time,writeback_time,extend_time,fsync_time,stats_age matches Data Models",
+    "coalesce_on_every_diffed_column": "pass — all 11 count counters and both KiB byte-sources (op_bytes PG16/17; read_bytes/write_bytes/extend_bytes PG18) and all 5 time columns wrapped in coalesce(...,0); asserted by NullSafety tests",
+    "kib_integer_division": "pass — PG16/17: coalesce(reads,0)*coalesce(op_bytes,0)/1024 (integer); PG18: (coalesce(read_bytes,0)/1024)::bigint, cast prevents numeric decimals per Decision 6",
+    "op_bytes_branch_vs_native_bytes": "pass — version>=PostgresV18 -> native *_bytes; else op_bytes multiplier per Decision 3",
+    "synthetic_io_key": "pass — left(md5(backend_type||coalesce(object,'')||coalesce(context,'')),10) AS io_key; object/context coalesced inside md5 so a NULL dimension cannot yield a NULL key that would break diff() row matching on column 0",
+    "count_based_where_on_both_screens": "pass — identical coalesce-sum WHERE on PgStatIOPG16, PgStatIOPG18, PgStatIOTime per Decision 5",
+    "version_constants": "pass — PostgresV15/16/17/18 added to query.go const block after PostgresV14; PostgresV18 referenced in selector branches per Decision 8",
+    "format_safety": "pass — flat non-template SQL; Test_SelectStatIOQuery_NoTemplateArtifacts guards against stray {{ that would break query.Format",
+    "diff_machinery_compatibility": "pass — coalesce guarantees no empty strings reaching parsePairInt; integer KiB output (no dots) routes through parsePairInt not parsePairFloat; UniqueKey column 0 and stats_age sit outside DiffIntvl"
+  }
+}

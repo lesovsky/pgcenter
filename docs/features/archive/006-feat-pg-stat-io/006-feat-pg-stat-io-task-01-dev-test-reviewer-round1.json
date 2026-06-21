@@ -1,0 +1,77 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "feature": "006-feat-pg-stat-io",
+  "task": "task-01",
+  "round": 1,
+  "status": "passed",
+  "summary": "Test suite for the pg_stat_io query layer is solid and meaningful. Selector shape tests, branch-routing assertions (via the NULL-safety tests), structural coalesce verification, template-artifact guard, and live FieldDescriptions/op_bytes/WAL gates are all present and correctly aligned with the tech-spec Data Models and Testing Strategy. The decision to verify NULL-safety as a structural coalesce-on-SQL assertion in package query is correct given the real stat->query import direction (query cannot import stat without a cycle). Findings are minor: the pure selector tests ignore the returned query string so branch routing rides on the NULL-safety tests rather than being asserted in the shape tests, and one live-test comment overstates what FieldDescriptions length actually proves. A behavioral NULL->0 diff() test in package stat is recommended as a logged follow-up (tech debt), not a blocker for this task.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/io_test.go:13-50 (Test_SelectStatIOQuery, Test_SelectStatIOTimeQuery)",
+      "issue": "The pure selector tests discard the returned query string (_, gotNcols, gotDiffIntvl := ...) and assert only (Ncols, DiffIntvl). Because both the PG16/17 and PG18 branches return an identical shape (16,[4,14]) / (10,[4,8]), removing the `if version >= PostgresV18` branch entirely would not fail these tests — the litmus test on per-version BRANCH SELECTION fails here. Branch routing is in fact covered, but only incidentally by Test_SelectStatIOQuery_NullSafety (which asserts read_bytes on v=180000 and op_bytes on v<18). The shape tests by themselves do not pin which SQL a version returns.",
+      "recommendation": "Acceptable as-is because the NULL-safety test closes the branch-routing gap (removing the PG18 branch makes Test_SelectStatIOQuery_NullSafety/version/180000 fail: PG16 SQL has no read_bytes). Optional hardening: in the count selector table-test add a per-version assertion on a branch-discriminating substring, e.g. for v>=180000 assert.Contains(q, \"read_bytes\") and for v<180000 assert.Contains(q, \"op_bytes\"), so branch selection is asserted at its own test rather than relying on the NULL test's side effect.",
+      "litmusTestFailed": true,
+      "tech_debt": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/io_test.go:131-132 (Test_StatIOQueries comment)",
+      "issue": "The comment claims the PG16 run 'verifies the op_bytes-derived KiB path' and PG18 'verifies the native read_bytes path', but the only live assertion is assert.Len(rows.FieldDescriptions(), wantNcols), which is 16 for both branches and therefore cannot distinguish the two KiB sources by column count. What the live test actually proves is weaker-but-still-valuable: the branch's SQL executes without error against the real schema (so op_bytes must exist on PG16, *_bytes must exist on PG18) — a genuine schema-divergence gate, identical to the bgwriter/replslots pattern. The comment overstates it.",
+      "recommendation": "No code change required — the execution-without-error IS the real gate and is correct. Tighten the comment to say 'the query executes against the real PGxx schema (op_bytes must exist on PG16, native *_bytes on PG18), and the column count matches Ncols' so it does not imply the KiB VALUES are checked. If stronger value verification is ever wanted, scan one known row and assert read,KiB == reads*op_bytes/1024 — but that is over-scope for this task.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat (no test) — referenced from internal/query/io_test.go:57-66 NullSafety rationale",
+      "issue": "The central risk of this feature (Decision 5 / Risks table: a NULL inside DiffIntvl reaches strconv.ParseInt(\"\") in stat.diffPair and aborts the whole sample -> blank screen) is verified only STRUCTURALLY here — the query test asserts coalesce(...,0) is present in the SQL string. There is no behavioral test that a NullString{Valid:false} in a diffed column actually survives diff() as '0'. The implementer correctly placed the structural check in package query because internal/stat imports internal/query (postgres.go:9, log.go:7, stat_test.go), so query CANNOT import stat without an import cycle — the behavioral test cannot live next to this SQL. This is a justified scope boundary, not a defect in this task, but the behavioral end of the protection remains unasserted anywhere.",
+      "recommendation": "Log a follow-up (tech debt) to add one behavioral unit test in package stat, where diff()/diffPair are reachable and PGresult{} literals are already constructed in postgres_test.go. Construct two PGresult samples that share a UniqueKey and carry sql.NullString{Valid:false} in a diffed column, call diff(curr, prev, itv, interval, ukey), and assert it returns no error and the cell renders as the expected delta rather than aborting. This locks the OTHER half of the NULL->0 contract (that diff tolerates a 0-valued cell) independent of the io.go SQL. Not required to close this task — the SQL-side coalesce is the actual production protection and it IS verified.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/io_test.go:107-150 (Test_StatIOQueries)",
+      "issue": "Risk-table item 'Composite-key correctness — wrong UniqueKey silently produces wrong deltas' and Decision 2's note about >=2 rows sharing a backend_type are not asserted. The synthetic io_key = left(md5(backend_type||coalesce(object,'')||coalesce(context,'')),10) is never checked for (a) distinctness across the backend_type x object x context rows, nor (b) non-NULL on a row where object/context is NULL. The coalesce-inside-md5 (the implementer's deviation from the spec's bare concat, which would yield a NULL key) is undocumented in tests despite being load-bearing for diff() row matching.",
+      "recommendation": "Optional follow-up: in the live PG16+ test, after running the query, collect column 0 (io_key) across all returned rows and assert len(distinct(io_keys)) == rowCount (keys are unique) and that no io_key is empty/NULL — this directly guards the diff() row-matching contract and catches a regression to bare concat (which produces NULL keys on object='' rows). Low priority because diff()'s correctness with this key is exercised at the view/integration layer in Wave 2; flagging for traceability against the Risks table.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 7,
+      "passed": 6,
+      "failed": 1,
+      "note": "The one failure (Test_SelectStatIOQuery shape test does not pin branch selection) is compensated by Test_SelectStatIOQuery_NullSafety, which asserts read_bytes vs op_bytes per version and would fail if the PG18 branch were removed."
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 2,
+      "e2e": 0,
+      "assessment": "healthy",
+      "note": "5 unit tests (2 shape, 2 structural NULL-safety, 1 template-artifact guard) + 2 live integration tests (count + time) gated by t.Skipf. Correct shape for a CLI/query-layer task per test-master pyramid; no E2E expected (TUI has no E2E layer)."
+    }
+  },
+  "techDebtFollowups": [
+    {
+      "title": "Behavioral NULL->0 diff() test in package stat",
+      "rationale": "Closes the behavioral half of the Decision 5 NULL-safety contract that cannot live in package query due to the stat->query import direction. The SQL coalesce is the production protection and is already verified structurally; this asserts diff() tolerates a 0/empty diffed cell.",
+      "suggestedLocation": "internal/stat/postgres_test.go",
+      "priority": "low"
+    },
+    {
+      "title": "io_key distinctness + non-NULL assertion in live PG16+ test",
+      "rationale": "Guards the synthetic-key row-matching contract (Decision 2) and the coalesce-inside-md5 deviation against a regression to NULL keys.",
+      "suggestedLocation": "internal/query/io_test.go (Test_StatIOQueries)",
+      "priority": "low"
+    }
+  ]
+}

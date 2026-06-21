@@ -1,0 +1,76 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "task": "006-feat-pg-stat-io / Task 02 — view registration",
+  "commit": "3a8ddf8",
+  "status": "approved",
+  "summary": "Both view registrations (stat_io, stat_io_time) and the two Configure() cases exactly match the tech-spec Data Models and Decisions. All field values, version gating, selector wiring, and the track_io_timing Msg hint are correct and consistent with the replslots/bgwriter idiom. Build is clean and the view test suite (including new guard tests and recalculated counts) is green. No tech-debt introduced.",
+  "findings": [
+    {
+      "id": 1,
+      "severity": "info",
+      "category": "correctness",
+      "file": "internal/view/view.go",
+      "line": "166-193",
+      "description": "stat_io and stat_io_time map entries match Data Models exactly: stat_io has Ncols 16, DiffIntvl [4,14], OrderKey 4, OrderDesc true, UniqueKey 0, MinRequiredVersion query.PostgresV16, NotRecordable true; stat_io_time has Ncols 10, DiffIntvl [4,8], same key/order/version/recordable fields. ColsWidth and Filters initialized as empty maps per the existing idiom.",
+      "suggestion": "No change required.",
+      "tech_debt": false
+    },
+    {
+      "id": 2,
+      "severity": "info",
+      "category": "cross-file-consistency",
+      "file": "internal/view/view.go",
+      "line": "385-390",
+      "description": "Configure() cases call query.SelectStatIOQuery(opts.Version) and query.SelectStatIOTimeQuery(opts.Version), assigning view.QueryTmpl, view.Ncols, view.DiffIntvl then v[k]=view. Verified against internal/query/io.go: both selectors have the (string, int, [2]int) signature, identical to SelectStatReplicationSlotsQuery, and the PG16-default constants (PgStatIOPG16, PgStatIOTime) referenced in the map exist and are Format-safe plain SELECTs. query.PostgresV16 exists in query.go (=160000).",
+      "suggestion": "No change required.",
+      "tech_debt": false
+    },
+    {
+      "id": 3,
+      "severity": "info",
+      "category": "best-practices",
+      "file": "internal/view/view.go",
+      "line": "190",
+      "description": "Decision 9 (track_io_timing hint) is satisfied: the time view Msg is 'Show pg_stat_io timings statistics (require track_io_timing=on)', carrying the track_io_timing caveat for the cmdline. Guard test asserts Msg contains 'track_io_timing'.",
+      "suggestion": "Minor wording nit (non-blocking): 'require' would read better as 'requires', but this is cosmetic and the substring assertion is unaffected.",
+      "tech_debt": false
+    },
+    {
+      "id": 4,
+      "severity": "info",
+      "category": "testing",
+      "file": "internal/view/view_test.go",
+      "line": "11,210",
+      "description": "Counts recalculated correctly. TestNew updated 24->26. TestView_VersionOK adds {160000, 26} while keeping {140000, 24} unchanged. Verified the highest pre-existing MinRequiredVersion gate is PostgresV14, so all 24 legacy views remain available on PG16 and the +2 new views (gated at V16) bring the PG16 total to 26; sub-16 totals correctly stay flat. New guard tests TestNew_StatIOView / TestNew_StatIOTimeView pin all stable map fields per the replslots/bgwriter precedent. All view tests pass.",
+      "suggestion": "No change required.",
+      "tech_debt": false
+    },
+    {
+      "id": 5,
+      "severity": "info",
+      "category": "consistency",
+      "file": "internal/view/view.go",
+      "line": "174,188",
+      "description": "New views set UniqueKey: 0 explicitly while replslots relies on the zero default. This is an intentional, documented deviation (task hint + Decision 2): the explicit 0 signals the synthetic io_key column rather than an unset field. Harmless and improves readability; not a consistency defect.",
+      "suggestion": "No change required.",
+      "tech_debt": false
+    },
+    {
+      "id": 6,
+      "severity": "info",
+      "category": "scope",
+      "file": "internal/view/view.go",
+      "line": "353-356",
+      "description": "The diff also reformats the Configure() doc-comment (gofmt list-indentation change from leading-space to tab/0xa0 form). This is an incidental gofmt normalization, not a functional change, and does not alter behavior. Within acceptable scope.",
+      "suggestion": "No change required.",
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  }
+}

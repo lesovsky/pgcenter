@@ -1,0 +1,27 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io",
+  "tasks_checked": ["04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_file",
+      "task": "04",
+      "issue": "Task references 006-feat-pg-stat-io-decisions.md (decisions log) in three places (What to do step 7, Verification Steps step 6, Post-completion) as the destination for the QA verdict, but that file does not exist in the feature directory. The feature dir contains only review JSONs, the user-spec, tech-spec and task files — no decisions.md.",
+      "fix": "Either create 006-feat-pg-stat-io-decisions.md before QA, or change the task to instruct the executor to create it on first write. Confirm 'decisions log' is the intended sink for the verdict and not, e.g., the user-spec Post-implementation section."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "The Verification Checklist references concrete unit tests / symbols that do not yet exist in the tree at validation time: internal/query/io.go and io_test.go are absent, and menuStatIO / statioNextView / SelectStatIOQuery are not yet present in top/ or internal/query/. This is expected for a wave-3 QA task gated by depends_on [02,03], but means the checklist cannot be executed until those waves land. No fix needed — flagged for awareness that this task is a no-op until dependencies complete.",
+      "fix": "No change required. The depends_on [02,03] declaration correctly gates execution. Optionally note in the task that all referenced selectors/views/menu are produced by Tasks 01–03."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 14,
+    "issues_found": 2
+  }
+}

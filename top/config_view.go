@@ -115,6 +115,8 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			viewSwitchHandler(app.config, statementsNextView(app.config.view.Name))
 		case "progress":
 			viewSwitchHandler(app.config, progressNextView(app.config.view.Name))
+		case "statio":
+			viewSwitchHandler(app.config, statioNextView(app.config.view.Name))
 		default:
 			viewSwitchHandler(app.config, c)
 		}
@@ -135,6 +137,21 @@ func databasesNextView(current string) string {
 		next = "databases_general"
 	default:
 		next = "databases_general"
+	}
+	return next
+}
+
+// statioNextView depending on current pg_stat_io view returns next view.
+func statioNextView(current string) string {
+	var next string
+
+	switch current {
+	case "stat_io":
+		next = "stat_io_time"
+	case "stat_io_time":
+		next = "stat_io"
+	default:
+		next = "stat_io"
 	}
 	return next
 }

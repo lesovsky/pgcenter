@@ -8,7 +8,43 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 24, len(v)) // 24 is the total number of views have to be returned
+	assert.Equal(t, 26, len(v)) // 26 is the total number of views have to be returned
+}
+
+// TestNew_StatIOView guards the stat_io count view wiring: it must be registered,
+// gated to PG16+, excluded from recording (NotRecordable), keyed by synthetic io_key,
+// and sorted by the first diffed counter column.
+func TestNew_StatIOView(t *testing.T) {
+	v := New()
+	statio, ok := v["stat_io"]
+	assert.True(t, ok)
+	assert.True(t, statio.NotRecordable)
+	assert.Equal(t, query.PostgresV16, statio.MinRequiredVersion)
+	// Pin the PG16-default map values that Configure() overrides per version.
+	assert.Equal(t, 16, statio.Ncols)
+	assert.Equal(t, [2]int{4, 14}, statio.DiffIntvl)
+	assert.Equal(t, 4, statio.OrderKey)
+	assert.True(t, statio.OrderDesc)
+	assert.Equal(t, 0, statio.UniqueKey)
+	assert.NotEqual(t, "", statio.Msg)
+}
+
+// TestNew_StatIOTimeView guards the stat_io_time view wiring: it must be registered,
+// gated to PG16+, excluded from recording (NotRecordable), keyed by synthetic io_key,
+// and its Msg must carry the track_io_timing hint (Decision 9).
+func TestNew_StatIOTimeView(t *testing.T) {
+	v := New()
+	statioTime, ok := v["stat_io_time"]
+	assert.True(t, ok)
+	assert.True(t, statioTime.NotRecordable)
+	assert.Equal(t, query.PostgresV16, statioTime.MinRequiredVersion)
+	// Pin the PG16-default map values that Configure() overrides per version.
+	assert.Equal(t, 10, statioTime.Ncols)
+	assert.Equal(t, [2]int{4, 8}, statioTime.DiffIntvl)
+	assert.Equal(t, 4, statioTime.OrderKey)
+	assert.True(t, statioTime.OrderDesc)
+	assert.Equal(t, 0, statioTime.UniqueKey)
+	assert.Contains(t, statioTime.Msg, "track_io_timing")
 }
 
 // TestNew_ReplslotsView guards the replslots view wiring: it must be registered,
@@ -171,6 +207,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
+		{version: 160000, total: 26},
 		{version: 140000, total: 24},
 		{version: 130000, total: 19},
 		{version: 120000, total: 16},
