@@ -17,7 +17,7 @@ teammate_name:
 
 ## Description
 
-Строим слой данных для нового экрана `pg_stat_io` (PostgreSQL 16+). Это первая (Wave 1) задача фичи 006 — она поставляет per-version SQL и два селектора, на которые опираются последующие задачи (регистрация view в Wave 2, TUI-навигация в Wave 3). Сама по себе задача не трогает TUI и не регистрирует view — только query-слой.
+Строим слой данных для нового экрана `pg_stat_io` (PostgreSQL 16+). Это первая (Wave 1) задача фичи 006 — она поставляет per-version SQL и два селектора, на которые опираются задачи Wave 2 (регистрация view — Task 02; TUI-навигация — Task 03). Сама по себе задача не трогает TUI и не регистрирует view — только query-слой.
 
 Экран `pg_stat_io` многострочный: одна строка на комбинацию `backend_type × object × context`. Кумулятивные счётчики показываются как per-interval rates через существующий pipeline query → format → diff. Экран разбит на два sub-view: **count** (счётчики операций + KiB throughput) и **time** (тайминги операций) — потому что в pgcenter нет горизонтальной прокрутки и полный набор колонок не помещается. Соответственно нужно два селектора с разной формой колонок.
 
@@ -156,7 +156,7 @@ time screen (`SelectStatIOTimeQuery`) — Ncols 10, `DiffIntvl [4,8]`:
 ```
 DiffIntvl `[4,8]` = read_time…fsync_time. WHERE на time-экране — тот же count-based, что на count-экране (Decision 5), чтобы набор строк совпадал.
 
-**Dependencies:** нет (Wave 1, `depends_on: []`). Эта задача — контракт для Wave 2 (Task 2 регистрирует view и зовёт `SelectStatIOQuery`/`SelectStatIOTimeQuery`) и Wave 3. Имена селекторов и форма возврата `(string, int, [2]int)` зафиксированы — не менять.
+**Dependencies:** нет (Wave 1, `depends_on: []`). Эта задача — контракт для Wave 2 (Task 02 регистрирует view и зовёт `SelectStatIOQuery`/`SelectStatIOTimeQuery`; Task 03 — TUI-навигация). Имена селекторов и форма возврата `(string, int, [2]int)` зафиксированы — не менять.
 
 **Edge cases:**
 - NULL в любой диффуемой колонке (`fsyncs` NULL для `temp relation`, `reads` NULL для `background writer`) → обязателен `coalesce(...,0)`, иначе `diffPair → ParseInt("")` обрывает сэмпл → пустой экран. Это центральный риск задачи.

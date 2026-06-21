@@ -1,0 +1,41 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Task 01 (Files to read, line 100) labels internal/query/replication_slots.go as a model and the surrounding text treats it as a version-aware selector, but SelectStatReplicationSlotsQuery has signature `(_ int)` and returns a single version-independent query — it does NOT branch on version (verified internal/query/replication_slots.go:39). The genuine two-branch precedents are bgwriter.go (branches at PG17/PG18) and wal.go (branches at PG18). The replslots reference is still valid for the multi-row / coalesce / KiB-integer-division / stats_age-outside-DiffIntvl patterns it is actually cited for (line 101), so impact is low.",
+      "fix": "No change required; optionally clarify that replslots is the model for the multi-row/coalesce/KiB patterns, while bgwriter/wal are the models for version branching."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "03",
+      "issue": "The 'Naming contract' analogy to the databases family (tech-spec Decision 7 and task 03 lines 24/40) writes it as `databases / databases_general / menuDatabases`. The actual registered databases sub-views are `databases_general` and `databases_sessions` (databasesNextView toggles between those two — top/config_view.go:128-140; there is no view literally named `databases`). The token `\"databases\"` is only the switchViewTo dispatch key, not a view name. The analogy is loose but does not misdirect the implementation: the statio contract names (stat_io / stat_io_time / token \"statio\" / menuStatIO) are internally consistent and correct.",
+      "fix": "No change required. If desired, correct the parenthetical to `databases_general / databases_sessions / menuDatabases` for accuracy."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Tech-spec Architecture/Solution prose references a view named `statements_io` and `queryid` collapsing as the precedent for the synthetic io_key (e.g. tech-spec Decision 2 mentions the 'statements_io queryid pattern'). The actual md5 synthetic-key precedent lives in internal/query/statements.go:65 (`left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10)`), which is exactly what task 01 (line 170 / Files-to-read line 102) cites. The view `statements_io` does exist (verified view map). No real mismatch — the implementer is pointed at the correct file/line.",
+      "fix": "None required — statements.go:65 confirmed as the correct md5 pattern source."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 cites wal.go as 'model: minimal two-branch selector' (line 100). The actual selector is named SelectStatWALQuery (uppercase WAL), not SelectStatWalQuery. Task 01 never invokes it by name (it only reads the file as a structural model and copies SelectStatBgwriterQuery's signature), so this is not a hallucination that would break implementation — but the bgwriter signature it copies (`func SelectStatBgwriterQuery(version int) (string, int, [2]int)`) is verified correct and matches the contracted `(string, int, [2]int)` return.",
+      "fix": "None required. The contracted selector shape (string, int, [2]int) matches bgwriter/replslots exactly."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 41,
+    "issues_found": 4
+  }
+}

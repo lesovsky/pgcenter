@@ -1,6 +1,6 @@
 ---
 status: planned                    # planned -> in_progress -> done
-depends_on: ["02", "03"]           # ID задач-зависимостей (строки: ["01", "02"])
+depends_on: ["02", "03"]           # ID задач-зависимостей
 wave: 3                            # волна параллельного выполнения
 skills: [pre-deploy-qa]            # МАССИВ скиллов для загрузки
 verify: bash                       # инструмент верификации (опционально: curl, bash, user)
@@ -18,8 +18,8 @@ teammate_name:                     # имя агента-исполнителя 
 ## Description
 
 Финальная волна фичи `pg_stat_io` — приёмочное тестирование перед деплоем. После завершения
-Wave 1 (query-слой, Task 01), Wave 2 (регистрация вьюх, Task 02) и Wave 3 (TUI-навигация, меню,
-help, Task 03) нужно собрать всё вместе и убедиться, что фича удовлетворяет критериям приёмки из
+Wave 1 (query-слой, Task 01) и Wave 2 (регистрация вьюх Task 02 + TUI-навигация/меню/help Task 03)
+нужно собрать всё вместе и убедиться, что фича удовлетворяет критериям приёмки из
 user-spec («Критерии приёмки», US1–US4) и техническим критериям из tech-spec («Acceptance
 Criteria»).
 
@@ -103,7 +103,7 @@ Criteria»).
 - [006-feat-pg-stat-io-decisions.md](docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io-decisions.md) — decisions log
 
 **Project knowledge:**
-- [project.md](.claude/skills/project-knowledge/overview.md) — overview: команды, поддерживаемые версии PG (14–18)
+- [overview.md](.claude/skills/project-knowledge/overview.md) — overview: команды, поддерживаемые версии PG (14–18)
 - [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, data flow, PG version handling
 - [patterns.md](.claude/skills/project-knowledge/patterns.md) — testing conventions, version branching
 - [deployment.md](.claude/skills/project-knowledge/deployment.md) — CI matrix PG14–18, тестовый контейнер, порты

@@ -1,0 +1,63 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "Description",
+      "issue": "Prose refers to TUI navigation as 'Wave 3' ('registered as static views in Task 02 ... last wiring layer'), and the body says 'TUI-навигация в Wave 3' (task 01 Description too). The actual frontmatter wave is 2. Tech-spec also labels this task 'Wave 3' in prose while it functionally belongs to Wave 2 (depends_on ['01'], parallel with Task 02). The frontmatter waves themselves are correct (02=2, 03=2, 04=3); only the descriptive 'Wave 3' label is misleading.",
+      "fix": "Align prose wave labels with frontmatter: refer to Task 03 as Wave 2 (parallel with Task 02), and Task 04 (QA) as the Final Wave / Wave 3. Optional cleanup, no functional impact."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "depends_on is correctly ['02', '03'] but the trailing template comment still reads '# ID задач-зависимостей (строки: [\"01\", \"02\"])' — leftover placeholder comment not updated to reflect actual deps.",
+      "fix": "Update or drop the stale inline comment on depends_on. Cosmetic only; value is correct."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "Link is written as [project.md](.claude/skills/project-knowledge/overview.md) — the display name 'project.md' points to overview.md. Tasks 01/02/03 use [overview.md](...overview.md) for the same file. Inconsistent link naming across the batch (this repo has no project.md; overview.md fills that role).",
+      "fix": "Use a consistent display name for the project-overview doc across all four tasks (either [overview.md] everywhere or [project.md] everywhere). The mandatory project-context doc IS present, so this is naming-only."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "Mandatory feature artifact decisions.md is linked but the file does not yet exist on disk (also true for tasks 01/03/04). This is expected — the decisions log is created during execution — so it is not a defect, only noted for completeness.",
+      "fix": "No action required; decisions.md is generated when the first task reports its summary."
+    }
+  ],
+  "checks": {
+    "frontmatter": {
+      "task_01": "status=planned OK; depends_on=[] OK; wave=1 OK; skills=[code-writing] array OK; reviewers=[dev-code-reviewer, dev-security-auditor, dev-test-reviewer] matches code-writing default and Reviewers section; verify=bash string OK",
+      "task_02": "status=planned OK; depends_on=['01'] OK; wave=2 OK; skills=[code-writing] OK; reviewers=[dev-code-reviewer, dev-test-reviewer] — valid subset, matches Reviewers section (security-auditor intentionally omitted, low-risk view-registration); verify=bash OK",
+      "task_03": "status=planned OK; depends_on=['01'] OK; wave=2 OK; skills=[code-writing] OK; reviewers=[dev-code-reviewer, dev-test-reviewer] matches section; verify=bash OK",
+      "task_04": "status=planned OK; depends_on=['02','03'] OK; wave=3 OK; skills=[pre-deploy-qa] OK; reviewers=[] OK (pre-deploy-qa has no reviewers per catalog); verify=bash OK"
+    },
+    "structure": "All required sections present and ordered for every task. TDD Anchor present for code tasks 01/02/03; correctly replaced by 'Verification Checklist' for QA task 04 (TDD Anchor absent as required for non-code). No template placeholders ([Task Name], {PK path}, {reviewer-name}) remain. No TODO/FIXME/TBD markers.",
+    "tdd_anchor": "01/02/03 anchors use `path::test_name` — description format, are behaviour-specific (selector shape, NULL-safety, view-map pinning, menu item count). Carry forward all tech-spec Testing Strategy items.",
+    "skills_reviewers_match": "Required Skills section ↔ frontmatter skills match in all tasks. Reviewers section ↔ frontmatter reviewers match in all tasks. Skill↔task-content correct: 01/02/03 are Go code → code-writing; 04 is acceptance testing → pre-deploy-qa. No mismatches.",
+    "decomposition": "Dependency graph acyclic: 01 (w1) → 02,03 (w2, depends ['01']) → 04 (w3, depends ['02','03']). All depends_on reference existing task IDs; every dependent wave strictly greater than its dependency wave. No cycles. 4 tasks for an M-sized feature with 4 user stories — well-sized, no over/under-decomposition. File ownership is disjoint (01: internal/query; 02: internal/view; 03: top/; 04: no code) — no merge/split candidates.",
+    "traceability": "Task files-to-modify match tech-spec Implementation Tasks exactly (Task1→query.go+io.go+io_test.go; Task2→view.go+view_test.go; Task3→top/keybindings,menu,config_view,help,menu_test; Task4→none). No dropped or hallucinated files.",
+    "ac_carry_forward": "tech-spec Acceptance Criteria (7 items) traceable across tasks: selector Ncols/DiffIntvl→T01 AC; NULL-safety→T01 AC; view registration fields→T02 AC; j/J + menuStatIO 2-item→T03 AC; live PG16-18 + object='wal' + PG14/15 gated→T01(integration)+T04(manual); make build/test/lint/vuln→T04 AC; no regressions→T02/T03/T04 AC. User-spec AC (8 items) likewise covered, aggregated in T04 Verification Checklist (US1-US4, filter, sort, track_io_timing hint, Q-not-reset). No AC dropped.",
+    "tdd_carry_forward": "tech-spec Testing Strategy unit tests all carried: selector-shape over {14..18}→T01 Test_SelectStatIOQuery/TimeQuery; NULL-safety→T01 Test_SelectStatIOQuery_NullSafety; selectMenuStyle(menuStatIO)==2→T03 Test_selectMenuStyle. Integration (live PG16/18, object='wal')→T01 Test_StatIOQueries/Test_StatIOTimeQueries. No TDD item dropped."
+  },
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 4,
+    "critical": 0,
+    "major": 0,
+    "minor": 4
+  }
+}
