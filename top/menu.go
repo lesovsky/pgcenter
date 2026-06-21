@@ -18,6 +18,7 @@ const (
 	menuPgss                      // menu with pg_stat_statements stats
 	menuProgress                  // menu with pg_stat_progress_* stats
 	menuConf                      // menu with configuration files
+	menuStatIO                    // menu with pg_stat_io stats
 
 	// Directions allowed when working with menu.
 	moveUp   direction = iota // move up
@@ -80,6 +81,15 @@ func selectMenuStyle(t menuType) menuStyle {
 				" pg_hba.conf",
 				" pg_ident.conf",
 				" recovery.conf",
+			},
+		}
+	case menuStatIO:
+		s = menuStyle{
+			menuType: menuStatIO,
+			title:    " Choose pg_stat_io mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_io operations",
+				" pg_stat_io timings",
 			},
 		}
 	default:
@@ -176,6 +186,16 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 				viewSwitchHandler(app.config, "progress_copy")
 			default:
 				viewSwitchHandler(app.config, "progress_vacuum")
+			}
+			printCmdline(app.ui, "%s", app.config.view.Msg)
+		case menuStatIO:
+			switch cy {
+			case 0:
+				viewSwitchHandler(app.config, "stat_io")
+			case 1:
+				viewSwitchHandler(app.config, "stat_io_time")
+			default:
+				viewSwitchHandler(app.config, "stat_io")
 			}
 			printCmdline(app.ui, "%s", app.config.view.Msg)
 		case menuConf:

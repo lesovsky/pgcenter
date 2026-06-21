@@ -224,6 +224,9 @@ func Test_switchViewTo(t *testing.T) {
 		{current: "progress_analyze", to: "progress", want: "progress_basebackup"},
 		{current: "progress_basebackup", to: "progress", want: "progress_copy"},
 		{current: "progress_copy", to: "progress", want: "progress_vacuum"},
+		{current: "activity", to: "statio", want: "stat_io"},
+		{current: "stat_io", to: "statio", want: "stat_io_time"},
+		{current: "stat_io_time", to: "statio", want: "stat_io"},
 	}
 
 	wg := sync.WaitGroup{}
@@ -267,6 +270,21 @@ func Test_databasesNextView(t *testing.T) {
 
 	for _, tc := range testcases {
 		assert.Equal(t, tc.want, databasesNextView(tc.current))
+	}
+}
+
+func Test_statioNextView(t *testing.T) {
+	testcases := []struct {
+		current string
+		want    string
+	}{
+		{current: "stat_io", want: "stat_io_time"},
+		{current: "stat_io_time", want: "stat_io"},
+		{current: "unknown", want: "stat_io"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, statioNextView(tc.current))
 	}
 }
 

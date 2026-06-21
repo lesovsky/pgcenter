@@ -15,6 +15,7 @@ func Test_selectMenuStyle(t *testing.T) {
 		{menu: menuPgss, want: 6},
 		{menu: menuProgress, want: 6},
 		{menu: menuConf, want: 4},
+		{menu: menuStatIO, want: 2},
 	}
 
 	for _, tc := range testcases {
