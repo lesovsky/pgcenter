@@ -1,0 +1,183 @@
+{
+  "feature": "006-feat-pg-stat-io",
+  "task": "04 — Pre-deploy QA",
+  "branch": "feature/pg-stat-io",
+  "date": "2026-06-21",
+  "verdict": "pass-with-manual-pending",
+  "environment": {
+    "status": "no-live-postgres",
+    "note": "Sandbox has NO running PostgreSQL cluster. The pre-deploy-qa Phase 1 Docker rebuild does not apply (pgcenter is a Go CLI with no app-level docker-compose; the lesovsky/pgcenter-testing PG14-18 container is not running here). All live-PG integration tests t.Skipf gracefully OR hard-fail/panic on 'dial tcp 127.0.0.1:21917: connect: connection refused'. The hard-failing PG tests (config, internal/postgres, internal/stat, profile, record, top/Test_doReload) are PRE-EXISTING tech-debt [005] — they do not skip without a PG fixture. NONE of them is feature-006 code; the feature's own tests skip cleanly. The full live-PG manual walk and the PG14/15/18 matrix are delegated to the user / CI, not this sandbox.",
+    "go_version": "go1.25.10",
+    "toolchain_note": "golangci-lint, gosec, govulncheck present in $(go env GOPATH)/bin but not on the make shell PATH; QA invoked make with GOPATH/bin appended to PATH."
+  },
+  "automated": {
+    "build": {
+      "command": "make build",
+      "result": "pass",
+      "evidence": "./bin/pgcenter built (18 MB), exit 0, no errors."
+    },
+    "lint": {
+      "command": "make lint (golangci-lint run --timeout 5m + gosec -quiet ./...)",
+      "result": "pass",
+      "evidence": "Both golangci-lint and gosec exit 0 with no findings."
+    },
+    "vuln": {
+      "command": "make vuln (govulncheck ./...)",
+      "result": "fail-environment-only",
+      "evidence": "1 finding: GO-2026-5037 (crypto/x509 inefficient hostname parsing), Go STANDARD LIBRARY, fixed in go1.25.11; sandbox runs go1.25.10. Call traces are in pre-existing files (internal/stat/postgres.go:236, cmd/pgcenter.go:67) — NOT feature-006 code. This is a toolchain/stdlib version issue resolvable by bumping the Go toolchain to 1.25.11; not a defect in this feature. No vulnerabilities in feature code or imported modules' called paths."
+    },
+    "targeted_tests": {
+      "query_view": {
+        "command": "go test ./internal/query/... ./internal/view/...",
+        "result": "pass",
+        "evidence": "Both packages ok. Selector-shape tests (Ncols/DiffIntvl per version {14,15,16,17,18}) and NULL-safety tests pass; live-PG io integration subtests SKIP gracefully (postgres NNN not available)."
+      },
+      "top_targeted": {
+        "command": "go test ./top/ -run 'Test_selectMenuStyle|Test_statioNextView|Test_switchViewTo'",
+        "result": "pass",
+        "evidence": "Test_selectMenuStyle (menuStatIO = 2 items), Test_statioNextView (count<->time toggle), Test_switchViewTo (25 subtests) all PASS."
+      }
+    },
+    "full_suite": {
+      "command": "go test ./...",
+      "result": "red-preexisting-only",
+      "feature_006_failures": "none",
+      "evidence": "Failing packages — config (TestRunMain), internal/postgres (TestConnect/TestReconnect, panic), internal/stat (Test_readCpuStat, panic), profile (Test_profileLoop, panic), record (Test_app_setup/Test_app_record, panic), top (Test_doReload, panic). EVERY failure is the identical root cause: 'dial tcp 127.0.0.1:21917: connect: connection refused' (no PG fixture). These live-PG tests hard-fail/panic instead of skipping — pre-existing tech-debt [005], broader than just Test_doReload as the task brief named, but all the same connection-refused root cause and none in feature-006 scope. Feature-006 packages (internal/query, internal/view, and the targeted top tests) are GREEN in isolation. No new failures introduced by this feature."
+    }
+  },
+  "acceptance": [
+    {
+      "id": "AC-views-registered",
+      "criterion": "Views stat_io (Ncols 16, DiffIntvl [4,14]) and stat_io_time (Ncols 10, DiffIntvl [4,8]) registered; both NotRecordable:true, MinRequiredVersion=PostgresV16, UniqueKey:0, OrderKey:4, OrderDesc:true.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "internal/view/view.go:166-193 — both view structs carry the exact fields. Configure() wires SelectStatIOQuery/SelectStatIOTimeQuery at view.go:385-389. Confirmed by go test ./internal/view/..."
+    },
+    {
+      "id": "AC-selector-branching",
+      "criterion": "SelectStatIOQuery branches PostgresV18 (native *_bytes) vs else (op_bytes); coalesce on every diffed column; KiB via /1024; synthetic io_key; count-based WHERE on both screens.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "internal/query/io.go:87-92 branches version>=PostgresV18 -> PgStatIOPG18 (read_bytes/write_bytes/extend_bytes /1024 ::bigint), else PgStatIOPG16 (reads*op_bytes/1024). Every diffed column coalesce(...,0); io_key = left(md5(backend_type||coalesce(object,'')||coalesce(context,'')),10); both count and time queries share the same count-based WHERE coalesce(reads,0)+...+coalesce(fsyncs,0) > 0. Selector-shape + NULL-safety unit tests PASS on {14,15,16,17,18}."
+    },
+    {
+      "id": "AC-version-constants",
+      "criterion": "PostgresV15/16/17/18 numeric constants added.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "internal/query/query.go:17-21 — V14=140000 ... V18=180000."
+    },
+    {
+      "id": "AC-tui-wiring",
+      "criterion": "j (enter+toggle) / J (open menu) keybindings; menuStatIO with exactly 2 items; statioNextView toggle; menuSelect branch; help line + Q-no-reset note.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "top/keybindings.go:41 j->switchViewTo(statio), :47 J->menuOpen(menuStatIO). top/menu.go:86-94 menuStatIO style with 2 items (operations/timings); :191-200 menuSelect branch -> stat_io / stat_io_time. top/config_view.go:118-119 case statio, :144-157 statioNextView 2-way toggle. top/help.go:19 j/J line; :39-40 Q-does-not-reset shared stats (pg_stat_io). Test_selectMenuStyle confirms menuStatIO=2 items."
+    },
+    {
+      "id": "AC-build-lint",
+      "criterion": "make build, make lint green.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "make build exit 0; make lint (golangci-lint + gosec) exit 0, no findings."
+    },
+    {
+      "id": "AC-vuln",
+      "criterion": "make vuln (govulncheck) green.",
+      "status": "verified-static",
+      "result": "fail-environment-only",
+      "evidence": "1 stdlib finding GO-2026-5037 fixed in go1.25.11 (sandbox go1.25.10); not feature code. Resolve by bumping Go toolchain on CI. Not a feature defect."
+    },
+    {
+      "id": "AC-unit-tests",
+      "criterion": "Selector unit tests pass on {14,15,16,17,18}; NULL-safety test passes; menuStatIO=2 items; no regressions in view/menu/query tests.",
+      "status": "verified-static",
+      "result": "pass",
+      "evidence": "go test ./internal/query/... ./internal/view/... ok; targeted top tests pass. No new failures in full suite."
+    },
+    {
+      "id": "AC-us1-triage",
+      "criterion": "US1: j opens count screen; backend_type/object/context rows with rates; default sort by reads desc; / filter by backend_type isolates rows.",
+      "status": "manual-pending",
+      "result": "pending-live-pg",
+      "evidence": "Static: OrderKey:4 (reads) + OrderDesc:true in view; j->statio toggle wired. Live TUI walk on PG17 required — not possible without a running cluster (delegated to user/CI)."
+    },
+    {
+      "id": "AC-us3-latency",
+      "criterion": "US3: second j -> time screen; sort by fsync_time; track_io_timing hint in cmdline.",
+      "status": "manual-pending",
+      "result": "pending-live-pg",
+      "evidence": "Static: stat_io_time Msg 'requires track_io_timing=on'; statioNextView toggles count<->time. Live walk required."
+    },
+    {
+      "id": "AC-J-menu",
+      "criterion": "J opens a 2-item menu (operations/timings); selecting an item switches screen (menuSelect J-path).",
+      "status": "manual-pending",
+      "result": "pending-live-pg",
+      "evidence": "Static: menuStatIO 2 items + menuSelect branch verified. Interactive menu navigation requires live TUI."
+    },
+    {
+      "id": "AC-rowset-identical",
+      "criterion": "Row-set identical on count and time screens; empty/all-zero rows hidden.",
+      "status": "manual-pending",
+      "result": "pending-live-pg",
+      "evidence": "Static: both queries share the same count-based WHERE. Empirical row-set equality requires live data."
+    },
+    {
+      "id": "AC-pg1415-not-supported",
+      "criterion": "PG14/15: entering the screen yields 'selected statistics is not supported by current version of Postgres', no panic, no blank screen.",
+      "status": "manual-pending",
+      "result": "pending-ci",
+      "evidence": "Static: MinRequiredVersion=PostgresV16 gates the view via the collector VersionOK path; selector stays Format-safe (returns PG16 form for <16). Live PG14/15 gate behavior delegated to CI matrix."
+    },
+    {
+      "id": "AC-pg18-wal-bytes",
+      "criterion": "PG18: object='wal' rows present; native *_bytes render as integers (no decimals).",
+      "status": "manual-pending",
+      "result": "pending-ci",
+      "evidence": "Static: PgStatIOPG18 selects read_bytes/write_bytes/extend_bytes with (.../1024)::bigint. Real PG18 shape (native numeric bytes, object='wal'/context='init' rows, op_bytes removal) is the external gate — REQUIRES the CI PG18 run; cannot be verified in this sandbox (no PG18)."
+    }
+  ],
+  "deferredToPostDeploy": [
+    {
+      "criterion": "US1-US4 interactive walk on live PG17 (j toggle, J 2-item menu + menuSelect J-path, / filter by backend_type, default sort by reads, count<->time switch, track_io_timing cmdline hint, identical row-set).",
+      "reason": "Requires a running PostgreSQL 17 cluster and an interactive TUI session; unavailable in this sandbox.",
+      "verificationCondition": "User runs ./bin/pgcenter top against live PG17.",
+      "verificationSteps": "Press j (count screen, rows sorted by reads desc); / then backend_type filter e.g. autovacuum; press j again (time screen), sort by fsync_time, confirm track_io_timing hint; press J, confirm 2-item menu and that selecting each item switches screen; confirm count and time screens show identical row-set with no all-zero rows."
+    },
+    {
+      "criterion": "PG14/15 'not supported' degradation (no panic, no blank screen).",
+      "reason": "Requires live PG14/15 from the CI matrix.",
+      "verificationCondition": "CI PG14/15 job or manual connect to PG14/15.",
+      "verificationSteps": "Connect to PG14/15, press j, expect 'ERROR: selected statistics is not supported by current version of Postgres' in the main pane, no panic."
+    },
+    {
+      "criterion": "PG18 native *_bytes + object='wal' rows (real gate).",
+      "reason": "Requires live PG18; the *_bytes numeric type, object='wal'/context='init' rows and op_bytes removal are assumed from PG18 docs, not a local cluster.",
+      "verificationCondition": "CI PG18 integration job (Test_StatIOQueries on port 21918).",
+      "verificationSteps": "Run integration tests against PG18; assert object='wal' rows present and KiB columns render as integers."
+    },
+    {
+      "criterion": "govulncheck clean (GO-2026-5037).",
+      "reason": "stdlib fix lands in go1.25.11; sandbox has go1.25.10.",
+      "verificationCondition": "CI runs on Go >= 1.25.11.",
+      "verificationSteps": "make vuln on go1.25.11+ — expect 0 findings."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "title": "govulncheck reports GO-2026-5037 (Go stdlib crypto/x509), unrelated to feature 006",
+      "expected": "make vuln clean",
+      "actual": "1 stdlib finding, fixed in go1.25.11; sandbox runs go1.25.10",
+      "reproduction": "make vuln on go1.25.10. Traces are in pre-existing files (internal/stat/postgres.go, cmd/pgcenter.go). Resolve by bumping the Go toolchain; not a feature defect."
+    },
+    {
+      "severity": "minor",
+      "title": "Pre-existing live-PG tests hard-fail/panic without a PG fixture (tech-debt [005])",
+      "expected": "Tests skip gracefully when PG is absent",
+      "actual": "config, internal/postgres, internal/stat, profile, record, top/Test_doReload fail/panic on 'connection refused' (port 21917)",
+      "reproduction": "go test ./... with no PG cluster. Pre-existing, broader than the single Test_doReload named in the brief but identical root cause; NOT introduced by feature 006. Feature-006 packages are green in isolation."
+    }
+  ]
+}

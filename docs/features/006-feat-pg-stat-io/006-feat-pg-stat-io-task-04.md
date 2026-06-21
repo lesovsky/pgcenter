@@ -1,5 +1,5 @@
 ---
-status: planned                    # planned -> in_progress -> done
+status: done                       # planned -> in_progress -> done
 depends_on: ["02", "03"]           # ID задач-зависимостей
 wave: 3                            # волна параллельного выполнения
 skills: [pre-deploy-qa]            # МАССИВ скиллов для загрузки

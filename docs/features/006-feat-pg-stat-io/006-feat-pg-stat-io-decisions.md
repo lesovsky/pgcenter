@@ -68,3 +68,23 @@
 - `make build` → бинарь собран; `go vet ./top/...` / `gofmt` → clean
 - Полный `go test ./top/...` падает ТОЛЬКО на pre-existing `Test_doReload` (tech-debt [005]); подтверждено lead'ом
 - Независимое подтверждение lead'ом: commit 162a3c9 (6 файлов, +61)
+
+---
+
+## Task 04: Pre-deploy QA
+
+**Status:** Done
+**Commit:** (без кода — QA-отчёт) e1888fc..162a3c9 покрыты
+**Agent:** io-qa (general-purpose, skill pre-deploy-qa)
+**Summary:** Приёмочное тестирование. `make build` PASS; `make lint` (golangci-lint+gosec) PASS, 0 находок; целевые фича-тесты (`internal/query`, `internal/view`, `top` целевые) PASS. Статическая верификация всех технических AC по коду — pass (оба view, ветвление PG18/op_bytes, coalesce, KiB /1024, io_key, j/J, menuStatIO=2, statioNextView, help). Отчёт: `006-feat-pg-stat-io-qa-report.json`. Вердикт **pass-with-manual-pending**.
+**Deviations:** Нет (фича-код).
+**Tech debt:** Не вводится фичей. Зафиксированы environment/CI-пункты: (1) `make vuln` краснит на GO-2026-5037 — stdlib crypto/x509, sandbox go1.25.10, фикс в 1.25.11 (CI уже бампнут в фиче 004), не фича-код; (2) полный `go test ./...` краснит во всех пакетах, требующих живого PG (connection refused :21917) — pre-existing [005], шире одного Test_doReload, окруженческое.
+
+**Manual / CI-pending (не верифицируемо в sandbox — нет PG-кластера):**
+- US1–US4 на живом PG17: j-toggle, J-меню (вкл. menuSelect путь), `/` фильтр, сортировка по reads, count↔time, подсказка track_io_timing, идентичный row-set.
+- PG14/15 «not supported» без паники/пустого экрана — CI-матрица.
+- PG18 реальный гейт: строки `object='wal'` + нативные `*_bytes` (порт 21918) — основной внешний гейт.
+- govulncheck clean — CI на Go ≥ 1.25.11.
+
+**Verification:**
+- Независимое подтверждение lead'ом: `make build` OK, `go test ./internal/query/... ./internal/view/...` + целевые `./top/` → ok; qa-report.json записан.

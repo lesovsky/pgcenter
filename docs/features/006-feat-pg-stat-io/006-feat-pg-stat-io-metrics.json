@@ -14,7 +14,7 @@
     "user_spec": { "start_time": "2026-06-21T11:31:14Z", "end_time": "2026-06-21T14:48:26Z", "duration_min": 197, "touch_time_min": 197, "human_wait_time_min": 0, "steps": {} },
     "tech_spec": { "start_time": "2026-06-21T14:50:03Z", "end_time": "2026-06-21T15:08:38Z", "duration_min": 18, "touch_time_min": 18, "human_wait_time_min": 0, "steps": {} },
     "task_decomposition": { "start_time": "2026-06-21T15:09:26Z", "end_time": "2026-06-21T15:20:46Z", "duration_min": 11, "touch_time_min": 11, "human_wait_time_min": 0, "steps": {} },
-    "feature_execution": { "start_time": "2026-06-21T15:22:25Z", "human_wait_time_min": 0, "steps": {} },
+    "feature_execution": { "start_time": "2026-06-21T15:22:25Z", "end_time": "2026-06-21T16:06:28Z", "duration_min": 44, "touch_time_min": 44, "human_wait_time_min": 0, "steps": {} },
     "done": null
   },
   "quality": {
@@ -28,7 +28,7 @@
     "interview_questions": 5,
     "tasks_count": 4,
     "waves_count": 3,
-    "agents_spawned": 17,
-    "commits_count": 0
+    "agents_spawned": 18,
+    "commits_count": 17
   }
 }
