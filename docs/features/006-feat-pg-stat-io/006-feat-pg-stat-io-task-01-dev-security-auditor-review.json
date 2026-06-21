@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "md5() used as a non-cryptographic synthetic row key (no security impact, document intent)",
+      "description": "All three query constants build column 0 as left(md5(backend_type || coalesce(object,'') || coalesce(context,'')), 10) AS io_key. md5 is used purely to fold the (backend_type x object x context) identity tuple into a single column so stat.diff() can match rows across samples by one column (the same pattern as pg_stat_statements queryid in statements.go). This is NOT a cryptographic/integrity use: there is no authentication, signing, or secret involved, and a hash collision would at worst mis-match two stat rows in a read-only TUI, not create a security boundary breach. It is therefore explicitly out of scope for OWASP A02 (Cryptographic Failures). It is flagged only at minor severity because md5 in source can trip static analyzers (e.g. gosec G401/G501) and future readers may misread it as a security control. The existing code comment already explains the NULL-coalesce rationale; a one-line note that md5 here is a non-cryptographic identity key (and/or a gosec nolint annotation if the linter flags it) would prevent confusion.",
+      "location": "internal/query/io.go:20, internal/query/io.go:43, internal/query/io.go:70",
+      "impact": "None on the security posture. Potential for a false-positive static-analysis finding (gosec weak-hash) and for a future maintainer to mistake the hash for a security mechanism.",
+      "recommendation": "Keep md5 as-is (it matches the established pgcenter pattern and is fine for row identity). Optionally add a brief code comment stating md5 is a non-cryptographic synthetic key, and if `make lint`/gosec flags a weak-hash warning on these lines, suppress it with a scoped `//nolint:gosec` plus justification rather than changing the algorithm.",
+      "cwe": "CWE-328"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "The pg_stat_io query layer is correctly implemented and fully conforms to the spec and existing query-package conventions. Column order/count (count=16 DiffIntvl[4,14], time=10 DiffIntvl[4,8]), coalesce on every diffed column, integer /1024 KiB, io_key via left(md5(...),10), and PG18-vs-PG16/17 branching all match the Data Models and reference patterns (bgwriter.go, replication_slots.go, statements.go). Build, go vet and go test ./internal/query/... pass; live tests t.Skipf cleanly on unavailable versions.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/io.go",
+      "line": 99,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "SelectStatIOTimeQuery ignores its version parameter (named _). This is the deliberate, spec-sanctioned single-query approach matching SelectStatReplicationSlotsQuery, and the doc comment explains the rationale. No change required; noted only because the time and count selectors now branch differently (count branches on PostgresV18, time does not) and Wave 2 callers should not assume symmetric branching.",
+      "benefit": "Prevents a future reader from assuming both selectors version-branch identically.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/io_test.go",
+      "line": 64,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_SelectStatIOQuery_NullSafety asserts coalesce on the raw counter columns (reads, writes, ...) but does not assert NULL-safety of the three diffed KiB columns (read,KiB / write,KiB / ext,KiB at indices 5,7,9), which are also inside DiffIntvl[4,14]. The implementation IS safe (PG16 multiplies two coalesced terms; PG18 wraps read_bytes/write_bytes/extend_bytes in coalesce(...,0)::bigint), but the test does not lock that in. Consider asserting the KiB expressions are coalesced too, so a future edit that drops coalesce on op_bytes/*_bytes is caught.",
+      "benefit": "Closes the one diffed-column gap in the NULL-safety regression net; all 11 columns in DiffIntvl would then be guarded by a test.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/io_test.go",
+      "line": 98,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "The live tests assert column count and (PG18) presence of object='wal' rows, but never assert that returned rows actually pass through the count-based WHERE without aborting a diff (the central risk per task Edge cases). This is acceptable because the diff machinery is unexported in package stat and the SQL-level coalesce assertions already cover the real source; just confirming the chosen approach is the pragmatic one and matches the task's guidance to verify NULL->0 at the SQL string rather than execute diff.",
+      "benefit": "Documents that the SQL-string-level NULL assertion is the intended verification, not an oversight.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

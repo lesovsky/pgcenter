@@ -1,6 +1,6 @@
 ---
-status: planned                    # planned -> in_progress -> done
-depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
+status: done                       # planned -> in_progress -> done
+depends_on: []                     # ID задач-зависимостей
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
 verify: bash                       # go test ./internal/query/... passes (selector shape per version + NULL-safety + live PG16/18 shape)

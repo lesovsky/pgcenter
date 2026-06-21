@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Test suite for the pg_stat_io query layer is well-constructed and faithfully covers every TDD anchor. Selector shape tests, NULL-safety, live integration gates and a template-artifact guard are all present, with meaningful assertions that pass the litmus test. The NULL-safety SQL-string approach is justified given a real import-cycle constraint (package stat imports package query, so package query cannot import stat to drive the real diff machinery). One non-blocking observation: a behavioral NULL->0 test is feasible but only in package stat, not here, so it belongs in a different task. No critical or major findings.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/io_test.go:64-92 (Test_SelectStatIOQuery_NullSafety / Test_SelectStatIOTimeQuery_NullSafety)",
+      "issue": "The NULL-safety tests are structural (assert.Contains on the SQL string for coalesce(col,0)) rather than behavioral. They verify the protection mechanism exists in the SQL source but do not prove the end-to-end effect (a NULL cell surviving the diff as 0 instead of aborting the sample at parsePairInt). This is category empty_test-adjacent: it tests presence of a substring, not behavior. Verified as acceptable here because a behavioral test is genuinely infeasible within package query: the diff machinery (diff/diffPair/parsePairInt) is unexported in package stat, AND package stat imports package query (internal/stat/postgres.go:9), so importing stat from a package query test would create an import cycle. The SQL string is the actual source of the protection, so asserting on it verifies the mechanism at the right layer given the constraint.",
+      "recommendation": "Keep this test as the in-package guard (it correctly protects the SQL contract). For genuine behavioral coverage of NULL->0, add a separate unit test in package stat (no import cycle there) that builds two synthetic PGresult samples with an empty-string cell inside DiffIntvl and calls the exported stat.Compare(...), asserting it returns no error and renders the diffed cell as 0. The building blocks already exist: PGresult, NewPGresultQuery, NewPGresultFile and Compare are exported (internal/stat/postgres.go), and Test_diff / Test_diffPair (postgres_test.go:283,528) already construct synthetic PGresult data. This is out of scope for Task 01 (query layer only); recommend it as a follow-up test in the stat-layer task rather than a fix here.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/io_test.go:64-92",
+      "issue": "The coalesce assertions cover all diffed counter/timing columns but do not assert coalesce on op_bytes in the PG16/17 KiB derivation (io.go uses coalesce(op_bytes,0)) nor on the PG18 *_bytes columns (coalesce(read_bytes,0)). op_bytes/*_bytes feed diffed KiB columns and the task Details explicitly call out op_bytes possibly being NULL as an edge case. A NULL op_bytes would not abort the diff (it only affects the multiplier), so severity is minor, but the guard is incomplete relative to the stated edge cases.",
+      "recommendation": "In Test_SelectStatIOQuery_NullSafety, additionally assert that the KiB derivation is NULL-protected per version: for version 160000 assert q contains coalesce(op_bytes,0); for version 180000 assert q contains coalesce(read_bytes,0), coalesce(write_bytes,0), coalesce(extend_bytes,0). This locks down the full edge-case set from the task Details (op_bytes NULL, *_bytes NULL) at the same SQL-string layer the test already uses.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 2,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
