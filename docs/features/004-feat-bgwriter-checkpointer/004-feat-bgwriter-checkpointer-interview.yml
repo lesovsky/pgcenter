@@ -1,0 +1,351 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Updated after EACH user response with scoring, values, and remaining gaps.
+#
+# Location: {feature_base}-interview.yml
+#   e.g.  docs/features/001-feat-add-auth-interview.yml
+#
+# Scoring: 0-100% (how well we understand this aspect)
+# Status: pending → partial → complete
+# Required: true = must reach threshold, false = cover if relevant
+
+# ============================================================================
+# Interview Metadata (Session Recovery)
+# ============================================================================
+interview_metadata:
+  feature_name: "bgwriter-checkpointer"
+  feature_base: "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer"
+  work_type: "feature"
+  started: "2026-06-21 12:04:19"
+  last_updated: "2026-06-21 12:04:19"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 0
+  feature_size: "M"
+
+# ============================================================================
+# Conversation History (for session recovery)
+# ============================================================================
+# Preserves complete Q&A. Update after EVERY user response.
+#
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-06-21 12:08:00"
+    topic: "columns / diff-semantics / stats_age / testing"
+    agent_question: |
+      Q1 column set (PG<17 and PG17+ layouts, variant A); Q2 delta vs absolute for
+      checkpoint counters; Q3 stats_age source on PG17+ (separate bgwriter/checkpointer
+      resets); Q4 testing strategy (unit per-version + integration on live PG14-18).
+    user_answer: |
+      Q1 column set OK. Q2: ckpt_timed/ckpt_req shown as ABSOLUTE cumulative (важно видеть
+      разницу timed vs req), всё остальное — диффы. Q3: option (a) — show checkpointer's
+      stats_age, но зафиксировать в документации чтобы не было сюрпризом. Q4 testing OK.
+    summary: "Checkpoint counters absolute; rest diffed; stats_age from checkpointer (documented); unit+integration tests."
+  - question_num: 2
+    timestamp: "2026-06-21 12:12:00"
+    topic: "restartpoints diff-semantics + PG18 verification"
+    agent_question: |
+      Restartpoints on PG17+ also absolute cumulative (contiguous absolute block at start)?
+      Plus reported code-research findings: DiffIntvl is a single contiguous range (confirms
+      design); PG18 pg_stat_checkpointer not verified on live DB (likely slru_written added).
+    user_answer: |
+      Yes — rstpt_timed/req/done also absolute cumulative. For PG18 slru_written: rely on
+      PostgreSQL documentation (if documented, assume present) AND verify via the container
+      integration tests which DO run PG18.
+    summary: "Restartpoints absolute. PG18 columns per docs + verify on PG18 container integration test."
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+# Interview Cycle 1 scope
+phase1_feature_overview:
+
+  feature_description:
+    score: 95
+    status: "complete"
+    value: |
+      New single-row TUI screen 'bgwriter' (hotkey `b`) combining pg_stat_bgwriter and
+      pg_stat_checkpointer. Shows background-writer and checkpoint activity. Follows the
+      pg_stat_wal view pattern exactly (single row, source label first, stats_age last,
+      counters diffed per refresh interval). TUI (top) only — NOT recordable in 0.11.0.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      No way in pgcenter to watch checkpoint/bgwriter behaviour: checkpoint frequency,
+      timed vs requested ratio (signals undersized max_wal_size / aggressive manual
+      checkpoints), write/sync time, buffers flushed by checkpointer vs bgwriter vs backends.
+      overview.md wrongly claims bgwriter is supported — it never was.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 85
+    status: "complete"
+    value: "Practicing PostgreSQL DBAs tuning checkpoint/WAL behaviour and IO load during ops."
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 80
+    status: "partial"
+    value: |
+      Screen opens on `b`, shows correct columns per PG version (14-18), checkpoint event
+      counters absolute-cumulative, work/time/buffer columns diffed per interval, stats_age
+      from checkpointer on 17+. Unit tests for SelectStatBgwriterQuery across PG14-18 pass;
+      query executes against live PG14-18.
+    gaps: "Confirm restartpoints absolute; finalize acceptance criteria list in Cycle 2."
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      PG 17 split: pre-17 all in pg_stat_bgwriter; 17+ checkpoint metrics in
+      pg_stat_checkpointer, bgwriter reduced, buffers_backend/_fsync removed (→ pg_stat_io,
+      out of scope). Variant A unified column headers across versions (MUST be documented).
+      Single contiguous DiffIntvl range → absolute event-counters must sit at the start.
+      MinRequiredVersion = PG14 (pgcenter's floor; bgwriter exists on all supported versions).
+      NotRecordable: true (temporary) to avoid issue #122 report breakage.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Unit tests for SelectStatBgwriterQuery(version) across PG14-18 (mirror wal_test.go).
+      Integration: query executes on live PG14/15/16/17/18 containers. No E2E needed.
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 3)
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      US1 (primary): As a DBA, I want to see timed vs requested checkpoint counts
+      (ckpt_timed/ckpt_req, absolute), so I can detect WAL-pressure-forced checkpoints
+      (high ckpt_req vs ckpt_timed => max_wal_size too small).
+      US2: As a DBA, I want checkpoint write/sync time (ckpt_write,ms / ckpt_sync,ms, diffed)
+      and buffers written (buf_ckpt), so I can assess checkpoint IO cost and spread.
+      US3: As a DBA, I want to compare who flushes buffers — buf_clean (bgwriter) vs
+      buf_backend (backends, pre-17) vs buf_ckpt — plus maxwritten, so I can tune
+      bgwriter_lru_maxpages (high buf_backend + maxwritten => bgwriter not keeping up).
+      US4: As a DBA on a standby, I want restartpoints (rstpt_timed/req/done, absolute), since
+      on a replica ckpt_timed/req stay 0 and restartpoints accumulate.
+      US5: As a DBA, I want stats_age, so I know the accumulation window for cumulative numbers
+      and can spot a recent reset.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 85
+    status: "complete"
+    value: |
+      - Hotkey `b` opens the "bgwriter" screen from any other screen.
+      - PG14-16: columns source, ckpt_timed, ckpt_req (absolute), ckpt_write,ms, ckpt_sync,ms,
+        buf_ckpt, buf_clean, maxwritten, buf_backend, buf_backend_fsync, buf_alloc (diffed),
+        stats_age (not diffed).
+      - PG17+: columns source, ckpt_timed, ckpt_req, rstpt_timed, rstpt_req, rstpt_done
+        (absolute), ckpt_write,ms, ckpt_sync,ms, buf_ckpt, buf_clean, maxwritten, buf_alloc
+        (diffed), stats_age from pg_stat_checkpointer (not diffed). PG18 extra columns per docs
+        (e.g. slru_written) included and verified on PG18 container.
+      - Event counters (ckpt_*, rstpt_*) render as absolute cumulative; work/time/buffer
+        columns render as per-interval deltas; stats_age is pass-through text.
+      - Screen is NOT collected by `pgcenter record` (NotRecordable: true).
+      - Unit tests for SelectStatBgwriterQuery cover PG14-18; query executes on live PG14-18.
+    gaps: "Final exact PG18 column list confirmed at implementation against PG18 container."
+    required: true
+
+  edge_cases:
+    score: 90
+    status: "complete"
+    value: |
+      - stats_reset IS NULL (fresh cluster / never reset): now()-NULL = NULL => stats_age
+        empty. Acceptable, same as wal view.
+      - External pg_stat_reset_shared(...) during a session: a diffed column shows a negative
+        delta for one tick. Existing pgcenter behaviour (same as wal), not fixed, documented.
+      - buf_backend/buf_backend_fsync absent on PG17+ (variant A): columns simply not present;
+        documented so it is not a surprise.
+      - Standby: ckpt_timed/req == 0, rstpt_* accumulate, buffers still populated.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 90
+    status: "complete"
+    value: |
+      Query uses only pg_stat_bgwriter / pg_stat_checkpointer (readable by any role, no special
+      privilege — unlike wal which uses pg_ls_waldir). No permission gating needed; screen works
+      on any connection including PgBouncer (simple protocol). PG<14 filtered out by
+      MinRequiredVersion. No additional error handling beyond standard query-error display.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      Agent: unit tests for SelectStatBgwriterQuery(version) across PG14-18 (mirror
+      wal_test.go) asserting query/ncols/DiffIntvl per version; integration test executing the
+      query on live PG14/15/16/17/18 containers. User: manual `make build` + open screen on a
+      PG17 and PG18 instance, confirm columns and absolute-vs-delta behaviour.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      Single-row screen, identical UX model to pg_stat_wal: header row of column names + one
+      data row. Entered via `b`; left via any other view hotkey. Diffed columns refresh each
+      interval; absolute columns show cumulative. Sorting and filtering not applicable
+      (single row). Standard cmdline help/title. No new UI components invented.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 85
+    status: "complete"
+    value: |
+      - PG18 column set unverified by memory — mitigated: follow PG docs + verify on PG18
+        container integration test before shipping.
+      - Variant A tension (different columns per version) — mitigated: wal.go precedent for
+        version-specific Ncols/DiffIntvl; documented for users.
+      - DiffIntvl single contiguous range — mitigated: layout places all absolute event
+        counters first, diffed block contiguous, stats_age last.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      - Follow pg_stat_wal pattern: new internal/query/bgwriter.go with
+        SelectStatBgwriterQuery(version) (string, int, [2]int); version literals 170000/180000
+        (no PostgresV17/V18 constants exist).
+      - Event counters (ckpt_*, rstpt_*) absolute (outside DiffIntvl); work/time/buffers diffed.
+      - Cross-join pg_stat_checkpointer × pg_stat_bgwriter on PG17+; pg_stat_bgwriter only <17.
+      - NotRecordable: true (temporary) — record/report deferred to a future feature.
+      - stats_age from pg_stat_checkpointer on PG17+ (documented).
+      - MinRequiredVersion = PostgresV14.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 2)
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      - NEW internal/query/bgwriter.go + bgwriter_test.go (templates: wal.go / wal_test.go).
+      - internal/view/view.go: new "bgwriter" view entry (~line 128) with NotRecordable: true;
+        case "bgwriter" in Configure() (~line 321) calling SelectStatBgwriterQuery(version).
+      - top/keybindings.go: one line {"sysstat", 'b', switchViewTo(app, "bgwriter")} (`b` free).
+      - top/reset.go, record/record.go (filterViews skips NotRecordable), cmd/report/report.go:
+        NO changes required.
+      - Diff mechanism: internal/stat/postgres.go:331-333 (DiffIntvl contiguous range).
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 80
+    status: "complete"
+    value: |
+      Depends on existing view/query/diff infrastructure and version-detection in
+      view.Configure(). No new external dependencies. Reuses pg_stat_wal architecture.
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      Reads pg_stat_bgwriter (all supported versions) and pg_stat_checkpointer (PG17+) via
+      a single SQL query (cross-join on 17+). No storage — TUI live display only
+      (NotRecordable). Single-row cumulative shared counters.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 100
+    status: "complete"
+    value: "None — additive new view, no schema/config/data migration. overview.md doc fix only."
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer.md"
+  status: "created"  # pending | created | approved
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase3_integration"
+  questions_asked: 8
+  last_question: "Cycle 2 user stories / UX / edge cases / error scenarios — all approved"
+  completion_estimate: "95%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  FINAL DECISIONS after Phase 6 (dev-customer, needs_work) + Phase 7 (completeness, complete):
+
+  D1 Column contract: per-version Ncols like wal.go (NOT NULL-padded unified). Each version
+     returns only real columns; shared columns keep identical headers/order. PG14-16: no
+     restartpoints. PG18: slru_written included as a real diffed column. ("variant A" in the
+     roadmap means consistent headers for shared columns, NOT identical Ncols.)
+  D2 record/report: live-only in 0.11.0 by design. NotRecordable: true. record/report is a
+     planned backlog follow-up (docs/roadmap-0.11.0.md "Out of scope / backlog"), no committed
+     date. Must be stated explicitly in the spec Limitations so "temporary" has an address.
+  D3 No in-UI notice for version-varying columns. Follows the existing pg_stat_wal precedent
+     (wal silently drops wal_write/sync on PG18). Column set reflects server capabilities;
+     documented in help only. (dev-customer's "major" pushback rejected with reasoning: a
+     bgwriter-specific notice would be inconsistent with how pgcenter already behaves.)
+  D4 Help text: add `b bgwriter` to top/help.go as an acceptance criterion. Concrete placement
+     requested by user: in the hotkey row currently "a,f,r,w" insert `b` between `a` and `f`
+     to yield the sorted row "a,b,f,r,w".
+  D5 Spec Limitations must note: (1) restartpoints are first to drop if the screen becomes
+     overcrowded; (2) stats_age is taken from pg_stat_checkpointer — on a standby or after a
+     separate pg_stat_reset_shared('bgwriter') it does not reflect the bgwriter reset.
+
+  dev-customer minor #4 (screen named "bgwriter" while showing checkpointer data): accepted as
+  a naming note; keep "bgwriter" (familiar, hotkey `b`), source column label clarifies content.
