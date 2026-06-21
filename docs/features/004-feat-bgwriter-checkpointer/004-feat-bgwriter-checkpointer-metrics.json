@@ -37,10 +37,10 @@
     },
     "feature_execution": {
       "start_time": "2026-06-21T08:30:10Z",
-      "end_time": null,
-      "duration_min": null,
-      "touch_time_min": null,
-      "human_wait_time_min": 0,
+      "end_time": "2026-06-21T09:02:05Z",
+      "duration_min": 31,
+      "touch_time_min": 26,
+      "human_wait_time_min": 5,
       "steps": {}
     },
     "done": null
@@ -57,6 +57,6 @@
     "tasks_count": 4,
     "waves_count": 3,
     "agents_spawned": 13,
-    "commits_count": 0
+    "commits_count": 25
   }
 }
