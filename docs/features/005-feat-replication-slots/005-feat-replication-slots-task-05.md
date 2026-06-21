@@ -182,7 +182,7 @@ spill,KiB, stream_txns, stream_count, stream,KiB, total_txns, total,KiB), 14 sta
 - Имена слотов фиксированные: `pgcenter_test_phys`, `pgcenter_test_logical` — статические литералы
   (не подставляются из пользовательского ввода), так что SQL-инъекции тут нет; для имени в
   `pg_drop_replication_slot` используй параметризацию `$1`, а не конкатенацию — следуй стилю
-  существующих тестов (`pg_terminate_backend($1)` в `postgres_test.go`).
+  существующих тестов (`pg_terminate_backend($1)` в `internal/postgres/postgres_test.go:143`).
 - Для проверки «строка присутствует» собери результат запроса в map по `slot_name` или пройди
   `rows.Next()` с поиском нужного `slot_name`; assert через testify (`assert.True`/`assert.Equal`).
 - Defer-дроп тоже guarded, чтобы teardown не падал если основной тест уже дропнул слот или слот не

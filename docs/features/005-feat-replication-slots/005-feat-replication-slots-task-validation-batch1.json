@@ -1,0 +1,60 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/005-feat-replication-slots/005-feat-replication-slots",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "01",
+      "section": "frontmatter / Reviewers",
+      "issue": "reviewers = [dev-code-reviewer, dev-test-reviewer] for a code-writing task; the catalog default set for code-writing also includes dev-security-auditor. Frontmatter and the Reviewers section are internally consistent, and this matches the tech-spec's per-task reviewer list, so the omission originates upstream in the tech-spec, not in decomposition.",
+      "fix": "If a security pass is desired, add dev-security-auditor (and update the tech-spec Task 1 reviewer list to match). Acceptable to leave as-is for a pure query/selector+test task with no untrusted input."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "02",
+      "section": "frontmatter / Reviewers",
+      "issue": "reviewers = [dev-code-reviewer] only; catalog default for code-writing is [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]. Internally consistent and matches tech-spec Task 2; deviation is intentional/upstream (view-wiring change with TestNew guard test covered).",
+      "fix": "Optionally add dev-test-reviewer given the new TestNew_ReplslotsView test. Not blocking."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "frontmatter / Reviewers",
+      "issue": "reviewers = [dev-deploy-reviewer, dev-code-reviewer]; catalog default for deploy-pipeline is [dev-code-reviewer, dev-security-auditor, dev-deploy-reviewer]. dev-security-auditor omitted. Internally consistent and matches tech-spec Task 4.",
+      "fix": "Optionally add dev-security-auditor (touches Dockerfile / CI workflow tags). Low risk; not blocking."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Project-knowledge link labeled [project.md] but points to .claude/skills/project-knowledge/overview.md — label/target mismatch (the inline note acknowledges the file is overview.md). Other tasks label it [overview.md] consistently.",
+      "fix": "Relabel the link to [overview.md] to match the actual target and the other task files."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "05",
+      "section": "Context Files / Reviewers / Post-completion",
+      "issue": "Feature-artifact and code links use repo-root-relative paths (e.g. docs/features/005-.../005-feat-replication-slots.md, internal/query/...). The task file lives inside docs/features/005-feat-replication-slots/, so feature-artifact links should be bare filenames (as in tasks 01-04). Reviewer/decisions paths are written full (docs/features/...) instead of the bare-filename style used in tasks 01-04. Functional inconsistency, not a correctness break.",
+      "fix": "Normalize links to the same relative style as tasks 01-04: bare filenames for feature artifacts/decisions/review JSON, and a consistent relative prefix for code files."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "Code-file links use ../../../ relative prefixes while task 03 uses absolute /home/... paths and task 05 uses repo-root-relative paths. Cross-task link style is inconsistent across the batch (cosmetic).",
+      "fix": "Pick one link convention for code files across all five tasks (relative-to-task-file is preferred)."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 6
+  }
+}

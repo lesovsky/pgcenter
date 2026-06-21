@@ -64,6 +64,10 @@ Task 01 и Task 04 — транзитивные зависимости (чере
       `safe,KiB`/`stats_age` пусто.
 - [ ] Логический слот: строка присутствует, spill/stream-колонки на месте (или skipped при
       `wal_level != logical`).
+- [ ] `retained,KiB` recovery-aware (primary → `pg_current_wal_lsn`, standby →
+      `pg_last_wal_receive_lsn`). Не проверяется автопрогоном — требует живого standby;
+      **deferred-to-post-deploy / not-verifiable** на этом гейте, фиксируется явно, чтобы не
+      потеряться.
 - [ ] Клавиша `o` открывает `replslots`; view зарегистрирован `NotRecordable: true`;
       `Test_filterViews` зелёный с увеличенными счётчиками.
 - [ ] Клавиша `o` присутствует в экране справки (`?`).

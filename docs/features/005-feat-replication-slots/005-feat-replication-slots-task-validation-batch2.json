@@ -1,0 +1,20 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/005-feat-replication-slots/005-feat-replication-slots",
+  "tasks_checked": ["06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "06",
+      "section": "Acceptance Criteria",
+      "issue": "User-spec acceptance criterion 'retained,KiB корректен и на primary, и на standby (recovery-aware WAL-функция)' is not carried forward as a distinct AC line. The physical-slot AC asserts retained,KiB is non-NULL, but the primary-vs-standby recovery-awareness is a separate user-facing criterion (verified only via live TUI on a standby — i.e. not_verifiable by the automated suite).",
+      "fix": "Add an explicit AC line: '`retained,KiB` recovery-aware — correct on primary (pg_current_wal_lsn) and standby (pg_last_wal_receive_lsn)', marked not_verifiable / deferred-to-post-deploy (needs a live standby). The Edge cases / Verification Steps already cover deferred visual checks, but this criterion should appear in the consolidated AC list so it is not silently dropped."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "issues_found": 1
+  }
+}

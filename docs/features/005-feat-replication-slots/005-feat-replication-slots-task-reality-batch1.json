@@ -1,0 +1,43 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/005-feat-replication-slots/005-feat-replication-slots",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Task-02 references the help mode line at top/help.go '~lines 13-14' and describes it as the 'a,b,f,r,w' line. Verified: the 'general actions:' block is at line 12 and the 'a,b,f,r,w' mode line is line 13 (with continuation). Line numbers are accurate (off by at most one due to wrapping). No correction strictly required, but executor should add 'o' to the existing line 13 string literal preserving alignment.",
+      "fix": "No change needed; line reference is correct. Executor inserts 'o' replication-slots entry into the helpTemplate general-actions block (line 13)."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 28,
+    "issues_found": 0
+  },
+  "verification_detail": {
+    "task_01": {
+      "SelectStatBgwriterQuery_signature": "VERIFIED: func SelectStatBgwriterQuery(version int) (string, int, [2]int) at internal/query/bgwriter.go:41",
+      "Test_StatBgwriterQueries_tier1_shape": "VERIFIED: bgwriter_test.go:35 Test_StatBgwriterQueries; versions []int{140000,150000,160000,170000,180000} at :36; NewTestConnectVersion at :46; assert.Len(FieldDescriptions(), wantNcols) at :58; Test_SelectStatBgwriterQuery unit test at :10",
+      "query_go_helpers": "VERIFIED: NewOptions at query.go:37, Format at :86, selectWalFunctions at :64, Options.WalFunction1 at :26, WalFunction2 at :27",
+      "replication_go_pattern": "VERIFIED: WAL-placeholder + KiB-alias pattern present in replication.go (e.g. ({{.WalFunction1}}({{.WalFunction2}}(),...) / 1024)::bigint AS \"...,KiB\"); ORDER BY present",
+      "replication_slots_go_absent": "VERIFIED: internal/query/replication_slots.go does NOT exist (ls: no such file)",
+      "PostgresV14": "VERIFIED: query.go:17 PostgresV14 = 140000. NOTE: PostgresV15..V18 do NOT exist as named constants (task-01 uses raw literals 150000..180000, consistent with bgwriter_test.go) — correct, no finding"
+    },
+    "task_02": {
+      "bgwriter_view_entry": "VERIFIED: view.go lines 140-152 (\"bgwriter\" map entry with NotRecordable:true)",
+      "configure_case": "VERIFIED: view.go:337-339 case \"bgwriter\": SelectStatBgwriterQuery(opts.Version)",
+      "View_struct_fields": "VERIFIED: MinRequiredVersion:12, DiffIntvl:15, Ncols:17, OrderKey:18, OrderDesc:19, UniqueKey:20, NotRecordable:30",
+      "hotkey_o_free": "VERIFIED: top/keybindings.go keys slice (lines 21-40) has no 'o'; 'b' bgwriter binding at line 36",
+      "config_view_default_branch": "VERIFIED: top/config_view.go:118 default: -> viewSwitchHandler(app.config, c); switchViewTo at :102",
+      "help_mode_line": "VERIFIED: top/help.go general actions: at line 12, a,b,f,r,w mode line at line 13",
+      "TestNew_count": "VERIFIED: view_test.go:11 assert.Equal(t, 23, len(v)); TestNew at :9; TestNew_BgwriterView at :16"
+    },
+    "task_03": {
+      "Test_filterViews_rows": "VERIFIED: record/record_test.go:101 Test_filterViews; six rows at lines 116-121 with wantN={7,1,4,7,9,9}, wantV={16,22,19,16,14,14} — exactly as task-03 claims",
+      "NotRecordable_drop_branch": "VERIFIED: record/record.go:200 func filterViews; if v.NotRecordable at :208 (first loop branch, before version-gate)"
+    }
+  }
+}

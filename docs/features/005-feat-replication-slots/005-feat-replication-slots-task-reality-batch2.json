@@ -1,0 +1,54 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/005-feat-replication-slots/005-feat-replication-slots",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "05",
+      "issue": "Implementation hint cites the parameterized-statement example as being in 'postgres_test.go' without a package path. The actual file is internal/postgres/postgres_test.go:143 (`c2.Exec(\"SELECT pg_terminate_backend($1)\", pid)`), not internal/query/. The file is referenced as a style guide only, so the example itself is real and correct, but the implied location is imprecise.",
+      "fix": "Optionally qualify the path as internal/postgres/postgres_test.go:143 to avoid the implementer searching internal/query/ for it."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 27,
+    "issues_found": 1
+  },
+  "verified_claims": {
+    "task_04": [
+      "testing/prepare-test-environment.sh: per-cluster postgresql.auto.conf heredoc is at lines 18-31 (`cat >> ... << EOF` line 18, `EOF` line 31); NO wal_level currently set (grep empty) - matches task claim",
+      "shared_preload_libraries = 'pg_stat_statements' present at line 30 (the suggested insertion anchor exists)",
+      "testing/Dockerfile line 2: comment reads `# PostgreSQL 14-17 on Ubuntu 22.04` (stale 14-17 confirmed)",
+      "testing/Dockerfile line 6: `LABEL version=\"0.0.9\"` (first 0.0.9 literal confirmed)",
+      "testing/Dockerfile line 38: `CMD [\"echo\", \"pgcenter-testing 0.0.9: PostgreSQL 14-18 on Ubuntu 22.04\"]` (second 0.0.9 literal confirmed; note its embedded `14-18` is ALREADY correct, task correctly targets only line 2 for the 14-17 fix)",
+      "Exactly TWO 0.0.9 literals in Dockerfile (lines 6 and 38) - matches task AC 'no other 0.0.9 remains'",
+      ".github/workflows/default.yml line 9: `container: lesovsky/pgcenter-testing:0.0.9` confirmed",
+      ".github/workflows/release.yml line 11: `container: lesovsky/pgcenter-testing:0.0.9` confirmed (inside job `test`); job `release` at line 85 is goreleaser/docker-login (product image), correctly excluded by task",
+      "NO CI image-build job exists: workflows reference pgcenter-testing only via `container:`; no docker build/push/buildx step - confirms 'manual maintainer step' framing is correct",
+      "deployment.md lines 40-45 contain the exact `docker build`/`docker push` pair plus 'Then update container tag in both default.yml and release.yml' note cited by the task hint; deployment.md line 35 says 'Current version: 0.0.9' (post-completion checklist correctly flags updating it)"
+    ],
+    "task_05": [
+      "internal/query/replication_slots_test.go does NOT yet exist (created by task-01) - task-05 correctly frames itself as EXTENDING it; depends_on includes 01",
+      "postgres.NewTestConnectVersion(version) exists at internal/postgres/testing.go:16 with port map covering PG 14-18 (140000-180000)",
+      "DB API confirmed in internal/postgres/postgres.go: Exec (line 119), QueryRow (line 124), Query (line 129), Close (line 134); QueryRow returns pgx.Row with .Scan",
+      "bgwriter_test.go pattern confirmed: version matrix []int{140000,150000,160000,170000,180000}, Format+NewOptions, NewTestConnectVersion+t.Skipf, conn.Query + rows.FieldDescriptions() - the cited skeleton to copy is real (Test_StatBgwriterQueries)",
+      "pg_create_physical_replication_slot(name, true) and pg_create_logical_replication_slot(name, 'test_decoding') are real PG built-in functions; second arg true = immediate WAL reservation (correct)",
+      "pg_drop_replication_slot is a real PG built-in; guarded drop-if-exists via `SELECT count(*) FROM pg_replication_slots WHERE slot_name=$1` is feasible with conn.QueryRow().Scan",
+      "test clusters run wal_level=replica by default (no wal_level in prepare script) - tier-3 t.Skipf on `SHOW wal_level != logical` is genuinely needed and feasible",
+      "idempotent drop-if-exists guard is feasible: existence-check + parameterized pg_drop_replication_slot($1), both via the existing DB API",
+      "parameterized-statement style example pg_terminate_backend($1) exists in tree (internal/postgres/postgres_test.go:143, internal/query/common.go:23)",
+      "no new packages required - all of internal/postgres, internal/query, testify already in use"
+    ],
+    "task_06": [
+      "pure QA gate, no production code written - correctly scoped",
+      "make targets confirmed in Makefile: build, test, lint, vuln, install all exist (referenced make test/lint/vuln/build are all real)",
+      "depends_on [02,03,05] is sound: task-06 is the final wave-4 gate; 02 (view+TUI), 03 (Test_filterViews), 05 (integration tiers); 01/04 are transitive via 02/05 as the task states",
+      "view.go fields referenced for AC (NotRecordable line 30, OrderKey line 18, Ncols line 17) exist",
+      "acceptance criteria mirror tech-spec/user-spec criteria (15 cols, OrderKey=4 retained sort, NotRecordable, hotkey o, help entry, physical-shows-0, tier-3 skip-when-replica) - all traceable",
+      "t.Skipf-as-not-failure handling and not_verifiable deferral for live-TUI criteria correctly framed"
+    ]
+  }
+}
