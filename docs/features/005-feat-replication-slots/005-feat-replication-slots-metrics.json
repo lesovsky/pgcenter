@@ -29,10 +29,10 @@
     },
     "task_decomposition": {
       "start_time": "2026-06-21T10:31:01Z",
-      "end_time": null,
-      "duration_min": null,
-      "touch_time_min": null,
-      "human_wait_time_min": 0,
+      "end_time": "2026-06-21T10:39:54Z",
+      "duration_min": 8,
+      "touch_time_min": 6,
+      "human_wait_time_min": 2,
       "steps": {}
     },
     "feature_execution": null,
