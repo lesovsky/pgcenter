@@ -1,9 +1,9 @@
 # lesovsky/pgcenter-testing
-# PostgreSQL 14-17 on Ubuntu 22.04
+# PostgreSQL 14-18 on Ubuntu 22.04
 # Go and lint tools are installed by CI, not bundled here
 FROM ubuntu:22.04
 
-LABEL version="0.0.9"
+LABEL version="0.0.10"
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -35,4 +35,4 @@ RUN apt-get update && \
 COPY prepare-test-environment.sh /usr/local/bin/
 COPY fixtures.sql /usr/local/testing/
 
-CMD ["echo", "pgcenter-testing 0.0.9: PostgreSQL 14-18 on Ubuntu 22.04"]
+CMD ["echo", "pgcenter-testing 0.0.10: PostgreSQL 14-18 on Ubuntu 22.04"]
