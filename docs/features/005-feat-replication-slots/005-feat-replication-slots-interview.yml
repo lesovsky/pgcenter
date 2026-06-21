@@ -1,0 +1,449 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Updated after EACH user response with scoring, values, and remaining gaps.
+#
+# Location: {feature_base}-interview.yml
+#   e.g.  docs/features/001-feat-add-auth-interview.yml
+#
+# Scoring: 0-100% (how well we understand this aspect)
+# Status: pending → partial → complete
+# Required: true = must reach threshold, false = cover if relevant
+
+# ============================================================================
+# Interview Metadata (Session Recovery)
+# ============================================================================
+interview_metadata:
+  feature_name: "replication-slots"
+  feature_base: "docs/features/005-feat-replication-slots/005-feat-replication-slots"
+  work_type: "feature"
+  started: "2026-06-21 14:37:21"
+  last_updated: "2026-06-21 14:37:21"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 0
+  feature_size: "M"
+
+# ============================================================================
+# Conversation History (for session recovery)
+# ============================================================================
+# Preserves complete Q&A. Update after EVERY user response.
+#
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-06-21 14:42:00"
+    topic: "scope_source / hotkey / adjacent / testing"
+    agent_question: |
+      Q1: Variant A (strictly pg_stat_replication_slots — logical-only spill/stream
+      counters) vs Variant B (hybrid: pg_replication_slots LEFT JOIN
+      pg_stat_replication_slots — all slots + retained WAL)?
+      Q2: Hotkey (free: c,e,g,j,o,u,v,y)?
+      Q3: pg_stat_subscription_stats — include now or defer?
+      Q4: Testing strategy + size?
+    user_answer: |
+      Q1: hybrid (Variant B) — that's what's needed.
+      Q2: hotkey 'o'.
+      Q3: defer pg_stat_subscription_stats — separate feature.
+      Q4: tests ok, but raised concern: containers have no slots, integration tests
+      would run on empty rows. Asked about options for fake slots.
+    summary: "Hybrid B + hotkey o + defer subscription_stats; open Q on fake slots for integration tests"
+  - question_num: 2
+    timestamp: "2026-06-21 14:46:00"
+    topic: "testing_strategy (fake slots)"
+    agent_question: |
+      Three fidelity tiers for integration tests given test clusters run wal_level=replica,
+      no contrib: (1) execute-only on empty set (existing pg_stat_replication precedent);
+      (2) physical slot via pg_create_physical_replication_slot(name,true) — real
+      pg_replication_slots row + retained WAL, no image change; (3) logical slot via
+      test_decoding — needs wal_level=logical + plugin + pgcenter-testing image bump.
+      Recommend tier 2 mandatory; tier 3 = decide here. Include tier 3 (image bump)?
+    user_answer: |
+      Yes, do tier 3 — edits are minimal, profit is substantial.
+    summary: "Tier 3 confirmed: live logical-slot integration test + pgcenter-testing image bump (wal_level=logical + test_decoding)"
+  - question_num: 3
+    timestamp: "2026-06-21 15:05:00"
+    topic: "Cycle 2 — columns / units / sort / invalidation / stories / empty-screen"
+    agent_question: |
+      Q5 column set (keep all 8 logical counters → 15 cols, or trim *_count);
+      Q6 bytes→KiB + physical slots show 0 in diffed counters (mandatory coalesce), empty safe/stats_age;
+      Q7 default sort by retained,KiB desc (OrderKey=4, OrderDesc=true);
+      Q8 stay on stable PG14-18 subset, no conflicting/invalidation_reason (wal_status carries the signal);
+      Q9 four user stories (retained offender, wal_status early warning, spill/stream pressure, unified phys+logical);
+      Q10 empty screen when no slots (like pg_stat_replication with no standby).
+    user_answer: |
+      Q5 keep all, 15 cols fine. Q6 accepted. Q7 agreed. Q8 explain the situation/invariants
+      in detail (done — user agreed to stable subset). Q9 stories sufficient. Q10 accepted,
+      same as the pg_stat_replication screen.
+    summary: "All Cycle-2 decisions locked: 15 cols, KiB, coalesce->0 for physical, default sort retained desc, stable subset (no conflicting/invalidation_reason), 4 stories, empty-screen ok"
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+# Interview Cycle 1 scope
+phase1_feature_overview:
+
+  feature_description:
+    score: 95
+    status: "complete"
+    value: |
+      New multi-row TUI screen 'replslots' (hotkey 'o') in pgcenter top showing one row
+      per replication slot. HYBRID source (Variant B, confirmed): pg_replication_slots
+      LEFT JOIN pg_stat_replication_slots ON slot_name. Covers ALL slots (physical +
+      logical). State columns (slot_type, active, wal_status, retained WAL, safe_wal_size)
+      shown absolute; spill/stream cumulative counters shown diffed (empty for physical
+      slots). Modeled on existing multi-row version-aware views (replication/tables) for
+      OrderKey + Filters. TUI-only in 0.11.0 (NotRecordable), like bgwriter (004).
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      Slot retention / WAL spill is a frequent disk-fill incident, especially with logical
+      decoding and disconnected standbys. pgcenter currently shows nothing about slots.
+      DBA must drop to psql to see which slot holds back WAL (restart_lsn), how much WAL is
+      retained, slot wal_status (reserved/extended/unreserved/lost), and logical-decoding
+      spill/stream pressure. Pure pg_stat_replication_slots (Variant A) would NOT solve
+      this — retained WAL lives in pg_replication_slots and physical slots are absent from
+      pg_stat_replication_slots. Hence hybrid.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 90
+    status: "complete"
+    value: |
+      Practicing PostgreSQL DBA doing daily ops / incident response — same audience as the
+      rest of 0.11.0. Primary scenario: disk filling up, find the offending slot.
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 80
+    status: "partial"
+    value: |
+      Hotkey 'o' opens replslots screen from any other top screen. One row per slot (all
+      types). Retained WAL and wal_status visible. Physical + logical slots both render.
+      spill/stream diffed, state absolute. Query runs on PG 14-18. NotRecordable. 'o' in
+      help. Exact column set + per-version branching decided in Cycle 2.
+    gaps: "Exact acceptance column list pending Cycle 2 (column set + PG16/18 conflicting/invalidation)"
+    required: true
+
+  constraints:
+    score: 80
+    status: "partial"
+    value: |
+      - TUI-only in 0.11.0 (NotRecordable: true) — record/report deferred to backlog,
+        same as bgwriter 004.
+      - MinRequiredVersion PG 14 (pg_stat_replication_slots introduced PG 14; older
+        versions filtered out by pgcenter's standard mechanism).
+      - Query readable by any role without special privileges; works over any connection
+        incl. PgBouncer (simple protocol).
+      - pg_stat_subscription_stats is OUT of scope — deferred to a separate feature.
+      - retained WAL = pg_current_wal_lsn() - restart_lsn on a primary; on a standby use
+        pg_last_wal_receive_lsn() — must handle recovery mode (decide in Cycle 2).
+    gaps: "Recovery-mode LSN function choice; exact column subset"
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Unit tests on the query selector (Ncols/DiffIntvl) per PG version — pattern from
+      wal_test.go / bgwriter_test.go. Integration on live PG 14-18 containers with REAL
+      fake slots:
+      - tier 2 (physical slot via pg_create_physical_replication_slot(name,true)) —
+        exercises retained WAL / wal_status / slot_type=physical without image change.
+      - tier 3 (CONFIRMED): logical slot via pg_create_logical_replication_slot(name,
+        'test_decoding') — exercises the pg_stat_replication_slots half + LEFT JOIN.
+        Requires pgcenter-testing image bump 0.0.9->0.0.10: add wal_level=logical to
+        testing/prepare-test-environment.sh and ensure test_decoding plugin present.
+        spill/stream counters asserted present (values may be 0 — shape, not magnitude).
+      Tests create slots in setup, drop via defer in teardown. E2E: none (no user flow
+      beyond opening the screen). Size: M.
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 3)
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      1. As a DBA with a filling disk, I want to see which slot retains the most WAL
+         (retained,KiB + active), to find the culprit — often a disconnected standby
+         (active=false).
+      2. As a DBA, I want to see wal_status, to catch a slot in lost/unreserved before an
+         outage.
+      3. As a DBA using logical replication, I want to see spill/stream (decoding spilled
+         to disk and streamed), to gauge decoding pressure and tune
+         logical_decoding_work_mem.
+      4. As a DBA, I want physical and logical slots on one screen, to avoid hopping
+         between views.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 85
+    status: "complete"
+    value: |
+      - Hotkey 'o' opens replslots from any other top screen.
+      - One row per slot (physical + logical), 15 columns PG 14-18 (single query, no
+        version branch).
+      - Columns: slot_name, slot_type, active, wal_status, retained,KiB, safe,KiB
+        (absolute); spill_txns, spill_count, spill,KiB, stream_txns, stream_count,
+        stream,KiB, total_txns, total,KiB (diffed); stats_age (absolute, last).
+      - Default sort: retained,KiB descending (OrderKey=4, OrderDesc=true). Sortable
+        (arrows) and filterable (/) like other multi-row views.
+      - Physical slots: 0 in the 8 diffed counters, empty safe/stats_age; logical slots:
+        real values.
+      - retained,KiB recovery-aware (primary vs standby) via existing WalFunction template.
+      - NotRecordable: pgcenter record skips it, report unaffected.
+      - 'o' added to help (?).
+      - Unit tests assert query/Ncols/DiffIntvl PG 14-18; integration runs on live PG
+        14-18 with physical (tier 2) and logical (tier 3) slots.
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 88
+    status: "complete"
+    value: |
+      - No slots configured -> empty screen (header only), like pg_stat_replication with
+        no standby. No special message.
+      - Physical slot in pg_replication_slots but absent from pg_stat_replication_slots
+        (LEFT JOIN) -> 8 counters NULL; MUST coalesce->0 or diffPair("","") errors and
+        breaks the sample (verified in postgres.go:316-345). Coalesce->0 => physical rows
+        show 0.
+      - restart_lsn NULL (physical slot without reserved WAL) -> retained,KiB empty
+        (absolute, outside DiffIntvl, no crash).
+      - safe_wal_size NULL (max_slot_wal_keep_size=-1, the default) -> safe,KiB empty.
+      - stats_reset NULL -> stats_age empty (physical slots always; fresh logical slots).
+      - Slot appears/disappears/reorders between samples -> diff matches by UniqueKey=0
+        (slot_name); new slot shows raw counters for one interval, dropped slot vanishes
+        (same as replication view).
+      - Standby: pg_replication_slots shows only slots existing on that standby
+        (cascading/failover-synced) — correct PG behavior.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 85
+    status: "complete"
+    value: |
+      - External pg_stat_reset_replication_slot / slot drop during a tick -> a diffed
+        counter may show one negative/raw interval; existing pgcenter behavior (same as
+        wal/bgwriter), not fixed here.
+      - Empty-string NULL entering the diff block -> prevented by coalesce->0 (the one
+        real correctness risk; mandatory, not optional).
+      - Both views are world-readable; no permission-denied path. Works over PgBouncer
+        (simple protocol). No new error UI.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      Agent: make test (unit selector + integration tier1/2/3), make build, make lint,
+      make vuln. Integration asserts len(FieldDescriptions)==Ncols on PG 14-18 and that a
+      created physical slot yields a non-NULL retained value, a created logical slot yields
+      a row with the spill/stream columns present.
+      User: open pgcenter top on a primary with a physical slot (e.g. inactive) and on a
+      logical-replication setup; press 'o'; confirm retained sort, physical-shows-0,
+      wal_status, and 'o' in help.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      Screen 'replslots' (hotkey 'o') in the top stats area — multi-row, modeled on the
+      replication/tables screens. Header row + one data row per slot. 15 columns (layout
+      above). Default sort retained,KiB desc. Standard multi-row controls: arrow keys move
+      OrderKey, '/' opens per-column regexp filter, Ncols=15 is the OrderKey right border.
+      No new dialogs/forms/components. Column set is version-independent (no per-version
+      surprise on upgrade). Help screen (?) mode line gains 'o' replication slots. Empty
+      state = header-only screen.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 88
+    status: "complete"
+    value: |
+      - R1: physical-slot NULL counters break diff. Mitigation: coalesce->0 (mandatory,
+        verified in code). HIGH-impact, fully mitigated.
+      - R2: 15 columns may be wide on small terminals. Mitigation: ColsWidth + standard
+        pgcenter horizontal handling; acceptable per replication precedent.
+      - R3: invalidation cause not shown (wal_status only). Mitigation: documented
+        limitation; invalidation_reason deferrable as a PG18 branch later.
+      - R4: Test_filterViews CI assertion must be bumped (+1 wantN per row) — same miss as
+        bgwriter. Mitigation: bump in the same change.
+      - R5: tier-2 physical slot retains WAL on shared fixture. Mitigation: drop slot in
+        teardown (defer).
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      - Hybrid pg_replication_slots LEFT JOIN pg_stat_replication_slots ON slot_name (B),
+        not pure pg_stat_replication_slots — needed for retained WAL + physical slots.
+      - State absolute (outside DiffIntvl), 8 logical counters diffed (inside contiguous
+        DiffIntvl=[6,13]); follows ADR-004 placement.
+      - coalesce(counter,0) on the 8 diffed columns — diff-safety for physical slots.
+      - Single query for PG 14-18 (stable subset), selector still version-keyed for
+        symmetry/future branches. No conflicting/invalidation_reason.
+      - retained WAL via {{.WalFunction1}}({{.WalFunction2}}(),restart_lsn) — recovery-aware
+        for free.
+      - Default sort retained,KiB desc (incident-first) — deviates from the col-0 default
+        of other views, justified by the disk-fill use case.
+      - NotRecordable: true (TUI-only in 0.11.0); record/report deferred to backlog.
+      - slot_name at col 0 = UniqueKey for row-identity in diffing.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 2)
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      Five files (same surface as bgwriter 004):
+      - internal/view/view.go: "replslots" entry in New() + case in Configure() calling
+        SelectStatReplicationSlotsQuery(version).
+      - internal/query/replication_slots.go (new) + replication_slots_test.go (new):
+        query constant(s) + selector (string,int,[2]int), unit + integration tests.
+      - top/keybindings.go: {"sysstat", 'o', switchViewTo(app, "replslots")}.
+      - top/help.go: add 'o' to the mode line.
+      - record/record.go: NotRecordable handled by existing filterViews; record_test.go
+        Test_filterViews wantN +1 per row.
+      - testing/prepare-test-environment.sh + Dockerfile: wal_level=logical + test_decoding,
+        image bump 0.0.9->0.0.10 (tier-3 tests).
+      Reuses existing WalFunction template machinery (query.go selectWalFunctions) and
+      multi-row diff (UniqueKey) — no new framework code.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 85
+    status: "complete"
+    value: |
+      - PostgreSQL views pg_replication_slots (PG13+ for wal_status/safe_wal_size) and
+        pg_stat_replication_slots (PG14+). MinRequiredVersion = PG14.
+      - WAL LSN functions pg_wal_lsn_diff + pg_current_wal_lsn/pg_last_wal_receive_lsn,
+        already wired via Options.WalFunction1/2.
+      - Builds on the bgwriter (004) NotRecordable + version-aware selector pattern.
+      - No new Go libraries (research §9).
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      Read-only SELECT over two system catalogs/views; no storage (NotRecordable). Data
+      computed per tick in the TUI: state columns absolute, 8 logical counters diffed per
+      interval. KiB = bytes/1024 in SQL. retained,KiB = WalFunction-diff vs restart_lsn.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 80
+    status: "complete"
+    value: |
+      No data/user migration. The only infra migration is the pgcenter-testing Docker image
+      bump (0.0.9->0.0.10) to enable wal_level=logical for tier-3 tests — CI-side only,
+      no effect on end users. New hotkey 'o' is additive (was free).
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/005-feat-replication-slots/005-feat-replication-slots.md"
+  status: "created"  # pending | created | approved
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase5_review_finalize"
+  questions_asked: 3
+  last_question: "Cycle 2 batch (columns/units/sort/invalidation/stories/empty-screen)"
+  completion_estimate: "95%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  - Feature 005 in the 0.11.0 roadmap; follows 004 (bgwriter) patterns directly.
+  - KEY scope resolution: roadmap named the feature pg_stat_replication_slots but framed the
+    value as disk-fill/retained-WAL — those live in DIFFERENT views. Resolved to hybrid
+    (Variant B): pg_replication_slots LEFT JOIN pg_stat_replication_slots, covering all
+    slots (physical+logical) + retained WAL. Pure Variant A would not deliver the value.
+  - CRITICAL correctness item (verified in postgres.go:316-345): physical slots match
+    themselves across samples and enter the diff branch; NULL counters -> diffPair("")
+    -> ParseInt error -> sample breaks. MUST coalesce the 8 diffed counters to 0.
+    Consequence: physical slots display 0 (not empty) for spill/stream/total.
+  - Recovery-aware retained WAL is free via existing WalFunction template — no recovery
+    branch needed.
+  - No per-version branching: chosen pg_replication_slots subset (slot_name, slot_type,
+    active, wal_status, restart_lsn, safe_wal_size) is stable PG 14-18. conflicting (PG16)
+    / invalidation_reason (PG18) deliberately excluded to avoid branching; wal_status
+    carries the invalidation signal. Documented limitation.
+  - Default sort deviates from the col-0 convention: retained,KiB desc (incident-first).
+  - pg_stat_subscription_stats deferred to a separate feature.
+  - Tests: tier 2 (physical slot, no image change) + tier 3 (logical slot, image bump
+    0.0.9->0.0.10 with wal_level=logical + test_decoding). Both confirmed in scope.
+  - Test_filterViews wantN must be bumped +1 per row (same miss as bgwriter commit 435f54c).
+
+  DEVIL'S ADVOCATE (dev-customer) resolutions:
+  - [Major] 15-column width: KEEP all 15 (user decision). Precedent: replication is already
+    15 (Default)/17 (Extended) columns. Mitigation: incident-critical columns on the LEFT
+    (slot_name, slot_type, active, wal_status, retained) so terminal-edge clipping drops the
+    least-important columns (total_*, stats_age) first.
+  - [Major] physical slots show "0" not empty: ACCEPTED + documented trade-off. "-"/empty
+    rendering would need new per-cell rendering code (not in pgcenter) = scope creep.
+    Mitigation: adjacent slot_type column disambiguates "0" as N/A vs no-activity.
+  - [Major] NotRecordable kills retrospective analysis: ACKNOWLEDGED limitation, kept for
+    0.11.0 (roadmap TUI-first). Documented explicitly in spec Limitations. Follow-up:
+    record/report for the new top-views (incl. replslots) is the planned next phase after
+    all 0.11.0 top-views land.
+  - [Minor] default sort deviation (retained desc vs col 0): documented in technical_decisions.
+  - [Minor] no invalidation_reason/conflicting: documented limitation (PG18 users go to psql
+    for the cause); accepted to avoid version branching.
+  COMPLETENESS CHECKER: complete (high confidence); its two minors == the width and "0"
+  trade-offs above, both resolved.
