@@ -47,3 +47,26 @@ The single optional suggestion (trim the dense bullet for tighter consistency wi
 **Verification:**
 - `grep -nE 'pg_stat_bgwriter[^+]*— background writer stats'` → empty (stale claim gone)
 - `grep -niE 'pg_stat_checkpointer|bgwriter'` → new accurate entry present (line 21)
+
+## Task 03: Register view + TUI wiring
+
+**Status:** Done
+**Commit:** 176e984
+**Agent:** view-dev
+**Summary:** Wired the bgwriter/checkpointer screen into `pgcenter top` by mirroring the `wal` screen exactly: added the `"bgwriter"` views-map entry (`NotRecordable: true`, `MinRequiredVersion: PostgresV14`, PG14 defaults Ncols 12 / DiffIntvl {3,10}) and a `case "bgwriter"` in `Configure()` calling `SelectStatBgwriterQuery(opts.Version)`; bound hotkey `b`; added `b` to the `?` help mode-key row (sorted `a,b,f,r,w`); and refreshed the stale `NotRecordable` example comment in `record/record.go` (procpidstat dropped the flag in feature 003, bgwriter is now its sole user). Added a guard test (`TestNew_BgwriterView`) and updated the existing view-count assertions 22→23.
+**Deviations:** Screen column/render behaviour (event counters absolute, work/time/buffer columns delta, `stats_age` pass-through, hotkey opens the screen) is verified manually — `verify: user` is the acceptance gate, not automated here. `make test` is not fully green locally: a pre-existing, unrelated `top/reload_test.go::Test_doReload` panic fires when the local PG fixture on port 21917 is absent (confirmed present on the clean baseline via `git stash`, not caused by this change). `make lint` was not run via the Makefile target because the `golangci-lint` binary is missing in this environment; `go vet` on all changed packages is clean and `gofmt` flags only a pre-existing comment block in `view.go` (present on baseline, untouched per scope). `make build` and `go test ./internal/view/...` pass.
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical / 0 major / 0 minor → [004-feat-bgwriter-checkpointer-task-03-dev-code-reviewer-round1.json](004-feat-bgwriter-checkpointer-task-03-dev-code-reviewer-round1.json)
+- dev-test-reviewer: passed, 0 critical / 0 major, 1 minor (optional) → [004-feat-bgwriter-checkpointer-task-03-dev-test-reviewer-round1.json](004-feat-bgwriter-checkpointer-task-03-dev-test-reviewer-round1.json)
+
+The single optional suggestion (pin the PG14-default `Ncols`/`DiffIntvl`/`Msg` in the guard test) was applied in commit `3e0833a` (`fix: address review round 1 for task 03`) — zero-setup defense-in-depth that strengthens the wiring guard. No round 2: both reviewers approved with zero major findings and the fix is trivial and test-only.
+
+**Verification:**
+- `make build` → ok
+- `go test ./internal/view/...` → ok (guard test green; counts 22→23 correct)
+- `go vet ./internal/view/... ./top/... ./record/...` → clean
+- Note: `make test` blocked by pre-existing environmental `Test_doReload` panic (port 21917 fixture absent), unrelated to this task.
