@@ -116,12 +116,16 @@ func Test_filterViews(t *testing.T) {
 		// wantV is unchanged (neither ever joins the remaining set). replslots has
 		// MinRequiredVersion=PostgresV14 but the NotRecordable branch fires before the
 		// version gate, so its +1 applies uniformly on all rows including PG<14.
-		{version: 140000, pgssSchema: "", wantN: 8, wantV: 16},
-		{version: 140000, pgssSchema: "public", wantN: 2, wantV: 22},
-		{version: 130000, pgssSchema: "public", wantN: 5, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 8, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 10, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 10, wantV: 14},
+		// The pg_stat_io views stat_io + stat_io_time (feature 006) are likewise both
+		// NotRecordable=true, so they are always dropped by filterViews on every version,
+		// adding a further +2 to wantN on each row while wantV stays unchanged (they never
+		// join the remaining set).
+		{version: 140000, pgssSchema: "", wantN: 10, wantV: 16},
+		{version: 140000, pgssSchema: "public", wantN: 4, wantV: 22},
+		{version: 130000, pgssSchema: "public", wantN: 7, wantV: 19},
+		{version: 120000, pgssSchema: "public", wantN: 10, wantV: 16},
+		{version: 110000, pgssSchema: "public", wantN: 12, wantV: 14},
+		{version: 100000, pgssSchema: "public", wantN: 12, wantV: 14},
 	}
 
 	for _, tc := range testcases {
