@@ -19,6 +19,11 @@ When a PG version changes columns in a stats view:
 
 Reference implementations of the single-row version-aware view: `internal/query/wal.go` and `internal/query/bgwriter.go`. The bgwriter screen is notable for placing absolute event-counter columns (`ckpt_*`, `rstpt_*`) **outside** the contiguous `DiffIntvl` range so they render cumulative, while the work/time/buffer columns inside the range render as per-interval deltas.
 
+For a **multi-row hybrid view** that LEFT JOINs two stats views, see `internal/query/replication_slots.go` (the `replslots` screen). Two patterns it establishes:
+- **`coalesce(...,0)` on diffed columns fed by a LEFT JOIN.** A row present in both samples enters `diff()`/`diffPair()`; if an outer-joined diffed column is SQL NULL it scans as an empty string and `strconv.ParseInt("")` aborts the whole sample. Coalescing NULL→0 in SQL keeps such rows diff-safe (physical slots, absent from `pg_stat_replication_slots`, render `0`). Only diffed columns need this — absolute columns outside `DiffIntvl` pass NULLs through as empty.
+- **Recovery-aware WAL distance for free** via the `{{.WalFunction1}}({{.WalFunction2}}(), lsn)` template (`selectWalFunctions` in `query.go` picks `pg_current_wal_lsn` on a primary, `pg_last_wal_receive_lsn` on a standby) — no recovery branch in the query.
+A multi-row view sets `UniqueKey` to the stable row identity (slot_name, col 0) for cross-sample row matching, and may set a non-default `OrderKey` (replslots: 4 = retained,KiB desc) for a domain-appropriate default sort.
+
 ## Error Wrapping
 
 Use `fmt.Errorf("context: %w", err)` for all error wrapping in production code.

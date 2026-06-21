@@ -64,8 +64,11 @@ Version-specific query selectors in `internal/query/`:
 - `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17
 - `SelectStatWALQuery(version)` — branches at PG 18 (columns removed)
 - `SelectStatBgwriterQuery(version)` — branches at PG 17 (`pg_stat_checkpointer` split off `pg_stat_bgwriter`) and PG 18 (`slru_written` added). Returns `(query, Ncols, DiffIntvl)` — DiffIntvl also differs per version.
+- `SelectStatReplicationSlotsQuery(_ int)` — version-independent on PG 14–18 (chosen column subset is stable), returns `(query, 15, [2]int{6,13})`; the `version` param is kept for selector-signature symmetry. Single hybrid `pg_replication_slots LEFT JOIN pg_stat_replication_slots` query.
 
-The `bgwriter` view (hotkey `b`, `internal/query/bgwriter.go`) is a single-row version-aware screen modeled on `pg_stat_wal`. It is the project's first and only view registered with `NotRecordable: true` — it is TUI-only and excluded from `pgcenter record`/`report`.
+The `bgwriter` view (hotkey `b`, `internal/query/bgwriter.go`) is a single-row version-aware screen modeled on `pg_stat_wal`. It was the project's first view registered with `NotRecordable: true` — TUI-only, excluded from `pgcenter record`/`report`.
+
+The `replslots` view (hotkey `o`, `internal/query/replication_slots.go`) is a multi-row screen modeled on `replication`/`tables`, the second `NotRecordable` user. It hybrid-joins `pg_replication_slots` (state: slot_type, active, wal_status, retained WAL via the recovery-aware `WalFunction` template, safe_wal_size) with `pg_stat_replication_slots` (logical-decoding spill/stream/total counters). Physical slots are absent from the stat view, so the 8 diffed counters are `coalesce(...,0)` — without it a physical slot's empty-string NULLs reach `diffPair`/`ParseInt` and abort the sample (`internal/stat/postgres.go`). State columns are absolute (outside `DiffIntvl=[6,13]`), counters diffed; `OrderKey=4` (retained,KiB desc) — the one multi-row view that deviates from the col-0 sort default.
 
 View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` and `Ncols` per view at connection time.
 

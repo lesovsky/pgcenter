@@ -50,6 +50,11 @@ pg_stat_io display-design problem.
 
 ### [005] pg_stat_replication_slots
 
+- **Status:** done — implemented 2026-06-21 (PR #140, branch `feature/replication-slots`).
+  Shipped as a **hybrid** `pg_replication_slots ⟕ pg_stat_replication_slots` multi-row screen
+  (hotkey `o`, all slots + retained WAL), TUI-only `NotRecordable`, single query PG 14–18.
+  `pg_stat_subscription_stats` deferred to a separate feature (as anticipated below). Next up:
+  [006] pg_stat_io.
 - **Value:** high daily-ops value — slot retention / spill is a frequent disk-fill incident,
   especially with logical decoding. `spilled_bytes`, `streamed_bytes`, `total_bytes`, retained
   WAL. Currently not shown at all.

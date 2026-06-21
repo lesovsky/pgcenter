@@ -8,7 +8,7 @@
     "feature_size": "M",
     "model": "Opus 4.8",
     "date_started": "2026-06-21T09:38:00Z",
-    "date_completed": ""
+    "date_completed": "2026-06-21T11:20:27Z"
   },
   "phases": {
     "user_spec": {
@@ -49,20 +49,33 @@
         "wave4": "task-06 pre-deploy QA (live PG 14-18 verification)"
       }
     },
-    "done": null
+    "done": {
+      "start_time": "2026-06-21T11:00:50Z",
+      "end_time": "2026-06-21T11:20:27Z",
+      "duration_min": 20,
+      "touch_time_min": 20,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
+  },
+  "totals": {
+    "total_lead_time_min": 102,
+    "total_touch_time_min": 74,
+    "total_human_wait_time_min": 26,
+    "flow_efficiency_pct": 73
   },
   "quality": {
     "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1 },
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
-    "review_rounds": {},
-    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
-    "first_pass_rate_pct": null
+    "validation_findings": { "critical": 0, "major": 0, "minor": 23 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_04": 1, "task_05": 1 },
+    "review_findings": { "critical": 0, "major": 0, "minor": 9 },
+    "first_pass_rate_pct": 100
   },
   "volume": {
     "interview_questions": 12,
     "tasks_count": 6,
     "waves_count": 4,
-    "agents_spawned": 23,
-    "commits_count": 14
+    "agents_spawned": 38,
+    "commits_count": 16
   }
 }

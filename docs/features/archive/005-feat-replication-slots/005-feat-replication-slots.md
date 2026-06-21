@@ -277,6 +277,34 @@ unit + integration.
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-06-21
+
+The implementation matches the user-spec — all acceptance criteria met, no behavioural
+divergence. The screen ships exactly as specified: hotkey `o`, hybrid
+`pg_replication_slots ⟕ pg_stat_replication_slots`, 15 columns single-query PG 14–18, physical
+slots render `0` via `coalesce`, default sort by `retained,KiB` desc, recovery-aware retained
+WAL, `NotRecordable`. The notes below record refinements and verification, not divergences.
+
+### Divergences from original spec
+
+None.
+
+### Added during implementation
+
+- **Help screen layout:** after adding `o`, the single general-actions mode line overflowed, so
+  it was split into three aligned rows (`a,b,f,o` / `r,w` / `s,t,i`) — cosmetic, no behaviour change.
+- **Regression-pinning tests:** `internal/view/view_test.go` `TestNew` (23→24) and
+  `TestView_VersionOK` PG 14 (23→24) count bumps, plus `TestNew_ReplslotsView`; `record_test.go`
+  `Test_filterViews` `wantN` +1 per row (the new view is `NotRecordable`).
+- **Live verification on PG 14–18:** unit + tier-1 (schema gate) + tier-2 (physical slot) pass on
+  the stock `wal_level=replica` image; tier-3 (logical slot via `test_decoding`) passes after the
+  `pgcenter-testing:0.0.10` bump (`wal_level=logical`). `test_decoding` confirmed shipped in the
+  PGDG packages.
+
+### Descoped / Deferred
+
+- record/report support — out of scope (TUI-only in 0.11.0), as planned; the planned next phase.
+- `conflicting`/`invalidation_reason` (invalidation cause) and `pg_stat_subscription_stats` —
+  deferred as documented.
+- The standby leg of `retained,KiB` is correct-by-construction (shared `WalFunction` template) but
+  not exercised by a live-standby integration test — see tech-debt [006].
