@@ -1,0 +1,12 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Decisions 3, 5, and 6 lack an explicit \"Alternatives considered\" line. Decisions 1, 2, and 4 include it; the rest provide only Decision + Rationale.",
+      "fix": "Add a short \"Alternatives considered:\" line to Decisions 3, 5, 6 (e.g., for Decision 3: default col-0 sort — rejected because the feature is disk-fill triage; for Decision 6: recordable now — rejected, record/report is the next phase). If no real alternative existed, state \"None — forced by ADR-004\"."
+    }
+  ],
+  "summary": "APPROVED. Zero critical findings. All template sections present and non-empty; frontmatter valid (created 2026-06-21, status draft, branch feature/replication-slots, size M). 6 tasks (<=15), all with valid catalog skills (code-writing, deploy-pipeline, pre-deploy-qa) and existing reviewer agents (dev-code-reviewer, dev-test-reviewer, dev-deploy-reviewer all verified on disk). Task descriptions are brief WHAT+WHY scope statements — no step-by-step, no line-number refs, no AC/TDD anchors, no embedded technical decisions (all decisions live in the Decisions section). Final Wave present with Pre-deploy QA (Task 6). Wave/dependency structure is sound and matches the expected shape: Wave 1 Task 1 & 4 independent (disjoint files); Wave 2 Task 2 & 5 depend on Wave 1 (disjoint files); Wave 3 Task 3 depends on Task 2. No same-file wave conflicts, no circular dependencies, no time-based estimates. File paths and naming conform to architecture.md and patterns.md (bgwriter reference pattern). Only one minor finding: three Decisions omit an explicit Alternatives line."
+}

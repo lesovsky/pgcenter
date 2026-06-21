@@ -98,9 +98,10 @@ signal already covered by `wal_status`.
 yields NULL for these columns. A physical slot matches itself across samples (same `slot_name`)
 and enters the diff branch; with empty-string NULLs, `diffPair("","")` →
 `strconv.ParseInt("")` returns an error and aborts the sample
-(verified in `internal/stat/postgres.go:316-343` / `diffPair` :445). Coalescing to 0 makes
-physical rows diff cleanly to `0`. retained/safe stay nullable (absolute columns, outside
-`DiffIntvl`) — NULL renders empty with no crash.
+(verified in `internal/stat/postgres.go:303-358`; `diffPair` :444). Coalescing to 0 makes
+physical rows diff cleanly to `0`. retained/safe/stats_age stay nullable (absolute columns,
+outside `DiffIntvl`) — NULL renders empty with no crash (physical slots show empty
+`safe,KiB`/`stats_age`).
 **Alternatives considered:** Render `-`/empty for physical slots — rejected: needs per-cell
 view-specific rendering pgcenter does not have (scope creep). The adjacent `slot_type=physical`
 column disambiguates the `0`.
@@ -111,6 +112,8 @@ column disambiguates the `0`.
 deviates from the col-0 default of every other multi-row view; documented intentionally so it is
 not read as a bug. The Go-side `sort()` governs the displayed order each tick; the SQL ORDER BY
 sets a sensible first-frame order (matches the `replication` convention of an explicit ORDER BY).
+**Alternatives considered:** `OrderKey=0` (slot_name) like every other multi-row view — rejected:
+buries the disk-fill offender, forcing the DBA to re-sort on every open.
 
 ### Decision 4: Selector keeps an (unused) version parameter
 **Decision:** `func SelectStatReplicationSlotsQuery(_ int) (string, int, [2]int)` — returns the
@@ -124,15 +127,22 @@ the "no divergence" invariant.
 ### Decision 5: Logical-slot test is defensive (skips unless wal_level=logical)
 **Decision:** The tier-3 logical-slot integration test runs `SHOW wal_level` and `t.Skipf`s if it
 is not `logical`. Slot creation/cleanup is wrapped so a missing `test_decoding` plugin also skips.
+Both tiers create slots idempotently (drop-if-exists before create) and drop them in `defer`, so a
+SIGKILL'd prior run cannot block a re-run on a duplicate slot name.
 **Rationale:** Decouples the manual test-image push from the code merge — CI stays green on the
 old image (`wal_level=replica`), and the test starts exercising logical slots once
 `pgcenter-testing:0.0.10` is live and the workflow tag is bumped. No fragile ordering dependency.
+**Alternatives considered:** A hard ordering (push image, then merge code that assumes
+`wal_level=logical`) — rejected: any failure between the two leaves CI red on a transient
+infrastructure state.
 
 ### Decision 6: TUI-only (NotRecordable), no record/report
 **Decision:** Register with `NotRecordable: true`; only `Test_filterViews` needs updating.
 **Rationale:** Roadmap TUI-first for all 0.11.0 views (ADR-004). Record/report for the new
 views is the planned next phase. Documented limitation in user-spec (retrospective analysis
 needs it most for this feature).
+**Alternatives considered:** Ship record/report in this feature — rejected: doubles scope
+(storage format + report pipeline), contradicts the roadmap's TUI-first sequencing.
 
 ## Data Models
 
@@ -261,8 +271,10 @@ must be pushed by the maintainer before the workflow tag bump takes effect; the 
 - **Files to read:** `internal/query/bgwriter.go`, `internal/query/bgwriter_test.go`, `internal/query/replication.go`, `internal/query/query.go`
 
 #### Task 4: Test-image bump for logical-slot support
-- **Description:** Enable `wal_level=logical` in `testing/prepare-test-environment.sh`, bump the
-  `testing/Dockerfile` label to `0.0.10` (and fix the stale "14-17" comment), and update the test
+- **Description:** Enable `wal_level=logical` in `testing/prepare-test-environment.sh` (with an
+  inline comment marking it test-only so it does not leak into user config examples), bump BOTH
+  `0.0.9` version literals in `testing/Dockerfile` (the `LABEL version` and the `CMD` echo string)
+  to `0.0.10`, fix the stale `PostgreSQL 14-17` header comment to `14-18`, and update the test
   container tag `0.0.9 → 0.0.10` in `default.yml` and `release.yml`. The actual
   `docker build && docker push lesovsky/pgcenter-testing:0.0.10` is a manual maintainer step
   (DockerHub credentials) — document it in the task; CI has no image-build job.
@@ -290,7 +302,8 @@ must be pushed by the maintainer before the workflow tag bump takes effect; the 
 - **Description:** Extend `replication_slots_test.go` with tier-2 (create a physical slot, assert
   row/retained/counters, drop in `defer`) and tier-3 (skip unless `wal_level=logical`, create a
   `test_decoding` logical slot, assert spill/stream columns, drop) integration tests across the
-  live PG 14–18 matrix. Depends on the query (Task 1) and the image bump (Task 4).
+  live PG 14–18 matrix. Create slots idempotently (drop-if-exists before create) so an interrupted
+  run cannot block re-runs. Depends on the query (Task 1) and the image bump (Task 4).
 - **Skill:** code-writing
 - **Reviewers:** dev-test-reviewer, dev-code-reviewer
 - **Verify:** bash — `make test` (tier-2 green; tier-3 green on `0.0.10`, else skipped)
@@ -302,8 +315,9 @@ must be pushed by the maintainer before the workflow tag bump takes effect; the 
 #### Task 3: Bump Test_filterViews for the new NotRecordable view
 - **Description:** Update `record/record_test.go` `Test_filterViews` — increment `wantN` by 1 on
   every test row (the `replslots` view is `NotRecordable`, dropped on every version before the
-  version branch). No production change to `record.go`. Depends on the view being registered
-  (Task 2).
+  version branch), and refresh the adjacent `wantN`-logic comment block to document the replslots
+  contribution alongside bgwriter. No production change to `record.go`. Depends on the view being
+  registered (Task 2).
 - **Skill:** code-writing
 - **Reviewers:** dev-test-reviewer
 - **Verify:** bash — `make test` (`Test_filterViews` green)

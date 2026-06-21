@@ -1,0 +1,40 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec states OrderKey=4 (retained,KiB) as the default sort, deviating from the col-0 default of every other multi-row view (replication, tables, indexes, databases_general all use OrderKey=0). The deviation is intentional and documented in Decision 3, but the code-research document (section 4) noted a conflicting 'recommended default' of OrderKey=0. Choosing OrderKey=4 requires that the SQL ORDER BY clause and the Go-side sort() remain consistent on first render — the spec ensures this by placing ORDER BY \"retained,KiB\" DESC NULLS LAST in the query itself and setting OrderKey=4/OrderDesc=true on the view. This is architecturally coherent but the inconsistency with all other multi-row views should be explicitly flagged in the help text (already planned) so operators are not surprised.",
+      "location": "Decision 3: Default sort by retained,KiB descending",
+      "fix": "No code change needed — the spec already handles this correctly with the SQL ORDER BY clause matching the Go OrderKey/OrderDesc defaults. Ensure the help text explicitly notes the non-standard default sort for this view."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The spec places stats_age at col 14 (last, outside DiffIntvl=[6,13]), consistent with the WAL-view pattern documented in ADR-004. However, stats_age derives from pg_stat_replication_slots.stats_reset, which is NULL for physical slots (physical slots have no row in pg_stat_replication_slots). The LEFT JOIN propagates NULL through to stats_age. The absolute copy-as-is path in diff() preserves NULL via sql.NullString (Valid=false), and the TUI renders Valid=false as an empty string — correct behavior. This is not a bug, but the spec should document that stats_age renders empty for physical slots to avoid operator confusion. The code-research notes this (section 6.2) but the tech-spec body does not mention it as expected display behavior.",
+      "location": "Data Models section; column layout table",
+      "fix": "Add a note in the user-facing description (Msg or help text) that stats_age is blank for physical slots. No code change required."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The Test_filterViews test in record/record_test.go must be bumped (+1 on wantN for every row) as part of Task 3. The spec correctly identifies this dependency and schedules Task 3 in Wave 3 after the view is registered. However, the comment block in the existing test (lines 108-115, read directly) describes the bgwriter bump rationale but will need updating to also describe the replslots bump. This is documentation debt in the test file, not a structural problem. The more important risk is that if Task 3 is omitted or delayed, CI fails on record_test.go — the spec acknowledges this risk (Risks table, row 2) and mitigates it by including Task 3 in the wave plan.",
+      "location": "Task 3: Bump Test_filterViews for the new NotRecordable view",
+      "fix": "When implementing Task 3, update the comment block in record_test.go to describe both the bgwriter and replslots bumps. Verify wantN values against the current test: {140000,'':7, 140000,'public':1, 130000:4, 120000:7, 110000:9, 100000:9} — each row needs +1."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The tech-spec is architecturally sound and maps cleanly onto the established version-aware-selector + view-registration pattern (bgwriter/wal). DiffIntvl=[6,13] is correctly derived from the contiguous 8-counter block, UniqueKey=0 (slot_name) is the correct multi-row identity key, the coalesce-to-0 approach correctly neutralizes the diffPair(\"\",,\"\") parse-error risk for physical slots, and the single-query no-version-branching decision is justified by verified column stability across PG 14-18. Component coupling is minimal: only the five intended seams are touched (query/, view/, keybindings, help, record_test). Three minor findings (non-standard OrderKey=4 is intentional and safe, stats_age NULL for physical slots needs a display note, test comment needs updating) — none are blocking. No critical or major issues."
+}
