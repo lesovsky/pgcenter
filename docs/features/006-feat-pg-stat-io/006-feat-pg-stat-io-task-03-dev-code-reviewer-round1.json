@@ -1,0 +1,52 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "feature": "006-feat-pg-stat-io",
+  "task": "03",
+  "round": 1,
+  "status": "approved",
+  "summary": "Task 03 wires the pg_stat_io TUI navigation (j/J keys, menuStatIO, statioNextView, help) by faithfully mirroring the databases/pgss/progress family idioms. The naming contract (stat_io / stat_io_time / statio / menuStatIO) is honored verbatim, cross-file consistency is verified end-to-end (keybinding token -> switchViewTo case -> statioNextView -> registered view names from Task 02), build is clean, go vet is clean, and all touched tests pass. The extended Test_switchViewTo cases and the new Test_statioNextView are legitimate, valuable coverage, not scope creep.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/help.go",
+      "line": 40,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The shared-stats caveat enumerates 'pg_stat_io, bgwriter, wal' but the codebase resets neither these nor archiver/replslots via 'Q'. Consider 'shared stats such as pg_stat_io, bgwriter, wal' (already hedged with 'such as') or aligning the list with the exact set reset.go skips, to avoid the list reading as exhaustive. Cosmetic only.",
+      "benefit": "Avoids a user inferring the list is complete; keeps help text precise.",
+      "optional": true
+    },
+    {
+      "file": "top/config_view.go",
+      "line": 144,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "statioNextView is a pure copy of databasesNextView's 2-way-toggle shape (only the case labels differ). This is the established per-family idiom in this file (databases/statements/progress each have their own helper), so duplication is consistent with the codebase and not worth abstracting. Noted for awareness only.",
+      "benefit": "Confirms the duplication is intentional and idiomatic, not accidental.",
+      "optional": true
+    }
+  ],
+  "positives": [
+    "Naming contract adhered to exactly: view names stat_io / stat_io_time, switchViewTo token \"statio\", menu type menuStatIO — matches the databases-family three-way naming as specified by Decision 7.",
+    "menuStatIO menuSelect branch mirrors menuPgss precisely: cy 0 -> stat_io, cy 1 -> stat_io_time, default -> stat_io, followed by printCmdline(app.ui, \"%s\", app.config.view.Msg) — preserving the Decision 9 track_io_timing hint on switch.",
+    "j and J keys confirmed free (no prior sysstat binding); placed in the correct block alongside the existing lowercase-switch / uppercase-menu pairs. Generic 'menu' bindings (Esc/Up/Down/Enter) already drive menuStatIO; correctly left untouched.",
+    "menuOpen(menuStatIO, app.config, \"\") passes the empty pgssSchema correctly — the availability guard only fires for menuPgss, so no false NOTICE.",
+    "Cross-file consistency verified: the three new Test_switchViewTo cases resolve against view.New()'s real registered stat_io/stat_io_time views (Task 02, present on this branch), asserting v.Name == \"stat_io\"/\"stat_io_time\" — proving the token->view mapping is wired correctly, not just compiling.",
+    "viewSwitchHandler used directly (not switchViewToProcPidStat) — correct, since pg_stat_io has no runtime patches.",
+    "helpTemplate ASCII alignment preserved; the j,J line (86 chars) and the Q continuation line are consistent with neighboring lines."
+  ],
+  "techDebt": [],
+  "verification": {
+    "build": "go build ./... — clean (exit 0)",
+    "vet": "go vet ./top/ — clean (no output)",
+    "tests": "go test ./top/... -run 'Test_selectMenuStyle|Test_statioNextView|Test_switchViewTo' — all PASS (Test_switchViewTo 25 cases incl. 3 new statio cases; Test_statioNextView 3 cases; Test_selectMenuStyle incl. {menuStatIO,2})",
+    "naming_contract": "verified stat_io / stat_io_time / statio / menuStatIO across keybindings.go, menu.go, config_view.go, view.go"
+  },
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  }
+}

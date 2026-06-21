@@ -45,3 +45,26 @@
 **Verification:**
 - `go test ./internal/view/...` → ok; `go build ./...` → clean; `gofmt` → clean
 - Независимое подтверждение lead'ом: commit 3a8ddf8 (2 файла), build всего проекта зелёный, TestNew 24→26 подтверждён
+
+---
+
+## Task 03: TUI navigation, menu & help — top/
+
+**Status:** Done
+**Commit:** 162a3c9
+**Agent:** io-tui-dev (general-purpose)
+**Summary:** Подключена TUI-навигация pg_stat_io по образцу databases-семейства: `j` → `switchViewTo "statio"` (+ `statioNextView` 2-way toggle stat_io↔stat_io_time), `J` → `menuOpen(menuStatIO)` (2-пунктовое меню operations/timings, `menuSelect` → stat_io/stat_io_time с сохранением Msg-подсказки Decision 9). help.go: строка `j,J` + примечание, что `Q` не сбрасывает shared-stats (pg_stat_io/bgwriter/wal). Тесты: `{menuStatIO,2}`, `Test_statioNextView`, +3 строки statio в `Test_switchViewTo` (end-to-end через реальную карту view из Task 02).
+**Deviations:** Task-бриф ошибочно утверждал «нет харнесса для switchViewTo/nextView» — на деле есть (`Test_switchViewTo`, `Test_databasesNextView`). Исполнитель корректно расширил реальные харнессы вместо выдумывания фейков — это лучшее покрытие, принято.
+**Tech debt:** Нет нового. Ветка `menuSelect cy 0/1` (путь `J`) не имеет unit-харнесса (как и все остальные меню в пакете) — отдана на ручной QA в Task 04 (`J`-меню в чеклисте). Pre-existing `Test_doReload` паника (tech-debt [005]) подтверждена на baseline через `git stash` — не от этой задачи.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical/major, 2 cosmetic-minor → [task-03-dev-code-reviewer-round1.json]
+- dev-test-reviewer: passed, 0 critical/major, 2 minor (litmus 5/5; J-path → manual QA) → [task-03-dev-test-reviewer-round1.json]
+
+**Verification:**
+- `go test ./top/ -run 'Test_selectMenuStyle|Test_statioNextView|Test_switchViewTo'` → PASS (25 субтестов switchViewTo)
+- `make build` → бинарь собран; `go vet ./top/...` / `gofmt` → clean
+- Полный `go test ./top/...` падает ТОЛЬКО на pre-existing `Test_doReload` (tech-debt [005]); подтверждено lead'ом
+- Независимое подтверждение lead'ом: commit 162a3c9 (6 файлов, +61)
