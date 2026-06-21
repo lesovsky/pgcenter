@@ -187,7 +187,7 @@ func New() Views {
 			OrderDesc:          true,
 			UniqueKey:          0,
 			ColsWidth:          map[int]int{},
-			Msg:                "Show pg_stat_io timings statistics (require track_io_timing=on)",
+			Msg:                "Show pg_stat_io timings statistics (requires track_io_timing=on)",
 			Filters:            map[int]*regexp.Regexp{},
 			NotRecordable:      true,
 		},
