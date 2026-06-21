@@ -1,0 +1,46 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": true
+  },
+  "requirements_total": 15,
+  "requirements_covered": 14,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "UX: column priority — identification + key rates (reads/writes) first; less-critical columns (writebacks, reuses, fsyncs, stats_age) move to the tail and clip first",
+      "detail": "The user-spec UX-behavior section explicitly states that less-critical columns (writebacks, reuses, fsyncs, stats_age) should trail and be truncated first on narrow terminals. The tech-spec Data Models count-screen table places writebacks at idx 10 (before hits/evictions/reuses), not at the tail; only stats_age is last. The tail-ordering intent (writebacks/reuses/fsyncs deprioritized after reads/writes) is not reflected in the concrete column order. Risk 2 / risk-clip is acknowledged but the spec does not state the columns were deliberately ordered to push the named low-priority ones to the end. Minor: ordering is a layout detail and the clip behavior itself is standard, but the explicit user requirement about WHICH columns trail is only partially honored.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "Scenario 3 / track_io_timing=off: time screen shows a cmdline hint 'track_io_timing is off — timings unavailable'",
+      "detail": "User-spec scenario 3 and AC require a cmdline hint when track_io_timing is off. Tech-spec Decision 9 implements this as a STATIC always-present Msg ('pg_stat_io timings (require track_io_timing=on)') shown on every switch rather than conditionally when the GUC is off. This is a deliberate, justified design change (avoids per-sample inspection) and is documented as an alternative-considered, so it is acceptable — but the delivered behavior diverges from the literal user-spec wording (conditional hint vs always-on hint). Flagged as partial, not a gap, because the user intent (DBA is told timings may be zero) is satisfied.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "14/15 requirements covered, 0 gaps, 0 missing, 2 partials (both minor). Strong bidirectional traceability: every user story (US1-US4), all 8 user-spec acceptance criteria, all 3 scenarios, and all constraints (PG16+ only, NotRecordable/top-first, two sub-screens, io_key composite matching, coalesce NULL-safety, version-branched KiB, Q-no-reset help note) map to tech-spec Decisions 1-11 and Tasks 1-4. No scope creep: every tech-spec element traces to a requirement; the added PostgresV15/16/17/18 constants and io_test.go are justified engineering enablers. No overengineering (two sub-screens and synthetic io_key are forced by pgcenter's no-horizontal-scroll and single-column UniqueKey constraints, both proven precedents; no speculative abstractions; tasks are brief scope descriptions). No underengineering (NULL-safety via coalesce + dedicated test, SQL-side empty-row filter, version-gate error path, integer KiB division, composite-key correctness test all present; error/boundary handling is explicit). Solution and Architecture sections have real technical substance (concrete files, selectors, diff pipeline, version branches). No critical findings -> PASS. The two partials are minor layout/wording divergences worth a glance during implementation but do not block.",
+  "traceability": {
+    "US-1: reads/writes by backend_type x context to separate vacuum- from client-driven": "covered — count screen, 3 separate sortable dimension columns (Decision 2), default sort by reads (Decision 11), per-column / filter",
+    "US-2: WAL-IO (object=wal) on PG18, gone from pg_stat_wal": "covered — Decision 3 PG18 branch returns object='wal' rows; integration test gates it (Testing Strategy)",
+    "US-3: high evictions/reuses for shared_buffers/ring-buffer churn": "covered — count screen includes evictions (idx12) and reuses (idx13) columns",
+    "US-4: read/write/fsync latency by source with track_io_timing": "covered — time screen (Decision 1) read_time/write_time/fsync_time + Decision 9 hint",
+    "AC-1: j opens count, j toggles count<->time, J opens 2-item menu": "covered — Decision 7, Task 3, menuStatIO 2-item test",
+    "AC-2: per-interval rates, counters diffed, identity+stats_age absolute": "covered — Decision 4, DiffIntvl [4,14]/[4,8], stats_age outside diff",
+    "AC-3: all-NULL/0 rows hidden via SQL WHERE, identical row-set on both screens": "covered — Decision 5 count-based WHERE reused on time screen",
+    "AC-4: PG16/17 and PG18 correct KiB; PG18 has object=wal; data consistent": "covered — Decision 3 + Decision 6 integer division; integration matrix gate",
+    "AC-5: PG14/15 not-supported message, no panic/empty screen": "covered — MinRequiredVersion=PostgresV16 + collector VersionOK gate (Architecture How-it-works)",
+    "AC-6: track_io_timing=off time screen shows zeros + cmdline hint": "partial — Decision 9 static hint instead of conditional (minor, justified)",
+    "AC-7: deltas correct when rows share backend_type (match by full identity)": "covered — Decision 2 synthetic io_key as UniqueKey + risk-table integration assertion",
+    "AC-8: help documents Q does not reset pg_stat_io": "covered — Task 3 help line, Decision in Architecture (top/help.go note)",
+    "Constraint: PG16+ only": "covered — MinRequiredVersion",
+    "Constraint: top-only, NotRecordable, record/report separate feature": "covered — Decision 10",
+    "Constraint: no new external deps, existing pgx/v5 pipeline": "covered — Dependencies: New packages None"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Decision 8 states that the io.go selectors use literal integers (160000/180000) 'matching the bgwriter/wal house style', while simultaneously adding PostgresV15/16/17/18 symbolic constants to query.go and referencing them for MinRequiredVersion in view.go. This creates an internal inconsistency: the view map will reference query.PostgresV16 (symbolic) but the selector function will branch on bare literal 160000. The replslots and bgwriter selectors use bare literals (170000, 180000) inline and the view map references query.PostgresV14 (symbolic). Both styles are present in the codebase so neither is wrong, but mixing them within a single feature's two files is slightly inconsistent. The cleanest resolution is to use the new symbolic constants in both places.",
+      "location": "Decision 8; internal/query/io.go selector vs internal/view/view.go MinRequiredVersion",
+      "fix": "Use query.PostgresV16 / query.PostgresV18 in the selector function branches too, now that the constants are being added. One style per feature file."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The code-research document recommended a plain concatenation key (backend_type || '/' || object || '/' || context) as more readable than md5, and explicitly noted md5 is only needed for pg_stat_statements because the query text is huge. The tech-spec chooses md5 anyway. This is a debatable design call, not an architectural defect, but it introduces a less-readable column (a hex substring) in a view where the key space is small (< 30 rows, fixed-vocabulary strings). The choice is internally consistent with the statements pattern and is architecturally sound; it is recorded as a minor style divergence from the research recommendation.",
+      "location": "Decision 2; Data Models section (io_key column)",
+      "fix": "Consider plain concatenation (backend_type || '/' || object || '/' || context) as the io_key for readability. Both approaches are architecturally valid."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Decision 2 states that hiding io_key via ColsWidth[0]=0 is 'not possible' because 'internal/align enforces a minimum column width of 8'. This is accurate: align.go line 36 sets colnamelen = math.Max(len(colname), 8). However, the statement that 'ColsWidth is a runtime width cache, not a preset' slightly mischaracterizes the field: ColsWidth entries seeded in view.New() before any sample arrives DO act as a preset for column 0 before first alignment pass. The conclusion (hiding is infeasible without new code) is correct, but the rationale conflates two distinct constraints. This is a documentation accuracy issue in the spec, not a code risk.",
+      "location": "Decision 2, 'Alternatives considered'",
+      "fix": "Clarify the rationale: ColsWidth presets are overwritten on first alignment pass, AND align enforces min-8, so a zero-width preset would be overwritten to 8 regardless. The conclusion stands."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The spec adds a new 'statio' string token to the switchViewTo switch in top/config_view.go alongside adding statioNextView helper. This token ('statio') does not match either registered view name ('stat_io' / 'stat_io_time'), which is correct by design (it is a family switch token, not a view name), but it introduces a third namespace for the same feature: view names use underscore (stat_io), the family switch token uses no separator (statio), and menu constants use PascalCase (menuStatIO). All existing family tokens are also abbreviated (databases, statements, progress) so this is consistent with precedent. No coupling risk; noted for implementation clarity.",
+      "location": "Decision 7; top/config_view.go switchViewTo",
+      "fix": "No change required. Document in the implementation that 'statio' is a family-switch token distinct from view names."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The tech-spec is architecturally sound and consistent with pgcenter patterns. The two-view split, synthetic md5 io_key as UniqueKey, per-version selector branches (PG16/17 vs PG18), DiffIntvl placement keeping stats_age absolute, coalesce on all diffed columns, and j/J keybinding pair all follow established precedents exactly (replslots, bgwriter, wal, pg_stat_statements). All four findings are minor stylistic observations with no blocking risk; the implementation can proceed as specified."
+}

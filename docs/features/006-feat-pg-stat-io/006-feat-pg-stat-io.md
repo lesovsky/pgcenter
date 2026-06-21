@@ -94,8 +94,8 @@ size: M
 - **count-экран `pg_stat_io` (по умолчанию при входе):** многострочная таблица. Колонки:
   `io_key` (короткий md5-ключ для сопоставления строк, как `queryid` в `pg_stat_statements`),
   `backend_type`, `object`, `context` (идентификация, абсолютные), затем рейты —
-  `reads`, `read,KiB`, `writes`, `write,KiB`, `extends`, `ext,KiB`, `writebacks`, `hits`,
-  `evictions`, `reuses`, `fsyncs`, и в конце `stats_age` (абсолютная). Объём в KiB считается
+  `reads`, `read,KiB`, `writes`, `write,KiB`, `extends`, `ext,KiB`, `hits`, `evictions`,
+  `writebacks`, `reuses`, `fsyncs`, и в конце `stats_age` (абсолютная). Объём в KiB считается
   гибридно: на PG 16/17 — производно из `op_bytes` (`reads*op_bytes/1024` и т.д.), на PG 18 —
   из нативных `read_bytes`/`write_bytes`/`extend_bytes`.
 - **time-экран `pg_stat_io`:** та же идентификация (`backend_type`, `object`, `context`), затем

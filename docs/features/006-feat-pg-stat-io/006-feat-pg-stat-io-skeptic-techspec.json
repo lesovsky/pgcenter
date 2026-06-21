@@ -1,0 +1,32 @@
+{
+  "status": "approved",
+  "summary": "Checked 38 claims, found 0 mirages. All file paths, struct fields, function signatures, constants, keybindings, and ADR references in the tech-spec are confirmed against the actual pgcenter codebase.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 38,
+    "confirmed": 38,
+    "mirages_found": 0,
+    "verified_claims": [
+      "internal/query/io.go is new (no pg_stat_io refs in codebase except unrelated pid_stat_iodelay fixture)",
+      "internal/query/bgwriter.go exists with SelectStatBgwriterQuery(version int) (string, int, [2]int)",
+      "internal/query/wal.go exists with SelectStatWALQuery returning (PgStatWALDefault,7,[2]int{2,5}) PG18 / (PgStatWALPG14,11,[2]int{2,9}) else",
+      "internal/query/replication_slots.go: SelectStatReplicationSlotsQuery(_ int) returns (PgStatReplicationSlots,15,[2]int{6,13})",
+      "internal/query/statements.go:65 left(md5(p.userid::text||p.dbid::text||p.queryid::text),10) AS queryid synthetic key",
+      "view.View has fields UniqueKey, OrderKey, OrderDesc, DiffIntvl, Ncols, NotRecordable, MinRequiredVersion, Msg, ColsWidth (view.go:10-31)",
+      "stat.diff() matches rows on single ukey column: cv[ukey].String != pv[ukey].String (postgres.go:322)",
+      "internal/align enforces minimum column width 8 (align.go:36 math.Max(len(colname),8))",
+      "view.Configure() switch wires per-view selectors (view.go:328, cases wal/bgwriter/replslots)",
+      "view.VersionOK exists (view.go:373)",
+      "top/config_view.go: switchViewTo (line 102), databasesNextView 2-way toggle (line 128), viewSwitchHandler(config *config, c string) (line 189)",
+      "top/menu.go: menuType iota menuNone/menuDatabases/menuPgss/menuProgress/menuConf, selectMenuStyle, menuOpen, menuSelect",
+      "menuPgss has 6 items (menu_test.go:15), menuDatabases 2 items",
+      "keybindings j and J are both free (no binding in top/keybindings.go)",
+      "lowercase-switch/uppercase-menu pairs exist: d/D, x/X, p/P",
+      "internal/postgres/testing.go NewTestConnectVersion(version) port map 180000->21918..140000->21914",
+      "query.go PostgresVxx constants stop at PostgresV14=140000 (no V15-V18)",
+      "ADR [004] Per-version column sets (decisions-log.md:191)",
+      "ADR [004] Absolute counters via DiffIntvl placement (decisions-log.md:207)",
+      "ADR [005] coalesce(...,0) NULL safety / replslots lesson (decisions-log.md:285)"
+    ]
+  }
+}

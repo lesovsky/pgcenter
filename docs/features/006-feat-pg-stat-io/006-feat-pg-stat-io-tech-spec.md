@@ -77,10 +77,11 @@ columns.
 one column (`internal/stat/postgres.go`), so the 3-field identity must be collapsed into one key —
 the proven `statements_io` `queryid` pattern. Separate dimension columns are kept so the per-column
 `/` filter stays precise on the ~30 rows (user decision).
-**Alternatives considered:** Hiding `io_key` via `ColsWidth[0]=0` — **not possible**: `internal/align`
-enforces a minimum column width of 8 and `ColsWidth` is a runtime width cache, not a preset; a
-hide mechanism would require new code in the shared align/print path (scope creep, touches every
-screen). A single readable `backend_type/object/context` concat column (no hash, narrower) — rejected
+**Alternatives considered:** Hiding `io_key` via `ColsWidth[0]=0` — **not possible**: `SetAlign`
+(`internal/align/align.go:36`) computes every column's width as `max(len(colname), 8)`, with no
+zero-width / skip path, and `ColsWidth` holds those *computed* widths at runtime (it is not a preset
+read during rendering). Hiding a column would require new code in the shared align/print path (scope
+creep, touches every screen). A single readable `backend_type/object/context` concat column (no hash, narrower) — rejected
 because it loses per-dimension sort and makes `/` filtering ambiguous (`/vacuum` would match both
 `context=vacuum` and `autovacuum worker`).
 
@@ -129,14 +130,18 @@ with a 2-item menu (`pg_stat_io operations`, `pg_stat_io timings`).
 A lowercase 2-way toggle reuses the `databasesNextView` precedent. Both `j` and `J` are free keys.
 **Alternatives considered:** Menu only (no toggle) — clunky for two states; toggle only (no menu) —
 breaks the established uppercase-menu convention and discoverability.
+**Naming contract (for the implementer):** view names `stat_io` / `stat_io_time`, `switchViewTo`
+token `"statio"`, menu type `menuStatIO` — the same three-way naming the `databases` family uses
+(`databases` / `databases_general` / `menuDatabases`).
 
 ### Decision 8: Add `PostgresV15/16/17/18` version constants
 **Decision:** Add `PostgresV15=150000, PostgresV16=160000, PostgresV17=170000, PostgresV18=180000`
-to `internal/query/query.go`; set `MinRequiredVersion: query.PostgresV16` on both views.
+to `internal/query/query.go`; reference them everywhere — `MinRequiredVersion: query.PostgresV16` in
+the view map AND the `io.go` selector branches (`version >= query.PostgresV18` / `>= query.PostgresV16`).
 **Rationale:** The `view.New()` map uses `query.PostgresVxx` constants for `MinRequiredVersion`; the
-constant list currently stops at `V14`. Adding them is the cleaner fit than a bare literal in the map.
-The `io.go` selectors themselves use literal `160000`/`180000` for their version branches, matching
-the `bgwriter`/`wal` house style.
+constant list currently stops at `V14`. Adding them and using them consistently in both the map and
+the selectors avoids a literal/constant split. (The `bgwriter`/`wal` selectors use bare literals only
+because these constants did not exist yet; this feature introduces them.)
 
 ### Decision 9: `track_io_timing` hint as a static cmdline message
 **Decision:** Surface the `track_io_timing` caveat via the time-view `Msg` (shown in the cmdline on
@@ -175,12 +180,17 @@ Synthetic SQL column emitted by both screens for row identity:
 | 7 | write,KiB | diff | `writes*op_bytes/1024` · `write_bytes/1024` |
 | 8 | extends | diff | view |
 | 9 | ext,KiB | diff | `extends*op_bytes/1024` · `extend_bytes/1024` |
-| 10 | writebacks | diff | view |
-| 11 | hits | diff | view |
-| 12 | evictions | diff | view |
+| 10 | hits | diff | view |
+| 11 | evictions | diff | view |
+| 12 | writebacks | diff | view |
 | 13 | reuses | diff | view |
 | 14 | fsyncs | diff | view |
 | 15 | stats_age | absolute | `now()-stats_reset` |
+
+Column order honours the user-spec priority: data-moving ops (`reads`/`writes`/`extends` + KiB) and
+`hits`/`evictions` come first and stay visible on 120–160-col terminals; lower-priority
+`writebacks`/`reuses`/`fsyncs` and `stats_age` trail and clip first. The whole counter block stays
+one contiguous `DiffIntvl` regardless of internal order.
 
 **time screen (`stat_io_time`)** — Ncols 10, `DiffIntvl [4,8]`, `UniqueKey 0`, `OrderKey 4`:
 
@@ -293,8 +303,7 @@ config is changed.
   selectors `SelectStatIOQuery` / `SelectStatIOTimeQuery` returning `(query, Ncols, DiffIntvl)`,
   plus the `PostgresV15/16/17/18` constants. The SQL emits the synthetic `io_key`, derives KiB via
   integer `/1024` (op_bytes on PG16/17, native `*_bytes` on PG18), coalesces all diffed columns, and
-  drops all-zero rows. This task carries both correctness traps (composite key, NULL-safety) and
-  their tests.
+  drops all-zero rows. Per Decisions 2/3/5/6/8.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/...` passes (selector shape per version + NULL-safety + live PG16/18 shape)
@@ -306,9 +315,8 @@ config is changed.
 
 #### Task 2: View registration — `internal/view/view.go`
 - **Description:** Register the two views `stat_io` and `stat_io_time` in `view.New()` and wire the
-  selectors in `Configure()`, setting `Ncols`/`DiffIntvl`/`UniqueKey:0`/`OrderKey:4`/`OrderDesc:true`/
-  `NotRecordable:true`/`MinRequiredVersion:PostgresV16` and the cmdline `Msg` (time view carries the
-  `track_io_timing` hint). Depends on the selectors and view names contracted in Wave 1 / Decisions.
+  selectors in `Configure()`, with the field values and cmdline `Msg` specified in the Decisions and
+  Data Models sections. Depends on the selectors and view names contracted in Wave 1.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/view/...` and `go build ./...` clean
