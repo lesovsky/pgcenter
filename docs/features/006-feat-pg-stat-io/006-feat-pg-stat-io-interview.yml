@@ -18,8 +18,8 @@ interview_metadata:
   feature_base: "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io"
   work_type: "feature"
   started: "2026-06-21 16:30:34"
-  last_updated: "2026-06-21 17:45:00"
-  status: "in_progress"
+  last_updated: "2026-06-21 17:48:00"
+  status: "completed"
   can_resume: true
   current_question_num: 5
   feature_size: "M"     # S | M | L
@@ -422,7 +422,7 @@ phase3_integration:
 # ============================================================================
 phase4_completion:
   userspec_file: "docs/features/006-feat-pg-stat-io/006-feat-pg-stat-io.md"
-  status: "created"  # pending | created | approved
+  status: "approved"  # pending | created | approved
 
 # ============================================================================
 # Decision Rules

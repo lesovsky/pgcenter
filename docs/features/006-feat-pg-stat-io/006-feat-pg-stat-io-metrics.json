@@ -11,14 +11,14 @@
     "date_completed": ""
   },
   "phases": {
-    "user_spec": { "start_time": "2026-06-21T11:31:14Z", "human_wait_time_min": 0, "steps": {} },
+    "user_spec": { "start_time": "2026-06-21T11:31:14Z", "end_time": "2026-06-21T14:48:26Z", "duration_min": 197, "touch_time_min": 197, "human_wait_time_min": 0, "steps": {} },
     "tech_spec": null,
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
+    "validation_rounds": { "user_spec": 1 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
