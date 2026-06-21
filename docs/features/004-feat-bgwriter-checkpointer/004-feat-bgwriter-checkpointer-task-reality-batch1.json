@@ -1,0 +1,56 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Alias naming inconsistency between the (declared-accurate) code-research and the task. code-research.md:296 names the PG17+ checkpointer buffers column alias `buffers_ckpt`, while task-01 / tech-spec Data Models use `buf_ckpt`. Both are valid free-choice aliases (cosmetic), but the divergence could cause the implementer brief confusion when cross-referencing §7 of the research.",
+      "fix": "No code impact. Optionally add a one-line note in task-01 that column aliases follow the tech-spec Data Models (`buf_ckpt`), not the research's exploratory `buffers_ckpt`."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "task-01 labels the first const branch 'PG14-16' and the integration loop includes 160000, but the unit-test TDD anchor only enumerates 140000/150000/160000/170000/180000 with 160000 as the 'highest pre-17' boundary. The wal.go precedent (the cited template) actually shares one const across PG14-17 (SelectStatWALQuery: PG14 const for everything < 180000). This is fine for bgwriter because the 17/18 split is genuine (pg_stat_checkpointer introduced in 17), but the task should make explicit that 160000 (not 165000/169999) is the chosen representative for the pre-17 branch upper edge — the selector uses `>= 170000`, so any value in [140000,169999] lands in the PG14-16 branch.",
+      "fix": "No change required for correctness; the `>= 170000` / `>= 180000` ladder is unambiguous. Optionally note the branch covers all versions < 170000, not literally only 14/15/16."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "verify is `user` (manual TUI) and there is NO automated regression test added for the static wiring (view map entry, Configure() case, keybinding, help row). This is intentional and noted in the task's TDD Anchor (config/map/keybinding changes have no new behavioral unit). A go-level guard (e.g. asserting the `bgwriter` view exists in New() with NotRecordable:true, or that `b` is registered) would cheaply catch a wiring regression, but its absence is an accepted decision, not an error.",
+      "fix": "Accepted as-is per task design. Optionally add a tiny test in internal/view that New()[\"bgwriter\"].NotRecordable == true and Ncols/DiffIntvl match the PG14 defaults, to lock the map entry."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 28,
+    "issues_found": 3
+  },
+  "verified_claims": [
+    "internal/query/wal.go:SelectStatWALQuery exists with signature (version int) (string, int, [2]int) — exact template for task-01.",
+    "internal/query/wal_test.go has Test_SelectStatWALQuery (table-driven) + Test_StatWALQueries (integration loop 140000..180000 with t.Skipf) — exact template for task-01 tests.",
+    "internal/view/view.go: 'wal' map entry at lines 128-139 (MinRequiredVersion: query.PostgresV14, NotRecordable not set) — accurate reference for the new 'bgwriter' entry.",
+    "internal/view/view.go: View struct has NotRecordable bool field at line 30.",
+    "internal/view/view.go: Configure() first `switch k` loop spans 307-325 with `case \"wal\"` at 321-323; second Format() loop at 328-335 — all line refs in task-03 accurate.",
+    "internal/view/view.go: 'procpidstat' entry (285-295) does NOT set NotRecordable — confirms the record.go comment is stale and bgwriter would be the first/only live user.",
+    "top/keybindings.go: hotkey `b` (lowercase) is genuinely UNBOUND; only `B` (uppercase, CollectDiskstats) exists at line 47; `wal` keybinding at line 35.",
+    "top/help.go: general-actions row at line 13 reads `a,f,r,w     mode: 'a' activity, 'f' functions, 'r' replication, 'w' WAL,` — matches task-03 claim.",
+    "record/record.go: filterViews() at 200-218; NotRecordable skip + stale `procpidstat` example comment at 205-207 — confirmed verbatim.",
+    "internal/query/query.go: PostgresV14 = 140000 exists; NO PostgresV15/16/17/18 constants — confirms raw literals 170000/180000 are required (no hallucinated constant).",
+    "internal/stat/postgres.go:diff() at 330-333 copies columns with index < interval[0] || > interval[1] as-is and diffs the rest — confirms the absolute-vs-delta mechanism and DiffIntvl semantics task-01 relies on.",
+    "Helper signatures match test usage: NewTestConnectVersion(version int) (testing.go:16), NewOptions(version, recovery, track, querylen, pgssSchema) (query.go:37), Format(tmpl, o) (query.go:86).",
+    "internal/query/bgwriter.go and bgwriter_test.go do NOT yet exist — correct: task-01 creates them; task-03 correctly declares depends_on: [\"01\"].",
+    "overview.md:21 contains the stale claim `- pg_stat_bgwriter — background writer stats`; no pg_stat_checkpointer mention — confirms task-02 premise and line ~21 reference.",
+    "Per-version column math is internally consistent: PG14-16 Ncols=12 DiffIntvl=[3,10] (12 cols 0-11, diffed 3-10, absolute source/ckpt_timed/ckpt_req + stats_age); PG17 Ncols=13 DiffIntvl=[6,11] (13 cols 0-12, 6 absolute event counters 0-5, diffed 6-11, stats_age 12); PG18 Ncols=14 DiffIntvl=[6,12] (14 cols 0-13, slru_written inserted in diffed block 6-12, stats_age 13). All contiguous and matching the selector ladder.",
+    "code-research.md (declared accurate) confirms column inventory: PG14-16 bgwriter has buffers_backend/buffers_backend_fsync/maxwritten_clean; PG17 pg_stat_checkpointer has num_timed/num_requested/restartpoints_*/write_time/sync_time/buffers_written (VERIFIED live on PG17.7); PG18 adds slru_written (from docs, flagged for live verification). No hallucinated symbols.",
+    "Decision 4 (stats_age from pg_stat_checkpointer on PG17+) is sound: code-research confirms PG17 pg_stat_bgwriter retains its own stats_reset (line 269), so task-01's edge-case note to explicitly source stats_reset from pg_stat_checkpointer is correct and necessary.",
+    "TDD anchor for task-01 (Test_SelectStatBgwriterQuery) is adequate: table-driven over 140000/150000/160000/170000/180000, asserts (Ncols, DiffIntvl) per version and exercises the 170000 and 180000 selector boundaries — directly mirrors the proven Test_SelectStatWALQuery pattern.",
+    "task-02 is documentation-only (overview.md) — no code claims to verify; premise (stale bgwriter line) confirmed.",
+    "task-03 verify is manual/user — no automated static-wiring test expected, consistent with task design."
+  ]
+}
