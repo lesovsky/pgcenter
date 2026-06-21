@@ -12,17 +12,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Cache Go 1.25.10 binary
+      - name: Cache Go 1.25.11 binary
         id: cache-go
         uses: actions/cache@v4
         with:
           path: /opt/go
-          key: go-1.25.10-linux-amd64
+          key: go-1.25.11-linux-amd64
 
-      - name: Install Go 1.25.10
+      - name: Install Go 1.25.11
         if: steps.cache-go.outputs.cache-hit != 'true'
         run: |
-          curl -fsSL https://dl.google.com/go/go1.25.10.linux-amd64.tar.gz -o /tmp/go.tar.gz
+          curl -fsSL https://dl.google.com/go/go1.25.11.linux-amd64.tar.gz -o /tmp/go.tar.gz
           tar -xf /tmp/go.tar.gz -C /opt
 
       - name: Setup Go symlinks
@@ -37,9 +37,9 @@ jobs:
           path: |
             ~/go/pkg/mod
             ~/.cache/go-build
-          key: ${{ runner.os }}-go-1.25.10-${{ hashFiles('go.sum') }}
+          key: ${{ runner.os }}-go-1.25.11-${{ hashFiles('go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-1.25.10-
+            ${{ runner.os }}-go-1.25.11-
 
       - name: Cache lint tools
         uses: actions/cache@v4
