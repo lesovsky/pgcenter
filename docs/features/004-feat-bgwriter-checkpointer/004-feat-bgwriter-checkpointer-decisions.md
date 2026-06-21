@@ -27,3 +27,23 @@ Both reviewers independently suggested the same optional hardening: assert the l
 - `make build` → ok
 - `golangci-lint run ./internal/query/` + `gosec -quiet ./internal/query/` → clean (exit 0, no findings)
 - Note: `make test` has a pre-existing failure in `top/reload_test.go` (`Test_doReload` panics when the test PG cluster on port 21917 is absent) — verified present on a clean baseline via `git stash`, unrelated to this task.
+
+## Task 02: Correct overview.md
+
+**Status:** Done
+**Commit:** 7745c80
+**Agent:** docs-dev
+**Summary:** Replaced the false `pg_stat_bgwriter — background writer stats` line in `overview.md` (Supported PostgreSQL Statistics) — which wrongly implied pre-existing as-is support — with an accurate entry for the new bgwriter/checkpointer screen this feature adds: single-row TUI screen, hotkey `b`, PG 14–18, `pg_stat_checkpointer` columns on PG 17+, TUI-only / not recordable in 0.11.0. Documentation-only; no code or other files touched.
+**Deviations:** Нет.
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical / 0 major, 1 minor (optional) → [004-feat-bgwriter-checkpointer-task-02-dev-code-reviewer-round1.json](004-feat-bgwriter-checkpointer-task-02-dev-code-reviewer-round1.json)
+
+The single optional suggestion (trim the dense bullet for tighter consistency with neighbors) was applied in commit 7745c80 by folding the caveats into a parenthetical in the `pg_stat_wal` style, without dropping any required fact (hotkey, PG range, PG17+ scoping, TUI-only/0.11.0). No round 2 — change is trivial and accuracy-preserving.
+
+**Verification:**
+- `grep -nE 'pg_stat_bgwriter[^+]*— background writer stats'` → empty (stale claim gone)
+- `grep -niE 'pg_stat_checkpointer|bgwriter'` → new accurate entry present (line 21)
