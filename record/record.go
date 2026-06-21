@@ -202,9 +202,9 @@ func filterViews(version int, pgssSchema string, views view.Views) (int, view.Vi
 	var pgssNotfound bool
 
 	for k, v := range views {
-		// Skip views explicitly marked as not recordable (e.g. procpidstat — its
-		// SQL query produces only 7 of 19 columns; the remaining columns require
-		// procfs enrichment which never runs in the record context).
+		// Skip views explicitly marked as not recordable (e.g. bgwriter — the
+		// bgwriter/checkpointer screen shows shared cumulative counters that are
+		// only meaningful live in the TUI and are intentionally not recorded).
 		if v.NotRecordable {
 			delete(views, k)
 			filtered++
