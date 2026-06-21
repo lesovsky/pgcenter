@@ -19,6 +19,10 @@ func TestNew_BgwriterView(t *testing.T) {
 	assert.True(t, ok)
 	assert.True(t, bgwriter.NotRecordable)
 	assert.Equal(t, query.PostgresV14, bgwriter.MinRequiredVersion)
+	// Pin the PG14-default map values that Configure() overrides per version.
+	assert.Equal(t, 12, bgwriter.Ncols)
+	assert.Equal(t, [2]int{3, 10}, bgwriter.DiffIntvl)
+	assert.Equal(t, "Show bgwriter / checkpointer statistics", bgwriter.Msg)
 }
 
 func TestViews_Configure(t *testing.T) {
