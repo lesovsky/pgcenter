@@ -18,7 +18,7 @@ pg_stat_io display-design problem.
 
 ### [004] pg_stat_bgwriter + pg_stat_checkpointer — combined screen
 
-- **Status:** next (interview → /new-user-spec)
+- **Status:** done — merged 2026-06-21 (TUI-only, `NotRecordable`; record/report deferred to backlog). Next up: [005] pg_stat_replication_slots.
 - **Value:** no current way to watch background writer / checkpoint activity — checkpoint
   frequency, timed vs requested (signals undersized `max_wal_size`), write/sync time, buffers
   flushed.

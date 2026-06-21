@@ -185,3 +185,81 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Decision:** `app.setup()` removes `procpidstat` from `views` and prints INFO when `!db.Local`, before `filterViews()` is called. `filterViews()` handles only static unsuitability (PG version, missing extension).
 
 **Rationale:** Local/remote is a runtime property, not a static view property. Keeps `filterViews()` focused on one concern. `db.Local` is already computed by `postgres.Connect()` via `isLocalhost()`.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Per-version column sets, not NULL-padded unified columns
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** `pg_stat_bgwriter` changes shape across versions: PG 17 splits checkpoint metrics into `pg_stat_checkpointer`, drops `buffers_backend`/`buffers_backend_fsync`, and PG 18 adds `slru_written`. The bgwriter screen had to decide whether to present one unified column set (NULL-padding versions that lack a column) or version-specific sets.
+
+**Decision:** Each version branch returns only the columns that exist on that version; shared columns keep identical headers and order. `Ncols`/`DiffIntvl` differ per version (PG 14–16: 12 cols / `[3,10]`; PG 17: 13 / `[6,11]`; PG 18: 14 / `[6,12]`).
+
+**Rationale:** Follows the `wal.go` precedent, which already returns different `Ncols`/`DiffIntvl` per version. NULL-padding pre-17 with empty restartpoint columns would show misleading blank columns to a PG 15 DBA.
+
+**Alternatives considered:** Unified header set with `NULL AS rstpt_*` placeholders on PG 14–16 — rejected: clutters the screen with always-empty columns and contradicts the wal precedent.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Absolute event counters via DiffIntvl placement
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** Checkpoint/restartpoint event counters (`ckpt_timed`, `ckpt_req`, and PG 17+ `rstpt_timed/req/done`) must render as absolute cumulative values — the timed-vs-requested ratio is the signal, and a per-interval delta on a short refresh is almost always 0. The work/time/buffer columns must render as deltas.
+
+**Decision:** Place the event counters in a contiguous block right after the `source` label, **outside** the `DiffIntvl` range; the diffed work/time/buffer columns form the single contiguous diff range; `stats_age` is last, also outside the range.
+
+**Rationale:** `DiffIntvl` is a single contiguous `[lo,hi]` range (`internal/stat/postgres.go:diff()`), which copies out-of-range columns as-is and subtracts in-range ones. Keeping event counters outside the range is the only way to render them absolute without changing the diff machinery.
+
+**Alternatives considered:** Diff everything (wal-style) — rejected for event counters; they would flicker between 0 and 1.
+
+---
+
+## [004-feat-bgwriter-checkpointer] NotRecordable: true for TUI-only scope
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** Supporting `record`/`report` for the bgwriter screen pulls in the storage format and the report pipeline — a separate layer that would roughly double the feature. The 0.11.0 roadmap mandates TUI-first for every new view.
+
+**Decision:** Register the view with `NotRecordable: true`; `record/record.go:filterViews()` skips it. Record/report support is deferred to a backlog feature (`docs/roadmap-0.11.0.md`, "Out of scope / backlog").
+
+**Rationale:** Keeps the feature size-M. Reuses the `NotRecordable` field whose lineage is in ADR [001-feat-per-process-system-stats] / [003-feat-procpidstat-record-report]; after procpidstat dropped the flag in feature 003, bgwriter is its sole live user.
+
+**Alternatives considered:** Ship record/report in the same feature — rejected as scope creep.
+
+---
+
+## [004-feat-bgwriter-checkpointer] stats_age sourced from pg_stat_checkpointer on PG 17+
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** On PG 17+ there are two independent `stats_reset` timestamps — `pg_stat_bgwriter.stats_reset` and `pg_stat_checkpointer.stats_reset` — reset separately via `pg_stat_reset_shared('bgwriter'|'checkpointer')`. The single-column `stats_age` must derive from one of them.
+
+**Decision:** On PG 17+ `stats_age` derives from `pg_stat_checkpointer.stats_reset`.
+
+**Rationale:** The screen's primary content on modern versions is checkpoint data; one column is cleaner than two reset ages. Documented in the user-spec so an independently-reset bgwriter is not a surprise.
+
+**Alternatives considered:** Show both reset ages, or the older of the two — rejected as needless column noise for a secondary signal.
+
+---
+
+## [004-feat-bgwriter-checkpointer] Go toolchain bump 1.25.10 → 1.25.11 in CI
+
+**Date:** 2026-06-21
+**Feature:** 004-feat-bgwriter-checkpointer
+**Status:** Accepted
+
+**Context:** `govulncheck` in CI flagged GO-2026-5037, a `crypto/x509` stdlib vulnerability fixed in Go 1.25.11. Surfaced during feature 004 execution; unrelated to the feature code.
+
+**Decision:** Bump the Go toolchain from 1.25.10 to 1.25.11 in the CI workflows to close GO-2026-5037.
+
+**Rationale:** Stdlib vuln in a transitive code path; the cheapest fix is the patch-version toolchain bump the CI gate requires.

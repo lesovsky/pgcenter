@@ -8,7 +8,7 @@
     "feature_size": "M",
     "model": "Opus 4.8 (1M context)",
     "date_started": "2026-06-21T07:04:34Z",
-    "date_completed": ""
+    "date_completed": "2026-06-21T09:29:08Z"
   },
   "phases": {
     "user_spec": {
@@ -43,20 +43,27 @@
       "human_wait_time_min": 5,
       "steps": {}
     },
-    "done": null
+    "done": {
+      "start_time": "2026-06-21T09:16:00Z",
+      "end_time": "2026-06-21T09:29:08Z",
+      "duration_min": 13,
+      "touch_time_min": 11,
+      "human_wait_time_min": 2,
+      "steps": {}
+    }
   },
   "quality": {
-    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1 },
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
-    "review_rounds": {},
-    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
-    "first_pass_rate_pct": null
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1, "done": 1 },
+    "validation_findings": { "critical": 0, "major": 3, "minor": 24 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_03": 1 },
+    "review_findings": { "critical": 0, "major": 0, "minor": 6 },
+    "first_pass_rate_pct": 100
   },
   "volume": {
     "interview_questions": 8,
     "tasks_count": 4,
     "waves_count": 3,
     "agents_spawned": 13,
-    "commits_count": 25
+    "commits_count": 29
   }
 }

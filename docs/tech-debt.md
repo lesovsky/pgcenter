@@ -7,6 +7,18 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [005] Test_doReload panics instead of skipping when PG fixture is absent
+
+**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
+**Severity:** Low
+**Area:** `top/reload_test.go`
+
+**What:** `Test_doReload` panics (instead of `t.Skipf`) when the PG fixture on port 21917 is not running, so `make test` fails locally whenever the test clusters are down — unlike the rest of the suite, which skips unavailable versions gracefully. Pre-existing (confirmed on a clean baseline via `git stash`), not caused by feature 004. During feature 004 this panic masked local detection of a `record`-package test regression that CI later caught.
+
+**Why deferred:** Pre-existing and environmental; the fix is to replace the panic with a `t.Skipf` guard matching the rest of the suite. Non-blocking for the feature.
+
+---
+
 ### [004] procpidstat col-index constants duplicated in report package
 
 **Added:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)

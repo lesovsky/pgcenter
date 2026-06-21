@@ -229,6 +229,31 @@ unit + integration.
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-06-21
+
+The implementation matches the original spec — all acceptance criteria were met and no behaviour
+diverged. The notes below record minor process additions and one deferral, not divergences.
+
+### Divergences from original spec
+
+None. The screen ships exactly as specified: hotkey `b`, per-version column sets
+(PG 14–16 / 17 / 18), absolute event counters vs diffed work/time/buffer columns, `stats_age`
+sourced from `pg_stat_checkpointer` on PG 17+, and `NotRecordable: true`.
+
+### Added during implementation
+
+- A `NotRecordable` guard test `TestNew_BgwriterView` (`internal/view/view.go` wiring) was added,
+  pinning the PG 14 defaults and confirming the view is excluded from recording.
+- CI surfaced two infra changes unrelated to the feature behaviour: a `record` package
+  `Test_filterViews` view-count assertion update (22 → 23) for the new view, and a Go toolchain
+  bump 1.25.10 → 1.25.11 to close `govulncheck` finding GO-2026-5037 (`crypto/x509` stdlib).
+- The stale `NotRecordable` example comment in `record/record.go` was refreshed — bgwriter is now
+  the flag's sole live user (procpidstat dropped it in feature 003).
+
+### Descoped or Deferred
+
+- record/report support remains out of scope (TUI-only in 0.11.0), as planned; deferred to a
+  backlog feature.
+- The PG 18 `slru_written` column set was written from PostgreSQL documentation and verified
+  against a live PG 18 cluster only via the CI PG 14–18 matrix (no local PG 18 available);
+  the `len(FieldDescriptions()) == Ncols` integration assertion is the schema-divergence gate.

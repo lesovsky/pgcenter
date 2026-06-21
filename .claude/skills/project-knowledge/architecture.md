@@ -63,6 +63,9 @@ Version-specific query selectors in `internal/query/`:
 - `SelectStatDatabaseGeneralQuery(version)` — branches at PG 12
 - `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17
 - `SelectStatWALQuery(version)` — branches at PG 18 (columns removed)
+- `SelectStatBgwriterQuery(version)` — branches at PG 17 (`pg_stat_checkpointer` split off `pg_stat_bgwriter`) and PG 18 (`slru_written` added). Returns `(query, Ncols, DiffIntvl)` — DiffIntvl also differs per version.
+
+The `bgwriter` view (hotkey `b`, `internal/query/bgwriter.go`) is a single-row version-aware screen modeled on `pg_stat_wal`. It is the project's first and only view registered with `NotRecordable: true` — it is TUI-only and excluded from `pgcenter record`/`report`.
 
 View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` and `Ncols` per view at connection time.
 
