@@ -37,7 +37,7 @@ func Test_StatBgwriterQueries(t *testing.T) {
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_bgwriter/%d", version), func(t *testing.T) {
-			tmpl, _, _ := SelectStatBgwriterQuery(version)
+			tmpl, wantNcols, _ := SelectStatBgwriterQuery(version)
 
 			opts := NewOptions(version, "f", "off", 256, "public")
 			q, err := Format(tmpl, opts)
@@ -47,11 +47,17 @@ func Test_StatBgwriterQueries(t *testing.T) {
 			if err != nil {
 				t.Skipf("postgres %d not available in test environment", version)
 			}
+			defer conn.Close()
 
-			_, err = conn.Exec(q)
+			rows, err := conn.Query(q)
 			assert.NoError(t, err)
 
-			conn.Close()
+			// Assert the live column count matches the declared Ncols. This turns the integration
+			// test into a real schema-divergence gate: on PG18 it verifies the slru_written column
+			// actually exists (the one column not verifiable on the local PG17-only environment).
+			assert.Len(t, rows.FieldDescriptions(), wantNcols)
+			rows.Close()
+			assert.NoError(t, rows.Err())
 		})
 	}
 }
