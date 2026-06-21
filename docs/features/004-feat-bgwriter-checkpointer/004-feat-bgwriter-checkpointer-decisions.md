@@ -70,3 +70,18 @@ The single optional suggestion (pin the PG14-default `Ncols`/`DiffIntvl`/`Msg` i
 - `go test ./internal/view/...` → ok (guard test green; counts 22→23 correct)
 - `go vet ./internal/view/... ./top/... ./record/...` → clean
 - Note: `make test` blocked by pre-existing environmental `Test_doReload` panic (port 21917 fixture absent), unrelated to this task.
+
+## Task 04: Pre-deploy QA
+
+**Status:** Done
+**Agent:** qa
+**Summary:** Final acceptance pass on the bgwriter/checkpointer feature (commit 867005a). All 9 locally-verifiable acceptance criteria PASS, 2 are CI-gated (PG18 `slru_written` + full PG14-18 integration matrix), 0 fail. Verdict: ready for CI, no blockers. `SelectStatBgwriterQuery` returns the correct (query, Ncols, DiffIntvl) for PG14-18 (12/[3,10], 12/[3,10], 12/[3,10], 13/[6,11], 14/[6,12]) — confirmed by `Test_SelectStatBgwriterQuery`. Counter placement (ckpt_*/rstpt_* absolute, work/time/buffer diffed, `stats_age` pass-through) verified by code layout and cross-checked live. `NotRecordable: true` honored by `filterViews` (3 filter tests green). Hotkey `b` bound and present in the `?` help row `a,b,f,r,w`. `overview.md` corrected. Live PG17.7 (port 5432) executed the PG17 query returning exactly 13 columns. Full report: [004-feat-bgwriter-checkpointer-qa-report.json](004-feat-bgwriter-checkpointer-qa-report.json).
+**Deviations:** `make lint` not runnable locally — golangci-lint binary absent; substituted `go vet` (clean on all touched packages) and `gofmt` (the only gofmt finding is a pre-existing doc-comment in `view.go` Configure(), present on master/develop~5 baselines, untouched by this feature; the feature's added lines are gofmt-clean). The golangci-lint + gosec gate is deferred to CI. Full PG14-18 integration and the PG18 `slru_written` live check are deferred to the CI matrix (`lesovsky/pgcenter-testing`): local PG test clusters on ports 21914-21918 are not running and PG18 is unavailable locally, so `Test_StatBgwriterQueries` t.Skipf for all versions except the out-of-band live PG17.7 check; the `len(FieldDescriptions()) == Ncols` assertion is the schema-divergence gate that proves `slru_written` exists when CI runs PG18. `make test` is not fully green locally due to a PRE-EXISTING, unrelated panic in `top/reload_test.go::Test_doReload` (needs PG fixture on port 21917; confirmed on clean baseline in earlier tasks) and environmental record integration failures — neither is a feature defect.
+**Tech debt:** Нет.
+
+**Verification:**
+- `make build` → ok (bin/pgcenter produced)
+- `go test ./internal/query/... ./internal/view/...` → ok; named guards `Test_SelectStatBgwriterQuery`, `TestNew_BgwriterView`, `TestFilterViews_NotRecordable`, `TestFilterViews_dropsExplicitNotRecordable`, `TestFilterViews_Recordable` all PASS
+- `go vet ./internal/query/... ./internal/view/... ./record/... ./top/...` → clean
+- Live PG17.7 (port 5432): PG17 bgwriter query executes, returns exactly 13 columns in declared order
+- Code grep: view.go:151 `NotRecordable: true`, record.go:208 filterViews drop branch, keybindings.go:36 `b → bgwriter`, help.go:13 `a,b,f,r,w` row, overview.md:21 corrected entry
