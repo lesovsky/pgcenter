@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Both new live integration tests (tier-2 physical, tier-3 logical) are high quality. The tier-2 test makes the core Decision-2 correctness claim falsifiable: a removed coalesce(...,0) or a missing physical row would flip the diff-column assertion from \"0\" to \"<nil>\" or fail the found check. Idempotency (guarded drop-if-exists + deferred guarded drop), $1-parameterized slot names, and graceful t.Skipf for unavailable PG / non-logical wal_level / missing test_decoding all match the spec and the established pattern in postgres_test.go / replication_test.go / bgwriter_test.go. Findings are minor robustness hardening only.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/replication_slots_test.go:132,188",
+      "issue": "The slot name is duplicated: declared once as the `slotName` const (used for drop-if-exists, defer, and findSlotRow) but re-typed as a string literal inside the create call ('pgcenter_test_phys' / 'pgcenter_test_logical'). A future rename of the const would silently desync create vs. lookup/teardown, leaking the actually-created slot and asserting on a non-existent one. The task explicitly recommends passing the name as a parameter.",
+      "recommendation": "Pass the const as a $1 bind parameter, consistent with dropReplicationSlotIfExists: `conn.Exec(\"SELECT pg_create_physical_replication_slot($1, true)\", slotName)` and `conn.Exec(\"SELECT pg_create_logical_replication_slot($1, 'test_decoding')\", slotName)`. This removes the duplicated literal and the desync risk.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/replication_slots_test.go:142-144",
+      "issue": "The retained,KiB non-NULL assertion is partially redundant: assert.NotNil(values[4]) is the load-bearing check (pgx returns a nil interface for SQL NULL), but the follow-up assert.NotEmpty(fmt.Sprint(values[4])) cannot fail for a NULL because fmt.Sprint(nil) == \"<nil>\" (non-empty). It also would not distinguish a real 0 from a meaningful value. This is harmless but the NotEmpty line adds no protection beyond NotNil.",
+      "recommendation": "Either drop the NotEmpty line (NotNil already guards the Decision-2 'restart_lsn was reserved' claim), or strengthen it to assert the value is a non-negative integer, e.g. cast values[4].(int64) with ok-check and assert >= 0, to confirm the WAL-diff cast actually produced a numeric retained size rather than just a present value.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/replication_slots_test.go:160-208",
+      "issue": "The tier-3 logical test asserts the spill/stream diff columns are present and non-NULL (cols 6-13) but does not assert any of them render as a concrete value the way tier-2 asserts \"0\". Because the logical slot IS present in pg_stat_replication_slots, this test does not independently exercise the coalesce path, and its diff-block assertion (NotNil) is weaker than tier-2's (== \"0\"). This is acceptable per the task (decoding has not run, magnitudes are unknown) but the logical test currently adds little verification beyond 'row is present with full Ncols shape' that tier-2 plus the tier-1 FieldDescriptions check do not already cover.",
+      "recommendation": "Optional: assert that for a freshly-created logical slot with no decoding activity the counters render as \"0\" (they should, since the stats row exists with zeroed counters), turning this into a real behavioral assertion on the logical-decoding columns rather than a presence/shape check. If the counters are not guaranteed zero across PG 14-18, keep the NotNil check but document that tier-3's unique value is confirming the LEFT JOIN matches a real ss row (vs tier-2's physical no-match path).",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 4,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

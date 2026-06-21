@@ -28,6 +28,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'I', toggleIdleConns(app.config)},
 		{"sysstat", 'd', switchViewTo(app, "databases")},
 		{"sysstat", 'r', switchViewTo(app, "replication")},
+		{"sysstat", 'o', switchViewTo(app, "replslots")},
 		{"sysstat", 't', switchViewTo(app, "tables")},
 		{"sysstat", 'i', switchViewTo(app, "indexes")},
 		{"sysstat", 's', switchViewTo(app, "sizes")},

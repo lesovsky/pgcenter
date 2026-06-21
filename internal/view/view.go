@@ -150,6 +150,19 @@ func New() Views {
 			Filters:            map[int]*regexp.Regexp{},
 			NotRecordable:      true,
 		},
+		"replslots": {
+			Name:               "replslots",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatReplicationSlots,
+			DiffIntvl:          [2]int{6, 13},
+			Ncols:              15,
+			OrderKey:           4,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show replication slots statistics",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
 		"statements_timings": {
 			Name:      "statements_timings",
 			QueryTmpl: query.PgStatStatementsTimingPG13,
@@ -336,6 +349,9 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "bgwriter":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatBgwriterQuery(opts.Version)
+			v[k] = view
+		case "replslots":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatReplicationSlotsQuery(opts.Version)
 			v[k] = view
 		}
 	}

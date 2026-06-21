@@ -8,7 +8,23 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 23, len(v)) // 23 is the total number of views have to be returned
+	assert.Equal(t, 24, len(v)) // 24 is the total number of views have to be returned
+}
+
+// TestNew_ReplslotsView guards the replslots view wiring: it must be registered,
+// gated to PG14+, excluded from recording (NotRecordable), and sorted by retained,KiB.
+func TestNew_ReplslotsView(t *testing.T) {
+	v := New()
+	replslots, ok := v["replslots"]
+	assert.True(t, ok)
+	assert.True(t, replslots.NotRecordable)
+	assert.Equal(t, query.PostgresV14, replslots.MinRequiredVersion)
+	// Pin the PG14-default map values that Configure() overrides per version.
+	assert.Equal(t, 15, replslots.Ncols)
+	assert.Equal(t, [2]int{6, 13}, replslots.DiffIntvl)
+	assert.Equal(t, 4, replslots.OrderKey)
+	assert.True(t, replslots.OrderDesc)
+	assert.Equal(t, "Show replication slots statistics", replslots.Msg)
 }
 
 // TestNew_BgwriterView guards the bgwriter view wiring: it must be registered,
@@ -155,7 +171,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
-		{version: 140000, total: 23},
+		{version: 140000, total: 24},
 		{version: 130000, total: 19},
 		{version: 120000, total: 16},
 		{version: 110000, total: 14},

@@ -10,8 +10,8 @@ const (
 	helpTemplate = `%s: Help for interactive commands
 
 general actions:
-    a,b,f,r,w   mode: 'a' activity, 'b' bgwriter/checkpointer, 'f' functions, 'r' replication, 'w' WAL,
-    s,t,i             's' tables sizes, 't' tables, 'i' indexes.
+    a,b,f,o,r,w mode: 'a' activity, 'b' bgwriter/checkpointer, 'f' functions, 'o' replication slots,
+    s,t,i             'r' replication, 'w' WAL, 's' tables sizes, 't' tables, 'i' indexes.
     d,D               'd' pg_stat_database switch, 'D' pg_stat_database menu.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
     p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
