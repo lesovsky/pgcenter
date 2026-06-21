@@ -1,0 +1,28 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "underengineering",
+      "severity": "major",
+      "issue": "The PG18 column contract is left unresolved. The spec says 'дополнительно включается колонка slru_written (по документации)' but the code research (section 7) explicitly flags an open design decision: variant A (unified column headers across versions, per interview.yml:106-107) argues for OMITTING slru_written to keep PG14-18 headers identical, while the spec's plan is to ADD it as a diffed column on PG18. These two directions are contradictory and the spec does not pick one.",
+      "why_matters": "An undecided column contract will surface during tech-spec/implementation as ambiguity: either slru_written is shown (breaking the 'unified headers' intent) or omitted (contradicting the spec's acceptance criterion that explicitly requires the PG18 column to be present). Leaving it open risks a back-and-forth or an arbitrary implementer choice that fails one of the acceptance criteria.",
+      "fix": "Explicitly resolve the slru_written question in the spec: state whether PG18 surfaces slru_written as an extra diffed column (per-version layout, like wal.go's PG14 vs PG18 split) or omits it for header uniformity. The acceptance criterion 'на PG 18 включена дополнительная колонка' already implies surfacing it — make that the single stated decision and drop the 'unified headers' ambiguity, or vice versa."
+    },
+    {
+      "category": "feasibility",
+      "severity": "minor",
+      "issue": "The PG18 query branch depends on a column set (slru_written and the full pg_stat_checkpointer shape) that was NOT verified on a live PG18 at planning time — only PG17.7 was live; PG14/15/16/18 columns are cited from documentation. The spec correctly lists this as a risk with mitigation (verify on container before release), but the exact PG18 Ncols/DiffIntvl cannot be finalized until that verification runs.",
+      "why_matters": "If the live PG18 schema differs from documentation (e.g. additional/renamed columns), the PG18 query, Ncols, and DiffIntvl will need adjustment. This is bounded and the mitigation is already planned, so it does not block the design — but it means the PG18 branch is not buildable purely from the spec without the integration step.",
+      "fix": "No spec change required; the existing risk + mitigation (verify pg_stat_checkpointer on a live PG18 before writing the query branch) is adequate. Ensure the tech-spec task ordering puts PG18 schema verification before authoring the PG18 query constant."
+    },
+    {
+      "category": "overengineering",
+      "severity": "minor",
+      "issue": "The 'Технические решения' section leaks light implementation detail into the user-spec: it names the new file (internal/query/bgwriter.go) and the exact function signature SelectStatBgwriterQuery(version) (string, int, [2]int). User-spec scope is WHAT/WHY; specific file paths and function signatures belong in the tech-spec.",
+      "why_matters": "Implementation specifics in the user-spec blur the WHAT/HOW boundary and can prematurely constrain the tech-spec. Here the impact is small because the decision (mirror pg_stat_wal) is genuinely a WHAT-level architectural choice with clear rationale, but the concrete file name and signature are HOW.",
+      "fix": "Keep the decision 'build the screen modeled on the pg_stat_wal version-aware single-row pattern' and its rationale; move the concrete file name and function signature to the tech-spec."
+    }
+  ],
+  "worst_category": "underengineering",
+  "summary": "The feature is reasonable, buildable with the current stack (Go, pgx/v5, gocui), and right-sized as M — it faithfully mirrors the established pg_stat_wal pattern, the DiffIntvl single-contiguous-range constraint is satisfied by the proposed layout (absolute counters first, diffed block contiguous, stats_age last), and the record/report deferral via NotRecordable is a sound scope cut. No critical issues; the main gap is the unresolved PG18 slru_written / unified-header column contract, which should be pinned down before tech-spec."
+}
