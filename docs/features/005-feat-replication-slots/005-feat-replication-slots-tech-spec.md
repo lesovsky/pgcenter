@@ -1,6 +1,6 @@
 ---
 created: 2026-06-21
-status: draft
+status: approved
 branch: feature/replication-slots
 size: M
 ---
