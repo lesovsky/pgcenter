@@ -13,10 +13,10 @@
   "phases": {
     "user_spec": {
       "start_time": "2026-06-21T07:04:34Z",
-      "end_time": null,
-      "duration_min": null,
-      "touch_time_min": null,
-      "human_wait_time_min": 0,
+      "end_time": "2026-06-21T08:06:47Z",
+      "duration_min": 62,
+      "touch_time_min": 14,
+      "human_wait_time_min": 48,
       "steps": {}
     },
     "tech_spec": null,

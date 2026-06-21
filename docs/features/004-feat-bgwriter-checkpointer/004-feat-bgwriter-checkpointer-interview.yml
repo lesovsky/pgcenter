@@ -19,9 +19,9 @@ interview_metadata:
   work_type: "feature"
   started: "2026-06-21 12:04:19"
   last_updated: "2026-06-21 12:04:19"
-  status: "in_progress"
+  status: "completed"
   can_resume: true
-  current_question_num: 0
+  current_question_num: 8
   feature_size: "M"
 
 # ============================================================================
@@ -293,7 +293,7 @@ phase3_integration:
 # ============================================================================
 phase4_completion:
   userspec_file: "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer.md"
-  status: "created"  # pending | created | approved
+  status: "approved"  # pending | created | approved
 
 # ============================================================================
 # Decision Rules
