@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "Version-branch selector must use only integer-compared server version, never string concatenation",
+      "description": "The tech-spec correctly mandates static const SQL strings with no user interpolation, mirroring internal/query/wal.go. This is the right approach and was verified: wal.go uses pure const strings and query.Format() runs Go text/template over an Options struct populated from server metadata (version, recovery, GUCs) rather than interactive input, with no {{ }} placeholders in the wal/bgwriter templates. The only residual risk is at implementation time: SelectStatBgwriterQuery branches on the version integer (>= 180000 / >= 170000 / else). The version value itself comes from the trusted PG connection, but the implementation must select between pre-built const strings by integer comparison and must NOT build SQL by concatenating any value (version, column name, label) into the query at runtime. Keeping each version's query as a complete, self-contained const (as wal.go does) preserves the zero-injection-surface property the spec relies on.",
+      "location": "Section: Data Models / Decision 5; future internal/query/bgwriter.go SelectStatBgwriterQuery",
+      "impact": "If a future maintainer assembled the query via string concatenation instead of returning a fixed const per branch, a dynamic surface could be reintroduced. With the documented design there is no exploitable path; this is a guardrail to keep the design's security property intact during implementation.",
+      "recommendation": "In bgwriter.go return whole const query strings selected purely by integer version comparison, exactly as SelectStatWALQuery does. Do not interpolate version literals, column names, or the 'Bgwriter' source label into SQL at runtime. Add the bgwriter consts to the same review surface as wal.go.",
+      "cwe": "CWE-89"
+    }
+  ]
+}

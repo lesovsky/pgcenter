@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Tests faithfully mirror the established wal_test.go convention and fully satisfy the TDD anchor: the unit test asserts the per-version (Ncols, DiffIntvl) tuples for all five versions including the 170000/180000 boundaries, and the integration test follows the Format -> connect -> skip -> exec -> close pattern verbatim. Assertion values were cross-checked against both the tech-spec Data Models and the actual query const column counts and all match. The single notable gap (no assertion on returned query string / column content) is acceptable for this layer because the integration test executing the real SQL against the live cluster is the true content gate. No critical or major findings.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/bgwriter_test.go:27",
+      "issue": "Test_SelectStatBgwriterQuery discards the returned query string (`_, gotNcols, gotDiffIntvl`). The unit test therefore never asserts which const the selector returns, so a wiring bug that returns the correct (Ncols, DiffIntvl) tuple but the wrong query const (e.g. PG17 branch returning PgStatBgwriterPG14 while still reporting 13/[6,11]) would pass the unit test. In practice the integration test catches this at execution time, so the risk is low and this mirrors wal_test.go exactly.",
+      "recommendation": "Optional hardening, only if diverging from the wal_test.go template is acceptable: capture the query string and assert it is non-empty and version-appropriate, e.g. for >=170000 `assert.Contains(t, gotQuery, \"pg_stat_checkpointer\")` and for <170000 `assert.NotContains(t, gotQuery, \"pg_stat_checkpointer\")`; for >=180000 `assert.Contains(t, gotQuery, \"slru_written\")`. This binds the tuple to the correct const without re-asserting full SQL. Given the integration test already executes the real SQL and this matches the established pattern, leaving it as-is is reasonable.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/bgwriter_test.go:51",
+      "issue": "The integration test ignores the rows returned by conn.Exec (`_, err = conn.Exec(q)`) and only asserts NoError. It verifies the query parses and executes (which validates that all referenced columns/views exist on each PG version — the real PG18 slru_written gate), but does not assert the row shape matches the declared Ncols. A query that executes but returns a different column count than Ncols would still pass.",
+      "recommendation": "Optional: this is identical to wal_test.go and the column-count contract is already locked by the unit test's wantNcols, so no change is required to stay consistent with the suite. If stronger coupling were desired, fetch the row description and assert `len(fieldDescriptions) == wantNcols`, but that diverges from the template and the unit test already pins Ncols. Acceptable as-is.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

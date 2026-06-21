@@ -8,7 +8,21 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 22, len(v)) // 22 is the total number of views have to be returned
+	assert.Equal(t, 23, len(v)) // 23 is the total number of views have to be returned
+}
+
+// TestNew_BgwriterView guards the bgwriter view wiring: it must be registered,
+// gated to PG14+, and excluded from recording (NotRecordable).
+func TestNew_BgwriterView(t *testing.T) {
+	v := New()
+	bgwriter, ok := v["bgwriter"]
+	assert.True(t, ok)
+	assert.True(t, bgwriter.NotRecordable)
+	assert.Equal(t, query.PostgresV14, bgwriter.MinRequiredVersion)
+	// Pin the PG14-default map values that Configure() overrides per version.
+	assert.Equal(t, 12, bgwriter.Ncols)
+	assert.Equal(t, [2]int{3, 10}, bgwriter.DiffIntvl)
+	assert.Equal(t, "Show bgwriter / checkpointer statistics", bgwriter.Msg)
 }
 
 func TestViews_Configure(t *testing.T) {
@@ -141,7 +155,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
-		{version: 140000, total: 22},
+		{version: 140000, total: 23},
 		{version: 130000, total: 19},
 		{version: 120000, total: 16},
 		{version: 110000, total: 14},

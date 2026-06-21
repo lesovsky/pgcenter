@@ -1,0 +1,132 @@
+{
+  "feature": "004-feat-bgwriter-checkpointer",
+  "task": "04 — Pre-deploy QA",
+  "date": "2026-06-21",
+  "commit": "867005aea699868349ef66c272e4fa5bae99824b",
+  "branch": "develop",
+  "status": "passed",
+  "verdict": "Ready for CI. Zero blockers found. All locally-verifiable acceptance criteria PASS; PG18 slru_written and the full PG14-18 integration matrix are CI-gated (test clusters not running locally, PG18 unavailable locally).",
+  "environment": {
+    "status": "healthy",
+    "type": "Go CLI/TUI — no docker-compose web app; 'environment' = local PostgreSQL test clusters",
+    "couldRunLocally": [
+      "make build — passed (bin/pgcenter produced)",
+      "go test ./internal/query/... ./internal/view/... — passed",
+      "Named guard tests: Test_SelectStatBgwriterQuery, TestNew_BgwriterView, TestFilterViews_NotRecordable, TestFilterViews_dropsExplicitNotRecordable, TestFilterViews_Recordable — all green",
+      "go vet on internal/query, internal/view, record, top — clean",
+      "Live PG 17.7 (port 5432) — PG17 bgwriter query executed, returned exactly 13 columns"
+    ],
+    "couldNotRunLocally": [
+      "make test as a whole — NOT fully green: PG test clusters on ports 21914-21918 not running, so integration subtests t.Skipf; and a PRE-EXISTING unrelated panic in top/reload_test.go::Test_doReload (needs port 21917, confirmed on clean baseline) — environment/pre-existing, NOT a feature defect",
+      "make lint — golangci-lint binary not installed in this environment; substituted go vet + gofmt; the golangci-lint gate runs in CI",
+      "PG18 live verification — PG18 not available locally; slru_written column existence cannot be checked here"
+    ],
+    "rebuildAttempts": 0,
+    "fixCommits": []
+  },
+  "testSuite": {
+    "status": "passed (scoped)",
+    "details": "Feature-scoped unit/guard tests all green. Integration tests for PG14-18 t.Skipf locally (clusters down). Live PG17.7 query verified out-of-band via psql (13 columns)."
+  },
+  "summary": {
+    "totalChecks": 11,
+    "passed": 9,
+    "failed": 0,
+    "ciGated": 2,
+    "criticals": 0,
+    "majors": 0,
+    "minors": 0
+  },
+  "acceptanceCriteria": [
+    {
+      "criterion": "SelectStatBgwriterQuery returns correct (query, Ncols, DiffIntvl) for PG14/15/16/17/18: 12/[3,10], 12/[3,10], 12/[3,10], 13/[6,11], 14/[6,12]",
+      "status": "passed",
+      "evidence": "internal/query/bgwriter.go:41-52 branches >=180000 -> (PG18,14,[6,12]), >=170000 -> (PG17,13,[6,11]), else (PG14,12,[3,10]). Test_SelectStatBgwriterQuery (5 subtests, versions 140000/150000/160000/170000/180000) PASS."
+    },
+    {
+      "criterion": "Event counters (ckpt_*, rstpt_*) absolute (outside DiffIntvl); work/time/buffer columns diffed; stats_age pass-through text outside diff",
+      "status": "passed",
+      "evidence": "PG14-16: ckpt_timed/ckpt_req at cols 1-2 (before diff block 3-10), stats_age col 11 outside [3,10]. PG17: ckpt/rstpt counters cols 1-5 (before diff block 6-11), stats_age col 12 outside [6,11]. PG18: same counters 1-5, diff block 6-12 incl. slru_written, stats_age col 13 outside [6,12]. stats_age is date_trunc(...)::text pass-through (bgwriter.go:12,24,35). Layout cross-checked live on PG17."
+    },
+    {
+      "criterion": "PG14-16 column set per user-spec (incl. buf_backend / buf_backend_fsync present on PG<=16)",
+      "status": "passed",
+      "evidence": "PgStatBgwriterPG14 (bgwriter.go:7-13) selects source, ckpt_timed, ckpt_req, ckpt_write,ms, ckpt_sync,ms, buf_ckpt, buf_clean, maxwritten, buf_backend, buf_backend_fsync, buf_alloc, stats_age = 12 cols matching user-spec lines 142-144."
+    },
+    {
+      "criterion": "PG17+ column set per user-spec (rstpt_* present, no buf_backend, stats_age from pg_stat_checkpointer)",
+      "status": "passed",
+      "evidence": "PgStatBgwriterPG17 (bgwriter.go:19-25) cross-joins pg_stat_bgwriter, pg_stat_checkpointer; stats_age from pg_stat_checkpointer.stats_reset; no buf_backend columns. Live PG17.7 query returned exactly 13 columns in the declared order."
+    },
+    {
+      "criterion": "pgcenter record does NOT collect the view (NotRecordable honored by filterViews); report not broken",
+      "status": "passed",
+      "evidence": "internal/view/view.go:151 bgwriter entry NotRecordable: true. record/record.go:208 filterViews deletes views with NotRecordable. Tests TestFilterViews_NotRecordable, TestFilterViews_dropsExplicitNotRecordable, TestFilterViews_Recordable PASS; view_test.go:20 asserts bgwriter.NotRecordable true."
+    },
+    {
+      "criterion": "Hotkey b switches to the bgwriter screen",
+      "status": "passed",
+      "evidence": "top/keybindings.go:36 {\"sysstat\", 'b', switchViewTo(app, \"bgwriter\")}. internal/view/view.go:140 'bgwriter' entry registered; view.go:337 Configure() case applies SelectStatBgwriterQuery. TestNew_BgwriterView PASS."
+    },
+    {
+      "criterion": "b present in the ? help row (a,b,f,r,w)",
+      "status": "passed",
+      "evidence": "top/help.go:13 — \"a,b,f,r,w   mode: 'a' activity, 'b' bgwriter/checkpointer, 'f' functions, 'r' replication, 'w' WAL,\""
+    },
+    {
+      "criterion": "overview.md corrected (no stale bgwriter-supported claim; new screen described)",
+      "status": "passed",
+      "evidence": ".claude/skills/project-knowledge/overview.md:21 — accurate entry: 'pg_stat_bgwriter (+ pg_stat_checkpointer on PG 17+) — background writer / checkpointer screen (hotkey b; PG 14-18; TUI-only, not recordable in 0.11.0)'. No stale standalone 'background writer stats' line remains."
+    },
+    {
+      "criterion": "make build passes",
+      "status": "passed",
+      "evidence": "make build produced bin/pgcenter with no errors."
+    },
+    {
+      "criterion": "Query executes on each available PG 14-18 container; integration green or skipped only when version unavailable",
+      "status": "ci_gated",
+      "evidence": "Local PG17.7 verified live (13 cols). PG14/15/16/18 clusters (ports 21914-21918) not running locally -> Test_StatBgwriterQueries t.Skipf. Full matrix executes in CI (lesovsky/pgcenter-testing PG14-18)."
+    },
+    {
+      "criterion": "PG18 branch (incl. slru_written) actually executed on live PG18 — not silently skipped",
+      "status": "ci_gated",
+      "evidence": "PG18 not available locally. Test_StatBgwriterQueries asserts len(rows.FieldDescriptions()) == Ncols, turning the PG18 subtest into a slru_written schema-divergence gate; closed in the CI PG14-18 matrix. Cannot be verified locally."
+    }
+  ],
+  "regressions": {
+    "status": "none_introduced",
+    "note": "go vet clean on all touched packages. gofmt -l flags internal/view/view.go, but the diff is a pre-existing Go doc-comment formatting in Configure() (lines 313-314), present on master and develop~5 baselines, unrelated to and untouched by this feature; the feature's added lines (140-152, 337-339) are gofmt-clean."
+  },
+  "ciGated": [
+    {
+      "item": "Full PG14-18 integration execution of Test_StatBgwriterQueries",
+      "reason": "Local PG test clusters (ports 21914-21918) not running; only live PG17.7 on 5432 available",
+      "verificationCondition": "CI run on lesovsky/pgcenter-testing PG14-18 matrix",
+      "verificationSteps": "Confirm no SKIP for any PG version subtest in CI test log"
+    },
+    {
+      "item": "PG18 slru_written column live verification",
+      "reason": "PG18 not available in local environment",
+      "verificationCondition": "CI PG18 job runs Test_StatBgwriterQueries with len(FieldDescriptions())==14 assertion",
+      "verificationSteps": "Confirm PG18 subtest passes (not skipped) in CI; the 14-column assertion proves slru_written exists"
+    },
+    {
+      "item": "golangci-lint + gosec gate (make lint)",
+      "reason": "golangci-lint binary not installed locally; substituted go vet (clean) + gofmt (only pre-existing unrelated finding)",
+      "verificationCondition": "CI lint stage",
+      "verificationSteps": "Confirm golangci-lint + gosec pass in CI"
+    }
+  ],
+  "preExistingIssues": [
+    {
+      "title": "top/reload_test.go::Test_doReload panics when PG fixture on port 21917 is absent",
+      "note": "Confirmed on clean baseline (git stash) in prior tasks; environmental, NOT caused by this feature."
+    },
+    {
+      "title": "record/record_test.go integration subtests fail without port 21917 cluster",
+      "note": "Environmental: PG test clusters down locally. Feature-scoped guard tests (filterViews) pass independently."
+    }
+  ],
+  "findings": []
+}

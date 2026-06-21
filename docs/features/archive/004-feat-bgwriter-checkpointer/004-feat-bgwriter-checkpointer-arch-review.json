@@ -1,0 +1,47 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec states 'NotRecordable is an existing field (Go zero-value false), so no other view is affected' and the code-research correctly notes the bgwriter view will be the only current user of NotRecordable: true. However, the inline comment in record/record.go:205 reads 'e.g. procpidstat' as the example for the NotRecordable mechanism. This comment is stale: procpidstat currently sets NotRecordable: false and is excluded from recording via an explicit delete(views, \"procpidstat\") at line 102. The mechanism itself works correctly — filterViews() at line 208 checks the field and the bgwriter view will be filtered correctly — but the stale comment creates a misleading documentation signal that implementers and reviewers will encounter. Neither the tech-spec nor the task list schedules a fix for this comment.",
+      "location": "Tech-spec section 'Backward Compatibility' / record/record.go:205",
+      "fix": "Add to Task 3 (or as a documentation step): update the inline comment in record/record.go:205 from 'e.g. procpidstat' to 'e.g. bgwriter' once the bgwriter view is the concrete live example. Alternatively, reword to 'views for which SQL-only output is incomplete or undesirable in a record context'."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec spec in 'Data Models' specifies DiffIntvl = [3,10] for PG14-16 (cols 3..10 are the eight work/time/buffer columns; col 11 = stats_age). However, the existing pg_stat_wal pattern uses DiffIntvl where col 0 = source (absolute), col 1 = waldir_size (absolute), cols 2-9 = counters (diffed), col 10 = stats_age (absolute). In the bgwriter PG14-16 layout col 0 = source, cols 1-2 = event counters (absolute), cols 3-10 = work/time/buffer (diffed), col 11 = stats_age (absolute). The DiffIntvl [3,10] is architecturally correct and consistent with the contiguous-range constraint of diff(). This is a confirmation, not a problem: the spec's column math checks out against the actual diff() implementation at internal/stat/postgres.go:331.",
+      "location": "Tech-spec 'Data Models' — PG14-16 column layout",
+      "fix": "No change required. Confirmed correct."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec references 'MinRequiredVersion = query.PostgresV14' but the query.go constants only go up to PostgresV14 = 140000 — there are no PostgresV17 or PostgresV18 constants. The spec correctly notes this and explicitly directs use of raw integer literals 170000/180000 (following the wal.go precedent). This is consistent with project policy ('minimum code that solves the problem — nothing speculative') but means the version boundary logic in SelectStatBgwriterQuery will use magic numbers. This is a pre-existing pattern accepted project-wide, not a regression introduced by this feature.",
+      "location": "Tech-spec 'Dependencies' / internal/query/query.go",
+      "fix": "No change required for this feature. If named constants for PG17/PG18 are desired, that is a separate refactoring task that affects wal.go and other files simultaneously."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "The view name 'bgwriter' is a string literal used in three separate files: internal/view/view.go (map key and Configure() case), top/keybindings.go (switchViewTo argument), and top/help.go (free text). This is string coupling, but it is the identical pattern used for every other view ('wal', 'activity', 'replication', etc.) in the codebase. The coupling is inherent to the gocui views-map architecture — there is no type-safe view name enum — and is not a regression introduced by this feature. All three files are in the task list and will be changed consistently.",
+      "location": "Tech-spec 'Architecture' — files to modify; keybindings.go:35, view.go:128, help.go:13",
+      "fix": "No change required. Accepted pattern across the entire codebase. If string coupling is to be eliminated, it requires a project-wide refactoring not scoped to this feature."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The design is architecturally sound and follows the pg_stat_wal pattern with precision: the DiffIntvl contiguous-range exploitation is correctly specified (absolute event counters outside the range, diffed block contiguous, stats_age last), the per-version Ncols/DiffIntvl split is consistent with wal.go's own PG14/PG18 divergence, the PG17+ cross-join of two single-row views produces exactly one row as required by diff()'s ukey-match loop, and NotRecordable: true is wired correctly into the existing filterViews() path. All four findings are minor: a stale comment in record.go, a confirmation that the column-math is correct, a pre-existing pattern of numeric version literals, and inherent string coupling shared by every other view. No critical or major issues were found."
+}

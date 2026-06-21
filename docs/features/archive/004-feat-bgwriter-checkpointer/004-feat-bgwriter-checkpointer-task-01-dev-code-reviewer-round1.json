@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "The bgwriter query layer is a faithful, correct mirror of the wal.go template. All three per-version column layouts match the tech-spec Data Models exactly; DiffIntvl placement correctly keeps event counters and stats_age outside the contiguous diffed block (verified against the inclusive-bound semantics of stat/postgres.go:diff()). Branch boundaries use raw literals, all SQL is static const with no interpolation surface, and the tests mirror wal_test.go. No critical or major issues found.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/bgwriter_test.go",
+      "line": 36,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_StatBgwriterQueries does not assert the actual column count returned by the live query against the per-version Ncols. The integration test only checks Exec returns no error, so a query that silently returns the wrong number of columns (e.g., a hand-edited alias drift) would still pass. Mirroring wal_test.go this is the established pattern, so this is informational only; if a stronger gate is desired, the PG18 slru_written verification (the one genuinely unverified-live column) could read rows.FieldDescriptions() and assert len == Ncols.",
+      "benefit": "Turns the integration test into a real schema-divergence gate for the unverified PG18 column set instead of relying on Exec-success alone.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/bgwriter.go",
+      "line": 9,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The double-quoted aliases ckpt_write,ms / ckpt_sync,ms embed a comma inside the identifier, matching the wal.go header convention (write,ms / sync,ms) used by the TUI renderer for the unit suffix. This is correct and intentional; noting it only because it is non-obvious to a future reader why a comma lives inside a SQL identifier. No change required given the wal.go precedent establishes the convention project-wide.",
+      "benefit": "Awareness only; consistency with wal.go is the right call.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

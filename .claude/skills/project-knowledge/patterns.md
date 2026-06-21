@@ -17,6 +17,8 @@ When a PG version changes columns in a stats view:
 - Call it in `view.Configure()` under the correct view name
 - Add version-specific test cases in `*_test.go`
 
+Reference implementations of the single-row version-aware view: `internal/query/wal.go` and `internal/query/bgwriter.go`. The bgwriter screen is notable for placing absolute event-counter columns (`ckpt_*`, `rstpt_*`) **outside** the contiguous `DiffIntvl` range so they render cumulative, while the work/time/buffer columns inside the range render as per-interval deltas.
+
 ## Error Wrapping
 
 Use `fmt.Errorf("context: %w", err)` for all error wrapping in production code.

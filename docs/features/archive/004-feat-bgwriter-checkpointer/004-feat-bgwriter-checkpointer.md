@@ -1,0 +1,259 @@
+---
+# Creation date (YYYY-MM-DD)
+created: 2026-06-21
+
+# Status: draft | approved
+status: approved
+
+# Work type: feature | bug | refactoring
+type: feature
+
+# Feature size: S (1-3 files, local fix) | M (several components) | L (new architecture)
+size: M
+---
+
+# User Spec: pg_stat_bgwriter + pg_stat_checkpointer screen
+
+## Что делаем
+
+Добавляем в `pgcenter top` новый однострочный экран `bgwriter` (горячая клавиша `b`),
+показывающий статистику фоновой записи и контрольных точек из `pg_stat_bgwriter` и
+`pg_stat_checkpointer`. Экран строится по образцу существующего экрана `pg_stat_wal`:
+одна строка данных, версионно-зависимый набор колонок (PostgreSQL 14–18), счётчики
+обновляются на каждом интервале обновления. В релизе 0.11.0 экран доступен только в
+интерактивном режиме (`top`) — запись (`record`/`report`) не входит в объём этой фичи.
+
+## Зачем
+
+Сейчас в pgcenter нет возможности наблюдать за фоновой записью и контрольными точками,
+хотя документация проекта годами ошибочно заявляла поддержку `pg_stat_bgwriter`. DBA нужно
+видеть прямо в утилите:
+
+- частоту контрольных точек и соотношение **timed vs requested** — рост requested указывает на
+  то, что чекпоинты форсируются давлением WAL (мал `max_wal_size`) или ручными вызовами;
+- стоимость чекпоинта — время записи/синхронизации и объём сброшенных буферов;
+- кто сбрасывает буферы — checkpointer, bgwriter или сами бэкенды (до PG 17) — чтобы настраивать
+  агрессивность bgwriter (`bgwriter_lru_maxpages`);
+- активность restartpoints на репликах.
+
+Без этого DBA вынужден ходить в `psql` и руками опрашивать системные вьюхи.
+
+## Пользовательские истории
+
+- Как DBA, я хочу видеть число timed и requested контрольных точек, чтобы понять, форсируются
+  ли чекпоинты давлением WAL (`max_wal_size` мал), а не идут по расписанию.
+- Как DBA, я хочу видеть время записи/синхронизации чекпоинта и число сброшенных им буферов,
+  чтобы оценить IO-нагрузку и размазанность контрольной точки во времени.
+- Как DBA, я хочу сравнивать, кто сбрасывает буферы (checkpointer / bgwriter / бэкенды),
+  чтобы настроить агрессивность bgwriter, если бэкенды сбрасывают слишком много.
+- Как DBA на реплике, я хочу видеть restartpoints, потому что на standby обычные чекпоинты не
+  выполняются, а счётчики restartpoints накапливаются.
+- Как DBA, я хочу видеть возраст статистики (`stats_age`), чтобы понимать, за какой период
+  накоплены кумулятивные значения, и замечать недавний сброс счётчиков.
+
+### Пользовательские сценарии
+
+**Сценарий 1: Диагностика частых чекпоинтов**
+1. DBA нажимает `b` — открывается экран `bgwriter`.
+2. Система показывает абсолютные `ckpt_timed` и `ckpt_req`.
+3. DBA видит, что `ckpt_req` растёт заметно быстрее `ckpt_timed`.
+4. Результат: вывод — чекпоинты форсируются WAL-давлением, нужно увеличить `max_wal_size`.
+
+**Сценарий 2: Оценка IO-стоимости чекпоинта**
+1. На экране `bgwriter` DBA наблюдает дифф-колонки `ckpt_write,ms`, `ckpt_sync,ms` и `buf_ckpt`.
+2. Во время прохождения контрольной точки значения растут за интервал.
+3. Результат: DBA оценивает, насколько чекпоинт нагружает диск и размазан ли он по времени
+   (`checkpoint_completion_target`).
+
+**Сценарий 3: Настройка bgwriter**
+1. На PG ≤ 16 DBA сравнивает `buf_clean` (bgwriter) и `buf_backend` (бэкенды), смотрит `maxwritten`.
+2. Видит высокий `buf_backend` и частые `maxwritten` — bgwriter не успевает за нагрузкой.
+3. Результат: DBA увеличивает `bgwriter_lru_maxpages` / снижает `bgwriter_delay`.
+
+**Сценарий 4: Мониторинг restartpoints на реплике**
+1. DBA открывает `bgwriter` на standby (PG 17+).
+2. `ckpt_timed`/`ckpt_req` равны 0, а `rstpt_timed`/`rstpt_req`/`rstpt_done` накапливаются.
+3. Результат: DBA отслеживает выполнение restartpoints на реплике.
+
+## Дизайн и интерфейс
+
+### Страницы / экраны
+
+- **Экран `bgwriter`:** однострочный экран в области статистики `pgcenter top`, по модели экрана
+  `pg_stat_wal`. Шапка с именами колонок + одна строка данных. Первая колонка — текстовая метка
+  `source`. Последняя колонка — `stats_age` (возраст статистики). Открывается клавишей `b`,
+  выход — переключением на любой другой экран. Сортировка и фильтрация неприменимы (одна строка).
+
+### Ключевые компоненты
+
+Состав колонок зависит от версии PostgreSQL (как у `pg_stat_wal`, который сам отдаёт разный
+набор на PG 14 и PG 18). Общие колонки сохраняют одинаковые заголовки и порядок на всех версиях,
+но **число колонок различается между версиями — единый набор по всем версиям не требуется и не
+делается**: каждая версия отдаёт только реально существующие в ней колонки (никаких NULL-заглушек).
+
+**PostgreSQL 14–16** (всё из `pg_stat_bgwriter`):
+`source │ ckpt_timed │ ckpt_req │ ckpt_write,ms │ ckpt_sync,ms │ buf_ckpt │ buf_clean │ maxwritten │ buf_backend │ buf_backend_fsync │ buf_alloc │ stats_age`
+
+**PostgreSQL 17+** (`pg_stat_checkpointer` × `pg_stat_bgwriter`):
+`source │ ckpt_timed │ ckpt_req │ rstpt_timed │ rstpt_req │ rstpt_done │ ckpt_write,ms │ ckpt_sync,ms │ buf_ckpt │ buf_clean │ maxwritten │ buf_alloc │ stats_age`
+На PG 18 дополнительно включается колонка из `pg_stat_checkpointer`, добавленная в этой версии
+(по документации PostgreSQL — `slru_written`), как дифф-колонка; точный состав подтверждается на
+живом PG 18 (контейнерный integration-тест).
+
+**Семантика отображения:**
+- Счётчики событий — `ckpt_timed`, `ckpt_req`, и на PG 17+ `rstpt_timed`, `rstpt_req`,
+  `rstpt_done` — показываются **абсолютными кумулятивными** значениями (важно видеть разницу
+  timed vs requested). Они стоят блоком сразу после `source`.
+- Колонки объёма/времени — `ckpt_write,ms`, `ckpt_sync,ms`, `buf_ckpt`, `buf_clean`,
+  `maxwritten`, `buf_alloc` (и `buf_backend`/`buf_backend_fsync` на PG ≤ 16, `slru_written` на
+  PG 18) — показываются **дельтой за интервал обновления** (диффятся).
+- `stats_age` — текст, не диффится; на PG 17+ берётся из `pg_stat_checkpointer`.
+
+### UX-поведение
+
+- Вход на экран по `b`, обновление дифф-колонок на каждом тике.
+- Никаких новых UI-компонентов, диалогов, форм — экран повторяет поведение `pg_stat_wal`.
+- Набор колонок отражает возможности версии сервера; отдельного уведомления в интерфейсе об
+  отсутствующих на данной версии колонках нет (как и у `pg_stat_wal`).
+- В экран справки (`?`) добавляется строка про клавишу `b`: в текущем ряду горячих клавиш
+  `a,f,r,w` клавиша `b` ставится между `a` и `f`, давая отсортированный ряд `a,b,f,r,w`.
+
+## Как должно работать
+
+### Основной сценарий
+1. Пользователь нажимает `b` в `pgcenter top`.
+2. pgcenter выбирает SQL-запрос и параметры (`Ncols`, `DiffIntvl`) под версию подключённого
+   PostgreSQL и опрашивает `pg_stat_bgwriter` (+ `pg_stat_checkpointer` на PG 17+).
+3. Экран показывает строку: абсолютные счётчики событий + дифф-колонки объёма/времени + `stats_age`.
+
+### Граничные случаи
+- `stats_reset IS NULL` (свежий кластер / счётчики не сбрасывались): `now() - NULL = NULL`,
+  `stats_age` отображается пустым — приемлемо, как у `pg_stat_wal`.
+- Внешний вызов `pg_stat_reset_shared(...)` во время работы pgcenter: дифф-колонка может показать
+  отрицательную дельту на один тик. Существующее поведение pgcenter (то же у `pg_stat_wal`), не
+  исправляется в рамках этой фичи.
+- На PG 17+ колонки `buf_backend`/`buf_backend_fsync` отсутствуют (данные ушли в `pg_stat_io`),
+  на PG ≤ 16 — присутствуют.
+- Реплика/standby: `ckpt_timed`/`ckpt_req` равны 0, накапливаются `rstpt_*`, буферные колонки
+  заполнены.
+
+## Критерии приёмки
+- [ ] Клавиша `b` открывает экран `bgwriter` из любого другого экрана `pgcenter top`.
+- [ ] На PG 14–16 показываются колонки: `source, ckpt_timed, ckpt_req` (абсолютные),
+      `ckpt_write,ms, ckpt_sync,ms, buf_ckpt, buf_clean, maxwritten, buf_backend,
+      buf_backend_fsync, buf_alloc` (диффятся), `stats_age` (не диффится).
+- [ ] На PG 17+ показываются колонки: `source, ckpt_timed, ckpt_req, rstpt_timed, rstpt_req,
+      rstpt_done` (абсолютные), `ckpt_write,ms, ckpt_sync,ms, buf_ckpt, buf_clean, maxwritten,
+      buf_alloc` (диффятся), `stats_age` из `pg_stat_checkpointer` (не диффится).
+- [ ] На PG 18 включена дополнительная колонка `pg_stat_checkpointer`, добавленная в PG 18
+      (по документации — `slru_written`), и её наличие подтверждено на живом PG 18.
+- [ ] Счётчики событий (`ckpt_*`, `rstpt_*`) отображаются абсолютными кумулятивными значениями;
+      колонки объёма/времени — дельтой за интервал; `stats_age` — текстом без диффа.
+- [ ] Экран НЕ собирается командой `pgcenter record` (отмечен `NotRecordable`), отчёт не ломается.
+- [ ] Клавиша `b` добавлена в экран справки (`?`) в ряд `a,b,f,r,w`.
+- [ ] Unit-тесты покрывают выбор запроса/`Ncols`/`DiffIntvl` для версий PG 14–18; запрос
+      успешно исполняется на живых PG 14/15/16/17/18.
+- [ ] `overview.md` исправлен: убрано ошибочное заявление о поддержке `pg_stat_bgwriter`,
+      добавлено упоминание нового экрана bgwriter/checkpointer.
+
+## Ограничения
+
+- **Только интерактивный режим (`top`) в 0.11.0.** Экран помечается `NotRecordable: true` —
+  он не записывается `pgcenter record` и не отображается в `pgcenter report`. Это осознанное
+  сокращение объёма, чтобы фича не разрослась (поддержка record/report тянет за собой формат
+  хранения и report-пайплайн). Поддержка record/report запланирована отдельной фичей в backlog
+  (`docs/roadmap-0.11.0.md`, раздел «Out of scope / backlog»), без привязки к конкретному релизу.
+- **`stats_age` на PG 17+ берётся из `pg_stat_checkpointer`.** `pg_stat_bgwriter` и
+  `pg_stat_checkpointer` сбрасываются независимо (`pg_stat_reset_shared('bgwriter'|'checkpointer')`);
+  при раздельном сбросе bgwriter `stats_age` это не отразит.
+- **Restartpoints — нишевый сценарий (standby).** Если экран окажется визуально перегружен,
+  колонки `rstpt_*` — первые кандидаты на вынос.
+- Поддерживаемые версии: PostgreSQL 14+ (`MinRequiredVersion`); на более старых версиях экран
+  отфильтровывается штатным механизмом pgcenter.
+- Совместимость: запрос использует только `pg_stat_bgwriter`/`pg_stat_checkpointer`, читаемые
+  любой ролью без специальных привилегий; экран работает на любом подключении, включая PgBouncer.
+
+## Риски
+- **Риск:** состав колонок `pg_stat_checkpointer` на PG 18 не проверен «вживую» при планировании.
+  **Митигация:** опираемся на документацию PostgreSQL и обязательно верифицируем на контейнерном
+  integration-тесте с PG 18 до выпуска; PG 18-ветку запроса не пишем «по памяти».
+- **Риск:** разный набор колонок по версиям может удивить пользователя при апгрейде сервера.
+  **Митигация:** следуем устоявшемуся поведению `pg_stat_wal` (он так же меняет колонки между
+  версиями); различия документируются.
+- **Риск:** механизм `DiffIntvl` — это один непрерывный диапазон колонок.
+  **Митигация:** раскладка ставит все абсолютные счётчики событий в начало, дифф-колонки идут
+  единым непрерывным блоком, `stats_age` — последней (вне диапазона).
+
+## Технические решения
+- Мы решили строить экран по образцу существующего экрана `pg_stat_wal`, потому что это
+  устоявшийся в проекте паттерн для однострочных версионно-зависимых вьюх. Конкретные файлы,
+  сигнатуры и места правок определяются на этапе tech-spec.
+- Мы решили показывать счётчики событий (`ckpt_*`, `rstpt_*`) абсолютными, а объём/время —
+  дельтой, потому что для чекпоинтов важна накопительная разница timed vs requested, а дельта по
+  ним при коротком интервале почти всегда пуста.
+- Мы решили не выравнивать число колонок между версиями NULL-заглушками, а возвращать только
+  реальные колонки версии (как `wal.go`), потому что пустые неинформативные колонки только
+  засоряют экран.
+- Мы решили не делать поддержку record/report в этой фиче (`NotRecordable: true`), потому что это
+  отдельный пласт работы; вынесено в backlog.
+- Мы решили не добавлять отдельное уведомление в интерфейсе об отсутствующих на версии колонках,
+  потому что это было бы непоследовательно с поведением `pg_stat_wal`.
+- Мы решили исправить `overview.md`, который ошибочно заявляет поддержку `pg_stat_bgwriter`.
+
+## Тестирование
+
+**Unit-тесты:** делаются всегда. Покрывают `SelectStatBgwriterQuery(version)` для PG 14–18 —
+проверка выбранного запроса, `Ncols` и `DiffIntvl` по каждой версии (по образцу `wal_test.go`).
+
+**Интеграционные тесты:** делаем — запрос исполняется на живых контейнерах PG 14/15/16/17/18,
+включая верификацию состава колонок PG 18. Причина: основной риск — расхождение схемы вьюх между
+версиями, его ловит только реальное исполнение.
+
+**E2E тесты:** не делаем — нет пользовательского флоу за пределами открытия экрана; покрывается
+unit + integration.
+
+## Как проверить
+
+### Агент проверяет
+
+| Шаг | Инструмент | Ожидаемый результат |
+|-----|-----------|-------------------|
+| Unit-тесты `SelectStatBgwriterQuery` для PG 14–18 | `make test` | Корректные query/Ncols/DiffIntvl на каждой версии |
+| Исполнение запроса на живых PG 14–18 | integration-тест в контейнере | Запрос отрабатывает, состав колонок совпадает с ожиданием (включая PG 18) |
+| Сборка | `make build` | Бинарь собирается без ошибок |
+| Линт | `make lint` | Без замечаний |
+
+### Пользователь проверяет
+- Открыть `pgcenter top` на PG 17 и PG 18, нажать `b` — убедиться, что колонки и поведение
+  (абсолютные счётчики vs дельты) соответствуют ожиданиям, и что `b` присутствует в справке (`?`).
+
+## Post-implementation
+
+Updated: 2026-06-21
+
+The implementation matches the original spec — all acceptance criteria were met and no behaviour
+diverged. The notes below record minor process additions and one deferral, not divergences.
+
+### Divergences from original spec
+
+None. The screen ships exactly as specified: hotkey `b`, per-version column sets
+(PG 14–16 / 17 / 18), absolute event counters vs diffed work/time/buffer columns, `stats_age`
+sourced from `pg_stat_checkpointer` on PG 17+, and `NotRecordable: true`.
+
+### Added during implementation
+
+- A `NotRecordable` guard test `TestNew_BgwriterView` (`internal/view/view.go` wiring) was added,
+  pinning the PG 14 defaults and confirming the view is excluded from recording.
+- CI surfaced two infra changes unrelated to the feature behaviour: a `record` package
+  `Test_filterViews` view-count assertion update (22 → 23) for the new view, and a Go toolchain
+  bump 1.25.10 → 1.25.11 to close `govulncheck` finding GO-2026-5037 (`crypto/x509` stdlib).
+- The stale `NotRecordable` example comment in `record/record.go` was refreshed — bgwriter is now
+  the flag's sole live user (procpidstat dropped it in feature 003).
+
+### Descoped or Deferred
+
+- record/report support remains out of scope (TUI-only in 0.11.0), as planned; deferred to a
+  backlog feature.
+- The PG 18 `slru_written` column set was written from PostgreSQL documentation and verified
+  against a live PG 18 cluster only via the CI PG 14–18 matrix (no local PG 18 available);
+  the `len(FieldDescriptions()) == Ncols` integration assertion is the schema-divergence gate.

@@ -1,0 +1,22 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Clean, minimal wiring of the bgwriter view into the TUI that mirrors the existing 'wal' screen exactly. The PG14-default values (DiffIntvl {3,10}, Ncols 12, QueryTmpl PgStatBgwriterPG14) match SelectStatBgwriterQuery's PG14 branch verbatim; the Configure() case, 'b' keybinding (no collision), and help-row alignment are all correct. Build and view-package tests pass; no critical or major findings.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  },
+  "verification": {
+    "pg14DefaultsMatch": "PASS — view.go bgwriter entry (DiffIntvl {3,10}, Ncols 12, QueryTmpl PgStatBgwriterPG14) is identical to the PG14-16 branch of SelectStatBgwriterQuery in internal/query/bgwriter.go:50-51 (returns PgStatBgwriterPG14, 12, [2]int{3,10}).",
+    "keybindingCollision": "PASS — lowercase 'b' is newly introduced (absent in HEAD~1) and is the only 'b' binding in the sysstat scope. Uppercase 'B' (diskstats, keybindings.go:48) is a distinct gocui key and untouched.",
+    "configureCase": "PASS — case \"bgwriter\" placed after case \"wal\", reassigns QueryTmpl/Ncols/DiffIntvl from query.SelectStatBgwriterQuery(opts.Version) and writes back v[k]=view, matching the wal pattern exactly.",
+    "helpRowAlignment": "PASS — mode-key row now reads 'a,b,f,r,w' (alphabetical); the 'mode:' label still lands at column 16, consistent with the original row and the 'config:' label row. Continuation rows (s,t,i etc.) remain aligned at column 22 by design.",
+    "notRecordableComment": "PASS — record/record.go comment updated from the stale procpidstat example (procpidstat dropped the flag in feature 003 / commit 83f95cd) to bgwriter, which is now the sole NotRecordable view. Comment-only change; filterViews() logic untouched.",
+    "tests": "view_test.go counts updated 22->23 and PG14 total 22->23; new TestNew_BgwriterView guards registration, PG14 gating, and NotRecordable. go build ./... and go test ./internal/view/... PASS. The pre-existing top.Test_doReload failure is environmental (requires a live PG fixture on 127.0.0.1:21917) and unrelated to these changes."
+  }
+}

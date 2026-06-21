@@ -137,6 +137,19 @@ func New() Views {
 			Msg:                "Show WAL statistics",
 			Filters:            map[int]*regexp.Regexp{},
 		},
+		"bgwriter": {
+			Name:               "bgwriter",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatBgwriterPG14,
+			DiffIntvl:          [2]int{3, 10},
+			Ncols:              12,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show bgwriter / checkpointer statistics",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
 		"statements_timings": {
 			Name:      "statements_timings",
 			QueryTmpl: query.PgStatStatementsTimingPG13,
@@ -320,6 +333,9 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "wal":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatWALQuery(opts.Version)
+			v[k] = view
+		case "bgwriter":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatBgwriterQuery(opts.Version)
 			v[k] = view
 		}
 	}

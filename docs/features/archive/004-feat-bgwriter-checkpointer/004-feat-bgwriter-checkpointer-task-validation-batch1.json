@@ -1,0 +1,44 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/004-feat-bgwriter-checkpointer/004-feat-bgwriter-checkpointer",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Project-knowledge link is mislabeled: `[project.md](.claude/skills/project-knowledge/overview.md)` — the link text says `project.md` but the path points to `overview.md`. The project has no `project.md` (PK files are overview.md, architecture.md, patterns.md, deployment.md); overview.md is the project-overview file. The path resolves to a real file, only the display text is wrong.",
+      "fix": "Rename the link text to match the target: `[overview.md](.claude/skills/project-knowledge/overview.md)`. Apply the same convention used in task-01 and task-02, which correctly link `overview.md`."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "Same mislabel as task-03: `[project.md](.claude/skills/project-knowledge/overview.md)` — text `project.md` does not match the `overview.md` target. Additionally `overview.md` is listed twice in this section (once as the mislabeled `project.md`, once correctly), which is redundant.",
+      "fix": "Use `[overview.md](.claude/skills/project-knowledge/overview.md)` and drop the duplicate overview.md entry, keeping a single correct link."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "Context-file paths use full repo-relative form (`docs/features/004-.../004-...md`) while task-01 uses bare filenames relative to the feature directory (`004-...md`). Inconsistent link-path convention across the batch (cosmetic; both resolve). Also `overview.md` is listed under both 'Project knowledge' and 'Code files' subsections (duplicate entry).",
+      "fix": "Align link-path style with task-01 (feature-dir-relative bare filenames) for consistency, and remove the duplicate overview.md entry from the 'Code files' subsection (it is already listed under 'Project knowledge')."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Code-file links use `../../../`-style relative paths (e.g. `[internal/view/view.go](../../../internal/view/view.go)`) whereas task-01 and task-04 use repo-root-relative bare paths (`internal/query/bgwriter.go`). Inconsistent path convention across the batch; not a broken link, just stylistic divergence.",
+      "fix": "Pick one path convention for code-file links across all tasks (task-01's bare repo-relative form is the simplest) and apply it uniformly."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 4
+  }
+}

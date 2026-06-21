@@ -1,0 +1,24 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Documentation-only single-line edit to overview.md is factually accurate against the user-spec on every claim (hotkey b, PG 14-18, pg_stat_checkpointer on PG 17+, single-row, TUI-only/NotRecordable in 0.11.0). The stale 'pg_stat_bgwriter — background writer stats' line that falsely implied pre-existing support is removed, and no other lines or files were touched by this change.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": ".claude/skills/project-knowledge/overview.md",
+      "line": 21,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The new entry is noticeably longer (one densely-packed line with four semicolon-separated caveats) than its neighbors, which carry at most a short parenthetical (e.g. the pg_stat_wal line: '(PG 14+; reduced schema in PG 18)'). It reads slightly more like a mini-spec than a high-level overview bullet. Optionally trim to the essentials (e.g. drop the explicit '0.11.0' version pin or fold 'single-row' into the parenthetical) to better match the section's terseness.",
+      "benefit": "Tighter consistency with surrounding bullets and a more scannable overview section.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 1,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  }
+}
