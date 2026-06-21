@@ -110,12 +110,15 @@ func Test_filterViews(t *testing.T) {
 		// NotRecordable=false in view.New() (the local/remote gate moved to
 		// app.setup() in task 02), so it passes through filterViews and joins
 		// wantV — every row's wantN decreases by 1 and wantV increases by 1.
-		{version: 140000, pgssSchema: "", wantN: 6, wantV: 16},
-		{version: 140000, pgssSchema: "public", wantN: 0, wantV: 22},
-		{version: 130000, pgssSchema: "public", wantN: 3, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 6, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 8, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 8, wantV: 14},
+		// The bgwriter view (feature 004) is NotRecordable=true, so it is always
+		// dropped by filterViews on every version — adding 1 to wantN on each row
+		// while wantV is unchanged (it never joins the remaining set).
+		{version: 140000, pgssSchema: "", wantN: 7, wantV: 16},
+		{version: 140000, pgssSchema: "public", wantN: 1, wantV: 22},
+		{version: 130000, pgssSchema: "public", wantN: 4, wantV: 19},
+		{version: 120000, pgssSchema: "public", wantN: 7, wantV: 16},
+		{version: 110000, pgssSchema: "public", wantN: 9, wantV: 14},
+		{version: 100000, pgssSchema: "public", wantN: 9, wantV: 14},
 	}
 
 	for _, tc := range testcases {
