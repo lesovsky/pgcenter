@@ -65,11 +65,16 @@ pg_stat_io display-design problem.
 
 ### [006] pg_stat_io — flagship
 
+- **Status:** done — merged 2026-06-21 (PR #141, squash into develop). Shipped as **two sub-screens**
+  (count + time) navigated by `j` (toggle) / `J` (menu), because pgcenter has no horizontal scroll —
+  the UX decision resolved to split (like pg_stat_statements), not aggregate. Per-version query
+  PG 16/17 (`op_bytes`) vs PG 18 (native `*_bytes` + `object='wal'`); synthetic md5 `io_key` for the
+  composite identity; TUI-only `NotRecordable`. CI green on the PG14–18 matrix (PG18 job gated the
+  native-bytes/WAL rows). Archive: `docs/features/archive/006-feat-pg-stat-io/`. Next up: [007].
 - **Value:** high — unified IO breakdown by backend_type × object × context (PG 16+; PG 18 added
   WAL IO timings that were removed from pg_stat_wal).
-- **Main risk is UX, not plumbing:** tall narrow table (~30 rows/sample). Cumulative counters fit
-  pgcenter's rate model, but the display/filtering decision (show all rows vs filter by
-  backend_type/object) needs a dedicated design discussion before/within the spec.
+- **Main risk was UX, not plumbing:** resolved by the two-screen split + separate sortable dimension
+  columns (per-column `/` filter) instead of one wide table or aggregation.
 
 ### [007] pg_stat_statements — JIT screen
 
