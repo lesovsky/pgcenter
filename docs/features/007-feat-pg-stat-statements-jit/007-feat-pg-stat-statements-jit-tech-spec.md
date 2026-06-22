@@ -173,6 +173,10 @@ PG15/16 — `jit_functions`(bigint), `jit_generation_time`,`jit_inlining_count`,
   (mirror `TestNew_StatIOView`).
 - `record.filterViews`: `Test_filterViews` `wantN +1` on all 6 rows (NotRecordable drops the
   view on every version; `wantV` unchanged).
+- `TestView_VersionOK`: bump the `version: 160000` row `total 26 → 27` (the new view passes
+  `VersionOK` at PG15+); rows ≤ 140000 unchanged (below the `PostgresV15` gate). This is the
+  **third** count-test that breaks — surfaced during task decomposition, not in the original
+  code-research §4.
 
 ### Integration tests
 - None as a separate suite. The live query against `pg_stat_statements` is exercised by the
@@ -240,8 +244,8 @@ references it.
 - [ ] `Configure()` patches `QueryTmpl/Ncols/DiffIntvl/UniqueKey` from the selector.
 - [ ] `X` menu shows a 7th item; selecting it opens `statements_jit`. `x` cycles
       `… wal → jit → timings …`.
-- [ ] `view_test.go::TestNew` expects 27; `record/record_test.go::Test_filterViews` `wantN +1`
-      on all rows.
+- [ ] Count-tests updated: `view_test.go::TestNew` expects 27; `Test_filterViews` `wantN +1`
+      on all rows; `TestView_VersionOK` `version:160000` row `total 27`.
 - [ ] No `report.go` description entry added (NotRecordable precedent).
 - [ ] `make build`, `make test`, `make lint` green locally; CI PG14–18 matrix green.
 - [ ] No regressions in existing view/record/query tests.
