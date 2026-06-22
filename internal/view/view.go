@@ -148,7 +148,6 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show bgwriter / checkpointer statistics",
 			Filters:            map[int]*regexp.Regexp{},
-			NotRecordable:      true,
 		},
 		"replslots": {
 			Name:               "replslots",
@@ -161,7 +160,6 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show replication slots statistics",
 			Filters:            map[int]*regexp.Regexp{},
-			NotRecordable:      true,
 		},
 		"stat_io": {
 			Name:               "stat_io",
@@ -175,7 +173,6 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show pg_stat_io operations statistics",
 			Filters:            map[int]*regexp.Regexp{},
-			NotRecordable:      true,
 		},
 		"stat_io_time": {
 			Name:               "stat_io_time",
@@ -189,7 +186,6 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show pg_stat_io timings statistics (requires track_io_timing=on)",
 			Filters:            map[int]*regexp.Regexp{},
-			NotRecordable:      true,
 		},
 		"statements_timings": {
 			Name:      "statements_timings",
@@ -239,7 +235,6 @@ func New() Views {
 			ColsWidth:          map[int]int{},
 			Msg:                "Show statements JIT compilation statistics (no rows when jit=off)",
 			Filters:            map[int]*regexp.Regexp{},
-			NotRecordable:      true,
 		},
 		"statements_temp": {
 			Name:      "statements_temp",

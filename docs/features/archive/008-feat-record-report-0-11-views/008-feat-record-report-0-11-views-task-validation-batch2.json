@@ -1,0 +1,76 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "06",
+      "section": "Reviewers / frontmatter",
+      "issue": "skills=[code-writing] but reviewers=[dev-code-reviewer, dev-test-reviewer] omit dev-security-auditor, which is part of the canonical code-writing default set.",
+      "fix": "Acceptable for a test-only task with no security surface, but if strict consistency is desired, either add dev-security-auditor or leave reviewers empty to fall back to defaults. The decision is reasonable as-is."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "Reviewers / frontmatter",
+      "issue": "skills=[code-writing] but reviewers omit dev-security-auditor from the canonical code-writing default set.",
+      "fix": "Test-only task; deviation defensible. Add dev-security-auditor or empty the field for default fallback if strict consistency is required."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "08",
+      "section": "Reviewers / frontmatter",
+      "issue": "skills=[code-writing] but reviewers omit dev-security-auditor from the canonical code-writing default set.",
+      "fix": "Test-only debt task; deviation defensible. Optional: align with default set."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "09",
+      "section": "Reviewers / frontmatter",
+      "issue": "skills=[code-writing] but reviewers omit dev-security-auditor from the canonical code-writing default set.",
+      "fix": "Internal refactor task with no security surface; deviation defensible. Optional: align with default set."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "08",
+      "section": "Details",
+      "issue": "Leftover template HTML comment '<!-- All details for task execution — technical, organizational, any other. -->' retained at the top of the Details section.",
+      "fix": "Remove the template comment (tasks 06/07 already removed it). Cosmetic only."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "09",
+      "section": "Details",
+      "issue": "Leftover template HTML comment '<!-- All details for task execution ... -->' retained at the top of the Details section.",
+      "fix": "Remove the template comment for consistency with tasks 06/07."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "Context Files",
+      "issue": "PK and feature-artifact links use full repo-rooted paths (docs/features/.../...md, .claude/skills/...) while tasks 08/09/10 use relative paths (008-...md, ../../../.claude/...). Inconsistent link path style across the batch.",
+      "fix": "Pick one path convention for the batch. Not blocking — links resolve in their respective rendering contexts."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "10",
+      "section": "Context Files",
+      "issue": "overview.md appears twice (once under 'Project knowledge', once under 'Code files (правка доков)') and architecture.md likewise. Mild duplication within the section.",
+      "fix": "Consolidate duplicate links or keep them — intentional here to mark which files are edit targets vs context. Cosmetic."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 8
+  }
+}

@@ -23,6 +23,9 @@ type options struct {
 	showSizes       bool   // Show tables sizes
 	showFunctions   bool   // Show stats from pg_stat_user_functions
 	showWAL         bool   // Show stats from pg_stat_wal
+	showBgwriter    bool   // Show stats from pg_stat_bgwriter, pg_stat_checkpointer
+	showReplSlots   bool   // Show stats from pg_replication_slots, pg_stat_replication_slots
+	showStatIO      string // Show stats from pg_stat_io
 	showStatements  string // Show stats from pg_stat_statements
 	showProgress    string // Show stats from pg_stat_progress_* stats
 	showProcPidStat bool   // Show per-process system stats (procpidstat)
@@ -65,6 +68,9 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
 	CommandDefinition.Flags().BoolVarP(&opts.showWAL, "wal", "W", false, "show pg_stat_wal report")
+	CommandDefinition.Flags().BoolVarP(&opts.showBgwriter, "bgwriter", "B", false, "show pg_stat_bgwriter / pg_stat_checkpointer report")
+	CommandDefinition.Flags().BoolVarP(&opts.showReplSlots, "replslots", "L", false, "show pg_replication_slots / pg_stat_replication_slots report")
+	CommandDefinition.Flags().StringVarP(&opts.showStatIO, "io", "J", "", "show pg_stat_io report (c - count, t - time)")
 	CommandDefinition.Flags().StringVarP(&opts.showDatabases, "databases", "D", "", "show pg_stat_database report")
 	CommandDefinition.Flags().StringVarP(&opts.showStatements, "statements", "X", "", "show pg_stat_statements report")
 	CommandDefinition.Flags().StringVarP(&opts.showProgress, "progress", "P", "", "show pg_stat_progress_* report")
@@ -144,6 +150,17 @@ func selectReport(opts options) string {
 		return "functions"
 	case opts.showWAL:
 		return "wal"
+	case opts.showBgwriter:
+		return "bgwriter"
+	case opts.showReplSlots:
+		return "replslots"
+	case opts.showStatIO != "":
+		switch opts.showStatIO {
+		case "c":
+			return "stat_io"
+		case "t":
+			return "stat_io_time"
+		}
 	case opts.showProcPidStat:
 		return "procpidstat"
 	case opts.showSizes:
@@ -162,6 +179,8 @@ func selectReport(opts options) string {
 			return "statements_local"
 		case "w":
 			return "statements_wal"
+		case "j":
+			return "statements_jit"
 		}
 	case opts.showProgress != "":
 		switch opts.showProgress {

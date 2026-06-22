@@ -1,0 +1,31 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A08: Software and Data Integrity",
+      "title": "Replayed tar archives are deserialized without integrity/size validation (pre-existing, surface widened by this feature)",
+      "description": "The feature lifts NotRecordable on 4 pure-SQL views so they are written to and replayed from tar archives. The replay path is unchanged, but it deserializes attacker-controllable input: report/report.go default branch calls stat.NewPGresultFile(r, hdr.Size), which at internal/stat/postgres.go:234 does `data := make([]byte, bufsz)` with bufsz taken directly from the untrusted tar header size, then json.Unmarshal into PGresult. A maliciously crafted .tar handed to `pgcenter report -f file.tar` could declare a very large entry size and trigger a large up-front allocation (memory-pressure DoS), or feed arbitrary JSON into the diff/format pipeline. This is a pre-existing pattern shared by every recordable view (wal/tables/statements_*), NOT introduced by this feature; the spec correctly leaves the reader/writer untouched. It is noted only because the feature increases how many view types flow through this trust boundary. Risk is low for a local CLI where the operator controls their own archive files.",
+      "location": "Section: Architecture (report replay path); internal/stat/postgres.go:233-245; report/report.go:201-207",
+      "impact": "A user opening a hostile/corrupted tar archive could experience excessive memory allocation (local DoS) or unexpected behavior in the diff pipeline. No code execution, no privilege boundary crossed — the operator already has the same privileges the tool runs with.",
+      "recommendation": "No change required for this feature (out of scope — reader is unchanged and the spec is right not to touch it). If hardening is desired later, bound the per-entry size before allocating (e.g. reject hdr.Size above a sane cap, or use io.LimitReader with io.ReadAll growth instead of a single make([]byte, hdr.Size)) in stat.NewPGresultFile. Track as tech-debt rather than blocking this feature.",
+      "cwe": "CWE-789"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "New CLI report-selection flags are safe pure-string mappings — confirmed no injection",
+      "description": "Verified the proposed CLI surface (cmd/report/report.go selectReport, report.go:126-184) for the new -B/--bgwriter, -L/--replslots, -J/--io (c|t) and -X j flags. selectReport maps flag values to fixed report-type string constants via a switch; unknown -J/-X values fall through to `return \"\"`, which validate() (report.go:88-90) converts to a clean error. The selected report-type string is then used as a map key into view.New()/describeReport — never concatenated into SQL, a shell command, or a file path. The underlying view queries are fixed text/template strings and, per code-research section 8, are never executed during report replay (only Ncols/DiffIntvl/UniqueKey/OrderKey are consumed). No injection, path-traversal, or argument-smuggling surface is introduced. This is recorded as an informational confirmation, not a defect.",
+      "location": "Section: Decisions/Decision 2 (CLI mapping); cmd/report/report.go:126-184",
+      "impact": "None — confirms the new flag layer is free of injection risk.",
+      "recommendation": "No action needed. Ensure the planned Test_selectReport cases include an unknown-value case for -J and -X to lock in the error-on-unknown behavior (the spec already lists the valid-value cases).",
+      "cwe": null
+    }
+  ]
+}

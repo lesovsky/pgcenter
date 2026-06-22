@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 02 is pure wiring: five column-description constants added to report/describe.go, registered in the describeReport map in report/report.go, and covered by matching Test_describeReport cases. Every column description was grounded against the actual query columns (bgwriter.go, replication_slots.go, io.go, statements.go) and matches name, origin and order exactly. Constant names, map keys, gofmt alignment, style consistency are all correct; the procpidstat const block (~342-346) was not touched; tests pass and gofmt is clean.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/describe.go",
+      "line": 446,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "In pgStatIODescription the 'read,KiB' / 'write,KiB' / 'ext,KiB' rows use origin 'reads,op_bytes' (etc.), which is accurate only for the PG16/17 baseline. On PG18 the KiB columns derive from native read_bytes/write_bytes/extend_bytes (op_bytes was removed) per PgStatIOPG18 in internal/query/io.go. The bgwriter and JIT descriptions both carry a 'Note:' line about PG17/18 deltas; for symmetry a one-line note here (e.g. 'on PG18 KiB throughput comes from read_bytes/write_bytes/extend_bytes; op_bytes removed') would keep the version-evolution documentation consistent.",
+      "benefit": "Consistent version-evolution notes across all new IO-related descriptions; avoids a reader mistaking op_bytes as the origin on PG18.",
+      "optional": true
+    },
+    {
+      "file": "report/describe.go",
+      "line": 425,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Column alignment in the new raw-string tables relies on hand-placed tabs (gofmt does not format inside string literals, confirmed clean). The four-column-name widths chosen per constant differ (e.g. bgwriter pads to a wider tab stop than stat_io). This matches the existing convention (each existing constant picks its own width), so no change required, but be aware future column additions must keep tabs hand-aligned to render correctly in the terminal.",
+      "benefit": "Awareness for future edits; prevents misaligned terminal output when columns are added.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

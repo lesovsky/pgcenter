@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Test_DiffZeroFilledCells is a genuinely behavioral closing-debt test of high quality: it asserts real computed deltas (not mock wiring), passes the litmus test (neutralizing diff()'s delta computation makes it fail on the mixed-row 50-vs-150 assertion), proves non-positional UniqueKey pairing via opposite prev/curr ordering, covers skip/copy-as-is rows, exercises both diff() and the public Compare wrapper, and demonstrates the empty-cell error path that justifies the [007] coalesce. It matches existing sibling-test style. The one real problem is at the verify-mask level, not the test logic: Go's -run is case-sensitive, so `-run Diff` selects ONLY Test_DiffZeroFilledCells and does NOT re-run Test_diff or Test_diff_pg18_wal_stats_age, contradicting the task description and an explicit acceptance criterion that the mask catches all three Test_diff* regression tests.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views-task-08.md (verify frontmatter / AC) vs internal/stat/postgres_test.go",
+      "issue": "Go's `go test -run` argument is a case-sensitive regex. The verify command `go test ./internal/stat/... -run Diff` matches ONLY Test_DiffZeroFilledCells; it does NOT match the lowercase-named siblings Test_diff or Test_diff_pg18_wal_stats_age. The task description ('Маска -run Diff ловит Test_diff, Test_diff_pg18_wal_stats_age и новый тест') and the acceptance criterion ('go test ./internal/stat/... -run Diff зелёный, включая существующие Test_diff и Test_diff_pg18_wal_stats_age') both assert the mask re-runs all three as regression coverage. It does not. Verified empirically: `-run Diff` selected only Test_DiffZeroFilledCells, while `-run 'Diff|diff'` selected Test_diff, Test_DiffZeroFilledCells, Test_diff_pg18_wal_stats_age (and Test_diffPair). So the stated regression-safety net of the verify step is illusory. The new test itself is correct; the defect is the mask's scope.",
+      "recommendation": "Change the verify mask to be case-insensitive over both spellings: `go test ./internal/stat/... -run '[Dd]iff'` (or `-run 'Diff|diff'`). This restores the intended coverage so the sibling regression tests actually execute. Alternatively, if only the new test should run, correct the task/AC wording to stop claiming the siblings are included. Recommended: fix the mask, since the AC's intent is regression safety across all Test_diff*.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "internal/stat/postgres_test.go (Test_DiffZeroFilledCells, Compare assertion block)",
+      "issue": "The Compare(...) assertion uses skey=0, desc=false on a string UniqueKey column, and the expected rows (a1,b2,d4) are already in ascending io_key order, so sort() is a no-op and Compare adds little over the direct diff() assertion beyond confirming the wrapper forwards arguments. This is acceptable (the task explicitly says testing Compare is optional-but-fine to cover the report path), but it currently does not exercise sort()'s reordering behavior, so it mostly duplicates the diff() assertion.",
+      "recommendation": "Keep the Compare assertion (it cheaply covers the countDiff -> Compare -> diff report path), but optionally make it earn more: feed curr rows in non-sorted order and assert Compare(... skey=0, desc=false ...) returns them sorted, so the wrapper's sort step is actually verified rather than incidentally a no-op. Low priority; the test is already valuable as-is.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/postgres_test.go (Test_DiffZeroFilledCells, empty-cell error sub-case)",
+      "issue": "The empty-cell sub-case asserts only assert.Error(t, err) for a `\"\"` in-interval cell. It proves an error occurs but does not pin which value triggered it nor distinguish it from the existing Test_diff '\"invalid\"' error path. Since the whole point of this sub-case is to document WHY coalesce is required (empty serialized NULL, not a generic parse failure), a bare Error assertion is slightly under-specified.",
+      "recommendation": "Tighten the assertion to bind the error to the empty cell, e.g. assert.ErrorContains(t, err, \"convert '' to int failed\") (parsePairInt wraps ParseInt as \"convert '%s' to int failed\"). This documents the exact failure mode the [007] coalesce prevents and guards against the error coming from an unrelated cell. Low priority.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

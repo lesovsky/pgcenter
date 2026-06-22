@@ -1,0 +1,11 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["11"],
+  "status": "approved",
+  "findings": [],
+  "stats": {
+    "tasks_checked": 1,
+    "issues_found": 0
+  }
+}

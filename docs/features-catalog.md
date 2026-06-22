@@ -73,12 +73,12 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Monitor restartpoints on a standby (PG 17+): `ckpt_*` stay 0 while `rstpt_*` accumulate.
 
 **Limitations:**
-- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record` skips it and it does not appear in `pgcenter report`. Record/report support is deferred to a backlog feature.
+- Recordable since [008-feat-record-report-0-11-views] — `pgcenter record` captures it and `pgcenter report -B` replays it (version-aware by the recording's PG version).
 - `buf_backend` / `buf_backend_fsync` columns appear only on PG ≤ 16 (the data moved to `pg_stat_io` on PG 17+).
 - The column set differs per server version (PG 18 adds a `slru_written` column); no NULL placeholders for columns absent on a given version.
 - `stats_age` on PG 17+ comes from `pg_stat_checkpointer`; a separate `pg_stat_bgwriter` reset is not reflected.
 
-**Touches:** Shares the single-row version-aware view model with the `pg_stat_wal` screen.
+**Touches:** Shares the single-row version-aware view model with the `pg_stat_wal` screen. Record/report support added later in [008-feat-record-report-0-11-views].
 
 ---
 
@@ -94,12 +94,12 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Re-sort (arrows) and filter (`/`) like the other multi-row screens.
 
 **Limitations:**
-- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record` skips it and it does not appear in `pgcenter report`. This hurts retrospective analysis most for this feature (disk-fill incidents are often forensic); record/report is the planned next phase.
+- Recordable since [008-feat-record-report-0-11-views] — `pgcenter record` captures it and `pgcenter report -L` replays it, which matters most for this feature (disk-fill incidents are often forensic).
 - Physical slots show `0` (not blank) in the spill/stream/total columns — those metrics are logical-decoding-only; the adjacent `slot_type=physical` disambiguates.
 - Invalidation **cause** is not shown (`conflicting`/`invalidation_reason` omitted to keep one query across PG 14–18); `wal_status` conveys the state (`lost`/`unreserved`).
 - `pg_stat_subscription_stats` (subscriber-side) is out of scope — a separate future feature.
 
-**Touches:** Shares the multi-row sort/filter/diff view model with the `pg_stat_replication` and `tables` screens; second view (after [004-feat-bgwriter-checkpointer]) registered `NotRecordable`.
+**Touches:** Shares the multi-row sort/filter/diff view model with the `pg_stat_replication` and `tables` screens. Record/report support added later in [008-feat-record-report-0-11-views].
 
 ---
 
@@ -115,13 +115,13 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Find slow IO paths: on the time screen (with `track_io_timing=on`), sort by `read_time`/`fsync_time`.
 
 **Limitations:**
-- TUI-only in 0.11.0 — both views are `NotRecordable`, so `pgcenter record`/`report` skip them. Record/report is a separate planned 0.11.0 feature.
+- Recordable since [008-feat-record-report-0-11-views] — `pgcenter record` captures both views and `pgcenter report -J c` (count) / `-J t` (time) replays them.
 - PG 16+ only (the view does not exist on PG 14/15 — those show "not supported"). PG 16 and 17 share one column shape; PG 18 differs (native `*_bytes`, `object='wal'`, `context='init'`).
 - The time screen is empty (all zeros) unless `track_io_timing=on`; a cmdline hint says so. WAL timings on PG 18 also need `track_wal_io_timing=on`.
 - Rows where all operation counters are zero are hidden in SQL. The synthetic `io_key` (md5 of the three dimensions) is shown like the `pg_stat_statements` `queryid`; per-dimension columns are shown separately for sorting/filtering.
 - `Q` does not reset `pg_stat_io` (it is shared/cluster-wide stats) — noted in the help screen.
 
-**Touches:** Shares the multi-row view model with `replslots`/`tables`; third + fourth `NotRecordable` views. Closes the visibility gaps left by [004-feat-bgwriter-checkpointer] (`buffers_backend` on PG 17+) and the `pg_stat_wal` screen (WAL IO timings on PG 18).
+**Touches:** Shares the multi-row view model with `replslots`/`tables`. Record/report support for both views added later in [008-feat-record-report-0-11-views]. Closes the visibility gaps left by [004-feat-bgwriter-checkpointer] (`buffers_backend` on PG 17+) and the `pg_stat_wal` screen (WAL IO timings on PG 18).
 
 ### [007-feat-pg-stat-statements-jit] pg_stat_statements JIT Screen
 
@@ -134,11 +134,36 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - Re-sort (arrows — `*_total` text durations sort numerically) and filter (`/`) like the other pgss sub-screens.
 
 **Limitations:**
-- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record`/`report` skip it. record/report is the planned next phase.
+- Recordable since [008-feat-record-report-0-11-views] — `pgcenter record` captures it and `pgcenter report -X j` replays it.
 - PG 15+ only (JIT columns appeared in PG 15; `deform_*` in PG 17). On PG < 15 the sub-screen reports "not supported" via the runtime version guard.
 - Rows with no JIT activity (`jit_functions = 0`) are hidden in SQL; under `jit=off` the screen is empty and the command line shows a hint.
 - The `*_count` phase counters (inlining/optimization/emission) are omitted to fit the screen width (no horizontal scroll) — only `functions` is shown; the value is in the phase times.
 
-**Touches:** Shares the pgss sub-screen model (synthetic md5 `queryid` `UniqueKey`, total+interval columns) with `statements_timings`/`statements_io`; fifth `NotRecordable` view added in 0.11.0 (after bgwriter, replslots, stat_io ×2). Closes release 0.11.0.
+**Touches:** Shares the pgss sub-screen model (synthetic md5 `queryid` `UniqueKey`, total+interval columns) with `statements_timings`/`statements_io`. The last of the five 0.11.0 screens (after bgwriter, replslots, stat_io ×2) to get record/report support in [008-feat-record-report-0-11-views]. Closes release 0.11.0.
 
 ---
+
+### [008-feat-record-report-0-11-views] Record/Report for the 0.11.0 Screens
+
+**What it does:** Lets `pgcenter record` capture the four screens introduced in 0.11.0 —
+background writer/checkpointer, replication slots, pg_stat_io (count + time), and
+pg_stat_statements JIT — and `pgcenter report` replay them offline, the same way it already
+handles tables/activity/wal/statements. These screens were live-TUI-only before this feature.
+
+**Key scenarios:**
+- Record an incident window (`pgcenter record -f stats.tar`) and later replay any of the new
+  screens: `report -B` (bgwriter), `-L` (replslots), `-J c` / `-J t` (pg_stat_io count/time),
+  `-X j` (statements JIT). Deltas match what the live TUI showed.
+- `report -d <flag>` prints the column descriptions for each new report type.
+- Replay archives recorded on any of PostgreSQL 14–18 — the report picks the version-correct
+  column layout from the recording's metadata.
+
+**Limitations:**
+- Empty or pre-0.11 archives print a header only for the new flags (no data, no error).
+- The live record↔report seam (recording and replaying against the same running server) is
+  verified manually, not by an automated end-to-end test (synthetic-tar + golden tests cover
+  the replay/diff logic version-parametrically).
+
+**Touches:** [004]/[005]/[006]/[007] — lifts the `NotRecordable` flag those screens shipped with
+and adds their report flags. Reuses the existing pure-SQL record/report pipeline (no recorder or
+storage-format change). Pays off tech-debt [004] and [007].

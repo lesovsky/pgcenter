@@ -1,0 +1,24 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Minimal, well-scoped CLI change adding report-selection flags (-B/--bgwriter, -L/--replslots, -J/--io) plus the statements_jit subcase (-X j). Implementation matches the existing flag/switch style exactly, all returned report-type strings are valid keys in internal/view/view.go New() and report/report.go describeReport, and tests cover all five valid forms plus invalid -J/-X paths. Tests pass and gofmt/go vet are clean.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "cmd/report/report.go",
+      "line": 157,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The -J (showStatIO) case is placed between showReplSlots and showProcPidStat, while the other string sub-selectors (showDatabases, showStatements, showProgress) are grouped together later in the switch. Grouping the string sub-selector cases together (or at least keeping -J next to the other string-valued flags) would marginally improve readability. The current placement keeps it next to the related bgwriter/replslots family, which is also a defensible choice per the task hints, so this is purely cosmetic.",
+      "benefit": "Slightly more consistent grouping of string-valued sub-selectors in the switch.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  }
+}

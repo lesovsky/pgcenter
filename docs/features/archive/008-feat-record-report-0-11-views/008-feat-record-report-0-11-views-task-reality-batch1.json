@@ -1,0 +1,34 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 says to flip 5 assertions to assert.False and rewrite the Test_filterViews comment, but the live comment at record_test.go:108-126 describes a DIFFERENT past state than the task narrative. The current comment frames procpidstat as 'now NotRecordable=false ... every row's wantN decreases by 1' and bgwriter/replslots/stat_io/stat_io_time/statements_jit as each adding +1/+2 to wantN. The task's hint to 'rewrite the comment' is correct, but the executor must rewrite the WHOLE block (which currently covers procpidstat lineage too), not just the bgwriter/replslots sentences, or the comment will stay internally inconsistent.",
+      "fix": "When rewriting record_test.go:108-126, rewrite the entire comment block coherently: bgwriter+replslots become recordable on PG14 (move filtered->kept), while stat_io/stat_io_time (V16) and statements_jit (V15) remain filtered on PG14 but now via the version/pgss gate rather than NotRecordable. Keep the procpidstat sentence accurate to current view.New() state."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "The PG14 count delta (11/16 -> 9/18 for s=\"\", 5/22 -> 3/24 for s=\"public\") is asserted in the task but not independently re-derivable without running the test, since it depends on the exact current recordable-view set. The reasoning is sound (bgwriter+replslots are the only two V14 views losing NotRecordable; the other 3 stay dropped by version/pgss gate), but the executor must rely on running go test to confirm the literals rather than trusting them blind.",
+      "fix": "Apply the TDD order stated in the task (change literals first, confirm red on old code, remove NotRecordable, confirm green). If the green counts differ from 9/18 and 3/24, trust the test output over the task literals."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "03",
+      "issue": "Frontmatter verify field is formatted differently from tasks 01/02: task 03 has 'verify: bash — `go test ./cmd/report/...`' (command embedded in the YAML value), while tasks 01/02 use 'verify: bash' with the command in a trailing comment. Cosmetic inconsistency; does not block execution.",
+      "fix": "Optional: normalize the verify frontmatter format across the three tasks to 'verify: bash' with the command as a comment, matching tasks 01/02."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 38,
+    "issues_found": 3
+  }
+}

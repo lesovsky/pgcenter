@@ -1,0 +1,32 @@
+{
+  "status": "approved",
+  "summary": "Checked 39 claims, found 0 mirages. All referenced files, symbols, view definitions, NotRecordable lines, query selectors, describe constants, CLI functions, test functions, procpidstat column constants and the synthetic-tar harness pattern exist in code exactly as described.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 39,
+    "confirmed": 39,
+    "mirages_found": 0,
+    "verified_claims": [
+      "internal/view/view.go bgwriter NotRecordable line 151",
+      "internal/view/view.go replslots NotRecordable line 164",
+      "internal/view/view.go stat_io NotRecordable line 178",
+      "internal/view/view.go stat_io_time NotRecordable line 192",
+      "internal/view/view.go statements_jit NotRecordable line 242",
+      "Configure switch wires all 5 selectors (view.go:390-407)",
+      "query.SelectStatBgwriterQuery (bgwriter.go:41, returns string,int,[2]int, 3-way V18/V17/PG14)",
+      "query.SelectStatReplicationSlotsQuery (replication_slots.go:39, version-independent)",
+      "query.SelectStatIOQuery (io.go:87)",
+      "query.SelectStatIOTimeQuery (io.go:99, version-independent)",
+      "query.SelectStatStatementsJITQuery (statements.go:347, 4-tuple, V17 vs PG15)",
+      "report/report.go describeReport map (report.go:606)",
+      "cmd/report/report.go selectReport (report.go:126)",
+      "cmd/report/report.go validate as opts method (report.go:85)",
+      "Test_filterViews (record_test.go:101)",
+      "TestNew with 27 views (view_test.go:9-11)",
+      "Test_describeReport (report_test.go:1033)",
+      "Test_selectReport (cmd/report report_test.go:34)",
+      "TestFilterViews_dropsExplicitNotRecordable (record_test.go:171)",
+      "Test_app_doReport_procpidstat synthetic-tar harness (report_test.go:604)"
+    ]
+  }
+}

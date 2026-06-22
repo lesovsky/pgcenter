@@ -1,0 +1,376 @@
+# Interview Plan for Feature Planning — 008-feat-record-report-0-11-views
+
+interview_metadata:
+  feature_name: "record-report-0-11-views"
+  feature_base: "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views"
+  work_type: "feature"
+  started: "2026-06-22 09:59:43"
+  last_updated: "2026-06-22 10:05:00"
+  status: "completed"
+  can_resume: false
+  current_question_num: 6
+  feature_size: "M"
+
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-06-22 10:05:00"
+    topic: "cli_flag_design"
+    agent_question: |
+      Proposed report CLI flag design: jit via -X j (extend existing statements flag);
+      bgwriter via new bool -B/--bgwriter; replslots via new bool -L/--replslots;
+      pg_stat_io via new string -J/--io with values c(count)/t(time) mapping to
+      stat_io / stat_io_time. Mirrors existing -X/-D/-P string-subtype idiom.
+    user_answer: "согласен"
+    summary: >
+      CLI design LOCKED: -X j → statements_jit (no new flag); -B/--bgwriter → bgwriter;
+      -L/--replslots → replslots; -J/--io c|t → stat_io / stat_io_time. Short letters
+      B/L/J verified free against existing report flags.
+  - question_num: 2
+    timestamp: "2026-06-22 10:05:00"
+    topic: "no_data_ux"
+    agent_question: |
+      No-data handling: procpidstat emits INFO/WARNING due to remote/procfs specifics.
+      New screens are plain SQL views — propose NO special handling, empty result prints
+      like tables/wal (header, no rows). Or add a friendly INFO for jit (often empty,
+      jit=off)?
+    user_answer: "ок"
+    summary: >
+      No-data UX LOCKED: no special handling. Empty result behaves like tables/wal
+      (header, no rows). No INFO/WARNING lines added for the four new screens.
+  - question_num: 3
+    timestamp: "2026-06-22 10:05:00"
+    topic: "docs_scope"
+    agent_question: |
+      overview.md/architecture.md/features-catalog.md currently state these screens are
+      TUI-only/NotRecordable. Update inside this feature (as tasks) or defer to /done?
+    user_answer: "тоже за внутрь"
+    summary: >
+      Docs scope LOCKED: update overview.md, architecture.md, features-catalog.md as
+      part of this feature (they become factually wrong once NotRecordable is lifted).
+  - question_num: 4
+    timestamp: "2026-06-22 10:05:00"
+    topic: "testing_and_tech_debt"
+    agent_question: |
+      Testing: unit (Test_filterViews count inversion, describeReport entries,
+      selectReport mapping) + integration (record→report roundtrip per screen PG14-18).
+      Tech-debt [007] (no behavioral diff() NULL test for pg_stat_io) is directly
+      relevant since report replays coalesce'd cells through countDiff — fix in this
+      feature?
+    user_answer: "тесты - ок, техдолги - выплачиваем"
+    summary: >
+      Testing strategy LOCKED. Tech-debt: PAY OFF. [007] confirmed in scope. Plural
+      "техдолги" — scope of additional debts to confirm next batch.
+  - question_num: 5
+    timestamp: "2026-06-22 10:10:00"
+    topic: "tech_debt_scope_and_edge_cases"
+    agent_question: |
+      Debt scope: pay off [007] (pg_stat_io diff() NULL behavioral test) + [004] (export
+      procpidstat col-index constants from internal/stat, dedupe in report.go — we touch
+      report.go anyway); leave [006] (replslots standby retained,KiB — needs live standby,
+      orthogonal) and [005] (Test_doReload panic in top/, unrelated) as debt. Edge cases
+      decided from code: (1) no remote gate — pure SQL views available remotely; (2) old
+      archives → header-only; (3) PG version change mid-archive handled by existing
+      processData re-Configure; (4) jit without pgss already dropped by filterViews.
+    user_answer: "ок, согласен"
+    summary: >
+      Debt scope LOCKED: pay [007]+[004]; defer [006]+[005]. Edge cases LOCKED:
+      no remote gate, old-archive header-only, version-change handled, jit-no-pgss dropped.
+  - question_num: 6
+    timestamp: "2026-06-22 10:20:00"
+    topic: "test_harness_choice"
+    agent_question: |
+      Code research found NO live record→report roundtrip harness exists. Variant A
+      (synthetic in-memory tar, like Test_app_doReport_procpidstat) vs B (new live PG14-18
+      end-to-end). User picked A and asked whether the existing golden-file approach can be
+      used for diff verification.
+    user_answer: "берем варианта А, ... для проверки диффов golden-файлы, можем использовать такой же подход?"
+    summary: >
+      Test harness LOCKED: variant A (synthetic tar input) + golden-file output assertion.
+      Legacy pgcenter.stat.golden.tar NOT reused (no new entries, PG13-era, regeneration
+      churns 30 goldens). Version-aware screens → per-version goldens (14/17/18).
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+phase1_feature_overview:
+
+  feature_description:
+    score: 90
+    status: "complete"
+    value: >
+      Add record/report support for the four 0.11.0 TUI-only screens currently marked
+      NotRecordable: bgwriter (pg_stat_bgwriter+checkpointer), replslots
+      (pg_replication_slots LEFT JOIN pg_stat_replication_slots), pg_stat_io (two
+      registered sub-views: stat_io count + stat_io_time), and statements_jit
+      (pg_stat_statements JIT). Lift NotRecordable so `pgcenter record` collects them and
+      `pgcenter report` can replay them, mirroring existing recordable SQL views
+      (tables/activity/wal/statements_*). One spec covering all four; tech-spec tasks
+      decomposed per-screen for risk isolation.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 60
+    status: "partial"
+    value: >
+      The four new 0.11.0 screens are TUI-live-only; their stats cannot be captured for
+      offline/historical analysis with `pgcenter record` + `pgcenter report`. DBAs doing
+      incident post-mortems or trend analysis lose checkpoint cadence, replication-slot
+      retention growth, IO breakdown, and JIT cost over time. Roadmap deferred record/report
+      as a TUI-first scope cut (ADR [004]); this feature closes that gap.
+    gaps: "Confirm relative priority/value framing per screen"
+    required: true
+
+  target_users:
+    score: 70
+    status: "partial"
+    value: >
+      Practicing PostgreSQL DBAs doing offline troubleshooting and trend analysis from
+      recorded archives (same audience as existing `pgcenter report`).
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: >
+      `pgcenter record` collects all 5 report types (bgwriter, replslots, stat_io,
+      stat_io_time, statements_jit). `pgcenter report` replays each via locked CLI:
+      -B/--bgwriter, -L/--replslots, -J/--io c|t, -X j. `pgcenter report -d <flag>`
+      prints a description for each. Empty/old archives print header-only (no special
+      no-data handling). diff semantics match the TUI (cumulative counters diffed via
+      DiffIntvl; absolute/text columns pass through). CI green on PG14-18 matrix.
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: >
+      Pure-SQL views (no procfs/CollectExtra/stateful tarRecorder, unlike procpidstat 003).
+      Infra already present: all 5 types in view.Configure() switch (view.go:390-407);
+      query.Format resilient to empty Options (plain text/template, no missingkey=error);
+      precedent is `replication` recordable via report-time Configure(Options{Version}).
+      replslots/stat_io coalesce diffed counters to 0 in the recorded SQL, so stored cells
+      are already "0" — diffPair-safe on replay. Must not regress existing recordable views
+      or break Test_filterViews/TestNew counts. CI gate must stay green PG14-18.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 85
+    status: "complete"
+    value: >
+      Unit: invert Test_filterViews per-version counts (NotRecordable views no longer
+      dropped); assert describeReport has all 5 entries; assert selectReport maps the new
+      flags (-B,-L,-J c|t,-X j). Integration: record→report roundtrip per screen across
+      PG14-18 (mirror existing report integration tests). Tech-debt payoff: [007]
+      behavioral diff() NULL-cell test for pg_stat_io (in internal/stat/postgres_test.go).
+    gaps: "Confirm full debt-payoff scope ([004] report col-index constants too?)"
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+phase2_user_experience:
+
+  user_stories:
+    score: 85
+    status: "complete"
+    value: >
+      US1: As a DBA, I want `pgcenter record` to capture bgwriter/replslots/pg_stat_io/JIT
+      stats, so that I can analyze them offline after an incident.
+        Scenario: run `pgcenter record -f stats.tar` during an incident window; the tar now
+        contains bgwriter.*, replslots.*, stat_io.*, stat_io_time.*, statements_jit.* entries
+        alongside the existing ones.
+      US2: As a DBA, I want `pgcenter report` to replay each new screen, so that I see the
+      same per-interval deltas the TUI showed, but from the archive.
+        Scenario: `pgcenter report -f stats.tar -B` prints the bgwriter report;
+        `-L` replslots; `-J c` / `-J t` the two pg_stat_io screens; `-X j` the JIT screen.
+      US3: As a DBA, I want `pgcenter report -d <flag>` to describe each new report's columns,
+      so that I can interpret an unfamiliar screen.
+        Scenario: `pgcenter report -d -B` prints the bgwriter column descriptions.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 85
+    status: "complete"
+    value: >
+      AC1: `NotRecordable` removed from bgwriter, replslots, stat_io, stat_io_time,
+      statements_jit; `pgcenter record` writes a tar entry per type per tick.
+      AC2: report flags work: -B→bgwriter, -L→replslots, -J c→stat_io, -J t→stat_io_time,
+      -X j→statements_jit; unknown -J/-X values error like existing ones.
+      AC3: `report -d <flag>` prints a description for each of the 5 types (describeReport map).
+      AC4: replayed reports show correct diff semantics (cumulative counters diffed; absolute/
+      text columns e.g. bgwriter stats_age, replslots wal_status pass through).
+      AC5: empty/old archives print header-only, no crash, no spurious INFO.
+      AC6: version-aware replay across PG14-18 picks correct layout from meta.version.
+      AC7: Test_filterViews per-version counts updated; full make test/lint/vuln green; CI
+      PG14-18 green.
+      AC8: tech-debt [007] behavioral diff() NULL test added; [004] constants exported/deduped.
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 85
+    status: "complete"
+    value: >
+      (1) Remote mode: no gate — pure SQL views, recordable remotely. (2) Old archives
+      (pre-feature): no matching tar entries → report prints header-only. (3) PG version
+      change mid-archive: existing processData discards prev + re-Configures; version-aware
+      bgwriter/stat_io/statements_jit switch layout (Ncols/DiffIntvl/UniqueKey) per
+      meta.version automatically. (4) jit without pg_stat_statements: filterViews already
+      drops statements_* when pgssSchema=="" → not recorded; report -X j → header-only.
+      (5) replslots with zero slots / jit with jit_functions=0: empty result, header-only.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 85
+    status: "complete"
+    value: >
+      Empty/no-data archive → header-only, no error (decision #2). Version mismatch →
+      handled by processData re-Configure. NULL-bearing diffed cells on replay →
+      coalesce(...,0) in the recorded SQL means stored cells are "0", not NULL, so
+      diffPair/ParseInt is safe (the [005]/[006] coalesce contract carries into recording).
+      report-time Configure renders structurally-correct view even with empty Options
+      (broken SQL string is never executed in report — only Ncols/DiffIntvl/UniqueKey used).
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 90
+    status: "complete"
+    value: >
+      Test approach LOCKED (variant A + golden output): report-side diff verification via
+      GOLDEN files (report_bgwriter.golden, report_replslots.golden, report_stat_io.golden,
+      report_stat_io_time.golden, report_statements_jit.golden) — same idiom as existing
+      report_*.golden. INPUT is a purpose-built SYNTHETIC in-memory tar (pattern of
+      Test_app_doReport_procpidstat: hand-built PGresult x2 ticks + meta entry with target
+      version), NOT the legacy pgcenter.stat.golden.tar (it lacks the new entries, is a ~PG13
+      recording that can't hold modern views, and regenerating it would churn all 30 existing
+      goldens). Version-aware screens (bgwriter, stat_io, statements_jit) get goldens at
+      meta.version 14/17/18 to prove layout switching; replslots + stat_io_time (version-
+      independent) need one golden each. Record-side covered by existing live Test_app_record
+      (auto-counts new recordable views). Unit: Test_filterViews PG14 literals (11/16→9/18,
+      5/22→3/24), describeReport 5 entries, selectReport 5 cases, view_test True→False x5.
+      User: manual record then report -B/-L/-J c|t/-X j and -d against live PG.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 85
+    status: "complete"
+    value: >
+      CLI only (no TUI changes). report flags: -B/--bgwriter (bool), -L/--replslots (bool),
+      -J/--io (string c|t), -X/--statements extended with value j. `-d <flag>` prints the
+      description text. Report output format identical to existing report screens (timestamp
+      header, periodic column header every 20 lines, per-interval rate line). Column set and
+      headers identical to the corresponding TUI screen. Empty data → header-only, no INFO.
+      Describe output mirrors existing pgStat*Description constants in report package.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 85
+    status: "complete"
+    value: >
+      R1 (low): report-time Configure renders broken SQL for replslots (empty WalFunction)
+      / jit (empty PGSSSchema) — mitigated: SQL not executed in report, Format won't error,
+      only layout fields used. Covered by roundtrip test.
+      R2 (low): NULL diffed cells on replay — mitigated: coalesce in recorded SQL stores "0".
+      R3 (low): Test_filterViews per-version count drift (version-gated views → different
+      deltas per version row) — mitigated by careful per-version update + CI PG14-18 gate.
+      R4 (low): CLI short-letter collision — B/L/J verified free.
+    gaps: ""
+    required: false
+
+  technical_decisions:
+    score: 85
+    status: "complete"
+    value: >
+      D1: pure-SQL views need NO recorder changes — only remove NotRecordable (vs
+      procpidstat 003 which needed stateful tarRecorder). D2: jit reuses -X statements flag
+      (value j), not a new flag — mirrors TUI x-cycle. D3: pg_stat_io uses one string flag
+      -J c|t for its two report types — mirrors -X/-D/-P idiom. D4: no remote gate (orthogonal
+      to procpidstat's db.Local gate). D5: no special no-data handling — empty=header-only.
+      D6: docs updated within feature. D7: pay [007]+[004], defer [006]+[005].
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+phase3_integration:
+
+  integration_points:
+    score: 85
+    status: "complete"
+    value: >
+      internal/view/view.go (remove NotRecordable from 4 view defs); record/record.go
+      filterViews (auto-collects once flag gone; statements_ pgss gate already covers jit);
+      report/report.go describeReport map (+5 entries) and new description constants;
+      cmd/report/report.go options/init/selectReport (+flags -B/-L/-J/-X j);
+      report.processData Configure(Options{Version}) already version-aware.
+    gaps: "Exact file:line surfaces — being mapped by dev-code-researcher (Phase 3)"
+    required: true
+
+  dependencies:
+    score: 80
+    status: "complete"
+    value: >
+      Existing recordable-SQL-view pipeline (tables/activity/wal/statements_*); the 004-007
+      view definitions and their version-aware selectors (already wired into view.Configure).
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: >
+      tar storage uses the standard SQL-view path: recorder writes raw query result
+      (cumulative counters, coalesce'd) as {reporttype}.TIMESTAMP.json per tick; report
+      diffs consecutive samples via DiffIntvl. No new storage format, no sysinfo entry
+      (that is procpidstat-specific). meta.* version drives report-time layout.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 85
+    status: "complete"
+    value: >
+      Backward compatible: old archives lack the new entries → report prints header-only.
+      New archives remain readable by older logic for existing types. No format version bump.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views.md"
+  status: "approved"
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+
+progress:
+  current_phase: "phase3_code_research"
+  questions_asked: 5
+  last_question: "tech_debt_scope_and_edge_cases"
+  completion_estimate: "88%"
+
+notes: |
+  - Pre-filled from /buddy discussion + roadmap-0.11.0.md + ADRs [004][006][007].
+  - Key technical reality established pre-interview: pure-SQL views, infra ready
+    (Configure switch has all 5 types; Format tolerates empty Options; `replication`
+    is the working precedent). Real work = remove NotRecordable + describe strings +
+    invert Test_filterViews counts + no-data handling.
+  - Relevant tech-debt: [007] no behavioral diff() NULL test (report replays coalesce'd
+    cells through countDiff); [006] replslots standby retained,KiB unverified live.
+  - Decision (locked in buddy): ONE spec for all four; per-screen tasks in tech-spec.

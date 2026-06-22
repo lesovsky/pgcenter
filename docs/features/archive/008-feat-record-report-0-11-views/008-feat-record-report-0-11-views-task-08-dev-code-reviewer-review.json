@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Test-only change adding Test_DiffZeroFilledCells is well-constructed: it drives both unexported diff() and the public Compare wrapper, proves UniqueKey-based pairing (prev rows reversed vs curr), covers the mixed zero+counter row, and demonstrates the empty-cell error path that coalesce prevents. The test passes and behaviorally locks tech-debt [007]. One real concern: the verify mask `-run Diff` (capital D) is case-sensitive and matches ONLY the new test, not the existing Test_diff / Test_diff_pg18_wal_stats_age, so the task's own AC of re-running the existing tests via that mask is not actually satisfied.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 348,
+      "severity": "major",
+      "category": "testing",
+      "suggestion": "The verify command `go test ./internal/stat/... -run Diff` is a case-sensitive Go regex and matches ONLY Test_DiffZeroFilledCells. It does NOT match Test_diff or Test_diff_pg18_wal_stats_age (lowercase 'diff'). Verified empirically: `-run Diff` selects 1 test, `-run diff` selects Test_diff/Test_diff_pg18_wal_stats_age/Test_diffPair. The inline comment 'Test name carries capital \"Diff\" so the verify mask `-run Diff` selects it' is true for the new test but the design intent in Acceptance Criteria (task-08.md lines 86-87) explicitly requires the mask to be green 'включая существующие Test_diff и Test_diff_pg18_wal_stats_age' — those are silently excluded, so the existing-test half of the AC is not met by the chosen mask. Fix by making the mask case-insensitive in the verify line (e.g. `-run '[Dd]iff'` or `-run 'Diff|diff'`), or rename the new test to start lowercase (e.g. Test_diff_zero_filled_cells, as the task description itself suggested at line 46) so a single `-run diff` covers all three.",
+      "benefit": "The verify command would actually re-run the sibling diff tests it claims to guard, matching the stated AC and preventing a false sense of regression coverage.",
+      "optional": false
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 586,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The diff includes unrelated gofmt comment-alignment changes inside Test_parseDuration (the '// the value from issue #50' and '// missing seconds' comment lines). These are outside the scope of a test-only task scoped to adding Test_DiffZeroFilledCells next to Test_diff. The committed HEAD version of the file is already gofmt-clean, so these edits are incidental churn unrelated to the task.",
+      "benefit": "Keeping the diff limited to the new test function makes the change easier to review and traces every changed line to the task; avoids unrelated-code churn per project conventions.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 1,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  }
+}

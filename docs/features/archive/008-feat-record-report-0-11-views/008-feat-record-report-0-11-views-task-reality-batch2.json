@@ -1,0 +1,55 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Task says the version-aware layout switch 'fires in report via views.Configure(query.Options{Version})' at 'report.go:250-252'. Verified: the Configure call is at report.go:250-252 and the bgwriter case at view.go:396-397 calls SelectStatBgwriterQuery(opts.Version), which returns per-version (QueryTmpl, Ncols, DiffIntvl). The static view.New() entry for bgwriter still carries the PG14 defaults (Ncols 12, DiffIntvl [3,10], view.go:144-145), so a test that records version 17/18 MUST rely on Configure running before countDiff. Configure does run on the first sample per version (report.go:242-259), so this is correct - just noting that the golden output for PG17/PG18 depends entirely on Configure firing, which is the exact behavior the test is meant to prove.",
+      "fix": "No change needed. The test design is sound; ensure the PG17/PG18 subcases actually assert the wider column set so a regression where Configure stops firing would fail the golden."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Task 04 Details claims bgwriter UniqueKey behavior is irrelevant because there is a single 'Bgwriter' row. Verified: bgwriter view (view.go:140-152) has no UniqueKey set (defaults to 0 = 'source' col). diff() (postgres.go:303-358) matches rows by ukey col 0; both ticks emit source='Bgwriter' so the single row pairs correctly. Claim holds. Only caveat: both ticks must carry identical col-0 'source' value ('Bgwriter') or diff() will treat the row as new and copy curr verbatim (no delta).",
+      "fix": "Ensure both synthetic ticks use the literal 'Bgwriter' in column 0 so the single row is paired and diffed (matches SQL alias 'Bgwriter' AS source)."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "05",
+      "issue": "Task 05 references view config at internal/view/view.go:153-165 and states UniqueKey is unset so it defaults to 0 (slot_name). Verified at view.go:153-165: replslots has OrderKey 4, OrderDesc true, DiffIntvl [6,13], Ncols 15, no UniqueKey (defaults 0). Correct. Note: report.go applies OrderColName-based reordering only if config.OrderColName is set (report.go:288-294); with it unset the view's static OrderKey=4 is used, so the 'retained,KiB DESC' ordering assertion in the test will hold via the view default - the test must NOT set Config.OrderColName or it would override OrderKey.",
+      "fix": "Leave Config.OrderColName empty so the view's OrderKey=4 / OrderDesc=true drives the retained,KiB DESC sort the test asserts."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Task 05 (and Task 06) rely on diffPair('0','0') yielding a clean '0' and on an empty-string diffed cell aborting the sample via ParseInt(''). Both verified: diffPair (postgres.go:445-460) -> parsePairInt -> strconv.ParseInt; '0'-'0'='0', and ParseInt('') returns an error that diff() propagates (postgres.go:336-339). The coalesced-zero and empty-string edge-case claims are accurate. The physical-slot-all-zeros case is feasible exactly as described.",
+      "fix": "No change needed."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "05",
+      "issue": "Task 05 mentions an 'empty/zero-slots' subcase referencing 'Decision 5 - empty result is normal, no INFO/WARNING'. The replslots view has no special empty-result handling in report.go (the procpidstat INFO path at report.go:266-271 is type-gated to 'procpidstat' only). So an empty replslots archive will naturally print only the header with no INFO/WARNING - the claim is structurally true, but it is true by absence of code, not by an explicit replslots branch. The header-only golden assertion is valid.",
+      "fix": "No change needed. Optionally assert via NotContains on slot names plus a header regexp rather than a brittle full golden for the empty case."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "Task 06 states stat_io has identical column shape across PG16/PG18 (Ncols 16, DiffIntvl {4,14}, UniqueKey 0) and the version difference is data-only. Verified at internal/query/io.go:87-92: SelectStatIOQuery returns (PgStatIOPG18, 16, [4,14]) for >=PostgresV18 and (PgStatIOPG16, 16, [4,14]) otherwise - identical shape, different QueryTmpl. Since report replays recorded JSON and never executes the SQL, the v16 vs v18 golden will be IDENTICAL unless the test deliberately feeds different recorded values per version. The task acknowledges this (values differ in the synthetic sample), but the two goldens prove only that Configure picks the right selector string, not any observable output difference - the recorded JSON, not the selector, drives the replay output.",
+      "fix": "Make the v16 and v18 synthetic samples differ in recorded KiB values (and optionally add a PG18-only object='wal' row) so the two goldens are genuinely distinct; otherwise consider collapsing to one golden or document that the two goldens differ only by injected data, not by replay logic."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 38,
+    "issues_found": 6
+  }
+}

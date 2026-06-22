@@ -102,6 +102,21 @@ When a hybrid view needs record/report support (reference: 003-feat-procpidstat-
 - After squash: `git reset --hard master && git push --force-with-lease` to sync develop
 - Release: tag on master → push to `release` branch → triggers release workflow
 
+### Commit trailers — single `Co-Authored-By`
+
+A commit message carries **at most one** `Co-Authored-By:` trailer, on the last line. When
+collapsing several commits into one, **deduplicate the trailer to a single line** — do not let the
+concatenated commit bodies stack N copies. The per-commit trailer on the feature branch is fine;
+the pile-up only appears when bodies are joined, so the fix lives at the squash/merge step:
+
+- **GitHub PR squash merge** (the usual path here — see the `(#NNN)` merge commits on `develop`):
+  GitHub's default squash body concatenates every source commit message, so each per-commit
+  trailer stacks (plus GitHub appends its own `Co-authored-by` lines). **Override the squash
+  commit body** — `gh pr merge --squash --body "…"` (or edit it in the merge UI) so the final
+  message has exactly one `Co-Authored-By:` at the end.
+- **Local squash** — `git merge --squash {branch}` then `git commit` with a hand-written body
+  (one trailer), not the auto-generated `.git/SQUASH_MSG` that lists every commit.
+
 ## Linting
 
 `.golangci.yml` enables: errcheck, gocritic, gosimple, govet, ineffassign, revive, staticcheck, unused.

@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "High-quality golden-replay tests for pg_stat_io count (v16/v18) and stat_io_time. Value-level wantRows assertions independently guard the diff math (they survive a golden regenerated against buggy code), io_key pairing is genuinely exercised via deliberately reversed prev rows, the coalesced zero-cell case is both exercised and asserted, v16/v18 goldens are byte-distinct (verified with cmp), and the suite is deterministic across repeated runs without -update. All findings are minor; no critical/major issues. Tests pass and the full report package shows no regressions.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "report/report_record_statio_test.go:68 (Test_app_doReport_StatIO_v16 / _v18)",
+      "issue": "The v16 vs v18 distinction in OUTPUT comes entirely from the hand-built synthetic sample, not from the selector switch. Both SelectStatIOQuery branches return identical shape (Ncols=16, DiffIntvl{4,14}), so a wrong selector choice at report time would NOT change this test's output. The test cannot fail if Configure picked the PG16 query for version_num=180000 (or vice versa). The test header comment is honest about this ('the version switch only proves it picks the correct selector for layout'), but the literal claim that the test 'pins one recorded PostgreSQL version ... which drives report-time view.Configure -> SelectStatIOQuery' overstates what is verified: the selector branch itself is not observable here.",
+      "recommendation": "No code change required for this test — selector branch correctness is legitimately covered elsewhere (internal/view/view_test.go pins the version-aware Configure map, and SelectStatIOQuery is unit-testable in internal/query). Optionally tighten the comment to state explicitly that v16/v18 output divergence is a property of the synthetic fixtures, and that selector-branch selection is asserted in view_test.go, so a future reader does not assume this replay test guards the PG16<->PG18 SQL switch.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_statio_test.go:157 (Test_app_doReport_StatIO_v18 wantRows)",
+      "issue": "v18 has two rows with reads-delta 0 (bgwriter and wal), so OrderKey=4 DESC produces a tie. Row order among ties depends on sort.SliceStable preserving input order (curr order [client,bgwriter,wal]). The wantRows Contains-assertions do not pin relative order of the two zero-reads rows (only the golden does, via Equal). This is correct and the comment acknowledges it, but the ordering guarantee is implicit: it relies on (a) SliceStable being used in PGresult.sort and (b) diff() preserving curr row order (it iterates curr.Values in index order). Both hold today (verified in internal/stat/postgres.go), but neither is asserted by this test independently of the golden — if sort were ever switched to a non-stable sort, only the golden Equal would catch it, and a regenerated golden would silently absorb the change.",
+      "recommendation": "Acceptable as-is given the golden pins exact order. If extra robustness is wanted cheaply, add one ordering assertion independent of the golden, e.g. assert.Less(strings.Index(normalized,'k_bgwrit01'), strings.Index(normalized,'k_wal00001')), so a stable-sort regression is caught even when the golden is regenerated.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "report/report_record_statio_test.go (whole file)",
+      "issue": "No empty/zero-row replay case for stat_io or stat_io_time, unlike the replslots baseline which adds Test_app_doReport_ReplSlots_empty (header-only, no ', rate:' line, no INFO/WARNING leak). pg_stat_io can legitimately yield an empty row-set when the count-based WHERE drops all-zero rows; the header-only / no-data path for these two new report types is currently untested.",
+      "recommendation": "Optionally add a Test_app_doReport_StatIO_empty mirroring Test_app_doReport_ReplSlots_empty: two ticks with Nrows=0, assert the column header prints, assert NotContains ', rate:' (strongest no-data signal), and assert no INFO/WARNING leakage. Low priority — the no-data branch is shared report.go code already covered by the replslots empty test, so this is incremental confidence rather than a gap in critical logic.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 0,
+      "integration": 3,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

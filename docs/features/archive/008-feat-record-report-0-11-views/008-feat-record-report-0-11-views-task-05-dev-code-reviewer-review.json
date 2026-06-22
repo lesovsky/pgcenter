@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "A well-constructed, test-only golden replay test for the replslots report screen. The synthetic tar harness faithfully mirrors the in-repo bgwriter example, the 15-column layout matches internal/query/replication_slots.go exactly, and the test genuinely proves all four claimed properties (col 6-13 diff, slot_name pairing, retained,KiB DESC ordering, and the physical-slot coalesced-zero case). Both tests pass and the full report package shows no regressions.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/report_record_replslots_test.go",
+      "line": 51,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Test function names are Test_app_doReport_ReplSlots / _ReplSlots_empty, while the task file (lines 54, 73, 87-92) specifies the lowercase Test_app_doReport_replslots / _replslots_empty. This is a deviation from the task spec naming. It is harmless (the implementation hint at task line 182 only requires the substring 'ReplSlots' so that -run ReplSlots matches both, which it does), and the existing report_test.go mixes both casings, so there is no real consistency win either way. Worth a one-line note in the decisions log per Post-completion, but not worth changing.",
+      "benefit": "Exact alignment between task file identifiers and code; avoids a reader noticing the casing mismatch.",
+      "optional": true
+    },
+    {
+      "file": "report/report_record_replslots_test.go",
+      "line": 134,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The empty-case test (Test_app_doReport_ReplSlots_empty) duplicates the whole tar-building boilerplate (metaRes, writeEntry closure, Config, app setup) from the main test. The bgwriter example avoids this by using a table-driven single function, but the two replslots cases differ enough (row payloads, distinct assertions) that a shared helper would add indirection. Acceptable as-is; if a third replslots replay case is ever added, extract a buildTar(meta, ticks...) helper.",
+      "benefit": "Less copy-paste if the suite grows; lower risk of the two cases drifting apart.",
+      "optional": true
+    },
+    {
+      "file": "report/report_record_replslots_test.go",
+      "line": 139,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "TsStart/TsEnd use time.Now().Location() to build the window. This matches the bgwriter and procpidstat examples (same pattern), so it is consistent with the codebase. Note only: golden replay output is timezone-independent here (the printed timestamp is derived from the filename, and the window is generous), so this carries no determinism risk for this test.",
+      "benefit": "Documents that the time.Now().Location() use is intentional and risk-free, matching existing harnesses.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

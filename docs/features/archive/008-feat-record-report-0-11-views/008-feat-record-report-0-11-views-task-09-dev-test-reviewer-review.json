@@ -1,0 +1,27 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Behavior-preserving refactor (tech-debt [004]): procpidstat column-index constants exported from internal/stat and the local duplicate const block removed from report.go. The WARNING-path test (Test_emitProcPidStatAvailabilityWarnings) is fully preserved — same 6 subcases, same assertions on emitted output — with only the index source swapped from removed local procPidStatCol* constants to stat.Col*. Coverage of the WARNING path is unchanged, assertions are not weakened, and the test correctly references the same single source of truth (procPidResultCols order) as production code, which is the intended outcome of an index-mapping refactor. No new tests expected per the task's TDD anchor; regression is caught by the existing behavioral tests plus compilation. Targeted tests pass.",
+  "findings": [],
+  "metrics": {
+    "filesReviewed": 3,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 6,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  },
+  "notes": [
+    "Litmus test on Test_emitProcPidStatAvailabilityWarnings: assertions check actual emitted WARNING strings via emitProcPidStatAvailabilityWarnings(&buf, res) against expected output per column-emptiness scenario. Removing the allEmpty/guard logic in production would change the emitted output and fail the test — not a tautology.",
+    "Tautology concern (test using stat.Col* same as production): NOT a defect. For an index-mapping refactor the test SHOULD reference the same exported constant as production; hardcoding 9/10/11 in the test would re-introduce the very duplication [004] removes. The behavioral contract (which output is emitted for which empty column) is still independently asserted via the 'want' strings.",
+    "Index values verified against canonical procPidResultCols (internal/stat/procpidstat.go:18-27, 0-indexed): 9=read_total,KiB, 10=write_total,KiB, 11=iodelay_total,s. Match.",
+    "Test outcome: Test_emitProcPidStatAvailabilityWarnings (6 subtests) PASS; all procpidstat tests in internal/stat PASS; report package PASS. The full 'go test ./internal/stat/...' run reports a FAIL, but it is Test_readCpuStat (cpu_test.go:15) requiring a live postgres.NewTestConnect() — a pre-existing, environment-dependent test untouched by and unrelated to this task. Not attributable to Task 09."
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "008",
+    "feature_name": "record-report-0-11-views",
+    "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "claude-opus-4-8[1m]",
+    "date_started": "2026-06-22",
+    "date_completed": ""
+  },
+  "phases": {
+    "user_spec": { "started": "2026-06-22", "ended": "2026-06-22" },
+    "tech_spec": { "started": "2026-06-22", "ended": "2026-06-22" },
+    "task_decomposition": { "started": "2026-06-22", "ended": "2026-06-22" },
+    "feature_execution": { "started": "2026-06-22", "ended": "2026-06-22" },
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 2, "tech_spec": 1, "task_decomposition": 1 },
+    "validation_findings": { "critical": 0, "major": 1, "minor": 3 },
+    "review_rounds": {},
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 5,
+    "tasks_count": 11,
+    "waves_count": 4,
+    "agents_spawned": 19,
+    "commits_count": 0
+  }
+}

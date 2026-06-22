@@ -12,13 +12,13 @@ func TestNew(t *testing.T) {
 }
 
 // TestNew_StatementsJITView guards the statements_jit view wiring: it must be registered,
-// gated to PG15+, excluded from recording (NotRecordable), keyed by the synthetic md5 queryid,
+// gated to PG15+, recordable, keyed by the synthetic md5 queryid,
 // and sorted by the first *_total column (gen_total).
 func TestNew_StatementsJITView(t *testing.T) {
 	v := New()
 	jit, ok := v["statements_jit"]
 	assert.True(t, ok)
-	assert.True(t, jit.NotRecordable)
+	assert.False(t, jit.NotRecordable)
 	assert.Equal(t, query.PostgresV15, jit.MinRequiredVersion)
 	// Pin the PG15-default map values that Configure() overrides per version.
 	assert.Equal(t, 13, jit.Ncols)
@@ -31,13 +31,13 @@ func TestNew_StatementsJITView(t *testing.T) {
 }
 
 // TestNew_StatIOView guards the stat_io count view wiring: it must be registered,
-// gated to PG16+, excluded from recording (NotRecordable), keyed by synthetic io_key,
+// gated to PG16+, recordable, keyed by synthetic io_key,
 // and sorted by the first diffed counter column.
 func TestNew_StatIOView(t *testing.T) {
 	v := New()
 	statio, ok := v["stat_io"]
 	assert.True(t, ok)
-	assert.True(t, statio.NotRecordable)
+	assert.False(t, statio.NotRecordable)
 	assert.Equal(t, query.PostgresV16, statio.MinRequiredVersion)
 	// Pin the PG16-default map values that Configure() overrides per version.
 	assert.Equal(t, 16, statio.Ncols)
@@ -49,13 +49,13 @@ func TestNew_StatIOView(t *testing.T) {
 }
 
 // TestNew_StatIOTimeView guards the stat_io_time view wiring: it must be registered,
-// gated to PG16+, excluded from recording (NotRecordable), keyed by synthetic io_key,
+// gated to PG16+, recordable, keyed by synthetic io_key,
 // and its Msg must carry the track_io_timing hint (Decision 9).
 func TestNew_StatIOTimeView(t *testing.T) {
 	v := New()
 	statioTime, ok := v["stat_io_time"]
 	assert.True(t, ok)
-	assert.True(t, statioTime.NotRecordable)
+	assert.False(t, statioTime.NotRecordable)
 	assert.Equal(t, query.PostgresV16, statioTime.MinRequiredVersion)
 	// Pin the PG16-default map values that Configure() overrides per version.
 	assert.Equal(t, 10, statioTime.Ncols)
@@ -67,12 +67,12 @@ func TestNew_StatIOTimeView(t *testing.T) {
 }
 
 // TestNew_ReplslotsView guards the replslots view wiring: it must be registered,
-// gated to PG14+, excluded from recording (NotRecordable), and sorted by retained,KiB.
+// gated to PG14+, recordable, and sorted by retained,KiB.
 func TestNew_ReplslotsView(t *testing.T) {
 	v := New()
 	replslots, ok := v["replslots"]
 	assert.True(t, ok)
-	assert.True(t, replslots.NotRecordable)
+	assert.False(t, replslots.NotRecordable)
 	assert.Equal(t, query.PostgresV14, replslots.MinRequiredVersion)
 	// Pin the PG14-default map values that Configure() overrides per version.
 	assert.Equal(t, 15, replslots.Ncols)
@@ -83,12 +83,12 @@ func TestNew_ReplslotsView(t *testing.T) {
 }
 
 // TestNew_BgwriterView guards the bgwriter view wiring: it must be registered,
-// gated to PG14+, and excluded from recording (NotRecordable).
+// gated to PG14+, and recordable.
 func TestNew_BgwriterView(t *testing.T) {
 	v := New()
 	bgwriter, ok := v["bgwriter"]
 	assert.True(t, ok)
-	assert.True(t, bgwriter.NotRecordable)
+	assert.False(t, bgwriter.NotRecordable)
 	assert.Equal(t, query.PostgresV14, bgwriter.MinRequiredVersion)
 	// Pin the PG14-default map values that Configure() overrides per version.
 	assert.Equal(t, 12, bgwriter.Ncols)

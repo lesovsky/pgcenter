@@ -1,0 +1,54 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "pass",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec states 'TestNew unchanged at 27' as an acceptance criterion, but view_test.go:TestNew asserts exactly 27 views. After removing NotRecordable: true from 5 view definitions, the view count stays at 27 (correct — no views are added or removed), but all 5 per-view test helpers (TestNew_StatementsJITView, TestNew_StatIOView, TestNew_StatIOTimeView, TestNew_ReplslotsView, TestNew_BgwriterView) currently assert 'assert.True(t, <view>.NotRecordable)'. These will fail immediately after Task 1. The spec correctly identifies this at §Testing (lines 146-147) and in code-research §5b, and the fix is trivial; however, the Task 1 file list includes view_test.go with no mention of the five per-function helper assertions — only 'flip the 5 NotRecordable assertions'. The task brief is complete, but implementers must flip all five helper functions, not just the literal at view_test.go:11.",
+      "location": "Tech-spec §Testing Strategy / Unit tests — Task 1 / Acceptance Criteria",
+      "fix": "Confirm Task 1 explicitly covers TestNew_StatementsJITView, TestNew_StatIOView, TestNew_StatIOTimeView, TestNew_ReplslotsView, TestNew_BgwriterView — each has an assert.True(t, *.NotRecordable) that must become assert.False. The spec knows this (code-research §5b), so this is a documentation gap in the task brief, not a design gap."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The stale comment at record.go:206-207 (the filterViews NotRecordable branch) currently names 'bgwriter' as the canonical example of a NotRecordable view. After this feature no production view will set NotRecordable: true; the comment becomes factually wrong. The spec mentions this in code-research §1 ('Comment update needed') but Task 1 does not list record.go as a file to modify — only view.go, view_test.go, record_test.go.",
+      "location": "Tech-spec §Task 1 — Files to modify",
+      "fix": "Add record.go to Task 1's 'Files to modify' list to update the stale comment at record.go:206-207 to a generic description ('e.g. views intentionally excluded from recording via the TestFilterViews_dropsExplicitNotRecordable guard')."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The replslots view has no UniqueKey set (zero value = column 0). Column 0 is the slot name, which is a stable string identifier across snapshots — so row matching in diff() works correctly. However the tech-spec and code-research mention the UniqueKey situation only for stat_io (synthetic md5 io_key) and statements_jit (queryid). For replslots the UniqueKey reliance on column 0 (slot_name) is implicit and never called out. If a future Configure selector for replslots adds or reorders columns before the slot_name, the diff will silently mismatch. This is a documentation gap, not a runtime risk in the current schema.",
+      "location": "Tech-spec §Data Models / code-research §2 replslots row",
+      "fix": "In Task 5 (replslots golden test), add a comment noting that UniqueKey=0 maps to the slot_name column, pinning the column order assumption. This is the same documentation pattern used for io_key (UniqueKey 0 = io_key) in the stat_io test."
+    },
+    {
+      "check": "api_contracts",
+      "severity": "minor",
+      "issue": "The showStatIO string flag (-J) uses values 'c' (count) and 't' (time). The existing string flags use single letters too (-D: 'g'/'s', -X: 'm'/'g'/'i'/'t'/'l'/'w', -P: 'v'/'c'/'i'/'a'/'b'/'y'). The letter 't' for stat_io_time is already used by -X 't' (statements_temp) and -P 't' is unused but -D is not relevant here. Within the -J namespace 'c'/'t' are unambiguous. However, there is no error path when -J receives an unrecognised value (e.g. '-J x'): selectReport's inner switch has no default case for showStatIO, so it falls through and returns '' — validate() then returns 'report type is not specified'. The tech-spec acceptance criterion says 'unknown -J/-X values error like existing string flags' — this is what happens: selectReport returns '' and validate() errors. The existing -D and -X have the same silent-fallthrough pattern. This is consistent with the established idiom, but worth confirming the acceptance criterion language matches the actual behavior (empty string → validate-level error, not a specific flag-level error message).",
+      "location": "Tech-spec §Decision 2 / Acceptance Criteria bullet 3",
+      "fix": "No code change needed. The acceptance criterion wording ('error like existing string flags') correctly describes the empty-string → validate error path. Verify the test in Task 3 includes at least one invalid value case (e.g. options{showStatIO: \"x\"} → want: \"\") to pin the behavior."
+    },
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "Tech-debt [004] (Task 9) exports new column-index constants from internal/stat/procpidstat.go (ColReadTotalKiB, ColWriteTotalKiB, ColIODelayTotalS). pgcenter is an application, not a library, so no external consumers exist. However, the existing unexported procPidResultCols slice and procPidResultNcols constant in procpidstat.go are not the same symbols being exported — the new exports are named index constants that do not currently exist. This is a purely additive change with no backward-compat risk. The only internal consumer of the old local const block (report/report.go:342-346) is replaced by the exported symbols; the import cycle check is straightforward (report already imports internal/stat). Confirmed safe.",
+      "location": "Tech-spec §Task 9 / Backward Compatibility section",
+      "fix": "No action required. Confirmed additive, no breaking change."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The feature is architecturally sound: lifting NotRecordable: true from 5 pure-SQL views is precisely the right mechanism (the filterViews drop-branch is the sole barrier, verified in code), the recorder and replay engine need zero changes, and the synthetic-tar + golden test pattern mirrors the established procpidstat precedent cleanly. All five findings are minor (stale comment, implicit UniqueKey doc gap, per-view test helper scope clarification, error-path wording, additive export) with no design flaws or blocking risks — the spec can proceed to implementation."
+}

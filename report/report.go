@@ -338,13 +338,6 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 	}
 }
 
-// procpidstat column indices for IO and iodelay metrics (see internal/stat/procpidstat.go).
-const (
-	procPidStatColReadTotalKiB  = 9
-	procPidStatColWriteTotalKiB = 10
-	procPidStatColIODelayTotalS = 11
-)
-
 // emitProcPidStatAvailabilityWarnings inspects the first procpidstat result
 // for empty IO / iodelay columns and writes a WARNING line per affected
 // column group. A column is considered "unavailable" when every row's value
@@ -356,7 +349,7 @@ func emitProcPidStatAvailabilityWarnings(w io.Writer, res stat.PGresult) error {
 	if res.Nrows == 0 {
 		return nil
 	}
-	if res.Ncols <= procPidStatColIODelayTotalS {
+	if res.Ncols <= stat.ColIODelayTotalS {
 		return nil
 	}
 
@@ -373,12 +366,12 @@ func emitProcPidStatAvailabilityWarnings(w io.Writer, res stat.PGresult) error {
 		return true
 	}
 
-	if allEmpty(procPidStatColReadTotalKiB) || allEmpty(procPidStatColWriteTotalKiB) {
+	if allEmpty(stat.ColReadTotalKiB) || allEmpty(stat.ColWriteTotalKiB) {
 		if _, err := fmt.Fprint(w, "WARNING: IO stats unavailable in recorded data\n"); err != nil {
 			return err
 		}
 	}
-	if allEmpty(procPidStatColIODelayTotalS) {
+	if allEmpty(stat.ColIODelayTotalS) {
 		if _, err := fmt.Fprint(w, "WARNING: iodelay stats unavailable in recorded data\n"); err != nil {
 			return err
 		}
@@ -625,6 +618,11 @@ func describeReport(w io.Writer, report string) error {
 		"statements_local":    pgStatStatementsLocalDescription,
 		"statements_temp":     pgStatStatementsTempDescription,
 		"statements_wal":      pgStatStatementsWalDescription,
+		"statements_jit":      pgStatStatementsJITDescription,
+		"bgwriter":            pgStatBgwriterDescription,
+		"replslots":           pgStatReplicationSlotsDescription,
+		"stat_io":             pgStatIODescription,
+		"stat_io_time":        pgStatIOTimeDescription,
 		"procpidstat":         procPidStatDescription,
 	}
 

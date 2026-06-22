@@ -1,0 +1,3 @@
+[37;1muser      [0m[37;1mdatabase  [0m[37;1mgen_total  [0m[37;1minline_total  [0m[37;1mopt_total  [0m[37;1memit_total  [0m[37;1mgen,ms    [0m[37;1minline,ms  [0m[37;1mopt,ms    [0m[37;1memit,ms   [0m[37;1mfunctions  [0m[37;1mqueryid     [0m[37;1mquery                             [0m
+2026/05/19 10:00:01, rate: 1s
+postgres  testdb    00:00:02   00:00:04      00:00:06   00:00:08    50        60         90        120       4          a1b2c3d4e5  select * from t

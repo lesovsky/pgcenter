@@ -105,27 +105,24 @@ func Test_filterViews(t *testing.T) {
 		wantN      int
 		wantV      int
 	}{
-		// wantN counts filtered views (version-incompatible + statements_* + NotRecordable);
-		// wantV counts remaining views after filtering. procpidstat is now
-		// NotRecordable=false in view.New() (the local/remote gate moved to
-		// app.setup() in task 02), so it passes through filterViews and joins
-		// wantV — every row's wantN decreases by 1 and wantV increases by 1.
-		// The bgwriter view (feature 004) and the replslots view (feature 005) are both
-		// NotRecordable=true, so each is always dropped by filterViews on every version —
-		// together adding 2 to wantN on each row versus the pre-bgwriter baseline, while
-		// wantV is unchanged (neither ever joins the remaining set). replslots has
-		// MinRequiredVersion=PostgresV14 but the NotRecordable branch fires before the
-		// version gate, so its +1 applies uniformly on all rows including PG<14.
-		// The pg_stat_io views stat_io + stat_io_time (feature 006) are likewise both
-		// NotRecordable=true, so they are always dropped by filterViews on every version,
-		// adding a further +2 to wantN on each row while wantV stays unchanged (they never
-		// join the remaining set).
-		// The statements_jit view (feature 007) is NotRecordable=true with
-		// MinRequiredVersion=PostgresV15; the NotRecordable branch in filterViews fires before
-		// the version gate, so it is always dropped on every version — adding a further +1 to
-		// wantN on each row (including PG<15) while wantV stays unchanged.
-		{version: 140000, pgssSchema: "", wantN: 11, wantV: 16},
-		{version: 140000, pgssSchema: "public", wantN: 5, wantV: 22},
+		// wantN counts filtered views (version-incompatible + statements_* without pgss);
+		// wantV counts remaining views after filtering. After feature 008 no production
+		// view sets NotRecordable=true, so every view now reaches the version gate (and,
+		// for statements_*, the pgss gate); whether a view is dropped is decided purely by
+		// version compatibility and pgss availability.
+		// The bgwriter and replslots views (both MinRequiredVersion=PostgresV14) are now
+		// recordable, so on PG14 they pass both gates and join wantV: relative to the
+		// pre-008 NotRecordable baseline this moves 2 views from filtered to remaining on
+		// the PG14 rows only (wantN -2, wantV +2).
+		// stat_io + stat_io_time (PostgresV16) and statements_jit (PostgresV15) are also
+		// recordable now, but on PG14 they are still dropped — by the version gate (and, for
+		// statements_jit, by the pgss gate when pgssSchema=="") instead of NotRecordable —
+		// so they stay counted in wantN; only the reason for dropping them changed.
+		// On PG13 and below all five views are version-incompatible and dropped by the
+		// version gate regardless of NotRecordable, so those rows are unchanged from the
+		// pre-008 baseline.
+		{version: 140000, pgssSchema: "", wantN: 9, wantV: 18},
+		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 24},
 		{version: 130000, pgssSchema: "public", wantN: 8, wantV: 19},
 		{version: 120000, pgssSchema: "public", wantN: 11, wantV: 16},
 		{version: 110000, pgssSchema: "public", wantN: 13, wantV: 14},

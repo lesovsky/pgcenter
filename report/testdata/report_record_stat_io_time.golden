@@ -1,0 +1,4 @@
+[37;1mio_key      [0m[37;1mbackend_type       [0m[37;1mobject    [0m[37;1mcontext   [0m[37;1mread_time  [0m[37;1mwrite_time  [0m[37;1mwriteback_time  [0m[37;1mextend_time  [0m[37;1mfsync_time  [0m[37;1mstats_age                         [0m
+2026/05/19 10:00:01, rate: 1s
+k_client01  client backend     relation  normal    600        300         60              80           25          02:00:00
+k_bgwrit01  background writer  relation  normal    0          120         30              40           0           02:00:00

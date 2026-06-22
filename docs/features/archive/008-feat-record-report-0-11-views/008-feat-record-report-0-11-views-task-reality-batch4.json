@@ -1,0 +1,33 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["10", "11"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step 1 instructs editing 4 lines in overview.md for bgwriter/replslots/pg_stat_io/JIT. The cited 'TUI-only, not recordable in 0.11.0' tail actually lives on lines 21, 22, 23 and 25 (line 24 is pg_stat_wal, which has no such tail). The task says '4 строки' without listing exact line numbers, so this is not an error, but executors should note the JIT claim is on line 25 (inside the long pg_stat_statements line), not a separate row.",
+      "fix": "No change required; line targets are correct (21/22/23/25). Editor should touch only the JIT fragment on line 25, as the task already warns in Edge cases."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 2,
+    "claims_verified": 18,
+    "issues_found": 1
+  },
+  "verification_detail": {
+    "task_10": {
+      "overview.md": "VERIFIED — lines 21 (pg_stat_bgwriter), 22 (pg_replication_slots), 23 (pg_stat_io), 25 (pg_stat_statements/JIT) all end with 'TUI-only, not recordable in 0.11.0'. Exactly 4 such lines, matching the task's claim. File has 40 lines.",
+      "architecture.md": "VERIFIED — line 70 'first view registered with NotRecordable: true — TUI-only' (bgwriter), line 72 'the second NotRecordable user' (replslots), line 74 'The third and fourth NotRecordable views' (pg_stat_io stat_io/stat_io_time). All cited ~line numbers and phrasings exact. File has 96 lines.",
+      "features-catalog.md": "VERIFIED — Limitations lines 76 [004], 97 [005], 118 [006], 137 [007] and Touches lines 102 [005], 124 [006], 142 [007] all contain the cited TUI-only/NotRecordable/deferred phrasings. Catalog entries [004]/[005]/[006]/[007] exist at expected positions (headers at 65/85/106/126). File has 144 lines.",
+      "cli_flags": "CONSISTENT — task documents new flags -B/-L/-J c|t and -X j as additions from feature 008 (Wave 1-2). Current report has -X/--statements and -d/--describe (cmd/report/report.go:60,69); -B/-L/-J absent now, which is expected since they are added by this feature, not by task 10 (docs-only)."
+    },
+    "task_11": {
+      "make_targets": "VERIFIED — Makefile defines test (line 33: go test -race + coverage), lint (line 26: golangci-lint + gosec), vuln (line 30: govulncheck), build (line 38). All targets referenced by task 11 (make test/lint/vuln/build) exist. verify front-matter command 'make test && make lint && make vuln' is valid.",
+      "scope": "QA task modifies no code; depends_on lists 01-10 (all prior tasks). Manual PG check and CI matrix PG14-18 are environment/runtime concerns, not falsifiable against static codebase. No file/function hallucinations.",
+      "test_names_referenced": "Test_filterViews / view_test / TestNew / golden replay / zero-cell diff are expected outputs of Wave 1-3 tasks (not yet implemented); not validatable as existing code, which is correct for a final-wave QA gate."
+    }
+  }
+}

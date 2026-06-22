@@ -1,0 +1,20 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["07", "08", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "07",
+      "issue": "Task refers to writeEntry as a reusable helper ('хелпер writeEntry') in Context Files and Implementation hints. In report/report_test.go writeEntry is NOT a package-level helper — it is a local closure redefined inside each test (report_test.go:462 in Test_app_doReport, report_test.go:678 in Test_app_doReport_procpidstat). The new test file cannot import/reuse it; it must define its own. The task body does say to 'copy the structure', so this is non-blocking, but the wording is slightly misleading.",
+      "fix": "Clarify that writeEntry is a per-test local closure to be re-created in the new test file, not a shared helper to call. The package-level `update` flag (report_test.go:22) IS shared and correctly noted as not to be redeclared."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 38,
+    "issues_found": 1
+  }
+}

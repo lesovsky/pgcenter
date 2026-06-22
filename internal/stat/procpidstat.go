@@ -28,6 +28,16 @@ var procPidResultCols = []string{
 
 const procPidResultNcols = 19
 
+// Column indices into a procpidstat PGresult for the IO and iodelay metrics.
+// They must match the order of procPidResultCols above: index 9 = read_total,KiB;
+// 10 = write_total,KiB; 11 = iodelay_total,s. Consumers (e.g. report) reference
+// these instead of hardcoding the numbers so a column reorder updates one place.
+const (
+	ColReadTotalKiB  = 9
+	ColWriteTotalKiB = 10
+	ColIODelayTotalS = 11
+)
+
 // ProcPidStat describes raw per-process CPU usage values from /proc/[pid]/stat.
 // Values are unscaled (jiffies), not seconds.
 type ProcPidStat struct {

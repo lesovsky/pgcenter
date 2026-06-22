@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": true
+  },
+  "requirements_total": 9,
+  "requirements_covered": 8,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-5: Empty/old archive prints header-only, no crash, no INFO/WARNING",
+      "detail": "Only the replslots golden test (Task 5) covers an empty/zero-slots case. The 'old archive without new entries' branch and the empty/header-only state for bgwriter, stat_io, stat_io_time, statements_jit are not exercised by any golden replay test (Tasks 4,6,7 cover only populated samples). The behavior is the same engine path for all 5 types, and Task 11 covers it manually, so this is a non-core coverage gap rather than a missing requirement.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-4: Replayed values match what the TUI shows on the same data",
+      "detail": "The 'values match TUI' half of the acceptance criterion is not covered by any automated test — golden replay tests (Tasks 4-7) verify diff correctness against fixed golden files, not equivalence with TUI output. This seam is explicitly delegated to the manual check in Task 11 / user-spec 'Пользователь проверяет'. Tech-spec Decision 3 and the user-spec acknowledge no live record->report harness exists and judge building one disproportionate (M-sized internal tooling), which is a reasonable trade-off for this feature size.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "8/9 requirements fully covered, 1 partial (no gaps, no missing). Forward traceability: every user-spec acceptance criterion maps to a task (US-1->T1, US-2->T3, US-3->T2, US-4->T4-7+T11, US-5->T5+T11, US-6->T4/6/7+T11, US-7->T8/T9, US-8->T10, US-9->T11). Reverse traceability: all 11 tasks trace to a requirement; tech-debt payoff (T8/T9) and docs (T10) are explicitly requested by US-7/US-8, so no scope creep. Solution has real technical substance (lift NotRecordable, reuse pure-SQL record + report-replay engines, report-time Configure consumes Version only) with justified architecture and explicit alternatives. No overengineering (Decisions explicitly reject a stateful recorder path, extra meta fields, and live-harness E2E as disproportionate). No underengineering for M-sized internal CLI tooling (empty/old-archive and zero-cell paths addressed; version variance covered on PG14-18; no user-input/network surface beyond existing CLI flags whose error path reuses the existing string-flag validation). Decisions are self-contained in the tech-spec Decisions section, not scattered in tasks. Two minor partials are coverage trade-offs explicitly reasoned and delegated to manual QA, both proportionate to feature size. No critical findings -> pass."
+}

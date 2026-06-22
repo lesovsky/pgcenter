@@ -1,0 +1,52 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Two well-constructed golden replay tests that genuinely exercise the report engine end-to-end (synthetic tar -> doReport -> output), not just golden equality. The diff math (cols 6-13), retained,KiB DESC ordering, the physical-slot coalesced-zero contract, and the empty/header-only case are all proven with meaningful pre-golden assertions and verified correct against report.go/postgres.go. Both tests pass (go test ./report/... -run ReplSlots is green). One real gap: the row-pairing-by-slot_name claim is not actually distinguished from positional pairing because prev and curr ticks list slots in identical order; diff() would produce the same output either way. A couple of brittle/over-broad substring assertions in the empty case are minor.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "report/report_record_replslots_test.go:90-93,159 (Test_app_doReport_ReplSlots)",
+      "issue": "The test claims to prove property 2 (rows paired across snapshots by slot_name / UniqueKey 0), but it does not distinguish key-based pairing from positional pairing. In stat.diff() (internal/stat/postgres.go:316-345) curr rows are matched to prev rows by cv[ukey]==pv[ukey]. The test lists both slots physical-first in BOTH prev and curr ticks, so even if pairing were purely positional (curr[i] vs prev[i]) the resulting deltas would be identical. Removing the slot_name key match (e.g. pairing by index) would NOT make this test fail -> the pairing property is asserted but not actually tested. This is the first multi-row replay test in the report package (bgwriter is single-row), so the pairing path is otherwise uncovered.",
+      "recommendation": "Make prev and curr list the two slots in DIFFERENT row order so positional pairing would yield wrong deltas. Concretely: keep curr as [physical_b, logical_a] but build prev as [logical_a, physical_b] (swap the two mkRow entries in statPrev.Values). With correct slot_name pairing the golden is unchanged (logical_a delta 5/8/15/12/20/30/30/50, physical_b all 0); with positional pairing logical_a(curr) would diff against physical_b(prev) and produce garbage/negative deltas. Regenerate the golden with -update and confirm it stays identical to the current golden. Optionally add an explicit assertion on a specific delta value to pin the pairing result, e.g. assert that the logical_a row contains the token \"50\" (total,KiB delta) and the physical_b row's diffed cells are all \"0\".",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_replslots_test.go:155-159 (Test_app_doReport_ReplSlots)",
+      "issue": "Beyond the golden-equality check, the only value-level assertions are Contains(\"logical_a\"/\"physical_b\") and an ordering check. The corrected diff values (the core property 1 from Decision 3) are pinned ONLY by the golden file. If the golden is ever regenerated against buggy code with -update, the bug would be silently baked in and the substring assertions would still pass. The diff correctness has no independent guard.",
+      "recommendation": "Add 1-2 explicit value assertions independent of the golden so the diff math is pinned even if the golden is regenerated: assert.Contains(t, out, \"50\") is too weak (collides with retained 2048? no, but collides with other tokens). Prefer asserting the full logical_a delta block via a normalized (whitespace-collapsed) substring, e.g. strip ANSI + collapse spaces and assert the row contains \"logical_a logical true reserved 2048 0 5 8 15 12 20 30 30 50\". This makes the litmus test pass for property 1 without relying solely on -update being run against correct code.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_replslots_test.go:242-243 (Test_app_doReport_ReplSlots_empty)",
+      "issue": "NotContains(out, \"logical\") and NotContains(out, \"physical\") are over-broad substring guards. They happen to pass only because the column header (slot_name slot_type active wal_status ...) contains neither token. This couples the empty-case assertion to the absence of those words in the header rather than to the actual property under test (no data rows). If a future column were renamed to include 'logical'/'physical' the assertion would break for the wrong reason; conversely it does not specifically prove 'no slot ROWS' vs 'no slot tokens anywhere'.",
+      "recommendation": "Tie the no-rows assertion to the row data, not arbitrary tokens: assert on the absence of the timestamp/rate line (already done at line 240 via NotRegexp on YYYY/MM/DD, which is the strongest no-rows signal since printStatSample only emits the 'rate:' header when a row prints) and/or assert.NotContains(t, out, \", rate: \"). Keep the slot_name header Contains check. The slot-name NotContains checks can stay as a secondary guard but the primary no-rows proof should be the absent timestamp/rate line."
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_replslots_test.go:244-245 (Test_app_doReport_ReplSlots_empty)",
+      "issue": "The NotContains(\"INFO\")/NotContains(\"WARNING\") assertions are correct for the empty case (verified against report.go: the no-data INFO at lines 331-335 and the IO/iodelay WARNING at lines 266-271/376-385 are both gated on config.ReportType == \"procpidstat\", so a replslots report never emits them). However printReportHeader (the 3x INFO: lines) is NOT exercised here because the test drives app.doReport directly rather than RunMain. The assertion is therefore slightly mislabeled by the comment as a general 'no INFO' guarantee when it only reflects the procpidstat-specific lines being absent.",
+      "recommendation": "No behavior change needed (the assertion is correct). Tighten the inline comment to state explicitly that doReport (not RunMain) is under test, so the printReportHeader INFO lines are out of scope and the NotContains(INFO/WARNING) specifically guards against the procpidstat-only diagnostics leaking into a replslots report. This keeps the test's intent unambiguous for future maintainers."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 4,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 0,
+      "integration": 2,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

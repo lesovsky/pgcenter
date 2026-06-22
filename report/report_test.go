@@ -527,9 +527,9 @@ func Test_emitProcPidStatAvailabilityWarnings(t *testing.T) {
 		for i := range row {
 			row[i] = sql.NullString{String: "x", Valid: true}
 		}
-		row[procPidStatColReadTotalKiB] = sql.NullString{String: read, Valid: true}
-		row[procPidStatColWriteTotalKiB] = sql.NullString{String: write, Valid: true}
-		row[procPidStatColIODelayTotalS] = sql.NullString{String: iodelay, Valid: true}
+		row[stat.ColReadTotalKiB] = sql.NullString{String: read, Valid: true}
+		row[stat.ColWriteTotalKiB] = sql.NullString{String: write, Valid: true}
+		row[stat.ColIODelayTotalS] = sql.NullString{String: iodelay, Valid: true}
 		return row
 	}
 
@@ -1055,6 +1055,11 @@ func Test_describeReport(t *testing.T) {
 		{report: "statements_io", want: pgStatStatementsIODescription},
 		{report: "statements_local", want: pgStatStatementsLocalDescription},
 		{report: "statements_temp", want: pgStatStatementsTempDescription},
+		{report: "bgwriter", want: pgStatBgwriterDescription},
+		{report: "replslots", want: pgStatReplicationSlotsDescription},
+		{report: "stat_io", want: pgStatIODescription},
+		{report: "stat_io_time", want: pgStatIOTimeDescription},
+		{report: "statements_jit", want: pgStatStatementsJITDescription},
 		{report: "procpidstat", want: procPidStatDescription},
 		{report: "invalid", want: "unknown description requested"},
 	}

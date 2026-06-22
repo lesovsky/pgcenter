@@ -1,0 +1,52 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/008-feat-record-report-0-11-views/008-feat-record-report-0-11-views",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "03",
+      "section": "frontmatter",
+      "issue": "verify field embeds the command inline in the value: `verify: bash — `go test ./cmd/report/...``. Template (and tasks 01/02/04/05) put the tool name as the value (`verify: bash`) and the command in a trailing `# comment`. Here the value is `bash — go test ...`, which is no longer a clean tool name.",
+      "fix": "Set `verify: bash` and move the command into a comment: `verify: bash                       # go test ./cmd/report/...`, matching tasks 01 and 02."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Required Skills / Context Files (Project knowledge)",
+      "issue": "Project-knowledge link uses mismatched text and path: `[project.md](.claude/skills/project-knowledge/overview.md)` — link label says project.md but target is overview.md. The repo has no project.md (overview.md is the analog). Tasks 01/02/04/05 correctly label this link `overview.md`.",
+      "fix": "Rename the link text to `overview.md` to match the actual target (as in the other tasks): `[overview.md](.claude/skills/project-knowledge/overview.md)`."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "Context Files / Reviewers / Post-completion",
+      "issue": "Feature-artifact, reviewer-report and decisions links use full repo-relative paths (docs/features/008-.../008-...) while tasks 01/02/04 use bare basenames (008-...md). Links resolve either way, but the batch is inconsistent in path style.",
+      "fix": "Pick one convention across the batch. Since these files sit in the feature dir alongside the task file, prefer the bare-basename style used by tasks 01/02/04."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "05",
+      "section": "Context Files / Reviewers / Post-completion",
+      "issue": "Same path-style inconsistency as task 03: full repo-relative paths for feature artifacts and reviewer reports, whereas tasks 01/02/04 use bare basenames.",
+      "fix": "Normalize link paths to the bare-basename style used by tasks 01/02/04 for consistency across the batch."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "Context Files (Code files)",
+      "issue": "Mixed relative-path styles within the same task: Project-knowledge and some code-file links use ../../../ ascent (e.g. [report/report_test.go](../../../report/report_test.go)) while feature-artifact links use bare basenames. Both resolve, but the ascent form differs from tasks 01/02 which use plain repo-relative paths (report/...).",
+      "fix": "Use one path convention. Plain repo-relative paths (report/..., .claude/...) as in tasks 01/02 are clearer than ../../../ ascent."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 5
+  }
+}

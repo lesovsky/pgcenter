@@ -1,0 +1,6 @@
+{
+  "status": "approved",
+  "findings": [],
+  "worst_category": null,
+  "summary": "Round-2 re-validation: the round-1 MAJOR (tech-spec-level detail leaked into the user-spec) is RESOLVED — all flagged test literals (11/16->9/18, 5/22->3/24, True->False x5, TestNew 27), internal symbol names (DiffIntvl, UniqueKey, Ncols, filterViews, processData, Configure, diffPair), and the named test-harness pattern (Test_app_doReport_procpidstat) are gone, rewritten to a behavioral WHAT/WHY level (deltas, recordable-flag counters, screen layout, synthetic-archive-input + golden as a strategy decision). A grep for every previously-flagged symbol returns no matches; no new HOW-level leakage was introduced. The round-1 underengineering MINOR (record->report coverage seam) is also addressed: the user-verification section now explicitly requires comparing a live report against the TUI for a cumulative-counter screen (bgwriter or stat_io). The feature remains feasible on the current stack (no new deps, pure-SQL views, report pipeline confirmed ready via the replication precedent), correctly sized M, and free of over/under-engineering. No findings remain."
+}

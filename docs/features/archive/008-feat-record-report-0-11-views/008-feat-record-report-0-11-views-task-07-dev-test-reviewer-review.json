@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Strong golden-based replay test for the version-aware statements_jit report. It exercises the real doReport pipeline end-to-end (synthetic in-memory tar -> readMeta -> version-driven view.Configure -> processData -> diff -> printStatSample) with zero mocks and no live PostgreSQL. Both required version variants (15/17) are covered with their own goldens, the goldens are correct and human-meaningful (13 vs 15 columns, deform present only on v17, deltas computed as curr-prev with itv==1), and the test passes the litmus test because the goldens pin every cell of the output row. The explicit non-golden assertions add localization value but are bare unanchored substring checks; one of them ('50') collides with the substring of the v17 deform delta '150', which is a minor robustness weakness, not a correctness defect. Test ran green locally for both subcases.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_statements_jit_test.go:217-227",
+      "issue": "Delta assertions use bare assert.Contains on raw number substrings ('50','60','90','120','150') without anchoring to a column, row, or word boundary. 'assert.Contains(out, \"50\")' is satisfied as a substring of the v17 deform delta '150', and the v17 'assert.Contains(out, \"150\")' would also be satisfied by the gen delta if it ever changed to e.g. '1500'. Because these are substring (not token) matches, a regression that shifted a value into the wrong column or merged columns could still pass them. The authoritative proof here is the golden equality (assert.Equal on the whole output), which DOES pin every delta correctly, so this is a robustness/clarity weakness in the auxiliary asserts rather than a coverage gap.",
+      "recommendation": "Make the delta sentinels unambiguous by asserting the whole data row as a token sequence rather than isolated substrings. Concrete options: (a) assert.Regexp with word boundaries, e.g. regexp.MustCompile(`\\b50\\s+60\\s+90\\s+120\\b`) for the shared phase block, and on v17 a separate `\\b120\\s+150\\b` to pin the deform delta adjacent to emit; or (b) extract the single data line (the line containing queryid) and assert.Contains on that line only, so a number in a header/timestamp cannot satisfy the check. Also consider asserting the functions delta (9-5=4) on the data line — it is currently only covered by the golden, not by an explicit sentinel, and a bare '4' would be too ambiguous to assert without line anchoring.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_statements_jit_test.go:223-229",
+      "issue": "The deform presence/absence check is asymmetric and uses two different assertion styles: assert.Contains(out, \"deform\") + assert.Contains(out, \"deform,ms\") on v17, but assert.False(strings.Contains(out, \"deform\")) on v15. The 'deform' substring it keys on is a header label, so it proves the column header is present/absent, not that the deform DELTA value (650-500=150) is in the data row. The deform value itself is only proven by the golden. This is acceptable since the golden anchors the value, but the asymmetric style (Contains vs strings.Contains+False) is slightly inconsistent and the positive case overlaps redundantly (deform,ms contains deform).",
+      "recommendation": "Use assert.NotContains(t, out, \"deform\", \"PG15 layout must not contain deform column\") for the negative case to match testify idiom and drop the manual strings.Contains/assert.False, removing the lone strings import dependency. For the positive case keep a single header check (assert.Contains(out, \"deform,ms\")) and rely on the golden for the deform delta value, OR add a line-anchored assertion that '150' appears on the data row to give the deform delta an explicit sentinel parallel to the other phases.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_record_statements_jit_test.go:60-114",
+      "issue": "Minor spec drift in chosen version_num values vs the task text. Task/TDD-anchor names version_num=150000 and 170000; the test uses 150004 and 170001. This is harmless (both correctly fall into the same SelectStatStatementsJITQuery branches: <170000 -> 13-col layout, >=170000 -> 15-col layout, confirmed in internal/query/statements.go:347-351) and is arguably better since real recordings carry non-zero patch levels. Flagged only for traceability so a reader does not assume a mismatch with the acceptance criteria.",
+      "recommendation": "No code change required. Optionally add a one-line comment noting that 150004/170001 are representative patch-level versions chosen to exercise the <170000 and >=170000 branches of SelectStatStatementsJITQuery, so the deviation from the task's illustrative 150000/170000 is intentional.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 0,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

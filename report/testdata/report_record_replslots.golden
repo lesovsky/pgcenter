@@ -1,0 +1,4 @@
+[37;1mslot_name   [0m[37;1mslot_type  [0m[37;1mactive    [0m[37;1mwal_status  [0m[37;1mretained,KiB  [0m[37;1msafe,KiB  [0m[37;1mspill_txns  [0m[37;1mspill_count  [0m[37;1mspill,KiB  [0m[37;1mstream_txns  [0m[37;1mstream_count  [0m[37;1mstream,KiB  [0m[37;1mtotal_txns  [0m[37;1mtotal,KiB  [0m[37;1mstats_age                         [0m
+2026/05/19 10:00:01, rate: 1s
+logical_a   logical    true      reserved    2048          0         5           8            15         12           20            30          30          50         02:00:00
+physical_b  physical   true      reserved    1024          0         0           0            0          0            0             0           0           0          02:00:00

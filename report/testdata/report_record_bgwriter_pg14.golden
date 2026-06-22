@@ -1,0 +1,3 @@
+[37;1msource    [0m[37;1mckpt_timed  [0m[37;1mckpt_req  [0m[37;1mckpt_write,ms  [0m[37;1mckpt_sync,ms  [0m[37;1mbuf_ckpt  [0m[37;1mbuf_clean  [0m[37;1mmaxwritten  [0m[37;1mbuf_backend  [0m[37;1mbuf_backend_fsync  [0m[37;1mbuf_alloc  [0m[37;1mstats_age  [0m
+2026/05/19 10:00:01, rate: 1s
+Bgwriter  11          3         50.00          10.00         500       200        3           150          1                  1000       02:00:00

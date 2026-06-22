@@ -1,0 +1,24 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Clean, behavior-preserving refactor that resolves tech-debt [004] by exporting the procpidstat IO/iodelay column-index constants from internal/stat and removing the duplicated local const block in report.go. Constant values (9/10/11) match the 0-based order of procPidResultCols exactly, all references were migrated (no leftover dead refs), there is no import-cycle risk (report->stat is one-way), and build/vet/test all pass.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/procpidstat.go",
+      "line": 35,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The doc-comment correctly states these constants must stay in sync with procPidResultCols, but the invariant is only enforced by a code comment. Consider an optional compile-time or test-time assertion (e.g. a small test asserting procPidResultCols[ColReadTotalKiB] == \"read_total,KiB\", etc.) so a future column reorder fails loudly rather than silently shifting indices.",
+      "benefit": "Turns the textual 'must match' contract into an automatically verified guarantee, protecting against a silent regression if the column slice is reordered.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  }
+}

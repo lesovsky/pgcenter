@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Test-only change adding a version-aware golden replay test for the statements_jit report. The test is well-structured, faithfully mirrors the bgwriter/procpidstat harness template, passes (both subcases), survives go vet, and introduces no regressions in the report package. Cross-file consistency against query.SelectStatStatementsJITQuery is exact (13 cols/{6,10}/UniqueKey 11 for v15; 15 cols/{7,12}/UniqueKey 13 for v17). Only minor, optional polish items remain.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/report_record_statements_jit_test.go",
+      "line": 63,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The task text specifies recorded version_num values of 150000/170000, but the test uses 150004/170001. Functionally this is correct and arguably better (realistic minor-version-bearing version_num that still routes to version < PostgresV17 and >= PostgresV17 respectively). Consider a one-line code comment noting the intentional use of realistic version_num so a future reader does not mistake it for a typo vs the task spec.",
+      "benefit": "Removes ambiguity between the task wording and the implementation; documents the deviation in-code.",
+      "optional": true
+    },
+    {
+      "file": "report/report_record_statements_jit_test.go",
+      "line": 217,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The explicit delta sentinels use bare substring matching: assert.Contains(out, \"50\"), \"60\", \"90\", \"120\", \"150\". These are robust here only because the byte-exact golden also pins the full row, and because no colliding substrings exist in the current fixtures (e.g. \"150\" does not appear in v15 output, \"50\" appears only as the gen delta). They remain inherently fragile to future fixture changes. Since the golden already guarantees the exact row, these Contains checks add little localization value beyond the deform presence/absence checks, which are the genuinely useful ones. Consider trimming the numeric Contains sentinels or asserting on a more specific token (e.g. the full tab-delimited cell) if you want them to keep meaning when fixtures evolve.",
+      "benefit": "Reduces the chance of a future false-positive/negative from incidental substring overlap and clarifies which assertions carry real diagnostic weight.",
+      "optional": true
+    },
+    {
+      "file": "report/report_record_statements_jit_test.go",
+      "line": 229,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The PG15 negative check uses strings.Contains via assert.False, while the PG17 positive checks use assert.Contains. Using assert.NotContains(t, out, \"deform\", \"PG15 layout must not contain deform column\") would be symmetric with the positive assertions and drop the separate strings import dependency used solely for this one call.",
+      "benefit": "Improves symmetry/readability and removes a single-use import.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

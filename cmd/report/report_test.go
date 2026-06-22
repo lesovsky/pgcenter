@@ -57,6 +57,13 @@ func Test_selectReport(t *testing.T) {
 		{opts: options{showProgress: "a"}, want: "progress_analyze"},
 		{opts: options{showProgress: "b"}, want: "progress_basebackup"},
 		{opts: options{showProgress: "y"}, want: "progress_copy"},
+		{opts: options{showBgwriter: true}, want: "bgwriter"},
+		{opts: options{showReplSlots: true}, want: "replslots"},
+		{opts: options{showStatIO: "c"}, want: "stat_io"},
+		{opts: options{showStatIO: "t"}, want: "stat_io_time"},
+		{opts: options{showStatements: "j"}, want: "statements_jit"},
+		{opts: options{showStatIO: "x"}, want: ""},     // invalid -J value
+		{opts: options{showStatements: "z"}, want: ""}, // invalid -X value
 		{opts: options{}, want: ""},
 	}
 

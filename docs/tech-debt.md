@@ -7,15 +7,27 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
-### [007] pg_stat_io NULL-safety covered structurally, no behavioral diff() test
+### [009] tar entry size trusted for allocation in stat.NewPGresultFile
 
-**Added:** 2026-06-21 (feature: 006-feat-pg-stat-io)
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
 **Severity:** Low
-**Area:** `internal/query/io.go`, `internal/stat/postgres.go`, tests
+**Area:** `internal/stat/postgres.go` (`NewPGresultFile`), `report/`
 
-**What:** Every diffed column in `io.go` is wrapped in `coalesce(...,0)` so a NULL `pg_stat_io` cell (e.g. `fsyncs` for `temp relation`) cannot reach `diffPair → ParseInt("")` and abort the sample. The unit test asserts the protection **structurally** (the SQL string contains `coalesce` on each diffed column), not behaviorally — `internal/query` cannot import `internal/stat` (import cycle), so a test that feeds a NULL-bearing `PGresult` through `diff()` cannot live next to the query. The behavioral half of the contract (`diff()` survives an empty diffed cell and does not blank the screen) is unverified anywhere.
+**What:** Report replay deserializes recorded archives via `NewPGresultFile`, which does `make([]byte, hdr.Size)` from the tar header size — an attacker-controlled value if the archive is untrusted (A08 / CWE-789, unbounded allocation). Pre-existing pattern shared by all recordable views; feature 008 did not introduce it but widened the set of view types flowing through this trust boundary.
 
-**Why deferred:** Out of scope for the query-layer task; the structural assertion guards the real production source (the SQL). The follow-up is a behavioral test in `internal/stat/postgres_test.go` (where `diff()` is reachable and `PGresult{}` literals are already built), plus a live assertion that `io_key` is unique/non-NULL.
+**Why deferred:** Out of scope for feature 008 and low risk in practice — the operator owns and controls their own `pgcenter record` archives. A proper fix bounds `hdr.Size` against a sane maximum (or `io.LimitReader`) before allocating.
+
+---
+
+### [008] record.Test_app_record panics instead of skipping without a live PG
+
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views)
+**Severity:** Low
+**Area:** `record/record_test.go` (`Test_app_record`), `record/record.go`
+
+**What:** `Test_app_record` panics (nil-pointer in `app.record`, record.go:167) instead of `t.Skipf` when no live PostgreSQL is available, so `go test ./record/...` fails locally whenever the test clusters are down. Sibling of [005] (`top/reload_test.go`); the rest of the suite skips unavailable versions gracefully. Pre-existing, not caused by feature 008. CI is unaffected (the container provides live PG).
+
+**Why deferred:** Pre-existing and environmental; the fix is the same `t.Skipf` guard pattern as the rest of the suite. Non-blocking.
 
 ---
 
@@ -43,18 +55,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ---
 
-### [004] procpidstat col-index constants duplicated in report package
-
-**Added:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)
-**Severity:** Low
-**Area:** `report/report.go`, `internal/stat/procpidstat.go`
-
-**What:** Column indices for procpidstat IO columns (9 = `read_total,KiB`, 10 = `write_total,KiB`, 11 = `iodelay_total,s`) are declared as local constants `procPidStatColReadTotal`, `procPidStatColWriteTotal`, `procPidStatColIODelay` in `report/report.go`. The authoritative source (`internal/stat/procpidstat.go`) does not export these indices. If column order changes, both places need updating.
-
-**Why deferred:** Non-blocking; report package has its own test coverage for the WARNING detection path. A small cleanup — export the constants from `internal/stat` and import them in report.
-
----
-
 ### [003] All task reviews were self-reviews — real reviewer agents not run
 
 **Added:** 2026-05-19 (feature: 001-feat-per-process-system-stats)
@@ -68,6 +68,32 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [007] pg_stat_io NULL-safety covered structurally, no behavioral diff() test
+
+**Added:** 2026-06-21 (feature: 006-feat-pg-stat-io)
+**Resolved:** 2026-06-22 (feature: 008-feat-record-report-0-11-views, task 08)
+**Severity:** Low
+**Area:** `internal/stat/postgres_test.go`
+
+**What:** The `coalesce(...,0)` NULL-safety of the diffed pg_stat_io/replslots columns was asserted only structurally (SQL contains `coalesce`); the behavioral half — `diff()` survives a zero-filled diffed cell and does not blank the screen — was unverified (an `internal/query`→`internal/stat` import cycle blocked a co-located test).
+
+**Resolution:** `Test_DiffZeroFilledCells` added to `internal/stat/postgres_test.go` (task 08): feeds coalesced-`"0"` cumulative cells through `diff()`/`Compare`, asserting clean `"0"` deltas with no sample abort, io_key-style UniqueKey row pairing (non-positional), and a mixed zero-cell/counter row. Directly relevant since report replay runs recorded coalesced cells through `countDiff → Compare → diff`.
+
+---
+
+### [004] procpidstat col-index constants duplicated in report package
+
+**Added:** 2026-05-19 (feature: 003-feat-procpidstat-record-report)
+**Resolved:** 2026-06-22 (feature: 008-feat-record-report-0-11-views, task 09)
+**Severity:** Low
+**Area:** `report/report.go`, `internal/stat/procpidstat.go`
+
+**What:** The procpidstat IO/iodelay column indices (9/10/11) were duplicated as an unexported local const block in `report/report.go` while the authoritative order lived only in the unexported `procPidResultCols` in `internal/stat/procpidstat.go`.
+
+**Resolution:** Exported `ColReadTotalKiB`/`ColWriteTotalKiB`/`ColIODelayTotalS` from `internal/stat/procpidstat.go`; deleted the local block in `report/report.go` and referenced `stat.Col*` in `emitProcPidStatAvailabilityWarnings` (task 09). Added `TestProcPidColIndexConstants` to lock the index↔column-name invariant. No import cycle (report→stat is one-way).
+
+---
 
 ### [002] procpidstat record/report — not integrated with recorder
 

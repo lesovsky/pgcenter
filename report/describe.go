@@ -419,6 +419,120 @@ Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 Details: https://www.postgresql.org/docs/current/pgstatstatements.html
 `
 
+	// pgStatBgwriterDescription is the detailed description of pg_stat_bgwriter view (PG14 baseline)
+	pgStatBgwriterDescription = `Background writer and checkpointer statistics based on pg_stat_bgwriter view:
+
+  column		origin				description
+- source		-				Always has 'Bgwriter' value
+- ckpt_timed		checkpoints_timed		Number of scheduled checkpoints that have been performed
+- ckpt_req		checkpoints_req			Number of requested checkpoints that have been performed
+- ckpt_write,ms		checkpoint_write_time		Total amount of time spent writing files to disk during checkpoints, in milliseconds
+- ckpt_sync,ms		checkpoint_sync_time		Total amount of time spent syncing files to disk during checkpoints, in milliseconds
+- buf_ckpt		buffers_checkpoint		Number of buffers written during checkpoints
+- buf_clean		buffers_clean			Number of buffers written by the background writer
+- maxwritten		maxwritten_clean		Number of times the background writer stopped a cleaning scan because it had written too many buffers
+- buf_backend		buffers_backend			Number of buffers written directly by a backend
+- buf_backend_fsync	buffers_backend_fsync		Number of times a backend had to execute its own fsync call instead of the background writer
+- buf_alloc		buffers_alloc			Number of buffers allocated
+- stats_age		stats_reset			Age of collected statistics in the moment when stats are taken
+
+Note: on PG17+ checkpoint/restartpoint counters come from pg_stat_checkpointer; PG18 adds slru_written.
+
+Details: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-BGWRITER-VIEW
+         https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-CHECKPOINTER-VIEW
+`
+
+	// pgStatReplicationSlotsDescription is the detailed description of pg_replication_slots and pg_stat_replication_slots views
+	pgStatReplicationSlotsDescription = `Replication slots statistics based on pg_replication_slots and pg_stat_replication_slots views:
+
+  column	origin			description
+- slot_name	slot_name		Name of the replication slot
+- slot_type	slot_type		Type of the slot, either physical or logical
+- active	active			True if this slot is currently actively being used
+- wal_status	wal_status		Availability of WAL files retained by this slot (reserved, extended, unreserved, lost)
+- retained,KiB	restart_lsn		Amount of WAL retained by this slot (computed from restart_lsn), in KiB
+- safe,KiB	safe_wal_size		Amount of WAL that can be written before this slot risks getting into the lost state, in KiB
+- spill_txns	spill_txns		Number of transactions spilled to disk once memory used by logical decoding exceeded logical_decoding_work_mem
+- spill_count	spill_count		Number of times transactions were spilled to disk while decoding changes from WAL for this slot
+- spill,KiB	spill_bytes		Amount of decoded transaction data spilled to disk while performing decoding of changes from WAL for this slot, in KiB
+- stream_txns	stream_txns		Number of in-progress transactions streamed to the decoding output plugin after the memory used by logical decoding exceeded logical_decoding_work_mem
+- stream_count	stream_count		Number of times in-progress transactions were streamed to the decoding output plugin while decoding changes from WAL for this slot
+- stream,KiB	stream_bytes		Amount of transaction data decoded for streaming in-progress transactions to the decoding output plugin while decoding changes from WAL for this slot, in KiB
+- total_txns	total_txns		Number of decoded transactions sent to the decoding output plugin for this slot
+- total,KiB	total_bytes		Amount of transaction data decoded for sending transactions to the decoding output plugin while decoding changes from WAL for this slot, in KiB
+- stats_age	stats_reset		Age of collected statistics in the moment when stats are taken
+
+Details: https://www.postgresql.org/docs/current/view-pg-replication-slots.html
+         https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-REPLICATION-SLOTS-VIEW
+`
+
+	// pgStatIODescription is the detailed description of pg_stat_io view (operations counters)
+	pgStatIODescription = `IO operations statistics based on pg_stat_io view:
+
+  column	origin			description
+- io_key	-			Synthetic row key derived from backend_type, object and context
+- backend_type	backend_type		Type of backend that performed the IO (e.g. client backend, background writer)
+- object	object			Target object of the IO operation (relation, temp relation)
+- context	context			Context of the IO operation (normal, vacuum, bulkread, bulkwrite)
+- reads		reads			Number of read operations
+- read,KiB	reads,op_bytes		Amount of data read, in KiB
+- writes	writes			Number of write operations
+- write,KiB	writes,op_bytes		Amount of data written, in KiB
+- extends	extends			Number of relation extend operations
+- ext,KiB	extends,op_bytes	Amount of data written by relation extends, in KiB
+- hits		hits			Number of times a desired block was found in a shared buffer
+- evictions	evictions		Number of times a block has been written out from a shared or local buffer in order to make it available for another use
+- writebacks	writebacks		Number of units of size op_bytes which the process requested the kernel write out to permanent storage
+- reuses	reuses			Number of times an existing buffer in a size-limited ring buffer outside of shared buffers was reused as part of an IO operation
+- fsyncs	fsyncs			Number of fsync calls
+- stats_age	stats_reset		Age of collected statistics in the moment when stats are taken
+
+Note: on PG18 KiB throughput comes from read_bytes/write_bytes/extend_bytes; op_bytes was removed.
+
+Details: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-IO-VIEW
+`
+
+	// pgStatIOTimeDescription is the detailed description of pg_stat_io view (timing counters)
+	pgStatIOTimeDescription = `IO timings statistics based on pg_stat_io view (requires track_io_timing=on):
+
+  column		origin			description
+- io_key		-			Synthetic row key derived from backend_type, object and context
+- backend_type		backend_type		Type of backend that performed the IO (e.g. client backend, background writer)
+- object		object			Target object of the IO operation (relation, temp relation)
+- context		context			Context of the IO operation (normal, vacuum, bulkread, bulkwrite)
+- read_time		read_time		Time spent in read operations, in milliseconds
+- write_time		write_time		Time spent in write operations, in milliseconds
+- writeback_time	writeback_time		Time spent in writeback operations, in milliseconds
+- extend_time		extend_time		Time spent in extend operations, in milliseconds
+- fsync_time		fsync_time		Time spent in fsync operations, in milliseconds
+- stats_age		stats_reset		Age of collected statistics in the moment when stats are taken
+
+Details: https://www.postgresql.org/docs/current/monitoring-stats.html#MONITORING-PG-STAT-IO-VIEW
+`
+
+	// pgStatStatementsJITDescription is the detailed description of pg_stat_statements section about JIT compilation (PG15 baseline)
+	pgStatStatementsJITDescription = `Statements JIT compilation statistics based on pg_stat_statements:
+
+  column	origin			description
+- user		rolname			Name of user who executed the statement
+- database	datname			Name of database in which the statement was executed
+- gen_total	jit_generation_time	Total time spent generating JIT code by the statement
+- inline_total	jit_inlining_time	Total time spent inlining functions during JIT compilation by the statement
+- opt_total	jit_optimization_time	Total time spent optimizing JIT code by the statement
+- emit_total	jit_emission_time	Total time spent emitting JIT code by the statement
+- gen,ms	jit_generation_time	Time spent generating JIT code by the statement, in milliseconds
+- inline,ms	jit_inlining_time	Time spent inlining functions during JIT compilation by the statement, in milliseconds
+- opt,ms	jit_optimization_time	Time spent optimizing JIT code by the statement, in milliseconds
+- emit,ms	jit_emission_time	Time spent emitting JIT code by the statement, in milliseconds
+- functions	jit_functions		Total number of functions JIT-compiled by the statement
+- queryid	rolname,datname,query	Fake queryid based on username, datname and text of the statement
+- query		query			Text of a representative statement
+
+Note: on PG17+ this section also includes the jit_deform_count/jit_deform_time columns.
+
+Details: https://www.postgresql.org/docs/current/pgstatstatements.html
+`
+
 	// procPidStatDescription is the detailed description of the procpidstat report.
 	procPidStatDescription = `Per-process system stats: CPU utilization, IO activity, and IO delay per PostgreSQL backend. Local mode only.`
 

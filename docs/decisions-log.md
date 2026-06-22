@@ -423,3 +423,50 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Alternatives considered:** All counts+times with total+interval doubling (too wide). Splitting into count/time sub-screens like `pg_stat_io` (out of scope — JIT is the low-risk release closer, and the time-only set fits one screen). Both rejected.
 
 ---
+
+## [008-feat-record-report-0-11-views] Lift NotRecordable only — pure-SQL views need no recorder change
+
+**Date:** 2026-06-22
+**Feature:** 008-feat-record-report-0-11-views
+**Status:** Accepted
+**Supersedes:** [004-feat-bgwriter-checkpointer] "NotRecordable: true for TUI-only scope" (and the equivalent NotRecordable scoping in [005]/[006]/[007])
+
+**Context:** The four 0.11.0 screens (5 report types: bgwriter, replslots, stat_io, stat_io_time, statements_jit) shipped `NotRecordable: true` as a deliberate TUI-first scope cut. Enabling record/report could have been read as a large effort (the procpidstat [003] precedent needed a stateful recorder, sysinfo entries, local/remote gating).
+
+**Decision:** These are pure-SQL views, so collection needed only the removal of `NotRecordable: true` from the 5 view definitions — `record/filterViews()` then keeps them and the existing SQL collect/write path records them like wal/tables. The recorder, the tar storage format, and the report replay engine are unchanged. report-time `view.Configure(query.Options{Version})` already selects the version-correct layout; the rebuilt SQL string is never executed in report, so passing only `Version` is sufficient.
+
+**Rationale:** No procfs/derived data is involved, so the procpidstat stateful machinery does not apply. The procpidstat enrichment branch is keyed on the literal `"procpidstat"` view name and never fires for these views. After this feature, no production view sets `NotRecordable: true`; the field and `filterViews` drop-branch remain, guarded solely by the synthetic `TestFilterViews_dropsExplicitNotRecordable`.
+
+**Alternatives considered:** A procpidstat-style stateful recorder path — rejected as dead complexity for pure-SQL views.
+
+---
+
+## [008-feat-record-report-0-11-views] report CLI: reuse -X for JIT, one string flag for the two IO screens
+
+**Date:** 2026-06-22
+**Feature:** 008-feat-record-report-0-11-views
+**Status:** Accepted
+
+**Context:** Five new report types needed CLI selectors in `cmd/report`. The existing idioms are bool flags for single screens (`-W` wal) and string sub-selector flags for screen families (`-X` statements, `-D` databases, `-P` progress).
+
+**Decision:** `-B`/`--bgwriter` (bool), `-L`/`--replslots` (bool), `-J`/`--io` (string `c|t` → stat_io / stat_io_time), and extend the existing `-X`/`--statements` with value `j` → statements_jit. Short letters B/L/J were verified free.
+
+**Rationale:** JIT is a pg_stat_statements sub-screen, so it belongs under `-X` like the TUI `x`-cycle rather than getting its own flag. The two pg_stat_io screens map to one string sub-selector (`-J c|t`), mirroring `-X`/`-D`/`-P`, instead of burning two bool flags.
+
+**Alternatives considered:** Two bool flags for the IO screens (breaks the string-subselector idiom); a dedicated JIT flag (it is a statements sub-screen). Both rejected.
+
+---
+
+## [008-feat-record-report-0-11-views] Replay tests: synthetic in-memory tar + golden files, not the legacy fixture
+
+**Date:** 2026-06-22
+**Feature:** 008-feat-record-report-0-11-views
+**Status:** Accepted
+
+**Context:** The new screens' replay/diff logic needed test coverage, including the version-aware layout switch. The existing report golden tests are fed by one shared fixture `testdata/pgcenter.stat.golden.tar`.
+
+**Decision:** Verify replay with golden files fed by a purpose-built synthetic in-memory tar (the `Test_app_doReport_procpidstat` pattern), one new `_test.go` file + its own goldens per screen. Version-aware screens (bgwriter, stat_io, statements_jit) get golden variants at recorded version 14/17/18, 16/18, 15/17 respectively; version-independent screens (replslots, stat_io_time) get one. No live PostgreSQL needed; the recording's meta version drives the report-time `Configure` layout switch.
+
+**Rationale:** The legacy `pgcenter.stat.golden.tar` predates these views, is a ~PG13 recording that cannot hold modern-view data, and regenerating it would churn all ~30 existing goldens. Synthetic input is version-parametric for free. Separate per-screen test files + goldens keep the tasks conflict-free for parallel authoring.
+
+**Alternatives considered:** A live PG14-18 record→report end-to-end harness (none exists; building one is disproportionate — the live record↔report seam is covered by a manual check); regenerating the shared fixture (mass golden churn). Both rejected.

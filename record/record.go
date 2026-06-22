@@ -202,9 +202,9 @@ func filterViews(version int, pgssSchema string, views view.Views) (int, view.Vi
 	var pgssNotfound bool
 
 	for k, v := range views {
-		// Skip views explicitly marked as not recordable (e.g. bgwriter — the
-		// bgwriter/checkpointer screen shows shared cumulative counters that are
-		// only meaningful live in the TUI and are intentionally not recorded).
+		// Skip views explicitly marked as not recordable. No production view sets
+		// NotRecordable=true currently; this branch is retained for views that are
+		// only meaningful live in the TUI and is covered by a synthetic guard test.
 		if v.NotRecordable {
 			delete(views, k)
 			filtered++

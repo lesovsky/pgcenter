@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Documentation-only change for Task 10: overview.md, architecture.md and features-catalog.md were updated to stop labeling bgwriter/replslots/pg_stat_io(×2)/statements_jit as TUI-only / NotRecordable and to document the new record/report support with CLI flags -B/-L/-J c|t/-X j. All flag and mapping claims verified against cmd/report/report.go; no production view sets NotRecordable; the field and its filterViews drop-branch survive only for the synthetic guard test, exactly as the docs state. One factual inaccuracy: architecture.md says feature 008 cleared 'the last five' views, but it actually cleared six (the five 0.11.0 screens plus procpidstat, whose stale NotRecordable flag was removed in task 03).",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": ".claude/skills/project-knowledge/architecture.md",
+      "line": 78,
+      "severity": "major",
+      "category": "best-practices",
+      "suggestion": "The sentence 'no production view sets it anymore (feature 008 cleared the last five)' undercounts the views the feature cleared. On master, NotRecordable:true was set on six views: the five 0.11.0 screens (bgwriter, replslots, stat_io, stat_io_time, statements_jit) plus procpidstat. procpidstat gained record/report support back in v0.10.1 but kept a stale NotRecordable flag; task 03 of feature 008 cleared it (local/remote gating moved to app.setup()). record/record_test.go (lines 139-160, TestFilterViews_NotRecordable) confirms 'After task 03 procpidstat is registered with NotRecordable=false', and Test_filterViews comments say 'After feature 008 no production view sets NotRecordable=true'. Reword to 'feature 008 cleared the last of them' or 'feature 008 cleared the remaining six (the five 0.11.0 screens plus procpidstat)' so the count is correct. Note the same line correctly names TestFilterViews_dropsExplicitNotRecordable as the synthetic guard, which matches record/record_test.go:168.",
+      "benefit": "Removes a verifiably wrong count from the architecture knowledge base; the file otherwise reads as the project's source of truth and future specs/agents will trust the number.",
+      "optional": false
+    },
+    {
+      "file": ".claude/skills/project-knowledge/architecture.md",
+      "line": 78,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The new paragraph references internal/view/view_test.go indirectly (the .False assertions) only via the record-package guard test. internal/view/view_test.go asserts .False on exactly the five 0.11.0 screens (jit, stat_io, stat_io_time, replslots, bgwriter) but not procpidstat — worth nothing here, but it reinforces that 'five' in the prose likely came from counting view_test.go assertions rather than the full set of cleared flags. Once the count is fixed per the major finding, optionally add a one-clause pointer that internal/view/view_test.go pins the five 0.11.0 screens as recordable.",
+      "benefit": "Ties the prose to the exact tests that enforce it, making the doc self-verifying.",
+      "optional": true
+    },
+    {
+      "file": "docs/features-catalog.md",
+      "line": 142,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The [007] Touches line now reads 'The last of the five 0.11.0 screens (after bgwriter, replslots, stat_io ×2) to get record/report support in [008...]'. This is accurate and scoped to the 0.11.0 screens (so 'five' is correct here, unlike architecture.md which speaks about all production views). No change required, but keeping the two files' framing distinct ('five 0.11.0 screens' vs 'all production views') avoids the appearance of a contradiction; the architecture.md fix above resolves it.",
+      "benefit": "Prevents a reader from cross-reading the two 'five' statements as inconsistent.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

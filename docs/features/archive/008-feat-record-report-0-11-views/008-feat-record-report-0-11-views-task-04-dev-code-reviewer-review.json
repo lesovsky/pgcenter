@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "New golden-based replay test for the version-aware bgwriter report. The harness faithfully mirrors Test_app_doReport_procpidstat, the column layouts and DiffIntvl boundaries match SelectStatBgwriterQuery exactly for PG14/17/18, and the three goldens are mathematically correct (diffed columns = curr-prev with itv=1; absolute/text columns pass through from the second tick). Tests pass, go vet is clean, and the reused `update` flag and cross-file references (report.go:250-252, processData first-snapshot rule) are accurate.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/report_record_bgwriter_test.go",
+      "line": 218,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The procpidstat harness this test mirrors adds independent row-presence assertions (assert.Contains for the pid and the last-column query text) precisely to catch regressions that suppress the data row while keeping the timestamp header. This bgwriter test only checks NotEmpty + the date-header regexp before the full golden compare. The golden equality already covers correctness, but a cheap assert.Contains(out, \"Bgwriter\") (and e.g. the diffed buf_ckpt value \"500\") would localize a future failure to 'row missing' vs 'header only' independently of the byte-for-byte golden diff, matching the source harness's intent.",
+      "benefit": "Faster diagnosis of row-suppression regressions; closer parity with the mirrored harness.",
+      "optional": true
+    },
+    {
+      "file": "report/report_record_bgwriter_test.go",
+      "line": 31,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "Function name is Test_app_doReport_Bgwriter (capital B) while the TDD Anchor and surrounding tests use lowercase screen names (Test_app_doReport_procpidstat). The capital is intentional so `-run Bgwriter` matches, and the AC requires that exact -run flag, so this is fine as-is; just noting the casing diverges from the sibling test's convention.",
+      "benefit": "Consistent naming convention across doReport tests.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  }
+}

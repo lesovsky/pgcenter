@@ -768,3 +768,13 @@ func TestSysInfoRoundTrip(t *testing.T) {
 	assert.Equal(t, orig.Ticks, got.Ticks)
 	assert.Equal(t, orig.CPUCount, got.CPUCount)
 }
+
+// TestProcPidColIndexConstants locks the exported IO/iodelay column-index
+// constants to the canonical procPidResultCols order. The constants carry a
+// doc-comment asserting this mapping; this test makes a future column reorder
+// fail loudly instead of silently shifting the indices that report relies on.
+func TestProcPidColIndexConstants(t *testing.T) {
+	assert.Equal(t, "read_total,KiB", procPidResultCols[ColReadTotalKiB])
+	assert.Equal(t, "write_total,KiB", procPidResultCols[ColWriteTotalKiB])
+	assert.Equal(t, "iodelay_total,s", procPidResultCols[ColIODelayTotalS])
+}

@@ -335,6 +335,95 @@ func Test_diff(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// Test_DiffZeroFilledCells locks the behavioral half of tech-debt [007]: pg_stat_io and
+// pg_replication_slots NULL cells are coalesced to "0" in SQL before recording, so the recorder
+// always stores "0" (never "") for those counters. This test feeds those coalesced-"0" cells
+// through diff() (and the public Compare wrapper) and proves they produce clean "0" deltas
+// instead of aborting the whole sample — the failure mode an empty "" cell would trigger via
+// ParseInt(""). It also proves rows are paired by a synthetic io_key-style UniqueKey (col 0),
+// not by position, and that a mixed row (a coalesced-"0" cell alongside a normal cumulative
+// counter) diffs each cell correctly.
+//
+// Test name carries capital "Diff" so the verify mask `-run Diff` selects it. NOTE: Go's
+// `-run` is case-sensitive, so use `-run '[Dd]iff'` to also re-run the sibling Test_diff* as
+// regression coverage.
+func Test_DiffZeroFilledCells(t *testing.T) {
+	// io_key-style layout: col 0 is the stable string UniqueKey, col 1 is a text label copied
+	// as-is (like pg_stat_io.object), cols 2-3 are diffed cumulative counters. The recorder
+	// stored "0" for NULL-after-coalesce cells.
+	// prev rows are listed in OPPOSITE order from curr to prove pairing is by UniqueKey, not by
+	// row position.
+	prev := PGresult{
+		Valid: true, Ncols: 4, Nrows: 3, Cols: []string{"io_key", "object", "reads", "hits"},
+		Values: [][]sql.NullString{
+			// b2: physical-slot-style row — every diffed counter is a coalesced "0".
+			{{String: "b2", Valid: true}, {String: "wal", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+			// a1: mixed row — one coalesced "0" cell, one normal cumulative counter.
+			{{String: "a1", Valid: true}, {String: "client backend", Valid: true}, {String: "0", Valid: true}, {String: "100", Valid: true}},
+			// c3: row absent from curr, must be skipped.
+			{{String: "c3", Valid: true}, {String: "bgwriter", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+		},
+	}
+	curr := PGresult{
+		Valid: true, Ncols: 4, Nrows: 3, Cols: []string{"io_key", "object", "reads", "hits"},
+		Values: [][]sql.NullString{
+			{{String: "a1", Valid: true}, {String: "client backend", Valid: true}, {String: "0", Valid: true}, {String: "150", Valid: true}},
+			{{String: "b2", Valid: true}, {String: "wal", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+			// d4: row absent from prev, must be copied as-is (coalesced "0" cells passed through).
+			{{String: "d4", Valid: true}, {String: "autovacuum", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+		},
+	}
+	// interval [2,3] covers the cumulative counters; UniqueKey (0) and the text label (1) are
+	// outside it and copied as-is.
+	want := PGresult{
+		Valid: true, Ncols: 4, Nrows: 3, Cols: []string{"io_key", "object", "reads", "hits"},
+		Values: [][]sql.NullString{
+			// a1 mixed: coalesced "0" reads → "0"; counter hits 150-100 → "50".
+			{{String: "a1", Valid: true}, {String: "client backend", Valid: true}, {String: "0", Valid: true}, {String: "50", Valid: true}},
+			// b2 all-zero: both coalesced "0" counters → clean "0" deltas, no abort.
+			{{String: "b2", Valid: true}, {String: "wal", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+			// d4 not in prev: copied as-is.
+			{{String: "d4", Valid: true}, {String: "autovacuum", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}},
+		},
+	}
+
+	got, err := diff(curr, prev, 1, [2]int{2, 3}, 0)
+	assert.NoError(t, err, "coalesced-\"0\" cells must diff cleanly, not abort the sample")
+	assert.Equal(t, want, got)
+
+	// Compare is the public wrapper report uses (countDiff → Compare → diff). Assert the same
+	// zero-cell contract holds through it, and that its sort() step actually runs: sort DESC on
+	// the io_key column (skey=0, desc=true) must reorder the diff rows to d4,b2,a1.
+	gotCompare, err := Compare(curr, prev, 1, [2]int{2, 3}, 0, true, 0)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"d4", "b2", "a1"},
+		[]string{gotCompare.Values[0][0].String, gotCompare.Values[1][0].String, gotCompare.Values[2][0].String},
+		"Compare must apply DESC sort on io_key after diffing")
+	// Same coalesced-"0" / mixed-counter deltas survive the wrapper (a1: reads 0, hits 50).
+	assert.Equal(t, "0", gotCompare.Values[2][2].String)
+	assert.Equal(t, "50", gotCompare.Values[2][3].String)
+
+	// Demonstrate WHY coalesce is required: an empty "" in-interval cell (a raw NULL serialized
+	// without coalesce) reaches ParseInt("") and aborts the entire sample with an error.
+	prevEmpty := PGresult{
+		Valid: true, Ncols: 4, Nrows: 1, Cols: []string{"io_key", "object", "reads", "hits"},
+		Values: [][]sql.NullString{
+			{{String: "a1", Valid: true}, {String: "client backend", Valid: true}, {String: "", Valid: true}, {String: "100", Valid: true}},
+		},
+	}
+	currEmpty := PGresult{
+		Valid: true, Ncols: 4, Nrows: 1, Cols: []string{"io_key", "object", "reads", "hits"},
+		Values: [][]sql.NullString{
+			{{String: "a1", Valid: true}, {String: "client backend", Valid: true}, {String: "", Valid: true}, {String: "150", Valid: true}},
+		},
+	}
+	_, err = diff(currEmpty, prevEmpty, 1, [2]int{2, 3}, 0)
+	// Bind the error to the empty cell specifically (parsePairInt wraps ParseInt as
+	// "convert '%s' to int failed") so this documents the exact NULL-after-serialization
+	// failure mode the [007] coalesce prevents, not a generic parse error.
+	assert.ErrorContains(t, err, "convert '' to int failed", "empty in-interval cell (uncoalesced NULL) must error — the bug [007] coalesce prevents")
+}
+
 // Test_diff_pg18_wal_stats_age reproduces issue #132: when showing WAL statistics on PG 18,
 // the stats_age column ('19 days 02:52:00') was incorrectly included in the diff interval
 // and caused a parse error. The correct DiffIntvl for PG 18 WAL view is [2, 5].
