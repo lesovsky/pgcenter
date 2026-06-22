@@ -1,0 +1,27 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit",
+  "tasks_checked": ["04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Task 04 references the description registry as being in 'report.go' (e.g. 'в report.go нет description-записи для statements_jit'). The per-view description map actually lives in report/report.go around line 622 (entries like \"statements_timings\": pgStatStatementsTimingsDescription). There is also a report/describe.go file with no such registry, and other report.go files exist (top/report.go, cmd/report/report.go). The unqualified 'report.go' is slightly ambiguous but resolves correctly to report/report.go; the QA check (grep for statements_jit in the registry) is sound.",
+      "fix": "Optional: qualify as report/report.go (description map at line ~622) to remove ambiguity with top/report.go and cmd/report/report.go."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Task 04 is a Final Wave QA task with depends_on: [01,02,03]; tasks 01-03 are NOT yet implemented in the codebase (verified: no PgStatStatementsJIT consts in internal/query/statements.go, no statements_jit entry anywhere in *.go, TestNew still asserts 26 not 27, statementsNextView still goes wal->timings with no jit stop). This is expected for a pre-implementation reality check of a QA task — Task 04's referenced artifacts (selector branches, view fields, Ncols/DiffIntvl/UniqueKey numbers, count-test bumps) are deliverables of 01-03, not preconditions. The dependency is correctly declared, so this is informational, not a defect.",
+      "fix": "No action — QA task must run after 01-03 are committed. The acceptance numbers (Ncols 13/15, DiffIntvl {6,10}/{7,12}, UniqueKey 11/13, TestNew 27, filterViews +1) trace exactly to tech-spec and must be re-verified once 01-03 land."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 14,
+    "issues_found": 2
+  }
+}

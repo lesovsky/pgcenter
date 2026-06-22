@@ -172,6 +172,8 @@ func statementsNextView(current string) string {
 	case "statements_local":
 		next = "statements_wal"
 	case "statements_wal":
+		next = "statements_jit"
+	case "statements_jit":
 		next = "statements_timings"
 	default:
 		next = "statements_timings"

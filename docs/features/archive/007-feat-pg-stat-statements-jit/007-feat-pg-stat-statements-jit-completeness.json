@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": true
+  },
+  "requirements_total": 14,
+  "requirements_covered": 14,
+  "requirements_partial": 0,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "US-9: PG<15 sub-screen unavailable, app does not crash, menu/cycle degrade gracefully",
+      "detail": "User-spec acceptance criterion explicitly requires that menu/cycle do not return an empty View{} on PG<15 (Risk 3 + AC line 138). The tech-spec relies on the runtime VersionOK guard (stat.go:199, verified present) which returns 'not supported' instead of querying, and notes the view is always in the map so no zero-value View{} occurs. However, code-research §5c flags an OPEN verification item: the menu/cycle on PG<15 target statements_jit unconditionally, and it was never confirmed in the tech-spec that the TUI view-availability filter (separate from record's filterViews) actually drops the view from the menu/cycle, or whether the user simply gets the 'not supported' message after selecting it. The tech-spec resolves this as 'graceful degrade via VersionOK' but does not specify whether the menu still SHOWS the JIT item on PG14 (cosmetic, but the user-spec says menu/cycle should degrade). This is a minor gap between the user-spec's 'degrade gracefully (skip it)' wording and the tech-spec's 'show item, block at query time' resolution.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "Ncols/DiffIntvl/UniqueKey consistency with real PG17 15-column branch",
+      "detail": "The highest-risk correctness concern (selector layout metadata out of sync with real columns, esp. the PG17 deform branch) is acknowledged in the Risks table and mitigated by the selector returning all four values explicitly + a per-version unit test + the gated exec test on the CI PG15-18 matrix. This is adequate coverage. Noting only that the exec test (the single place where layout-vs-real-columns is validated) is skipped locally without PG and runs only in CI; there is no local safeguard against an Ncols/DiffIntvl typo for the PG17 branch beyond manual PG17 testing. Acceptable for an S feature with the documented mitigation, but the dependency on CI for the core correctness check is the thinnest part of the test strategy.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "PASS. 14/14 user-spec acceptance criteria map to tech-spec tasks (Task 1: version selector + WHERE jit_functions>0 + version branches; Task 2: view entry MinRequiredVersion PostgresV15, NotRecordable, OrderKey gen_total desc, Msg hint, Configure patch, count-test fixes; Task 3: 7th menu item + x-cycle wal→jit→timings; Task 4: QA). No gaps, no scope creep — every tech-spec decision (selector layout metadata, single interval block, jit_functions>0 filter, static Msg hint, NotRecordable) traces directly to a user-spec requirement or constraint, and all are explicitly framed as following established ADRs ([004], [006]). No overengineering: two-branch selector (not N-way), no abstractions, *_count metrics deliberately dropped to fit width (YAGNI-respecting), no record/report wiring (deferred per TUI-first principle). No critical underengineering: error handling is the existing VersionOK runtime guard (verified at stat.go:199), empty/jit=off state handled by SQL filter + Msg, no user input beyond existing keybindings, read-only consumer of pg_stat_statements so no write/concurrency concerns. Two minor findings: (1) PG<15 menu/cycle degradation resolved as 'show item, block at query time' vs user-spec 'skip it' wording; (2) core Ncols/DiffIntvl/UniqueKey-vs-real-columns check runs only in CI. Both mitigated and acceptable for an S feature. Tech-spec Decisions section is self-contained (5 decisions with rationale + alternatives); no decision-level content scattered in tasks (no structural_gap). Solution section has real substance (3-layer architecture, named files/functions, specific PG version branching) — not shallow."
+}

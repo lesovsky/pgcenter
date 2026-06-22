@@ -1,0 +1,49 @@
+{
+  "status": "approved",
+  "checks": {
+    "completeness": "pass",
+    "edge_cases": "pass",
+    "acceptance_criteria": "pass",
+    "contradictions": "pass",
+    "template_compliance": "pass",
+    "size_check": "warning",
+    "clarity": "pass"
+  },
+  "findings": [
+    {
+      "check": "size_check",
+      "severity": "minor",
+      "issue": "Заявлен size S, но число критериев приёмки (12) превышает порог >10. Спек по объёму и детализации (таблицы колонок по версиям, 3 сценария, 3 риска) тяготеет к нижней границе M. Фактический объём кода действительно мал (1-3 файла + правки count-тестов), поэтому это не противоречие, а пограничный случай.",
+      "location": "frontmatter (size: S) / Критерии приёмки",
+      "fix": "Оставить S оправданно (мало файлов, аддитивная фича), либо явно отметить, что часть критериев — это обязательные правки count-тестов, а не отдельные пользовательские флоу. Действия не требуется, информативно."
+    },
+    {
+      "check": "acceptance_criteria",
+      "severity": "minor",
+      "issue": "Критерий «смена колонки сортировки и фильтр / работают» формулирует ожидаемый результат через слово «работают» без конкретного наблюдаемого исхода. Контекст (дефолт gen_total desc, duration-aware сортировка из сценария 2) делает его проверяемым, поэтому не critical/major.",
+      "location": "Критерии приёмки (6-й пункт)",
+      "fix": "Уточнить ожидаемый результат: «смена колонки сортировки пересортировывает строки численно (включая текст-длительности HH:MM:SS), фильтр / сужает набор по query/database»."
+    }
+  ],
+  "interview_coverage": {
+    "covered": [
+      "feature_description (7-й pgss под-экран JIT, TUI-only, NotRecordable, закрывает 0.11.0)",
+      "user_problem (нет способа увидеть стоимость JIT-компиляции по запросам, jit=on overhead)",
+      "target_users (DBA, troubleshooting латентности/JIT overhead)",
+      "constraints (PG15+, deform_* на PG17, pgss required, синтетический md5 queryid → per-version column set)",
+      "testing_strategy (unit на SelectStatStatementsJITQuery, правки count-тестов, CI PG14-18)",
+      "user_stories / scenarios (4 истории + 3 пошаговых сценария)",
+      "acceptance_criteria (12 тестируемых критериев)",
+      "edge_cases (jit=off, PG<15, нет запросов выше jit_above_cost, deform на PG17+)",
+      "error_scenarios (pgss отсутствует → NOTICE; PG<15 деградация)",
+      "verification_strategy (агент: make build/test/lint, версионные ветки, CI; пользователь: локальный PG17)",
+      "ui_ux_requirements (7-й пункт меню, x-цикл wal→jit→timings, набор колонок по версиям, хинт jit=off, фильтр jit_functions>0)",
+      "risks (count-тесты ломаются и маскируются локально; механика хинта; деградация на PG<15)",
+      "technical_decisions (образец statements_timings, только functions без *_count, фильтр jit_functions>0, селектор SelectStatStatementsJITQuery, сортировка gen_total, NotRecordable)",
+      "integration_points (statements.go, view.go, top/menu.go, top/config_view.go)",
+      "data_requirements (JIT-колонки pgss, диффы интервальных, md5 queryid)"
+    ],
+    "missing": []
+  },
+  "summary": "Спек качественный и готов к утверждению: все обязательные секции заполнены содержательно, критерии тестируемы (есть и негативные — PG<15 не падает, хинт jit=off), риски имеют митигации, решения по тестам обоснованы, темы интервью покрыты полностью. Единственное — size_check warning: 12 критериев превышают порог >10 для S, но фактический объём кода мал, так что это пограничный, а не блокирующий случай."
+}

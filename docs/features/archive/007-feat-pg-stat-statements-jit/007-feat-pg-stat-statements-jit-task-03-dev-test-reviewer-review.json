@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "failed",
+  "summary": "The task's central premise — that top/menu.go selectMenuStyle/menuSelect and top/config_view.go statementsNextView have NO existing Go unit-test coverage — is factually wrong. Both functions ARE covered by existing table-driven tests in top/menu_test.go and top/config_view_test.go. The diff changes their behavior (7th menu item, wal->jit->timings cycle) but does not update the stale assertions, so it breaks 3 existing tests. Confirmed empirically: `go test ./top/` fails in Test_selectMenuStyle, Test_statementsNextView, and Test_switchViewTo/14. Since `make test` (race + coverage) is the project CI gate, the change as committed breaks the build pipeline. The 'no speculative tests for this layer' decision is reasonable as a forward-looking principle, but it does not excuse leaving the EXISTING regression tests broken.",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "anti_pattern",
+      "location": "top/config_view_test.go:301 (Test_statementsNextView) and top/config_view_test.go:219 (Test_switchViewTo case 14)",
+      "issue": "The diff changes statementsNextView so that statements_wal now returns statements_jit (was statements_timings), but two existing test assertions still expect statements_timings. `go test ./top/` fails: Test_statementsNextView expected 'statements_timings' got 'statements_jit', and Test_switchViewTo/14_ expected 'statements_timings' got 'statements_jit'. These are real regression tests that passed the litmus test (they assert the actual next-view name, not a mock), and the diff left them stale.",
+      "recommendation": "Update both stale assertions to match the new cycle and add the missing jit hop. In Test_statementsNextView (config_view_test.go:301) change {current: \"statements_wal\", want: \"statements_timings\"} to {current: \"statements_wal\", want: \"statements_jit\"} and insert a new case {current: \"statements_jit\", want: \"statements_timings\"}. In Test_switchViewTo (config_view_test.go:219) change {current: \"statements_wal\", to: \"statements\", want: \"statements_timings\"} to want: \"statements_jit\" and add {current: \"statements_jit\", to: \"statements\", want: \"statements_timings\"}.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "critical",
+      "category": "anti_pattern",
+      "location": "top/menu_test.go:15 (Test_selectMenuStyle)",
+      "issue": "The diff adds a 7th menuPgss item, but Test_selectMenuStyle still asserts {menu: menuPgss, want: 6}. `go test ./top/` fails: Test_selectMenuStyle expected 6 got 7. This is a real existing test that verifies the menuPgss item count and now contradicts the implementation.",
+      "recommendation": "Change menu_test.go:15 from {menu: menuPgss, want: 6} to {menu: menuPgss, want: 7} so the asserted item count matches the new 7-item menuPgss slice.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "Section: TDD Anchor / Acceptance Criteria (task-03.md)",
+      "issue": "The task TDD Anchor states 'every prior pgss-menu wiring and the x-cycle entries were added the same way and verified only by make build plus a manual TUI check' and 'these have no existing Go unit-test coverage'. This is false. Test_selectMenuStyle covers menuPgss item count and Test_statementsNextView + Test_switchViewTo cover the statements cycle, including the exact statements_wal transition this task modifies. Because the premise is wrong, the task omits the mandatory 'update the existing regression tests' step from the acceptance criteria, and the implementer correctly followed the (incorrect) task and shipped a build-breaking change. The new jit menu index (case 6) and the new wal->jit->timings hop are also left uncovered after the fix, even though the surrounding cases are tested.",
+      "recommendation": "Correct the TDD Anchor to acknowledge existing coverage in top/menu_test.go and top/config_view_test.go, and add an acceptance-criterion: 'Existing tests updated for the new item count and cycle order; new jit transition asserted; make test green.' Extend Test_statementsNextView with the statements_jit -> statements_timings case (catches the new hop). Optionally extend Test_switchViewTo with the statements_jit row. No new test file or speculative gocui-driver test is needed — the layer already has cheap, pure-function coverage, so the no-speculative-tests principle is satisfied by simply updating existing tests.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

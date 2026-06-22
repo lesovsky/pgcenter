@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Count-test changes for Task 02 are correct and the guard test pins the right invariants. The three count-tests (TestNew 26->27, Test_filterViews wantN +1 on all 6 rows, TestView_VersionOK 160000 row 26->27) form a coherent TDD anchor: each delta traces directly to registering one new NotRecordable, PG15-gated view. The new TestNew_StatementsJITView guard mirrors TestNew_StatIOView and pins every behaviorally-significant field (NotRecordable, MinRequiredVersion, Ncols, DiffIntvl, UniqueKey, OrderKey, OrderDesc, non-empty Msg). All count tests pass in isolation. Count math verified manually and empirically.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/view/view_test.go:29",
+      "issue": "Msg invariant is asserted only as non-empty (assert.NotEqual(t, \"\", jit.Msg)). The task and Decision 4 give Msg a load-bearing role: it must carry the 'no rows when jit=off' empty-state hint. A non-empty check passes for any string, so it does not pin the documented behavior. Note this exactly mirrors the existing TestNew_StatIOView pattern (line 47), whereas TestNew_StatIOTimeView (line 65) uses assert.Contains for its track_io_timing hint — so a stronger assertion has precedent in the same file.",
+      "recommendation": "Replace assert.NotEqual(t, \"\", jit.Msg) with assert.Contains(t, jit.Msg, \"jit=off\") (matching the TestNew_StatIOTimeView precedent). This pins the empty-state hint that Decision 4 requires, so an accidental Msg edit that drops the jit=off note is caught.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 4,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

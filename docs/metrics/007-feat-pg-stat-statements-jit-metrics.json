@@ -1,0 +1,35 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "007",
+    "feature_name": "pg-stat-statements-jit",
+    "feature_base": "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit",
+    "project": "pgcenter",
+    "feature_size": "S",
+    "model": "claude-opus-4-8[1m]",
+    "date_started": "2026-06-21",
+    "date_completed": "2026-06-22"
+  },
+  "phases": {
+    "user_spec": null,
+    "tech_spec": null,
+    "task_decomposition": null,
+    "feature_execution": null,
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1 },
+    "validation_findings": { "critical": 0, "major": 2, "minor": 9 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_03": 2 },
+    "review_findings": { "critical": 2, "major": 1, "minor": 3 },
+    "first_pass_rate_pct": 67,
+    "note": "Phase timing not captured (metrics phases left null during the run). Validation findings: userspec adequacy 1 major + quality 2 minor; techspec 0 critical/major across 5 validators; task validation 5 minor. Review findings: task-03 dev-test-reviewer round 1 had 2 critical + 1 major (stale TUI test assertions), resolved round 2."
+  },
+  "volume": {
+    "interview_questions": 4,
+    "tasks_count": 4,
+    "waves_count": 4,
+    "agents_spawned": 26,
+    "commits_count": 11
+  }
+}

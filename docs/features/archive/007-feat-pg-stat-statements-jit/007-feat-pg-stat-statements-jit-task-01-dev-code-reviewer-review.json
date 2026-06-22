@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Additive, correct, and idiomatic. The two JIT query consts faithfully mirror the canonical pgss layout (PgStatStatementsTimingPG13 / PgStatStatementsIoDefault) and the SelectStatStatementsJITQuery selector follows the SelectStatIOQuery multi-return model. Column ordering matches the declared Ncols/DiffIntvl/UniqueKey for both branches exactly; build, vet, and tests pass.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/statements.go",
+      "line": 305,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The two consts are byte-for-byte identical except for the single deform_total / deform_ms columns. This duplication is intentional and matches the existing project pattern (the timing consts are likewise duplicated per version rather than composed), so no change is required. Flagging only so a future reader does not 'fix' it into a shared base string — the positional align path (ADR 006) makes per-version full strings the correct, lowest-risk shape.",
+      "benefit": "Prevents a well-meaning future refactor from breaking positional column alignment.",
+      "optional": true
+    }
+  ],
+  "verifiedFindings": [
+    "Column layout PG15/16 (13 cols): user(0), database(1), gen_total(2), inline_total(3), opt_total(4), emit_total(5), gen,ms(6), inline,ms(7), opt,ms(8), emit,ms(9), functions(10), queryid(11), query(12). DiffIntvl {6,10} covers the interval block + functions; UniqueKey 11 = md5 queryid. Matches selector return and task spec exactly.",
+    "Column layout PG17+ (15 cols): user(0)..emit_total(5), deform_total(6), gen,ms(7)..emit,ms(10), deform,ms(11), functions(12), queryid(13), query(14). DiffIntvl {7,12}, UniqueKey 13. Matches selector return and task spec exactly.",
+    "Column expressions correct: *_total uses date_trunc('seconds', round(p.jit_*_time)/1000 * '1 second'::interval)::text; *_ms uses round(p.jit_*_time); functions uses p.jit_functions; queryid uses left(md5(...),10); query is regexp_replace last. round() is applied consistently (avoids fractional ms), matching the timing-const pattern.",
+    "JIT source column names verified against task/tech-spec: jit_generation_time, jit_inlining_time, jit_optimization_time, jit_emission_time (PG15+), plus jit_deform_time (PG17+). The intentionally-dropped *_count metrics are correctly omitted; only jit_functions is surfaced as the single counter.",
+    "Both consts use template tokens {{.PGSSSchema}} and {{.PgSSQueryLenFn}}, end with JOIN pg_database d ON d.oid=p.dbid WHERE p.jit_functions > 0 (Decision 3), and use the concatenated E'\\\\s+' regexp style consistent with PgStatStatementsIoDefault (not the raw-backtick single-backslash style).",
+    "Cross-file consistency: selector branches on PostgresV17 (170000, query.go:20); SelectStatStatementsJITQuery signature (string, int, [2]int, int) mirrors SelectStatIOQuery (io.go:87) with the extra UniqueKey return as specified. No existing const or selector was modified.",
+    "Tests: TestSelectStatStatementsJITQuery covers all four version branches (150000/160000 -> PG15 const, 13/{6,10}/11; 170000/180000 -> Default const, 15/{7,12}/13). JIT exec sub-test added to Test_StatStatementsQueries, gated PG15+, per-version sub-tests with t.Skipf when PG unavailable (matches WAL-loop pattern, avoids the skip-in-loop bug). go build / go vet / go test ./internal/query/... all green."
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  }
+}

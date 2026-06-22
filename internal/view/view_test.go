@@ -8,7 +8,26 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 26, len(v)) // 26 is the total number of views have to be returned
+	assert.Equal(t, 27, len(v)) // 27 is the total number of views have to be returned
+}
+
+// TestNew_StatementsJITView guards the statements_jit view wiring: it must be registered,
+// gated to PG15+, excluded from recording (NotRecordable), keyed by the synthetic md5 queryid,
+// and sorted by the first *_total column (gen_total).
+func TestNew_StatementsJITView(t *testing.T) {
+	v := New()
+	jit, ok := v["statements_jit"]
+	assert.True(t, ok)
+	assert.True(t, jit.NotRecordable)
+	assert.Equal(t, query.PostgresV15, jit.MinRequiredVersion)
+	// Pin the PG15-default map values that Configure() overrides per version.
+	assert.Equal(t, 13, jit.Ncols)
+	assert.Equal(t, [2]int{6, 10}, jit.DiffIntvl)
+	assert.Equal(t, 11, jit.UniqueKey)
+	assert.Equal(t, 2, jit.OrderKey)
+	assert.True(t, jit.OrderDesc)
+	// Msg is load-bearing (Decision 4): it doubles as the empty-screen hint for jit=off.
+	assert.Contains(t, jit.Msg, "jit=off")
 }
 
 // TestNew_StatIOView guards the stat_io count view wiring: it must be registered,
@@ -207,7 +226,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
-		{version: 160000, total: 26},
+		{version: 160000, total: 27},
 		{version: 140000, total: 24},
 		{version: 130000, total: 19},
 		{version: 120000, total: 16},

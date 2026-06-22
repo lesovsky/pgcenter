@@ -216,7 +216,8 @@ func Test_switchViewTo(t *testing.T) {
 		{current: "statements_io", to: "statements", want: "statements_temp"},
 		{current: "statements_temp", to: "statements", want: "statements_local"},
 		{current: "statements_local", to: "statements", want: "statements_wal"},
-		{current: "statements_wal", to: "statements", want: "statements_timings"},
+		{current: "statements_wal", to: "statements", want: "statements_jit"},
+		{current: "statements_jit", to: "statements", want: "statements_timings"},
 		{current: "statements_timings", to: "progress", want: "progress_vacuum"},
 		{current: "progress_vacuum", to: "progress", want: "progress_cluster"},
 		{current: "progress_cluster", to: "progress", want: "progress_index"},
@@ -298,7 +299,8 @@ func Test_statementsNextView(t *testing.T) {
 		{current: "statements_io", want: "statements_temp"},
 		{current: "statements_temp", want: "statements_local"},
 		{current: "statements_local", want: "statements_wal"},
-		{current: "statements_wal", want: "statements_timings"},
+		{current: "statements_wal", want: "statements_jit"},
+		{current: "statements_jit", want: "statements_timings"},
 		{current: "unknown", want: "statements_timings"},
 	}
 

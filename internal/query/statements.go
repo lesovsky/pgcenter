@@ -300,6 +300,33 @@ LIMIT 1
 		"pg_size_pretty(s.wal_bytes::bigint) AS wal_bytes," +
 		"to_char(100*s.wal_bytes/(SELECT coalesce(nullif(total_wal_bytes, 0), 1) FROM totals), 'FM990.00') AS wal_bytes_ratio " +
 		"FROM stmt s JOIN pg_database d ON d.oid=s.dbid LIMIT 1"
+
+	// PgStatStatementsJITPG15 defines JIT compilation query for pg_stat_statements (PG 15-16).
+	PgStatStatementsJITPG15 = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
+		"date_trunc('seconds', round(p.jit_generation_time) / 1000 * '1 second'::interval)::text AS gen_total, " +
+		"date_trunc('seconds', round(p.jit_inlining_time) / 1000 * '1 second'::interval)::text AS inline_total, " +
+		"date_trunc('seconds', round(p.jit_optimization_time) / 1000 * '1 second'::interval)::text AS opt_total, " +
+		"date_trunc('seconds', round(p.jit_emission_time) / 1000 * '1 second'::interval)::text AS emit_total, " +
+		`round(p.jit_generation_time) AS "gen,ms", round(p.jit_inlining_time) AS "inline,ms", ` +
+		`round(p.jit_optimization_time) AS "opt,ms", round(p.jit_emission_time) AS "emit,ms", ` +
+		"p.jit_functions AS functions, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
+		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
+		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid WHERE p.jit_functions > 0"
+
+	// PgStatStatementsJITDefault defines JIT compilation query for pg_stat_statements (PG 17+).
+	// PG 17 adds jit_deform_count/jit_deform_time columns.
+	PgStatStatementsJITDefault = "SELECT pg_get_userbyid(p.userid) AS user, d.datname AS database, " +
+		"date_trunc('seconds', round(p.jit_generation_time) / 1000 * '1 second'::interval)::text AS gen_total, " +
+		"date_trunc('seconds', round(p.jit_inlining_time) / 1000 * '1 second'::interval)::text AS inline_total, " +
+		"date_trunc('seconds', round(p.jit_optimization_time) / 1000 * '1 second'::interval)::text AS opt_total, " +
+		"date_trunc('seconds', round(p.jit_emission_time) / 1000 * '1 second'::interval)::text AS emit_total, " +
+		"date_trunc('seconds', round(p.jit_deform_time) / 1000 * '1 second'::interval)::text AS deform_total, " +
+		`round(p.jit_generation_time) AS "gen,ms", round(p.jit_inlining_time) AS "inline,ms", ` +
+		`round(p.jit_optimization_time) AS "opt,ms", round(p.jit_emission_time) AS "emit,ms", ` +
+		`round(p.jit_deform_time) AS "deform,ms", ` +
+		"p.jit_functions AS functions, left(md5(p.userid::text || p.dbid::text || p.queryid::text), 10) AS queryid, " +
+		`regexp_replace({{.PgSSQueryLenFn}}, E'\\s+', ' ', 'g') AS query ` +
+		"FROM {{.PGSSSchema}}.pg_stat_statements p JOIN pg_database d ON d.oid=p.dbid WHERE p.jit_functions > 0"
 )
 
 // SelectStatStatementsTimingQuery returns proper statements_timing query depending on Postgres version.
@@ -312,6 +339,16 @@ func SelectStatStatementsTimingQuery(version int) string {
 	default:
 		return PgStatStatementsTimingPG13
 	}
+}
+
+// SelectStatStatementsJITQuery returns the statements_jit query, column count, diff interval
+// and unique-key index depending on Postgres version. PG17+ adds the jit_deform_* columns,
+// shifting the interval block, functions, queryid and query right by one.
+func SelectStatStatementsJITQuery(version int) (string, int, [2]int, int) {
+	if version >= PostgresV17 {
+		return PgStatStatementsJITDefault, 15, [2]int{7, 12}, 13
+	}
+	return PgStatStatementsJITPG15, 13, [2]int{6, 10}, 11
 }
 
 // SelectQueryReportQuery returns proper query report query depending on Postgres version.

@@ -1,0 +1,27 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task line anchors for statements.go are slightly off but harmless: const block actually ends at line 303 (task says 303 — correct); PgStatStatementsIoDefault is at lines 55-67 (task says 55-67 — correct); SelectStatStatementsTimingQuery is at 305-315 (task says 305-315 — correct); SelectQueryReportQuery ends at 327 (task says 327 — correct). All verified accurate. No mismatch found; recorded only to note all anchors were checked.",
+      "fix": "No action needed — anchors verified accurate."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Implementation hints in Details section contain a concrete Go code block for SelectStatStatementsJITQuery (lines 160-168) and per-column SQL expression snippets. These are close to prescribing the full solution rather than pointing to a pattern. Borderline against the 'hints not implementations' rule, but mitigated because they explicitly mirror the existing SelectStatIOQuery pattern (io.go:87-92) which the task correctly references as the model.",
+      "fix": "Acceptable as-is given they mirror an existing in-repo pattern; could trim the full function body to a one-line signature + 'model SelectStatIOQuery' reference."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 41,
+    "issues_found": 0
+  }
+}
