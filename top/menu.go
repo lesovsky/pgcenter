@@ -57,6 +57,7 @@ func selectMenuStyle(t menuType) menuStyle {
 				" pg_stat_statements temp files input/output",
 				" pg_stat_statements temp tables (local) input/output",
 				" pg_stat_statements WAL usage",
+				" pg_stat_statements JIT compilation",
 			},
 		}
 	case menuProgress:
@@ -166,6 +167,8 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 				viewSwitchHandler(app.config, "statements_local")
 			case 5:
 				viewSwitchHandler(app.config, "statements_wal")
+			case 6:
+				viewSwitchHandler(app.config, "statements_jit")
 			default:
 				viewSwitchHandler(app.config, "statements_timings")
 			}
