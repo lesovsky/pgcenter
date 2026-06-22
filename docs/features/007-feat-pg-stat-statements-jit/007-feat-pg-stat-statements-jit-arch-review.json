@@ -1,0 +1,40 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The tech-spec states 'OrderKey: 2, gen_total, desc' for the initial sort, but col 2 is a cumulative text interval (date_trunc output, e.g. '00:01:23'), not a numeric or diffed column. The sort engine in internal/stat/postgres.go:sort() auto-detects by probing the first row's value: if parseDuration succeeds it uses duration sort, otherwise falls back to string sort. Under an empty screen (WHERE jit_functions > 0 with no JIT activity) there are zero rows, so sort is a no-op. On a live screen the value '00:00:00' does parse as a duration via parseDuration(), so sorting is numerically correct — but only because the format matches HH:MM:SS. If a statement accumulates more than 24 hours of JIT time the format becomes 'N days HH:MM:SS', which parseDuration also handles. This works correctly and is consistent with the existing statements_timings precedent (OrderKey 0, user, which falls through to string sort). The minor concern is that the tech-spec does not explicitly document that OrderKey 2 relies on the duration-sort branch of stat.sort(), making the reasoning opaque for future contributors.",
+      "location": "Tech-spec section 'Decisions / Decision 2: Column layout', acceptance criteria OrderKey:2",
+      "fix": "Add a comment in the view entry or tech-spec noting that gen_total is formatted as HH:MM:SS text, which triggers the duration-sort branch in internal/stat/postgres.go:sort(). No code change required."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The code-research file (section 5c) flags a risk: 'verify the top view-availability filter removes statements_jit on PG<15 so that viewSwitchHandler on PG14 does not yield a zero-value View{}'. The tech-spec names 'existing VersionOK runtime guard (stat.go:199)' as the mitigation, but does not explicitly resolve this concern. Looking at the codebase: view.New() registers statements_jit unconditionally; config.views is built from view.New() in top/top.go. The VersionOK check lives in the collector path (internal/stat), not in viewSwitchHandler or statementsNextView. This means pressing 'x' on PG14 would call viewSwitchHandler(config, 'statements_jit'), which reads config.views['statements_jit'] — a valid View entry (MinRequiredVersion is set but the view IS in the map). The collector then calls v.VersionOK(version) and returns the 'not supported' message. This is the same behavior as statements_wal on PG12: the view is in the map, but the collector guards it. So the existing pattern handles it correctly. However the tech-spec does not confirm this analysis explicitly; it should note that this is the same graceful-degradation path as statements_wal on PG<13.",
+      "location": "Tech-spec section 'How it works', step 3 — VersionOK guard",
+      "fix": "Add one sentence to the tech-spec confirming that the PG<15 degradation path is identical to statements_wal on PG<13: the view is in the map, viewSwitchHandler succeeds, and the collector's VersionOK guard returns the 'not supported' message. No code change required."
+    },
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "The tech-spec marks the statementsNextView cycle change as purely additive ('wal → jit → timings') and calls backward compatibility N/A. This is correct for the record/report path. However, the x-key cycle order is a user-observable behavior change for anyone who relies on the existing 'wal → timings' cycle. The spec describes this as intended, and the change is safe because no external API contract is affected. The mention of it here is informational only — the cycle insertion is the right approach.",
+      "location": "Tech-spec section 'Backward Compatibility'",
+      "fix": "Optionally note in the Backward Compatibility section that the x-cycle order changes from 'wal → timings' to 'wal → jit → timings', which is a deliberate UX change, not a breakage."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The spec is architecturally sound and fits the existing codebase precisely. The selector-returns-(query,Ncols,DiffIntvl,UniqueKey) design correctly follows the SelectStatIOQuery model (not the timings model) because Ncols changes across PG versions; the NotRecordable+MinRequiredVersion+synthetic-md5-UniqueKey combination matches the stat_io/stat_io_time precedent exactly; and the column index arithmetic for both the PG15 (13-col, DiffIntvl{6,10}, UniqueKey 11) and PG17 (15-col, DiffIntvl{7,12}, UniqueKey 13) layouts is internally consistent and correct. Three minor findings — all documentation gaps rather than correctness defects — do not block implementation."
+}

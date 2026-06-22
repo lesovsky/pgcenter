@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "Schema token {{.PGSSSchema}} is interpolated unquoted (pre-existing pattern, not a regression)",
+      "description": "The two new JIT query consts (PgStatStatementsJITPG15, PgStatStatementsJITDefault) interpolate {{.PGSSSchema}} directly into the FROM clause ('FROM {{.PGSSSchema}}.pg_stat_statements p') via text/template in query.Format(), with no identifier quoting. This is string interpolation into SQL, which is technically the SQL-injection-prone construct that a static analyzer would flag. However, the value is NOT user-controlled: PGSSSchema is populated by extensionSchema() (internal/stat/postgres.go:536), which runs query.GetExtensionSchema against pg_extension/pg_namespace in the connected DB and returns the schema name where the pg_stat_statements extension is actually installed. It is a server-returned catalog identifier, defaulting to empty string on error. The other token {{.PgSSQueryLenFn}} is built in NewOptions (query.go:57) exclusively from an int (fmt.Sprintf with %d over PgSSQueryLen, hardcoded 256 in top/top.go:60), so no string injection is possible through it. The JIT consts use these tokens identically to all six existing pgss consts (Timing/General/Io/Temp/Local/Wal) and the same query.Format() text/template path, the WHERE jit_functions > 0 predicate is a fixed constant with no interpolation, and no user-supplied value enters the diffable query at all (the $1-parameterized report path is untouched by this feature). Therefore the design introduces NO new input surface and NO security regression relative to the established baseline. Severity kept minor and informational because (a) the data source is a trusted PostgreSQL catalog, (b) this is a local admin/observability CLI run by a DBA against their own cluster, and (c) the pattern is unchanged from existing code that has shipped for years.",
+      "location": "Section: Architecture / internal/query/statements.go (new consts PgStatStatementsJITPG15, PgStatStatementsJITDefault); compare existing statements.go:18,46,53,67,77,90,98",
+      "impact": "None in practice. A theoretical SQL injection via the schema qualifier would require an attacker to first compromise pg_extension/pg_namespace catalog contents (i.e. already have DDL privileges to install pg_stat_statements into an arbitrarily-named schema) on the very database the DBA is connecting to with their own credentials, in which case the attacker already controls the database. No privilege boundary is crossed by pgcenter.",
+      "recommendation": "No change required for this feature; matching the existing pattern is correct and keeps the codebase consistent. If schema-identifier hardening is ever desired project-wide, it should be a separate cross-cutting task (e.g. validate the extension schema name against a [A-Za-z0-9_]+ allowlist, or use quote_ident, in extensionSchema()), applied to all pgss query consts at once rather than only the new JIT ones. Do not single out this feature for it.",
+      "cwe": "CWE-89"
+    }
+  ]
+}

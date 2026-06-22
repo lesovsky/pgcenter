@@ -1,0 +1,49 @@
+{
+  "status": "approved",
+  "summary": "Checked 32 claims, found 0 critical mirages. All file paths, function/const names, struct fields, line anchors, version constants, count-test expectations and the duration-aware sort are confirmed against the real codebase. 1 minor naming note (report.go function is describeReport, not doDescribe — only in code-research, tech-spec is generic).",
+  "findings": [
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "code-research.md §6 says report.go maps view-name -> description in doDescribe (report.go:604)",
+      "reality": "The function at report/report.go:605 is named describeReport, not doDescribe. The description map literal spans report.go:606-629 (research said 604-624). The tech-spec itself does NOT name the function (Decision 5 only says 'add no report.go description entry'), so the tech-spec is unaffected; this is a code-research-only inaccuracy. The substantive precedent claim (bgwriter/replslots/stat_io absent from the map) is CONFIRMED.",
+      "source": "007-feat-pg-stat-statements-jit-code-research.md, §6 NotRecordable mechanism",
+      "fix": "Optional: rename doDescribe -> describeReport and fix the line anchor in code-research.md. No impact on tech-spec or implementation."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 32,
+    "confirmed": 31,
+    "mirages_found": 1,
+    "verified_claims": [
+      "internal/query/statements.go exists",
+      "internal/query/io.go::SelectStatIOQuery returns (string, int, [2]int) — io.go:87",
+      "internal/query/statements.go::SelectStatStatementsTimingQuery returns string — statements.go:306",
+      "PgStatStatementsTimingPG13/PG12/Default consts exist; timing query is 13 cols (DiffIntvl {6,10})",
+      "internal/view/view.go::View struct has Name,MinRequiredVersion,QueryTmpl,DiffIntvl,Ncols,OrderKey,OrderDesc,UniqueKey,ColsWidth,Msg,Filters,NotRecordable",
+      "view.go statements_timings entry: Ncols 13, DiffIntvl {6,10}, UniqueKey 11",
+      "view.go statements_io: Ncols 13, DiffIntvl {6,10}, UniqueKey 11",
+      "view.go statements_wal: MinRequiredVersion PostgresV13, DiffIntvl {3,6}, Ncols 9, UniqueKey 7",
+      "view.go stat_io: NotRecordable true, MinRequiredVersion PostgresV16, UniqueKey 0 — view.go:166",
+      "view.go stat_io_time Msg carries track_io_timing hint — view.go:190",
+      "Configure() statements_timings case swaps only QueryTmpl — view.go:373-375",
+      "Configure() stat_io case patches QueryTmpl/Ncols/DiffIntvl — view.go:386",
+      "view.New() returns 26 views (confirmed by count)",
+      "view_test.go::TestNew asserts 26 — view_test.go:11 (bump to 27 valid)",
+      "TestNew_StatIOView precedent exists — view_test.go:17",
+      "internal/stat/stat.go::VersionOK guard returns 'not supported by current version' — stat.go:199-200",
+      "PostgresV15=150000 PostgresV16 PostgresV17=170000 PostgresV18 in query.go:18-21",
+      "top/menu.go menuPgss has 6 items (0-5) — menu.go:53-60",
+      "top/menu.go menuSelect case menuPgss handles cy 0-5 + default — menu.go:155-172",
+      "top/config_view.go::statementsNextView cycles wal->timings — config_view.go:160-180",
+      "keybindings.go: 'x' switchViewTo statements (line 40), 'X' menuOpen menuPgss (line 45)",
+      "record/record.go::filterViews NotRecordable branch fires before version gate — record.go:208 vs 214",
+      "record_test.go::Test_filterViews has 6 rows, documented wantN/wantV — record_test.go:123-128",
+      "internal/stat/postgres.go::sort has duration-aware branch via parseDuration — postgres.go:379",
+      "statements_test.go::TestSelectStatStatementsTimingQuery exists — line 10",
+      "statements_test.go exec loop with t.Skipf, WAL PG13+ gate — lines 53,86",
+      "report.go description map: bgwriter/replslots/stat_io absent (NotRecordable precedent) — report.go:606-629",
+      "no pre-existing statements_jit / JIT const references in codebase (grep clean)"
+    ]
+  }
+}

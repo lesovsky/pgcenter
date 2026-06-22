@@ -1,0 +1,18 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Per-task verification for Task 3 uses `verify: user` (manual local-PG17 TUI check), which is appropriate for a TUI feature with no E2E layer, but it is not an automated/agent-executable step. This is acceptable given pgcenter has no TUI E2E harness (consistent with Testing Strategy E2E section), noted for transparency only.",
+      "fix": "No change required. Optionally add a non-interactive smoke assertion (e.g. grep that `statements_jit` appears in the menu/cycle wiring) to give the agent a checkable signal alongside the manual TUI walkthrough."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task descriptions occasionally embed light rationale-style phrasing (e.g. Task 1 'the only layer where the PG15-vs-PG17 column difference lives', Task 3 'no keybinding changes are needed'). These are scope clarifications rather than technical decisions — the actual decisions (selector shape, column layout, filter, hint mechanism, NotRecordable) are all correctly consolidated in the Decisions section. Borderline, not a duplication of any specific config value.",
+      "fix": "Optional: trim the trailing scope-justification clauses to keep task descriptions to pure WHAT+WHY. No decision content needs to move."
+    }
+  ],
+  "summary": "APPROVED. Zero critical findings. Frontmatter valid (created 2026-06-22, status draft, branch filled, size S). All template sections present and non-empty, including Decisions (5 entries, each with Decision+Rationale+Alternatives), Data Models (real content), Dependencies (New packages: None / Using existing), Testing Strategy (size S), Agent Verification Plan (approach + per-task table + tools required), Risks (table with Risk+Mitigation, all realistic and mitigated, no generic placeholders), Acceptance Criteria (present, non-empty), Implementation Tasks (organized by Wave 1 + Final Wave). Final Wave correctly contains the Pre-deploy QA task (skill pre-deploy-qa, reviewers none — per catalog). Skills valid: all code tasks use code-writing, QA uses pre-deploy-qa; no LLM/prompt content mis-skilled. Reviewers all in standard catalog (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) and the agent files exist. Tasks are brief scope descriptions with no HOW/steps, no line-number references, no embedded AC/TDD-anchor sections. Each implementation task has Skill + Reviewers + Verify + Files to modify + Files to read with concrete existing paths (all 11 referenced files verified present). No time-based estimates. Wave conflict check: Wave 1's three tasks touch disjoint file sets (query/* vs view/*+record_test vs top/*) — no same-file collision; no circular deps; QA correctly sequenced last. 4 tasks total (well under the 15-task split threshold). Tech-spec claims cross-checked against project-knowledge architecture.md/patterns.md (SelectStatIOQuery return shape, NotRecordable precedent, count-test coupling, synthetic md5 key, no-column-hiding) — consistent. Two minor, non-blocking observations only."
+}

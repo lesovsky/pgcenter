@@ -63,8 +63,11 @@ already route to the pgss menu/cycle). PG<15 degrades gracefully via the existin
    statistics is not supported by current version of Postgres" and never queries (same as
    `statements_wal` on PG<13). On PG15+ it runs `view.Query`, diffs the `DiffIntvl` columns,
    matches rows across samples on the `UniqueKey` (md5 queryid), and sorts by `OrderKey` (2,
-   `gen_total`, desc) — the duration-aware branch in `internal/stat/postgres.go::sort` orders
-   the `*_total` text durations numerically.
+   `gen_total`, desc) — the duration-aware branch in `internal/stat/postgres.go::sort` (via
+   `parseDuration`, handling `HH:MM:SS` with 3+ digit hours and `N days HH:MM:SS`) orders the
+   `*_total` text durations numerically, the same path the timings-screen totals rely on. This
+   is an undocumented invariant: `OrderKey` pointing at a `*_total` text column sorts correctly
+   only because of that branch.
 4. Rows are pre-filtered in SQL by `WHERE jit_functions > 0`, so under `jit=off`/low activity
    the screen is empty; the `Msg` text explains why.
 
@@ -205,6 +208,11 @@ bash (go test, make). No MCP/Playwright/curl — TUI feature.
 N/A — adding new code only. New view entry, new query consts/selector, additive menu item and
 cycle link. No existing API, query, view, or config is modified in a breaking way. The two
 count-test edits are test expectations tracking the additive change, not behavior changes.
+
+One user-visible behavior shift, non-breaking: the `x`-cycle order changes from `… wal →
+timings …` to `… wal → jit → timings …` (one extra stop inserted). No screen is removed or
+reordered relative to each other; existing muscle memory for every other transition is
+preserved.
 
 **Breaking changes:** no
 **Consumer impact:** none found — `statements_jit` is a new view name; no existing caller
