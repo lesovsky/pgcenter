@@ -6,7 +6,7 @@ interview_metadata:
   work_type: "feature"
   started: "2026-06-21"
   last_updated: "2026-06-21"
-  status: "in_progress"
+  status: "completed"
   can_resume: true
   current_question_num: 0
   feature_size: "S"
@@ -142,7 +142,7 @@ phase3_integration:
 
 phase4_completion:
   userspec_file: "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit.md"
-  status: "created"
+  status: "approved"
 
 decision_rules:
   required_threshold: 85
