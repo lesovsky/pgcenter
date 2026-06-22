@@ -212,3 +212,19 @@ CI-матрицей (фактический запрос к `pg_stat_statements`
 <!-- This section is filled automatically by /done during feature finalization.
      It captures divergences between the original spec and the actual result.
      DO NOT fill manually — this is maintained by the reconciliation process. -->
+
+## Post-implementation
+
+Updated: 2026-06-22
+
+### Divergences from original spec
+
+- **Объём count-тестов:** спек называл два ломающихся теста (`TestNew`, `Test_filterViews`). Фактически правок потребовали **пять**: добавились `view_test.go::TestView_VersionOK` (строка `version:160000` 26→27, всплыл при декомпозиции — patterns.md уже документировал его как count-тест) и три TUI-теста в `top/` — `Test_selectMenuStyle`, `Test_statementsNextView`, `Test_switchViewTo` (покрывают меню `X` и `x`-цикл; пойманы dev-test-reviewer'ом на round 1). Причина: code-research §4/§5 не сверился с `patterns.md` и не проверил тест-слой `top/`. Поведение фичи не изменилось.
+
+### Added during implementation
+
+- Guard-тест `TestNew_StatementsJITView` (по образцу `TestNew_StatIOView`).
+
+### Descoped / Deferred
+
+- Нет. Весь запланированный объём реализован. record/report для JIT-view остаётся в roadmap-backlog (TUI-first принцип 0.11.0), как и для фич 004–006.

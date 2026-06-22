@@ -78,6 +78,13 @@ pg_stat_io display-design problem.
 
 ### [007] pg_stat_statements — JIT screen
 
+- **Status:** done — merged 2026-06-22 (PR #142, branch `feature/pg-stat-statements-jit`).
+  Shipped as the 7th `pg_stat_statements` sub-screen (`statements_jit`) under the `X` menu / `x`
+  cycle: cumulative phase-time totals + per-interval `*,ms` + `functions`, `+deform` on PG 17+;
+  per-version selector PG15/16 (13 cols) vs PG17+ (15 cols); `WHERE jit_functions > 0`; sorted by
+  `gen_total` desc; `MinRequiredVersion PostgresV15`; TUI-only `NotRecordable`. CI green on the full
+  gate (lint/gosec/govulncheck/test/build/E2E). **Last feature of release 0.11.0** — remaining:
+  finalization (version bump + release per deployment.md).
 - **Value:** medium. JIT compilation cost visibility (functions, inlining, optimization,
   emission counts/times; PG 15+, extended in PG 17).
 - **Shape:** new 7th pg_stat_statements sub-screen (existing: timings, general, io, temp, local,

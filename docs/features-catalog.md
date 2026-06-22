@@ -122,3 +122,23 @@ Used by spec-writer to understand existing functionality and avoid duplication o
 - `Q` does not reset `pg_stat_io` (it is shared/cluster-wide stats) — noted in the help screen.
 
 **Touches:** Shares the multi-row view model with `replslots`/`tables`; third + fourth `NotRecordable` views. Closes the visibility gaps left by [004-feat-bgwriter-checkpointer] (`buffers_backend` on PG 17+) and the `pg_stat_wal` screen (WAL IO timings on PG 18).
+
+### [007-feat-pg-stat-statements-jit] pg_stat_statements JIT Screen
+
+**What it does:** Adds a 7th `pg_stat_statements` sub-screen — **JIT** — under the `X` menu (and the `x` cycle), showing per-statement JIT compilation cost. Lets a DBA find which normalized queries pay heavy JIT generation/inlining/optimization/emission time (the classic cause of "mysterious" latency on short queries when `jit=on`) without dropping to `psql`.
+
+**Key scenarios:**
+- Press `X` → choose `pg_stat_statements JIT compilation` (or press `x` to cycle `… wal → jit → timings …`). The screen opens sorted by `gen_total` (cumulative generation time) descending — the heaviest JIT compilers on top.
+- Columns: `user`, `database`, cumulative phase totals `gen_total`/`inline_total`/`opt_total`/`emit_total` (`+deform_total` on PG 17+), per-interval `gen,ms`/`inline,ms`/`opt,ms`/`emit,ms` (`+deform,ms` on PG 17+), `functions` (JIT-compiled functions this interval), `queryid`, `query`.
+- Decide whether JIT pays off: a query with large phase times but few rows is a candidate for raising `jit_above_cost`/`jit_optimize_above_cost` or turning JIT off for the workload.
+- Re-sort (arrows — `*_total` text durations sort numerically) and filter (`/`) like the other pgss sub-screens.
+
+**Limitations:**
+- TUI-only in 0.11.0 — the view is `NotRecordable`, so `pgcenter record`/`report` skip it. record/report is the planned next phase.
+- PG 15+ only (JIT columns appeared in PG 15; `deform_*` in PG 17). On PG < 15 the sub-screen reports "not supported" via the runtime version guard.
+- Rows with no JIT activity (`jit_functions = 0`) are hidden in SQL; under `jit=off` the screen is empty and the command line shows a hint.
+- The `*_count` phase counters (inlining/optimization/emission) are omitted to fit the screen width (no horizontal scroll) — only `functions` is shown; the value is in the phase times.
+
+**Touches:** Shares the pgss sub-screen model (synthetic md5 `queryid` `UniqueKey`, total+interval columns) with `statements_timings`/`statements_io`; fifth `NotRecordable` view added in 0.11.0 (after bgwriter, replslots, stat_io ×2). Closes release 0.11.0.
+
+---

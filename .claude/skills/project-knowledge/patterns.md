@@ -17,6 +17,13 @@ When a PG version changes columns in a stats view:
 - Call it in `view.Configure()` under the correct view name
 - Add version-specific test cases in `*_test.go`
 
+When versions differ by **column count** (not just names), the selector must also carry the
+layout: return `(string, int, [2]int)` (`+DiffIntvl`, see `io.go`) or `(string, int, [2]int, int)`
+(`+UniqueKey`, see the `statements_jit` selector in `internal/query/statements.go` — UniqueKey
+points at the trailing md5 `queryid`, whose index shifts with ncols) and patch all returned
+fields in `Configure()`. When only names change but the count is constant (e.g. `statements_timings`),
+`Configure()` swaps `QueryTmpl` alone and the static `Ncols`/`DiffIntvl`/`UniqueKey` stay valid.
+
 Reference implementations of the single-row version-aware view: `internal/query/wal.go` and `internal/query/bgwriter.go`. The bgwriter screen is notable for placing absolute event-counter columns (`ckpt_*`, `rstpt_*`) **outside** the contiguous `DiffIntvl` range so they render cumulative, while the work/time/buffer columns inside the range render as per-interval deltas.
 
 For a **multi-row hybrid view** that LEFT JOINs two stats views, see `internal/query/replication_slots.go` (the `replslots` screen). Two patterns it establishes:
@@ -28,9 +35,11 @@ When the row identity is **composite** (more than one column), emit a synthetic 
 
 ## Adding a New View — test counts that must be updated
 
-Registering a view in `view.New()` couples to two count-based tests that fail in CI (not always locally) if missed:
-- `internal/view/view_test.go: TestNew` pins the total view count (and `TestView_VersionOK` pins per-version availability).
-- `record/record_test.go: Test_filterViews` pins, per version, how many views `filterViews` drops vs keeps. A `NotRecordable: true` view is always dropped, so every `wantN` row increases by the number of new `NotRecordable` views (feature 006 added 2 → `+2` each row; `wantV` unchanged). This test runs without Postgres, so a stale count is a real failure even though the rest of the `record` package skips/fails on a missing PG fixture — do not assume a red `record` package is only the connection-refused tests.
+Registering a view in `view.New()` couples to count-based tests that fail in CI (not always locally) if missed:
+- `internal/view/view_test.go: TestNew` pins the total view count. `TestView_VersionOK` pins per-version availability — its row at a version **≥ the new view's `MinRequiredVersion`** also increases by one (feature 007's PG15+ view bumped only the `160000` row, not the `≤140000` rows).
+- `record/record_test.go: Test_filterViews` pins, per version, how many views `filterViews` drops vs keeps. A `NotRecordable: true` view is always dropped, so every `wantN` row increases by the number of new `NotRecordable` views (feature 006 added 2 → `+2` each row; feature 007 added 1 → `+1`; `wantV` unchanged). This test runs without Postgres, so a stale count is a real failure even though the rest of the `record` package skips/fails on a missing PG fixture — do not assume a red `record` package is only the connection-refused tests.
+
+Adding a `pg_stat_statements` **sub-screen** (or any `menuPgss`/cycle entry) additionally breaks `top` tests — `Test_selectMenuStyle` (pins each menu's item count), `Test_statementsNextView`, and `Test_switchViewTo` (pin the `x`-cycle transitions). These `top` tests DO run locally without Postgres, so they catch the miss in `make test` — but feature 007's code-research overlooked them (the task wrongly assumed the TUI layer had no tests). When touching `top/menu.go` or `top/config_view.go`, grep `top/*_test.go` for the function you changed before assuming it is untested.
 
 ## Error Wrapping
 

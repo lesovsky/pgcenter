@@ -391,3 +391,35 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** Follows the [004] per-version-branch ADR (not NULL-padded). Identical headers keep the DBA's table stable across versions. `coalesce` is mandatory — `pg_stat_io` returns NULL pervasively (e.g. `fsyncs` for `temp relation`), and a NULL inside `DiffIntvl` aborts the whole sample ([005] lesson).
 
 **Alternatives considered:** Single NULL-padded query across versions (rejected by [004]); a separate PG 17 branch (unnecessary — 16==17).
+
+## [007-feat-pg-stat-statements-jit] JIT query selector returns a 4-tuple (query, Ncols, DiffIntvl, UniqueKey)
+
+**Date:** 2026-06-22
+**Feature:** 007-feat-pg-stat-statements-jit
+**Status:** Accepted
+
+**Context:** The JIT sub-screen's column COUNT differs across versions (PG 15/16 → 13 columns; PG 17+ → 15, adding `deform_total`/`deform,ms`). Because `UniqueKey` points at the trailing synthetic md5 `queryid`, its index shifts with the column count, and `DiffIntvl` shifts too. The existing `statements_timings` selector returns only a query string (its count is constant at 13 across versions), and the `pg_stat_io` selector returns `(string, int, [2]int)` (its `UniqueKey` is a fixed col 0).
+
+**Decision:** `SelectStatStatementsJITQuery(version) (string, int, [2]int, int)` returns query + `Ncols` + `DiffIntvl` + `UniqueKey`; `view.Configure()` patches all four. Two-way branch: `>= PostgresV17` → (Default, 15, {7,12}, 13); else → (PG15, 13, {6,10}, 11). Gate `MinRequiredVersion: query.PostgresV15`.
+
+**Rationale:** A trailing-key layout whose index moves with version forces the selector to carry the full layout — returning only the query (timings model) would leave stale `Ncols`/`DiffIntvl`/`UniqueKey`; returning a 3-tuple (io model) would leave a stale `UniqueKey`. Extending to a 4-tuple keeps the layout invariant explicit and unit-testable, and column hiding remains unavailable (`internal/align` floors width at 8, ADR [006]).
+
+**Alternatives considered:** Compute `UniqueKey = Ncols-2` in `Configure()` (works, but hides a layout invariant in arithmetic). Hide `deform` columns on PG 15 (impossible per ADR [006]). Both rejected.
+
+---
+
+## [007-feat-pg-stat-statements-jit] JIT column layout: timings-style total+interval, drop the *_count phase counters
+
+**Date:** 2026-06-22
+**Feature:** 007-feat-pg-stat-statements-jit
+**Status:** Accepted
+
+**Context:** `pg_stat_statements` exposes 8 JIT metrics on PG 15/16 (4 counts + 4 times) and 10 on PG 17+. Mirroring `statements_io`'s total+interval doubling across all of them would be ~22–26 columns; pgcenter has no horizontal column scroll (ADR [006]).
+
+**Decision:** Model the screen on `statements_timings`: cumulative `*_total` text durations + per-interval `*,ms` columns for the four (PG 17+: five) phase TIMES, plus a single `functions` counter. Drop the `inlining_count`/`optimization_count`/`emission_count` (and `deform_count`) metrics. Filter rows to `WHERE jit_functions > 0` (pg_stat_io zero-row precedent), surfacing the `jit=off` empty state via the view `Msg`.
+
+**Rationale:** The per-phase TIME is the cost signal a DBA acts on; the phase counts are secondary and `jit_functions` already represents "how much JIT work". Dropping the counts keeps the screen at 13/15 columns — within terminal width. The `Msg`-as-hint reuses the existing `track_io_timing` note mechanism (no new GUC-detection code).
+
+**Alternatives considered:** All counts+times with total+interval doubling (too wide). Splitting into count/time sub-screens like `pg_stat_io` (out of scope — JIT is the low-risk release closer, and the time-only set fits one screen). Both rejected.
+
+---
