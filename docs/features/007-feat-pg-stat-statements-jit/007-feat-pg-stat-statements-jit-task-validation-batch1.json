@@ -1,0 +1,52 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "01",
+      "section": "frontmatter / verify",
+      "issue": "verify field value is 'bash — go test ./internal/query/...' (a string), which is fine, but it duplicates the verify tool plus a command in one field where the template/agent treats verify as a single tool token (e.g. 'bash'). Tasks 03/04 mix styles too (03: 'user' + trailing comment; 04: 'bash — ...'). Consistency only — not blocking.",
+      "fix": "Optional: set verify to the bare tool ('bash'/'user') and keep the command in the per-task verification mapping. Cosmetic; value is a valid string so the type contract holds."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Details / Implementation hints",
+      "issue": "Details includes a ~10-line Go code block for the SelectStatStatementsJITQuery selector signature/body. This leans toward HOW (concrete implementation) rather than WHAT. It is a small signature sketch (mirrors SelectStatIOQuery) and is bounded, so it is borderline rather than a true violation, but the rules flag pseudocode/implementation in Details.",
+      "fix": "Optional: reduce the code block to the function signature line only ('func SelectStatStatementsJITQuery(version int) (string, int, [2]int, int)') and describe the two-branch return values as prose, instead of showing the full if/return body."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "Two feature-artifact references are plain text, not markdown links: '007-feat-pg-stat-statements-jit-decisions.md — decisions log' and the code-research entry has a link but decisions log does not. Mandatory decisions log link is present elsewhere as plain text only on task 01.",
+      "fix": "Wrap the decisions log as a markdown link: [007-feat-pg-stat-statements-jit-decisions.md](007-feat-pg-stat-statements-jit-decisions.md) — matches tasks 02/03/04 which already link it."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files / Project knowledge",
+      "issue": "Link label says 'project.md' but the path points to '.claude/skills/project-knowledge/overview.md'. Label/target mismatch (tasks 02/03/04 correctly label it 'overview.md').",
+      "fix": "Rename the label to [overview.md](.claude/skills/project-knowledge/overview.md) to match the actual target and the other three tasks."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "Feature-artifact links use full repo-root-relative paths (docs/features/007-.../007-...md) whereas tasks 01-03 use bare-filename links relative to the task file's own directory. Both resolve, but the batch is internally inconsistent. Post-completion decisions-log link in task 04 also uses the long form.",
+      "fix": "Optional: normalize task 04's feature-artifact links to bare filenames (e.g. [007-feat-pg-stat-statements-jit.md](007-feat-pg-stat-statements-jit.md)) for consistency with tasks 01-03."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 5
+  }
+}
