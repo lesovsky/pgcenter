@@ -53,3 +53,31 @@ Minor от dev-test-reviewer применён в 304ee62 (`assert.Contains(t, ji
 - Примечание: live-DB тесты (`Test_app_record` и пр.) падают с connection-refused/nil-pointer — это pre-existing, требуют живого PG, воспроизводятся на HEAD~1; вне scope Task 02
 
 ---
+
+## Task 03: TUI menu item + x-cycle wiring — top/menu.go, top/config_view.go
+
+**Status:** Done
+**Commit:** 1d8d678 (menu item + handler + x-cycle), 217b69d (review round 1 fix — обновление существующих regression-тестов)
+**Agent:** jit-tui-dev (general-purpose)
+**Summary:** Чистая TUI-обвязка нового view `statements_jit` (зарегистрирован в Task 02) через два штатных входа pgss. В `top/menu.go` `selectMenuStyle` `case menuPgss` добавлен 7-й пункт (индекс 6) `" pg_stat_statements JIT compilation"` сразу после `" pg_stat_statements WAL usage"` (leading-space-формат как у соседей; высота меню авто-размер от `len(s.items)` — геометрия не тронута). В `menuSelect` `case menuPgss` добавлен `case 6: viewSwitchHandler(app.config, "statements_jit")` строго между `case 5` и `default`. В `top/config_view.go` `statementsNextView` x-цикл расширен: `case "statements_wal"` теперь `next = "statements_jit"`, добавлен `case "statements_jit": next = "statements_timings"` — порядок цикла стал `… local → wal → jit → timings …`. `top/keybindings.go` не тронут (`x`/`X` уже подключены и уже гейтят пустой `ExtPGSSSchema`).
+**Deviations:** TDD-якорь task-спека («у этого TUI-слоя нет существующего unit-покрытия, тесты не писать») оказался ФАКТИЧЕСКИ НЕВЕРНЫМ — найдено dev-test-reviewer (round 1, critical, подтверждено эмпирически `go test ./top/`). Слой покрыт table-driven тестами: `Test_selectMenuStyle` (счётчик пунктов `menuPgss`), `Test_statementsNextView` и `Test_switchViewTo` (x-цикл, включая переход `statements_wal`). Мои изменения сломали 3 существующих теста. Отклонение от плана: вместо «no tests» обновил три устаревших assertion'а под новое поведение (НЕ спекулятивные новые тесты — правка существующих regression-тестов): `menuPgss` count 6→7; `statements_wal → statements_jit` + новый `statements_jit → statements_timings` в обоих cycle-тестах. Это минимальная правка, восстанавливающая зелёный `make test` (CI-гейт проекта), и она же закрывает покрытие нового JIT-перехода. Причина расхождения в спеке зафиксирована для lead'а (TDD Anchor task-03 нуждается в исправлении).
+**Tech debt:** Нет. Pre-existing: `Test_doReload` падает nil-pointer на `top/reload.go:18` — требует живого PostgreSQL, воспроизводится идентично на HEAD~2 (чистый worktree), вне scope Task 03.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical/major/minor (cross-file consistency: индекс пункта 6 совпадает с `case 6`, view `statements_jit` зарегистрирован в Task 02 → `viewSwitchHandler` резолвит реальный view, не zero-value; геометрия меню не тронута) → [task-03-dev-code-reviewer-review.json]
+- dev-test-reviewer: **failed**, 2 critical + 1 major — устаревший TDD-якорь, сломаны 3 существующих теста (`Test_selectMenuStyle`, `Test_statementsNextView`, `Test_switchViewTo`) → [task-03-dev-test-reviewer-review.json]
+
+Critical-замечания dev-test-reviewer применены в 217b69d (обновлены три assertion'а + добавлен новый JIT-переход в оба cycle-теста).
+
+*Round 2:*
+- dev-test-reviewer: **passed**, 0 findings (все 3 регрессии устранены, litmus-целостность сохранена — тесты проверяют реальное имя view/счётчик, а не моки; новый JIT-переход покрыт) → [task-03-dev-test-reviewer-review-round2.json]
+
+**Verification:**
+- `go build ./...` → clean; `go vet ./top/...` → clean
+- `go test ./top/ -run 'Test_selectMenuStyle|Test_statementsNextView|Test_switchViewTo'` → все PASS (включая `Test_switchViewTo/14`)
+- `make build` → собирает `bin/pgcenter` без ошибок
+- Manual (local PG17, верифицирует user): `X` → 7-й пункт «pg_stat_statements JIT compilation», выбор открывает JIT-экран; `x` циклит `… wal → jit → timings …`
+
+---
