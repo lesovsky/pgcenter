@@ -120,12 +120,16 @@ func Test_filterViews(t *testing.T) {
 		// NotRecordable=true, so they are always dropped by filterViews on every version,
 		// adding a further +2 to wantN on each row while wantV stays unchanged (they never
 		// join the remaining set).
-		{version: 140000, pgssSchema: "", wantN: 10, wantV: 16},
-		{version: 140000, pgssSchema: "public", wantN: 4, wantV: 22},
-		{version: 130000, pgssSchema: "public", wantN: 7, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 10, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 12, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 12, wantV: 14},
+		// The statements_jit view (feature 007) is NotRecordable=true with
+		// MinRequiredVersion=PostgresV15; the NotRecordable branch in filterViews fires before
+		// the version gate, so it is always dropped on every version — adding a further +1 to
+		// wantN on each row (including PG<15) while wantV stays unchanged.
+		{version: 140000, pgssSchema: "", wantN: 11, wantV: 16},
+		{version: 140000, pgssSchema: "public", wantN: 5, wantV: 22},
+		{version: 130000, pgssSchema: "public", wantN: 8, wantV: 19},
+		{version: 120000, pgssSchema: "public", wantN: 11, wantV: 16},
+		{version: 110000, pgssSchema: "public", wantN: 13, wantV: 14},
+		{version: 100000, pgssSchema: "public", wantN: 13, wantV: 14},
 	}
 
 	for _, tc := range testcases {

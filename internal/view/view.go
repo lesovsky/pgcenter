@@ -227,6 +227,20 @@ func New() Views {
 			Msg:       "Show statements IO statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"statements_jit": {
+			Name:               "statements_jit",
+			MinRequiredVersion: query.PostgresV15,
+			QueryTmpl:          query.PgStatStatementsJITPG15,
+			DiffIntvl:          [2]int{6, 10},
+			Ncols:              13,
+			OrderKey:           2,
+			OrderDesc:          true,
+			UniqueKey:          11,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show statements JIT compilation statistics (no rows when jit=off)",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
 		"statements_temp": {
 			Name:      "statements_temp",
 			QueryTmpl: query.PgStatStatementsTempDefault,
@@ -372,6 +386,9 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "statements_timings":
 			view.QueryTmpl = query.SelectStatStatementsTimingQuery(opts.Version)
+			v[k] = view
+		case "statements_jit":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl, view.UniqueKey = query.SelectStatStatementsJITQuery(opts.Version)
 			v[k] = view
 		case "wal":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatWALQuery(opts.Version)
