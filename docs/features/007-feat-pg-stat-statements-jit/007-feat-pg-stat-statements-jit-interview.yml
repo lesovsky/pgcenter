@@ -1,0 +1,149 @@
+# Interview Plan for Feature 007 — pg_stat_statements JIT screen
+
+interview_metadata:
+  feature_name: "pg-stat-statements-jit"
+  feature_base: "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit"
+  work_type: "feature"
+  started: "2026-06-21"
+  last_updated: "2026-06-21"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 0
+  feature_size: "S"
+
+conversation_history: []
+
+phase1_feature_overview:
+  feature_description:
+    score: 85
+    status: "complete"
+    value: >
+      New 7th pg_stat_statements sub-screen under the X menu showing JIT compilation
+      metrics per (user, database, queryid): jit_functions, generation/inlining/
+      optimization/emission counts+times (PG15+); PG17 adds deform_count/deform_time.
+      Built by analogy with statements_io. TUI-only, NotRecordable. Closes release 0.11.0.
+    gaps: ""
+    required: true
+  user_problem:
+    score: 80
+    status: "complete"
+    value: >
+      No way in pgcenter to see JIT compilation cost per query. With jit=on (default),
+      JIT overhead can dominate planning/execution for short queries; a DBA needs to spot
+      which normalized statements pay heavy generation/optimization/emission time.
+    gaps: ""
+    required: true
+  target_users:
+    score: 80
+    status: "complete"
+    value: "Practicing PostgreSQL DBA troubleshooting query latency / JIT overhead."
+    required: false
+  success_criteria:
+    score: 60
+    status: "partial"
+    value: "JIT sub-screen reachable via X menu and x-cycle; correct columns per PG version; CI green PG14-18."
+    gaps: "Confirm exact acceptance criteria and zero-JIT row handling"
+    required: true
+  constraints:
+    score: 85
+    status: "complete"
+    value: >
+      PG15+ feature (view absent <15). TUI-only, NotRecordable. pgss extension required.
+      Single query per version (PG15/16 base, PG17+ adds deform_*). Synthetic md5 queryid
+      UniqueKey -> columns cannot be hidden, must use per-version column set.
+    gaps: ""
+    required: true
+  testing_strategy:
+    score: 70
+    status: "partial"
+    value: >
+      S feature. Unit: SelectStatStatementsJITQuery version branching (query_test.go pattern).
+      Fix the two count-tests broken by adding a view (view_test.go::TestNew,
+      record/record_test.go::Test_filterViews). Full PG14-18 gate in CI.
+    gaps: "Confirm whether config_view/menu need tests"
+    required: true
+
+phase2_user_experience:
+  user_stories:
+    score: 50
+    status: "partial"
+    value: ""
+    gaps: "Need concrete step-by-step scenarios"
+    required: true
+  acceptance_criteria:
+    score: 50
+    status: "partial"
+    value: ""
+    gaps: "Testable checklist"
+    required: true
+  edge_cases:
+    score: 40
+    status: "partial"
+    value: ""
+    gaps: "jit=off (all-zero), PG<15, zero-JIT queries, deform on PG17+"
+    required: true
+  error_scenarios:
+    score: 60
+    status: "partial"
+    value: "pgss absent -> 'pg_stat_statements not found' (existing X-menu behavior)."
+    gaps: "PG<15 behavior"
+    required: true
+  verification_strategy:
+    score: 50
+    status: "partial"
+    value: ""
+    gaps: "Local PG17 manual check + CI matrix"
+    required: true
+  ui_ux_requirements:
+    score: 55
+    status: "partial"
+    value: "7th menu item; x-cycle wal->jit->timings; columns TBD; optional jit=off hint."
+    gaps: "Exact column set/order, hint decision, zero-row filtering"
+    required: true
+  risks:
+    score: 60
+    status: "partial"
+    value: "Lowest-risk feature. Main pitfall: count-test breakage masked locally (no PG)."
+    gaps: ""
+    required: true
+  technical_decisions:
+    score: 60
+    status: "partial"
+    value: ""
+    gaps: "Column set, hint, zero-row filter, total vs interval columns"
+    required: false
+
+phase3_integration:
+  integration_points:
+    score: 80
+    status: "complete"
+    value: >
+      internal/query/statements.go (new query const + SelectStatStatementsJITQuery selector),
+      internal/view/view.go (new statements_jit view + DiffIntvl/UniqueKey/Ncols),
+      top/menu.go (menuPgss item + menuSelect case), top/config_view.go (statementsNextView link).
+    gaps: ""
+    required: true
+  dependencies:
+    score: 80
+    status: "complete"
+    value: "pg_stat_statements extension; existing pgss view/menu/cycle infrastructure."
+    required: false
+  data_requirements:
+    score: 70
+    status: "partial"
+    value: "JIT columns from pg_stat_statements; counts diffable, times rounded ms; md5 queryid."
+    gaps: "Confirm exact column list via code research"
+    required: false
+  migration_needs:
+    score: 100
+    status: "complete"
+    value: "None — additive TUI feature."
+    required: false
+
+phase4_completion:
+  userspec_file: "docs/features/007-feat-pg-stat-statements-jit/007-feat-pg-stat-statements-jit.md"
+  status: "created"
+
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
