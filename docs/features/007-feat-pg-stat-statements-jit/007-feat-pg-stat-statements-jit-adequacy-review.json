@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "overengineering",
+      "severity": "major",
+      "issue": "The user-spec embeds tech-spec-level implementation detail: exact column-index tables with idx/DiffIntvl/Ncols/UniqueKey/OrderKey values (lines 82-104), the internal selector function name and signature SelectStatStatementsJITQuery(version) (lines 151, 185-187), specific source file paths (internal/stat/postgres.go, statements_io reference), and the precise test-count edits view_test.go::TestNew (26->27) and record/record_test.go::Test_filterViews +1 (lines 153, 197).",
+      "why_matters": "User-spec defines WHAT and WHY; HOW (column indices, function names, file paths, Ncols/DiffIntvl values, test-count deltas) belongs in tech-spec. Pinning indices in the user-spec couples the requirement to one implementation, and if the tech-spec chooses a slightly different layout the acceptance criteria become wrong/contradictory. It also blurs the review boundary — these numbers should be derived and validated during tech-spec, not pre-committed here.",
+      "fix": "Move the index/Ncols/DiffIntvl/UniqueKey tables, the selector name+signature, file paths, and the exact test-count edits into the tech-spec (they are already captured in code-research.md). In the user-spec keep behavioural acceptance criteria: which columns appear per PG version (by meaning, not index), default sort by generation time desc, jit_functions=0 rows hidden, PG<15 unavailable, NotRecordable, hint on empty. Restate AC lines 151/153 as behaviour, not as code edits."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "Edge cases are listed for the main flows (jit=off / empty set, PG<15 degradation, pg_stat_statements absent, sort/filter), but the duration-aware numeric sort of *_total text columns is mentioned only as an assumption (line 59-60) rather than as an explicit acceptance criterion, and there is no edge case for very large cumulative times (3+ digit hours / 'N days ...') beyond a parenthetical note.",
+      "why_matters": "The *_total columns are text durations; sorting them numerically (HH:MM:SS with 3+ digit hours and 'N days') is a known sharp edge in internal/stat/postgres.go. Without an explicit AC, a regression there would pass all listed criteria.",
+      "fix": "Add an acceptance criterion: sorting by a *_total column orders rows numerically by duration (correct for 100+ hour and multi-day values), not lexically. This is behaviour, so it belongs in the user-spec."
+    }
+  ],
+  "worst_category": "overengineering",
+  "summary": "The idea is sound, feasible, and correctly right-sized as S: a 7th pgss sub-screen built strictly by analogy with established, version-aware NotRecordable views (statements_timings / statements_io / stat_io / replslots) using only the existing stack (pgx/v5, gocui, version selectors). No new dependencies, infrastructure, or architectural conflicts; the chosen single-interval-block layout and WHERE jit_functions>0 filter are the simplest viable approach and match prior ADRs. Approved with no blocking concerns — main improvement is pulling implementation detail (column indices, selector signature, file paths, test-count edits) out of the user-spec into the tech-spec."
+}
