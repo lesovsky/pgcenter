@@ -1,0 +1,21 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 02 cleanly registers the statements_jit view and its Configure() branch, modeling statements_io for the pgss layout and stat_io for the NotRecordable+MinRequiredVersion precedent. Cross-file consistency is correct: the Configure() call matches the task-01 selector signature query.SelectStatStatementsJITQuery(version) (string, int, [2]int, int) and the static PG15 defaults in the view map (QueryTmpl=PgStatStatementsJITPG15, Ncols=13, DiffIntvl={6,10}, UniqueKey=11) match the selector's PG15 return. All three count-tests were updated correctly and the diff-affected tests pass.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  },
+  "notes": [
+    "Cross-file consistency (dim 10) verified: Configure() at view.go assigns all 4 return values (QueryTmpl, Ncols, DiffIntvl, UniqueKey) from SelectStatStatementsJITQuery — matches the 4-tuple signature at internal/query/statements.go:347 and its PG15 return (PgStatStatementsJITPG15, 13, {6,10}, 11) at statements.go:351, which equals the static map defaults. PG17+ override path (15, {7,12}, 13) is exercised by the selector's own unit tests (statements_test.go). UniqueKey patching (correctly added beyond the stat_io 3-tuple precedent) is justified because the JIT md5 key sits at the end and shifts with Ncols.",
+    "filterViews ordering confirmed: record/record.go NotRecordable branch (line ~208) fires before the VersionOK gate (line ~214), so the statements_jit view is dropped on every version regardless of MinRequiredVersion=PostgresV15. This makes the uniform wantN +1 across all 6 Test_filterViews rows (including PG<15) correct; wantV unchanged is correct since dropped views never join the remaining set.",
+    "All three count-tests handled per task spec: TestNew 26->27, TestView_VersionOK 160000 row 26->27 (VersionOK true only at 150000+, lower rows untouched — correct), Test_filterViews +1 on all 6 rows. New guard test TestNew_StatementsJITView pins NotRecordable, MinRequiredVersion, and the PG15 default layout fields — good defensive coverage mirroring TestNew_StatIOView.",
+    "report.go correctly NOT modified — NotRecordable views (bgwriter/replslots/stat_io precedent) have no doDescribe entry by design; explicitly out of scope per instructions.",
+    "Test execution: go test ./internal/view/... passes; Test_filterViews and the other filterViews tests pass in isolation. Test_app_record panics (nil-pointer at record.go:167, DB connection path) — verified this panic is PRE-EXISTING on parent commit HEAD~1 and is caused by the absence of a live PostgreSQL test instance, NOT by this diff. Not a finding against task 02."
+  ]
+}
