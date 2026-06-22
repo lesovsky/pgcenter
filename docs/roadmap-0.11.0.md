@@ -106,7 +106,13 @@ feature lifts them.
 
 ## Finalization
 
-- [ ] Update `overview.md` (correct bgwriter claim, list new views)
-- [ ] Update `features-catalog.md` per feature
-- [ ] Version bump, CHANGELOG
-- [ ] Release per deployment.md (tag on master → push to `release`)
+**Status: ✅ Shipped as v0.11.0 (2026-06-22).** All scoped features (004–007) plus the backlog
+record/report feature (008) are merged. This roadmap is complete and kept for the ordering
+rationale referenced by `docs/decisions-log.md`.
+
+- [x] Update `overview.md` (correct bgwriter claim, list new views)
+- [x] Update `features-catalog.md` per feature
+- [x] Version bump, CHANGELOG — version is git-tag-driven (ldflags); no CHANGELOG in this project
+      (GoReleaser generates release notes)
+- [x] Release per deployment.md (tag on master → push to `release`)
+- [x] [008] record/report for the new 0.11.0 views (was "Out of scope / backlog") — done
