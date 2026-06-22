@@ -26,7 +26,8 @@ func TestNew_StatementsJITView(t *testing.T) {
 	assert.Equal(t, 11, jit.UniqueKey)
 	assert.Equal(t, 2, jit.OrderKey)
 	assert.True(t, jit.OrderDesc)
-	assert.NotEqual(t, "", jit.Msg)
+	// Msg is load-bearing (Decision 4): it doubles as the empty-screen hint for jit=off.
+	assert.Contains(t, jit.Msg, "jit=off")
 }
 
 // TestNew_StatIOView guards the stat_io count view wiring: it must be registered,
