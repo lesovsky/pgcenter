@@ -1,6 +1,6 @@
 ---
 created: 2026-06-22
-status: draft
+status: approved
 branch: feature/pg-stat-statements-jit
 size: S
 ---
