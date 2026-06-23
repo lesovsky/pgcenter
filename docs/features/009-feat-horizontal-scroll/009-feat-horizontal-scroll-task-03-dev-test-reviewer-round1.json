@@ -1,0 +1,40 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Tests for task 03 are high quality: table-driven testify style consistent with the existing Test_orderKey* pattern, assertions check real config.scrollOffset/OrderKey state (litmus passes for all five tests), and both view-switch reset paths are covered including the bypass path through switchViewToProcPidStat with a correctly-justified remote (early-return) setup. All TDD Anchor cases are present. Two minor gaps and one tech-debt note do not block: the orthogonality of the view send (that the unmutated config.view is what reaches viewCh, not a write-back) is only partially asserted, and there is small intentional overlap between Test_scrollOrthogonalToSort and the per-handler tests.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/config_view_test.go:77 (Test_scrollLeft), :110 (Test_scrollRight)",
+      "issue": "The task and AC emphasize that scroll handlers must NOT mutate the view and send config.view on viewCh purely for redraw. The tests assert only that v.OrderKey is unchanged. They do not assert that the value received on viewCh is the same config.view object (identity) and that no other view field (e.g. a written-back offset) was mutated. The litmus for 'view not mutated' is therefore only partially covered: a hypothetical regression that mutates a non-OrderKey field of config.view before sending would pass.",
+      "recommendation": "In the channel-reader goroutine, capture the sent view and assert it is the same instance as config.view, e.g. `v := <-config.viewCh; assert.Same(t, config.view, v)` (or compare a known sentinel field set before the call). This pins the 'send for redraw only, no mutation' contract beyond OrderKey.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/config_view_test.go:135 (Test_scrollOrthogonalToSort)",
+      "issue": "The 'scroll-keeps-sort' half of Test_scrollOrthogonalToSort re-verifies that scrollLeft/scrollRight do not change OrderKey, which is already asserted inside Test_scrollLeft and Test_scrollRight (v.OrderKey == 5). This is partial duplication of coverage.",
+      "recommendation": "Acceptable as-is because the 'sort-keeps-scroll' half (orderKeyLeft/orderKeyRight do not touch config.scrollOffset) is unique and the test name documents the orthogonality contract bidirectionally. If trimming, drop the scroll-keeps-sort sub-loop and rely on the per-handler OrderKey sentinel; keep the sort-keeps-scroll loop since nothing else covers it.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

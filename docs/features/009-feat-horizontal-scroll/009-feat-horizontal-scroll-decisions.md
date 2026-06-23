@@ -50,3 +50,24 @@
 **Verification:**
 - `go test ./top/` → все render-тесты + `Test_visibleColumns` + `Test_render_alignmentInvariant` (litmus выравнивания) зелёные; без новых регрессий
 - `make build` → ок; gofmt/go vet → чисто
+
+---
+
+## Task 03: Scroll hotkeys, offset reset, and help text
+
+**Status:** Done
+**Commit:** 3e09740
+**Agent:** основной агент
+**Summary:** Добавлены хендлеры `scrollLeft` (`[`) и `scrollRight` (`]`) в `top/config_view.go`: `scrollLeft` декрементирует `config.scrollOffset` с зажимом по 0; `scrollRight` инкрементирует без верхнего предела в хендлере (верхний зажим — write-back при рендере из Task 2) + дешёвый guard от int-переполнения. Оба шлют `config.view` на `viewCh` только для перерисовки (view не мутируется — Decision 1). Клавиши `[`/`]` зарегистрированы на `sysstat`. `config.scrollOffset` сбрасывается в 0 на обоих путях переключения: `viewSwitchHandler` и `switchViewToProcPidStat` (Decision 3). Help-экран дополнен описанием клавиш.
+**Deviations:** Сброс offset в `switchViewToProcPidStat` помещён ДО guard `app.db.Local` (а не после probe). Причина: код после guard вызывает `app.db.QueryRow` (nil Conn → паника), что делает TDD-тест без живого PostgreSQL невозможным. На remote-пути сброс идемпотентен и безвреден (экран не меняется, offset эфемерный). Оценено обоими ревьюерами как приемлемое.
+**Tech debt:** Нет (только optional-предложения ревью: `assert.Same` на не-мутацию view в тесте, коммент-инвариант в хендлере procpidstat — не блокеры).
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 0 critical/major, 3 optional minor → [009-feat-horizontal-scroll-task-03-dev-code-reviewer-round1.json]
+- dev-test-reviewer: passed, 0 critical/major, 2 minor (tech_debt, не блокеры) → [009-feat-horizontal-scroll-task-03-dev-test-reviewer-round1.json]
+
+**Verification:**
+- `go test ./top/` → `Test_scrollLeft/Right`, `Test_scrollOrthogonalToSort`, оба reset-теста + существующие (`Test_orderKey*`, `Test_switchViewTo`) зелёные
+- `make build` → ок; gofmt/go vet → чисто

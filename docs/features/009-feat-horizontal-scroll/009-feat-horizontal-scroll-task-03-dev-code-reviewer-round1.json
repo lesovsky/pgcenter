@@ -1,0 +1,45 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Task 3 correctly implements scroll handlers (lower clamp at 0, no upper clamp in handler by design, cheap int-overflow guard), offset reset on both view-switch paths, sysstat keybindings, and help text. Cross-file model is consistent: render-time write-back (top/stat.go:361 config.scrollOffset = win.clamped) closes the upper-bound loop as the spec prescribes. View is not mutated (Decision 1 honored); style matches orderKeyLeft/Right; all new and existing top tests pass. Only minor, non-blocking polish suggestions remain.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/config_view.go",
+      "line": 18,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Replace the hand-rolled `maxInt = int(^uint(0) >> 1)` constant with the standard library `math.MaxInt` (Go 1.17+; project is on Go 1.25). Note this is the *math/bits stdlib* MaxInt, not the project's internal/math package — so it would mean importing the stdlib `math` alongside the aliased internal one, or just keeping the bit-trick. Given the import collision with the internal `math` package, the current bit-trick is a defensible local choice; flagging only as idiomatic preference.",
+      "benefit": "Slightly more readable/idiomatic; self-documenting intent.",
+      "optional": true,
+      "tech_debt": false
+    },
+    {
+      "file": "top/config_view_test.go",
+      "line": 224,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_switchViewToProcPidStatResetsScrollOffset relies on the reset (app.config.scrollOffset = 0) being placed BEFORE the `if !app.db.Local` early-return guard, using Local:false to avoid a live DB. This couples the test's correctness to the physical ordering of statements in the handler. The test comment already documents this dependency, which is good. Consider adding a one-line note in the handler itself (near line 257) stating 'reset must precede the local-mode guard so it applies on the early-return path too' to make the ordering intent explicit at the source and prevent a future refactor from silently breaking the reset on the remote-mode path.",
+      "benefit": "Protects the ordering invariant from accidental refactors; makes the deliberate placement self-explanatory at the call site, not only in the test.",
+      "optional": true,
+      "tech_debt": false
+    },
+    {
+      "file": "top/config_view.go",
+      "line": 257,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Deviation assessment (reset placed BEFORE the app.db.Local guard in switchViewToProcPidStat): ACCEPTABLE, no semantic problem. Resetting the ephemeral scrollOffset unconditionally on every invocation of the per-process switch is correct even when the handler early-returns (remote mode) — the offset belongs to the current screen's UI state and zeroing it before a no-op transition is harmless (the screen does not actually change, but the value was already 0 in the common case, and re-zeroing is idempotent). The placement is driven by testability (observable without a live PG backend) and does not alter user-visible behavior. No change required.",
+      "benefit": "Documents that the reviewer evaluated the intentional deviation and found it sound.",
+      "optional": true,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  }
+}
