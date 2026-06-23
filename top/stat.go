@@ -400,11 +400,12 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (fi
 	// Budget left for scrollable columns after reserving the frozen column 0.
 	scrollBudget := termWidth - colWidth(0)
 
-	// fits returns how many consecutive scrollable columns starting at start (inclusive)
-	// fit into the remaining scroll budget.
-	fits := func(start int) int {
+	// countFit walks scrollable columns from index "from" toward "stop" (exclusive) in
+	// the given step direction (+1 forward, -1 backward) and returns how many consecutive
+	// columns fit into scrollBudget before it is exceeded.
+	countFit := func(from, stop, step int) int {
 		count, used := 0, 0
-		for i := start; i < ncols; i++ {
+		for i := from; i != stop; i += step {
 			used += colWidth(i)
 			if used > scrollBudget {
 				break
@@ -418,14 +419,7 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (fi
 	// count how many columns fit when filling from the end backwards.
 	maxOffset := 0
 	if scrollBudget > 0 {
-		used, tailCount := 0, 0
-		for i := ncols - 1; i >= 1; i-- {
-			used += colWidth(i)
-			if used > scrollBudget {
-				break
-			}
-			tailCount++
-		}
+		tailCount := countFit(ncols-1, 0, -1) // walk columns ncols-1..1 backwards
 		// Scrollable columns count is ncols-1; offset that shows the tail window.
 		maxOffset = math.Max((ncols-1)-tailCount, 0)
 	}
@@ -434,8 +428,8 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (fi
 	clamped = math.Min(math.Max(offset, 0), maxOffset)
 
 	first = 1 + clamped
-	count := fits(first)
-	last = first + count - 1 // last < first when no scrollable column fits
+	count := countFit(first, ncols, +1) // walk columns first..ncols-1 forwards
+	last = first + count - 1            // last < first when no scrollable column fits
 
 	hiddenLeft = clamped > 0
 	hiddenRight = last < ncols-1

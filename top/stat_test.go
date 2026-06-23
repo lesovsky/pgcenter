@@ -170,12 +170,24 @@ func Test_visibleColumns(t *testing.T) {
 
 	t.Run("very narrow only frozen fits", func(t *testing.T) {
 		// termWidth 12 fits exactly the frozen column (cost 12), no room for scrollable.
-		// Window must be empty (last < first), no panic, no negative width.
+		// Window must be empty: first=1, last=0 (last < first), no panic, no negative width.
 		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 12, 0)
 		assert.Equal(t, 0, clamped)
 		assert.False(t, hiddenLeft)
 		assert.True(t, hiddenRight)
-		assert.Less(t, last, first, "window over scrollable columns must be empty")
+		assert.Equal(t, 1, first)
+		assert.Equal(t, 0, last)
+	})
+
+	t.Run("negative scroll budget (term narrower than frozen column)", func(t *testing.T) {
+		// termWidth 5 is smaller than the frozen column cost (12) => scrollBudget < 0.
+		// Must be graceful: empty window first=1, last=0, no panic.
+		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 5, 0)
+		assert.Equal(t, 0, clamped)
+		assert.False(t, hiddenLeft)
+		assert.True(t, hiddenRight)
+		assert.Equal(t, 1, first)
+		assert.Equal(t, 0, last)
 	})
 
 	t.Run("single frozen column only", func(t *testing.T) {
@@ -190,10 +202,39 @@ func Test_visibleColumns(t *testing.T) {
 	t.Run("missing or zero ColsWidth key", func(t *testing.T) {
 		// Sparse map: keys for some columns in [0, ncols) are absent (read as 0).
 		// Math must stay bounded (each missing column costs the +2 gap), no panic.
+		// Deterministic budget for termWidth 40: frozen col0 costs 12, scrollBudget=28.
+		// Costs from col1: 2,12,2,12 (=28, all four fit), col5 (+2) overflows.
+		// => window covers columns 1..4, col5 hidden right.
 		widths := map[int]int{0: 10, 2: 10, 4: 10} // columns 1, 3, 5 missing
-		first, last, clamped, _, _ := visibleColumns(6, widths, 40, 0)
-		assert.GreaterOrEqual(t, clamped, 0)
-		assert.GreaterOrEqual(t, first, 1)
-		assert.Less(t, last, 6)
+		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, widths, 40, 0)
+		assert.Equal(t, 1, first)
+		assert.Equal(t, 4, last)
+		assert.Equal(t, 0, clamped)
+		assert.False(t, hiddenLeft)
+		assert.True(t, hiddenRight)
+	})
+
+	t.Run("negative offset clamps to zero", func(t *testing.T) {
+		// offset -5 must clamp up to 0 (covers math.Max(offset, 0) lower bound).
+		// 6 columns cost 12 each, termWidth 40 => 2 scrollable fit from the start.
+		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 40, -5)
+		assert.Equal(t, 0, clamped)
+		assert.Equal(t, 1, first)
+		assert.Equal(t, 2, last)
+		assert.False(t, hiddenLeft)
+		assert.True(t, hiddenRight)
+	})
+
+	t.Run("last column visible at max offset", func(t *testing.T) {
+		// Invariant: at the maximum offset the last column (ncols-1) is visible and
+		// nothing is hidden to the right. Narrow term 40 with 6 uniform columns has
+		// maxOffset 3; passing a large offset clamps to it.
+		ncols := 6
+		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(ncols, uniformWidths(ncols, 10), 40, 1<<30)
+		assert.Equal(t, 3, clamped)
+		assert.Equal(t, ncols-1, last, "last visible column must be the final column at max offset")
+		assert.False(t, hiddenRight, "nothing hidden to the right at max offset")
+		assert.True(t, hiddenLeft)
+		assert.Equal(t, 4, first)
 	})
 }
