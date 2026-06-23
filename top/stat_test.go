@@ -130,102 +130,105 @@ func Test_visibleColumns(t *testing.T) {
 
 	t.Run("all columns fit", func(t *testing.T) {
 		// 5 columns of width 10 => each costs 12; total 60 fits easily into 1000.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(5, uniformWidths(5, 10), 1000, 0)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.False(t, hiddenRight)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 4, last)
+		// Nothing hidden either side, so no marker space is reserved.
+		win := visibleColumns(5, uniformWidths(5, 10), 1000, 0)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.False(t, win.hiddenRight)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 4, win.last)
 	})
 
 	t.Run("narrow width, offset 0", func(t *testing.T) {
-		// Each column costs 12. termWidth 40 => frozen(12) + scrollable: 28/12 = 2 columns (1,2).
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 40, 0)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.True(t, hiddenRight)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 2, last)
+		// Each column costs 12. termWidth 40 => frozen(12) + budget 28. Right marker is
+		// reserved (columns hidden right) => budget 27, still fits columns 1,2 (cost 24).
+		win := visibleColumns(6, uniformWidths(6, 10), 40, 0)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 2, win.last)
 	})
 
 	t.Run("mid offset", func(t *testing.T) {
-		// 6 columns, cost 12 each, termWidth 40 => after frozen, room for 2 scrollable.
-		// offset 2 => window starts at column 3, shows columns 3 and 4. Column 5 hidden right,
-		// columns 1,2 hidden left. maxOffset = 3 (columns 4,5 fit at the end), so 2 is valid.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 40, 2)
-		assert.Equal(t, 2, clamped)
-		assert.True(t, hiddenLeft)
-		assert.True(t, hiddenRight)
-		assert.Equal(t, 3, first)
-		assert.Equal(t, 4, last)
+		// 6 columns, cost 12 each, termWidth 40 => after frozen, budget 28. offset 2 hides
+		// columns 1,2 left and column 5 right, so BOTH markers are reserved (budget 26).
+		// Columns 3,4 (cost 24) still fit => window 3..4. maxOffset = 3, so 2 is valid.
+		win := visibleColumns(6, uniformWidths(6, 10), 40, 2)
+		assert.Equal(t, 2, win.clamped)
+		assert.True(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
+		assert.Equal(t, 3, win.first)
+		assert.Equal(t, 4, win.last)
 	})
 
 	t.Run("offset past end", func(t *testing.T) {
-		// 6 columns, room for 2 scrollable. The last two scrollable columns are 4 and 5,
-		// so maxOffset = 3 (window starts at column 4). offset 99 clamps to 3.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 40, 99)
-		assert.Equal(t, 3, clamped)
-		assert.True(t, hiddenLeft)
-		assert.False(t, hiddenRight)
-		assert.Equal(t, 4, first)
-		assert.Equal(t, 5, last)
+		// 6 columns, budget 28. The last two scrollable columns are 4 and 5, so maxOffset = 3
+		// (window starts at column 4). offset 99 clamps to 3. Only the left marker is reserved
+		// (nothing hidden right) => budget 27, columns 4,5 (cost 24) still fit.
+		win := visibleColumns(6, uniformWidths(6, 10), 40, 99)
+		assert.Equal(t, 3, win.clamped)
+		assert.True(t, win.hiddenLeft)
+		assert.False(t, win.hiddenRight)
+		assert.Equal(t, 4, win.first)
+		assert.Equal(t, 5, win.last)
 	})
 
 	t.Run("very narrow only frozen fits", func(t *testing.T) {
 		// termWidth 12 fits exactly the frozen column (cost 12), no room for scrollable.
 		// Window must be empty: first=1, last=0 (last < first), no panic, no negative width.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 12, 0)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.True(t, hiddenRight)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 0, last)
+		win := visibleColumns(6, uniformWidths(6, 10), 12, 0)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 0, win.last)
 	})
 
 	t.Run("negative scroll budget (term narrower than frozen column)", func(t *testing.T) {
 		// termWidth 5 is smaller than the frozen column cost (12) => scrollBudget < 0.
 		// Must be graceful: empty window first=1, last=0, no panic.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 5, 0)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.True(t, hiddenRight)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 0, last)
+		win := visibleColumns(6, uniformWidths(6, 10), 5, 0)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 0, win.last)
 	})
 
 	t.Run("single frozen column only", func(t *testing.T) {
 		// ncols == 1: only the frozen column exists, no scrollable columns at all.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(1, uniformWidths(1, 10), 1000, 0)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.False(t, hiddenRight)
-		assert.Less(t, last, first, "no scrollable columns => empty window")
+		win := visibleColumns(1, uniformWidths(1, 10), 1000, 0)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.False(t, win.hiddenRight)
+		assert.Less(t, win.last, win.first, "no scrollable columns => empty window")
 	})
 
 	t.Run("missing or zero ColsWidth key", func(t *testing.T) {
 		// Sparse map: keys for some columns in [0, ncols) are absent (read as 0).
 		// Math must stay bounded (each missing column costs the +2 gap), no panic.
-		// Deterministic budget for termWidth 40: frozen col0 costs 12, scrollBudget=28.
-		// Costs from col1: 2,12,2,12 (=28, all four fit), col5 (+2) overflows.
-		// => window covers columns 1..4, col5 hidden right.
+		// Budget for termWidth 40: frozen col0 costs 12, base budget 28. Columns hidden right
+		// => right marker reserved (budget 27). Costs from col1: 2,12,2 (=16) then col4 (+12)
+		// => 28 > 27, so col4 no longer fits and the window is columns 1..3, col4/5 hidden right.
 		widths := map[int]int{0: 10, 2: 10, 4: 10} // columns 1, 3, 5 missing
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, widths, 40, 0)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 4, last)
-		assert.Equal(t, 0, clamped)
-		assert.False(t, hiddenLeft)
-		assert.True(t, hiddenRight)
+		win := visibleColumns(6, widths, 40, 0)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 3, win.last)
+		assert.Equal(t, 0, win.clamped)
+		assert.False(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
 	})
 
 	t.Run("negative offset clamps to zero", func(t *testing.T) {
 		// offset -5 must clamp up to 0 (covers math.Max(offset, 0) lower bound).
-		// 6 columns cost 12 each, termWidth 40 => 2 scrollable fit from the start.
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(6, uniformWidths(6, 10), 40, -5)
-		assert.Equal(t, 0, clamped)
-		assert.Equal(t, 1, first)
-		assert.Equal(t, 2, last)
-		assert.False(t, hiddenLeft)
-		assert.True(t, hiddenRight)
+		// 6 columns cost 12 each, termWidth 40 => right marker reserved, columns 1,2 fit.
+		win := visibleColumns(6, uniformWidths(6, 10), 40, -5)
+		assert.Equal(t, 0, win.clamped)
+		assert.Equal(t, 1, win.first)
+		assert.Equal(t, 2, win.last)
+		assert.False(t, win.hiddenLeft)
+		assert.True(t, win.hiddenRight)
 	})
 
 	t.Run("last column visible at max offset", func(t *testing.T) {
@@ -233,12 +236,12 @@ func Test_visibleColumns(t *testing.T) {
 		// nothing is hidden to the right. Narrow term 40 with 6 uniform columns has
 		// maxOffset 3; passing a large offset clamps to it.
 		ncols := 6
-		first, last, clamped, hiddenLeft, hiddenRight := visibleColumns(ncols, uniformWidths(ncols, 10), 40, 1<<30)
-		assert.Equal(t, 3, clamped)
-		assert.Equal(t, ncols-1, last, "last visible column must be the final column at max offset")
-		assert.False(t, hiddenRight, "nothing hidden to the right at max offset")
-		assert.True(t, hiddenLeft)
-		assert.Equal(t, 4, first)
+		win := visibleColumns(ncols, uniformWidths(ncols, 10), 40, 1<<30)
+		assert.Equal(t, 3, win.clamped)
+		assert.Equal(t, ncols-1, win.last, "last visible column must be the final column at max offset")
+		assert.False(t, win.hiddenRight, "nothing hidden to the right at max offset")
+		assert.True(t, win.hiddenLeft)
+		assert.Equal(t, 4, win.first)
 	})
 }
 
@@ -295,7 +298,8 @@ func Test_printStatData_windowed_midOffset(t *testing.T) {
 	s := makeRenderResult(6, 2)
 
 	var buf bytes.Buffer
-	err := printStatData(&buf, s, cfg, false, 40)
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatData(&buf, s, cfg, false, win)
 	assert.NoError(t, err)
 
 	out := buf.String()
@@ -320,7 +324,8 @@ func Test_printStatData_emptyResult(t *testing.T) {
 	s := makeRenderResult(6, 0)
 
 	var buf bytes.Buffer
-	err := printStatData(&buf, s, cfg, false, 40)
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatData(&buf, s, cfg, false, win)
 	assert.NoError(t, err)
 	assert.Empty(t, buf.String())
 }
@@ -334,13 +339,93 @@ func Test_printStatHeader_rightEdgeMarker(t *testing.T) {
 	s := makeRenderResult(6, 1)
 
 	var buf bytes.Buffer
-	err := printStatHeader(&buf, s, cfg, 40)
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatHeader(&buf, s, cfg, win)
 	assert.NoError(t, err)
 
 	out := buf.String()
 	assert.Contains(t, out, "col0", "frozen column must be present")
 	assert.Contains(t, out, "›", "right marker expected (columns hidden to the right)")
 	assert.NotContains(t, out, "‹", "left marker not expected at offset 0")
+	// The right marker must be at the END of the header line (rightmost position), not just
+	// present somewhere — it marks columns hidden off the right edge.
+	assert.True(t, strings.HasSuffix(strings.TrimRight(out, "\n"), "›"),
+		"right marker must be the last visible rune on the header line")
+}
+
+// ansiEscape matches SGR escape sequences (\033[...m) so the visible width of a rendered
+// line can be measured by counting runes after stripping them.
+var ansiEscape = regexp.MustCompile("\033\\[[0-9;]*m")
+
+// visibleRuneLen returns the number of visible runes in a rendered line, after removing
+// ANSI SGR escape sequences and the trailing newline. Used to assert the alignment invariant.
+func visibleRuneLen(line string) int {
+	return len([]rune(ansiEscape.ReplaceAllString(strings.TrimRight(line, "\n"), "")))
+}
+
+// Test_printStatHeader_midOffset_bothMarkers verifies that at a mid offset BOTH edge markers
+// are present: the left marker ‹ (columns hidden left) and the right marker › (columns hidden
+// right). The TDD Anchor for task 02 requires both markers in the mid-offset case (review
+// round 1, MAJOR #2).
+func Test_printStatHeader_midOffset_bothMarkers(t *testing.T) {
+	cfg := makeRenderConfig(6, 10)
+	cfg.scrollOffset = 2 // window 3..4: columns 1,2 hidden left, column 5 hidden right
+	s := makeRenderResult(6, 1)
+
+	var buf bytes.Buffer
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatHeader(&buf, s, cfg, win)
+	assert.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "‹", "left marker expected at mid offset (columns hidden to the left)")
+	assert.Contains(t, out, "›", "right marker expected at mid offset (columns hidden to the right)")
+}
+
+// Test_render_alignmentInvariant is the litmus test for MAJOR #1: at a mid offset where both
+// edge markers are drawn, the visible (ANSI-stripped) width of the header line must equal the
+// visible width of every data line. The edge markers are visible runes printed by the header;
+// the data rows must reserve the same space (blank fillers) or columns drift out of alignment.
+// This test fails on the pre-fix implementation (header is wider than data by the marker runes)
+// and passes after the marker width is reserved in the budget and mirrored as blanks in data.
+func Test_render_alignmentInvariant(t *testing.T) {
+	cfg := makeRenderConfig(6, 10)
+	cfg.scrollOffset = 2 // both markers drawn (columns hidden left and right)
+	s := makeRenderResult(6, 3)
+
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	assert.True(t, win.hiddenLeft && win.hiddenRight, "test premise: both markers must be active")
+
+	var hbuf, dbuf bytes.Buffer
+	assert.NoError(t, printStatHeader(&hbuf, s, cfg, win))
+	assert.NoError(t, printStatData(&dbuf, s, cfg, false, win))
+
+	headerWidth := visibleRuneLen(hbuf.String())
+	for i, line := range strings.Split(strings.TrimRight(dbuf.String(), "\n"), "\n") {
+		assert.Equal(t, headerWidth, visibleRuneLen(line),
+			"data row %d visible width must equal header visible width (alignment invariant)", i)
+	}
+}
+
+// Test_printStatData_truncation verifies the truncation branch of printDataCell after the
+// colnum→absolute-index reindex: a value longer than its column width is cut to width-1 and
+// suffixed with '~'. Column 0 (frozen) is always printed, so its long value is the cleanest
+// probe (review round 1, MINOR).
+func Test_printStatData_truncation(t *testing.T) {
+	cfg := makeRenderConfig(6, 5) // each scrollable/frozen column width 5
+	s := makeRenderResult(6, 1)
+	// Overwrite the frozen column value with one longer than width 5.
+	s.Result.Values[0][0] = sql.NullString{String: "abcdefghij", Valid: true}
+
+	var buf bytes.Buffer
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatData(&buf, s, cfg, false, win)
+	assert.NoError(t, err)
+
+	out := buf.String()
+	// Truncated to width-1 (4 chars) + '~'.
+	assert.Contains(t, out, "abcd~", "long value must be truncated to width-1 with '~' suffix")
+	assert.NotContains(t, out, "abcde", "original untruncated value must not appear")
 }
 
 // Test_printStatHeader_frozenColumn verifies the frozen column 0 is always present in the
@@ -354,16 +439,31 @@ func Test_printStatHeader_frozenColumn(t *testing.T) {
 		cfg := makeRenderConfig(6, 10)
 		cfg.scrollOffset = 99 // clamped internally; frozen col still rendered
 		var buf bytes.Buffer
-		err := printStatHeader(&buf, s, cfg, 40)
+		win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+		err := printStatHeader(&buf, s, cfg, win)
 		assert.NoError(t, err)
 		assert.Contains(t, buf.String(), "col0")
+	})
+
+	t.Run("frozen column is bold when not the ordered column", func(t *testing.T) {
+		// Default OrderKey != 0 path: column 0 must carry the frozen-bold escape
+		// (\033[30;47;1m). Plain Contains "col0" passes even without bold, so assert the
+		// exact bold sequence precedes the frozen column name (review round 1, MINOR).
+		cfg := makeRenderConfig(6, 10)
+		cfg.view.OrderKey = 3 // some other column is the ordered one
+		var buf bytes.Buffer
+		win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+		err := printStatHeader(&buf, s, cfg, win)
+		assert.NoError(t, err)
+		assert.Contains(t, buf.String(), "\033[30;47;1mcol0", "frozen column must be bold when not the ordered column")
 	})
 
 	t.Run("sort highlight has priority on column 0", func(t *testing.T) {
 		cfg := makeRenderConfig(6, 10)
 		cfg.view.OrderKey = 0
 		var buf bytes.Buffer
-		err := printStatHeader(&buf, s, cfg, 40)
+		win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+		err := printStatHeader(&buf, s, cfg, win)
 		assert.NoError(t, err)
 		out := buf.String()
 		// Sort highlight sequence (\033[47;1m) is the existing ordered-column escape.
