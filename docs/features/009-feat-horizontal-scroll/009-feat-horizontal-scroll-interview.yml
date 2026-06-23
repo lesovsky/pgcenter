@@ -5,7 +5,7 @@ interview_metadata:
   work_type: "feature"
   started: "2026-06-23 03:20:38"
   last_updated: "2026-06-23 03:35:00"
-  status: "in_progress"
+  status: "completed"
   can_resume: true
   current_question_num: 8
   feature_size: "M"
@@ -214,7 +214,7 @@ phase3_integration:
 
 phase4_completion:
   userspec_file: "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll.md"
-  status: "created"
+  status: "approved"
 
 decision_rules:
   required_threshold: 85

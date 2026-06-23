@@ -13,10 +13,10 @@
   "phases": {
     "user_spec": {
       "start_time": "2026-06-23T03:20:38Z",
-      "end_time": null,
-      "duration_min": null,
-      "touch_time_min": null,
-      "human_wait_time_min": 0,
+      "end_time": "2026-06-23T04:13:15Z",
+      "duration_min": 52,
+      "touch_time_min": 37,
+      "human_wait_time_min": 15,
       "steps": {}
     },
     "tech_spec": null,
@@ -25,14 +25,14 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
+    "validation_rounds": { "user_spec": 1 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 0,
+    "interview_questions": 8,
     "tasks_count": 0,
     "waves_count": 0,
     "agents_spawned": 0,
