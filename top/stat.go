@@ -7,6 +7,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/align"
+	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/pretty"
 	"github.com/lesovsky/pgcenter/internal/stat"
@@ -358,6 +359,88 @@ func formatError(err error) string {
 	}
 
 	return fmt.Sprintf("ERROR: %s", err.Error())
+}
+
+// visibleColumns computes the visible window of scrollable columns for horizontal
+// scrolling. Column 0 is frozen (always part of the width budget); the remaining
+// columns (1..ncols-1) form a sliding window selected by offset.
+//
+// It is the single source of truth for the visible range: it re-clamps offset into
+// [0, maxOffset] on every call, where maxOffset is the smallest offset at which the
+// last column (ncols-1) is still visible. This guards against a stale offset after an
+// auto-refresh changed the column count.
+//
+// Returns the absolute index range [first, last] of visible scrollable columns
+// (last < first means an empty window — e.g. only the frozen column fits), the clamped
+// offset, and flags hiddenLeft (scrollable columns hidden to the left, i.e. clamped > 0)
+// and hiddenRight (scrollable columns hidden to the right of the window).
+//
+// Widths are read strictly by index in [0, ncols); the map is never ranged over. A
+// missing/zero key is treated as width 0 (still costing the +2 print gap), keeping the
+// math bounded even with sparse widths (issue #99 class).
+func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (first, last, clamped int, hiddenLeft, hiddenRight bool) {
+	// colWidth returns the printed cell budget for a column (value width + the +2 gap
+	// that printing adds), reading the dense map strictly within [0, ncols).
+	colWidth := func(i int) int {
+		w := 0
+		if i >= 0 && i < ncols {
+			w = colsWidth[i]
+		}
+		if w < 0 {
+			w = 0
+		}
+		return w + 2
+	}
+
+	// No scrollable columns: only the frozen column exists (or none at all).
+	if ncols <= 1 {
+		return 1, 0, 0, false, false
+	}
+
+	// Budget left for scrollable columns after reserving the frozen column 0.
+	scrollBudget := termWidth - colWidth(0)
+
+	// fits returns how many consecutive scrollable columns starting at start (inclusive)
+	// fit into the remaining scroll budget.
+	fits := func(start int) int {
+		count, used := 0, 0
+		for i := start; i < ncols; i++ {
+			used += colWidth(i)
+			if used > scrollBudget {
+				break
+			}
+			count++
+		}
+		return count
+	}
+
+	// maxOffset is the smallest offset at which the last column is still visible:
+	// count how many columns fit when filling from the end backwards.
+	maxOffset := 0
+	if scrollBudget > 0 {
+		used, tailCount := 0, 0
+		for i := ncols - 1; i >= 1; i-- {
+			used += colWidth(i)
+			if used > scrollBudget {
+				break
+			}
+			tailCount++
+		}
+		// Scrollable columns count is ncols-1; offset that shows the tail window.
+		maxOffset = math.Max((ncols-1)-tailCount, 0)
+	}
+
+	// Re-clamp offset into [0, maxOffset] on every call.
+	clamped = math.Min(math.Max(offset, 0), maxOffset)
+
+	first = 1 + clamped
+	count := fits(first)
+	last = first + count - 1 // last < first when no scrollable column fits
+
+	hiddenLeft = clamped > 0
+	hiddenRight = last < ncols-1
+
+	return first, last, clamped, hiddenLeft, hiddenRight
 }
 
 // printStatHeader prints stats header.
