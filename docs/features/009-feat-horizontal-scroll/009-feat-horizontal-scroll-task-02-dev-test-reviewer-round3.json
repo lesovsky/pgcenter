@@ -1,0 +1,49 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Round 3 review of the post-QA bugfix (commit a235af7) for the horizontal-scroll feature. Both QA bugs are genuinely covered by failing-before-fix tests: a new unit case (wide last column => last==ncols-1, hiddenRight==false) and a new render-level case (query column present in header+data, no right marker). Litmus verified empirically: reverting countFit to the old full-fit semantics makes exactly the partial-visibility tests fail (narrow/mid/past-end/missing-key/neg-offset/max-offset visibleColumns subtests, wide-last-col unit+render, windowed_midOffset, clampsScrollOffset). All 7 recomputed expected values were re-derived by hand under the start-in-budget rule and matched exactly — not reverse-engineered from the implementation. The both-markers cases moved from 6cols/offset2 to 7cols/offset1 preserve genuine two-sided hiding (col1 hidden left, col5/col6 hidden right with col5 start=36 >= scrollBudget 26). Test_render_alignmentInvariant still asserts visibleRuneLen(header)==visibleRuneLen(each data line) with an explicit both-markers premise and remains meaningful. visibleColumns coverage is 97.3%; no coverage was lost — two new tests were added. Findings are minor tech-debt only.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:273-298 (Test_render_widePartialLastColumn) and top/stat_test.go:347-372 (Test_printStatData_windowed_midOffset)",
+      "issue": "Render-level assertions use substring Contains/NotContains over the rendered string (e.g. assert.Contains(hbuf, \"col4\"), assert.NotContains(hbuf, \"›\") for the right marker). This verifies presence/absence of a token rather than exact placement/width. It is acceptable here because column values are uniquely tagged (col4 / r0-c4) and the marker rune is unique, and the companion Test_render_alignmentInvariant / Test_printStatHeader_rightEdgeMarker already pin down exact widths and marker position. But the wide-column render test alone would still pass if the marker moved to a wrong-but-present position, so it leans on its siblings for full rigor.",
+      "recommendation": "Acceptable as-is for this bugfix scope (the litmus passes and the unique tags make false positives unlikely). If hardened later: in Test_render_widePartialLastColumn additionally assert the header line does not end with '›' (HasSuffix check, mirroring Test_printStatHeader_rightEdgeMarker) and assert visibleRuneLen(header)==visibleRuneLen(data) to lock the no-marker invariant to width, not just token absence.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go (package top) — Test_doReload",
+      "issue": "Running the full top package test suite panics in Test_doReload (nil pointer dereference). Verified this failure is PRE-EXISTING: it reproduces identically at a235af7~1 (parent of the fix commit) and the fix diff does not touch doReload or any reload code. It is unrelated to the horizontal-scroll bugfix (the scroll/render tests all pass in isolation). Flagged only so the noise is not mistaken for a regression introduced by this task.",
+      "recommendation": "Out of scope for task 02. Track separately: Test_doReload appears to depend on a live PostgreSQL connection / environment and should be guarded with a skip when unavailable, or fixed independently. Do not let this block the scroll bugfix.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 14,
+      "passed": 14,
+      "failed": 0,
+      "note": "Empirical litmus: reverting countFit to full-fit semantics fails exactly the 10 partial-visibility-dependent tests (narrow/mid/past-end/missing-key/neg-offset/max-offset/wide-last-col visibleColumns subtests + Test_render_widePartialLastColumn + Test_printStatData_windowed_midOffset + Test_printDbstat_clampsScrollOffset), and the all-columns-fit / frozen-only / negative-budget cases correctly stay green (semantics-invariant). 'checked' counts the meaningful behavioral tests that exercise the changed countFit; 'passed' = behaves correctly under both the fix (green) and the litmus (red where expected)."
+    },
+    "coverageAssessment": "excellent",
+    "manualValueVerification": {
+      "casesRecomputedByHand": 7,
+      "matches": 7,
+      "detail": "narrow/offset0 => 1..3 hiddenRight; mid 7cols/offset1 => first2 last4 clamped1 both-markers; past-end => clamped2 first3 last5 no-right; missing-key => 1..4; neg-offset => 1..3; max-offset 6cols => clamped2 first3 last5 no-right; wide-last-col 5cols/2000 => first1 last4 no-right. All derived from colWidth=w+2, markerWidth=1, start-in-budget rule — matched implementation exactly."
+    },
+    "bothMarkersGenuine": true,
+    "alignmentInvariantMeaningful": true,
+    "pyramidBalance": {
+      "unit": 8,
+      "integration": 6,
+      "e2e": 0,
+      "assessment": "healthy",
+      "note": "Pure-function unit tests for visibleColumns plus writer-level render tests (printStatHeader/printStatData via in-memory buffers) — appropriate for a CLI/TUI layout function. No mocking; tests assert real computed windows and real rendered output."
+    }
+  }
+}

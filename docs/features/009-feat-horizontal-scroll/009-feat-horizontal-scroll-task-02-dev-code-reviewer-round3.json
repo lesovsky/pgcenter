@@ -1,0 +1,53 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 3,
+  "commit": "a235af7",
+  "status": "changes_required",
+  "summary": "The fix correctly solves the two reported QA bugs (wide query column now stays visible truncated; spurious right marker gone on wide screens) and the start-in-budget semantics is sound for the common forward-window case. However, the central claim of the commit — that the same start-in-budget rule on the backward walk keeps the 'last column visible at max offset / nothing hidden right' invariant — is FALSE. maxOffset is computed against baseBudget, but the rendered window at any offset>0 always uses scrollBudget = baseBudget - markerWidth (the left marker is unconditionally present once clamped>0). The backward walk never reserves that guaranteed left marker, so at maxOffset the forward walk can fall one column short: the final column becomes permanently unreachable and the right marker stays lit forever. This reproduces the exact class of bug the fix targeted, now at the far-right edge, for realistic terminal sizes (e.g. ncols=6, width 25, term 82). No panics or out-of-bounds; edge cases (empty window, narrow term, negative width) are safe.",
+  "criticalIssues": [
+    {
+      "file": "top/stat.go",
+      "line": 477,
+      "severity": "critical",
+      "category": "architecture",
+      "issue": "maxOffset (backward walk, line 479: countFit(ncols-1, 0, -1, baseBudget)) is computed against the FULL baseBudget, but the actual rendered window for any clamped offset > 0 is computed against scrollBudget = baseBudget - markerWidth, because hiddenLeft is always true at a non-zero offset (line 484) and the left marker is therefore always reserved (lines 493-494). The backward walk does not subtract the guaranteed left-marker width, so it over-estimates how far the tail fits and yields a maxOffset at which the forward walk (line 501) cannot reach the last column. Result: at the clamped maximum offset, last < ncols-1 and hiddenRight stays true. The commit message asserts 'the same start-in-budget rule applies to the backward walk ... so the invariant still holds' — this is incorrect; the two walks use different budgets (baseBudget vs scrollBudget).",
+      "impact": "User-visible regression of the very bugs this commit fixes, now at the right edge. For realistic layouts the last column is permanently unreachable by scrolling and the › marker is shown forever even though further scrolling reveals nothing. Brute-force enumeration over ncols 2..8, term widths >=80, uniform column widths {5,8,10,15,20,25,30}: 29 distinct configurations break the invariant, e.g. ncols=6/width=25/term=82 clamps at offset 2 with last=4 (column 5 never shown, hiddenRight=true at every offset >= 2). This is the activity/statements 'query last column disappears' symptom shifted to the case where the tail is several normal columns rather than one wide one. Note: the desync is a PRE-EXISTING latent defect (the old full-fit code failed the strict invariant in ~146 enumerated cases); the new semantics reduces the total count (68 vs 100 for term>=40) but introduces a fresh set of stuck cases that did not exist before (e.g. ncols=4/width=20/term=45, ncols=5/width=25/term=55). So this is a partial regression on top of an unfixed root cause, not purely new.",
+      "recommendation": "Make the backward walk (maxOffset computation) reserve the markers that will actually be present at a non-zero offset. The minimal correct change: compute the tail against the same budget the forward window will use when hiddenLeft is true. Since any offset > 0 forces the left marker, and the maxOffset window by definition has nothing hidden right (right marker absent), the backward walk should use budget = baseBudget - markerWidth (reserve only the left marker). Concretely: tailCount := countFit(ncols-1, 0, -1, baseBudget - markerWidth) when that quantity could produce a non-zero maxOffset; guard for baseBudget - markerWidth <= 0. After fixing, re-run the brute-force invariant assertion (at the clamped maximum offset: last == ncols-1 AND hiddenRight == false for every config where baseBudget admits any scrollable column) and add it as a table/property test. Verify the 'wide last column' case (term 200, col4=2000) still passes — there hiddenLeft is false at offset 0 so the marker reservation must not over-shrink it."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "top/stat_test.go",
+      "line": 244,
+      "severity": "major",
+      "category": "best-practices",
+      "suggestion": "The 'last column visible at max offset' test only exercises uniform 6-column/width-10/term-40 (which happens to satisfy the invariant) and the new 'wide last column' test uses offset 0 (hiddenLeft=false, so the marker-reservation desync is never triggered). Neither covers the failing class where hiddenLeft becomes true at maxOffset. Add a property/table test that enumerates a grid of (ncols, width, termWidth) and asserts the invariant at clamped max offset (last==ncols-1 && !hiddenRight whenever any scrollable column fits). This would have caught the critical issue and guards against re-introduction.",
+      "benefit": "Turns the implicit invariant into an executable guarantee; prevents silent recurrence of the right-edge stuck-column / spurious-marker bug across terminal sizes that point examples miss.",
+      "optional": false,
+      "tech_debt": true
+    },
+    {
+      "file": "top/stat.go",
+      "line": 504,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "hiddenRight is computed three times (probe at line 487, then overwritten at line 506) and hiddenLeft/right marker budgeting straddles two passes. The 'reserve right marker conservatively because shrinking can only hide more' reasoning is correct, but combined with the now-known left-marker desync on the backward walk, the budget bookkeeping is subtle and easy to get wrong (as it was). After fixing the critical issue, consider a short comment block (or a tiny helper) that states explicitly, per walk, which markers are reserved and why, so the baseBudget-vs-scrollBudget distinction is impossible to overlook in future edits.",
+      "benefit": "Reduces the chance of a future edit re-desyncing the backward and forward budgets.",
+      "optional": true,
+      "tech_debt": true
+    }
+  ],
+  "positiveNotes": [
+    "Core QA bugs are genuinely fixed: start-in-budget semantics keeps the wide content-aligned query column in the window (printed full-width, truncated by gocui at the edge — matching pre-scroll behaviour) and suppresses the redundant › on wide screens. Verified by the new Test_render_widePartialLastColumn and by brute force over wide-last-column layouts at offset 0.",
+    "Alignment invariant (header width == data width) is preserved: both printStatHeader and printStatData gate marker emission on the same win.hiddenLeft/hiddenRight flags and reserve markerWidth symmetrically; mid-offset both-markers tests pass. Holds even in the degenerate empty-window case (header prints ‹›, data prints matching blanks).",
+    "No off-by-one / out-of-bounds in the new logic: empty window is represented as last < first and the render loops (for i := win.first; i <= win.last) simply don't execute; very narrow terminals (baseBudget <= 0), ncols<=1, ncols=2, and negative widths all behave without panic.",
+    "Tests were updated to match the new semantics with accurate, detailed comments; the 7-column reframings for mid-offset and alignment tests correctly preserve the both-markers test premise."
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 1,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "insufficient"
+  }
+}
