@@ -1,0 +1,49 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Test_visibleColumns is a clean table-driven testify suite that covers all six required TDD Anchor cases plus a bonus ncols==1 case; all tests pass. Coverage is good and most assertions are strong (exact first/last/clamped/flags for the all-fit, narrow, mid-offset and past-end cases). The weak spot is the issue #99 anti-regression case ('missing or zero ColsWidth key'): its assertions (clamped>=0, first>=1, last<6) are near-tautological — they pass for almost any non-panicking implementation and would not catch a re-introduced map-zero-key bug. The 'very narrow only frozen fits' case also under-asserts (checks last<first but not concrete first/last). No critical issues; pyramid is correctly unit-only per tech-spec (pure UI math).",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:189 (Test_visibleColumns / \"missing or zero ColsWidth key\")",
+      "issue": "The issue #99 anti-regression case asserts only clamped>=0, first>=1, last<6. These are near-tautological: clamped is always >=0 (clamp into [0,maxOffset], maxOffset>=0), first is always >=1 (first = 1+clamped), and last<6 holds for any sane window. The test verifies 'does not panic' but NOT that the sparse-width math is correct. If the #99 bug class returned (ranging over the map, or a missing key silently corrupting the budget), this test could still pass — defeating its stated purpose.",
+      "recommendation": "Assert the deterministic expected window for the given inputs. For widths={0:10,2:10,4:10}, ncols=6, termWidth=40: colWidth = col0=12, missing=2 each; scrollBudget=28; fits(1) yields columns 1..4; maxOffset=1; offset 0 clamps to 0. Replace the loose checks with: assert.Equal(0, clamped); assert.Equal(1, first); assert.Equal(4, last); assert.False(hiddenLeft); assert.True(hiddenRight). This pins the sparse-width math and fails if a missing key is mis-costed.",
+      "litmusTestFailed": true,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:170 (Test_visibleColumns / \"very narrow only frozen fits\")",
+      "issue": "The very-narrow case checks clamped==0, flags, and last<first (empty window), but does not assert concrete first/last. The task requires 'no negative/zero window width and a valid range'. last<first passes equally for first=1,last=0 (valid) and for a degenerate first=5,last=-3 — so the 'range stays valid' guarantee is not actually verified.",
+      "recommendation": "Add assert.Equal(1, first) (window still anchored just after the frozen column) and assert.Equal(0, last) so an empty-but-valid window is pinned, not just 'last < first'. This locks in the documented 'last < first means empty window' contract.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (Test_visibleColumns) — negative offset edge case",
+      "issue": "The task Details list 'offset отрицательный (теоретически) → зажать до 0' as an edge case. The clamp code (math.Max(offset,0)) handles it, but no test exercises a negative offset. Minor gap since negative offset is not reachable from the real handlers (Task 3 clamps), but it is an explicitly listed edge case and the clamp branch is untested.",
+      "recommendation": "Add a small sub-case: visibleColumns(5, uniformWidths(5,10), 1000, -3) and assert clamped==0, first==1, hiddenLeft==false. One extra t.Run line covers the lower-clamp branch.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 7,
+      "passed": 6,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 7,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

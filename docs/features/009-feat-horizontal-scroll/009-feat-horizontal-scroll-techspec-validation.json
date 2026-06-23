@@ -1,0 +1,18 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Code-writing tasks (1, 2, 3) list reviewers `dev-code-reviewer, dev-test-reviewer` but omit `dev-security-auditor`, which is the default reviewer for the `code-writing` skill per the catalog.",
+      "fix": "Either add `dev-security-auditor` to the reviewer set, or this is acceptable as a deliberate choice given the feature is pure in-memory UI math with no security surface (no input parsing, network, DB writes). Document the rationale if intentional."
+    },
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Project Knowledge files are not at the path the validation process expects (`.claude/skills/project-knowledge/references/`); they live at `.claude/skills/project-knowledge/` directly. File paths in tasks were verified against this actual location and are consistent.",
+      "fix": "No spec change needed. File paths in tasks (top/config.go, top/stat.go, top/config_view.go, top/keybindings.go, top/help.go, internal/align, internal/view) match architecture.md package layout."
+    }
+  ],
+  "summary": "Tech-spec is template-compliant and ready for decomposition. All required sections present and non-empty (Solution, Architecture with both subsections, 5 well-formed Decisions each with Rationale + Alternatives, Data Models, Dependencies, Testing Strategy size M, Agent Verification Plan with all three subsections, Risks as table, Acceptance Criteria, Implementation Tasks by waves). Frontmatter valid (created 2026-06-23, status draft, branch dev, size M). 4 tasks (<=15), Final Wave with pre-deploy-qa present. Skills (code-writing, pre-deploy-qa) and reviewers (dev-code-reviewer, dev-test-reviewer) are valid catalog entries and the agent files exist. No wave conflicts: Task 2 (top/stat.go) and Task 3 (top/config_view.go, keybindings.go, help.go) in Wave 2 do not share files; both depend on Wave 1, ordering is correct; no circular dependencies. Technical decisions are correctly placed in the Decisions section, not embedded in tasks. Task descriptions are scope-level (WHAT+WHY), no AC/TDD/line-number references. No time-based estimates. Zero critical findings -> approved. Two minor advisory findings only."
+}

@@ -4,17 +4,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/align"
+	"github.com/lesovsky/pgcenter/internal/math"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/lesovsky/pgcenter/internal/pretty"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
-	"os"
-	"regexp"
-	"strconv"
-	"time"
 )
 
 // collectStat
@@ -331,19 +335,39 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	// Align values within columns, use fixed aligning instead of dynamic.
 	alignViewToResult(config, s.Result)
 
+	// Terminal width drives the visible-column window. dbstat is created with
+	// Frame=false, so Size() returns the true drawing width.
+	termWidth, _ := v.Size()
+
+	return renderDbstat(v, config, s, termWidth)
+}
+
+// renderDbstat is the writer-based core of printDbstat: it clamps the scroll offset,
+// then prints the windowed header and data. It is separated from printDbstat (which only
+// resolves the terminal width from the gocui view) so the render can be unit-tested
+// without a live terminal.
+func renderDbstat(w io.Writer, config *config, s stat.Stat, termWidth int) error {
+	// Compute the visible window ONCE here and pass it to the header/data printers. This is
+	// the single source of truth for the render: it avoids re-running visibleColumns three
+	// times per frame (which risked the header and data disagreeing on the window) and it
+	// guarantees both rows reserve the SAME space for the edge markers (alignment invariant).
+	win := visibleColumns(s.Result.Ncols, config.view.ColsWidth, termWidth, config.scrollOffset)
+
+	// Re-clamp the scroll offset on every render and write it back into config. config
+	// is shared by pointer, so this persists across renders — the fix for runaway offset:
+	// without write-back, repeated scroll-right at the visual maximum inflates the field
+	// unboundedly (visibleColumns clamps its own result but the source field keeps growing),
+	// after which scroll-left "sticks" until the offset drifts back into range.
+	config.scrollOffset = win.clamped
+
 	// Print header.
-	err := printStatHeader(v, s, config)
+	err := printStatHeader(w, s, config, win)
 	if err != nil {
 		return err
 	}
 
 	// Print data.
-	err = printStatData(v, s, config, isFilterRequired(config.view.Filters))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return printStatData(w, s, config, isFilterRequired(config.view.Filters), win)
 }
 
 // formatError returns formatted error string depending on its type.
@@ -360,44 +384,241 @@ func formatError(err error) string {
 	return fmt.Sprintf("ERROR: %s", err.Error())
 }
 
-// printStatHeader prints stats header.
-func printStatHeader(v *gocui.View, s stat.Stat, config *config) error {
-	var pname string
-	for i := 0; i < s.Result.Ncols; i++ {
-		name := s.Result.Cols[i]
+// markerWidth is the printed (visible-rune) width reserved for one edge marker (‹ or ›).
+// The markers are single runes, so each reserves exactly one cell. Both the header (which
+// prints the marker rune) and the data rows (which print this many blank spaces in its
+// place) use this constant, keeping the visible width of every row identical.
+const markerWidth = 1
 
-		// mark filtered column
-		if config.view.Filters[i] != nil && config.view.Filters[i].String() != "" {
-			pname = "*" + name
-		} else {
-			pname = name
+// columnWindow describes the visible window of scrollable columns for one render, plus the
+// edge-marker reservation. It is computed once per frame (renderDbstat) and shared by the
+// header and data printers so they never disagree on the window or on marker placement.
+//
+// first..last is the absolute index range of visible scrollable columns (last < first means
+// an empty window — only the frozen column fits). clamped is the offset re-clamped into the
+// valid range. hiddenLeft/hiddenRight report whether scrollable columns are hidden to the
+// corresponding side; they double as "print this side's marker" flags. The header prints the
+// marker rune; the data rows print markerWidth spaces on the same side, so both rows keep the
+// same visible width and the columns stay aligned beneath their names.
+type columnWindow struct {
+	first, last, clamped    int
+	hiddenLeft, hiddenRight bool
+}
+
+// visibleColumns computes the visible window of scrollable columns for horizontal
+// scrolling. Column 0 is frozen (always part of the width budget); the remaining
+// columns (1..ncols-1) form a sliding window selected by offset.
+//
+// It is the single source of truth for the visible range: it re-clamps offset into
+// [0, maxOffset] on every call, where maxOffset is the smallest offset at which the
+// last column (ncols-1) is still visible. This guards against a stale offset after an
+// auto-refresh changed the column count.
+//
+// Edge markers (‹ / ›) are visible runes, so the space they occupy is subtracted from the
+// scroll budget here — the single source of truth — and the same space is later emitted as
+// blanks in the data rows. To avoid a circular dependency (a marker exists only if a side
+// has hidden columns, but the window — and thus what is hidden — depends on the budget
+// already deducted for that marker) the budget is reserved conservatively: the left marker
+// is reserved whenever the clamped offset is > 0, and the right marker whenever a first
+// pass over the full budget already shows columns hidden to the right (shrinking the budget
+// can only keep them hidden, never reveal them, so the reservation is always justified).
+//
+// Widths are read strictly by index in [0, ncols); the map is never ranged over. A
+// missing/zero key is treated as width 0 (still costing the +2 print gap), keeping the
+// math bounded even with sparse widths (issue #99 class).
+func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) columnWindow {
+	// colWidth returns the printed cell budget for a column (value width + the +2 gap
+	// that printing adds), reading the dense map strictly within [0, ncols).
+	colWidth := func(i int) int {
+		w := 0
+		if i >= 0 && i < ncols {
+			w = colsWidth[i]
 		}
+		if w < 0 {
+			w = 0
+		}
+		return w + 2
+	}
 
-		// mark ordered column with foreground color
-		if i != config.view.OrderKey {
-			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, config.view.ColsWidth[i]+2, pname)
-			if err != nil {
-				return err
+	// No scrollable columns: only the frozen column exists (or none at all).
+	if ncols <= 1 {
+		return columnWindow{first: 1, last: 0}
+	}
+
+	// Budget left for scrollable columns after reserving the frozen column 0.
+	baseBudget := termWidth - colWidth(0)
+
+	// countFit walks scrollable columns from index "from" toward "stop" (exclusive) in the
+	// given step direction (+1 forward, -1 backward) and returns how many consecutive columns
+	// have their START position inside the budget. A column counts as visible whenever the
+	// width already consumed BEFORE it (its start) is still within budget — even if the column
+	// itself overflows. The last counted column may therefore be only partially visible: it is
+	// printed at full cell width and the terminal (gocui) truncates it at the screen edge.
+	//
+	// This mirrors the pre-scroll behaviour for the very wide trailing "query" column of the
+	// activity/statements screens (aligned by content, almost never fitting in full): the
+	// column stays visible truncated instead of disappearing, and no right marker is drawn when
+	// the only thing past the edge is that column's own tail (issue #14 QA).
+	countFit := func(from, stop, step, budget int) int {
+		count, used := 0, 0
+		for i := from; i != stop; i += step {
+			if used >= budget {
+				break
 			}
-		} else {
-			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, config.view.ColsWidth[i]+2, pname)
-			if err != nil {
-				return err
+			count++
+			used += colWidth(i)
+		}
+		return count
+	}
+
+	// maxOffset is the smallest offset at which the last column (ncols-1) is still visible.
+	// It is found by a backward walk: count how many trailing columns fit, the rest must be
+	// scrolled past. The walk must reserve the SAME markers the forward-walk will reserve for
+	// the window it produces at that offset, otherwise the two disagree and the last column
+	// becomes unreachable (a › that never clears).
+	//
+	// At a non-zero max offset the left marker ‹ is always present (clamped > 0), while the
+	// right marker is absent by definition (the last column is visible). So the trailing
+	// columns must fit into baseBudget - markerWidth, not the full baseBudget. The all-fit case
+	// (maxOffset == 0) has no left marker and uses the full budget.
+	//
+	// Reserving the left marker shrinks the budget, which can only push maxOffset up (never
+	// down), so once a first full-budget pass shows scrolling is needed (maxOffset > 0) the
+	// reservation is justified and re-running the walk against the reduced budget reaches the
+	// fixpoint: the value can only grow and stays > 0, keeping the left marker present.
+	maxOffset := 0
+	if baseBudget > 0 {
+		tailCount := countFit(ncols-1, 0, -1, baseBudget) // walk columns ncols-1..1 backwards
+		maxOffset = math.Max((ncols-1)-tailCount, 0)
+		if maxOffset > 0 {
+			tailBudget := baseBudget - markerWidth // reserve the guaranteed left marker
+			if tailBudget > 0 {
+				tailCount = countFit(ncols-1, 0, -1, tailBudget)
+				maxOffset = math.Max((ncols-1)-tailCount, 0)
+			} else {
+				maxOffset = ncols - 1 // no room for any trailing column beside the marker
 			}
 		}
 	}
-	_, err := fmt.Fprintf(v, "\n")
-	if err != nil {
+	clamped := math.Min(math.Max(offset, 0), maxOffset)
+
+	hiddenLeft := clamped > 0
+	probeFirst := 1 + clamped
+	probeCount := countFit(probeFirst, ncols, +1, baseBudget)
+	hiddenRight := probeFirst+probeCount-1 < ncols-1
+
+	// Reserve marker space on each side that actually shows a marker, then recompute the
+	// window inside the reduced budget so its visible width (data side) leaves room for the
+	// marker(s) printed by the header.
+	scrollBudget := baseBudget
+	if hiddenLeft {
+		scrollBudget -= markerWidth
+	}
+	if hiddenRight {
+		scrollBudget -= markerWidth
+	}
+
+	first := probeFirst
+	count := countFit(first, ncols, +1, scrollBudget) // walk columns first..ncols-1 forwards
+	last := first + count - 1                         // last < first when no scrollable column fits
+
+	// Recompute hiddenRight against the final window (reserving the right marker may have
+	// pushed the last visible column off-screen; it cannot have revealed a new one).
+	hiddenRight = last < ncols-1
+
+	return columnWindow{first: first, last: last, clamped: clamped, hiddenLeft: hiddenLeft, hiddenRight: hiddenRight}
+}
+
+// printStatHeader prints the stats header for the visible column window: the frozen
+// column 0 followed by the scrollable columns inside the window computed by
+// visibleColumns. Edge markers ‹ / › are drawn when columns are hidden to the
+// corresponding side; the markers are visible runes and are accounted for in the cell
+// budget so the header stays aligned with the data rows.
+func printStatHeader(w io.Writer, s stat.Stat, config *config, win columnWindow) error {
+	// Frozen column 0 is always printed first, independent of offset.
+	if err := printHeaderCell(w, s, config, 0); err != nil {
+		return err
+	}
+
+	// Left edge marker: scrollable columns hidden to the left.
+	if win.hiddenLeft {
+		if _, err := fmt.Fprint(w, "‹"); err != nil {
+			return err
+		}
+	}
+
+	// Scrollable columns inside the visible window.
+	for i := win.first; i <= win.last; i++ {
+		if err := printHeaderCell(w, s, config, i); err != nil {
+			return err
+		}
+	}
+
+	// Right edge marker: scrollable columns hidden to the right.
+	if win.hiddenRight {
+		if _, err := fmt.Fprint(w, "›"); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintf(w, "\n"); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// printStatData prints stats data.
-func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) error {
+// printHeaderCell prints a single header cell for column i, applying the filter prefix,
+// the ordered-column highlight, and the frozen-column bold. The sort highlight has
+// priority over frozen-bold on column 0 (Decision 4): when column 0 is the ordered
+// column, only the sort highlight is applied.
+func printHeaderCell(w io.Writer, s stat.Stat, config *config, i int) error {
+	name := s.Result.Cols[i]
+
+	// mark filtered column
+	pname := name
+	if config.view.Filters[i] != nil && config.view.Filters[i].String() != "" {
+		pname = "*" + name
+	}
+
+	width := config.view.ColsWidth[i] + 2
+
+	switch {
+	case i == config.view.OrderKey:
+		// ordered column highlight (also wins over frozen-bold on column 0, Decision 4)
+		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 47, 1, width, pname)
+		return err
+	case i == 0:
+		// frozen column name in bold (when not the ordered column)
+		_, err := fmt.Fprintf(w, "\033[%d;%d;%dm%-*s\033[0m", 30, 47, 1, width, pname)
+		return err
+	default:
+		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 30, 47, width, pname)
+		return err
+	}
+}
+
+// printStatData prints the stats data for the visible column window: the frozen column 0
+// followed by the scrollable columns inside the window computed by visibleColumns. Values
+// and widths are indexed strictly by the ABSOLUTE column index i (the previous independent
+// colnum counter is removed) so windowed rendering keeps each value aligned with its
+// column.
+func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, win columnWindow) error {
+	// Blank fillers mirroring the header's edge markers: the header prints a marker rune on
+	// each hidden side, so each data row prints markerWidth spaces in the same place. This is
+	// the alignment invariant — the visible width of the header row equals that of every data
+	// row, so scrollable columns line up under their names (review round 1, MAJOR #1).
+	leftMarker := ""
+	if win.hiddenLeft {
+		leftMarker = strings.Repeat(" ", markerWidth)
+	}
+	rightMarker := ""
+	if win.hiddenRight {
+		rightMarker = strings.Repeat(" ", markerWidth)
+	}
+
 	var doPrint bool
-	for colnum, rownum := 0, 0; rownum < s.Result.Nrows; rownum, colnum = rownum+1, 0 {
+	for rownum := 0; rownum < s.Result.Nrows; rownum++ {
 		// be optimistic, we want to print the row.
 		doPrint = true
 
@@ -414,38 +635,62 @@ func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) erro
 			}
 		}
 
-		// print values
-		for i := range s.Result.Cols {
-			if doPrint {
-				// truncate values that longer than column width
-				valuelen := len(s.Result.Values[rownum][colnum].String)
-				if valuelen > config.view.ColsWidth[i] {
-					width := config.view.ColsWidth[i]
-					if width <= 0 {
-						return fmt.Errorf("zero or negative width, skip")
-					}
-
-					// truncate value up to column width and replace last character with '~' symbol
-					s.Result.Values[rownum][colnum].String = s.Result.Values[rownum][colnum].String[:width-1] + "~"
-				}
-
-				// print value
-				_, err := fmt.Fprintf(v, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][colnum].String)
-				if err != nil {
-					return err
-				}
-				colnum++
-			}
+		if !doPrint {
+			continue
 		}
-		if doPrint {
-			_, err := fmt.Fprintf(v, "\n")
-			if err != nil {
+
+		// print frozen column 0 value first, then the windowed columns.
+		if err := printDataCell(w, s, config, rownum, 0); err != nil {
+			return err
+		}
+
+		// Blank filler for the left edge marker, keeping data aligned with the header.
+		if leftMarker != "" {
+			if _, err := fmt.Fprint(w, leftMarker); err != nil {
 				return err
 			}
+		}
+
+		for i := win.first; i <= win.last; i++ {
+			if err := printDataCell(w, s, config, rownum, i); err != nil {
+				return err
+			}
+		}
+
+		// Blank filler for the right edge marker.
+		if rightMarker != "" {
+			if _, err := fmt.Fprint(w, rightMarker); err != nil {
+				return err
+			}
+		}
+
+		if _, err := fmt.Fprintf(w, "\n"); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// printDataCell prints the value of column i for the given row, truncating values longer
+// than the column width (replacing the last character with '~') and padding to the column
+// width plus the +2 gap. Returns an error for a zero or negative column width.
+func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	// truncate values that are longer than column width
+	valuelen := len(s.Result.Values[rownum][i].String)
+	if valuelen > config.view.ColsWidth[i] {
+		width := config.view.ColsWidth[i]
+		if width <= 0 {
+			return fmt.Errorf("zero or negative width, skip")
+		}
+
+		// truncate value up to column width and replace last character with '~' symbol
+		s.Result.Values[rownum][i].String = s.Result.Values[rownum][i].String[:width-1] + "~"
+	}
+
+	// print value
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][i].String)
+	return err
 }
 
 // printIostat prints extra 'iostat' - block IO devices stats.

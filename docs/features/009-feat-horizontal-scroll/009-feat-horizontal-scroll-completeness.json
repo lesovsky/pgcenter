@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 12,
+  "requirements_covered": 12,
+  "requirements_partial": 0,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-12: При пустом результате (0 строк) заголовок со скроллом и маркерами отображается корректно, без сбоя",
+      "detail": "Tech-spec testing strategy and the unit-test list do not explicitly enumerate the 0-rows case for header/marker rendering. The code structure satisfies it inherently (printStatData iterates rows then columns, so header is printed independently of row count), so coverage exists by construction rather than by an explicit test. Recommend adding an explicit boundary check during decomposition/QA.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-7: Сортировка и скролл не влияют друг на друга (ортогональны)",
+      "detail": "Tech-spec guarantees orthogonality structurally (scrollOffset is separate ephemeral state on top.config; offset indexes only columns 1..Ncols-1; sort handlers left.go/right.go untouched), but the unit-test list does not include an explicit assertion that scrolling does not mutate OrderKey and that sorting does not mutate scrollOffset. Low risk since the two are independent fields, not shared state.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "Decision 5 / edge markers width budget",
+      "detail": "Decision 5 states the exact glyph placement of the markers is deferred to decomposition and only the width-budget rule is fixed. Given the explicit off-by-one risk called out in both specs, the absence of a concrete placement rule in the tech-spec leaves a non-trivial header-alignment detail to be designed at implementation time. Mitigated by the boundary unit test on marker flags, but the placement itself (which cell holds the marker, how it interacts with the frozen-column bold) is the actual alignment risk and remains unspecified.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "12/12 user-spec acceptance criteria traced to tech-spec decisions, architecture, and tasks. No gaps, no missing requirements. No scope creep: every tech-spec element (scrollOffset field, pure visibleColumns function, print-function changes, dual-path offset reset, [ ]-hotkeys, help text, edge markers) maps back to a user requirement; the deliberately excluded items (extra-panels, sub-screen splits, io_key, record/report) are honored as agreed scope limits and are NOT flagged as under-engineering. No over-engineering: single new int field, one pure function, no speculative abstractions or layers; Decision 4 explicitly rejects a third combined highlight style as over-engineering. Solution section has real technical substance (manual windowing vs gocui viewport, frozen-column rationale, ephemeral-state placement). 3 minor findings: two are documentation/test-coverage gaps for US-7 and US-12 that are satisfied structurally but not by explicit tests, and one is the deferred marker-placement detail behind the known off-by-one risk. Zero critical findings -> status pass."
+}

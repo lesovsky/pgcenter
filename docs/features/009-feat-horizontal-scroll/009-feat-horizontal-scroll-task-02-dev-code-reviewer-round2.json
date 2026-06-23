@@ -1,0 +1,44 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "status": "approved",
+  "summary": "Round-1 MAJOR (unreserved edge-marker width causing header/data off-by-one desync) is fully resolved. visibleColumns now reserves markerWidth per active side in the scroll budget and printStatData mirrors it as same-side blank fillers; the window is computed once in renderDbstat and passed to both printers, eliminating the triple-call desync. The alignment invariant (ANSI-stripped header width == every data row width) was verified by exhaustive brute force across the realistic parameter space (ncols 2-8, width 8-14, termWidth 1-80, all offsets) with zero mismatches. The two-pass reservation is conservative and correct, the columnWindow logic is out-of-bounds safe, and all signature refactors are consistent across callers.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 471,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The full-budget right-overflow probe at line 478-479 (probeCount/hiddenRight) is computed but its boolean result is only used to decide marker reservation; the final hiddenRight is recomputed at line 498 against the shrunk window. The intermediate hiddenRight at 479 is effectively a 'reserve the right marker?' signal. Consider renaming it (e.g. reserveRight) to make the two-phase intent self-documenting and avoid the impression that line 479 sets the returned value.",
+      "benefit": "Clearer separation between the conservative reservation signal and the final flag returned to the printers; reduces re-reasoning cost for future maintainers.",
+      "optional": true,
+      "tech_debt": true
+    },
+    {
+      "file": "top/stat_test.go",
+      "line": 251,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "makeRenderConfig uses width values (e.g. 5, 10) where the synthetic column name 'colN' (4 chars) can exceed the column width in some tests. In production align.SetAlign enforces width >= max(len(colname), 8), so the header name always fits its column. The current tests happen to stay safe, but a future test with width < 4 plus a hidden side would surface a header/data width difference that is purely a fixture artifact (header does not truncate names, data truncates values), not a real bug. Consider documenting the 'width >= name length' precondition or asserting it in the render-test helpers.",
+      "benefit": "Prevents a misleading future test failure that looks like an alignment regression but is a fixture artifact; encodes the production invariant guaranteed by align.SetAlign.",
+      "optional": true,
+      "tech_debt": true
+    }
+  ],
+  "verification": {
+    "major1_marker_budget_alignment": "CLOSED. markerWidth reserved per active side in scrollBudget (stat.go:484-490); same-side blank fillers of identical width emitted in printStatData (stat.go:582-636) on the same sides the header draws the marker runes (stat.go:514-533). Exhaustive brute force over realistic widths (>= name length) confirmed header visible width == every data row visible width in 100% of cases.",
+    "two_pass_logic": "CORRECT. First pass over full base budget computes maxOffset, clamped, hiddenLeft (= clamped>0, independent of forward budget so stable), and a conservative right-overflow probe. Shrinking the budget for markers can only hide more columns, never reveal hidden ones, so left/right reservation decisions stay valid. Final hiddenRight is recomputed against the shrunk window (stat.go:498). No case found where a marker is drawn without its width reserved (verified by brute force across the production-realistic parameter space).",
+    "out_of_bounds": "SAFE. Empty window encoded as first=1,last=0 (loops do not execute). clamped is bounded to [0, maxOffset] with maxOffset <= ncols-1; first = 1+clamped <= ncols; countFit from index==ncols stops immediately so last < first, no OOB index. colWidth reads the map strictly within [0, ncols), negative widths floored to 0. Confirmed by the very-narrow / negative-budget / sparse-map / ncols<=1 test cases and by go vet.",
+    "blank_fillers": "CORRECT. Left filler printed after frozen col0 and before the window; right filler after the window — exactly where the header emits the marker runes. Width == markerWidth on both sides.",
+    "signature_refactor": "CONSISTENT. printStatHeader and printStatData both take win columnWindow; visibleColumns is called once in renderDbstat; printDbstat only resolves termWidth from v.Size(). No remaining caller passes termWidth to a print function. Build and go vet clean; all scroll tests pass."
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent",
+    "notes": "Pre-existing failing test Test_doReload panics on the base commit (3a11407^) as well — it requires a live gocui terminal and is unrelated to the scroll feature. Not a regression introduced by this fix. All scroll-related tests (Test_visibleColumns, Test_printStat*, Test_render_alignmentInvariant, Test_printDbstat_clampsScrollOffset) pass."
+  }
+}

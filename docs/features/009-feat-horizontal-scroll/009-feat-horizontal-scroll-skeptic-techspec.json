@@ -1,0 +1,46 @@
+{
+  "status": "approved",
+  "summary": "Checked 27 claims, found 1 mirage (minor name mismatch on the Shift+S hotkey reference). All files, functions, structs, fields, signatures, dependencies and referenced tests in the tech-spec are confirmed against the actual code.",
+  "findings": [
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "tech-spec 'How it works' (point 4) and Solution narrative say switchViewToProcPidStat is triggered by 'Shift+S' (e.g. '(`switchViewTo` -> `viewSwitchHandler`, or `Shift+S` -> `switchViewToProcPidStat`)')",
+      "reality": "top/keybindings.go:55 registers switchViewToProcPidStat on the plain uppercase rune 'S' (`{\"sysstat\", 'S', switchViewToProcPidStat(app)}`), not a Shift+S modifier combo. Per the code-research doc itself (section 9), termbox v1.1.1 cannot distinguish Shift+arrow/Shift+rune from a plain rune and gocui only exposes ModNone/ModAlt — so the binding is literally rune 'S'. Functionally a user produces 'S' by pressing Shift+s, but the tech-spec's framing as a distinct 'Shift+S' modifier path is technically inaccurate.",
+      "source": "009-feat-horizontal-scroll-tech-spec.md, section Architecture / How it works (point 4) and Decision 3 narrative",
+      "fix": "Refer to the hotkey as 'S' (uppercase rune) to match keybindings.go:55, or note it is the rune 'S' produced via Shift; the offset-reset point in switchViewToProcPidStat remains correct regardless. No code-change impact — the two-path reset logic the spec prescribes is valid."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 27,
+    "confirmed": 26,
+    "mirages_found": 1,
+    "verified_claims": [
+      "top/stat.go exists",
+      "top/config.go exists",
+      "top/config_view.go exists",
+      "top/keybindings.go exists",
+      "top/help.go exists",
+      "internal/view/view.go exists",
+      "internal/align/align.go exists",
+      "printStatHeader(v *gocui.View, s stat.Stat, config *config) error @ stat.go:364",
+      "printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) error @ stat.go:398",
+      "printDbstat(v *gocui.View, config *config, s stat.Stat) error @ stat.go:320",
+      "alignViewToResult(config, r) @ stat.go:309 calls align.SetAlign(r, 1000, false)",
+      "printDbstat(v, app.config, s) called from printStat @ stat.go:150",
+      "printStatData dual colnum/i counter + in-place truncation confirmed",
+      "viewSwitchHandler(config, c) @ config_view.go:208 (saves to map, loads from map)",
+      "switchViewToProcPidStat @ config_view.go:220 bypasses viewSwitchHandler, patches view manually",
+      "orderKeyLeft/orderKeyRight/increaseWidth/decreaseWidth handlers exist in config_view.go",
+      "config struct fields (view, views, viewCh, ...) @ config.go:10 - no scrollOffset yet (new field)",
+      "view.View has ColsWidth map[int]int, Ncols, OrderKey, Filters - no scroll field (correct)",
+      "align.SetAlign(r stat.PGresult, truncLimit int, dynamic bool) @ align.go:14",
+      "internal/math Min/Max int helpers exist",
+      "keys slice on view 'sysstat' + SetKeybinding(ModNone) @ keybindings.go:18,82",
+      "'[' and ']' runes are FREE (no existing binding)",
+      "help.go template column-nav line @ help.go:21 (Left,Right,<,/) - no [/] yet",
+      "Test_alignViewToResult @ stat_test.go:63, Test_orderKeyLeft/Right, Test_switchViewTo exist",
+      "dbstat view name used in render path (g.View(\"dbstat\")), distinct from sysstat keybinding view"
+    ]
+  }
+}

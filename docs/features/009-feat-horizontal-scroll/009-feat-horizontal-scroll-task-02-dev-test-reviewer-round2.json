@@ -1,0 +1,61 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "round": 2,
+  "status": "passed",
+  "summary": "Both round-1 MAJOR findings are closed with meaningful, mutation-verified assertions. MAJOR #1 (header/data alignment, Decision 5) is now guarded by Test_render_alignmentInvariant, a genuine ANSI-stripped visible-width invariant that provably fails on the pre-fix behavior (verified by mutation: header=38 vs data=36, the 2-marker delta) and passes after the fix. MAJOR #2 (left marker at mid-offset) is covered by Test_printStatHeader_midOffset_bothMarkers, which fails when left-marker emission is suppressed. All three round-1 minors are closed: frozen-bold now asserts the exact escape sequence (\\033[30;47;1mcol0), the right-marker is asserted at end-of-line via HasSuffix, and the truncation branch is exercised. Test_visibleColumns was correctly updated for the new 1-cell marker reservation: the missing/zero case last 4->3 is a real behavioral change (budget 28->27 drops col4), not a tautology. The columnWindow / renderDbstat refactor introduced no coverage gaps that matter: absolute-index lookup, clamp write-back, empty-result, and both edge markers are all covered and mutation-sensitive. One MINOR edge gap remains (empty scroll window + render printers), recorded as tech_debt.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (printStatHeader/printStatData render tests)",
+      "issue": "The empty scrollable window case (win.last < win.first, only the frozen column fits, hiddenRight=true) is tested only at the visibleColumns unit level. The render printers (printStatHeader/printStatData) are never exercised with an empty window. In that state the header must print the frozen column + right marker with NO scrollable columns, and every data row must reserve the matching right-marker blank. The alignment-invariant litmus does not cover this branch because it uses a mid-offset window with visible scrollable columns. A regression where the empty-window data row drops the right-marker filler (misalignment with header) would not be caught.",
+      "recommendation": "Add a subtest rendering both header and data with termWidth=12 (only frozen col0 fits) for a 6-column result: assert header contains col0 and the right marker, asserts col1.. are absent, and that visibleRuneLen(header)==visibleRuneLen(each data row). Reuse makeRenderConfig/makeRenderResult and visibleRuneLen already present in the file.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:837 Test_printStatHeader_frozenColumn/sort highlight has priority on column 0",
+      "issue": "The second assertion (strings.Count over out[:index(col0)+len(col0)] == 1) is a weak, slightly obscure guard against doubled escape sequences. It counts occurrences of the literal 'col0' in a prefix slice, which will always be 1 by construction of the prefix and does not actually prove the frozen-bold sequence is absent. The first assertion (Contains \\033[47;1mcol0) carries the real signal; the second adds confusion without protecting against the doubling it claims to.",
+      "recommendation": "Replace the count assertion with a direct negative: assert.NotContains(t, out, \"\\033[30;47;1mcol0\") to prove the frozen-bold escape is NOT applied when OrderKey==0 (sort highlight wins, Decision 4). This directly verifies non-doubling.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 9,
+      "passed": 9,
+      "failed": 0,
+      "mutationVerified": [
+        "Test_render_alignmentInvariant: zero-width data fillers -> header 38 vs data 36, FAIL (MAJOR #1 closed)",
+        "Test_printStatHeader_midOffset_bothMarkers + alignmentInvariant: suppress left marker -> FAIL (MAJOR #2 closed)",
+        "Test_printStatHeader_frozenColumn/bold: drop ;1m -> FAIL (MINOR closed)",
+        "Test_printStatData_windowed_midOffset + alignmentInvariant: data loop ignores offset (i:=1) -> FAIL (absolute-index lookup guarded)"
+      ]
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 9,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  },
+  "round1FindingsStatus": {
+    "major_1_header_data_alignment": "closed — Test_render_alignmentInvariant, real invariant, mutation-confirmed to fail pre-fix",
+    "major_2_left_marker_midOffset": "closed — Test_printStatHeader_midOffset_bothMarkers, fails when left marker suppressed",
+    "minor_frozen_bold_normal_case": "closed — exact escape \\033[30;47;1mcol0 asserted, mutation-confirmed",
+    "minor_right_marker_position": "closed — HasSuffix(TrimRight,'›') asserts rightmost position",
+    "minor_truncation_branch": "closed — Test_printStatData_truncation asserts abcd~ present, abcde absent"
+  },
+  "refactorRegressionCheck": {
+    "columnWindow_struct": "covered — all fields exercised via render tests and updated Test_visibleColumns",
+    "renderDbstat_split": "covered — Test_printDbstat_clampsScrollOffset drives renderDbstat with synthetic termWidth",
+    "absolute_index_lookup": "covered + mutation-verified (offset-ignoring loop fails)",
+    "Test_visibleColumns_marker_reservation_update": "non-tautological — missing/zero last 4->3 reflects real 1-cell budget reduction; values recomputed and correct",
+    "newGapsIntroduced": "one minor edge gap (empty scroll window through render printers), recorded as tech_debt"
+  }
+}

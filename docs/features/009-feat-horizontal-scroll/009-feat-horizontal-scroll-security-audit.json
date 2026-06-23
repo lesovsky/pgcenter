@@ -1,0 +1,51 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 4,
+    "critical": 0,
+    "major": 0,
+    "minor": 4
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Risk of out-of-bounds index in printStatData due to dual colnum/i counter when windowing",
+      "description": "The current printStatData (top/stat.go:398-449) iterates columns with `for i := range s.Result.Cols` but indexes the actual data with a separate, independently-incremented `colnum` (Values[rownum][colnum]). The tech-spec windows the render to a subset of columns starting after the frozen column. If the refactor reuses this dual-counter pattern, indexing values by the loop position instead of the absolute column index can read Values[rownum][colnum] at an index that no longer matches the visible column, and at the right edge of the window can exceed Ncols-1, producing an index-out-of-range panic. The tech-spec explicitly flags this in the Risks table (\"keep value lookup on the absolute index\") and Task 2 (\"Value lookups must use absolute column indices\"), which is the correct mitigation — but it is currently only a textual instruction, not an enforced invariant.",
+      "location": "Section: Architecture / Risks; top/stat.go:418-433 (printStatData)",
+      "impact": "A runtime panic (index out of range) crashes the whole TUI, including for stat screens unrelated to scrolling, since printStatHeader/printStatData are shared by every dbstat screen. This is an availability/correctness defect rather than an exploitable security flaw (no untrusted input is involved), but it can be triggered by ordinary user interaction (scrolling near the right edge).",
+      "recommendation": "In Task 2, drop the separate colnum counter entirely and index both Cols and Values by the single absolute column index returned from visibleColumns (column 0 frozen, then the window range [first..last]). Add a unit/render-level test that scrolls to the last valid offset and asserts no panic and correct value-to-column mapping. Bound every Values[rownum][idx] access by 0 <= idx < s.Result.Ncols.",
+      "cwe": "CWE-125"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Truncation slicing assumes width >= 1; very narrow columns / negative width can panic",
+      "description": "The existing truncation logic does `String[:width-1] + \"~\"` (top/stat.go:429) guarded only by `if width <= 0 { return error }`. align.SetAlign floors widths at colsTruncMinLimit=1 / colname length, but the new visibleColumns math introduces a fresh source of width values (terminal width minus frozen column minus marker cells). If any computed effective width reaches 0 or negative for a column that still gets rendered (e.g. extremely narrow terminal where only the frozen column fits, or marker-cell budgeting over-subtracts), the slice `String[:width-1]` would panic for width<1, or the printf `%-*s` with a negative width would misbehave. The tech-spec's \"very narrow terminal\" unit test (line 96) targets exactly this but only asserts on the pure function's returned range, not on the downstream slicing in printStatData.",
+      "location": "top/stat.go:421-433 (printStatData truncation); Section: Testing Strategy (very-narrow case)",
+      "impact": "Index-out-of-range / slice-bounds panic crashing the TUI on a sufficiently narrow terminal. Correctness/availability, not exploitable; no untrusted input.",
+      "recommendation": "Ensure visibleColumns never returns a window that includes a column whose effective render width would be < 1, and have it clamp marker-cell budgeting so the frozen column always renders even when nothing else fits. Keep the existing `width <= 0` guard, and add a render-path test for the minimal-terminal case (not just a pure-function-range assertion) verifying no panic.",
+      "cwe": "CWE-787"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "scrollOffset clamping must be enforced at the render boundary, not only in handlers",
+      "description": "Decision 1 stores scrollOffset on top.config and the handlers ([ / ]) clamp it. visibleColumns also returns a `clamped` offset. There are two independent clamp sites (handler increment/decrement vs. pure function), and the offset can also become stale relative to a changed column set: between scrolling on a wide screen and the dataset changing (e.g. Ncols differs after a view switch, or ColsWidth recomputed by alignViewToResult), a previously-valid offset may now point past the last scrollable column. The reset-on-switch (Decision 3) covers view switches, but auto-refresh ticks within a view deliberately preserve the offset (Architecture step 4) while the underlying PGresult column count can in principle change (e.g. extra-stats toggle paths). The render path must always derive the actual visible range from the clamped offset returned by visibleColumns and never index columns by the raw config.scrollOffset.",
+      "location": "Section: Architecture (How it works, step 2-4); Decisions 1 & 3",
+      "impact": "If render code indexes columns using the raw (unclamped) config.scrollOffset rather than visibleColumns' clamped output, an offset left over from a wider/older dataset yields an out-of-range first column index → panic or blank screen. Correctness/availability.",
+      "recommendation": "Make visibleColumns the single source of truth: render must use its returned [first,last] range and ignore the raw offset for indexing. Treat the handler-side clamp as UX-only (to stop the marker flicker). Add a test where offset > max valid for the current Ncols and assert visibleColumns clamps and hiddenRight=false. Consider also persisting the clamped offset back to config.scrollOffset after each render so the next handler step starts from a valid base.",
+      "cwe": "CWE-129"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "ColsWidth is a map[int]int — missing-key reads return 0 and can mask width-math errors",
+      "description": "config.view.ColsWidth is a map[int]int (see align.SetAlign and alignViewToResult). Reading a non-existent key yields 0 silently rather than panicking. visibleColumns takes colsWidth map[int]int and sums widths to decide how many columns fit. If it ever reads a key outside the aligned range (e.g. due to an off-by-one in the window range, or Ncols/ColsWidth mismatch — the exact class of bug that caused issue #99, referenced in alignViewToResult at top/stat.go:303-317), it will read 0 width and compute a wrong (too-large) visible window, which then feeds an out-of-range index into Values in printStatData. The 0-default turns a detectable error into a silent miscalculation.",
+      "location": "top/stat.go:309-317 (alignViewToResult); Data Models (visibleColumns signature, colsWidth map[int]int)",
+      "impact": "Silent off-by-one in the column window leading to a downstream out-of-range Values access (panic) under column-count/width desync — the same failure mode as historical issue #99. Correctness/availability.",
+      "recommendation": "In visibleColumns, only iterate column indices in [0, ncols) and treat a missing ColsWidth key as a hard precondition violation (the spec already calls alignViewToResult before every render, which guarantees len(ColsWidth)==Ncols). Optionally assert len(colsWidth)>=ncols at function entry, or pass widths as a slice rather than a map to make missing entries impossible. Cover the all-fit and past-end cases (already planned) plus a width/ncols-consistency assertion.",
+      "cwe": "CWE-129"
+    }
+  ]
+}

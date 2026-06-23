@@ -1,0 +1,252 @@
+# Interview Plan — 009-feat-horizontal-scroll
+interview_metadata:
+  feature_name: "horizontal-scroll"
+  feature_base: "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll"
+  work_type: "feature"
+  started: "2026-06-23 03:20:38"
+  last_updated: "2026-06-23 03:35:00"
+  status: "completed"
+  can_resume: true
+  current_question_num: 8
+  feature_size: "M"
+
+conversation_history:
+  - question_num: 1
+    topic: "design (pre-interview)"
+    summary: |
+      Дизайн согласован до запуска воркфлоу: горизонтальный скролл по колонкам, заморозка
+      первой колонки, один view dbstat + ручное окно (не origin.x), хоткеи [ / ].
+      Альтернативы (скрытие колонок, адаптив, cell-boxes, однострочный layout) отвергнуты.
+      Хоткеи: Shift/Ctrl+arrow невозможны на termbox v1.1.1 → выбраны скобки.
+  - question_num: 5
+    topic: "indicator + frozen highlight + scope + tests"
+    summary: |
+      Индикатор: вариант А — маркеры ‹ / › на краях заголовка при наличии скрытых колонок.
+      Подсветка замороженной колонки: вариант (а) — только заголовок (bold-имя), данные не красим.
+      Скролл и сортировка независимы (контрпример pgss timings).
+      Scope: только dbstat; extra-панели не скроллятся; разбиение на под-экраны не откатываем.
+      Тесты: unit на логику окна + ручная проверка; без интеграционных/E2E.
+  - question_num: 8
+    topic: "stories + acceptance + edge cases"
+    summary: |
+      Подтверждены 3 истории, черновик критериев приёмки, и 3 граничных случая
+      (очень узкий терминал, первая колонка = колонка сортировки, ресайз терминала).
+
+phase1_feature_overview:
+  feature_description:
+    score: 95
+    status: "complete"
+    value: |
+      Горизонтальный скролл таблицы статистики в `pgcenter top` по колонкам, с заморозкой
+      первой колонки. На узких терминалах правые колонки сейчас молча обрезаются по краю
+      (issue #14, открыт с 2015). Хоткеи `[` (влево) / `]` (вправо). Окно колонок формируется
+      вручную в printStatHeader/printStatData (top/stat.go), печать в один view dbstat,
+      НЕ через origin.x gocui.
+    gaps: ""
+    required: true
+  user_problem:
+    score: 95
+    status: "complete"
+    value: |
+      На узких экранах (1366x768, 1280x1024, putty с крупным шрифтом + tmux) таблица не
+      влезает по ширине — колонки за правым краем (часто `query`) не видны вообще, без
+      индикации. Корневое ограничение: из-за отсутствия скролла pg_stat_io разбит на 2
+      под-экрана, pg_stat_statements на 7, io_key показывается как md5 (ADR 006).
+    gaps: ""
+    required: true
+  target_users:
+    score: 85
+    status: "complete"
+    value: "PostgreSQL DBA, работающие в узких терминалах / через putty+tmux / на ноутбуках."
+    gaps: ""
+    required: false
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      DBA на узком терминале может увидеть любую колонку любого stat-экрана, прокрутив таблицу,
+      не теряя идентификатор строки (первая колонка заморожена), и понимает по индикаторам, что
+      и куда можно скроллить. Скролл не ломает сортировку/фильтр/обновление.
+    gaps: ""
+    required: true
+  constraints:
+    score: 85
+    status: "complete"
+    value: |
+      Стек: jroimartin/gocui v0.5.0 + nsf/termbox-go v1.1.1. Модификаторы только ModNone/ModAlt
+      — Shift+arrow и Ctrl+arrow НЕ различаются termbox (отсюда выбор скобок). Печать в общий
+      буфер view dbstat. internal/align floors ширину колонки на 8; ColsWidth — runtime cache.
+      Без изменений в record/report (это отдельный stdout-вывод, не TUI).
+    gaps: ""
+    required: true
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Unit-тесты на чистую логику вычисления видимого окна колонок (видимый диапазон при
+      offset+ширине, заморозка первой, границы offset, случай "всё влезает"). Интеграционные
+      тесты с PG НЕ нужны. E2E не нужны. Ручная проверка в TUI на узком терминале — обязательна.
+    gaps: ""
+    required: true
+
+phase2_user_experience:
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      1. Как DBA на узком терминале, я хочу прокручивать таблицу вправо/влево, чтобы видеть
+         колонки, которые не помещаются на экране (например `query` в activity).
+      2. Как DBA, я хочу, чтобы первая колонка (PID / имя БД / таблицы) оставалась на месте при
+         скролле, чтобы не терять контекст строки.
+      3. Как DBA, я хочу видеть индикацию, что часть колонок скрыта слева/справа, чтобы понимать,
+         что можно скроллить и куда.
+    gaps: ""
+    required: true
+  acceptance_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      - `]` сдвигает окно на одну колонку вправо, `[` — влево; первая колонка всегда видна.
+      - На границах скролл не уходит за пределы (нельзя дальше последней/первой нефиксированной).
+      - Если таблица влезает целиком — `[`/`]` no-op, маркеры не показываются.
+      - При переключении на другой view offset сбрасывается в 0.
+      - Маркеры ‹/› показываются только при наличии скрытых колонок в соответствующую сторону.
+      - Скролл сохраняется между авто-обновлениями данных в пределах одного view.
+      - Сортировка (←/→) и скролл не влияют друг на друга.
+      - Имя замороженной первой колонки выделено bold в заголовке.
+    gaps: ""
+    required: true
+  edge_cases:
+    score: 90
+    status: "complete"
+    value: |
+      - Очень узкий терминал (не влезает даже первая + одна следующая колонка): первая колонка
+        печатается всегда, остальное обрезается gocui по краю — деградация без краша.
+      - Первая колонка одновременно заморожена и является колонкой сортировки: подсветки должны
+        сосуществовать без визуального конфликта.
+      - Ресайз терминала: окно колонок пересчитывается на следующем рендере, offset зажимается
+        в допустимые границы.
+    gaps: ""
+    required: true
+  error_scenarios:
+    score: 85
+    status: "complete"
+    value: |
+      Ошибочных состояний по сути нет (чистый UI). Защитное поведение: offset всегда зажат в
+      [0, maxOffset]; пустой результат (0 строк) — заголовок со скроллом работает, данных нет.
+    gaps: ""
+    required: true
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      Агент: unit-тесты на функцию вычисления видимого окна (go test), make build/lint/vuln.
+      Пользователь: ручная проверка в узком терминале — скролл вправо/влево на activity и
+      pg_stat_io, заморозка первой колонки, маркеры, сброс при переключении view.
+    gaps: ""
+    required: true
+  ui_ux_requirements:
+    score: 92
+    status: "complete"
+    value: |
+      Хоткеи [ (влево) / ] (вправо). Заморожена первая колонка (всегда видна). Скролл по колонкам.
+      Сброс offset при переключении view. Скролл сохраняется между авто-обновлениями.
+      ИНДИКАТОР (вариант А): маркеры ‹ слева и › справа на строке заголовка, только когда в ту
+      сторону есть скрытые колонки.
+      ПОДСВЕТКА ЗАМОРОЖЕННОЙ КОЛОНКИ (вариант а): имя в заголовке bold; строки данных НЕ красим
+      (фон по всей колонке отвергнут как косметическое усложнение).
+      АВТО-СКРОЛЛ К СОРТИРОВКЕ: не делаем — скролл и сортировка ортогональны.
+      HELP: добавить описание [ / ] в help-экран (top/help.go).
+    gaps: ""
+    required: true
+  risks:
+    score: 85
+    status: "complete"
+    value: |
+      - Совмещение подсветки заморозки (bold) и подсветки колонки сортировки (цвет) в заголовке,
+        когда это одна и та же первая колонка. Митигация: явное правило приоритета/комбинации.
+      - Изменение общей для всех stat-экранов функции печати (printStatHeader/printStatData) может
+        задеть рендеринг всех view. Митигация: unit-тесты на логику окна, ручная проверка набора
+        экранов.
+      - Очень узкий терминал. Митигация: первая колонка печатается всегда, gocui обрезает остаток.
+    gaps: ""
+    required: true
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      Один view + ручное окно (не origin.x). Скролл по колонкам (не посимвольно). Морозим
+      первую колонку. Хоткеи [ / ] (Shift/Ctrl+arrow невозможны на termbox).
+      Скролл и сортировка ортогональны. Scope: только dbstat; extra-панели не скроллятся;
+      разбиение stat_io/pgss на под-экраны не откатывается. Подсветка заморозки — только заголовок.
+    gaps: ""
+    required: false
+
+phase3_integration:
+  integration_points:
+    score: 85
+    status: "complete"
+    value: |
+      top/stat.go (printStatHeader/printStatData — построение видимого окна), top/keybindings.go
+      (хоткеи [ / ]), top/config_view.go (хендлеры скролла + сброс offset при switchViewTo),
+      хранение offset (поле в view.View или в config — уточнит tech-spec), top/help.go (документация).
+      Чистая функция вычисления окна колонок — кандидат на отдельную тестируемую единицу.
+    gaps: ""
+    required: true
+  dependencies:
+    score: 80
+    status: "complete"
+    value: "Существующие хоткеи навигации/сортировки (view sysstat), align.SetAlign, ColsWidth."
+    gaps: ""
+    required: false
+  data_requirements:
+    score: 100
+    status: "complete"
+    value: "Нет новых данных — работаем с уже собранным PGresult и ColsWidth."
+    gaps: ""
+    required: false
+  migration_needs:
+    score: 100
+    status: "complete"
+    value: "Нет — чисто UI-фича, без изменения форматов записи/конфигов."
+    gaps: ""
+    required: false
+
+phase4_completion:
+  userspec_file: "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll.md"
+  status: "approved"
+
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+
+progress:
+  current_phase: "phase3_code_research"
+  questions_asked: 8
+  last_question: "stories + acceptance + edge cases"
+  completion_estimate: "90%"
+
+notes: |
+  Дизайн согласован в обсуждении ДО запуска spec-writer (память: issue_14_horizontal_scroll.md).
+  Интервью сжатое и сфокусированное на ранее нерешённых вопросах. Все required-поля >= 85%.
+
+  Devil's advocate (dev-customer) вердикт: ok, 0 critical, 4 minor (все про документирование):
+  добавить в user-spec "почему сейчас", зафиксировать заморозку/маркеры как необходимый минимум,
+  обосновать скролл против выбора колонок, явно отметить extra-панели вне scope. Учтено в spec.
+
+  ПРОДУКТОВЫЙ ПРИНЦИП (решено с пользователем 2026-06-23): разбиение pg_stat_io/pgss на под-экраны
+  и io_key=md5 — ЗАДУМАННЫЙ дизайн (логическая группировка/изоляция связанных данных), НЕ техдолг.
+  Скролл нужен для узких терминалов, НЕ для отмены под-экранов. Под-экраны остаются как есть,
+  без обязательств по пересмотру. Закрывает главный вопрос devil's advocate.
+
+  Валидация user-spec: оба валидатора approved, 0 critical. Применённые правки: убраны имена
+  функций реализации из user-spec, добавлены 2 критерия приёмки (col0=сортировка, пустой результат).
+
+  ВХОД ДЛЯ TECH-SPEC (из adequacy/code research, требует решения на этапе tech-spec):
+  - Где хранить scroll offset: на view.View или в config/app. Ловушка: при хранении на view.View
+    viewSwitchHandler пишет view обратно в config.views — без явного зануления offset переживёт
+    переключение. Нужно сбросить offset в 0 на ОБОИХ путях переключения: viewSwitchHandler И
+    switchViewToProcPidStat (он обходит viewSwitchHandler, патчит view вручную). Покрыть тестом.
+  - Коллизия bold-подсветки заморозки и bold-подсветки колонки сортировки (\033[47;1m) на col0 —
+    нужно правило приоритета/комбинации.
+  - Маркеры ‹/› — видимые руны, входят в бюджет ширины заголовка (риск off-by-one).
