@@ -1,0 +1,54 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Scroll handlers в tech-spec описаны как изменяющие config.scrollOffset и отправляющие config.view на viewCh. Однако scrollOffset — поле config, а не view.View, поэтому через viewCh он не транспортируется. Render-путь читает полный *config (printDbstat получает app.config), так что рендеринг работает корректно. Но тест-шаблон из config_view_test.go ловит view.View с канала и проверяет только его поля — тест на scroll-handler не сможет проверить offset через существующий паттерн, и потребует отдельной проверки config.scrollOffset напрямую, а не через viewCh.",
+      "location": "Architecture / Scroll handlers + hotkeys; Data Models",
+      "fix": "В тестах на scrollLeft/scrollRight проверять config.scrollOffset после вызова хэндлера напрямую, а не через значение, полученное с viewCh. Явно задокументировать это отличие в задаче 3 (Task 3)."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Tech-spec указывает, что `[` и `]` регистрируются на view \"sysstat\", но scroll-handlers меняют config.scrollOffset, не config.view, — то есть в viewCh ничего нового не поступает (либо поступает тот же config.view без изменений). Если handler не отправляет в viewCh, статистика не перерисуется до следующего авто-тика. Если handler отправляет config.view без изменений — это противоречит существующему паттерну, где viewCh используется только при реальном изменении view. Spec это явно не разрешает.",
+      "location": "Architecture / Scroll handlers + hotkeys; How it works (step 1)",
+      "fix": "Явно уточнить в spec (или в задаче 1/3): после изменения scrollOffset handler должен вызвать ui.Update() (или послать config.view на viewCh) чтобы перерисовать экран немедленно. Наиболее близкий паттерн: вызов app.ui.Update с замыканием, аналогично как printStat триггерит render — либо отправка config.view на viewCh как в orderKeyLeft (даже если view сам не менялся, коллектор просто снова возьмёт текущий view и render пройдёт заново)."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "printStatData содержит баг в dual-counter: переменная colnum инкрементируется только когда doPrint=true, но i итерирует по s.Result.Cols всегда. При переходе к windowed-рендерингу необходимо использовать абсолютный индекс колонки (i) для доступа к Values[rownum][i], а не colnum. Tech-spec это признаёт как риск и требует явной осторожности, но не формализует решение (например, отказ от colnum в пользу абсолютного индекса). Риск регрессии существующего поведения при реализации.",
+      "location": "Risks / `printStatData` uses a dual `colnum`/`i` counter",
+      "fix": "В задаче 2 (Task 2) явно указать: при рефакторинге на windowed loop заменить colnum-счётчик на прямой доступ s.Result.Values[rownum][absCol], сохранив truncation через absCol. Существующий colnum-паттерн — это технический долг, не связанный с этой фичей, но его опасно тащить в новый код."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "Spec предлагает передавать v.Size() внутрь pure-функции visibleColumns как termWidth. gocui.View.Size() возвращает (width, height) — ширина включает frame (если v.Frame=true). dbstat создаётся с Frame=false (top/ui.go:155), поэтому v.Size() возвращает реальную ширину рисования. Это поведение подтверждено code research, но spec не фиксирует этот инвариант, и если в будущем Frame изменится, window-function тихо сломается.",
+      "location": "Architecture / Pure window function; Dependencies / gocui.View.Size()",
+      "fix": "Добавить в Task 1 / acceptance criteria: \"window function принимает termWidth как уже вычисленную ширину без frame; caller (printStatHeader/printStatData) несёт ответственность за передачу v.Size() ширины с учётом Frame=false\"."
+    },
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "Test_switchViewTo (top/config_view_test.go:195) проверяет только v.Name с канала viewCh. Если scroll-reset реализован внутри viewSwitchHandler — добавление config.scrollOffset=0 там не сломает этот тест. Однако patterns.md явно предупреждает: изменения в top/config_view.go могут затронуть Test_switchViewTo и связанные тесты. Spec упоминает это в acceptance criteria, но в задаче 3 нет явного указания проверить Test_switchViewTo после добавления reset-логики.",
+      "location": "Acceptance Criteria / All existing top package tests pass; Task 3",
+      "fix": "В Task 3 добавить: явно запустить make test после изменения viewSwitchHandler и switchViewToProcPidStat, убедиться что Test_switchViewTo проходит без регрессий."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "Tech-spec архитектурно состоятелен: все 5 ключевых решений (offset на config, ручное окно, двойной reset, приоритет sort-highlight, бюджет маркеров) обоснованы кодом и прямо вытекают из ADR [006]. Нет конфликтов с ADR, нет новых зависимостей, scope строго ограничен TUI render-путём. Четыре minor-находки касаются деталей реализации (transport offset через viewCh, dual-counter риск в printStatData, Frame-invaraint для v.Size(), покрытие Test_switchViewTo) — ни одна не блокирует реализацию."
+}

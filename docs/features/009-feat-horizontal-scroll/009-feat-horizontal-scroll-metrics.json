@@ -32,7 +32,7 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": { "user_spec": 1 },
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
@@ -42,7 +42,7 @@
     "interview_questions": 8,
     "tasks_count": 0,
     "waves_count": 0,
-    "agents_spawned": 0,
+    "agents_spawned": 11,
     "commits_count": 0
   }
 }

@@ -26,10 +26,10 @@ Scroll offset is held as ephemeral UI state on the `top.config` struct (not on `
 
 ### How it works
 
-1. User presses `]` → handler clamps and increments `config.scrollOffset`, sends `config.view` on `viewCh`; the stats goroutine re-renders.
-2. `printDbstat(v, config, s)` calls `printStatHeader` then `printStatData`. Both query terminal width via `v.Size()`, call the pure window function with `s.Result.Ncols`, `config.view.ColsWidth`, width, and `config.scrollOffset`, and obtain the visible scrollable range + marker flags + clamped offset.
-3. Each renders column index 0 first (frozen), then iterates only the columns inside the visible window. The header bolds the frozen column name and prints `‹`/`›` where the flags indicate hidden columns.
-4. On a view switch (`switchViewTo` → `viewSwitchHandler`, or `Shift+S` → `switchViewToProcPidStat`), `config.scrollOffset` is reset to 0 so the new screen starts unscrolled. Auto-refresh ticks do not touch the offset, so scrolling persists within a screen.
+1. User presses `]` → handler clamps and increments `config.scrollOffset`, then sends `config.view` on `viewCh` **purely to retrigger an immediate re-render**. The view itself is unchanged (unlike `orderKeyLeft`, which mutates `view.OrderKey`); the render reads the new `config.scrollOffset` from the threaded `*config`, not from the view. Without the send, the change would only appear on the next auto-refresh tick (up to the refresh interval later).
+2. `printDbstat(v, config, s)` calls `printStatHeader` then `printStatData`. Both query terminal width via `v.Size()` (the `dbstat` view is created with `Frame=false`, so `Size()` returns the true drawing width — an invariant the window math depends on), call the pure window function with `s.Result.Ncols`, `config.view.ColsWidth`, width, and `config.scrollOffset`, and obtain the visible scrollable range + marker flags + clamped offset.
+3. Each renders column index 0 first (frozen), then iterates only the columns inside the visible window, indexing values by **absolute** column index. The header bolds the frozen column name and prints `‹`/`›` where the flags indicate hidden columns.
+4. On a view switch (`switchViewTo` → `viewSwitchHandler`, or the `S` key → `switchViewToProcPidStat`), `config.scrollOffset` is reset to 0 so the new screen starts unscrolled. Auto-refresh ticks do not touch the offset, so scrolling persists within a screen.
 
 ## Decisions
 
@@ -45,7 +45,7 @@ Scroll offset is held as ephemeral UI state on the `top.config` struct (not on `
 
 ### Decision 3: Reset offset on both view-switch paths
 **Decision:** Zero `config.scrollOffset` in `viewSwitchHandler` and, separately, in `switchViewToProcPidStat`.
-**Rationale:** `switchViewToProcPidStat` does not delegate to `viewSwitchHandler` (it patches runtime fields onto the view manually and must not reload from the static map). A single reset in `viewSwitchHandler` would miss the `Shift+S` path, leaving a stale offset when entering the per-process screen.
+**Rationale:** `switchViewToProcPidStat` does not delegate to `viewSwitchHandler` (it patches runtime fields onto the view manually and must not reload from the static map). A single reset in `viewSwitchHandler` would miss the per-process screen path (bound to the `S` key — termbox does not distinguish Shift, so it is a plain rune `'S'`, not a modifier combo), leaving a stale offset when entering it.
 **Alternatives considered:** Reset only in `viewSwitchHandler` — misses `procpidstat`. Reset inside the render path on a detected view-name change — adds hidden state tracking to the render loop. Both rejected.
 
 ### Decision 4: Sort-column highlight takes priority over the frozen-column highlight
@@ -94,7 +94,11 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (fi
 - `visibleColumns`: offset in the middle → `hiddenLeft` and `hiddenRight` both true, correct range.
 - `visibleColumns`: offset past the end → clamped to last valid offset, `hiddenRight=false`.
 - `visibleColumns`: very narrow terminal (only frozen column fits) → graceful range (no panic, no negative width).
+- `visibleColumns`: missing/zero `ColsWidth` key → no panic, math stays bounded (issue #99 class).
 - Offset clamping in scroll handlers: `[` at offset 0 stays 0; `]` at max stays max.
+- Orthogonality: scroll handlers do not change `OrderKey`; sort handlers do not change `scrollOffset`.
+- Render-level (`printStatData`/`printStatHeader`): a narrow-terminal + mid-offset case renders without panic, frozen column present, value lookup by absolute index; right-edge marker case.
+- Render-level: empty result (0 rows) prints the header (with scroll/markers) and no data rows, no panic.
 
 ### Integration tests
 - None. The scroll logic is pure UI math over an already-collected `PGresult`; it does not depend on SQL, PostgreSQL version, or a DB connection. Consistent with the user-spec testing decision.
@@ -136,9 +140,12 @@ Automated: run unit tests for the window function and scroll handlers; build and
 | Risk | Mitigation |
 |------|-----------|
 | `printStatHeader`/`printStatData` are shared by all stat screens; a windowing bug could break rendering everywhere. | Pure, unit-tested window function; manual verification across a set of screens (activity, tables, pg_stat_io). |
-| `printStatData` uses a dual `colnum`/`i` counter and mutates `s.Result.Values` in place on truncation; windowing must index values by absolute column index correctly. | Explicit in tech-spec; covered by code review and the data-render manual check; keep value lookup on the absolute index. |
-| Visible-rune markers `‹`/`›` mis-counted against width → off-by-one / header-data misalignment. | Budget marker cells into the width math (Decision 5); boundary unit test on marker flags. |
+| `printStatData` uses a dual `colnum`/`i` counter and mutates `s.Result.Values` in place on truncation; windowing must index values by absolute column index correctly. | Drop the independent `colnum`; index `Values[rownum][i]` by the absolute column index from `visibleColumns`. Covered by code review and the data-render check. |
+| `ColsWidth` is a `map[int]int`; reading an absent key yields 0 and silently corrupts the window math (same class as issue #99). | Iterate strictly over `[0, ncols)`; treat the widths as dense for present columns. Unit-test guards against a zero/missing width. |
+| Stale offset after the dataset changes on an auto-refresh tick (e.g. fewer columns). | `visibleColumns` is the single source of truth: it re-clamps the offset against the current `ncols`/width on every render, not only in the key handlers. |
+| Visible-rune markers `‹`/`›` mis-counted against width → off-by-one / header-data misalignment. | Budget marker cells into the width math (Decision 5); boundary unit test on marker flags; render-level test on the right edge. |
 | Bold frozen-column highlight collides with sort-column highlight on column 0. | Sort highlight takes priority (Decision 4). |
+| Truncation slice `String[:width-1]` on a very narrow terminal could underflow. | Window math guarantees rendered columns keep positive width; render-level test on a minimal terminal. |
 
 ## Acceptance Criteria
 
@@ -155,10 +162,12 @@ Automated: run unit tests for the window function and scroll handlers; build and
 
 ## Implementation Tasks
 
+> **Reviewers note:** code-writing tasks here use `dev-code-reviewer` + `dev-test-reviewer` and intentionally omit the default `dev-security-auditor`. The security audit of this spec confirmed OWASP/injection/auth are N/A (pure in-memory UI arithmetic, no untrusted input beyond a keypress); its only findings are out-of-bounds/panic correctness concerns, which the test-reviewer and code-reviewer cover.
+
 ### Wave 1 (независимые)
 
 #### Task 1: Pure column-window function + scroll-offset state
-- **Description:** Add the `scrollOffset` field to `top.config` and implement the pure function that computes the visible scrollable column window (frozen first column + sliding range), the clamped offset, and the hidden-left/hidden-right flags from column widths, terminal width, and offset. This is the testable core of the feature, independent of rendering and key handling.
+- **Description:** Add the `scrollOffset` field to `top.config` and implement the pure function that computes the visible scrollable column window (frozen first column + sliding range), the clamped offset, and the hidden-left/hidden-right flags from column widths, terminal width, and offset. The function re-clamps the offset on every call (single source of truth) and reads widths strictly over `[0, ncols)` to avoid the map-zero-key pitfall. This is the testable core of the feature, independent of rendering and key handling.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...`
@@ -168,7 +177,7 @@ Automated: run unit tests for the window function and scroll handlers; build and
 ### Wave 2 (зависит от Wave 1)
 
 #### Task 2: Render frozen column + visible window in header and data
-- **Description:** Modify `printStatHeader` and `printStatData` to render the frozen first column plus the visible window returned by the Task 1 function instead of all columns, bold the frozen column name (sort highlight takes priority on column 0), and draw `‹`/`›` edge markers when columns are hidden. Value lookups must use absolute column indices and preserve the existing truncation behavior.
+- **Description:** Modify `printStatHeader` and `printStatData` to render the frozen first column plus the visible window returned by the Task 1 function instead of all columns, bold the frozen column name (sort highlight takes priority on column 0), and draw `‹`/`›` edge markers when columns are hidden. Drop the independent `colnum` counter in `printStatData` and index `Values[rownum][i]` by the absolute column index, preserving the existing truncation behavior. Terminal width comes from `v.Size()` (relies on the `dbstat` `Frame=false` invariant).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** user — narrow terminal: scroll with `]`/`[`, first column stays fixed, markers appear correctly, frozen name bold
