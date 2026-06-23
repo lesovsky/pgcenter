@@ -274,6 +274,54 @@ func Test_visibleColumns(t *testing.T) {
 	})
 }
 
+// Test_visibleColumns_maxOffsetReachesLastColumn is a property test for the core scroll
+// invariant: for ANY column count, width set and terminal width, scrolling to the maximum
+// offset must make the final column (ncols-1) visible with no right marker left "stuck".
+//
+// It feeds a deliberately huge offset so visibleColumns re-clamps it down to maxOffset, then
+// asserts: win.last == ncols-1 AND win.hiddenRight == false. A user who keeps pressing the
+// right-scroll key must always be able to reach the last column, after which › disappears.
+//
+// The case where even the FULL window does not reach the last column at offset 0 because the
+// frozen column alone overflows the terminal (empty window, last < first) is excluded — there
+// is no scrollable real estate at all, so the invariant does not apply.
+func Test_visibleColumns_maxOffsetReachesLastColumn(t *testing.T) {
+	uniformWidths := func(ncols, width int) map[int]int {
+		m := make(map[int]int, ncols)
+		for i := 0; i < ncols; i++ {
+			m[i] = width
+		}
+		return m
+	}
+
+	widthSet := []int{5, 8, 10, 15, 20, 25, 30}
+
+	for ncols := 2; ncols <= 8; ncols++ {
+		for _, width := range widthSet {
+			for termWidth := 40; termWidth <= 120; termWidth += 5 {
+				colsWidth := uniformWidths(ncols, width)
+
+				// Huge offset forces clamped == maxOffset.
+				win := visibleColumns(ncols, colsWidth, termWidth, 1<<30)
+
+				// Skip configs where no scrollable column fits at all (frozen column alone
+				// overflows / leaves no budget): the window is empty and the invariant about
+				// reaching the last column is vacuous.
+				if win.last < win.first {
+					continue
+				}
+
+				assert.Equalf(t, ncols-1, win.last,
+					"ncols=%d width=%d term=%d: max offset must reach last column (clamped=%d, first=%d, last=%d)",
+					ncols, width, termWidth, win.clamped, win.first, win.last)
+				assert.Falsef(t, win.hiddenRight,
+					"ncols=%d width=%d term=%d: no right marker may remain at max offset (clamped=%d, first=%d, last=%d)",
+					ncols, width, termWidth, win.clamped, win.first, win.last)
+			}
+		}
+	}
+}
+
 // Test_render_widePartialLastColumn is the render-level reproduction of issue #14 QA: on a
 // wide terminal where the last column ("query") is wider than the remaining budget, that
 // column must still be printed (truncated by the terminal edge) and NO right marker may be

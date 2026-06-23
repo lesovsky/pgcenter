@@ -471,13 +471,34 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) col
 		return count
 	}
 
-	// First pass over the FULL budget (no marker reservation) determines the clamped offset
-	// and whether the right side overflows. Shrinking the budget afterwards for markers can
-	// only hide more columns, never reveal hidden ones, so these two facts stay valid.
+	// maxOffset is the smallest offset at which the last column (ncols-1) is still visible.
+	// It is found by a backward walk: count how many trailing columns fit, the rest must be
+	// scrolled past. The walk must reserve the SAME markers the forward-walk will reserve for
+	// the window it produces at that offset, otherwise the two disagree and the last column
+	// becomes unreachable (a › that never clears).
+	//
+	// At a non-zero max offset the left marker ‹ is always present (clamped > 0), while the
+	// right marker is absent by definition (the last column is visible). So the trailing
+	// columns must fit into baseBudget - markerWidth, not the full baseBudget. The all-fit case
+	// (maxOffset == 0) has no left marker and uses the full budget.
+	//
+	// Reserving the left marker shrinks the budget, which can only push maxOffset up (never
+	// down), so once a first full-budget pass shows scrolling is needed (maxOffset > 0) the
+	// reservation is justified and re-running the walk against the reduced budget reaches the
+	// fixpoint: the value can only grow and stays > 0, keeping the left marker present.
 	maxOffset := 0
 	if baseBudget > 0 {
 		tailCount := countFit(ncols-1, 0, -1, baseBudget) // walk columns ncols-1..1 backwards
 		maxOffset = math.Max((ncols-1)-tailCount, 0)
+		if maxOffset > 0 {
+			tailBudget := baseBudget - markerWidth // reserve the guaranteed left marker
+			if tailBudget > 0 {
+				tailCount = countFit(ncols-1, 0, -1, tailBudget)
+				maxOffset = math.Max((ncols-1)-tailCount, 0)
+			} else {
+				maxOffset = ncols - 1 // no room for any trailing column beside the marker
+			}
+		}
 	}
 	clamped := math.Min(math.Max(offset, 0), maxOffset)
 
