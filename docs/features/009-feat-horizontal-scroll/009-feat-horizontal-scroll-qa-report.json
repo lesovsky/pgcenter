@@ -1,0 +1,194 @@
+{
+  "feature": "009-feat-horizontal-scroll",
+  "task": "task-04 — Pre-deploy QA",
+  "date": "2026-06-23",
+  "branch": "feature/horizontal-scroll",
+  "head_commit": "ca188e0",
+  "status": "passed_with_manual_pending",
+  "environment": {
+    "status": "ready",
+    "postgres_available": false,
+    "note": "pgcenter is a Go project with no docker-compose dev environment; Phase 1 reduces to `make build` on fresh feature-branch code (EXIT=0). Test PostgreSQL fixture containers (ports 21914-21918) are NOT running locally, so PG-dependent tests in package top fail with 'connection refused' to 127.0.0.1:21917 and then nil-DB panic. This is pre-existing tech-debt [005], confirmed not a regression of this feature (failures occur in DB.Exec/DB.QueryRow paths, never in the scroll feature code). lint/vuln binaries were not on the shell PATH initially; resolved by adding /home/lesovsky/go/bin to PATH (env issue, not a code issue)."
+  },
+  "automated_gates": {
+    "build": {
+      "command": "make build",
+      "status": "PASS",
+      "note": "Binary built to ./bin/pgcenter, EXIT=0."
+    },
+    "lint": {
+      "command": "make lint (golangci-lint + gosec)",
+      "status": "PASS",
+      "note": "golangci-lint and gosec ran clean, EXIT=0. Binaries found at /home/lesovsky/go/bin (added to PATH)."
+    },
+    "vuln": {
+      "command": "make vuln (govulncheck)",
+      "status": "FAIL_PREEXISTING",
+      "note": "1 vulnerability GO-2026-5037 in Go standard library crypto/x509 (go1.25.10, fixed in go1.25.11). NOT related to this feature — call traces go through internal/stat/postgres.go NewPGresultFile and cmd/cobra Execute, not the horizontal-scroll code. Requires Go toolchain upgrade to 1.25.11; pre-existing environment/toolchain issue, does not block the feature. No vulnerabilities in feature code or imported packages."
+    },
+    "unit_tests_feature": {
+      "command": "go test ./top/ -run '<feature tests>'",
+      "status": "PASS",
+      "note": "All 14 feature test functions green (EXIT=0): Test_visibleColumns, Test_render_alignmentInvariant, Test_printStatData_windowed_midOffset, Test_printStatData_emptyResult, Test_printStatData_truncation, Test_printStatHeader_rightEdgeMarker, Test_printStatHeader_midOffset_bothMarkers, Test_printStatHeader_frozenColumn, Test_printDbstat_clampsScrollOffset, Test_scrollLeft, Test_scrollRight, Test_scrollOrthogonalToSort, Test_viewSwitchResetsScrollOffset, Test_switchViewToProcPidStatResetsScrollOffset. With all PG-dependent tests excluded, package top passes cleanly (go test ./top/ -skip '<pg tests>' = ok)."
+    },
+    "preexisting_failures": {
+      "status": "PREEXISTING_NOT_REGRESSION",
+      "note": "PG-dependent tests in package top fail/panic without running fixture containers (connection refused to 127.0.0.1:21917, then nil-pointer panic in postgres.DB.Exec/QueryRow). These never exercise feature code. Identified tests: Test_doReload, Test_resetStat, Test_killSingle, Test_killGroup, Test_getQueryReport, Test_app_quit, Test_app_setup, Test_newApp, Test_printMaskString, Test_setProcMask, Test_showProcMask. Tech-debt [005], not introduced by this feature. `make test` as a whole therefore fails for this reason, independent of the feature."
+    }
+  },
+  "acceptance_criteria": [
+    {
+      "id": "TS-1",
+      "desc": "visibleColumns has unit tests: all-fit, scroll-right, mid-scroll, past-end clamp, very-narrow, both marker flags",
+      "status": "PASS",
+      "note": "Test_visibleColumns passes (10 subcases per decisions log incl. issue-#99 zero-width guard, negative offset/budget, last-column-visible-at-maxOffset invariant)."
+    },
+    {
+      "id": "TS-2",
+      "desc": "config.scrollOffset reset to 0 in both viewSwitchHandler AND switchViewToProcPidStat",
+      "status": "PASS",
+      "note": "config_view.go:243 (viewSwitchHandler) and config_view.go:257 (switchViewToProcPidStat, reset before the Local guard per Decision 3). Covered by Test_viewSwitchResetsScrollOffset and Test_switchViewToProcPidStatResetsScrollOffset."
+    },
+    {
+      "id": "TS-3",
+      "desc": "[ / ] registered on sysstat view; clamped at both ends",
+      "status": "PASS",
+      "note": "keybindings.go:26-27 register '[' scrollLeft and ']' scrollRight on 'sysstat'. Lower clamp via math.Max(offset-1,0); upper clamp via write-back of clamped offset at render (Test_printDbstat_clampsScrollOffset). Test_scrollLeft/Test_scrollRight verify handler clamping."
+    },
+    {
+      "id": "TS-4",
+      "desc": "First column always rendered regardless of offset; offset indexes only columns 1..Ncols-1",
+      "status": "PASS",
+      "note": "visibleColumns (stat.go:429) always reserves frozen column 0 in the width budget; scrollable window is over columns 1..ncols-1. Verified by Test_printStatHeader_frozenColumn and Test_printStatData_windowed_midOffset (value lookup by absolute index). Visual confirmation = MANUAL."
+    },
+    {
+      "id": "TS-5",
+      "desc": "Markers rendered only when columns hidden in that direction",
+      "status": "PASS",
+      "note": "stat.go: hiddenLeft = clamped > 0; hiddenRight = last < ncols-1. Tested by Test_printStatHeader_rightEdgeMarker and Test_printStatHeader_midOffset_bothMarkers. Visual confirmation = MANUAL (see US-5)."
+    },
+    {
+      "id": "TS-6",
+      "desc": "All existing top package tests pass with no regressions (Test_switchViewTo, Test_orderKeyLeft/Right, Test_alignViewToResult, etc.)",
+      "status": "PASS",
+      "note": "Test_switchViewTo, Test_orderKeyLeft, Test_orderKeyRight, Test_switchSortOrder, all *NextView, width/filter tests pass. Only failures are PG-dependent (see preexisting_failures), not regressions."
+    },
+    {
+      "id": "TS-7",
+      "desc": "make test, make lint, make vuln are green",
+      "status": "PARTIAL",
+      "note": "make lint = PASS. make test fails only on pre-existing PG-dependent tests (no fixture containers); feature tests pass. make vuln fails on pre-existing stdlib GO-2026-5037 (toolchain upgrade needed), not feature code. No feature-attributable failures in any gate."
+    },
+    {
+      "id": "TS-8",
+      "desc": "Help screen documents [ / ]",
+      "status": "PASS",
+      "note": "help.go:23 — \"[,]  '[' scroll columns left, ']' scroll columns right.\""
+    },
+    {
+      "id": "US-1",
+      "desc": "] shifts window one column right, [ one column left; first column always visible",
+      "status": "MANUAL",
+      "note": "Visual TUI behavior — cannot be asserted by harness. Verify in narrow terminal: handler+window logic unit-tested, but on-screen scroll/freeze needs user. Screens: activity, tables, pg_stat_io."
+    },
+    {
+      "id": "US-2",
+      "desc": "At edges scroll does not go past limits",
+      "status": "MANUAL",
+      "note": "Clamping unit-tested (Test_scrollLeft at 0 stays 0; Test_printDbstat_clampsScrollOffset upper). Visual edge behavior = MANUAL."
+    },
+    {
+      "id": "US-3",
+      "desc": "Table fits fully -> [ / ] no-op, markers not shown",
+      "status": "MANUAL",
+      "note": "all-fit case unit-tested in visibleColumns (clamp to 0, both flags false). On-screen no-op on a wide terminal (~200 cols, e.g. databases 'd') needs user confirmation."
+    },
+    {
+      "id": "US-4",
+      "desc": "Offset resets to 0 on view switch including procpidstat via S",
+      "status": "MANUAL",
+      "note": "Reset unit-tested on both paths (TS-2). Visual confirmation of reset after real switch incl. Shift+S -> procpidstat needs user."
+    },
+    {
+      "id": "US-5",
+      "desc": "Left marker iff hidden-left; right marker iff hidden-right",
+      "status": "MANUAL",
+      "note": "Flag logic unit-tested (TS-5). Actual on-screen glyph placement/visibility = MANUAL."
+    },
+    {
+      "id": "US-6",
+      "desc": "Offset persists across auto-refresh ticks within a screen",
+      "status": "MANUAL",
+      "note": "By design offset is on config and untouched by refresh; reset only on view switch. Visual persistence across ticks needs user (no automated tick harness)."
+    },
+    {
+      "id": "US-7",
+      "desc": "Sort (<-/->) and scroll ([/]) are orthogonal",
+      "status": "MANUAL",
+      "note": "Orthogonality unit-tested (Test_scrollOrthogonalToSort: scroll keeps OrderKey, sort keeps scrollOffset). Visual confirmation that neither moves the other on screen = MANUAL."
+    },
+    {
+      "id": "US-8",
+      "desc": "Frozen first-column name shown bold",
+      "status": "MANUAL",
+      "note": "printStatHeader emits bold for frozen col (sort highlight wins on col 0, Decision 4). Bold rendering is a visual property -> MANUAL."
+    },
+    {
+      "id": "US-9",
+      "desc": "Scroll works on all main-table stat screens; extra panels (iostat/netdev/fsstats/logtail) untouched",
+      "status": "MANUAL",
+      "note": "Feature confined to dbstat print path; extra panels use separate render paths (per spec scope). Cross-screen visual verification incl. extra panels not scrolling = MANUAL."
+    },
+    {
+      "id": "US-10",
+      "desc": "Frozen + sort highlight on first column coexist without visual conflict",
+      "status": "MANUAL",
+      "note": "Decision 4: sort highlight takes priority on col 0. Visual coexistence = MANUAL."
+    },
+    {
+      "id": "US-11",
+      "desc": "Empty result (0 rows): header with scroll/markers correct, no crash",
+      "status": "MANUAL",
+      "note": "Test_printStatData_emptyResult passes (header prints, no data rows, no panic). On-screen empty-state appearance = MANUAL."
+    }
+  ],
+  "summary": {
+    "automated_gates": {
+      "build": "PASS",
+      "lint": "PASS",
+      "vuln": "FAIL_PREEXISTING (stdlib GO-2026-5037, toolchain)",
+      "unit_tests_feature": "PASS (14/14)",
+      "preexisting_pg_failures": "not a regression"
+    },
+    "acceptance_criteria_counts": {
+      "total": 19,
+      "PASS": 7,
+      "MANUAL": 11,
+      "PARTIAL": 1,
+      "FAIL": 0
+    },
+    "verdict": "No feature-attributable failures. All code-verifiable criteria PASS. 11 visual TUI criteria require manual user confirmation in a narrow terminal before merge/deploy. Two gate failures (PG tests, vuln) are pre-existing environment/toolchain issues, not regressions of this feature."
+  },
+  "blockers": [],
+  "deferredToManual": [
+    "US-1 ] / [ scroll one column; first column stays visible",
+    "US-2 edge clamping (visual)",
+    "US-3 no-op + no markers on wide terminal (~200 cols, e.g. databases 'd')",
+    "US-4 offset reset on view switch incl. Shift+S -> procpidstat",
+    "US-5 markers <-/-> appear iff hidden in that direction",
+    "US-6 offset persists across auto-refresh within a screen",
+    "US-7 sort and scroll orthogonal on screen",
+    "US-8 frozen first-column name is bold",
+    "US-9 scroll on all main-table screens; extra panels untouched",
+    "US-10 frozen + sort highlight coexist on col 0",
+    "US-11 empty result (0 rows) header renders correctly"
+  ],
+  "notes_for_user": {
+    "manual_checklist_screens": ["activity (a)", "tables (t)", "pg_stat_io (j)", "databases (d) wide", "procpidstat (S)"],
+    "preexisting_items_to_track": [
+      "tech-debt [005]: top package PG-dependent tests require running fixture containers (ports 21914-21918) to run `make test` fully",
+      "toolchain: govulncheck reports GO-2026-5037 in crypto/x509 — upgrade Go to 1.25.11 to clear `make vuln`",
+      "env: golangci-lint/govulncheck must be on PATH (/home/lesovsky/go/bin) for make lint/vuln"
+    ]
+  }
+}

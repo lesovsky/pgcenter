@@ -71,3 +71,20 @@
 **Verification:**
 - `go test ./top/` → `Test_scrollLeft/Right`, `Test_scrollOrthogonalToSort`, оба reset-теста + существующие (`Test_orderKey*`, `Test_switchViewTo`) зелёные
 - `make build` → ок; gofmt/go vet → чисто
+
+---
+
+## Task 04: Pre-deploy QA
+
+**Status:** Done
+**Commit:** (QA-отчёт, без изменений кода)
+**Agent:** основной агент (pre-deploy-qa)
+**Summary:** Приёмочное тестирование без изменений production-кода. Автоматические гейты: `make build` PASS, `make lint` PASS, тесты фичи (`go test ./top/`, 14 функций) PASS. Критерии приёмки: 7 PASS (авто), 11 MANUAL (визуальные TUI, требуют ручной проверки пользователем), 1 PARTIAL (сводный гейт), 0 FAIL, 0 блокеров. QA-отчёт: 009-feat-horizontal-scroll-qa-report.json.
+**Deviations:** Нет. Реальных багов фичи не выявлено.
+**Tech debt:** Не относящееся к фиче, к отслеживанию: (1) `make vuln` падает на предсуществующем GO-2026-5037 (stdlib crypto/x509, go1.25.10→1.25.11; через postgres/cobra, не код фичи; ADR [004] уже бампил в CI — локальный toolchain отстаёт); (2) tech-debt [005] — PG-фикстуры (контейнеры 21914-21918) не подняты, поэтому PG-зависимые тесты пакета top падают на connection refused (не регрессия, не заходят в код скролла).
+
+**Reviews:** none (QA — собственная верификация).
+
+**Verification:**
+- `make build` PASS; `make lint` PASS; `go test ./top/` (тесты фичи) PASS
+- 11 визуальных критериев (US-1…US-11) — ожидают ручной проверки пользователем в узком терминале
