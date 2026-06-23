@@ -1,0 +1,20 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll",
+  "tasks_checked": ["04"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Task references 009-feat-horizontal-scroll-decisions.md as a Context File and as the Post-completion report target, but that file does not exist yet in the feature directory (only -code-research.md and review JSONs are present).",
+      "fix": "No fix required for the QA gate itself — the task reads the decisions-log 'if exists' and writes its summary there in Post-completion. Optionally clarify that the file is created by this task, or drop it from Context Files since it has no input content yet."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 18,
+    "issues_found": 1
+  }
+}

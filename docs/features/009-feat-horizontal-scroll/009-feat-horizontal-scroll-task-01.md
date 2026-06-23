@@ -128,5 +128,3 @@ teammate_name:                     # имя агента-исполнителя 
 - [ ] Записать краткий отчёт в [009-feat-horizontal-scroll-decisions.md](009-feat-horizontal-scroll-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось
-</content>
-</invoke>

@@ -1,0 +1,56 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "iteration": 1,
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "structure",
+      "task": "01",
+      "section": "end of file",
+      "issue": "Stray generation artifacts at the end of the file: lines 131-132 contain `</content>` and `</invoke>` tags after the Post-completion checklist. These are leftover tool-call markup, not part of the task content.",
+      "fix": "Delete lines 131-132 (`</content>` and `</invoke>`). The file should end after the last Post-completion checklist item."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "Code-file and project-knowledge links use broken relative paths. From the task file's directory (docs/features/009-feat-horizontal-scroll/) the links `[top/stat.go](top/stat.go)`, `[top/config.go](top/config.go)`, `[internal/view/view.go](internal/view/view.go)`, and the three project-knowledge links `[overview.md](.claude/skills/project-knowledge/overview.md)` etc. do not resolve — they are missing the `../../../` prefix that task-01 and task-04 use correctly.",
+      "fix": "Prefix code-file and project-knowledge paths with `../../../`, e.g. `[top/stat.go](../../../top/stat.go)`, `[overview.md](../../../.claude/skills/project-knowledge/overview.md)`. Match the working pattern in task-01/task-04."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Same broken relative paths as task-02: `[top/config_view.go](top/config_view.go)`, `[top/keybindings.go](top/keybindings.go)`, `[top/help.go](top/help.go)`, `[top/config_view_test.go](top/config_view_test.go)`, `[top/config.go](top/config.go)`, `[top/stat.go](top/stat.go)` and the project-knowledge links lack the `../../../` prefix and will not resolve from the task file's location.",
+      "fix": "Prefix code-file and project-knowledge paths with `../../../`, matching task-01/task-04."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "project-knowledge entry comment says 'project.md в проекте отсутствует' but the mandatory project.md/architecture.md check is satisfied because this project uses overview.md as its project-overview file (no project.md exists by design). Worth noting the inconsistency: task-01 lists overview.md as the equivalent without the apologetic note, task-02 frames it as an absence.",
+      "fix": "Optional: align wording across tasks — overview.md is the project's project-overview document; no project.md is expected in this repo. Not a blocking issue."
+    }
+  ],
+  "notes": {
+    "frontmatter": "All four tasks: status=planned (correct for iteration 1), depends_on arrays correct (01=[], 02=[\"01\"], 03=[\"01\"], 04=[\"01\",\"02\",\"03\"]), waves correct and monotonic vs dependencies (01=w1, 02=w2, 03=w2, 04=w3), skills arrays valid (01-03 code-writing, 04 pre-deploy-qa), reviewers arrays valid. No extra fields beyond template.",
+    "reviewers": "code tasks 01-03 use [dev-code-reviewer, dev-test-reviewer] and intentionally omit dev-security-auditor. This omission is explicitly documented in the tech-spec Implementation Tasks 'Reviewers note' (pure in-memory UI arithmetic, no untrusted input; security audit findings reduce to out-of-bounds/panic correctness covered by code/test reviewers). Not flagged. Task 04 reviewers=[] correct for pre-deploy-qa (QA is its own verification).",
+    "tdd_anchor": "TDD Anchor present for code tasks 01/02/03 with path::test_name + description format, behavior-focused (no string-presence-only assertions). Correctly absent for QA task 04. Carry-forward from tech-spec Testing Strategy is complete (all six visibleColumns unit cases in task-01; render-level cases in task-02; handler/reset/orthogonality cases in task-03).",
+    "ac_carry_forward": "Acceptance Criteria from tech-spec (8 items) and user-spec (12 items) are carried forward and aggregated in task-04, and per-task ACs in 01-03 cover their slices (visibleColumns tests, offset reset both paths, [/] registration+clamp, frozen column always rendered, markers, help text, no regressions). No tech-spec/user-spec AC dropped.",
+    "decisions_log": "All tasks reference {feature_base}-decisions.md which does not yet exist on disk; this is expected — the decisions log is created during execution (Post-completion writes to it). Not flagged.",
+    "depends_on_comment": "All four tasks keep the template's literal comment `# ID задач-зависимостей (строки: [\"01\", \"02\"])` next to depends_on even where the actual value differs (e.g. task-04). Cosmetic template-comment leftover, not a placeholder in content; not flagged."
+  },
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 4,
+    "critical": 1,
+    "major": 0,
+    "minor": 3
+  }
+}

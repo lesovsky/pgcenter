@@ -46,10 +46,20 @@ progress, procpidstat и т.д.), поэтому корректность кри
 
 ## What to do
 
-- Изменить `printStatHeader` (`top/stat.go`): вызвать чистую функцию окна из Task 01 с `s.Result.Ncols`,
-  `config.view.ColsWidth`, шириной терминала из `v.Size()` и `config.scrollOffset`. Получить видимый диапазон
-  скроллируемых колонок, заклампленный offset и флаги скрытых сторон. Рендерить колонку 0 (frozen) первой,
-  затем итерироваться только по колонкам внутри видимого окна.
+- **Записать заклампленный offset обратно в `config.scrollOffset`** в `printDbstat` (`top/stat.go:320`,
+  после `alignViewToResult`, до вызова `printStatHeader`/`printStatData`). Там доступен `*config` по указателю
+  и ширина из `v.Size()`. Вызвать чистую функцию окна Task 01 один раз, взять `clamped` offset и присвоить
+  `config.scrollOffset = clamped`. Это **критично**: без записи clamped значения многократное нажатие `]` на
+  визуальном максимуме неограниченно раздувает `config.scrollOffset` (таблица стоит, функция Task 01 каждый раз
+  клампит результат, но исходное поле растёт), после чего клавиша `[` «залипает» — приходится жать вхолостую,
+  пока offset не вернётся в валидный диапазон. Запись clamped offset на каждом рендере держит поле в диапазоне
+  `[0, maxOffset]`, и `[` реагирует сразу. `printStatHeader`/`printStatData` затем читают уже заклампленный
+  `config.scrollOffset` (или принимают видимое окно — см. ниже, на усмотрение реализации, лишь бы оба источника
+  были согласованы).
+- Изменить `printStatHeader` (`top/stat.go`): получить видимое окно из той же функции Task 01 (с `s.Result.Ncols`,
+  `config.view.ColsWidth`, шириной терминала из `v.Size()` и уже заклампленным `config.scrollOffset`). Получить
+  видимый диапазон скроллируемых колонок и флаги скрытых сторон. Рендерить колонку 0 (frozen) первой, затем
+  итерироваться только по колонкам внутри видимого окна.
 - В заголовке выделять имя замороженной колонки 0 жирным. Если `config.view.OrderKey == 0`, оставить
   существующую подсветку сортировки (она имеет приоритет — Decision 4); не накладывать две escape-последовательности.
 - Сохранить существующую логику маркировки колонки сортировки (`OrderKey`) и фильтр-префикса `*` для остальных
@@ -57,9 +67,13 @@ progress, procpidstat и т.д.), поэтому корректность кри
 - Рисовать краевые маркеры `‹` (слева) и `›` (справа) в строке заголовка только когда флаги указывают на
   скрытые колонки в соответствующую сторону. Учесть, что маркеры — это видимые руны (потребляют ячейки),
   заложить их ширину в бюджет (Decision 5), чтобы заголовок и строки данных оставались выровнены.
-- Изменить `printStatData` (`top/stat.go`): использовать тот же видимый диапазон. Рендерить колонку 0 (frozen)
-  первой, затем колонки внутри окна. Убрать независимый счётчик `colnum`; индексировать `Values[rownum][i]` и
-  `ColsWidth[i]` по абсолютному индексу колонки.
+- Изменить `printStatData` (`top/stat.go`): использовать тот же видимый диапазон (читать заклампленный
+  `config.scrollOffset`). Рендерить колонку 0 (frozen) первой, затем колонки внутри окна. Убрать независимый
+  счётчик `colnum`. Уточнение: фильтр-блок (`stat.go:408`) уже индексирует по абсолютному `i`
+  (`Filters[i].MatchString(Values[rownum][i].String)`) — его трогать не нужно. Счётчик `colnum` используется
+  только в блоке усечения/печати значений (`stat.go:421` чтение длины, `:429` усечение, `:433` печать) —
+  именно там заменить `Values[rownum][colnum]` на `Values[rownum][i]` (по абсолютному `i`), как и `ColsWidth[i]`,
+  и удалить инкремент `colnum++` (`:437`) и его объявление в заголовке внешнего цикла (`:400`).
 - Сохранить существующее поведение обрезки значений: при `valuelen > ColsWidth[i]` обрезать до `width-1 + "~"`;
   при `width <= 0` возвращать существующую ошибку. Сохранить применение фильтров (`doPrint`) без изменений.
 - Написать render-level тесты на `printStatHeader`/`printStatData` (см. TDD Anchor), используя существующий
@@ -82,12 +96,20 @@ Render-level тесты печатают в реальный `*gocui.View` (со
 - `top/stat_test.go::Test_printStatHeader_frozenColumn` — замороженная первая колонка всегда присутствует в
   выводе заголовка независимо от offset; при `OrderKey == 0` применяется подсветка сортировки (приоритет над
   frozen-bold, Decision 4).
+- `top/stat_test.go::Test_printDbstat_clampsScrollOffset` — узкий терминал + заведомо раздутый
+  `config.scrollOffset` (намного больше `maxOffset`): после `printDbstat` поле `config.scrollOffset` равно
+  заклампленному значению (`<= maxOffset`), а не исходному раздутому. Прямая проверка отсутствия runaway offset:
+  рендер на визуальном максимуме не накапливает offset в поле config.
 
 ## Acceptance Criteria
 
+- [ ] `printDbstat` записывает заклампленный offset обратно в `config.scrollOffset` на каждом рендере (после
+      `alignViewToResult`, до печати): поле не уходит за `maxOffset` при повторных нажатиях `]` на визуальном
+      максимуме, клавиша `[` реагирует немедленно (нет «залипания»/холостых нажатий) — runaway offset исключён.
 - [ ] `printStatHeader` рендерит замороженную колонку 0 + только колонки видимого окна (не все колонки).
-- [ ] `printStatData` рендерит замороженную колонку 0 + только колонки видимого окна; значения индексируются
-      по абсолютному индексу колонки (`colnum` удалён).
+- [ ] `printStatData` рендерит замороженную колонку 0 + только колонки видимого окна; значения в блоке
+      усечения/печати (`stat.go:421/:429/:433`) индексируются по абсолютному `i` (`colnum` и его инкремент
+      удалены); фильтр-блок (`stat.go:408`), уже использующий абсолютный `i`, не изменён.
 - [ ] Имя замороженной колонки выделено bold; при `OrderKey == 0` приоритет у подсветки сортировки (Decision 4).
 - [ ] Маркеры `‹` / `›` рисуются только когда колонки скрыты в соответствующую сторону; их ширина учтена в
       бюджете, выравнивание заголовка и данных не сбито (Decision 5).
@@ -107,39 +129,51 @@ Render-level тесты печатают в реальный `*gocui.View` (со
 - [009-feat-horizontal-scroll-code-research.md](009-feat-horizontal-scroll-code-research.md) — code research (§1, §5, §6, §8)
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md) — фичи, поддерживаемые статистики (project.md в проекте отсутствует)
-- [architecture.md](.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных, рендер-пайплайн
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — паттерны кода, тестовые соглашения, gocui
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md) — фичи, поддерживаемые статистики (project.md в проекте отсутствует)
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных, рендер-пайплайн
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — паттерны кода, тестовые соглашения, gocui
 
 **Code files:**
-- [top/stat.go](top/stat.go) — изменить `printStatHeader` (:364) и `printStatData` (:398)
-- [top/config.go](top/config.go) — читать: `config` struct, поле `scrollOffset` из Task 01
-- [internal/view/view.go](internal/view/view.go) — читать: `View` struct (`Cols`, `Ncols`, `OrderKey`, `ColsWidth`, `Filters`)
+- [top/stat.go](../../../top/stat.go) — изменить `printDbstat` (:320, запись clamped offset), `printStatHeader` (:364) и `printStatData` (:398)
+- [top/config.go](../../../top/config.go) — читать: `config` struct, поле `scrollOffset` из Task 01
+- [internal/view/view.go](../../../internal/view/view.go) — читать: `View` struct (`Cols`, `Ncols`, `OrderKey`, `ColsWidth`, `Filters`)
 
 ## Verification Steps
 
-- Запустить `go test ./top/...` — render-level тесты из TDD Anchor проходят, существующие тесты пакета `top`
-  без регрессий.
+- Запустить `go test ./top/...` — render-level тесты из TDD Anchor проходят (включая
+  `Test_printDbstat_clampsScrollOffset`), существующие тесты пакета `top` без регрессий.
 - `make build` — сборка проходит.
 - Verify: **user** — ручная проверка в узком терминале: `make build` (свежий бинарь — patterns.md, обязательно),
   затем запуск `pgcenter top`, сузить терминал, прокрутить `]`/`[` (хоткеи появятся в Task 03; до этого можно
   проверить рендер на узком терминале без скролла): первая колонка остаётся на месте, появляются маркеры
   `‹`/`›` соответственно скрытым колонкам, имя замороженной колонки выделено жирным. Проверить на нескольких
   экранах: activity, tables (`d`), pg_stat_io (`j`).
+- (После Task 03) Проверка отсутствия runaway offset: на узком терминале долистать вправо до упора, продолжить
+  многократно жать `]` — таблица должна стоять, и **первое же** нажатие `[` должно сдвинуть окно влево (без
+  серии холостых нажатий). Это подтверждает, что clamped offset пишется обратно в `config.scrollOffset`.
 
 ## Details
 
 **Files:**
+- `top/stat.go` → `printDbstat` (`:320`). Сейчас: после `alignViewToResult(config, s.Result)` (`:332`) сразу
+  вызывает `printStatHeader` (`:335`) и `printStatData` (`:341`). Изменить: между `alignViewToResult` и печатью
+  вызвать функцию окна Task 01 (ширина из `v.Size()`, `s.Result.Ncols`, `config.view.ColsWidth`,
+  `config.scrollOffset`) и записать `config.scrollOffset = clamped`. `config` приходит сюда по указателю
+  (`*config`), поэтому запись переживает рендер — это и есть фикс runaway offset (см. What to do / AC). После
+  этого `printStatHeader`/`printStatData` читают уже заклампленный `config.scrollOffset`.
 - `top/stat.go` → `printStatHeader` (`:364`). Сейчас цикл `for i := 0; i < s.Result.Ncols; i++` по всем
   колонкам; sort-колонка получает `\033[47;1m` (bold), остальные `\033[30;47m`, фильтр-колонки префиксятся `*`,
   каждая ячейка паддится до `ColsWidth[i]+2`. Изменить: получить видимое окно от функции Task 01 (ширина из
   `v.Size()`), печатать колонку 0 первой + только колонки окна, добавить frozen-bold для имени колонки 0
   (с приоритетом sort при `OrderKey == 0`), добавить маркеры `‹`/`›` с учётом бюджета ширины.
 - `top/stat.go` → `printStatData` (`:398`). Сейчас внешний цикл по строкам с двойным счётчиком
-  `colnum, rownum`; внутренний `for i := range s.Result.Cols` с обрезкой значений и инкрементом `colnum` только
-  при `doPrint`, индексирование `Values[rownum][colnum]`. Изменить: убрать `colnum` полностью; печатать
-  колонку 0 + окно; индексировать `Values[rownum][i]` и `ColsWidth[i]` по абсолютному `i`; сохранить обрезку и
-  фильтр-логику (`doPrint`).
+  `colnum, rownum` (`:400`); фильтр-блок (`:405-415`) уже индексирует `Values[rownum][i]` по абсолютному `i`
+  (`:408`) — его НЕ трогать. Счётчик `colnum` используется только в блоке усечения/печати значений: чтение длины
+  `len(Values[rownum][colnum].String)` (`:421`), усечение `Values[rownum][colnum].String[:width-1]+"~"` (`:429`),
+  печать `Values[rownum][colnum].String` (`:433`), и инкрементируется `colnum++` (`:437`) только при `doPrint`.
+  Изменить: убрать `colnum` (объявление в заголовке цикла `:400` и инкремент `:437`); в блоке усечения/печати
+  заменить `colnum` на абсолютный `i`; печатать колонку 0 + окно; индексировать `ColsWidth[i]` по абсолютному `i`;
+  сохранить обрезку (`[:width-1]+"~"`, ошибку при `width <= 0`) и фильтр-логику (`doPrint`) без изменений.
 
 **Dependencies:**
 - Task 01 (`depends_on: ["01"]`): использует чистую функцию вычисления окна и поле `config.scrollOffset`.
@@ -167,6 +201,11 @@ Render-level тесты печатают в реальный `*gocui.View` (со
   учитывать в бюджете ширины. Маркеры `‹`/`›` — видимые руны и ДОЛЖНЫ учитываться (Decision 5).
 - Замороженная колонка печатается всегда отдельно перед циклом окна, чтобы не зависеть от offset.
 - `printDbstat` уже передаёт весь `*config` в обе print-функции — `config.scrollOffset` доступен напрямую.
+- Запись clamped offset делать именно в `printDbstat` (один раз за рендер), а не внутри `printStatHeader`/
+  `printStatData`: там `*config` тоже доступен, но запись из двух мест за один рендер избыточна и легко
+  рассинхронизируется. Один вызов функции окна в `printDbstat`, присвоение `config.scrollOffset = clamped`,
+  затем обе print-функции читают согласованное окно. Это и закрывает runaway offset (исходное поле росло,
+  потому что clamped результат функции Task 01 никуда не сохранялся).
 - Для render-level тестов изучить существующие тесты в `top/stat_test.go` и хелпер построения синтетического
   `stat.PGresult` (`makeResult`); понять, как тесты создают/обходят `*gocui.View` (например через headless
   gui), чтобы вызвать print-функции без живого терминала.

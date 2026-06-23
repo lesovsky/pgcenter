@@ -1,0 +1,34 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "Runaway offset: scrollRight increments config.scrollOffset without an upper clamp (task-03 lines 54-56, 167), and the upper clamp is delegated to the pure visibleColumns function used at render time (Task 1/Task 2). But visibleColumns is a PURE function: it returns 'clamped' but does not write it back to config.scrollOffset, and neither Task 2 (render) nor Task 3 instructs writing the clamped value back into config.scrollOffset. Result: pressing ] repeatedly at the visual maximum keeps growing config.scrollOffset unbounded (or up to the cheap Ncols safety cap), while the table visually stays put. To then scroll left the user must press [ many times 'into the void' before the offset re-enters the valid [0, maxOffset] range. The 'cheap safety cap (e.g. Ncols)' in task-03 limits growth but does NOT fix the dead-key UX, because in a narrow terminal maxOffset can be far below Ncols.",
+      "fix": "Add an explicit instruction (in Task 2 render path, since that is where v.Size()/widths are known) to write the clamped offset returned by visibleColumns back into config.scrollOffset on every render — making config.scrollOffset the persisted, already-clamped value. Then ] at the visual max leaves config.scrollOffset at maxOffset, and a single [ moves it. Alternatively assign config.scrollOffset = clamped inside printDbstat after the first visibleColumns call. Update tech-spec 'How it works' / Decision and the Task 2 AC to make the write-back explicit; without it the feature works visually but the scroll-left key 'sticks'."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "01",
+      "issue": "Task 01 (lines 41, 81) points to the makeResult(ncols) helper as if it were reusable from a new Test_visibleColumns. In reality makeResult is a LOCAL closure declared inside Test_alignViewToResult (top/stat_test.go:64), not a package-level helper, so it cannot be referenced from another test function. Task 01 does soften this ('либо аналогичный', and Details line 99 says a separate small helper is fine), so it is not blocking, but line 81 wording ('рядом с Test_alignViewToResult, makeResult') reads as if a shared helper exists.",
+      "fix": "Note explicitly that makeResult is a local closure and Test_visibleColumns needs only a map[int]int of widths + ints (build inline or a small new helper). No code dependency on makeResult."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Task 02 (lines 36, 140) describes the current printStatData as 'индексирование Values[rownum][colnum]'. Verified against top/stat.go: only the truncation read (line 421) and the truncated write-back (line 429) and the Fprintf (line 433) use colnum; the FILTER block (line 408) already uses the absolute index i (Values[rownum][i]). So the dual-counter divergence the task warns about exists, but the filter path is already correct. Minor inaccuracy — does not affect feasibility (dropping colnum and indexing by i is correct and matches the filter path already).",
+      "fix": "Clarify that the filter loop already uses i; only the truncation/print path uses colnum and must switch to the absolute window index i. The fix direction (drop colnum, index by i) is correct as written."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 27,
+    "issues_found": 3
+  }
+}

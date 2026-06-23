@@ -38,22 +38,27 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
 
 Скролл орто́гонален сортировке: `[`/`]` не трогают `OrderKey`, а сортировка не трогает `scrollOffset`.
 
-Важно про зажим верхней границы: максимальный валидный офсет зависит от текущих ширин колонок и ширины
-терминала, которые в хендлере недоступны (нет `v.Size()` контекста). Единственный источник истины по
-верхнему зажиму — чистая функция из Task 1, которая ре-зажимает офсет на каждом рендере. Поэтому хендлер
-`scrollRight` инкрементирует офсет без жёсткого верхнего предела (или с дешёвым предохранителем против
-неограниченного роста, напр. `Ncols`), а фактический верхний зажим (`]` на максимуме остаётся на максимуме)
-обеспечивается рендером. `scrollLeft` зажимает по 0 прямо в хендлере. Сверься с реализацией Task 1
-(сигнатура функции окна и где живёт max-clamp) перед написанием хендлеров.
+Важно про зажим верхней границы (модель, согласованная с Task 2): максимальный валидный офсет зависит от
+текущих ширин колонок и ширины терминала, которые в хендлере недоступны (нет `v.Size()` контекста), — и это
+правильно, хендлер про ширину терминала знать не должен. Поэтому хендлер `scrollRight` **только инкрементирует**
+`config.scrollOffset`; нижнюю границу 0 держит `scrollLeft`. ИСТИННЫЙ верхний зажим обеспечивается тем, что при
+рендере вычисленный (clamped) офсет записывается обратно в `config.scrollOffset` — это делает Task 2 в
+`printDbstat` через `visibleColumns`. То есть `]` на максимуме фактически остаётся на максимуме, потому что
+следующий рендер перезапишет `config.scrollOffset` зажатым значением; для пользователя предела как такового в
+хендлере нет, и не нужно. НЕ вводи «предохранитель `Ncols`» как верхний предел: в узком терминале реальный
+`maxOffset` много меньше `Ncols`, и такой «предохранитель» не лечит UX (офсет всё равно убежал бы далеко за
+видимое). Допустима лишь дешёвая защита от целочисленного переполнения, но это не пользовательский верхний
+предел. Место верхнего clamp/write-back — Task 2. `scrollLeft` зажимает по 0 прямо в хендлере.
 
 ## What to do
 
 1. В `top/config_view.go` добавь два хендлера рядом с `orderKeyLeft`/`orderKeyRight`:
    - `scrollLeft(config *config) func(*gocui.Gui, *gocui.View) error` — уменьшает `config.scrollOffset` на 1,
      зажимает по нижней границе 0 (не уходить в минус), отправляет `config.view` на `config.viewCh`.
-   - `scrollRight(config *config) func(*gocui.Gui, *gocui.View) error` — увеличивает `config.scrollOffset` на 1
-     (фактический верхний зажим делает рендер из Task 1; в хендлере — без жёсткого верхнего предела либо с
-     дешёвым предохранителем), отправляет `config.view` на `config.viewCh`.
+   - `scrollRight(config *config) func(*gocui.Gui, *gocui.View) error` — увеличивает `config.scrollOffset` на 1,
+     **без верхнего предела в хендлере** (фактический верхний зажим делает рендер из Task 2: записывает clamped
+     офсет обратно в `config.scrollOffset`). НЕ использовать `Ncols`-предохранитель как верхний предел; допустима
+     лишь дешёвая защита от int-переполнения. Отправляет `config.view` на `config.viewCh`.
    - View при этом **не мутируется** — меняется только `config.scrollOffset`. Отправка на канал нужна только
      для немедленной перерисовки.
 2. В `top/keybindings.go` в слайсе `keys` зарегистрируй на view `"sysstat"`:
@@ -79,7 +84,7 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
   даёт N-1; хендлер отправляет view на `viewCh` (немедленная перерисовка) и не меняет `OrderKey`.
 - `top/config_view_test.go::Test_scrollRight` — `]` инкрементирует `config.scrollOffset` на 1; хендлер
   отправляет view на `viewCh` и не меняет `OrderKey`. (Верхний зажим `]` на максимуме обеспечивает рендер
-  из Task 1 — проверяется там/визуально, не в этом хендлер-тесте.)
+  из Task 2 — write-back clamped офсета в `printDbstat`; проверяется там/визуально, не в этом хендлер-тесте.)
 - `top/config_view_test.go::Test_scrollOrthogonalToSort` — скролл (`[`/`]`) не меняет `OrderKey`;
   сортировка (`orderKeyLeft`/`orderKeyRight`) не меняет `config.scrollOffset`.
 - `top/config_view_test.go::Test_viewSwitchResetsScrollOffset` — при ненулевом `config.scrollOffset`
@@ -91,7 +96,7 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
 ## Acceptance Criteria
 
 - [ ] `scrollLeft` (`[`) уменьшает `config.scrollOffset`, зажат по 0 (на 0 остаётся 0).
-- [ ] `scrollRight` (`]`) увеличивает `config.scrollOffset`; верхний зажим обеспечен рендером Task 1.
+- [ ] `scrollRight` (`]`) увеличивает `config.scrollOffset` без верхнего предела в хендлере; верхний зажим обеспечен write-back clamped офсета при рендере (Task 2). Нет `Ncols`-предохранителя как пользовательского предела.
 - [ ] Оба хендлера отправляют `config.view` на `config.viewCh` ради немедленной перерисовки и не мутируют view.
 - [ ] `[` и `]` зарегистрированы на view `sysstat` в слайсе `keys` (`top/keybindings.go`).
 - [ ] `config.scrollOffset` сбрасывается в 0 и в `viewSwitchHandler`, и в `switchViewToProcPidStat`.
@@ -110,17 +115,17 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
 - [009-feat-horizontal-scroll-task-01.md](009-feat-horizontal-scroll-task-01.md) — зависимость: поле `scrollOffset` и функция окна с зажимом
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md)
-- [architecture.md](.claude/skills/project-knowledge/architecture.md)
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — testing conventions, handler patterns
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md)
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md)
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — testing conventions, handler patterns
 
 **Code files:**
-- [top/config_view.go](top/config_view.go) — добавить `scrollLeft`/`scrollRight`; сбросить офсет в `viewSwitchHandler` и `switchViewToProcPidStat`
-- [top/keybindings.go](top/keybindings.go) — зарегистрировать `[` / `]` на `sysstat`
-- [top/help.go](top/help.go) — документировать `[` / `]` в `helpTemplate`
-- [top/config_view_test.go](top/config_view_test.go) — тесты хендлеров и сброса
-- [top/config.go](top/config.go) — read: поле `scrollOffset` (добавлено в Task 1)
-- [top/stat.go](top/stat.go) — read: функция окна колонок с зажимом (Task 1), путь рендера
+- [top/config_view.go](../../../top/config_view.go) — добавить `scrollLeft`/`scrollRight`; сбросить офсет в `viewSwitchHandler` и `switchViewToProcPidStat`
+- [top/keybindings.go](../../../top/keybindings.go) — зарегистрировать `[` / `]` на `sysstat`
+- [top/help.go](../../../top/help.go) — документировать `[` / `]` в `helpTemplate`
+- [top/config_view_test.go](../../../top/config_view_test.go) — тесты хендлеров и сброса
+- [top/config.go](../../../top/config.go) — read: поле `scrollOffset` (добавлено в Task 1)
+- [top/stat.go](../../../top/stat.go) — read: функция окна колонок с зажимом (Task 1), write-back офсета при рендере (Task 2)
 
 ## Verification Steps
 
@@ -154,8 +159,10 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
 
 **Edge cases:**
 - `[` на offset 0 → остаётся 0 (нижний зажим в хендлере).
-- `]` на максимуме → офсет не выходит за реальный максимум; верхний зажим выполняет рендер (Task 1
-  ре-зажимает офсет на каждом вызове функции окна — единственный источник истины по верхней границе).
+- `]` на максимуме → хендлер по-прежнему инкрементирует офсет, но следующий рендер (Task 2) запишет clamped
+  значение обратно в `config.scrollOffset`, поэтому реально офсет не убегает за видимый максимум. Единственный
+  источник истины по верхней границе — write-back в `printDbstat` через `visibleColumns` (Task 2). НЕ ставить
+  верхний предел `Ncols` в хендлере: в узком терминале реальный `maxOffset` много меньше `Ncols`.
 - Переключение на per-process экран (`S` → `switchViewToProcPidStat`) — офсет должен сброситься (отдельный путь).
 - Авто-обновление (тик refresh) НЕ трогает офсет — скролл сохраняется в пределах экрана (это уже так,
   ничего делать не нужно; не сломать).
@@ -165,7 +172,11 @@ Task 1 уже добавил поле `config.scrollOffset` и чистую фу
   (отличие от `orderKey*`). Render читает `config.scrollOffset` из проброшенного `*config`.
 - termbox v1.1.1 не различает Shift/Ctrl — поэтому plain-rune `[`/`]`, а не модификаторы (code research §9).
 - НЕ добавляй верхний зажим в `scrollRight` через `v.Size()`/ширины — этой информации в хендлере нет;
-  верхний зажим централизован в функции окна из Task 1.
+  верхний зажим централизован в write-back при рендере (Task 2: `printDbstat` пишет clamped офсет обратно
+  в `config.scrollOffset` через `visibleColumns`).
+- НЕ используй `Ncols` (или иное «дешёвое» число) как верхний предел в `scrollRight` — это не лечит UX
+  (в узком терминале реальный `maxOffset` много меньше `Ncols`, офсет всё равно убежит). Допустима лишь
+  дешёвая защита от целочисленного переполнения, но не как пользовательский верхний предел.
 
 ## Reviewers
 
