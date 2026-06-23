@@ -1,0 +1,463 @@
+# Interview Plan for Feature Planning — 010-feat-overview-dashboard
+
+interview_metadata:
+  feature_name: "overview-dashboard"
+  feature_base: "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard"
+  work_type: "feature"
+  started: "2026-06-23 21:58:53"
+  last_updated: "2026-06-23 22:50:00"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 5
+  feature_size: "L"
+
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-06-23 22:00:00"
+    topic: "cycle1: hotkey/landing, record-report scope, success criteria, testing"
+    agent_question: |
+      Batch of 4 (each with a proposed default):
+      1. Landing screen + hotkey: NOT default landing (keep `activity` as start);
+         dedicated hotkey, candidate `v` (overview) or `g` (global).
+      2. Record/report: TUI-only first version (NotRecordable: true), like
+         bgwriter/replslots in 0.11; record/report to backlog.
+      3. Success criteria draft (a-e).
+      4. Testing pyramid: pure layout fn + io.Writer printers (009 pattern) unit-tested;
+         integration PG 14-18 for collection + graceful degradation; manual TUI E2E.
+    user_answer: |
+      1. hotkey `v` (closer mnemonic).
+      2. TUI-only.
+      3. all criteria OK.
+      4. agreed.
+    summary: "hotkey v, not landing; TUI-only/NotRecordable; success criteria a-e accepted; 009 testing pyramid accepted"
+  - question_num: 2
+    timestamp: "2026-06-23 22:15:00"
+    topic: "cycle2: layout decision, card interactivity, curation MVP, system IO/disk scope"
+    agent_question: |
+      Post-code-research batch (4):
+      1. Layout: reuse the existing free-form printSysstat idiom — new full-screen gocui
+         view + new printer (io.Writer); persistent dbstat-style view (not help-style overlay).
+      2. Interactivity: NOT in v1; show each group's hotkey hint next to its title
+         (Replication [o], Checkpointer [b]); Enter-to-drill deferred to backlog.
+      3. Curation: ~8-card MVP draft (Instance, Sessions, Throughput, DB time,
+         Vacuum/Wraparound, WAL/Checkpoint, Replication, System host).
+      4. System IO/disk cards scope lever: (A) CPU/mem/swap/load only (free), defer host
+         IO/disk; (B) include host IO/disk in v1, paying the collectExtra rework.
+    user_answer: |
+      1. agreed (free-form reuse, persistent dbstat-style).
+      2. interactivity was never intended — accepted (no card navigation in v1).
+      3. MVP card set is fine; exact composition to be refined AFTER MVP.
+      4. variant B — include host IO/disk in v1.
+    summary: "free-form persistent view; no interactivity v1; ~8-card MVP (refine later); variant B host IO/disk in v1 w/ collectExtra rework"
+  - question_num: 3
+    timestamp: "2026-06-23 22:25:00"
+    topic: "cycle2: narrow-terminal, per-card independence, user stories, edge/error/verify"
+    agent_question: |
+      Batch (4): 1. narrow-terminal behavior — (a) compact cards fit 80x24 + min-size guard,
+      no scroll/drop. 2. per-card independence: one failing source -> that card n/a, screen
+      still renders. 3. four user stories (triage, remote context, honest n/a, low overhead).
+      4. edge cases + verification block.
+    user_answer: |
+      1. (a). 2. yes. 3. ok. 4. ok.
+    summary: "compact-fit + min-size guard; per-card independence firm; 4 user stories accepted; edge/error/verify block accepted"
+  - question_num: 4
+    timestamp: "2026-06-23 22:40:00"
+    topic: "devils-advocate resolution: variant A, thinner MVP, incident scenario"
+    agent_question: |
+      dev-customer review (needs_work): (minor) add a concrete incident scenario showing
+      value; (major) variant B is scope creep — recommend variant A, defer host IO/disk;
+      (major) 8-card MVP too big — recommend reuse-first slice + database time, defer the
+      rest of the new-aggregate cards. Reversal put back to user with sharpened tradeoffs.
+    user_answer: |
+      Roll back to variant A — evaluate the dashboard first, think about extension later.
+      Accept the compromise: exact card composition refined in a second pass; for v1 the
+      layout and the concept are what matter.
+    summary: "v1 = variant A (host IO/disk -> v1.1, R1 removed); v1 focuses on layout+concept with reuse-first cards + database time; exact composition deferred to a second pass; add incident scenario to spec"
+  - question_num: 5
+    timestamp: "2026-06-23 22:50:00"
+    topic: "completeness follow-up: first-tick n/a vs backoff visibility"
+    agent_question: |
+      completeness-checker = complete (high). Two UX choices: 1. first-tick rate n/a — (a)
+      same literal n/a (self-resolves) vs (b) collecting placeholder. 2. backed-off source —
+      (a) stale last value, silent vs (b) flip to n/a. (printCmdline remote-warning and
+      three-rhythm unit test folded into spec as defaults.)
+    user_answer: |
+      1. variant A, but surface "collecting" in the cmdline status line.
+      2. variant A (stale last value, silent backoff).
+    summary: "first tick: n/a in cells + transient cmdline 'collecting' hint; backoff: stale last value, silent, auto-resume; printCmdline remote-warning + three-rhythm/backoff unit tests folded into spec"
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+phase1_feature_overview:
+
+  feature_description:
+    score: 90
+    status: "complete"
+    value: |
+      New full-screen TUI screen in `pgcenter top` — a composite "overview dashboard"
+      of overall instance state, inspired by pg_activity's header block but as a
+      standalone screen and extended with production-DBA metrics. Card-oriented layout
+      (vs the row-oriented stats tables). Acts as a navigation hub: glance at instance
+      health, then drill down into the relevant detailed screen.
+      Opened by a dedicated hotkey `v` (overview); NOT the default landing screen —
+      `top` still starts on `activity` to preserve muscle memory.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 80
+    status: "partial"
+    value: |
+      A DBA connecting to a troubled instance has no single-glance health overview in
+      pgcenter — must hop across many screens (activity, databases, bgwriter, replslots,
+      stat_io, statements) to assemble a mental picture. pg_activity has a richer overview
+      header but (a) it is static and leads nowhere, (b) its system metrics work only on
+      local connections. The dashboard gives one screen to assess "where it hurts" and a
+      starting point for a deliberate drill-down.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 90
+    status: "complete"
+    value: |
+      PostgreSQL DBAs monitoring/troubleshooting production Postgres without GUI tools
+      (project's core audience). Especially the on-call/incident scenario.
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 88
+    status: "complete"
+    value: |
+      (a) Screen opens on `v` and renders all curated cards in one frame on an 80x24
+          terminal without truncation.
+      (b) Every metric updates per refresh tick with a correct delta where applicable.
+      (c) Unavailable metrics render `n/a` (not `0`, not blank).
+      (d) On a remote connection the system cards (Mem/Swap/IO/Load) work via PL/Perl.
+      (e) Collection stays within a query budget — latency backoff kicks in on a slow source.
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 85
+    status: "complete"
+    value: |
+      - Go 1.25+, gocui TUI, pgx/v5, PG 14-18.
+      - Remote system stats via existing PL/Perl schema; local via /proc.
+      - Collection cost: composite screen pulls from 6+ sources; must NOT add undue load
+        to a monitored (possibly struggling) instance. Internal three-rhythm collection
+        (cheap-fresh / wal-size dear-but-fresh / data&db-sizes slow-cached) + latency-based
+        backoff. `z` stays a single user-facing interval knob.
+      - Graceful degradation: unavailable metric -> `n/a` via probe (procpidstat pattern).
+      - TUI-only in v1: register with NotRecordable: true (ADR [004] precedent).
+        record/report deferred to backlog (recording a composite-aggregate screen is
+        conceptually murky — revisit separately if ever requested).
+      - v1 = variant A: system card uses already-per-tick CPU/mem/swap/load; NO collectExtra
+        rework, NO new disk/fs branch (host IO/disk deferred to v1.1). Render path = reuse the
+        free-form Fprintf idiom (printSysstat precedent), not the PGresult table renderer.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      Mirror the 009-feat-horizontal-scroll pyramid:
+      - Pure layout function (card placement by terminal width/height) + printers taking
+        io.Writer -> unit-tested without a live gocui terminal.
+      - Integration tests against PG 14-18 for metric collection + graceful degradation
+        (n/a paths, version-missing views, track_io_timing off).
+      - Manual TUI E2E QA (no automated end-to-end TUI harness exists in the project).
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+phase2_user_experience:
+
+  user_stories:
+    score: 88
+    status: "complete"
+    value: |
+      US1 (triage): As an on-call DBA, I want to press `v` and assess overall instance
+      health in one glance, so I can drill into the worst area with a deliberate keystroke.
+        Concrete incident scenario (the "caught something" example, per dev-customer review):
+        Replica lag alert fires at 03:00. DBA connects, presses `v`. The Sessions card looks
+        normal and the System card shows low load — so it is NOT a host saturation problem.
+        But the DB time card shows database time spiking far above the per-tick interval
+        (backends are burning time) while checkpoints on the Checkpointer card are firing as
+        `requested` (not timed) — WAL pressure. The single glance rules out the host, points at
+        a checkpoint/WAL storm, and the DBA presses `b` to confirm on the bgwriter screen — all
+        before having opened activity. Without the overview the DBA would hop activity->bgwriter
+        ->databases assembling this by hand under time pressure.
+      US2 (remote context): As a DBA on a remote instance, I want system cards
+      (CPU/mem/IO/load) to work over the network via PL/Perl, so I get host context that
+      pg_activity cannot show remotely.
+        Scenario: connect to remote host with pgcenter schema -> press v -> System card shows
+        real load/cpu/mem/IO. Without the schema -> System card shows n/a (US3).
+      US3 (honest n/a): As a DBA, I want unavailable metrics to render `n/a` (not 0/blank),
+      so I never misread a missing metric as a real zero.
+        Scenario: track_io_timing=off -> time-in-IO shows n/a; no pg_stat_statements ->
+        DB-time/IO-time n/a; PG14 -> pg_stat_io-derived cells n/a.
+      US4 (low overhead): As a DBA on a struggling instance, I want the overview not to add
+      undue query load, so monitoring doesn't worsen the incident.
+        Scenario: expensive sources (sizes, xid-age, dead-tuples) refresh on the slow rhythm;
+        a source that gets slow is backed off automatically; `z` remains the only knob.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 88
+    status: "complete"
+    value: |
+      AC1: Pressing `v` opens the overview; `top` still starts on activity by default.
+      AC2: All MVP cards render in one frame on 80x24 without truncation; below the minimum
+           size a "terminal too small" guard message is shown (no scroll, no card-dropping).
+      AC3: Each metric updates per refresh tick; rate metrics show correct deltas; on the
+           first tick (no prev sample) rate cells render `n/a` AND the cmdline shows a
+           transient "collecting..." hint, which clears after the first successful refresh
+           (so first-tick n/a is distinguishable from a permanently-unavailable n/a).
+      AC4: Unavailable metrics render the literal `n/a` (never 0, never blank).
+      AC4b: On switching to the overview against a remote server without the pgcenter PL/Perl
+           schema, a single cmdline message explains the system card is unavailable (the
+           procpidstat-warning idiom; exactly one printCmdline per code path, patterns.md).
+      AC5: On a remote connection with the pgcenter PL/Perl schema, the System card shows real
+           host metrics (CPU/mem/swap/load — variant A); without the schema it shows n/a.
+           Host IO/disk metrics are out of v1 scope (deferred to v1.1).
+      AC6: A single failing/slow source degrades only its own card to n/a; the rest of the
+           dashboard still renders (per-card independence).
+      AC7: Expensive sources use the slow rhythm; latency backoff increases a slow source's
+           skip interval; no second user-facing interval knob is introduced. A backed-off
+           source keeps showing its last known (stale) value — NOT n/a; backoff is silent
+           (no cmdline spam) and resumes automatically when latency recovers.
+      AC8: Each card group title shows the hotkey of its detailed screen (e.g. Replication [o]).
+      AC9: Version/feature-gated cells degrade to n/a or version-appropriate values on
+           PG 14/15 (no pg_stat_io), <17 (checkpointer in bgwriter), track_io_timing off,
+           missing pg_stat_statements; on a standby WAL/checkpoint/lag use recovery-aware paths.
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 88
+    status: "complete"
+    value: |
+      - 80x24 fit: compact cards designed to fit; smaller-than-minimum -> guard message.
+      - Remote without pgcenter PL/Perl schema -> system cards n/a.
+      - Standby/recovery -> recovery-aware WAL fns, checkpoint->restartpoint, lag from standby.
+      - Missing pg_stat_statements extension -> DB-time/IO-time cards n/a.
+      - PG 14/15 (no pg_stat_io), <17 (checkpointer inside pg_stat_bgwriter) -> version-correct
+        or n/a; no NULL-padded columns.
+      - track_io_timing=off -> time-in-IO n/a.
+      - First tick (no prev sample) -> rate metrics n/a.
+      - Geometry 0 right after pager/editor (ui.go maxX==0 guard) -> render no-op until restored.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 88
+    status: "complete"
+    value: |
+      - A source query fails (permissions, lock timeout, statement error): catch per source,
+        render that card as n/a, do NOT abort the whole sample/screen (per-card independence,
+        AC6). Stronger than the table screens, where a sample error blanks the table.
+      - A source is slow: latency backoff raises its internal skip divisor; the card keeps its
+        last known (stale) value, silently, and auto-resumes when latency recovers (AC7).
+      - First tick (no prev): rate cells n/a + transient cmdline "collecting..." hint (AC3).
+      - Connection lost / server restart: existing pgcenter error handling/reconnect path
+        applies; the overview shows the standard error state, not a partial garbage frame.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      - Unit: pure card-layout function with a property test over terminal sizes (009-style,
+        invariant: cards fit or guard triggers); printOverview output asserted against a
+        bytes.Buffer; n/a formatting (sentinel -> literal "n/a", distinct from real 0);
+        three-rhythm gating (tick-counter) and latency-backoff (mock slow source -> stale
+        value retained) tested without live PG, the visibleColumns idiom.
+      - Integration (PG 14-18): metric collection per source + graceful degradation paths
+        (missing extension, old version, track_io_timing off, remote-no-schema).
+      - Manual TUI QA: 80x24 and wide terminal; local and remote; standby; missing extension;
+        slow-source backoff observed. One fresh `make build` per QA session (patterns.md).
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      LAYOUT: a new full-screen, persistent gocui view "overview" (dbstat-style geometry,
+      Frame=false), rendered per tick. Rendered by a new printer `printOverview(w io.Writer,
+      ...)` in the free-form printSysstat/printPgstat idiom (plain Fprintf of label:value
+      cells with ANSI emphasis) — NOT the PGresult table renderer. Card placement is a pure
+      layout function (terminal width/height -> card grid), unit-testable (009 pattern).
+      INTERACTIVITY: none in v1. Each card group's title shows the hotkey of its detailed
+      screen as a hint (e.g. "Replication [o]", "Checkpointer [b]", "IO [j]"). Enter-to-drill
+      deferred to backlog. DBA glances, then presses the existing hotkey.
+      V1 SCOPE (focus = layout + concept; exact card composition refined in a 2nd pass):
+        v1 ships the full dashboard machinery (new view, hotkey v, free-form card render,
+        pure layout fn, three-rhythm collection seam, n/a degradation, remote system via
+        PL/Perl variant A) demonstrated with a reuse-first starter card slice + database time:
+        - Instance: version, uptime, recovery, conninfo (reuse props/Activity)
+        - Sessions: total/active/idle/idle-in-txn/idle-in-txn-aborted/waiting (reuse Activity.Conn*)
+        - DB time: database time = diff sum(total_exec_time) (the one strong NEW aggregate kept
+          in v1) + longest xact (reuse)
+        - Checkpointer: ckpt timed/req, write/sync ms (reuse bgwriter.go)
+        - System (host): load avg, CPU breakdown, mem, swap — VARIANT A (no IO/disk in v1)
+      TARGET STRUCTURE (post-v1 / v1.1, the ~8-group dashboard the concept aims at):
+        + Throughput (tps/tuples/temp), + time-in-IO + longest query, + Vacuum/Wraparound,
+        + WAL growth + replication lag/slots, + host IO/disk (variant B). Added incrementally
+        — the Fprintf render path makes adding a card cheap.
+      NARROW TERMINAL: compact cards designed to fit 80x24; below a minimum size show a
+      "terminal too small" guard. No card-dropping, no vertical scroll in v1.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 85
+    status: "complete"
+    value: |
+      R1 (ELIMINATED by the variant-A decision): the host IO/disk collectExtra rework — the
+        feature's only invasive change — is removed from v1. Variant A reuses the already-
+        per-tick CPU/mem/load collection, touching nothing in the side-panel mutual-exclusion.
+      R2 (80x24 fit): 8 cards may not fit a small terminal. Mitigation: compact design +
+        min-size guard; property test proves fit-or-guard.
+      R3 (new aggregate query cost on a struggling instance): every gated tick runs new sums.
+        Mitigation: three rhythms + latency backoff; keep cheap-fresh set minimal; cache
+        sizes/xid-age/dead-tuples on the slow rhythm; xid-age uses cheap per-DB datfrozenxid.
+      R4 (single-table render assumption): branching printStat on view.Name is invasive to the
+        shared render loop. Mitigation: minimal conditional create/render like the `extra` view;
+        keep table path untouched for all other screens; unit-test the branch.
+      R5 (reintroducing a live NotRecordable user): after [008] no production view set it.
+        Low risk — the field and filterViews branch are retained; just update the count tests.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 80
+    status: "partial"
+    value: |
+      TD1 — Render path: reuse the free-form Fprintf idiom (printSysstat/help precedent),
+        new gocui view + printOverview. Alt rejected: reuse renderDbstat/printStatHeader
+        (PGresult/column-bound, cannot render free-form cards); a bespoke card-widget engine
+        (over-engineering — the Fprintf idiom + pure layout fn suffices).
+      TD2 — No card interactivity in v1; hotkey hints instead. Alt rejected: navigable cards
+        with Enter-to-drill (gocui free-form views have no cell-selection model; cursor +
+        highlight + card->view map is large new TUI machinery for marginal gain). Backlog.
+      TD3 — Variant A (REVISED after dev-customer review): v1 system card = CPU/mem/swap/load
+        only, which are ALREADY collected every tick (no new collection branch, no collectExtra
+        rework, R1 eliminated). The remote-PL/Perl differentiator is fully delivered by A.
+        Host IO/disk deferred to v1.1 (drill-down is one keystroke away: `j`/`B`/`F`).
+        Alt rejected: variant B (host IO/disk in v1) — marginal value (one hotkey saved) for
+        the feature's single invasive change and biggest risk; reversed on dev-customer finding.
+      TD4 — Bespoke collect via a new CollectOverview constant (ADR [001] CollectExtra hook),
+        not string-coupling on view name. Three internal rhythms + latency backoff live in
+        this collect fn; `z` stays the only user knob.
+      TD5 — Dedicated switch handler (switchViewToProcPidStat pattern) if runtime probe flags
+        are patched onto the view; resets handled like other screens.
+      TD6 — xid-age uses per-DB max(age(datfrozenxid)) (cheap) for the wraparound gauge;
+        per-relation age is drill-down, not on the dashboard.
+    gaps: "Confirm narrow-terminal behavior; finalize per-card-independence error principle"
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+phase3_integration:
+
+  integration_points:
+    score: 85
+    status: "complete"
+    value: |
+      - New view "overview" in view.New() (internal/view/view.go:37), NotRecordable: true.
+      - New hotkey `v` (confirmed FREE on sysstat, top/keybindings.go); help.go entry.
+      - NOT default landing (activity stays, top/top.go:69).
+      - New gocui view "overview" in layout() (top/ui.go:103); conditional create/render.
+      - Branch printStat (top/stat.go:126) on view.Name == "overview" -> printOverview
+        instead of dbstat (the single-table assumption, §8).
+      - New CollectOverview constant + branch in Collector.Update (internal/stat/stat.go:122);
+        bespoke collect fn (analog of collectActivityStat) owning 3-rhythm + backoff state.
+      - System stats CPU/mem/swap/load reuse the existing per-tick collection verbatim
+        (db.Local / SchemaPgcenterAvail) — variant A, NO new disk/fs collection branch in v1.
+      - Tests to update: view_test.go:11 (27->28), TestView_VersionOK rows, record_test.go
+        Test_filterViews (wantN +1 since NotRecordable). Give the view a non-empty Query OR
+        exempt it from the Test_app_record non-empty-Query assertion.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 0
+    status: "pending"
+    value: ""
+    gaps: "Existing features it depends on"
+    required: false
+
+  data_requirements:
+    score: 75
+    status: "partial"
+    value: |
+      Metric -> source (from code-research §6):
+      REUSE existing: sessions-by-state (Activity.Conn*, common.go:54); longest xact
+        (Activity.XactMaxTime, common.go:112); checkpoint (bgwriter.go version-split);
+        system CPU/mem/load (Collector.Update every tick); WAL fns (selectWalFunctions).
+      NEW aggregate queries needed: tps/tuples/cache-hit (sum over pg_stat_database);
+        database time + time-in-IO (sum(total_exec_time)/sum(total_io_time), mind PG13/17
+        column splits); repl lag sec+bytes (single-value over pg_stat_replication);
+        slots retained WAL (max over pg_replication_slots); dead tuples (sum n_dead_tup);
+        xid age (max age(datfrozenxid) over pg_database) + autovacuum_freeze_max_age GUC;
+        db sizes (pg_database_size) + data-dir FS size (pgcenter.get_filesystem_stats remote);
+        wal-dir size (pg_ls_waldir, wal.go:6).
+      V1 (variant A) metric set: sessions (reuse), longest xact (reuse), checkpoint (reuse),
+        system CPU/mem/swap/load (reuse), database time = diff sum(total_exec_time) (1 NEW
+        aggregate). Three-rhythm seam is still BUILT in v1 (it is core machinery), but with a
+        light load: cheap-fresh = sessions/dbtime/checkpoint/system; slow/cached rhythm proven
+        with database time's prev-sample handling. Heavier sources (sizes, xid-age, dead-tuples,
+        throughput, lag, WAL growth) arrive in v1.1 and slot into the existing rhythm tiers.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 0
+    status: "pending"
+    value: ""
+    gaps: "Likely none — additive screen"
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard.md"
+  status: "created"
+
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+
+progress:
+  current_phase: "phase8_create_userspec"
+  questions_asked: 15
+  last_question: "Completeness follow-up: first-tick collecting hint + silent stale backoff"
+  completion_estimate: "98%"
+
+notes: |
+  - Originated from a /buddy design discussion. Settled principles (do NOT re-litigate):
+    single `z` knob; internal three-rhythm collection + latency backoff; golden-signal
+    metrics incl. database time (diff sum(total_exec_time)) and time-in-IO (diff total_io_time)
+    plus xid age/wraparound, longest xact, repl lag (sec+bytes), dead tuples/vacuum debt,
+    checkpoint, WAL growth; probe->n/a graceful degradation.
+  - Key differentiator vs pg_activity: remote system stats work via PL/Perl.
+  - Three OPEN questions for interview: layout (card vs table render), card interactivity,
+    metric curation/grouping.
+  - Feature size L: new screen, new free-form render path, new collection rhythm.
+  - dev-customer review (needs_work) resolved: rolled back to VARIANT A (host IO/disk -> v1.1,
+    R1 eliminated); MVP thinned to a reuse-first card slice + database time, exact card
+    composition deferred to a 2nd pass; concrete incident scenario added to US1. v1 focus is
+    the layout + concept + the dashboard machinery, not a complete metric catalog.
+  - Code research artifact: 010-feat-overview-dashboard-code-research.md (8 gating questions
+    answered; key finding: free-form Fprintf render path already exists, reuse it).
