@@ -141,36 +141,44 @@ func Test_visibleColumns(t *testing.T) {
 
 	t.Run("narrow width, offset 0", func(t *testing.T) {
 		// Each column costs 12. termWidth 40 => frozen(12) + budget 28. Right marker is
-		// reserved (columns hidden right) => budget 27, still fits columns 1,2 (cost 24).
+		// reserved (columns hidden right) => budget 27. Partial-visibility semantics: columns
+		// 1,2 fit fully (start used 0,12 < 27); column 3 starts at used 24 < 27 so it is in the
+		// window (partially visible, cost would reach 36); column 4 would start at 36 >= 27 so it
+		// is hidden. Window 1..3, columns 4,5 hidden right.
 		win := visibleColumns(6, uniformWidths(6, 10), 40, 0)
 		assert.Equal(t, 0, win.clamped)
 		assert.False(t, win.hiddenLeft)
 		assert.True(t, win.hiddenRight)
 		assert.Equal(t, 1, win.first)
-		assert.Equal(t, 2, win.last)
+		assert.Equal(t, 3, win.last)
 	})
 
 	t.Run("mid offset", func(t *testing.T) {
-		// 6 columns, cost 12 each, termWidth 40 => after frozen, budget 28. offset 2 hides
-		// columns 1,2 left and column 5 right, so BOTH markers are reserved (budget 26).
-		// Columns 3,4 (cost 24) still fit => window 3..4. maxOffset = 3, so 2 is valid.
-		win := visibleColumns(6, uniformWidths(6, 10), 40, 2)
-		assert.Equal(t, 2, win.clamped)
+		// BOTH markers active at a genuine mid offset. 7 columns cost 12 each, termWidth 40 =>
+		// after frozen, base budget 28; maxOffset is 4 (the last column's start fits from
+		// offset 4). offset 1 hides column 1 left and columns 5,6 right, so both markers are
+		// reserved (budget 26). Columns 2,3 fit fully (start 0,12 < 26); column 4 starts at 24 <
+		// 26 => partially visible and in the window; column 5 would start at 36 => hidden. Window
+		// 2..4.
+		win := visibleColumns(7, uniformWidths(7, 10), 40, 1)
+		assert.Equal(t, 1, win.clamped)
 		assert.True(t, win.hiddenLeft)
 		assert.True(t, win.hiddenRight)
-		assert.Equal(t, 3, win.first)
+		assert.Equal(t, 2, win.first)
 		assert.Equal(t, 4, win.last)
 	})
 
 	t.Run("offset past end", func(t *testing.T) {
-		// 6 columns, budget 28. The last two scrollable columns are 4 and 5, so maxOffset = 3
-		// (window starts at column 4). offset 99 clamps to 3. Only the left marker is reserved
-		// (nothing hidden right) => budget 27, columns 4,5 (cost 24) still fit.
+		// 6 columns, budget 28. Partial-visibility shrinks maxOffset to 2: from offset 2 the
+		// window starts at column 3 and the last column's (5) start fits, so nothing more is
+		// revealed by scrolling further. offset 99 clamps to 2. Only the left marker is reserved
+		// (nothing hidden right) => budget 27; columns 3,4 fit fully and column 5 is partially
+		// visible => window 3..5.
 		win := visibleColumns(6, uniformWidths(6, 10), 40, 99)
-		assert.Equal(t, 3, win.clamped)
+		assert.Equal(t, 2, win.clamped)
 		assert.True(t, win.hiddenLeft)
 		assert.False(t, win.hiddenRight)
-		assert.Equal(t, 4, win.first)
+		assert.Equal(t, 3, win.first)
 		assert.Equal(t, 5, win.last)
 	})
 
@@ -209,12 +217,13 @@ func Test_visibleColumns(t *testing.T) {
 		// Sparse map: keys for some columns in [0, ncols) are absent (read as 0).
 		// Math must stay bounded (each missing column costs the +2 gap), no panic.
 		// Budget for termWidth 40: frozen col0 costs 12, base budget 28. Columns hidden right
-		// => right marker reserved (budget 27). Costs from col1: 2,12,2 (=16) then col4 (+12)
-		// => 28 > 27, so col4 no longer fits and the window is columns 1..3, col4/5 hidden right.
+		// => right marker reserved (budget 27). Partial-visibility starts: col1 start 0, col2
+		// start 2, col3 start 14, col4 start 16 (all < 27 => visible), col5 would start at 28 >=
+		// 27 => hidden. Window 1..4, only col5 hidden right.
 		widths := map[int]int{0: 10, 2: 10, 4: 10} // columns 1, 3, 5 missing
 		win := visibleColumns(6, widths, 40, 0)
 		assert.Equal(t, 1, win.first)
-		assert.Equal(t, 3, win.last)
+		assert.Equal(t, 4, win.last)
 		assert.Equal(t, 0, win.clamped)
 		assert.False(t, win.hiddenLeft)
 		assert.True(t, win.hiddenRight)
@@ -222,11 +231,12 @@ func Test_visibleColumns(t *testing.T) {
 
 	t.Run("negative offset clamps to zero", func(t *testing.T) {
 		// offset -5 must clamp up to 0 (covers math.Max(offset, 0) lower bound).
-		// 6 columns cost 12 each, termWidth 40 => right marker reserved, columns 1,2 fit.
+		// 6 columns cost 12 each, termWidth 40 => right marker reserved (budget 27); same window
+		// as the "narrow width, offset 0" case: columns 1,2 full + column 3 partial => 1..3.
 		win := visibleColumns(6, uniformWidths(6, 10), 40, -5)
 		assert.Equal(t, 0, win.clamped)
 		assert.Equal(t, 1, win.first)
-		assert.Equal(t, 2, win.last)
+		assert.Equal(t, 3, win.last)
 		assert.False(t, win.hiddenLeft)
 		assert.True(t, win.hiddenRight)
 	})
@@ -234,15 +244,58 @@ func Test_visibleColumns(t *testing.T) {
 	t.Run("last column visible at max offset", func(t *testing.T) {
 		// Invariant: at the maximum offset the last column (ncols-1) is visible and
 		// nothing is hidden to the right. Narrow term 40 with 6 uniform columns has
-		// maxOffset 3; passing a large offset clamps to it.
+		// maxOffset 2 under partial-visibility semantics (from offset 2 the last column's
+		// start already fits); passing a large offset clamps to it. Window 3..5.
 		ncols := 6
 		win := visibleColumns(ncols, uniformWidths(ncols, 10), 40, 1<<30)
-		assert.Equal(t, 3, win.clamped)
+		assert.Equal(t, 2, win.clamped)
 		assert.Equal(t, ncols-1, win.last, "last visible column must be the final column at max offset")
 		assert.False(t, win.hiddenRight, "nothing hidden to the right at max offset")
 		assert.True(t, win.hiddenLeft)
-		assert.Equal(t, 4, win.first)
+		assert.Equal(t, 3, win.first)
 	})
+
+	t.Run("wide last column visible partially, no right marker", func(t *testing.T) {
+		// Reproduces issue #14 QA bugs. Mimics the activity/statements layout: a handful of
+		// narrow columns followed by a very wide last column ("query", aligned by content up
+		// to ~1000 chars). termWidth is wide enough that all narrow columns and the START of
+		// the wide query column fit, but the query column does not fit in full.
+		//
+		// Correct behaviour (partial visibility): the wide last column is part of the window
+		// (last == ncols-1, shown truncated by the terminal edge) and nothing is hidden to the
+		// right, so no right marker. Pre-fix (full-fit) semantics drop the wide column entirely
+		// => last == ncols-2 and hiddenRight == true.
+		widths := map[int]int{0: 10, 1: 10, 2: 10, 3: 10, 4: 2000} // col4 = wide "query"
+		win := visibleColumns(5, widths, 200, 0)
+		assert.Equal(t, 4, win.last, "wide last column must be in the window (partially visible)")
+		assert.False(t, win.hiddenRight, "nothing is hidden past the partially-visible last column")
+		assert.Equal(t, 1, win.first)
+		assert.False(t, win.hiddenLeft)
+	})
+}
+
+// Test_render_widePartialLastColumn is the render-level reproduction of issue #14 QA: on a
+// wide terminal where the last column ("query") is wider than the remaining budget, that
+// column must still be printed (truncated by the terminal edge) and NO right marker may be
+// drawn. Pre-fix the wide column is dropped from the window and a spurious › appears.
+func Test_render_widePartialLastColumn(t *testing.T) {
+	cfg := makeRenderConfig(5, 10)
+	cfg.view.ColsWidth[4] = 2000 // wide last column, like the aligned "query" column
+	cfg.scrollOffset = 0
+	s := makeRenderResult(5, 1)
+
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 200, cfg.scrollOffset)
+
+	var hbuf, dbuf bytes.Buffer
+	assert.NoError(t, printStatHeader(&hbuf, s, cfg, win))
+	assert.NoError(t, printStatData(&dbuf, s, cfg, false, win))
+
+	// The wide last column (absolute index 4) must be present in both header and data.
+	assert.Contains(t, hbuf.String(), "col4", "wide last column header must be printed")
+	assert.Contains(t, dbuf.String(), "r0-c4", "wide last column value must be printed")
+	// No right marker on a wide screen where the only "hidden" part is the tail of the last
+	// column (which the terminal simply truncates).
+	assert.NotContains(t, hbuf.String(), "›", "no right marker when only the last column is partial")
 }
 
 // makeRenderConfig builds a config with a synthetic, already-aligned view of ncols
@@ -291,11 +344,12 @@ func makeRenderResult(ncols, nrows int) stat.Stat {
 // position within the visible window (the regression guarded by removing the colnum
 // counter).
 func Test_printStatData_windowed_midOffset(t *testing.T) {
-	// 6 columns of width 10 (cost 12 each). termWidth 40 => frozen(12) + 28 budget => 2
-	// scrollable columns visible. offset 2 => window covers absolute columns 3 and 4.
-	cfg := makeRenderConfig(6, 10)
-	cfg.scrollOffset = 2
-	s := makeRenderResult(6, 2)
+	// 7 columns of width 10 (cost 12 each). termWidth 40 => frozen(12) + base budget 28; both
+	// markers reserved (budget 26). offset 1 => window covers absolute columns 2,3,4 (2,3 full,
+	// 4 partial). Column 1 is hidden left; columns 5,6 are hidden right.
+	cfg := makeRenderConfig(7, 10)
+	cfg.scrollOffset = 1
+	s := makeRenderResult(7, 2)
 
 	var buf bytes.Buffer
 	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
@@ -305,13 +359,14 @@ func Test_printStatData_windowed_midOffset(t *testing.T) {
 	out := buf.String()
 	// Frozen column 0 value for row 0 present.
 	assert.Contains(t, out, "r0-c0")
-	// Windowed columns at absolute indices 3 and 4 present (value tagged by absolute col).
+	// Windowed columns at absolute indices 2,3,4 present (value tagged by absolute col).
+	assert.Contains(t, out, "r0-c2")
 	assert.Contains(t, out, "r0-c3")
 	assert.Contains(t, out, "r0-c4")
-	// Hidden columns (1, 2 left; 5 right) must NOT be printed.
+	// Hidden columns (1 left; 5,6 right) must NOT be printed.
 	assert.NotContains(t, out, "r0-c1")
-	assert.NotContains(t, out, "r0-c2")
 	assert.NotContains(t, out, "r0-c5")
+	assert.NotContains(t, out, "r0-c6")
 	// Second row rendered too.
 	assert.Contains(t, out, "r1-c0")
 	assert.Contains(t, out, "r1-c3")
@@ -368,9 +423,9 @@ func visibleRuneLen(line string) int {
 // right). The TDD Anchor for task 02 requires both markers in the mid-offset case (review
 // round 1, MAJOR #2).
 func Test_printStatHeader_midOffset_bothMarkers(t *testing.T) {
-	cfg := makeRenderConfig(6, 10)
-	cfg.scrollOffset = 2 // window 3..4: columns 1,2 hidden left, column 5 hidden right
-	s := makeRenderResult(6, 1)
+	cfg := makeRenderConfig(7, 10)
+	cfg.scrollOffset = 1 // window 2..4: column 1 hidden left, columns 5,6 hidden right
+	s := makeRenderResult(7, 1)
 
 	var buf bytes.Buffer
 	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
@@ -389,9 +444,9 @@ func Test_printStatHeader_midOffset_bothMarkers(t *testing.T) {
 // This test fails on the pre-fix implementation (header is wider than data by the marker runes)
 // and passes after the marker width is reserved in the budget and mirrored as blanks in data.
 func Test_render_alignmentInvariant(t *testing.T) {
-	cfg := makeRenderConfig(6, 10)
-	cfg.scrollOffset = 2 // both markers drawn (columns hidden left and right)
-	s := makeRenderResult(6, 3)
+	cfg := makeRenderConfig(7, 10)
+	cfg.scrollOffset = 1 // both markers drawn (column 1 hidden left, columns 5,6 hidden right)
+	s := makeRenderResult(7, 3)
 
 	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
 	assert.True(t, win.hiddenLeft && win.hiddenRight, "test premise: both markers must be active")
@@ -483,8 +538,9 @@ func Test_printDbstat_clampsScrollOffset(t *testing.T) {
 
 	var buf bytes.Buffer
 	// renderDbstat is the writer-based core of printDbstat (printDbstat feeds it the
-	// terminal width from v.Size()). termWidth 40 => maxOffset 3 for 6 uniform columns.
+	// terminal width from v.Size()). termWidth 40 => maxOffset 2 for 6 uniform columns under
+	// partial-visibility semantics (from offset 2 the last column's start already fits).
 	err := renderDbstat(&buf, cfg, s, 40)
 	assert.NoError(t, err)
-	assert.Equal(t, 3, cfg.scrollOffset, "scrollOffset must be clamped to maxOffset, not the inflated value")
+	assert.Equal(t, 2, cfg.scrollOffset, "scrollOffset must be clamped to maxOffset, not the inflated value")
 }

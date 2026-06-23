@@ -448,17 +448,25 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) col
 	// Budget left for scrollable columns after reserving the frozen column 0.
 	baseBudget := termWidth - colWidth(0)
 
-	// countFit walks scrollable columns from index "from" toward "stop" (exclusive) in
-	// the given step direction (+1 forward, -1 backward) and returns how many consecutive
-	// columns fit into the given budget before it is exceeded.
+	// countFit walks scrollable columns from index "from" toward "stop" (exclusive) in the
+	// given step direction (+1 forward, -1 backward) and returns how many consecutive columns
+	// have their START position inside the budget. A column counts as visible whenever the
+	// width already consumed BEFORE it (its start) is still within budget — even if the column
+	// itself overflows. The last counted column may therefore be only partially visible: it is
+	// printed at full cell width and the terminal (gocui) truncates it at the screen edge.
+	//
+	// This mirrors the pre-scroll behaviour for the very wide trailing "query" column of the
+	// activity/statements screens (aligned by content, almost never fitting in full): the
+	// column stays visible truncated instead of disappearing, and no right marker is drawn when
+	// the only thing past the edge is that column's own tail (issue #14 QA).
 	countFit := func(from, stop, step, budget int) int {
 		count, used := 0, 0
 		for i := from; i != stop; i += step {
-			used += colWidth(i)
-			if used > budget {
+			if used >= budget {
 				break
 			}
 			count++
+			used += colWidth(i)
 		}
 		return count
 	}
