@@ -360,6 +360,8 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 
 **Alternatives considered:** One wide table (columns cut — unreadable); aggregation by `backend_type` (loses the `object`/`context` breakdown, the core value); a reduced single-screen column set (kills the evictions/reuses and WAL-fsync stories). All rejected.
 
+**Update (2026-06-23, [009-feat-horizontal-scroll]):** Horizontal column scroll was later implemented for the main table, so the "no horizontal scroll" premise no longer holds. The two-screen split is **kept deliberately** — it is a product decision (logical grouping of count vs latency, sequential DBA workflow), not a workaround for the missing mechanism. Scroll exists for narrow terminals; collapsing the sub-screens into one wide view is explicitly out of scope. The same applies to the [007] `pg_stat_statements` JIT sub-screen split and the synthetic `io_key`.
+
 ---
 
 ## [006-feat-pg-stat-io] Synthetic md5 io_key for composite row identity; column hiding is not available
@@ -470,3 +472,99 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** The legacy `pgcenter.stat.golden.tar` predates these views, is a ~PG13 recording that cannot hold modern-view data, and regenerating it would churn all ~30 existing goldens. Synthetic input is version-parametric for free. Separate per-screen test files + goldens keep the tasks conflict-free for parallel authoring.
 
 **Alternatives considered:** A live PG14-18 record→report end-to-end harness (none exists; building one is disproportionate — the live record↔report seam is covered by a manual check); regenerating the shared fixture (mass golden churn). Both rejected.
+
+---
+
+## [009-feat-horizontal-scroll] Scroll offset on top.config, not on view.View
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted
+
+**Context:** The horizontal scroll position needs a home. `view.View` values are stored in `config.views`, and `viewSwitchHandler` deliberately persists per-view state (`OrderKey`, `Filters`, `ColsWidth`) into that map so it is restored when the user returns to a screen. But the user-spec requires the opposite for scroll — it must reset to 0 on every screen switch.
+
+**Decision:** Store the offset as a new `scrollOffset int` field on `top.config`, not on `view.View`. It is ephemeral "current screen" UI state; `config` is already threaded into both the render path and the key handlers.
+
+**Rationale:** Putting the offset on `view.View` would make it inherit the per-view persistence and survive switches — the wrong behavior. Persistence vs ephemerality is the deciding axis: per-view state belongs on the view, transient view-independent UI state belongs on `config`.
+
+**Alternatives considered:** Field on `view.View` with explicit zeroing on load — fights the intentional persistence mechanism and needs zeroing in every load path. Rejected as conceptually wrong (offset is not part of a view's definition).
+
+---
+
+## [009-feat-horizontal-scroll] Manual column window, not gocui viewport scroll
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted
+
+**Context:** Freezing the first column (the row identifier) while scrolling the rest is the core requirement. gocui offers a built-in horizontal viewport shift (`SetOrigin`/origin-x).
+
+**Decision:** Compute the visible column window in a pure function (`visibleColumns`) and render the frozen column + window manually inside `printStatHeader`/`printStatData`. Do not use gocui's viewport scroll.
+
+**Rationale:** gocui's viewport-x shift moves the *entire* buffered row, which cannot keep the first column fixed. The print functions already iterate columns, so manual windowing fits the existing structure, and extracting the window math into a pure function makes the only non-trivial logic unit-testable without a live terminal.
+
+**Alternatives considered:** gocui viewport `origin.x` (cannot freeze the first column). Hiding columns via `ColsWidth[i]=0` (impossible — `internal/align.SetAlign` floors width at 8, per ADR [006-feat-pg-stat-io]). Both rejected.
+
+---
+
+## [009-feat-horizontal-scroll] Reset offset on both view-switch paths
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted
+
+**Context:** Scroll must reset to 0 on every screen switch. There are two switch paths: the normal `switchViewTo → viewSwitchHandler`, and `switchViewToProcPidStat` (`Shift+S`), which patches runtime fields onto the view manually and does **not** delegate to `viewSwitchHandler`.
+
+**Decision:** Zero `config.scrollOffset` in `viewSwitchHandler` and, separately, in `switchViewToProcPidStat`. In the latter, place the reset **before** the `db.Local` guard.
+
+**Rationale:** A single reset in `viewSwitchHandler` would miss the per-process screen, leaving a stale offset on entry. Placing the reset before the `db.Local` guard is required for testability — the code after the guard calls `app.db.QueryRow` (nil Conn → panic without a live PostgreSQL), and on the remote path the reset is idempotent and harmless.
+
+**Alternatives considered:** Reset only in `viewSwitchHandler` (misses procpidstat); reset inside the render path on a detected view-name change (adds hidden state tracking to the render loop). Both rejected.
+
+---
+
+## [009-feat-horizontal-scroll] Partial last column + marker reservation in both walk directions
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted (refinement surfaced by manual QA after the initial implementation)
+
+**Context:** The first implementation admitted a scrollable column into the window only when it fit *whole*. Manual narrow-terminal testing found two bugs with one root cause: a deliberately wide trailing column (`query` on activity/statements) vanished entirely (it never fit whole, where gocui previously printed it truncated at the edge), and a spurious `›` marker appeared on a wide terminal.
+
+**Decision:** Change `visibleColumns` window semantics to "start-in-budget" — the last column may render partially (truncated at the edge); `hiddenRight` is false when nothing follows it. The `‹`/`›` marker glyphs are visible runes, so reserve their cell width in **both** the forward walk (window from offset) and the backward walk (computing `maxOffset`) — otherwise the last column becomes unreachable at the right edge.
+
+**Rationale:** Dropping a column whole-or-nothing is worse than the prior truncate-at-edge behavior. Reserving the marker only in the forward walk leaves a forward/backward asymmetry that makes `maxOffset` undershoot, so the last column can never be fully reached and `›` never turns off — a correctness bug the user observed visually. A property test over `ncols × widths × termWidth` now proves "last column reachable at `maxOffset`, `›` off there".
+
+**Alternatives considered:** Keep whole-column-only semantics and accept the disappearing `query` (rejected — regresses a long-standing behavior); reserve marker width in the forward walk only (rejected — the asymmetry bug above). This refinement was invisible to the original unit tests, which encoded the whole-column semantics; only manual visual QA exposed it.
+
+---
+
+## [009-feat-horizontal-scroll] Hotkeys `[` / `]`, not Shift/Ctrl/Alt + arrow
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted
+
+**Context:** Scroll needs two new keys. Arrows are already taken (sort column / column width). The TUI stack is gocui + nsf/termbox-go (`OutputNormal`), whose key modifiers are only `ModNone`/`ModAlt`.
+
+**Decision:** Use the printable keys `[` (left) and `]` (right), registered on the `sysstat` view.
+
+**Rationale:** termbox does not distinguish `Shift`/`Ctrl`+arrow (so e.g. `Shift+S` arrives as the plain rune `'S'`, not a modifier combo), and `Alt`+arrow is frequently intercepted by tiling terminal emulators and readline. Printable `[`/`]` work reliably across all terminals and read naturally as "move the window".
+
+**Alternatives considered:** `Shift`/`Ctrl`+arrow (indistinguishable in termbox); `Alt`+arrow (terminal-intercepted). Both rejected.
+
+---
+
+## [009-feat-horizontal-scroll] Sort-column highlight takes priority over frozen-column bold
+
+**Date:** 2026-06-23
+**Feature:** 009-feat-horizontal-scroll
+**Status:** Accepted
+
+**Context:** The frozen first column's header name is rendered bold. The first column can simultaneously be the active sort column (`OrderKey == 0`), which `printStatHeader` already renders with a distinct escape sequence (`\033[47;1m`).
+
+**Decision:** When both apply on column 0, the sort highlight wins; the frozen-bold adds nothing.
+
+**Rationale:** Layering two bold/background escape sequences on one cell risks a garbled render. Sort state is the more actionable signal, and both states reading as "emphasized" is visually consistent.
+
+**Alternatives considered:** A third combined style for the overlap — extra escape-sequence handling for a rare case, rejected as over-engineering.

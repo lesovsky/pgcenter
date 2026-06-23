@@ -7,7 +7,7 @@ It reads PostgreSQL internal statistics views and presents them in a top-like in
 
 | Command   | Purpose |
 |-----------|---------|
-| `top`     | Real-time monitoring (main feature) — live stats with refresh |
+| `top`     | Real-time monitoring (main feature) — live stats with refresh; the main stats table scrolls horizontally by column (`[`/`]`) with a frozen first column for narrow terminals (009-feat-horizontal-scroll) |
 | `record`  | Collect stats to tar files ("poor man's monitoring") |
 | `report`  | Build reports from recorded files |
 | `profile` | Wait events profiler — shows what queries are waiting on |
