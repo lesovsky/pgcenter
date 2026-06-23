@@ -1,0 +1,54 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Task 01 implements the pure visibleColumns window function and the config.scrollOffset field cleanly and idiomatically. The function is correct across all edge cases I verified empirically (non-uniform widths, scrollBudget<=0, zero/negative termWidth, ncols<=1, sparse map) — no panics, no negative/zero window widths, math stays bounded; the issue #99 class is properly guarded by strict index reads in [0,ncols) with no map ranging. Findings are minor: a slightly weak edge-case assertion and a small duplication of the column-budget walk; no critical or major issues. Existing pure tests pass; the package-level FAIL is a pre-existing DB-dependent test (Test_doReload) unrelated to this change.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 405,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "There are two near-identical width-accumulation walks: the `fits` closure (forward fill from `first`) and the inline `maxOffset` loop (backward tail fill). Both replicate the same `used += colWidth(i); if used > scrollBudget break` budget logic. Consider a single small helper that counts how many consecutive columns fit from a given start within scrollBudget, used by both forward and (conceptually) the tail computation, to keep the two consistent if the +2 gap rule ever changes.",
+      "benefit": "Single source of truth for the column-budget rule; reduces risk that forward-fit and max-offset accounting drift apart on a future change.",
+      "optional": true,
+      "tech_debt": false
+    },
+    {
+      "file": "top/stat.go",
+      "line": 421,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "In the maxOffset block the local `used` is only meaningful inside the loop; the `tailCount` name plus the `(ncols-1)-tailCount` arithmetic is a bit indirect. A one-line comment example (e.g. 'tailCount columns fit at the end => first scrollable shown is ncols-tailCount => offset = (ncols-1)-tailCount') already exists but the inverse relationship between tailCount and offset is the only non-obvious step; consider naming the result `visibleFromEnd` or asserting the invariant `fits(1+maxOffset) covers the last column` in a test.",
+      "benefit": "Makes the offset<->tailCount inversion easier to verify at a glance and pins the key invariant (last column visible at maxOffset) in a test rather than only in prose.",
+      "optional": true,
+      "tech_debt": false
+    },
+    {
+      "file": "top/stat.go",
+      "line": 401,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "When scrollBudget <= 0 (terminal narrower than the frozen column) the function returns an empty window with hiddenRight=true and maxOffset=0 — correct graceful degradation per user-spec ('first column printed always, rest clipped'). This behavior is exercised by 'very narrow only frozen fits' only for the budget==frozenCost boundary; the strictly-negative-budget path (termWidth < colWidth(0)) is not asserted by any test. Adding that case would lock in the no-panic / empty-window contract for the resize-to-tiny scenario.",
+      "benefit": "Protects the documented narrow-terminal degradation path (resize edge case from user-spec) against future regressions.",
+      "optional": true,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  },
+  "checkedDimensions": {
+    "correctness": "Verified empirically: all-fit, narrow, mid-offset, past-end clamp, non-uniform widths (wide head/tail, wide tail), scrollBudget<=0, termWidth 0 and negative, ncols<=1, sparse/missing map keys. maxOffset (backward tail fill) is consistent with the forward `fits` walk because both share colWidth and the strict '> scrollBudget' comparison; last column is reachable at maxOffset in every tested case. No panics, no negative window widths.",
+    "boundary_handling": "Out-of-bounds reads guarded by `if i >= 0 && i < ncols` in colWidth; negative width clamped to 0; offset clamped to [0, maxOffset] via math.Min/math.Max on every call (single source of truth, matches Decision-2 / Risks); empty window expressed as last < first.",
+    "issue_99_class": "Correctly mitigated: colsWidth read strictly by index in [0,ncols), never ranged over; absent/zero key treated as width 0 while still costing the +2 gap, keeping math bounded.",
+    "spec_conformance": "Matches Task 01 scope and Decision 1 (offset on config, not view.View — confirmed field added to config struct with reset-on-switch comment) and Decision 2 (manual pure window function, gocui viewport not used). printStatHeader/printStatData left unchanged as required; newConfig untouched (zero value valid).",
+    "go_idiomatic": "Named return values used appropriately and documented; closures for colWidth/fits are clear; uses internal/math Min/Max consistent with config_view.go convention. gofmt clean. go vet clean.",
+    "project_style": "Follows project align/math conventions; the +2 print gap matches printStatHeader (`ColsWidth[i]+2`); SetAlign floor-of-8 noted but not relied upon (function robust to width 0). Table-driven tests via t.Run + testify/assert consistent with Test_alignViewToResult.",
+    "tech_debt_note": "No shortcuts or hardcoded magic introduced beyond the spec-mandated +2 gap (documented and matches existing print code). The only tech-debt-flagged item is a missing test for the strictly-negative scrollBudget path; the implementation handles it correctly, only assertion coverage is absent."
+  }
+}
