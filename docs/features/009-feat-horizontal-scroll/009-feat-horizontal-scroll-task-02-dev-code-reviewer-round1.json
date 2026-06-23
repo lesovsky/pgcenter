@@ -1,0 +1,54 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "changes_required",
+  "summary": "Реализация оконного рендера корректна по индексации (абсолютный i вместо colnum), write-back clamped offset правильно закрывает runaway-offset, приоритет sort-подсветки на col0 реализован без двойного ANSI-escape. Однако бюджет ширины маркеров ‹/› НЕ зарезервирован в visibleColumns (нарушение Decision 5): при hiddenLeft строка заголовка шире строк данных, имена колонок съезжают относительно значений — подтверждено тестом (header 39 рун vs data 37). Это явное требование спека (off-by-one риск), поэтому changes_required.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 417,
+      "severity": "major",
+      "category": "best-practices",
+      "suggestion": "Бюджет ширины маркеров ‹/› не учитывается в visibleColumns. scrollBudget = termWidth - colWidth(0) заполняет колонки на всю ширину, а маркеры (‹ слева, › справа — видимые руны, по 1 ячейке) печатаются в printStatHeader СВЕРХ бюджета. В результате строка заголовка становится шире строк данных, и при hiddenLeft маркер ‹ вставляется между frozen-колонкой и первой scrollable-колонкой, сдвигая ВСЕ имена scrollable-колонок заголовка на 1 руну вправо относительно значений под ними. Проверено эмпирически на mid-offset (6 колонок ×10, termWidth 40, offset 2): header = 39 видимых рун, data = 37; col3/col4 в заголовке стоят правее своих значений. Decision 5 и AC (\"их ширина учтена в бюджете, выравнивание заголовка и данных не сбито\") прямо требуют резервировать ячейки маркеров. Рекомендация: либо вычитать максимально возможную ширину маркеров (1-2 ячейки) из scrollBudget внутри visibleColumns до подбора окна (предпочтительно — единый источник истины), либо паддить data-строки на ту же ширину маркеров. Из-за того, что маркеры зависят от hiddenLeft/hiddenRight (которые сами зависят от окна), для детерминированного выравнивания проще зарезервировать фиксированный бюджет под обе стороны заранее.",
+      "benefit": "Выравнивание заголовка и данных при наличии скрытых слева колонок — закрытие явного требования Decision 5 и одноимённого риска off-by-one из user-spec/tech-spec.",
+      "optional": false,
+      "tech_debt": false
+    },
+    {
+      "file": "top/stat.go",
+      "line": 353,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "visibleColumns вызывается трижды за один рендер: в renderDbstat (для clamped), в printStatHeader и в printStatData. Функция чистая и детерминированная, поэтому результаты согласованы (все три читают уже заклампленный config.scrollOffset), бага нет. Но это лишние вычисления и риск рассинхронизации при будущих правках сигнатуры/логики окна. Implementation hints в задаче допускали передачу видимого окна в print-функции как альтернативу. Рекомендация: вычислить окно один раз в renderDbstat и передать (first, last, hiddenLeft, hiddenRight) в printStatHeader/printStatData параметрами — единственный вызов visibleColumns за рендер. Это также естественнее свяжет с фиксом бюджета маркеров (находка выше): окно считается в одном месте.",
+      "benefit": "Единый источник истины окна за рендер, меньше дублирования, ниже риск рассинхронизации header/data при будущих изменениях.",
+      "optional": true,
+      "tech_debt": true
+    },
+    {
+      "file": "top/stat.go",
+      "line": 15,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "Импорт \"io\" добавлен в середину блока между сторонними пакетами (после internal/view, перед \"os\"), а не сгруппирован с stdlib. gofmt не ругается, и файл уже смешивает stdlib и сторонние в одной группе, так что это согласуется с текущим стилем файла, но goimports сгруппировал бы stdlib отдельно. Опционально привести импорты к группировке stdlib/external, если проект перейдёт на goimports.",
+      "benefit": "Согласованность с идиоматичной Go-группировкой импортов.",
+      "optional": true,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  },
+  "positiveNotes": [
+    "Индексация переведена на абсолютный i во всех точках (printDataCell: длина/усечение/печать, ColsWidth[i]); colnum и его инкремент удалены — регрессия рассинхронизации значений с колонками закрыта корректно. Фильтр-блок (уже абсолютный i) не тронут, как и требовалось.",
+    "Write-back clamped offset в renderDbstat (config.scrollOffset = clamped) реализован один раз за рендер до печати — корректно закрывает runaway offset; покрыт Test_printDbstat_clampsScrollOffset (1<<20 -> 3).",
+    "Приоритет подсветки на col0 реализован switch'ем: при OrderKey==0 печатается ТОЛЬКО sort-escape (\\033[47;1m), иначе frozen-bold (\\033[30;47;1m), иначе обычная. Двойного ANSI-escape на одной ячейке нет; проверено тестом strings.Count.",
+    "Рефактор на io.Writer + termWidth оправдан архитектурно: renderDbstat (writer-core) отделён от printDbstat (резолвит ширину из v.Size()), что делает рендер юнит-тестируемым без живого терминала через bytes.Buffer — *gocui.View реализует io.Writer, вызов из printDbstat не сломан. Все вызовы (top/stat.go:152 -> printDbstat -> renderDbstat) согласованы; report/printStatHeader — отдельная функция в пакете report, коллизии имён нет.",
+    "Усечение значений (value[:width-1]+\"~\", ошибка при width<=0) и фильтрация (doPrint) сохранены без изменений.",
+    "Frozen-колонка печатается всегда отдельно перед циклом окна — корректно независима от offset; пустой результат (Nrows==0) не печатает данные и не паникует (покрыто тестом)."
+  ],
+  "notes": "Сбой Test_doReload при go test ./top/... — pre-existing, требует живого PostgreSQL (QueryRow на nil-соединении в top/reload.go:18), к изменениям task 02 не относится. Все новые render-level тесты и Test_visibleColumns зелёные. gofmt чист."
+}

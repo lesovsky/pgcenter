@@ -25,3 +25,28 @@
 - `go test ./top/ -run Test_visibleColumns` → 10/10 подкейсов passed
 - `go test ./top/` → без новых регрессий (предсуществующий `Test_doReload` падает без живого PostgreSQL — tech-debt [005], не связан)
 - `make build` → ок; gofmt/go vet → чисто
+
+---
+
+## Task 02: Render frozen column + visible window in header and data
+
+**Status:** Done
+**Commit:** 3a11407, d17b389
+**Agent:** основной агент (исполнитель + round-1 фиксы)
+**Summary:** `printStatHeader`/`printStatData` переведены на оконный рендер: замороженная колонка 0 + видимое окно из `visibleColumns`, маркеры `‹`/`›`, bold-имя замороженной колонки с приоритетом подсветки сортировки на col0 (Decision 4). Удалён счётчик `colnum` — индексация значений строго по абсолютному индексу. В `printDbstat`/`renderDbstat` добавлен write-back `config.scrollOffset = clamped` (защита от runaway offset). Print-функции переведены на `io.Writer`+`columnWindow` для тестируемости (gocui.View нельзя сконструировать в юнит-тестах); окно считается один раз в `renderDbstat` и передаётся параметром.
+**Deviations:** Сигнатуры print-функций изменены (`io.Writer`+`columnWindow` вместо чтения `v.Size()` внутри) — оправдано тестируемостью, согласовано во всех вызовах, одобрено code-review. `visibleColumns` теперь возвращает структуру `columnWindow` и резервирует ширину маркеров в бюджете (двухпроходное разрешение цикла маркер↔окно).
+**Tech debt:** Незначительный, необязательный (из round-2 ревью): переименовать промежуточный `hiddenRight` для читаемости; задокументировать предусловие тест-хелперов (width ≥ len(name)); добавить прогон пустого окна через принтеры; усилить вторую ассерту в sort-priority подтесте. Все косметические, не блокеры.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: changes_required, 1 major (бюджет маркеров не зарезервирован → рассинхрон header/data, Decision 5) + 2 minor → [009-feat-horizontal-scroll-task-02-dev-code-reviewer-round1.json]
+- dev-test-reviewer: needs_improvement, 2 major (тот же дефект + левый маркер не тестируется) + 3 minor → [009-feat-horizontal-scroll-task-02-dev-test-reviewer-round1.json]
+
+*Round 2 (после исправлений, commit d17b389):*
+- dev-code-reviewer: approved — major закрыт (проверено перебором по пространству параметров) → [009-feat-horizontal-scroll-task-02-dev-code-reviewer-round2.json]
+- dev-test-reviewer: passed — оба major закрыты (проверено мутациями), minor закрыты → [009-feat-horizontal-scroll-task-02-dev-test-reviewer-round2.json]
+
+**Verification:**
+- `go test ./top/` → все render-тесты + `Test_visibleColumns` + `Test_render_alignmentInvariant` (litmus выравнивания) зелёные; без новых регрессий
+- `make build` → ок; gofmt/go vet → чисто

@@ -1,0 +1,65 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Render-level tests cover the core TDD Anchor cases (mid-offset windowed with absolute indexing, empty result, right-edge marker, frozen column + sort priority, clamped write-back) with mostly strong, behavior-asserting tests — all pass. The clampsScrollOffset write-back test is genuinely strong (asserts the mutated config field, litmus-passes). Two real gaps: (1) Decision 5 alignment (markers budgeted so header and data rows line up) is NOT tested, and a probe shows the implementation actually misaligns header vs data by the width of the markers (header 38 visible cols, data 36) — no test catches this, giving false confidence on the AC. (2) Two TDD-Anchor-adjacent assertions are missing: left marker ‹ presence at mid-offset, and the frozen-bold escape sequence in the normal (non-sort) case. No critical issues; tests are not tautological overall.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (printStatHeader/printStatData render tests)",
+      "issue": "No test asserts header/data alignment under Decision 5 (marker cells budgeted into width). A probe stripping ANSI escapes shows header visible width = 38 but data visible width = 36 at mid-offset — they differ by exactly the two marker runes ‹/›, i.e. markers are printed ON TOP of the column budget rather than reserved within it. visibleColumns never subtracts marker cells from scrollBudget, so the AC 'ширина маркеров учтена в бюджете, выравнивание заголовка и данных не сбито (Decision 5)' is violated AND untested. The test suite gives false confidence on this AC.",
+      "recommendation": "Add Test_printStatHeader_dataAligned_withMarkers: render header and data for the same mid-offset config (e.g. makeRenderConfig(6,10), scrollOffset=2, termWidth=40), strip ANSI with regexp `\\033\\[[0-9;]*m`, take the first line of each, and assert.Equal on the visible rune count of the header line vs the data line. This forces marker cells to be budgeted. Expected to FAIL against current impl (38 vs 36), correctly surfacing the Decision 5 defect for the code-reviewer/implementer to fix.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go:286 Test_printStatData_windowed_midOffset / header counterpart",
+      "issue": "TDD Anchor and task explicitly call for the mid-offset case to show BOTH edge markers (‹ left and › right). The right marker is asserted only in the offset-0 case (rightEdgeMarker test, where ‹ is correctly asserted absent). No test asserts the LEFT marker ‹ is present at mid-offset. A probe confirms ‹ IS printed at scrollOffset=2, so the behavior exists but is unguarded — a regression dropping the left marker would not be caught.",
+      "recommendation": "In a header render at mid-offset (scrollOffset=2, 6 cols, termWidth=40) add: assert.Contains(out, \"‹\", \"left marker expected when columns hidden to the left\") and assert.Contains(out, \"›\"). Either extend Test_printStatHeader_rightEdgeMarker into a mid-offset sibling or add Test_printStatHeader_bothEdgeMarkers.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:341,353 (frozen column presence assertions)",
+      "issue": "AC 'Имя замороженной колонки выделено bold' is not verified in the normal (non-sort) path. Tests only assert.Contains(out, \"col0\"), but 'col0' is printed for the frozen column whether or not the frozen-bold escape (\\033[30;47;1m) is applied — so the assertion passes even if bold is dropped. This is a weak (near-tautological) assertion for the bold behavior; the sort-priority subtest is fine, but the frozen-bold-when-not-sorted case is not pinned.",
+      "recommendation": "In Test_printStatHeader_frozenColumn, for a config with OrderKey != 0 (e.g. OrderKey=1), assert.Contains(out, \"\\033[30;47;1mcol0\") to pin the frozen-bold escape sequence for column 0, and assert it is NOT the plain \\033[30;47m sequence on col0. tech_debt: true (weak assertion masquerading as bold coverage).",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:330 Test_printStatHeader_rightEdgeMarker",
+      "issue": "The test asserts the › marker is present but not that it appears AFTER the visible columns (right side). A bug placing the marker on the wrong side would still pass Contains. Position relative to col0/visible columns is the actual behavior of interest.",
+      "recommendation": "Assert ordering: strings.Index(out, \"col0\") < strings.Index(out, \"›\"), and that › comes after the last visible scrollable column name. Cheap, makes the marker-side behavior load-bearing. tech_debt: true.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (printDataCell truncation path)",
+      "issue": "AC requires preserving truncation behavior ([:width-1]+\"~\", and the 'zero or negative width' error). The refactor moved this logic into printDataCell and re-indexed by absolute i, but no render-level test exercises the truncation branch (value longer than column width producing the '~' suffix) nor the width<=0 error path. These are behavior-bearing branches touched by this task.",
+      "recommendation": "Add a test with a cell value longer than ColsWidth[i] and assert the printed value ends with '~' and is truncated to width. Optionally a config with ColsWidth giving width 0 on a visible column to assert printStatData returns the 'zero or negative width' error. Guards that the colnum->i reindex did not break truncation.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 5,
+      "failed": 0,
+      "weak": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 16,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
