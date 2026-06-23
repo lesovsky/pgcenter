@@ -1,7 +1,7 @@
 ---
 created: 2026-06-23
 status: approved
-branch: dev
+branch: feature/horizontal-scroll
 size: M
 ---
 
