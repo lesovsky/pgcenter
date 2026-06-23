@@ -167,3 +167,42 @@ handles tables/activity/wal/statements. These screens were live-TUI-only before 
 **Touches:** [004]/[005]/[006]/[007] — lifts the `NotRecordable` flag those screens shipped with
 and adds their report flags. Reuses the existing pure-SQL record/report pipeline (no recorder or
 storage-format change). Pays off tech-debt [004] and [007].
+
+---
+
+### [009-feat-horizontal-scroll] Horizontal Scroll of the Stats Table
+
+**What it does:** Adds by-column horizontal scrolling to the main stats table in `pgcenter top`
+so columns that don't fit a narrow terminal can be brought into view. `]` scrolls right, `[`
+scrolls left; the first column (the row identifier — PID / database / table name) is **frozen**
+and stays in place at any offset. Edge markers `‹`/`›` on the header row show when columns are
+hidden to the left/right. Closes issue #14, the most-requested item, open since 2015.
+
+**Key scenarios:**
+- On a ~100-column terminal the `query` column on the activity screen is off the right edge and
+  the header shows `›`. Press `]` a few times: the window scrolls right, `pid` stays put, `query`
+  comes into view, and `‹` now shows on the left. Press `[` to scroll back; `‹` disappears at offset 0.
+- Switch to another screen (including the per-process screen via `Shift+S`): the new screen
+  opens unscrolled (offset reset to 0). The offset persists across auto-refresh ticks within one screen.
+- On a wide terminal where everything fits, `[`/`]` are no-ops and no markers are shown.
+- Sorting (`←`/`→`) and scrolling (`[`/`]`) are independent — the sort column may sit outside the
+  visible window, which is expected (no auto-scroll to the sort column).
+
+**Limitations:**
+- **Main stats table only.** The side extra-panels (iostat / netdev / fsstats / logtail) do not
+  scroll — intentional scope: issue #14 is about the main table, and the panels have a fixed
+  narrow field set.
+- The `pg_stat_io` two-screen split, the seven `pg_stat_statements` sub-screens, and the
+  synthetic `io_key` (see [006]) are **kept as-is** — they are a deliberate logical grouping, not
+  a workaround for the (now-removed) lack of scroll. Scroll is for narrow terminals, not for
+  collapsing those into one wide view.
+- Scrolling is by **column**, not by character — you cannot peek at half a wide column. The last
+  visible column may render partially (truncated at the edge) so a wide trailing column like
+  `query` is never dropped entirely.
+- `record`/`report` is plain stdout, not a TUI, so scroll does not apply there.
+
+**Touches:** Every stat screen of the main table (activity, databases, tables, indexes, sizes,
+functions, replication, replslots, wal, bgwriter, progress, all `statements` sub-screens, both
+`pg_stat_io` screens, procpidstat) — all share the `printStatHeader`/`printStatData` render path.
+Relates to [006-feat-pg-stat-io], whose ADRs cited "no horizontal scroll" as the reason for the
+sub-screen splits; this feature removes that constraint but the splits are deliberately retained.

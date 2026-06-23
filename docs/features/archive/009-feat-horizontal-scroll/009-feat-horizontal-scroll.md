@@ -144,6 +144,34 @@ size: M
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+_Reconciliation of the shipped result against this spec. Filled during finalization (009)._
+
+### Divergences
+
+- **Print functions moved to `io.Writer` + precomputed `columnWindow`.** The spec/tech-spec had
+  `printStatHeader`/`printStatData` read terminal width via `v.Size()` internally. As implemented,
+  they take an `io.Writer` and a precomputed `columnWindow`; the window is computed once in
+  `renderDbstat` (which writes the clamped offset back to `config.scrollOffset`) and passed in.
+  Reason: `gocui.View` cannot be constructed in a unit test, so this change made the render path
+  testable against a `bytes.Buffer` without a live terminal. Signatures changed consistently at all
+  call sites; approved in code review. Not a behavior change for the user.
+
+- **Partial visibility of the last column (added after manual QA).** The original window math
+  admitted a scrollable column only when it fit *whole*. Manual narrow-terminal testing showed a
+  deliberately wide trailing column (`query` on activity/statements) disappeared entirely instead
+  of being truncated at the edge (the prior gocui behavior), and a spurious `›` appeared on a wide
+  terminal. Fixed by changing `visibleColumns` to "start-in-budget" semantics — the last column may
+  render partially; `hiddenRight` is false when nothing follows it. Covered by updated and new
+  tests. See decisions-log ADR "[009] Partial last column + marker reservation".
+
+- **`columnWindow` struct + two-pass marker reservation.** `visibleColumns` returns a
+  `columnWindow` struct (rather than the loose tuple sketched in the tech-spec) and reserves the
+  `‹`/`›` marker glyph width in **both** the forward walk (window from offset) and the backward
+  walk (computing `maxOffset`). Reserving it only in the forward walk left the last column
+  unreachable at the right edge (the `›` never turned off) — a critical correctness defect found in
+  code review of the partial-visibility fix and closed with a property test over the parameter space.
+
+### Descoped
+
+- None. All user-spec acceptance criteria were implemented; the side extra-panels and the
+  record/report pipeline were out of scope from the start, as stated in "Ограничения".

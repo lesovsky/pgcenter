@@ -1,0 +1,75 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "009-feat-horizontal-scroll",
+    "feature_name": "horizontal-scroll",
+    "feature_base": "docs/features/009-feat-horizontal-scroll/009-feat-horizontal-scroll",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "Opus 4.8",
+    "date_started": "2026-06-23T03:20:38Z",
+    "date_completed": "2026-06-23T07:32:00Z"
+  },
+  "phases": {
+    "user_spec": {
+      "start_time": "2026-06-23T03:20:38Z",
+      "end_time": "2026-06-23T04:13:15Z",
+      "duration_min": 52,
+      "touch_time_min": 37,
+      "human_wait_time_min": 15,
+      "steps": {}
+    },
+    "tech_spec": {
+      "start_time": "2026-06-23T04:14:55Z",
+      "end_time": "2026-06-23T04:24:14Z",
+      "duration_min": 9,
+      "touch_time_min": 7,
+      "human_wait_time_min": 2,
+      "steps": {}
+    },
+    "task_decomposition": {
+      "start_time": "2026-06-23T04:24:59Z",
+      "end_time": "2026-06-23T04:38:48Z",
+      "duration_min": 13,
+      "touch_time_min": 11,
+      "human_wait_time_min": 2,
+      "steps": {}
+    },
+    "feature_execution": {
+      "start_time": "2026-06-23T04:40:31Z",
+      "end_time": "2026-06-23T07:11:57Z",
+      "duration_min": 151,
+      "touch_time_min": 121,
+      "human_wait_time_min": 30,
+      "steps": {}
+    },
+    "done": {
+      "start_time": "2026-06-23T07:29:00Z",
+      "end_time": "2026-06-23T07:32:00Z",
+      "duration_min": 3,
+      "touch_time_min": 3,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 1, "tech_spec": 1, "task_decomposition": 1, "feature_execution": 3 },
+    "validation_findings": { "critical": 1, "major": 1, "minor": 32 },
+    "review_rounds": { "task-01": 1, "task-02": 3, "task-03": 1 },
+    "review_findings": { "critical": 1, "major": 5, "minor": 22 },
+    "first_pass_rate_pct": 66.7
+  },
+  "volume": {
+    "interview_questions": 8,
+    "tasks_count": 4,
+    "waves_count": 3,
+    "agents_spawned": 38,
+    "commits_count": 11
+  },
+  "aggregates": {
+    "total_lead_time_min": 228,
+    "total_touch_time_min": 179,
+    "total_wait_time_min": 49,
+    "flow_efficiency_pct": 78.5
+  }
+}
