@@ -12,6 +12,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/pretty"
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
+	"io"
 	"os"
 	"regexp"
 	"strconv"
@@ -332,19 +333,34 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 	// Align values within columns, use fixed aligning instead of dynamic.
 	alignViewToResult(config, s.Result)
 
+	// Terminal width drives the visible-column window. dbstat is created with
+	// Frame=false, so Size() returns the true drawing width.
+	termWidth, _ := v.Size()
+
+	return renderDbstat(v, config, s, termWidth)
+}
+
+// renderDbstat is the writer-based core of printDbstat: it clamps the scroll offset,
+// then prints the windowed header and data. It is separated from printDbstat (which only
+// resolves the terminal width from the gocui view) so the render can be unit-tested
+// without a live terminal.
+func renderDbstat(w io.Writer, config *config, s stat.Stat, termWidth int) error {
+	// Re-clamp the scroll offset on every render and write it back into config. config
+	// is shared by pointer, so this persists across renders — the fix for runaway offset:
+	// without write-back, repeated scroll-right at the visual maximum inflates the field
+	// unboundedly (visibleColumns clamps its own result but the source field keeps growing),
+	// after which scroll-left "sticks" until the offset drifts back into range.
+	_, _, clamped, _, _ := visibleColumns(s.Result.Ncols, config.view.ColsWidth, termWidth, config.scrollOffset)
+	config.scrollOffset = clamped
+
 	// Print header.
-	err := printStatHeader(v, s, config)
+	err := printStatHeader(w, s, config, termWidth)
 	if err != nil {
 		return err
 	}
 
 	// Print data.
-	err = printStatData(v, s, config, isFilterRequired(config.view.Filters))
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return printStatData(w, s, config, isFilterRequired(config.view.Filters), termWidth)
 }
 
 // formatError returns formatted error string depending on its type.
@@ -437,44 +453,87 @@ func visibleColumns(ncols int, colsWidth map[int]int, termWidth, offset int) (fi
 	return first, last, clamped, hiddenLeft, hiddenRight
 }
 
-// printStatHeader prints stats header.
-func printStatHeader(v *gocui.View, s stat.Stat, config *config) error {
-	var pname string
-	for i := 0; i < s.Result.Ncols; i++ {
-		name := s.Result.Cols[i]
+// printStatHeader prints the stats header for the visible column window: the frozen
+// column 0 followed by the scrollable columns inside the window computed by
+// visibleColumns. Edge markers ‹ / › are drawn when columns are hidden to the
+// corresponding side; the markers are visible runes and are accounted for in the cell
+// budget so the header stays aligned with the data rows.
+func printStatHeader(w io.Writer, s stat.Stat, config *config, termWidth int) error {
+	first, last, _, hiddenLeft, hiddenRight := visibleColumns(s.Result.Ncols, config.view.ColsWidth, termWidth, config.scrollOffset)
 
-		// mark filtered column
-		if config.view.Filters[i] != nil && config.view.Filters[i].String() != "" {
-			pname = "*" + name
-		} else {
-			pname = name
-		}
+	// Frozen column 0 is always printed first, independent of offset.
+	if err := printHeaderCell(w, s, config, 0); err != nil {
+		return err
+	}
 
-		// mark ordered column with foreground color
-		if i != config.view.OrderKey {
-			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 30, 47, config.view.ColsWidth[i]+2, pname)
-			if err != nil {
-				return err
-			}
-		} else {
-			_, err := fmt.Fprintf(v, "\033[%d;%dm%-*s\033[0m", 47, 1, config.view.ColsWidth[i]+2, pname)
-			if err != nil {
-				return err
-			}
+	// Left edge marker: scrollable columns hidden to the left.
+	if hiddenLeft {
+		if _, err := fmt.Fprint(w, "‹"); err != nil {
+			return err
 		}
 	}
-	_, err := fmt.Fprintf(v, "\n")
-	if err != nil {
+
+	// Scrollable columns inside the visible window.
+	for i := first; i <= last; i++ {
+		if err := printHeaderCell(w, s, config, i); err != nil {
+			return err
+		}
+	}
+
+	// Right edge marker: scrollable columns hidden to the right.
+	if hiddenRight {
+		if _, err := fmt.Fprint(w, "›"); err != nil {
+			return err
+		}
+	}
+
+	if _, err := fmt.Fprintf(w, "\n"); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-// printStatData prints stats data.
-func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) error {
+// printHeaderCell prints a single header cell for column i, applying the filter prefix,
+// the ordered-column highlight, and the frozen-column bold. The sort highlight has
+// priority over frozen-bold on column 0 (Decision 4): when column 0 is the ordered
+// column, only the sort highlight is applied.
+func printHeaderCell(w io.Writer, s stat.Stat, config *config, i int) error {
+	name := s.Result.Cols[i]
+
+	// mark filtered column
+	pname := name
+	if config.view.Filters[i] != nil && config.view.Filters[i].String() != "" {
+		pname = "*" + name
+	}
+
+	width := config.view.ColsWidth[i] + 2
+
+	switch {
+	case i == config.view.OrderKey:
+		// ordered column highlight (also wins over frozen-bold on column 0, Decision 4)
+		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 47, 1, width, pname)
+		return err
+	case i == 0:
+		// frozen column name in bold (when not the ordered column)
+		_, err := fmt.Fprintf(w, "\033[%d;%d;%dm%-*s\033[0m", 30, 47, 1, width, pname)
+		return err
+	default:
+		_, err := fmt.Fprintf(w, "\033[%d;%dm%-*s\033[0m", 30, 47, width, pname)
+		return err
+	}
+}
+
+// printStatData prints the stats data for the visible column window: the frozen column 0
+// followed by the scrollable columns inside the window computed by visibleColumns. Values
+// and widths are indexed strictly by the ABSOLUTE column index i (the previous independent
+// colnum counter is removed) so windowed rendering keeps each value aligned with its
+// column.
+func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, termWidth int) error {
+	first, last, _, _, _ := visibleColumns(s.Result.Ncols, config.view.ColsWidth, termWidth, config.scrollOffset)
+
 	var doPrint bool
-	for colnum, rownum := 0, 0; rownum < s.Result.Nrows; rownum, colnum = rownum+1, 0 {
+	for rownum := 0; rownum < s.Result.Nrows; rownum++ {
 		// be optimistic, we want to print the row.
 		doPrint = true
 
@@ -491,38 +550,47 @@ func printStatData(v *gocui.View, s stat.Stat, config *config, filter bool) erro
 			}
 		}
 
-		// print values
-		for i := range s.Result.Cols {
-			if doPrint {
-				// truncate values that longer than column width
-				valuelen := len(s.Result.Values[rownum][colnum].String)
-				if valuelen > config.view.ColsWidth[i] {
-					width := config.view.ColsWidth[i]
-					if width <= 0 {
-						return fmt.Errorf("zero or negative width, skip")
-					}
-
-					// truncate value up to column width and replace last character with '~' symbol
-					s.Result.Values[rownum][colnum].String = s.Result.Values[rownum][colnum].String[:width-1] + "~"
-				}
-
-				// print value
-				_, err := fmt.Fprintf(v, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][colnum].String)
-				if err != nil {
-					return err
-				}
-				colnum++
-			}
+		if !doPrint {
+			continue
 		}
-		if doPrint {
-			_, err := fmt.Fprintf(v, "\n")
-			if err != nil {
+
+		// print frozen column 0 value first, then the windowed columns.
+		if err := printDataCell(w, s, config, rownum, 0); err != nil {
+			return err
+		}
+		for i := first; i <= last; i++ {
+			if err := printDataCell(w, s, config, rownum, i); err != nil {
 				return err
 			}
+		}
+
+		if _, err := fmt.Fprintf(w, "\n"); err != nil {
+			return err
 		}
 	}
 
 	return nil
+}
+
+// printDataCell prints the value of column i for the given row, truncating values longer
+// than the column width (replacing the last character with '~') and padding to the column
+// width plus the +2 gap. Returns an error for a zero or negative column width.
+func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	// truncate values that are longer than column width
+	valuelen := len(s.Result.Values[rownum][i].String)
+	if valuelen > config.view.ColsWidth[i] {
+		width := config.view.ColsWidth[i]
+		if width <= 0 {
+			return fmt.Errorf("zero or negative width, skip")
+		}
+
+		// truncate value up to column width and replace last character with '~' symbol
+		s.Result.Values[rownum][i].String = s.Result.Values[rownum][i].String[:width-1] + "~"
+	}
+
+	// print value
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][i].String)
+	return err
 }
 
 // printIostat prints extra 'iostat' - block IO devices stats.

@@ -1,6 +1,7 @@
 package top
 
 import (
+	"bytes"
 	"database/sql"
 	"fmt"
 	"github.com/jackc/pgx/v5"
@@ -9,6 +10,8 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -237,4 +240,151 @@ func Test_visibleColumns(t *testing.T) {
 		assert.True(t, hiddenLeft)
 		assert.Equal(t, 4, first)
 	})
+}
+
+// makeRenderConfig builds a config with a synthetic, already-aligned view of ncols
+// columns each of the given width. Column names are col0..colN-1, so a column name
+// can be matched back to its absolute index in render output.
+func makeRenderConfig(ncols, width int) *config {
+	cols := make([]string, ncols)
+	colsWidth := make(map[int]int, ncols)
+	for i := 0; i < ncols; i++ {
+		cols[i] = fmt.Sprintf("col%d", i)
+		colsWidth[i] = width
+	}
+	return &config{view: view.View{
+		Ncols:     ncols,
+		Cols:      cols,
+		ColsWidth: colsWidth,
+		Aligned:   true,
+		Filters:   map[int]*regexp.Regexp{},
+	}}
+}
+
+// makeRenderResult builds a synthetic PGresult with nrows rows of ncols columns.
+// Each cell value is "rR-cC" so a printed value can be matched to its absolute
+// (row, column) coordinates — this is how the absolute-index lookup is verified.
+func makeRenderResult(ncols, nrows int) stat.Stat {
+	cols := make([]string, ncols)
+	for i := 0; i < ncols; i++ {
+		cols[i] = fmt.Sprintf("col%d", i)
+	}
+	values := make([][]sql.NullString, nrows)
+	for r := 0; r < nrows; r++ {
+		row := make([]sql.NullString, ncols)
+		for c := 0; c < ncols; c++ {
+			row[c] = sql.NullString{String: fmt.Sprintf("r%d-c%d", r, c), Valid: true}
+		}
+		values[r] = row
+	}
+	return stat.Stat{Pgstat: stat.Pgstat{Result: stat.PGresult{
+		Valid: true, Ncols: ncols, Nrows: nrows, Cols: cols, Values: values,
+	}}}
+}
+
+// Test_printStatData_windowed_midOffset verifies windowed data rendering with a narrow
+// terminal and a mid offset (columns hidden both left and right). The frozen column 0
+// must be printed, and values must be looked up by the ABSOLUTE column index, not by the
+// position within the visible window (the regression guarded by removing the colnum
+// counter).
+func Test_printStatData_windowed_midOffset(t *testing.T) {
+	// 6 columns of width 10 (cost 12 each). termWidth 40 => frozen(12) + 28 budget => 2
+	// scrollable columns visible. offset 2 => window covers absolute columns 3 and 4.
+	cfg := makeRenderConfig(6, 10)
+	cfg.scrollOffset = 2
+	s := makeRenderResult(6, 2)
+
+	var buf bytes.Buffer
+	err := printStatData(&buf, s, cfg, false, 40)
+	assert.NoError(t, err)
+
+	out := buf.String()
+	// Frozen column 0 value for row 0 present.
+	assert.Contains(t, out, "r0-c0")
+	// Windowed columns at absolute indices 3 and 4 present (value tagged by absolute col).
+	assert.Contains(t, out, "r0-c3")
+	assert.Contains(t, out, "r0-c4")
+	// Hidden columns (1, 2 left; 5 right) must NOT be printed.
+	assert.NotContains(t, out, "r0-c1")
+	assert.NotContains(t, out, "r0-c2")
+	assert.NotContains(t, out, "r0-c5")
+	// Second row rendered too.
+	assert.Contains(t, out, "r1-c0")
+	assert.Contains(t, out, "r1-c3")
+}
+
+// Test_printStatData_emptyResult verifies that a result with zero rows prints no data
+// lines and does not panic (the outer loop simply does not execute).
+func Test_printStatData_emptyResult(t *testing.T) {
+	cfg := makeRenderConfig(6, 10)
+	s := makeRenderResult(6, 0)
+
+	var buf bytes.Buffer
+	err := printStatData(&buf, s, cfg, false, 40)
+	assert.NoError(t, err)
+	assert.Empty(t, buf.String())
+}
+
+// Test_printStatHeader_rightEdgeMarker verifies that with a narrow terminal and offset 0
+// the header shows the right-edge marker (columns hidden to the right) but not the
+// left-edge marker, and that the frozen column 0 name is present.
+func Test_printStatHeader_rightEdgeMarker(t *testing.T) {
+	cfg := makeRenderConfig(6, 10)
+	cfg.scrollOffset = 0
+	s := makeRenderResult(6, 1)
+
+	var buf bytes.Buffer
+	err := printStatHeader(&buf, s, cfg, 40)
+	assert.NoError(t, err)
+
+	out := buf.String()
+	assert.Contains(t, out, "col0", "frozen column must be present")
+	assert.Contains(t, out, "›", "right marker expected (columns hidden to the right)")
+	assert.NotContains(t, out, "‹", "left marker not expected at offset 0")
+}
+
+// Test_printStatHeader_frozenColumn verifies the frozen column 0 is always present in the
+// header regardless of offset, and that when OrderKey == 0 the sort highlight escape
+// sequence is applied to it (priority over frozen-bold, Decision 4) without doubling
+// escape sequences.
+func Test_printStatHeader_frozenColumn(t *testing.T) {
+	s := makeRenderResult(6, 1)
+
+	t.Run("frozen column present at large offset", func(t *testing.T) {
+		cfg := makeRenderConfig(6, 10)
+		cfg.scrollOffset = 99 // clamped internally; frozen col still rendered
+		var buf bytes.Buffer
+		err := printStatHeader(&buf, s, cfg, 40)
+		assert.NoError(t, err)
+		assert.Contains(t, buf.String(), "col0")
+	})
+
+	t.Run("sort highlight has priority on column 0", func(t *testing.T) {
+		cfg := makeRenderConfig(6, 10)
+		cfg.view.OrderKey = 0
+		var buf bytes.Buffer
+		err := printStatHeader(&buf, s, cfg, 40)
+		assert.NoError(t, err)
+		out := buf.String()
+		// Sort highlight sequence (\033[47;1m) is the existing ordered-column escape.
+		assert.Contains(t, out, "\033[47;1mcol0", "sort highlight must wrap frozen column when OrderKey==0")
+		// The frozen-bold sequence must not be doubled onto the same column 0 segment.
+		assert.Equal(t, 1, strings.Count(out[:strings.Index(out, "col0")+len("col0")], "col0"))
+	})
+}
+
+// Test_printDbstat_clampsScrollOffset verifies the runaway-offset guard: rendering with a
+// wildly inflated scrollOffset writes the clamped value back into config.scrollOffset, so
+// repeated scroll-right at the visual maximum never accumulates the field beyond maxOffset.
+func Test_printDbstat_clampsScrollOffset(t *testing.T) {
+	cfg := makeRenderConfig(6, 10)
+	cfg.scrollOffset = 1 << 20 // absurdly large, far beyond maxOffset
+	s := makeRenderResult(6, 2)
+
+	var buf bytes.Buffer
+	// renderDbstat is the writer-based core of printDbstat (printDbstat feeds it the
+	// terminal width from v.Size()). termWidth 40 => maxOffset 3 for 6 uniform columns.
+	err := renderDbstat(&buf, cfg, s, 40)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, cfg.scrollOffset, "scrollOffset must be clamped to maxOffset, not the inflated value")
 }
