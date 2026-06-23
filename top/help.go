@@ -20,6 +20,7 @@ general actions:
     S                 'S' per-process system stats (local mode only; Shift+S).
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
+    [,]               '[' scroll columns left, ']' scroll columns right.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.
     ~                 start psql session.
     l                 open log file with pager.

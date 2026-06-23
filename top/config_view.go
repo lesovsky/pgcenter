@@ -15,6 +15,7 @@ import (
 const (
 	colsWidthMax  = 256 // max width allowed for column, they can't be wider than that value
 	colsWidthStep = 4   // minimal step of changing column's width, 1 is too boring and 4 looks good
+	maxInt        = int(^uint(0) >> 1)
 )
 
 // orderKeyLeft switches sort order to left column.
@@ -36,6 +37,37 @@ func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 		config.view.OrderKey++
 		if config.view.OrderKey >= config.view.Ncols {
 			config.view.OrderKey = 0
+		}
+
+		config.viewCh <- config.view
+		return nil
+	}
+}
+
+// scrollLeft scrolls the columns window one step to the left.
+// It decrements config.scrollOffset, clamped at the lower bound 0, and sends the
+// view on viewCh solely to trigger an immediate redraw — the view itself is not
+// mutated (render reads scrollOffset directly from *config).
+func scrollLeft(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
+	return func(_ *gocui.Gui, _ *gocui.View) error {
+		config.scrollOffset = math.Max(config.scrollOffset-1, 0)
+
+		config.viewCh <- config.view
+		return nil
+	}
+}
+
+// scrollRight scrolls the columns window one step to the right.
+// It increments config.scrollOffset without an upper bound in the handler — the
+// terminal/column widths are not available here. The true upper clamp is enforced
+// at render time, which writes the clamped offset back into config.scrollOffset.
+// The view is not mutated; sending it on viewCh only triggers an immediate redraw.
+func scrollRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
+	return func(_ *gocui.Gui, _ *gocui.View) error {
+		// Cheap guard against integer overflow only; this is not a user-facing limit.
+		// The true upper bound is enforced by the render-time write-back.
+		if config.scrollOffset < maxInt {
+			config.scrollOffset++
 		}
 
 		config.viewCh <- config.view
@@ -208,6 +240,7 @@ func progressNextView(current string) string {
 func viewSwitchHandler(config *config, c string) {
 	config.views[config.view.Name] = config.view
 	config.view = config.views[c]
+	config.scrollOffset = 0 // horizontal scroll is ephemeral; reset on view switch
 	config.viewCh <- config.view
 }
 
@@ -219,6 +252,10 @@ func viewSwitchHandler(config *config, c string) {
 // the static map and would discard the runtime patches.
 func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
+		// Horizontal scroll is ephemeral; reset it when entering the per-process
+		// screen. This path bypasses viewSwitchHandler, so the reset is done here.
+		app.config.scrollOffset = 0
+
 		if !app.db.Local {
 			printCmdline(g, "Per-process stats available in local mode only")
 			return nil

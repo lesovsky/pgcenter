@@ -2,6 +2,8 @@ package top
 
 import (
 	"fmt"
+	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
@@ -70,6 +72,162 @@ func Test_orderKeyRight(t *testing.T) {
 		})
 		wg.Wait()
 	}
+}
+
+func Test_scrollLeft(t *testing.T) {
+	testcases := []struct {
+		offset int
+		want   int
+	}{
+		{offset: 0, want: 0}, // bottom clamp: stays at 0, never goes negative
+		{offset: 3, want: 2}, // decrement
+	}
+
+	wg := sync.WaitGroup{}
+
+	for i, tc := range testcases {
+		t.Run(fmt.Sprintln(i), func(t *testing.T) {
+			config := newConfig()
+			config.view = config.views["activity"]
+			config.view.OrderKey = 5 // sentinel: scroll must not touch sort
+			config.scrollOffset = tc.offset
+
+			wg.Add(1)
+			go func() {
+				v := <-config.viewCh
+				assert.Equal(t, 5, v.OrderKey) // scroll does not mutate sort order
+				close(config.viewCh)
+				wg.Done()
+			}()
+
+			fn := scrollLeft(config)
+			assert.NoError(t, fn(nil, nil))
+			assert.Equal(t, tc.want, config.scrollOffset)
+		})
+		wg.Wait()
+	}
+}
+
+func Test_scrollRight(t *testing.T) {
+	testcases := []struct {
+		offset int
+		want   int
+	}{
+		{offset: 0, want: 1}, // increment from 0
+		{offset: 3, want: 4}, // increment, no upper clamp in handler
+	}
+
+	wg := sync.WaitGroup{}
+
+	for i, tc := range testcases {
+		t.Run(fmt.Sprintln(i), func(t *testing.T) {
+			config := newConfig()
+			config.view = config.views["activity"]
+			config.view.OrderKey = 5 // sentinel: scroll must not touch sort
+			config.scrollOffset = tc.offset
+
+			wg.Add(1)
+			go func() {
+				v := <-config.viewCh
+				assert.Equal(t, 5, v.OrderKey) // scroll does not mutate sort order
+				close(config.viewCh)
+				wg.Done()
+			}()
+
+			fn := scrollRight(config)
+			assert.NoError(t, fn(nil, nil))
+			assert.Equal(t, tc.want, config.scrollOffset)
+		})
+		wg.Wait()
+	}
+}
+
+// Test_scrollOrthogonalToSort verifies scroll and sort are independent:
+// scroll handlers do not mutate OrderKey, sort handlers do not mutate scrollOffset.
+func Test_scrollOrthogonalToSort(t *testing.T) {
+	wg := sync.WaitGroup{}
+
+	// scroll does not change OrderKey
+	for i, fnFactory := range []func(*config) func(*gocui.Gui, *gocui.View) error{scrollLeft, scrollRight} {
+		t.Run(fmt.Sprintf("scroll-keeps-sort-%d", i), func(t *testing.T) {
+			config := newConfig()
+			config.view = config.views["activity"]
+			config.view.OrderKey = 7
+			config.scrollOffset = 2
+
+			wg.Add(1)
+			go func() {
+				<-config.viewCh
+				close(config.viewCh)
+				wg.Done()
+			}()
+
+			fn := fnFactory(config)
+			assert.NoError(t, fn(nil, nil))
+			assert.Equal(t, 7, config.view.OrderKey)
+			wg.Wait()
+		})
+	}
+
+	// sort does not change scrollOffset
+	for i, fnFactory := range []func(*config) func(*gocui.Gui, *gocui.View) error{orderKeyLeft, orderKeyRight} {
+		t.Run(fmt.Sprintf("sort-keeps-scroll-%d", i), func(t *testing.T) {
+			config := newConfig()
+			config.view = config.views["activity"]
+			config.view.OrderKey = 5
+			config.scrollOffset = 3
+
+			wg.Add(1)
+			go func() {
+				<-config.viewCh
+				close(config.viewCh)
+				wg.Done()
+			}()
+
+			fn := fnFactory(config)
+			assert.NoError(t, fn(nil, nil))
+			assert.Equal(t, 3, config.scrollOffset)
+			wg.Wait()
+		})
+	}
+}
+
+// Test_viewSwitchResetsScrollOffset verifies the common switch path resets scroll.
+func Test_viewSwitchResetsScrollOffset(t *testing.T) {
+	config := newConfig()
+	config.view = config.views["activity"]
+	config.scrollOffset = 5
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		<-config.viewCh
+		close(config.viewCh)
+		wg.Done()
+	}()
+
+	viewSwitchHandler(config, "databases_general")
+	wg.Wait()
+
+	assert.Equal(t, 0, config.scrollOffset)
+}
+
+// Test_switchViewToProcPidStatResetsScrollOffset verifies the per-process path
+// (which bypasses viewSwitchHandler) also resets scroll. The non-local guard
+// returns early without touching the DB or viewCh, so the reset must happen
+// before the guard to be observable without a live PostgreSQL backend.
+func Test_switchViewToProcPidStatResetsScrollOffset(t *testing.T) {
+	app := &app{
+		config: newConfig(),
+		db:     &postgres.DB{Local: false}, // remote: early return, no DB access
+	}
+	app.config.view = app.config.views["activity"]
+	app.config.scrollOffset = 5
+
+	fn := switchViewToProcPidStat(app)
+	assert.NoError(t, fn(nil, nil))
+
+	assert.Equal(t, 0, app.config.scrollOffset)
 }
 
 func Test_increaseWidth(t *testing.T) {
