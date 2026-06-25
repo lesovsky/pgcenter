@@ -18,8 +18,8 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "validation_rounds": { "user_spec": 1 },
+    "validation_findings": { "critical": 0, "major": 0, "minor": 4 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null
