@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Clean, well-scoped refactor that extracts the top-band geometry into a pure, table-tested topBandLayout function and rewires layout()'s SetView calls. Compact output is byte-identical to the old literals (4/4/3/5/4), verbose grows sysstat +3 / pgstat +5 with cmdline and dbstat shifted down to clear the taller panel, and the height-guard threshold matches the spec exactly. Tests pass, go vet/build/gofmt clean, the extra panel block is untouched, and config.verbose / printCmdline cross-file usage is correct.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/ui.go",
+      "line": 176,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The height-guard hint is emitted once when (verbose && !expanded) flips on, but printCmdline auto-clears the cmdline after 2 seconds. Since verboseTooShortShown stays true until expanded becomes true or verbose is toggled off, after the 2s timer the cmdline goes blank while verbose silently remains non-functional. A user who returns to the screen later sees no indication of why verbose did nothing. This matches the spec's explicit 'avoid spamming on every redraw frame' constraint, so it is an acceptable trade-off rather than a bug — noting only in case a less transient indicator (e.g. a persistent marker, or re-emitting on the resize event rather than the timer) is preferred later.",
+      "benefit": "Clearer feedback that verbose is suppressed on a short terminal beyond the initial 2s window.",
+      "optional": true
+    },
+    {
+      "file": "top/layout.go",
+      "line": 44,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The height-guard condition 'dbstatY0+2 > maxY-1' encodes header(1)+data(1) as a bare +2. A named local (e.g. minDbstatRows = 2 // header + 1 data row) or an inline comment on that line would make the off-by-one self-documenting at the comparison site (the rationale currently lives only in the function doc comment several lines above).",
+      "benefit": "Reduces the chance of a future edit silently breaking the threshold.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  }
+}
