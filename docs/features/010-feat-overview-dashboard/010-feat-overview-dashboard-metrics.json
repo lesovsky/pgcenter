@@ -13,7 +13,7 @@
   },
   "phases": {
     "user_spec": { "status": "completed", "started": "2026-06-23 21:58:53", "ended": "2026-06-25 12:00:00", "human_wait_time_min": 0 },
-    "tech_spec": null,
+    "tech_spec": { "status": "in_progress", "started": "2026-06-25 12:10:00", "ended": null, "human_wait_time_min": 0 },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
