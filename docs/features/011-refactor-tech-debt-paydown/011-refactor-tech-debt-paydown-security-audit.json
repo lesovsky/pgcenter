@@ -1,37 +1,37 @@
 {
   "status": "approved",
   "summary": {
-    "totalFindings": 5,
+    "totalFindings": 4,
     "critical": 0,
-    "major": 1,
+    "major": 0,
     "minor": 4
   },
   "findings": [
     {
-      "severity": "major",
-      "category": "A04: Insecure Design",
-      "title": "[009] sysinfo branch is not actually vulnerable to the modeled threat — cap rationale is imprecise and may mask the real remaining sink",
-      "description": "The spec treats all three readTar branches as equivalent CWE-789 allocation sinks and applies the same 'reject before allocation' cap. This is true for the meta.* and stat branches, which both call NewPGresultFile(r, hdr.Size) -> make([]byte, hdr.Size) (postgres.go:519): the buffer is pre-allocated to the attacker-controlled tar header size before a single byte is read. The sysinfo.* branch (report/report.go:191), however, uses io.ReadAll(io.LimitReader(r, hdr.Size)). io.ReadAll grows its buffer incrementally from bytes actually read, and io.LimitReader caps reads at hdr.Size. A crafted hdr.Size of, say, 8 GiB on a sysinfo entry whose physical archive body is 10 bytes causes io.ReadAll to allocate only ~10 bytes, not 8 GiB — the unbounded-pre-allocation threat the cap is designed for does not exist on this path. Verified empirically: io.LimitReader with negative n reads 0 bytes with no error and no panic (so the make-panic concern also does not apply to sysinfo). Applying the cap to sysinfo is still defensible for consistency and to bound a genuinely-large real body, but the spec's stated rationale ('the sysinfo branch that bypasses NewPGresultFile [is the easy-to-miss CWE-789 sink]', Risks table row 1) is inaccurate for this branch. The risk is that an implementer reading the spec checks hdr.Size against the cap on sysinfo and considers the path 'hardened', while the genuinely unbounded behavior on that path is actually the io.ReadAll growth driven by the real number of bytes a malicious archive can stream (bounded only by archive body length, which a cap on hdr.Size does NOT bound — a 300 MiB physical sysinfo body with hdr.Size=10 would still be allocated by ReadAll up to the LimitReader's 10, but a body declared and physically present at 300 MiB passes a per-entry cap of 256 MiB only by the header check). Recommend the spec explicitly distinguish the two allocation models so the sysinfo cap is enforced on the value that actually bounds the allocation.",
-      "location": "Section: Architecture / Decision 1; report/report.go:191 (sysinfo branch), :170 + :203 (NewPGresultFile branches); internal/stat/postgres.go:519",
-      "impact": "Mischaracterized threat model can lead to a cap placed where it gives a false sense of completeness. If the cap is compared only against hdr.Size on the sysinfo branch (per the spec wording), the branch is bounded by header value, which is correct for defense-in-depth but does not match the spec's claimed 'this is the dangerous sink' framing. Conversely the two real pre-allocation sinks (meta/stat via make([]byte, hdr.Size)) are correctly identified.",
-      "recommendation": "Keep the cap on all three branches (defense-in-depth is fine), but correct the rationale: the make([]byte, hdr.Size) sinks in NewPGresultFile (meta.* + stat) are the true CWE-789 pre-allocation vulnerabilities; the sysinfo branch is already incrementally bounded by io.ReadAll/io.LimitReader and is being capped for consistency, not because it panics or pre-allocates. Ensure the sysinfo guard checks hdr.Size (header) AND that the test asserts the over-limit sysinfo entry is rejected before the ReadAll, matching the meta/stat semantics.",
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "[009] RESOLVED (round-1 major): the two allocation models are now correctly distinguished; sysinfo framing is accurate",
+      "description": "Round-1 raised a major finding: the spec wrongly characterized the sysinfo readTar branch as an easy-to-miss CWE-789 pre-allocation sink and applied the cap with that rationale. The round-2 spec is corrected and now matches the code. Verified against source: (a) meta.* (report/report.go:170) and stat (report/report.go:203) both call NewPGresultFile(r, hdr.Size), which does make([]byte, bufsz) at internal/stat/postgres.go:519 — a buffer pre-sized from the attacker-influenceable tar header before any byte is read = the two true CWE-789 pre-allocation sinks; (b) the sysinfo.* branch (report/report.go:191) uses io.ReadAll(io.LimitReader(r, hdr.Size)), which grows incrementally by bytes actually read and so cannot over-allocate from a lying oversized header alone — not a pre-alloc sink. The spec now states exactly this in three places: Architecture 'How it works' [009] ('two true CWE-789 pre-allocation sinks' = meta+stat; sysinfo 'is not a pre-allocation sink ... grows its buffer by bytes actually read ... its purpose is consistency, not closing a pre-alloc sink'); Decision 1 ('the meta.* and stat branches (the two real pre-alloc sinks) inherit the guard via NewPGresultFile; the sysinfo.* branch adds the same cap inline as defense-in-depth'); and Risks table row 1 ('uses io.ReadAll, so it is bounded by actual bytes, not a pre-alloc CWE-789 sink'). The inaccurate 'easy-to-miss CWE-789 sink' wording is gone. The cap is still applied to all three branches (defense-in-depth on sysinfo), which is fine.",
+      "location": "Section: Architecture (How it works [009]); Decision 1; Risks table row 1; report/report.go:170,191,203; internal/stat/postgres.go:519",
+      "impact": "None remaining. The threat model is now precisely stated, so an implementer will place the make()-guard on the two real pre-alloc sinks and treat the sysinfo cap as defense-in-depth rather than as the primary mitigation.",
+      "recommendation": "No change required. The round-1 major is resolved. Keep the guard as the first statement in NewPGresultFile before make([]byte, bufsz), and keep the inline sysinfo cap as documented defense-in-depth.",
       "cwe": "CWE-789"
     },
     {
       "severity": "minor",
       "category": "best-practice",
       "title": "[009] core mitigation is sound — cap + reject before make() correctly closes CWE-789 on the two pre-allocation sinks",
-      "description": "Confirmed against code: NewPGresultFile (internal/stat/postgres.go:518) does data := make([]byte, bufsz) with bufsz = hdr.Size sourced directly from the tar header (report/report.go:170, :203), with no prior bound. A crafted 'pgcenter record' archive (the trust boundary: report replays an archive that pgcenter itself produced, but the file is on disk and can be tampered with or hand-crafted) can declare a multi-GiB hdr.Size and force an immediate large allocation / OOM before any data is read. The proposed fix — reject when bufsz < 0 || bufsz > MaxResultFileSize before the make — is the correct sink and the correct mechanism. 256 MiB is a reasonable bound (~300x the largest observed golden entry).",
-      "location": "internal/stat/postgres.go:518-519; report/report.go:170,203",
+      "description": "Confirmed against code: NewPGresultFile (internal/stat/postgres.go:518) does data := make([]byte, bufsz) with bufsz = hdr.Size sourced directly from the tar header (report/report.go:170, :203), with no prior bound. A crafted or tampered 'pgcenter record' archive (trust boundary: report replays an on-disk archive) can declare a multi-GiB hdr.Size and force an immediate large allocation / OOM before any data is read. The proposed fix — reject when bufsz < 0 || bufsz > MaxResultFileSize before the make — is the correct sink and the correct mechanism. 256 MiB is a reasonable bound (~300x the largest observed golden entry).",
+      "location": "internal/stat/postgres.go:518-519; report/report.go:170,203; Decision 1",
       "impact": "Unbounded memory allocation / denial of service via crafted archive, before the fix.",
-      "recommendation": "Proceed as specified. Place the guard as the first statement in NewPGresultFile, before make([]byte, bufsz).",
+      "recommendation": "Proceed as specified. Place the guard as the first statement in NewPGresultFile, before make([]byte, bufsz). The pinned error format (fmt.Errorf(\"result file size %d exceeds limit %d bytes\", bufsz, MaxResultFileSize)) plus a distinct negative-size error is appropriate.",
       "cwe": "CWE-789"
     },
     {
       "severity": "minor",
       "category": "best-practice",
       "title": "[009] negative/zero guard is adequate — make([]byte, negative) panics, bufsz < 0 reject prevents it",
-      "description": "Confirmed: make([]byte, n) with n < 0 panics ('makeslice: len out of range'), which would crash pgcenter report instead of returning a clean error. The spec's explicit bufsz < 0 reject guard (Decision 1, Risks row 2) is necessary and correct. bufsz == 0 (empty entry) is correctly allowed: make([]byte, 0) is valid and io.ReadFull on a zero-length buffer returns nil. Note: in the meta/stat path the negative value would panic; in the sysinfo path a negative hdr.Size into io.LimitReader reads 0 bytes with no panic (verified) — another reason the two paths differ and the guard is primarily protecting the make() sinks.",
+      "description": "Confirmed: make([]byte, n) with n < 0 panics ('makeslice: len out of range'), which would crash pgcenter report instead of returning a clean error. The spec's explicit bufsz < 0 reject guard (Decision 1, Risks row 2) is necessary and correct. bufsz == 0 (empty entry) is correctly allowed: make([]byte, 0) is valid and io.ReadFull on a zero-length buffer returns nil. The two paths differ on negative input (meta/stat would panic at make; sysinfo's io.LimitReader with negative n reads 0 bytes without panic), which the spec now reflects by scoping the panic concern to the make() sinks. The pinned 'no int(hdr.Size) conversion in the guard' constraint keeps the comparison a pure int64 compare and avoids reintroducing a narrowing bug.",
       "location": "internal/stat/postgres.go:519; Decision 1; Risks table row 2",
       "impact": "Without the < 0 guard, a negative tar hdr.Size crashes report with an unrecoverable panic (availability) rather than a handled error.",
       "recommendation": "Keep the combined guard bufsz < 0 || bufsz > MaxResultFileSize. The table test cases (negative rejected, 0 allowed, ==limit allowed, ==limit+1 rejected) cover the boundary correctly.",
@@ -40,22 +40,12 @@
     {
       "severity": "minor",
       "category": "best-practice",
-      "title": "[009] int64 typing is correct — no gosec G115 integer-overflow conversion introduced",
-      "description": "Confirmed: hdr.Size (archive/tar Header.Size) is int64, NewPGresultFile's bufsz parameter is int64, and the spec declares MaxResultFileSize as int64 (256 << 20). The comparison bufsz < 0 || bufsz > MaxResultFileSize is a pure int64 vs int64 comparison with no narrowing conversion, so gosec G115 (integer overflow on conversion) is not triggered by the fix. The constant 256 << 20 = 268435456 is well within int64 range. The spec's claim is accurate.",
-      "location": "Decision 1; internal/stat/postgres.go:518 (bufsz int64); report/report.go (hdr.Size int64)",
-      "impact": "None — typing is correct; flagged to confirm the no-G115 acceptance criterion holds.",
-      "recommendation": "Declare the const as 'const MaxResultFileSize int64 = 256 << 20' explicitly typed. Do not introduce an int(hdr.Size) conversion anywhere in the guard or in make([]byte, bufsz) (bufsz is already int64; make accepts it). Keep 'make lint' / govulncheck gates as specified.",
+      "title": "[009] int64 typing is correct and the no-G115 / no-int(hdr.Size) constraint is now explicit; no other archive-driven allocation sinks missed",
+      "description": "Confirmed: hdr.Size (archive/tar Header.Size) is int64, NewPGresultFile's bufsz parameter is int64, and the spec declares MaxResultFileSize as int64 (256 << 20). The comparison bufsz < 0 || bufsz > MaxResultFileSize is a pure int64 vs int64 comparison with no narrowing conversion, so gosec G115 is not triggered; the spec now explicitly forbids introducing int(hdr.Size) in the guard. Sink coverage re-checked on the tar-replay path: the only attacker-influenceable allocation sinks reachable from a replayed archive are (a) make([]byte, hdr.Size) in NewPGresultFile x2 (meta, stat) — capped; (b) io.ReadAll(io.LimitReader(r, hdr.Size)) for sysinfo — capped via header check for defense-in-depth. After allocation, json.Unmarshal into stat.PGresult / stat.SysInfo is bounded by the already-capped fixed in-memory byte slice. internal/stat/log.go make([]byte, bufsize) is the live-PostgreSQL logfile reader, not in the tar-replay path — correctly out of scope. No JSON-depth limit is applied to json.Unmarshal, but with the 256 MiB input cap and flat target structs this is a low, acceptable residual risk for this tool.",
+      "location": "Decision 1; internal/stat/postgres.go:518 (bufsz int64); report/report.go (hdr.Size int64); out of scope: internal/stat/log.go",
+      "impact": "None — typing is correct; confirms the no-G115 acceptance criterion holds and the sink inventory is complete for the tar-replay path.",
+      "recommendation": "Declare 'const MaxResultFileSize int64 = 256 << 20' explicitly typed; do not introduce int(hdr.Size) anywhere in the guard. Keep 'make lint' / govulncheck gates as specified. Optional (not required): note in the spec that json.Unmarshal depth is not separately bounded, accepted because the input buffer is now capped.",
       "cwe": "CWE-190"
-    },
-    {
-      "severity": "minor",
-      "category": "best-practice",
-      "title": "[009] reject (not truncate) is the correct choice; no other allocation/parse sinks in the tar-replay path are missed",
-      "description": "Reject vs truncate: correct. json.Unmarshal (postgres.go:527) needs the complete buffer; io.ReadFull already requires exactly bufsz bytes, and a truncated buffer would produce invalid JSON. The rejected alternative (io.LimitReader truncation) is correctly dismissed. Sink coverage: I scanned the full tar-replay path (report/report.go readTar/doReport and internal/stat/postgres.go). The only attacker-influenceable allocation/parse sinks reachable from a replayed archive are: (a) make([]byte, hdr.Size) in NewPGresultFile x2 (meta, stat) — capped; (b) io.ReadAll(io.LimitReader(r, hdr.Size)) for sysinfo — capped. After allocation, json.Unmarshal into stat.PGresult / stat.SysInfo is bounded by the already-capped buffer (Go's encoding/json has no separate unbounded pre-allocation from a length field here, since input is a fixed in-memory byte slice). readMeta (report.go:386) operates on the already-parsed PGresult, no new allocation from header data. internal/stat/log.go make([]byte, bufsize) is the live-PostgreSQL logfile reader (l.File.Seek/ReadAt), NOT in the tar-replay path and not driven by archive headers — correctly out of scope. No JSON-bomb / deeply-nested-structure depth limit is applied to json.Unmarshal, but with the 256 MiB input cap and PGresult/SysInfo being flat structs, this is a low residual risk acceptable for this tool.",
-      "location": "internal/stat/postgres.go:519,527; report/report.go:191,196,203; (out of scope: internal/stat/log.go:95)",
-      "impact": "None new. Confirms the spec's sink inventory is complete for the tar-replay path.",
-      "recommendation": "No additional sinks to cap. Optional defense-in-depth (not required): note in the spec that json.Unmarshal depth is not separately bounded, accepted because the input buffer is now capped at 256 MiB and the target structs are flat.",
-      "cwe": "CWE-789"
     }
   ]
 }
