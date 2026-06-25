@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 04 correctly extends SelectCommonProperties with 5 net-new columns and threads them into PostgresProperties via a strictly positional Scan. SELECT, struct fields, and Scan targets are in perfect lockstep order with matching types (int/int/int/int64/string); the 8 pre-existing scan targets are unchanged and GucMaxPrepXacts remains an untouched declared-but-unscanned placeholder. Build and vet are clean.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/common.go",
+      "line": 54,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The pg_size_bytes(...)::int8 expression for wal_segment_size matches the precedent in wal.go:6 exactly, which is the right call. No change needed — flagging only that this cross-file duplication of the same setting-to-bytes idiom now appears in two query files; if a third consumer ever needs it, consider a shared SQL fragment. Not actionable for this task.",
+      "benefit": "Reduces future drift risk if the WAL segment size conversion idiom proliferates.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 105,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Per the task TDD anchor, GucMaxLogicalReplicationWorkers is intentionally not asserted (default may legitimately be 0, so only 'scan did not fail' is verifiable). This is correct and matches the spec. The added asserts for the other four fields use the right typed comparators (int64(0) for GucWalSegmentSize, \"\" for DataDirectory). No action required — noted for traceability.",
+      "benefit": "Confirms test design intentionally aligns with documented edge case rather than an omission.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}
