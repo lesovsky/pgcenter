@@ -135,3 +135,32 @@ Round 3 не запускался: оба ревьюера approved/passed.
 - `go test ./internal/...` → ok (live-PG кластер доступен; новые тесты зелёные на PG 14-18, пути деградации покрыты)
 - `go build ./...` → OK
 - `go vet ./internal/query/... ./internal/stat/...` + `gofmt -l` → чисто
+
+---
+
+## Task 06: Verbose-aware layout() geometry
+
+**Status:** Done
+**Commit:** 82853f6 (impl) + 3aef6b3 (round 1 fixes)
+**Agent:** layout-dev
+**Summary:** Извлечена чистая функция `topBandLayout(verbose, maxY) -> (sysstatY1, pgstatY1, cmdlineY0, cmdlineY1, dbstatY0 int, expanded bool)` в новый `top/layout.go` (Decision 3) — целочисленная арифметика без gocui/app, по прецеденту `visibleColumns`. Compact-ветка (`verbose=false` ИЛИ height-guard) воспроизводит исторические литералы байт-идентично (`4/4/3/5/4`). Verbose растит панели асимметрично: `sysstatY1 = 4+3`, `pgstatY1 = 4+5`; cmdline/dbstat расчищаются под более высокую (`pgstat`) панель: `bandTop = max-1` → `cmdline 8/10`, `dbstatY0 = max+1 = 10` — так dbstat теряет строки сверху, а не снизу. Height-guard: verbose раскрывается только если `dbstatY0 + header(1) + >=1 data row <= maxY-1` (порог `maxY>=13` при `dbstatY0=10`); иначе возврат compact-координат с `expanded=false`. `layout(app)` в `top/ui.go` теперь вызывает функцию один раз и кормит результат в четыре `SetView` вместо хардкод-литералов; блок `extra` не тронут. Когда verbose запрошен, но guard сработал, печатается одноразовая подсказка `terminal too short for verbose mode` через `printCmdline` — анти-спам через closure-captured флаг `verboseTooShortShown`, эмиссия только на флипе состояния, не на каждом кадре. `config.verbose` читается в gocui-handler goroutine (как `view.ShowExtra`) — гонки нет. Табличный тест `Test_topBandLayout` (`top/layout_test.go`) покрывает compact / verbose / height-guard / verbose-zero-maxY / boundary с обеих сторон порога, gocui-free.
+
+**Deviations:**
+1. **`make lint` не прогнан** — golangci-lint установлен в окружении, но его версия несовместима с конфигом репозитория (`unsupported version of the configuration`), как в Task 01/02/05. Вместо него `go vet ./top/...`, `gofmt -l` и `gosec ./top/...` чисты; полный golangci-lint остаётся на CI.
+2. **Подсказка height-guard транзиентна (осознанный компромисс).** `printCmdline` авто-очищает cmdline через 2с, после чего verbose молча неактивен без индикации (отмечено code-reviewer как optional minor). Оставлено как есть: спек явно требует «не спамить каждый кадр», а `printCmdline` — указанный спеком канал. Постоянный индикатор — вне скоупа задачи.
+3. **+3/+5 высоты и порог `maxY>=13` подтверждены, но не верифицированы визуально** на живых строках рендеринга — фактическая печать verbose-строк sysstat (+3) / pgstat (+5) добавляется в Task 08; высота band должна совпасть с числом реально печатаемых строк. Это проверяется в ручном QA (verify: user) и при интеграции Task 08.
+
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved — 0 critical/major, 2 minor (оба optional) → [010-feat-overview-dashboard-task-06-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-06-dev-code-reviewer-round1.json)
+- dev-test-reviewer: passed — 0 critical/major, 2 minor (litmus 5/5), pyramid healthy → [010-feat-overview-dashboard-task-06-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-06-dev-test-reviewer-round1.json)
+
+Применены три из четырёх находок (commit 3aef6b3): именованная константа `minDbstatRows = 2` на месте сравнения (само-документирующий off-by-one), репурпозинг избыточной строки `height-guard` (была `maxY=12`, дубль `boundary-fallback`) на отдельное `maxY=5`, и новый кейс `verbose-zero-maxY` (`maxY=0` → compact, защита инварианта «никаких сломанных координат»). Отклонён один optional-minor: транзиентность подсказки height-guard — осознанный компромисс по спеку (см. Deviation 2). Round 2 не запускался: оба ревьюера approved/passed в round 1, правки — некостыльное hardening без изменения поведения.
+
+**Verification:**
+- `go test ./top/...` → ok (`Test_topBandLayout` зелёный, 6 подкейсов; регрессий нет)
+- `go build ./...` → OK; полный `go test ./...` → все пакеты ok
+- `go vet ./top/...` + `gofmt -l` + `gosec ./top/...` → чисто
