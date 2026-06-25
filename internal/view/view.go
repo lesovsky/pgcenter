@@ -25,6 +25,7 @@ type View struct {
 	Refresh            time.Duration          // Number of seconds between update view.
 	ShowExtra          int                    // Specifies extra stats should be enabled on the view.
 	CollectExtra       int                    // Specifies non-SQL enrichment kind for Collector.Update(); 0 means no enrichment.
+	Verbose            bool                   // When true, the system/Postgres summary panels render in verbose mode. Rides viewCh to the collector; zero value (false) keeps the compact layout.
 	IOAvailable        bool                   // True when /proc/[pid]/io is readable; carries the capability flag to the Collector.
 	DelayAcctAvailable bool                   // True when /proc/sys/kernel/task_delayacct == "1"; enables iodelay columns in procpidstat view.
 	NotRecordable      bool                   // When true, record/record.go:filterViews() skips this view.

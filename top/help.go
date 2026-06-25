@@ -27,6 +27,7 @@ general actions:
 
 extra stats actions:
     B,N,F,L       'B' diskstat, 'N' nicstat, 'F' filesystems, L' logtail.
+    v             'v' verbose mode for the summary panels on/off.
 
 activity actions:
     -,_         '-' cancel backend by pid, '_' terminate backend by pid.

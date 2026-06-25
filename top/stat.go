@@ -55,6 +55,10 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Collector.Update() (not via ToggleCollectExtra), so changes must trigger
 	// a Reset() to discard stale per-PID snapshots.
 	prevCollectExtra := v.CollectExtra
+	// Track Verbose separately too — toggling it only changes how the top panels are
+	// rendered, not what is collected, so a verbose-only view update must NOT Reset()
+	// the collector (which would blank the CPU/mem/load deltas for one frame).
+	prevVerbose := v.Verbose
 
 	// Collect stat in loop and send it to stat channel.
 	for {
@@ -89,6 +93,15 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			if extra != v.ShowExtra {
 				extra = v.ShowExtra
 				c.ToggleCollectExtra(extra)
+				continue
+			}
+
+			// Detect a verbose-only toggle. Verbose changes only how the top panels are
+			// rendered, not what is collected, so it must not fall through to either Reset()
+			// path below — doing so would discard the "previous" snapshot and blank the
+			// CPU/mem/load deltas for one frame. Update the tracked value and skip the resets.
+			if prevVerbose != v.Verbose {
+				prevVerbose = v.Verbose
 				continue
 			}
 

@@ -54,6 +54,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'N', showExtra(app, stat.CollectNetdev)},
 		{"sysstat", 'F', showExtra(app, stat.CollectFsstats)},
 		{"sysstat", 'L', showExtra(app, stat.CollectLogtail)},
+		{"sysstat", 'v', toggleVerbose(app)},
 		{"sysstat", 'S', switchViewToProcPidStat(app)},
 		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
 		{"sysstat", '/', dialogOpen(app, dialogFilter)},
