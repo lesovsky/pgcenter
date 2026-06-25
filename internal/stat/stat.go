@@ -62,6 +62,13 @@ type Collector struct {
 	currNetdevs Netdevs
 	// mounted filesystems snapshot
 	currFsstats Fsstats
+	// verbose system-collection state (forward-compatible, grouped into verboseCollectState in a later task).
+	// verboseFirstTick signals that delta-based system metrics have no valid prev point on this tick,
+	// so the composer must render n/a instead of a misleading zero delta.
+	verboseFirstTick bool
+	// prevVerboseActive tracks whether verbose was active on the previous tick; it re-arms
+	// verboseFirstTick on every OFF->ON re-enable without relying on c.Reset() (toggleVerbose skips Reset).
+	prevVerboseActive bool
 	// postgres stats snapshots for previous and current intervals
 	prevPgStat Pgstat
 	currPgStat Pgstat
@@ -172,6 +179,39 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			return s, err
 		}
 		s.Fsstats = fsstats
+	}
+
+	// Verbose mode renders all three extended system rows (disk/net/fs) at once, so collect every source
+	// each tick. The == nil guards skip a source already populated by the side-panel switch above, reusing
+	// the same collect* methods (and %util math) as the full panels (Decision 5). A per-source error must
+	// NOT abort the sample: one failing subsystem (no network, EACCES on /proc, no remote schema) leaves
+	// the source nil (rendered as n/a in Task 8) while the others still populate.
+	if view.Verbose {
+		// First verbose tick OR an OFF->ON re-enable (prevVerboseActive == false): delta metrics have no
+		// valid prev point, so signal the composer (Task 8) to draw n/a on this tick instead of a misleading
+		// zero delta. The flag persists for the rest of this Update so the composer can read it, and is
+		// cleared on the next verbose tick. This does not depend on c.Reset() (toggleVerbose skips Reset).
+		c.verboseFirstTick = !c.prevVerboseActive
+
+		if s.Diskstats == nil {
+			if diskstats, err := c.collectDiskstats(db); err == nil {
+				s.Diskstats = diskstats
+			}
+		}
+		if s.Netdevs == nil {
+			if netdevs, err := c.collectNetdevs(db); err == nil {
+				s.Netdevs = netdevs
+			}
+		}
+		if s.Fsstats == nil {
+			if fsstats, err := c.collectFsstats(db); err == nil {
+				s.Fsstats = fsstats
+			}
+		}
+
+		c.prevVerboseActive = true
+	} else {
+		c.prevVerboseActive = false
 	}
 
 	// Take refresh interval from view

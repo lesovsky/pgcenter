@@ -134,6 +134,77 @@ func TestCollector_Update_VerboseAggregates(t *testing.T) {
 	})
 }
 
+func TestCollector_Update_Verbose(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	baseView := view.View{
+		Name:      "activity",
+		QueryTmpl: query.PgStatActivityDefault,
+		DiffIntvl: [2]int{0, 0},
+		Ncols:     14,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show activity statistics",
+		Filters:   map[int]*regexp.Regexp{},
+		Refresh:   1 * time.Second,
+	}
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
+
+	v := baseView
+	v.Verbose = true
+	views := view.Views{"activity": v}
+	assert.NoError(t, views.Configure(opts))
+	v = views["activity"]
+
+	c, err := NewCollector(conn)
+	assert.NoError(t, err)
+	assert.NotNil(t, c)
+
+	// First verbose tick: all three system sources populate in a single sample.
+	stat, err := c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.NotEqual(t, 0, len(stat.System.Diskstats))
+	assert.NotEqual(t, 0, len(stat.System.Netdevs))
+	assert.NotEqual(t, 0, len(stat.System.Fsstats))
+
+	// First-tick flag is set after the first verbose Update.
+	assert.True(t, c.verboseFirstTick)
+
+	// Second verbose tick: flag is cleared.
+	_, err = c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.False(t, c.verboseFirstTick)
+
+	// OFF->ON re-enable WITHOUT Reset: one non-verbose tick, then verbose again.
+	off := baseView
+	off.Verbose = false
+	offViews := view.Views{"activity": off}
+	assert.NoError(t, offViews.Configure(opts))
+
+	_, err = c.Update(conn, offViews["activity"], time.Second)
+	assert.NoError(t, err)
+	assert.False(t, c.verboseFirstTick)
+
+	// Re-enable verbose: flag must re-arm WITHOUT c.Reset().
+	stat, err = c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.True(t, c.verboseFirstTick)
+	assert.NotEqual(t, 0, len(stat.System.Diskstats))
+	assert.NotEqual(t, 0, len(stat.System.Netdevs))
+	assert.NotEqual(t, 0, len(stat.System.Fsstats))
+
+	// Following verbose tick clears the flag again.
+	_, err = c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.False(t, c.verboseFirstTick)
+}
+
 func TestCollector_collectDiskstats(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
