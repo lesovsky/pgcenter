@@ -49,5 +49,22 @@ func Test_toggleVerbose(t *testing.T) {
 		})
 	}
 
+	// Persistence acceptance criterion: verbose must survive a real view switch
+	// (unlike scrollOffset, which viewSwitchHandler resets). Toggle it on, then
+	// switch views and assert the active view still carries the flag.
+	config.view = config.views["activity"]
+	config.verbose = false
+	wg.Add(1)
+	go func() { <-config.viewCh; wg.Done() }() // drain the toggle push
+	assert.NoError(t, toggleVerbose(app)(nil, nil))
+	wg.Wait()
+
+	wg.Add(1)
+	go func() { <-config.viewCh; wg.Done() }() // drain the switch push
+	viewSwitchHandler(config, "databases_general")
+	wg.Wait()
+
+	assert.True(t, config.view.Verbose, "verbose must persist across view switch")
+
 	close(config.viewCh)
 }

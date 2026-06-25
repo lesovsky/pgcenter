@@ -83,6 +83,12 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 		ticker := time.NewTicker(refresh)
 		select {
 		case v = <-viewCh:
+			// Branch order is load-bearing: refresh -> ShowExtra -> Verbose -> CollectExtra
+			// -> unconditional Reset. The render-only early-outs (refresh, Verbose) MUST
+			// precede both Reset() paths below, otherwise a toggle that changes nothing the
+			// collector reads would still wipe the "previous" snapshot and blank the deltas.
+			// Do not move the Verbose early-out below a Reset.
+
 			// Update refresh interval if it is changed.
 			if refresh != v.Refresh && v.Refresh > 0 {
 				refresh = v.Refresh
