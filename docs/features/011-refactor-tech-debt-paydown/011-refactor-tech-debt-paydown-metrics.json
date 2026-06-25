@@ -11,7 +11,7 @@
     "date_completed": ""
   },
   "phases": {
-    "user_spec": { "started": "2026-06-25 18:07:30", "ended": null, "human_wait_time_min": 0 },
+    "user_spec": { "started": "2026-06-25 18:07:30", "ended": "2026-06-25 18:18:00", "human_wait_time_min": 0 },
     "tech_spec": null,
     "task_decomposition": null,
     "feature_execution": null,
