@@ -65,11 +65,15 @@ teammate_name:                     # имя агента-исполнителя 
     БЕЗ аллокации (ошибка возвращается до `make`);
   - `bufsz == 0` — разрешён (пустой результат, текущее поведение);
   - `bufsz < 0` (например `-1`) — отклонён с ошибкой про отрицательный размер, `PGresult{}` возвращён.
-- `report/report_test.go::Test_readTar_sizeCap` (имя на усмотрение исполнителя) — переиспользует синтетический
-  in-memory tar harness (`writeEntry` + `tar.NewWriter(&tarBuf)`, ADR 008, ~report_test.go:461) с
-  **крафтовым** `hdr.Size` сверх лимита (независимо от реальной длины payload) на каждой из трёх веток
-  (`meta.*`, `sysinfo.*`, stat): `readTar` возвращает ошибку лимита, в `dataCh` не уходит ни одной `data`;
-  легитимная под-лимитная запись по-прежнему реплеится (отправляется в канал).
+- `report/report_test.go::Test_readTar_sizeCap` (имя на усмотрение исполнителя) — синтетический
+  in-memory tar (ADR 008). ВАЖНО: существующий `writeEntry` (`report_test.go:463`) хардкодит
+  `Size: int64(len(payload))`, поэтому для крафтового over-limit заголовка его использовать НЕЛЬЗЯ —
+  построить `tar.Header{Name, Size, Mode}` напрямую через `tw.WriteHeader`, выставив `Size` сверх лимита
+  независимо от реальной (маленькой/нулевой) длины payload. Прогнать на каждой из трёх веток
+  (`meta.*`, `sysinfo.*`, stat): `readTar` возвращает ошибку лимита, в `dataCh` не уходит ни одной `data`.
+  Развести ассерты по code-path: ветки `meta.*`/stat бьют по новому guard'у в `NewPGresultFile`, а
+  `sysinfo.*` — по новой inline-проверке в `report.go` (это разные пути, ошибки могут отличаться текстом).
+  Отдельный кейс: легитимная под-лимитная запись по-прежнему реплеится (отправляется в канал).
 
 ## Acceptance Criteria
 
@@ -93,7 +97,7 @@ teammate_name:                     # имя агента-исполнителя 
 - [011-refactor-tech-debt-paydown-decisions.md](docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown-decisions.md) — decisions log (создаётся при выполнении)
 
 **Project knowledge:**
-- [project.md](.claude/skills/project-knowledge/overview.md) — обзор проекта (overview.md)
+- [overview.md](.claude/skills/project-knowledge/overview.md) — обзор проекта
 - [architecture.md](.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных, record/report
 - [patterns.md](.claude/skills/project-knowledge/patterns.md) — паттерны кода и тестирования (testify, table/golden tests)
 
@@ -101,7 +105,7 @@ teammate_name:                     # имя агента-исполнителя 
 - [internal/stat/postgres.go](internal/stat/postgres.go) — `NewPGresultFile` (517-538), `make([]byte, bufsz)` на 519; добавить const + guard
 - [report/report.go](report/report.go) — `readTar` (139-222), ветка `sysinfo.*` на 186-200 (`io.ReadAll`/`io.LimitReader` на 191)
 - [internal/stat/postgres_test.go](internal/stat/postgres_test.go) — `Test_NewPGresultFile` (293-329); добавить cap-табличный тест
-- [report/report_test.go](report/report_test.go) — `writeEntry`/in-memory tar harness (~461-467); добавить over-limit тест на 3 ветки
+- [report/report_test.go](report/report_test.go) — in-memory tar harness (`writeEntry` ~461-467 хардкодит `Size=len(payload)`; для over-limit строить `tar.Header` напрямую); добавить over-limit тест на 3 ветки
 
 ## Verification Steps
 

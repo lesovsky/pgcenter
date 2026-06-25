@@ -74,7 +74,9 @@ golden boundary table **before** deleting `rateField`, then make the new helpers
   against the captured pre-refactor `rateField` strings: disk and net, `r` and `w`, at `maxFit` (9999,
   base unit, e.g. `"9999 rMB/s"`) and `maxFit+1` (10000, promoted unit, e.g. `"  10 wGB/s"`). Asserts the
   space, the prefix, and the promotion boundary are all byte-identical to `rateField`. This is the golden
-  anchor — write it first, capturing the exact strings `rateField` produces today.
+  anchor — write it first, capturing the exact strings `rateField` produces today. The `want` values MUST
+  be hardcoded string literals computed by hand from the current `rateField` body (e.g. `"9999 rMB/s"`) —
+  do NOT call `rateField` in the test (it is being deleted, and calling it would make the anchor circular).
 - `internal/pretty/pretty_test.go::TestRateUnit` (existing, lines 77-116) — must stay GREEN unchanged
   (proves `RateUnit` output is still byte-identical, `"9999MB/s"` form, no space/prefix).
 - `internal/pretty/pretty_test.go::TestRateUnit_boundary` (existing, lines 120-141) — must stay GREEN
