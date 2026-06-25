@@ -1,0 +1,20 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "info",
+      "file": "report/report.go",
+      "line": 197,
+      "issue": "The sysinfo-branch inline error message reuses the 'result file size %d exceeds limit %d bytes' wording for both the negative-size and over-limit conditions (single combined `if hdr.Size < 0 || hdr.Size > limit`), and omits the entry name that the adjacent sysinfo error paths (lines 201, 205) include. This is purely cosmetic — the guard logic and CWE-789/panic protection are fully correct — and the combined check matches the spec's fixed error format.",
+      "suggestion": "Optional: for log clarity, split the negative case into its own message (mirroring NewPGresultFile's distinct 'is negative' error) and/or include hdr.Name. Not required for the security fix."
+    }
+  ],
+  "summary": {
+    "verdict": "CWE-789 mitigation is correct and complete. The 256 MiB cap is enforced before make([]byte, bufsz) on both real pre-allocation sinks (meta.* and stat, via NewPGresultFile); the bufsz<0 guard prevents a make([]byte, negative) panic; all comparisons are pure int64 (MaxResultFileSize int64, hdr.Size int64, bufsz int64) with no int()/int32() narrowing, so no gosec G115 is introduced (verified by grep and go vet). The sysinfo inline check is correct defense-in-depth ahead of io.ReadAll(io.LimitReader(...)). No bypass remains: the only two allocation sinks in the tar-replay path are both guarded. The error path is clean — every branch returns the error, and readTar's `defer doneCh <- struct{}{}` always fires (consumed by processData), so an over-limit entry aborts without panic or deadlock and propagates to the caller. Tests genuinely exercise rejection-before-allocation: the over-limit case (limit+1 with a tiny/header-only payload) asserts the 'exceeds limit' guard error rather than a downstream EOF, which would only be possible if make/read had not yet run; the at-limit case confirms the inclusive boundary. All new and existing tests pass (go test -count=1, race not re-run here but make test is a separate QA gate).",
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 0,
+    "info": 1
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 01 closes tech-debt [009] cleanly: an exported int64 const MaxResultFileSize gates NewPGresultFile before make([]byte, bufsz), the guard is pure int64 (no int() conversions, no G115 surface), and the sysinfo branch carries the same limit inline with an accurate defense-in-depth comment. meta/stat branches correctly inherit the cap through NewPGresultFile and are left untouched. The error message matches the fixed format `result file size %d exceeds limit %d bytes`. Tests cover boundary (==limit), over-limit, zero, negative, and all three readTar code-paths plus a legitimate replay. No tech debt introduced.",
+  "findings": [
+    {
+      "severity": "minor",
+      "file": "report/report.go",
+      "line": 196,
+      "issue": "The sysinfo inline guard collapses the negative case (hdr.Size < 0) and the over-limit case into a single branch that always emits the 'exceeds limit' message. A negative hdr.Size therefore reports 'result file size -1 exceeds limit 268435456 bytes', which is slightly misleading. NewPGresultFile (postgres.go:529-534) distinguishes the two with a dedicated 'is negative' error; the sysinfo branch does not. In practice hdr.Size from archive/tar is effectively non-negative (tar parsing rejects negative sizes), so this is cosmetic only.",
+      "suggestion": "Optional: mirror the two-branch shape from NewPGresultFile for message consistency, or drop the `hdr.Size < 0` sub-condition here (io.LimitReader treats negative as 0, never an allocation sink) and keep only the over-limit check. Either way the comment already explains intent. Not blocking.",
+      "tech_debt": false
+    },
+    {
+      "severity": "minor",
+      "file": "report/report.go",
+      "line": 197,
+      "issue": "The over-limit error string `result file size %d exceeds limit %d bytes` is duplicated verbatim between report.go:197 and postgres.go:533 as an inline literal rather than a shared helper/sentinel. Acceptable given the task pins this exact format and the two live in different packages, but a future format change must be applied in two places.",
+      "suggestion": "Optional: leave as-is (format is intentionally pinned by the spec). If desired later, expose a small stat.ErrResultFileTooLarge constructor so both call sites stay in lockstep. Not blocking.",
+      "tech_debt": false
+    }
+  ],
+  "deviation_assessment": {
+    "note": "Implementer's over-limit report test emits the tar header only (no body, no Close) because tar.Writer enforces Size == bytes-written.",
+    "verdict": "sound",
+    "reasoning": "archive/tar.Writer.Write rejects writes exceeding the declared Header.Size and Close() errors when bytes-written != Size, so a tiny body cannot be paired with a crafted multi-GB Size via the writer. Emitting the header alone is valid: tar.NewReader exposes hdr.Size from the header on Next(), and readTar rejects on hdr.Size (in NewPGresultFile for meta/stat, inline for sysinfo) BEFORE reading any body — so no body is required to exercise the guard. The 'under limit replays' case correctly uses full bodies plus Close() to validate the happy path. The harness comment documents this clearly. Approach is correct and idiomatic."
+  },
+  "verification": {
+    "tests": "go test ./internal/stat/... ./report/... — PASS (both packages)",
+    "lint": "golangci-lint/gosec not installed in review environment; guard is pure int64 comparison with no int() conversion, so G115 cannot trigger by construction (verified by reading postgres.go:529-536 and report.go:196)",
+    "int64_guard": "confirmed — no int(hdr.Size) / int(bufsz) in either guard",
+    "guard_placement": "confirmed — both range checks precede make([]byte, bufsz) (postgres.go:529-536)",
+    "branch_inheritance": "confirmed — meta.* (report.go:170) and stat default (report.go:211) call stat.NewPGresultFile unchanged and inherit the cap; only sysinfo.* gained an inline check"
+  },
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  }
+}
