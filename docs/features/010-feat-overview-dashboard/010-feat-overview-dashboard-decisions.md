@@ -188,3 +188,34 @@ Round 3 не запускался: оба ревьюера approved/passed.
 - `go test ./internal/stat/...` → ok (live-PG кластер доступен; все три источника наполняются, флаг set/clear, OFF→ON re-arm без Reset, coexistence-кейс зелёные; существующие `TestCollector_Update`/`TestCollector_collectDiskstats` не падают)
 - `go build ./...` → OK
 - `go vet ./internal/stat/...` + `gofmt -l` → чисто
+
+---
+
+## Task 08: Verbose row composers (both panels)
+
+**Status:** Done
+**Commit:** 9268de9 (impl) + d0696f7 (round 1 fixes) + 54695df (review reports)
+**Agent:** rows-dev
+**Summary:** Финальный рендер-слой verbose-режима. Внутри writer-ядер `renderSysstat`/`renderPgstat` (`top/stat.go`, Task 3), под флагом verbose, добавлены 3 системные строки (`iostat`/`nicstat`/`filesyst`) и 5 pgstat-строк (`workload`/`databases`/`workers`/`replication`/`bgwr/ckpt`). Сигнатуры обёрток/ядер расширены: `printSysstat`/`renderSysstat(w, s, verbose, local, dataDir)`, `printPgstat`/`renderPgstat(w, s, props, db, verbose)`; verbose приходит из `app.config.verbose`, `local` из `app.db.Local`, `dataDir` из `props.DataDirectory`. `iostat`/`nicstat` выбирают устройство с макс. `%util`/`Utilization` среди активных (фильтры `Completed != 0` / `Packets != 0`, как в `printIostat`/`printNetdev`), читая `Util`/`Utilization` AS-IS из `count*Usage` — НЕ пересчитывая (Decision 5). `nicstat` rMbps/wMbps реплицируют print-time конверсию `printNetdev`: `Rbytes/1024/128`; `err/coll` = `(Rerrs+Terrs)`/`Tcolls`. `filesyst` — ФС каталога данных через новый чистый матчер `MatchDataDirFs(dataDir, fss, local)` (`internal/stat/fsstat.go`): longest-mount-prefix по границе компонента пути (`/var` не съедает `/variable`), при `local` сначала `filepath.EvalSymlinks(filepath.Clean(...))`, удалённо — нерезолвленный путь; любой сбой (broken symlink, EACCES, no-match, пустой dataDir) → `ok=false` → строка `n/a`, без паники и без логирования сырого пути; `mounted` усечён до 10 рун. pgstat-строки — из `PgstatOverview` (Task 5) с форматтерами Task 1 (`pretty.Ceil`/`ReserveWidth`/`Size`); недоступные сигналы (sentinel-флаги `*Valid` / `HasPrev=false`) → литерал `n/a`, отличимый от `0`; падение одного источника не гасит остальные строки. First-tick `n/a` для системных строк — по флагу коллектора, НЕ по `len(slice)==0`. Бюджеты разрядов системных строк по user-spec (devices=2, util=3, MB/s&Mbps=4, r/s&w/s=5, err&coll=4). compact-вывод обеих панелей при verbose=false байт-в-байт неизменён (golden-тесты).
+
+**Deviations:**
+1. **Затронут `internal/stat/stat.go` сверх заявленного списка файлов задачи** (задача разрешала только `top/stat.go`, `top/stat_test.go`, `internal/stat/fsstat.go`+тест). Причина — необходимая и неустранимая: флаг first-tick `verboseFirstTick` Task 7 — приватное поле `Collector`, а collector и renderer общаются ИСКЛЮЧИТЕЛЬНО через `stat.Stat` по каналу `statCh` (разные горутины). Без моста приватный флаг не доедет до `renderSysstat`. Добавлено публичное поле `System.VerboseFirstTick bool` (+ одна строка присваивания `s.VerboseFirstTick = c.verboseFirstTick` в verbose-ветке `Update`) — минимальный мост, точно соответствующий замыслу спека («n/a по флагу коллектора, не по `len(slice)==0`»). Подтверждено всеми тремя ревьюерами как корректное, минимальное, обоснованное отклонение.
+2. **Матчер экспортирован: `matchDataDirFs` → `MatchDataDirFs`** (TDD-якорь спека называл его в lowercase, подразумевая unexported). Причина — композер живёт в пакете `top` и зовёт матчер через границу пакета, поэтому функция и тесты `Test_MatchDataDirFs_*` следуют экспортированному имени. Покрытие идентично; задокументировано комментарием в тесте.
+3. **`rateField` в `top/stat.go` дублирует overflow/divisor-логику `pretty.RateUnit`** (отличие — r/w-префикс ставится МЕЖДУ цифрами и единицей, как в user-spec раскладке `1135 rMB/s`). Рефактор `pretty.RateUnit` под общий хелпер потребовал бы правки `internal/pretty/pretty.go` (вне разрешённых файлов) — отложено; дублирование маленькое и задокументированное (code-reviewer minor, optional).
+4. **`make lint` не прогнан** — `golangci-lint` в окружении отсутствует/несовместим с конфигом (как в Task 01/02/05/06/07); вместо него `go vet ./top/... ./internal/stat/...`, `gofmt -l` и `gosec` чисты, полный lint остаётся на CI.
+
+**Tech debt:** Нет (Deviation 3 — кандидат на консолидацию при будущем касании `internal/pretty`).
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions — 0 critical/major, 3 minor (все optional) → [010-feat-overview-dashboard-task-08-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-08-dev-code-reviewer-round1.json)
+- dev-security-auditor: approved — 0 находок (EvalSymlinks/path: ошибка отбрасывается, raw-путь не логируется/не выводится, failure→n/a, без паники; новых SQL/shell-вызовов нет) → [010-feat-overview-dashboard-task-08-dev-security-auditor-round1.json](010-feat-overview-dashboard-task-08-dev-security-auditor-round1.json)
+- dev-test-reviewer: passed — litmus 11/13, pyramid healthy, 4 minor (все 7 TDD-якорей закрыты + extra) → [010-feat-overview-dashboard-task-08-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-08-dev-test-reviewer-round1.json)
+
+Применены сходящиеся code+test находки (commit d0696f7): full-line golden-ассерты для всех verbose-строк обеих панелей (фиксируют reserve-width / порядок полей — раскладка spec-load-bearing), вместо `Contains`-подстрок; `*_compactUnchanged` усилены — теперь сравнивают первые compact-строки verbose-вывода с чистым compact (verbose только дописывает, не возмущает), а не `verbose=false` сам с собой (тавтология); в pgstat-available кейсе грубый глобальный `NotContains("n/a")` заменён на позитивные пер-полевые golden (включая bgwr write/sync ms дельты и значение `maxwritten=4`); задокументирован rename матчера. Отклонены: рефактор `rateField`↔`pretty.RateUnit` (вне разрешённых файлов — Deviation 3) и косметика раскладки pgstat (бюджеты разрядов pgstat в спеке жёстко не заданы — проверяется на user-верификации). Round 2 не запускался: security approved 0 находок, code/test — только optional minor, actionable из них применены.
+
+**Verification:**
+- `go test ./top/... ./internal/stat/...` → ok (live-PG кластер доступен; все writer-based и fsstat-тесты зелёные; compact байт-в-байт неизменён)
+- `go build ./...` → OK; полный `go test ./...` → все пакеты ok
+- `go vet ./top/... ./internal/stat/...` + `gofmt -l` + `gosec ./top/... ./internal/stat/...` → чисто
