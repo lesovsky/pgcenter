@@ -1,0 +1,43 @@
+{
+  "feature": "011-refactor-tech-debt-paydown",
+  "date": "2026-06-25",
+  "branch": "develop",
+  "environment": { "status": "healthy", "note": "Go 1.25.11, golangci-lint v2.12.2, gosec, govulncheck; live PG test clusters up (ports 21914-21918)" },
+  "automated_gate": {
+    "make_build": "pass",
+    "make_test": "pass (race+coverage, exit 0, no FAIL/panic/DATA RACE)",
+    "make_lint": "pass (golangci-lint v2: 0 issues; gosec: clean, no G115)",
+    "make_vuln": "pass (code affected by 0 vulnerabilities; 1 transitive module vuln not in call path)",
+    "coverage": { "internal/pretty": "100.0%", "internal/stat": "87.6%", "report": "83.1%", "top": "43.6%", "total": "69.8%" }
+  },
+  "acceptance_criteria": {
+    "009_alloc_cap": {
+      "MaxResultFileSize_int64_256MiB": "pass",
+      "guard_negative_and_over_limit_before_make": "pass",
+      "error_format_result_file_size_exceeds_limit": "pass",
+      "int64_only_no_G115": "pass",
+      "all_three_readTar_branches_capped": "pass (meta/stat via NewPGresultFile, sysinfo inline defense-in-depth)",
+      "tests_over_limit_rejected_legit_replays": "pass"
+    },
+    "011_rate_helper": {
+      "rateField_removed": "pass (grep empty)",
+      "rateUnitParts_core_RateUnit_RateUnitPrefixed": "pass",
+      "byte_identical_boundary_table": "pass",
+      "existing_RateUnit_and_verbose_goldens_unchanged": "pass"
+    },
+    "012_fixed_width_size": {
+      "SizeWidth_added": "pass",
+      "five_fields_fixed_width_plus_naReserve": "pass",
+      "wal_size_excluded": "pass (Decision 5)",
+      "values_units_identical_padding_only": "pass",
+      "value_vs_na_offset_assertion_red_before_green_after": "pass",
+      "manual_v_verbose_check": "PENDING — user visual confirmation required"
+    }
+  },
+  "manual_verification_required": {
+    "step": "Press `v` in `pgcenter top` against an instance with changing DB sizes / replication lag",
+    "expect": "In the databases: and replication: rows, the Size values are right-aligned in fixed 8-col slots; trailing labels (per, growth/s, lag, slots/retain, archiving backlog) hold a steady horizontal position across ticks and when a value drops to n/a. Numbers/units unchanged; wal size intentionally unchanged.",
+    "status": "pending"
+  },
+  "verdict": "automated gate GREEN; feature ready pending the manual [012] visual check"
+}
