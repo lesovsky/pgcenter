@@ -192,7 +192,7 @@ func Test_renderSysstat_verboseNicstatConversion(t *testing.T) {
 	if assert.Len(t, lines, 7) {
 		// Full-line golden: /1024/128 parity (4345/6543), err=Rerrs+Terrs=3451, coll=Tcolls=0.
 		assert.Equal(t,
-			" nicstat:  1 devices,  60% max util, 4345 rMbps, 6543 wMbps, 3451/   0 err/coll",
+			" nicstat:  1 devices,  60% max util, 4345 rMbps, 6543 wMbps, 3451/0 err/coll",
 			lines[5])
 	}
 }
@@ -236,17 +236,20 @@ func Test_renderSysstat_verboseFilesystMounted10(t *testing.T) {
 	s := stat.Stat{System: stat.System{
 		Fsstats: stat.Fsstats{
 			{Mount: stat.Mount{Device: "/dev/nvme0n1p2", Mountpoint: "/var/lib/postgresql/data", Fstype: "ext4"},
-				Size: 1024, Used: 512, Pused: 74},
+				Size: 1024, Used: 512, Pused: 74.3},
 		},
 	}}
 
 	lines := verboseSysstatLines(t, s, false, "/var/lib/postgresql/data")
 	if assert.Len(t, lines, 7) {
 		// Full-line golden: mounted truncated to first 10 runes of "/var/lib/postgresql/data".
+		// use-% mirrors printFsstats' %.0f of Pused exactly (74.3 -> 74, NOT Ceil's 75) — the
+		// verbose row must agree with the full fsstat panel for the same filesystem.
 		assert.Equal(t,
 			"filesyst: /dev/nvme0n1p2 on /var/lib/p (ext4), 1.0K size, 512B used,  74% use",
 			lines[6])
 		assert.NotContains(t, lines[6], "/var/lib/postgresql")
+		assert.NotContains(t, lines[6], "75")
 	}
 }
 
@@ -325,7 +328,7 @@ func Test_renderPgstat_verboseNA(t *testing.T) {
 
 	if assert.Len(t, lines, 9, "4 compact + 5 verbose pgstat rows") {
 		// Full-line golden per row. First-tick rates n/a; unavailable sources n/a; always-available
-		// fields (count, wal size, workers, absolute ckpt counters, slots count, send/recv) render.
+		// fields (count, wal size, workers, absolute ckpt counters, slots count, senders/receivers) render.
 		assert.Equal(t,
 			"    workload: n/a tps, n/a ins/s, n/a upd/s, n/a del/s, n/a ret/s, n/a tmp/s, n/a others",
 			lines[4])
@@ -336,10 +339,10 @@ func Test_renderPgstat_verboseNA(t *testing.T) {
 			"     workers:  1/8 workers/max,  0/4 logical workers,  2/8 parallel workers",
 			lines[6])
 		assert.Equal(t,
-			" replication: 1.0K wal size, n/a lag,  0/n/a slots/retain, n/a archiving backlog, 0/0 send/recv",
+			" replication: 1.0K wal size, n/a lag,  0/n/a slots/retain, n/a archiving backlog, 0/0 senders/receivers",
 			lines[7])
 		assert.Equal(t,
-			"   bgwr/ckpt: 12/ 3 timed/req, n/a/n/a ms write/sync, n/a maxwritten",
+			"   bgwr/ckpt: 12/3 timed/req, n/a/n/a ms write/sync, n/a maxwritten",
 			lines[8])
 	}
 }
@@ -378,10 +381,10 @@ func Test_renderPgstat_verboseAvailable(t *testing.T) {
 			"     workers:  0/8 workers/max,  0/4 logical workers,  0/8 parallel workers",
 			lines[6])
 		assert.Equal(t,
-			" replication: 1.0G wal size, 1.0M lag,  1/1.0G slots/retain, 1.0M archiving backlog, 2/1 send/recv",
+			" replication: 1.0G wal size, 1.0M lag,  1/1.0G slots/retain, 1.0M archiving backlog, 2/1 senders/receivers",
 			lines[7])
 		assert.Equal(t,
-			"   bgwr/ckpt: 12/ 3 timed/req, 245/ 30 ms write/sync,  4 maxwritten",
+			"   bgwr/ckpt: 12/3 timed/req, 245/30 ms write/sync,  4 maxwritten",
 			lines[8])
 	}
 	assert.NotContains(t, buf.String(), "n/a")

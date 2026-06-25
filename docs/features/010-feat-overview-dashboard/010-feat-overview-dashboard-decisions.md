@@ -275,3 +275,20 @@ Critical устранён (commit c6c5938): добавлена per-source cadenc
 - `gosec -quiet ./...` → 0 issues; `go vet ./...` + `gofmt -l .` (файлы фичи) → чисто
 - `govulncheck ./...` → 1 stdlib-advisory (тулчейн, не код) — задокументирован как minor
 - Визуальные TUI-критерии → DEFERRED-TO-USER (чек-лист в qa-report.json `deferredToPostDeploy`)
+
+---
+
+## Task 08: Visual-review fixes (live-TUI polish)
+
+**Status:** Done
+**Commit:** (this commit)
+**Agent:** rows-dev
+**Summary:** Четыре косметические правки в verbose-композерах `top/stat.go` по итогам ручного прогона живого TUI. (1) nicstat `err/coll`: post-slash значение (`Tcolls`) больше не паддится резервной шириной — `strconv.Itoa(pretty.Ceil(...))` вместо `pretty.ReserveWidth`, рендер стал тесным `N/0`. (2) bgwr/ckpt `write/sync` и `timed/req`: то же правило тесной A/B-пары — post-slash значения (`CkptSyncMsDelta`, `CkptReq`) теперь без паддинга; leading-колонка (pre-slash) сохраняет выравнивание. slots/retain и workers/max уже были тесными (post-slash = `pretty.Size`/`%d`) — не трогались. (3) filesyst `use%`: устранён рассинхрон с полной панелью fsstat (75% vs 74%) — строка рендерит `fs.Pused` форматом `%3.0f` (как `printFsstats` через `%8.0f`), **без** `Ceil`; правило ceil остаётся только для rate-полей. (4) replication label `send/recv` → `senders/receivers` (только подпись, значения те же — чтобы убрать сетевую коннотацию send/recv). Тесты-golden в `top/stat_test.go` обновлены под новый тесный формат, паритет use% (Pused 74.3 → 74, не 75) и новую подпись.
+**Deviations:** Нет. `internal/stat/fsstat.go` не тронут — паритет use% решён в композере. `bin/pgcenter` (модифицированный трекнутый бинарь) не трогался.
+**Tech debt:** Нет.
+
+**Reviews:** dev-code-reviewer round2 — [010-feat-overview-dashboard-task-08-dev-code-reviewer-round2.json](010-feat-overview-dashboard-task-08-dev-code-reviewer-round2.json).
+
+**Verification:**
+- `go test ./top/...` → ok (golden-строки nicstat/bgwr/replication/filesyst зелёные)
+- `go build ./...` → OK

@@ -378,7 +378,7 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 			rateField(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
 			rateField(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
 			pretty.ReserveWidth(pretty.Ceil(n.Rerrs+n.Terrs), 4),
-			pretty.ReserveWidth(pretty.Ceil(n.Tcolls), 4)); err != nil {
+			strconv.Itoa(pretty.Ceil(n.Tcolls))); err != nil {
 			return err
 		}
 	}
@@ -386,9 +386,9 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 	// filesyst row: the data_directory's filesystem by longest mount-prefix. Any match failure
 	// (no mount, empty data_directory, EvalSymlinks failure) renders n/a.
 	if fs, ok := stat.MatchDataDirFs(dataDir, s.Fsstats, local); ok {
-		if _, err := fmt.Fprintf(w, "filesyst: %s on %s (%s), %s size, %s used, %s%% use\n",
+		if _, err := fmt.Fprintf(w, "filesyst: %s on %s (%s), %s size, %s used, %3.0f%% use\n",
 			fs.Mount.Device, truncate(fs.Mount.Mountpoint, 10), fs.Mount.Fstype,
-			pretty.Size(fs.Size), pretty.Size(fs.Used), pretty.ReserveWidth(pretty.Ceil(fs.Pused), 3)); err != nil {
+			pretty.Size(fs.Size), pretty.Size(fs.Used), fs.Pused); err != nil {
 			return err
 		}
 	} else {
@@ -576,7 +576,7 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 	if o.ArchivingBacklogValid {
 		backlog = pretty.Size(float64(o.ArchivingBacklog))
 	}
-	if _, err := fmt.Fprintf(w, " replication: %s wal size, %s lag, %s/%s slots/retain, %s archiving backlog, %d/%d send/recv\n",
+	if _, err := fmt.Fprintf(w, " replication: %s wal size, %s lag, %s/%s slots/retain, %s archiving backlog, %d/%d senders/receivers\n",
 		pretty.Size(float64(o.WalSize)), lag,
 		pretty.ReserveWidth(int(o.SlotsCount), 2), retain,
 		backlog, o.Senders, o.Receivers); err != nil {
@@ -588,11 +588,11 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 	writeMs, syncMs, maxw := naLiteral, naLiteral, naLiteral
 	if hp {
 		writeMs = pretty.ReserveWidth(pretty.Ceil(o.CkptWriteMsDelta), 3)
-		syncMs = pretty.ReserveWidth(pretty.Ceil(o.CkptSyncMsDelta), 3)
+		syncMs = strconv.Itoa(pretty.Ceil(o.CkptSyncMsDelta)) // tight post-slash value
 		maxw = pretty.ReserveWidth(int(o.MaxWrittenDelta), 2)
 	}
 	if _, err := fmt.Fprintf(w, "   bgwr/ckpt: %s/%s timed/req, %s/%s ms write/sync, %s maxwritten\n",
-		pretty.ReserveWidth(int(o.CkptTimed), 2), pretty.ReserveWidth(int(o.CkptReq), 2),
+		pretty.ReserveWidth(int(o.CkptTimed), 2), strconv.Itoa(int(o.CkptReq)),
 		writeMs, syncMs, maxw); err != nil {
 		return err
 	}
