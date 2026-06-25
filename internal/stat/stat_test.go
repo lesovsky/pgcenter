@@ -262,6 +262,8 @@ func TestCollector_Update_DbSizeThrottle(t *testing.T) {
 	assert.Equal(t, cachedSize, c.verbose.dbSizeCache.TotalSize, "size cached after real collection")
 
 	// Force the guard: pretend the last db-size query was slow (over the 500ms floor for refresh=1s).
+	// dbSizeLastRun was just stamped by tick 1, so the cadence budget (1s) has NOT elapsed -> tick 2 is
+	// throttled (the immediate "next" collection is skipped).
 	c.verbose.dbSizeLastLatency = 2 * time.Second
 
 	// Tick 2: throttled — the size/growth fields keep the cached stale value (not n/a), while the
@@ -273,6 +275,17 @@ func TestCollector_Update_DbSizeThrottle(t *testing.T) {
 	assert.GreaterOrEqual(t, s2.Pgstat.Overview.DatabasesCount, int64(1), "cheap aggregates collect every tick")
 	// System rows still collect every tick (not throttled).
 	assert.NotEmpty(t, s2.System.Diskstats, "system rows collect every tick")
+
+	// Auto-resume (end-to-end through the real Update path): once the cadence budget has elapsed since
+	// the last real collection, the guard force-collects to re-probe latency — even while dbSizeLastLatency
+	// still records the old slow value. Backdate dbSizeLastRun beyond the budget to simulate the elapsed
+	// cadence without sleeping. The re-probe re-measures the (now fast) live query and resumes.
+	c.verbose.dbSizeLastRun = time.Now().Add(-2 * time.Second) // > budget (1s) in the past
+	s3, err := c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.True(t, s3.Pgstat.Overview.TotalSizeValid, "re-probe collects a fresh value")
+	assert.LessOrEqual(t, c.verbose.dbSizeLastLatency, latencyGuardThreshold(time.Second),
+		"re-probe re-measured the fast live latency -> throttle auto-resumes")
 }
 
 func TestCollector_collectDiskstats(t *testing.T) {
@@ -445,37 +458,56 @@ func Test_latencyGuardThreshold(t *testing.T) {
 	}
 }
 
-// Test_verboseCollectState_throttlesSlowSource verifies the pure throttle decision: a source whose
-// last measured latency exceeded the guard threshold is throttled (skipped) on the next tick, so the
-// caller reuses the cached stale value instead of re-querying.
+// Test_verboseCollectState_throttlesSlowSource verifies the pure throttle decision: with a real value
+// already cached, a source whose last measured latency exceeded the guard threshold is throttled
+// (skipped) while still inside the cadence budget, so the caller reuses the cached stale value.
 func Test_verboseCollectState_throttlesSlowSource(t *testing.T) {
 	threshold := latencyGuardThreshold(1 * time.Second) // 500ms
+	budget := 1 * time.Second
+	withinBudget := 200 * time.Millisecond // < budget
 
-	// Last query was slow (> threshold): throttle the next collection.
-	st := verboseCollectState{dbSizeLastLatency: 800 * time.Millisecond}
-	assert.True(t, st.dbSizeThrottled(threshold), "slow last query must throttle next collection")
+	// Slow last query (> threshold), within cadence budget, cache valid: throttle the next collection.
+	st := verboseCollectState{dbSizeCacheValid: true, dbSizeLastLatency: 800 * time.Millisecond}
+	assert.True(t, st.dbSizeThrottled(threshold, budget, withinBudget), "slow last query must throttle next collection")
 
 	// Last query was fast (<= threshold): do not throttle.
-	st = verboseCollectState{dbSizeLastLatency: 100 * time.Millisecond}
-	assert.False(t, st.dbSizeThrottled(threshold), "fast last query must not throttle")
+	st = verboseCollectState{dbSizeCacheValid: true, dbSizeLastLatency: 100 * time.Millisecond}
+	assert.False(t, st.dbSizeThrottled(threshold, budget, withinBudget), "fast last query must not throttle")
 
 	// Exactly at threshold: not over, so not throttled.
-	st = verboseCollectState{dbSizeLastLatency: threshold}
-	assert.False(t, st.dbSizeThrottled(threshold), "at-threshold latency must not throttle")
+	st = verboseCollectState{dbSizeCacheValid: true, dbSizeLastLatency: threshold}
+	assert.False(t, st.dbSizeThrottled(threshold, budget, withinBudget), "at-threshold latency must not throttle")
 }
 
-// Test_verboseCollectState_autoResumes verifies throttling lifts once the source recovers: after a
-// slow query throttles the next tick, recording a fast latency (e.g. on a forced collection) makes
-// dbSizeThrottled report false again — no manual reset required.
+// Test_verboseCollectState_firstTickNotThrottled pins the genuine-first-tick guard: when nothing has
+// been cached yet (dbSizeCacheValid == false), the source is NEVER throttled regardless of a stale slow
+// latency — there is no stale value to fall back to, so it must collect. Without this guard the first
+// tick could skip and render n/a.
+func Test_verboseCollectState_firstTickNotThrottled(t *testing.T) {
+	threshold := latencyGuardThreshold(1 * time.Second)
+	budget := 1 * time.Second
+
+	// No cache yet, but a (leftover) slow latency and zero sinceLastRun: must still collect.
+	st := verboseCollectState{dbSizeCacheValid: false, dbSizeLastLatency: 5 * time.Second}
+	assert.False(t, st.dbSizeThrottled(threshold, budget, 0), "first tick (no cache) must never be throttled")
+}
+
+// Test_verboseCollectState_autoResumes verifies the throttle is NOT a permanent latch: once the cadence
+// budget elapses since the last real collection, the slow source is re-probed (not throttled) even
+// though dbSizeLastLatency still records the old slow value — this is the path that re-measures latency
+// and lets the guard auto-resume when the source recovers.
 func Test_verboseCollectState_autoResumes(t *testing.T) {
 	threshold := latencyGuardThreshold(1 * time.Second)
+	budget := 1 * time.Second
 
-	st := verboseCollectState{dbSizeLastLatency: 900 * time.Millisecond}
-	assert.True(t, st.dbSizeThrottled(threshold), "slow source throttled")
+	st := verboseCollectState{dbSizeCacheValid: true, dbSizeLastLatency: 900 * time.Millisecond}
 
-	// Source recovers: a subsequent real collection records a fast latency.
-	st.dbSizeLastLatency = 50 * time.Millisecond
-	assert.False(t, st.dbSizeThrottled(threshold), "recovered source auto-resumes")
+	// Inside the budget: still throttled.
+	assert.True(t, st.dbSizeThrottled(threshold, budget, 500*time.Millisecond), "slow source throttled within budget")
+
+	// Budget elapsed: force a re-probe (not throttled), even with the slow latency still recorded.
+	assert.False(t, st.dbSizeThrottled(threshold, budget, budget), "elapsed cadence forces a re-probe (no permanent latch)")
+	assert.False(t, st.dbSizeThrottled(threshold, budget, 2*budget), "well past the budget -> re-probe")
 }
 
 func TestCollectorUpdateProcPidStat19Cols(t *testing.T) {

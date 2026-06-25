@@ -158,8 +158,10 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	// First-tick cmdline hint, keyed on the collector's first-tick flag (via Stat). printCmdline runs
 	// its own g.Update, so it is called here (outside the panel-render g.Update below) exactly once per
 	// path — only when the hint is shown — respecting the printCmdline mutual-exclusion (one call per
-	// path, no overwrite). The hint self-clears after 2s via printCmdline's timer; once the flag clears
-	// on the next refresh the hint is simply not re-emitted.
+	// path, no overwrite). The cmdline is event-driven (it is NOT rewritten on every refresh; it stays
+	// empty until something prints to it), so there is intentionally no explicit "clear" here: the hint
+	// self-clears via printCmdline's own 2s timer, and once the first-tick flag clears on the next refresh
+	// it is simply not re-emitted. On an OFF->ON re-enable the flag re-arms, so the hint reappears.
 	if msg, show := firstTickHint(s); show {
 		printCmdline(app.ui, "%s", msg)
 	}

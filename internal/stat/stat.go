@@ -88,9 +88,15 @@ type verboseCollectState struct {
 	// verboseFirstTick on every OFF->ON re-enable without relying on c.Reset() (toggleVerbose skips Reset).
 	prevVerboseActive bool
 	// dbSizeLastLatency is the measured duration of the last real db-size query. When it exceeds the
-	// latency-guard threshold, the next collection of this source is throttled (skipped) and the cached
-	// value below is reused. Auto-resumes: a later real collection records a fresh (faster) latency.
+	// latency-guard threshold, collection of this source is throttled (skipped) for at most the cadence
+	// budget and the cached value below is reused; after the budget elapses one real collection is forced
+	// to re-probe the latency — auto-resuming when it has recovered.
 	dbSizeLastLatency time.Duration
+	// dbSizeLastRun is the wall-clock time of the last REAL db-size collection. Together with
+	// dbSizeLastLatency it bounds the throttle: a slow source is skipped only until the cadence budget
+	// elapses since dbSizeLastRun, then re-probed. Without this cadence the guard would latch permanently
+	// (a slow source would never be re-measured, so auto-resume could never happen).
+	dbSizeLastRun time.Time
 	// dbSizeCache holds the last successfully collected size/growth aggregate, reused (stale, not n/a)
 	// while the source is throttled.
 	dbSizeCache PgstatOverview
@@ -98,11 +104,20 @@ type verboseCollectState struct {
 	dbSizeCacheValid bool
 }
 
-// dbSizeThrottled reports whether the dear db-size source should be skipped on this tick because its
-// last query exceeded the latency-guard threshold. Pure decision (no clock), so the guard is testable
-// without live PG.
-func (s verboseCollectState) dbSizeThrottled(threshold time.Duration) bool {
-	return s.dbSizeLastLatency > threshold
+// dbSizeThrottled reports whether the dear db-size source should be skipped on this tick. It is throttled
+// when (a) a real value is already cached, (b) the last query exceeded the latency-guard threshold, AND
+// (c) less than the cadence budget has elapsed since the last real collection. Condition (c) is what
+// makes this a throttle rather than a permanent latch: once the budget elapses the source is force-
+// collected to re-probe its latency, which either re-arms the throttle (still slow) or resumes it (now
+// fast). Pure decision (sinceLastRun is passed in), so the guard is testable without live PG or a clock.
+func (s verboseCollectState) dbSizeThrottled(threshold, budget, sinceLastRun time.Duration) bool {
+	if !s.dbSizeCacheValid {
+		return false // genuine first tick (nothing cached) — must collect.
+	}
+	if s.dbSizeLastLatency <= threshold {
+		return false // last query was within budget — collect normally.
+	}
+	return sinceLastRun < budget // slow, but re-probe once the cadence budget elapses.
 }
 
 // Collector defines container for stats objects.
@@ -385,24 +400,31 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	var overview PgstatOverview
 	if view.Verbose {
 		// Latency guard for the dear no-twin aggregate (db sizes / growth): when the last db-size query
-		// exceeded the threshold (max 25% of refresh, 500ms floor), skip it this tick and reuse the cached
-		// stale value (not n/a) — there is no live panel twin to cross-check, so staleness is acceptable
-		// (Decision 9). The cheap aggregates (workload/workers/...) and all system rows still collect every
-		// tick. On the genuine first verbose tick there is nothing cached yet, so we must collect it.
+		// exceeded the threshold (max 25% of refresh, 500ms floor), skip it and reuse the cached stale
+		// value (not n/a) — there is no live panel twin to cross-check, so staleness is acceptable
+		// (Decision 9). The skip is bounded by a cadence budget (one refresh interval): once it elapses the
+		// source is force-collected to re-probe its latency, so the guard auto-resumes when latency recovers
+		// instead of latching forever. The cheap aggregates (workload/workers/...) and all system rows
+		// always collect every tick. On the genuine first verbose tick there is nothing cached yet, so the
+		// source must collect.
 		threshold := latencyGuardThreshold(refresh)
-		skipSize := c.verbose.dbSizeCacheValid && c.verbose.dbSizeThrottled(threshold)
+		budget := refresh
+		skipSize := c.verbose.dbSizeThrottled(threshold, budget, time.Since(c.verbose.dbSizeLastRun))
 
-		start := time.Now()
-		overview = collectOverviewStat(db, c.config.PostgresProperties, itv, c.currPgStat.Overview, skipSize)
+		var sizeLatency time.Duration
+		overview, sizeLatency = collectOverviewStat(db, c.config.PostgresProperties, itv, c.currPgStat.Overview, skipSize)
 		if skipSize {
 			// Reuse the cached stale size/growth fields; everything else in overview is fresh.
 			overview.TotalSize = c.verbose.dbSizeCache.TotalSize
 			overview.TotalSizeValid = c.verbose.dbSizeCache.TotalSizeValid
 			overview.GrowthPerSec = c.verbose.dbSizeCache.GrowthPerSec
 		} else {
-			// Real collection happened: record its latency (covers the whole overview, dominated by the
-			// dear size query) and refresh the cache so the next throttled tick has a stale value to reuse.
-			c.verbose.dbSizeLastLatency = time.Since(start)
+			// Real collection happened: record the db-size query's own latency (measured narrowly around
+			// its QueryRow inside collectOverviewStat, so a slow neighbour aggregate cannot trip the guard
+			// for the wrong source), stamp the cadence clock, and refresh the cache so the next throttled
+			// tick has a stale value to reuse.
+			c.verbose.dbSizeLastLatency = sizeLatency
+			c.verbose.dbSizeLastRun = time.Now()
 			c.verbose.dbSizeCache = overview
 			c.verbose.dbSizeCacheValid = true
 		}

@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Pgstat describes collected Postgres stats.
@@ -192,10 +193,15 @@ func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv in
 // skipDatabasesSize lets the caller's latency guard (Decision 9) throttle the dear no-twin db-size
 // aggregate: when true, the sum(pg_database_size) QueryRow is not run at all (the caller reuses a
 // cached stale value instead). The cheap aggregates and all other rows still collect unconditionally.
-func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, prev PgstatOverview, skipDatabasesSize bool) PgstatOverview {
+//
+// The second return value is the wall-clock latency of the dear sum(pg_database_size) QueryRow alone
+// (zero when skipped), measured narrowly so the caller's guard attributes slowness to the source it
+// actually throttles — not to a momentarily slow neighbour aggregate.
+func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, prev PgstatOverview, skipDatabasesSize bool) (PgstatOverview, time.Duration) {
 	var s PgstatOverview
 	s.Valid = true
 	s.HasPrev = prev.Valid
+	var sizeLatency time.Duration
 
 	if itv < 1 {
 		itv = 1
@@ -242,7 +248,10 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 	// When the caller's latency guard throttles this source (skipDatabasesSize), the query is not run
 	// at all and the caller reuses its cached stale value (Decision 9).
 	if !skipDatabasesSize {
-		if err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize); err == nil {
+		sizeStart := time.Now()
+		err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize)
+		sizeLatency = time.Since(sizeStart)
+		if err == nil {
 			s.TotalSizeValid = true
 			if s.HasPrev && prev.TotalSizeValid {
 				s.GrowthPerSec = (s.TotalSize - prev.TotalSize) / int64(itv)
@@ -292,7 +301,7 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 	// so scan generically by column name.
 	collectOverviewBgwriter(db, version, &s, prev)
 
-	return s
+	return s, sizeLatency
 }
 
 // collectOverviewBgwriter scans the bgwr/ckpt aggregate via SelectStatBgwriterQuery and fills the

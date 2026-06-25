@@ -99,7 +99,7 @@ func Test_collectOverviewStat(t *testing.T) {
 		assert.NoError(t, err)
 
 		// First tick: no prev snapshot. Must not panic; rates stay zero/n/a.
-		first := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+		first, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
 		assert.True(t, first.Valid)
 		assert.False(t, first.HasPrev)
 		assert.False(t, first.CacheHitRatioValid, "cache hit ratio is n/a on the first tick")
@@ -109,7 +109,7 @@ func Test_collectOverviewStat(t *testing.T) {
 		assert.GreaterOrEqual(t, first.WalSize, int64(0))
 
 		// Second tick with first as prev: rates are computed, no panic on deltas.
-		second := collectOverviewStat(conn, props, 1, first, false)
+		second, _ := collectOverviewStat(conn, props, 1, first, false)
 		assert.True(t, second.Valid)
 		assert.True(t, second.HasPrev)
 		// tps = (Δcommits + Δrollbacks)/itv; >= 0 (counters never go backwards on a live cluster).
@@ -123,7 +123,7 @@ func Test_collectOverviewStat(t *testing.T) {
 		// Exact rate formula against a synthetic prev with known deltas. Using prev counters BELOW the
 		// live ones guarantees positive, deterministic deltas regardless of background activity. This
 		// proves tps = (Δcommit+Δrollback)/itv and others = Δ(...) over the interval (not /s).
-		base := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+		base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
 		synthPrev := PgstatOverview{
 			Valid:             true,
 			TotalSizeValid:    true,
@@ -133,7 +133,7 @@ func Test_collectOverviewStat(t *testing.T) {
 			WorkloadOthers:    base.WorkloadOthers - 7,
 		}
 		// itv = 2 so the /itv division is actually observable (not an identity).
-		withItv2 := collectOverviewStat(conn, props, 2, synthPrev, false)
+		withItv2, _ := collectOverviewStat(conn, props, 2, synthPrev, false)
 		expectedTPS := ((withItv2.WorkloadCommits + withItv2.WorkloadRollbacks) - (synthPrev.WorkloadCommits + synthPrev.WorkloadRollbacks)) / 2
 		assert.Equal(t, expectedTPS, withItv2.TPSRate, "tps must be (Δcommit+Δrollback)/itv")
 		// others is the raw interval delta, NOT divided by itv.
@@ -176,7 +176,7 @@ func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
 	props, err := GetPostgresProperties(conn)
 	assert.NoError(t, err)
 
-	base := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+	base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
 
 	// Synthetic prev with counters strictly BELOW the live ones -> Δhit/Δread are deterministically
 	// positive, so the per-interval ratio path runs and the result is a valid percentage in [0,100].
@@ -186,7 +186,7 @@ func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
 		BlksHit:        base.BlksHit - 800,
 		BlksRead:       base.BlksRead - 200,
 	}
-	got := collectOverviewStat(conn, props, 1, prev, false)
+	got, _ := collectOverviewStat(conn, props, 1, prev, false)
 	assert.True(t, got.HasPrev)
 	assert.True(t, got.CacheHitRatioValid, "with positive Δ(hit+read) the ratio must be valid")
 	assert.GreaterOrEqual(t, got.CacheHitRatio, float64(0))
@@ -196,7 +196,7 @@ func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
 	// Deterministic division-by-zero: prev counters equal to current -> Δ(hit+read) == 0 -> n/a.
 	// (cacheHitRatio is unit-tested directly in Test_cacheHitRatio; here we assert the collect wiring.)
 	prevEqual := PgstatOverview{Valid: true, TotalSizeValid: true, BlksHit: got.BlksHit, BlksRead: got.BlksRead}
-	noio := collectOverviewStat(conn, props, 1, prevEqual, false)
+	noio, _ := collectOverviewStat(conn, props, 1, prevEqual, false)
 	if noio.BlksHit == prevEqual.BlksHit && noio.BlksRead == prevEqual.BlksRead {
 		assert.False(t, noio.CacheHitRatioValid)
 		assert.False(t, math.IsNaN(noio.CacheHitRatio))
@@ -213,7 +213,7 @@ func Test_collectOverviewStat_Degradation(t *testing.T) {
 
 	// Test clusters are primaries with no replication and (typically) no slots: lag/slots/retained
 	// degrade to n/a while the rest of the struct is populated (one failed row does not blank the sample).
-	got := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+	got, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
 	assert.True(t, got.Valid)
 	// No standbys -> lag is n/a.
 	assert.False(t, got.LagBytesValid, "no replication -> lag is n/a")
