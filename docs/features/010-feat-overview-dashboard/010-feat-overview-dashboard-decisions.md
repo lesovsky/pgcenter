@@ -219,3 +219,39 @@ Round 3 не запускался: оба ревьюера approved/passed.
 - `go test ./top/... ./internal/stat/...` → ok (live-PG кластер доступен; все writer-based и fsstat-тесты зелёные; compact байт-в-байт неизменён)
 - `go build ./...` → OK; полный `go test ./...` → все пакеты ok
 - `go vet ./top/... ./internal/stat/...` + `gofmt -l` + `gosec ./top/... ./internal/stat/...` → чисто
+
+---
+
+## Task 09: Tiering + latency guard + first-tick handling
+
+**Status:** Done
+**Commit:** e5d5c71 (impl) + c6c5938 (round 1 fixes) + b9c5b3a (round 2 fixes) + 4540f80 (review reports)
+**Agent:** tier-dev
+**Summary:** Финальный штрих verbose-коллектора. Verbose-специфичные поля сгруппированы в именованный sub-struct `verboseCollectState` на `Collector` (`internal/stat/stat.go`, Decision 9): ОБА first-tick-поля Task 7 (`verboseFirstTick` + `prevVerboseActive`) переехали внутрь него с сохранением ре-арм-семантики (`verboseFirstTick = !prevVerboseActive` на каждом OFF→ON, БЕЗ опоры на `c.Reset()` — `toggleVerbose` Reset не зовёт, Decision 2); мост `System.VerboseFirstTick` обновлён. Добавлен per-source latency guard ТОЛЬКО для дорогого no-twin агрегата (db sizes / growth): при превышении порога источник троттлится и отдаёт кешированное **stale** значение (не `n/a`), system-строки и дешёвые агрегаты собираются каждый тик (консистентность с полными панелями). Гард — НЕ односторонняя защёлка: к latency-порогу добавлена per-source cadence (`dbSizeLastRun`), троттлинг снимается через бюджет в один refresh-интервал, после чего источник принудительно пересобирается для ре-замера latency — авто-resume достижим на боевом пути `Update`. Решение «троттлить/отдать stale» вынесено в чистую функцию `dbSizeThrottled(threshold, budget, sinceLastRun)` (тестируема без live PG). Latency дорогого запроса замеряется узко вокруг `OverviewDatabasesSize` `QueryRow` (возвращается вторым значением из `collectOverviewStat`), а не вокруг всей сборки. `Reset()` чистит `verboseCollectState` в lockstep с prev/curr (не «застрявший» троттл после view-switch), но ре-арм НЕ полагается на Reset. В `top/stat.go` подсказка `collecting...` в cmdline завязана на тот же флаг (через `Stat.System.VerboseFirstTick`, единый источник истины — без дубль-флага в `top/`), показывается пока флаг выставлен, само-очищается через 2с-таймер `printCmdline`, ре-аппиртся на каждом OFF→ON re-enable; mutual-exclusion `printCmdline` соблюдён (один вызов на путь). Всё за единственным `z` — нового user-knob нет.
+
+**Финализированная константа порога latency guard (Decision 9 отложил точное значение сюда):** `latencyGuardThreshold(refresh) = max(refresh/4, 500ms)`. Именованные константы: `verboseGuardFloor = 500 * time.Millisecond` (абсолютный пол), `verboseGuardFraction = 4` (относительная доля = 25% интервала). Cadence-бюджет троттлинга = один refresh-интервал (`budget := refresh`). Семантика: при refresh=1s активен 500ms-floor (25% = 250ms < floor); при refresh=4s активны 25% = 1s. Порог сравнивается строго (`lastLatency > threshold` троттлит; at-threshold — нет), граница бюджета строгая (`sinceLastRun < budget` троттлит; at-budget — ре-проба).
+
+**Deviations:**
+1. **Затронут `internal/stat/postgres.go` (+`postgres_test.go`) сверх заявленного списка файлов задачи** (задача разрешала `internal/stat/stat.go`+тест и `top/stat.go`+тест). Причина — необходимая и неустранимая: дорогой запрос `sum(pg_database_size)` живёт внутри `collectOverviewStat` (`postgres.go`), и чтобы РЕАЛЬНО не платить за него при троттлинге (а не просто перезаписать поля после выполнения), функции нужен параметр пропуска. Добавлены: параметр `skipDatabasesSize bool` (гейтит только size-`QueryRow`; дешёвые агрегаты и все прочие строки собираются всегда) и второй возврат `time.Duration` (узкий замер latency size-запроса). Изменение в том же пакете, минимальное; 8 call-site в `postgres_test.go` обновлены механически (`x, _ :=` + `false`). Прецедент — Task 08 (вынужденное касание `stat.go` ради моста флага).
+2. **`make lint`/`govulncheck` не прогнаны** — `golangci-lint`/`gosec`/`govulncheck` не установлены/несовместимы с конфигом в окружении (как в Task 01-08); вместо них `go vet ./internal/stat/... ./top/...` и `gofmt -l` чисты, полный lint/vuln остаётся на CI.
+
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: changes_required — 1 critical (latency guard был односторонней защёлкой: `skipSize` зависел только от `dbSizeLastLatency`, который обновляется лишь на реальной сборке → медленный источник троттлится навсегда, авто-resume не происходит в проде; unit-тест маскировал баг ручной мутацией поля), 2 minor → [010-feat-overview-dashboard-task-09-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-09-dev-code-reviewer-round1.json)
+- dev-test-reviewer: passed — 0 critical/major, 3 minor → [010-feat-overview-dashboard-task-09-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-09-dev-test-reviewer-round1.json)
+
+Critical устранён (commit c6c5938): добавлена per-source cadence `dbSizeLastRun`, `dbSizeThrottled` стал чистым 3-арг решением (no-cache / at-threshold / within-budget), на каждой реальной сборке стампятся ОБА поля → троттл снимается через бюджет, источник пере-пробируется (genuine throttle, auto-resume достижим на боевом пути). Minor'ы: узкий замер latency size-запроса (второй возврат `collectOverviewStat`); документирование 2с-self-clear cmdline на месте вызова. Test-minor'ы: новый чистый `Test_verboseCollectState_firstTickNotThrottled` (гард genuine-first-tick) + end-to-end auto-resume через реальный `Update` (бэкдейт `dbSizeLastRun` за бюджет).
+
+*Round 2:*
+- dev-code-reviewer: approved — 0 critical/major, 1 minor (опциональный doc-nit про zero-time first tick) → [010-feat-overview-dashboard-task-09-dev-code-reviewer-round2.json](010-feat-overview-dashboard-task-09-dev-code-reviewer-round2.json)
+- dev-test-reviewer: passed — litmus 8/8, pyramid healthy, 2 minor (s3-assertion слегка timing-dependent; carried-over redundant_testing) → [010-feat-overview-dashboard-task-09-dev-test-reviewer-round2.json](010-feat-overview-dashboard-task-09-dev-test-reviewer-round2.json)
+
+Применены оба опциональных minor'а (commit b9c5b3a): note на месте вызова про harmless zero-time first tick; детерминированный ассерт `dbSizeLastRun.After(backdated)` в end-to-end auto-resume (доказывает реальную пересборку независимо от тайминга хоста), latency-ассерт оставлен как coarse smoke-check с пометкой о запасе. Отклонён carried-over redundant_testing (ре-арм в длинном live-тесте `TestCollector_Update_Verbose`) — осознанно принят как есть ещё в round 1 (поведение покрыто end-to-end), вынос в чистый хелпер — вне скоупа. Round 3 не запускался: оба ревьюера approved/passed.
+
+**Verification:**
+- `go test ./internal/stat/... ./top/...` → ok (live-PG кластер доступен; пороговый table-тест, чистые throttle/auto-resume/first-tick тесты, end-to-end троттлинг со stale-кешем и system-rows-every-tick, cmdline-hint тест — зелёные; существующие тесты не падают)
+- `go build ./...` → OK; полный `go test ./...` → все пакеты ok
+- `go vet ./internal/stat/... ./top/...` + `gofmt -l` → чисто
