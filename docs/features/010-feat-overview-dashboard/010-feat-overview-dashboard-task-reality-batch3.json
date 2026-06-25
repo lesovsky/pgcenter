@@ -8,20 +8,27 @@
       "severity": "major",
       "category": "feasibility",
       "task": "07",
-      "issue": "First-tick 'no prev -> nil slice -> n/a' assumption does not hold for disk/net. collectDiskstats (internal/stat/stat.go:303-309) and collectNetdevs (:323-331) set prevDiskstats=currDiskstats / prevNetdevs=currNetdevs on length mismatch BEFORE calling countDiskstatsUsage/countNetdevsUsage. So on the first verbose tick the count* functions receive prev==curr (equal lengths) and return a NON-nil slice of zero-delta entries, not nil. The count*Usage nil-on-mismatch path (diskstats.go:191-193, netdev.go:180-183) is therefore NOT reached via the collect* wrappers. Task 07 edge case 'Первый тик verbose: prev-снимок пустой, count*Usage возвращает nil' and Task 08 edge case 'countDiskstatsUsage/countNetdevsUsage возвращают nil при len(curr)!=len(prev), поэтому s.Diskstats/s.Netdevs пусты' are both inaccurate for the collect* call path the task itself mandates (hint: 'звать именно collect*, а не read* напрямую').",
-      "fix": "Reconcile the first-tick mechanism. Either (a) Task 08 composer must detect first-tick by a means other than empty slice (e.g. all-zero deltas / a Collector-side first-tick flag, which Task 09's verboseCollectState could carry), or (b) document that the nil path is only reachable when device COUNT changes mid-session, and the genuine first tick yields a populated zero-delta slice -> composer must treat zero-delta-with-no-prev as n/a. Update Task 07 and Task 08 edge-case wording accordingly so the implementer does not rely on s.Diskstats==nil for first-tick detection."
+      "issue": "Flag RE-ARM trigger is unspecified, which can reintroduce the very bug the fix targets. The fix correctly replaces the nil-slice first-tick signal with an explicit verboseFirstTick flag ('set on first verbose collect-all-three, cleared after the first tick'). But it never pins down HOW the flag re-arms for a SECOND verbose session. Verified seam: the verbose-toggle viewCh push must NOT call c.Reset() (Decision 2 / tech-spec risk row), while the screen-switch viewCh path calls c.Reset() unconditionally on every push (top/stat.go:108). If verboseFirstTick re-arms only via Reset(), then toggling verbose OFF then ON (no Reset) leaves it false -> the second verbose session's first frame shows a deceptive 0 instead of n/a -> exactly the regression the fix exists to prevent. Task 07 defers Reset() coordination to Task 09, but Task 09 only addresses 'view-switch / Reset() must not leave a stuck throttle-state', not the verbose-OFF->ON re-arm. Since the set/clear logic lives in Task 07, the re-arm trigger must be pinned there.",
+      "fix": "In Task 07, make re-arm explicit and independent of Reset(): keep a 'was the verbose branch active last tick' bit and set verboseFirstTick whenever the branch is entered after an inactive tick (covers initial enable AND OFF->ON re-enable), clearing it after that single tick. State this in What-to-do / Edge-cases so Task 09's Reset() handling is not the sole re-arm path."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "07",
+      "issue": "Task 07 TDD anchor and tech-spec testing strategy claim the new live-PG test uses 'the t.Skipf guard pattern, as in existing stat-tests'. Verified: the existing stat tests (TestCollector_Update at internal/stat/stat_test.go:27, TestCollector_collectDiskstats at :71) do NOT skip without a cluster - they assert.NoError on postgres.NewTestConnect(), so they FAIL rather than skip. No t.Skip exists anywhere under internal/stat/*_test.go. The 'as in existing stat-tests' reference is inaccurate; the real convention is connect-or-fail. (Carried over from the prior batch scope; orthogonal to the fix.)",
+      "fix": "Drop the 't.Skipf as in existing stat-tests' phrasing, or have TestCollector_Update_Verbose explicitly t.Skip when NewTestConnect errors and note it diverges from the existing connect-or-fail tests."
     },
     {
       "severity": "minor",
       "category": "hints",
-      "task": "08",
-      "issue": "Implementation hint states data_directory 'читался ad hoc в log.go:129'. The actual path is internal/stat/log.go:129 (relative 'log.go' is ambiguous; there is also top/log.go context). Verified: internal/stat/log.go:129 reads current_setting('data_directory'); a separate gucDataDir='data_directory' constant lives in top/pgconfig.go:25. DataDirectory field does not yet exist on PostgresProperties (correctly added by Task 4).",
-      "fix": "Qualify the path as internal/stat/log.go:129 to avoid ambiguity."
+      "task": "07",
+      "issue": "Task 07 cites collectDiskstats/collectNetdevs prev=curr-before-count*Usage at '~303-331'. Exact anchors: prev=curr swap is at internal/stat/stat.go:307-309 (disk) and :327-329 (net); the switch is at 156-175 and Collector snapshot fields at 57-64 (both cited correctly). The mechanism described is accurate; only the disk/net swap line range is slightly loose.",
+      "fix": "Optional: tighten the citation to 307-309 / 327-329. Non-blocking."
     }
   ],
   "stats": {
     "tasks_checked": 3,
-    "claims_verified": 27,
-    "issues_found": 2
+    "claims_verified": 28,
+    "issues_found": 3
   }
 }
