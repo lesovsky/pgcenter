@@ -169,9 +169,9 @@ func TestCollector_Update_Verbose(t *testing.T) {
 	// First verbose tick: all three system sources populate in a single sample.
 	stat, err := c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
-	assert.NotEqual(t, 0, len(stat.System.Diskstats))
-	assert.NotEqual(t, 0, len(stat.System.Netdevs))
-	assert.NotEqual(t, 0, len(stat.System.Fsstats))
+	assert.NotEmpty(t, stat.System.Diskstats, "diskstats must populate under verbose")
+	assert.NotEmpty(t, stat.System.Netdevs, "netdevs must populate under verbose")
+	assert.NotEmpty(t, stat.System.Fsstats, "fsstats must populate under verbose")
 
 	// First-tick flag is set after the first verbose Update.
 	assert.True(t, c.verboseFirstTick)
@@ -190,19 +190,33 @@ func TestCollector_Update_Verbose(t *testing.T) {
 	_, err = c.Update(conn, offViews["activity"], time.Second)
 	assert.NoError(t, err)
 	assert.False(t, c.verboseFirstTick)
+	// The else-branch must disarm prevVerboseActive so the next OFF->ON re-enables the flag.
+	assert.False(t, c.prevVerboseActive)
 
 	// Re-enable verbose: flag must re-arm WITHOUT c.Reset().
 	stat, err = c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
 	assert.True(t, c.verboseFirstTick)
-	assert.NotEqual(t, 0, len(stat.System.Diskstats))
-	assert.NotEqual(t, 0, len(stat.System.Netdevs))
-	assert.NotEqual(t, 0, len(stat.System.Fsstats))
+	assert.NotEmpty(t, stat.System.Diskstats, "diskstats must populate on re-enable")
+	assert.NotEmpty(t, stat.System.Netdevs, "netdevs must populate on re-enable")
+	assert.NotEmpty(t, stat.System.Fsstats, "fsstats must populate on re-enable")
 
 	// Following verbose tick clears the flag again.
 	_, err = c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
 	assert.False(t, c.verboseFirstTick)
+
+	// Coexistence with an active side panel: collectExtra populates Diskstats via the switch,
+	// the == nil guard skips re-collecting it, and the verbose branch still fills Netdevs/Fsstats.
+	c2, err := NewCollector(conn)
+	assert.NoError(t, err)
+	c2.config.collectExtra = CollectDiskstats
+
+	stat, err = c2.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, stat.System.Diskstats, "diskstats populated by side-panel switch")
+	assert.NotEmpty(t, stat.System.Netdevs, "netdevs populated by verbose branch")
+	assert.NotEmpty(t, stat.System.Fsstats, "fsstats populated by verbose branch")
 }
 
 func TestCollector_collectDiskstats(t *testing.T) {
