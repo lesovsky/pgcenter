@@ -6,6 +6,7 @@
     "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
     "project": "pgcenter",
     "feature_size": "L",
+    "_note_size": "revised M->L by verbose-panel pivot (Q6/Q7); was L, thinned to M, restored to L",
     "model": "claude-opus-4-8[1m]",
     "date_started": "2026-06-23",
     "date_completed": ""
@@ -25,7 +26,7 @@
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 15,
+    "interview_questions": 17,
     "tasks_count": 0,
     "waves_count": 0,
     "agents_spawned": 0,

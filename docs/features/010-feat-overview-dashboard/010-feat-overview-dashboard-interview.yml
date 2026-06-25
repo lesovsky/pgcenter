@@ -5,10 +5,10 @@ interview_metadata:
   feature_base: "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard"
   work_type: "feature"
   started: "2026-06-23 21:58:53"
-  last_updated: "2026-06-23 22:50:00"
+  last_updated: "2026-06-25 11:00:00"
   status: "in_progress"
   can_resume: true
-  current_question_num: 5
+  current_question_num: 7
   feature_size: "L"
 
 conversation_history:
@@ -85,6 +85,41 @@ conversation_history:
       1. variant A, but surface "collecting" in the cmdline status line.
       2. variant A (stale last value, silent backoff).
     summary: "first tick: n/a in cells + transient cmdline 'collecting' hint; backoff: stale last value, silent, auto-resume; printCmdline remote-warning + three-rhythm/backoff unit tests folded into spec"
+  - question_num: 6
+    timestamp: "2026-06-24 10:00:00"
+    topic: "MAJOR PIVOT — variant D: verbose mode of the top panels (not a separate screen)"
+    agent_question: |
+      User raised a sharp antipattern: a separate overview screen DUPLICATES the always-visible
+      sysstat/pgstat top panels (System=sysstat 100%, Instance/Sessions=pgstat lines). pgcenter's
+      two panels already ARE a mini pg_activity-header (and already do remote system stats via
+      PL/Perl, so even that 'differentiator' pre-exists). Offered B (overview = only non-panel
+      signals, panels stay) vs C (full-screen overview, hide panels while active).
+    user_answer: |
+      Variant D (user's own): make `v` a VERBOSE TOGGLE that ADDS rows to the existing
+      sysstat/pgstat panels — compact (4 lines) vs verbose (8-10 lines). No duplication by
+      construction (extension, not a parallel copy). Verbose persists across screens, so the
+      expanded health header travels above any detailed table. Do it ALL AT ONCE (no v1/v1.1
+      split). Left panel +3 rows (iostat/nicstat/filesyst aggregates); right panel +5 rows
+      (workload/databases/workers/replication/bgwr-ckpt). Detailed field layout provided.
+    summary: "PIVOT to verbose-panel toggle (variant D) — supersedes the separate-screen / card-grid concept and the variant-A/M thinning; full set delivered at once; size back to L; R1 (all-three system collection) and tiering return"
+  - question_num: 7
+    timestamp: "2026-06-25 11:00:00"
+    topic: "verbose data layout — final field-level decisions"
+    agent_question: |
+      Proposed bgwr/ckpt aggregate, archiving-backlog computation, workers composition; asked
+      6 clarifications (cache-hit window, tps definition, remote fs symlink, digit overflow,
+      data-dir-only fs, others as rate vs value).
+    user_answer: |
+      bgwr/ckpt trimmed to "12/3 timed/req, 245/30ms write/sync, 4 maxwritten" (no buffers —
+      dups the bgwriter screen). archiving backlog = count(*.ready) x wal_segment_size (SQL,
+      remote-friendly). workers = umbrella max_worker_processes + logical/parallel under it;
+      walsenders/walreceivers moved into the replication line. 1. cache hit = per-interval.
+      2. tps = commit+rollback summed (no separate rollback column). 3. remote fs symlink not
+      resolved over network — accept as limitation. 4. dynamic unit-suffix switching
+      (MB/s->GB/s, Mbps->Gbps), new pattern from scratch. 5. filesyst = data_directory FS only.
+      6. others = per-interval value, drop the /s suffix. (Width note acknowledged: verbose
+      lines assume a wide terminal; narrow -> truncate at panel edge.)
+    summary: "final verbose field layout pinned: bgwr/ckpt minimal, .ready-backlog, workers umbrella + senders/receivers in replication, per-interval cache hit, tps=commit+rollback, fs data-dir-only + no remote symlink, dynamic unit suffix (new), others as interval value; verbose assumes wide terminal"
 
 # ============================================================================
 # Phase 1: High-Level Feature Understanding
@@ -288,9 +323,22 @@ phase2_user_experience:
     required: true
 
   ui_ux_requirements:
-    score: 85
+    score: 90
     status: "complete"
     value: |
+      *** SUPERSEDED by the verbose-panel pivot (Q6/Q7). Authoritative design = user-spec .md. ***
+      CURRENT (verbose mode): `v` toggles verbose on the existing sysstat (left) / pgstat (right)
+      top panels — compact 4 lines vs verbose 8-10. Persistent across screens. Extends the
+      free-form printSysstat/printPgstat printers; no new view, no card grid, no dbstat render.
+      sysstat +3 rows: iostat / nicstat / filesyst one-row aggregates (device with max %util;
+      filesyst = data_directory FS). pgstat +5 rows: workload (pg_stat_database rate),
+      databases (sum sizes + growth + per-interval cache hit), workers (max_worker_processes
+      umbrella + logical/parallel from backend_type), replication (wal size, lag, slots/retain,
+      .ready archiving backlog, senders/receivers), bgwr/ckpt (timed/req, write/sync ms,
+      maxwritten). Integers rounded up; reserved digits; dynamic unit suffix (MB/s->GB/s) NEW.
+      n/a degradation; collecting hint on first tick; verbose grows top band (dbstat shrinks);
+      wide-terminal assumption (narrow -> truncate at panel edge).
+      --- historical (separate-screen concept, pre-Q6) below ---
       LAYOUT: a new full-screen, persistent gocui view "overview" (dbstat-style geometry,
       Frame=false), rendered per tick. Rendered by a new printer `printOverview(w io.Writer,
       ...)` in the free-form printSysstat/printPgstat idiom (plain Fprintf of label:value
@@ -319,9 +367,22 @@ phase2_user_experience:
     required: true
 
   risks:
-    score: 85
+    score: 88
     status: "complete"
     value: |
+      *** Updated for verbose-panel pivot. Authoritative = user-spec .md "Риски". ***
+      R1 RETURNS (all-three system collection at once for verbose): new disk+net+fs branch,
+        gated by verbose, must not disturb the mutually-exclusive side panels. Mitigation:
+        independent branch, reuse same readers/structs, regression-test side panels.
+      R-tier (expensive aggregates cost): sum DB sizes + growth, statements/databases aggregates,
+        archive_status scan. Mitigation: tiering (slow-cached sizes) + latency guard; collect
+        only when verbose; .ready backlog is one cheap pg_ls_dir.
+      R-suffix (new dynamic unit-suffix code): layout-overflow bugs. Mitigation: pure format fn
+        + table/property tests at overflow boundaries.
+      R-vspace (verbose eats table rows): user toggle + height-guard (no expand on short term).
+      R-seam (extensibility): collect fn as a per-source rhythm registry; adding a source is a
+        local registration (unit-tested).
+      --- historical (pre-Q6) below ---
       R1 (ELIMINATED by the variant-A decision): the host IO/disk collectExtra rework — the
         feature's only invasive change — is removed from v1. Variant A reuses the already-
         per-tick CPU/mem/load collection, touching nothing in the side-panel mutual-exclusion.
@@ -339,9 +400,20 @@ phase2_user_experience:
     required: true
 
   technical_decisions:
-    score: 80
-    status: "partial"
+    score: 85
+    status: "complete"
     value: |
+      *** SUPERSEDED by verbose-panel pivot (Q6/Q7). Authoritative = user-spec .md "Технические решения". ***
+      CURRENT key decisions: verbose-mode toggle of top panels (not a screen) — kills the
+      duplication antipattern by construction; extend printSysstat/printPgstat (no new view).
+      `v` = persistent mode toggle (extra-panel idiom). CollectExtra-gated verbose collection;
+      all-three system sources collected at once when verbose (R1). Consistency via reusing the
+      same stat structs/queries as full panels/screens. cache hit per-interval; tps=commit+rollback;
+      archiving backlog = count(*.ready) x wal_segment_size; workers/max = max_worker_processes
+      umbrella; bgwr/ckpt trimmed (timed-req, write-sync, maxwritten); dynamic unit suffix (new
+      pattern); filesyst data-dir FS only, no remote symlink resolve; tiering + latency guard as
+      an extensible source registry (no second user knob). Size L.
+      --- historical (pre-Q6) below ---
       TD1 — Render path: reuse the free-form Fprintf idiom (printSysstat/help precedent),
         new gocui view + printOverview. Alt rejected: reuse renderDbstat/printStatHeader
         (PGresult/column-bound, cannot render free-form cards); a bespoke card-widget engine
@@ -398,9 +470,24 @@ phase3_integration:
     required: false
 
   data_requirements:
-    score: 75
-    status: "partial"
+    score: 85
+    status: "complete"
     value: |
+      *** Verbose-mode layout (Q7). Authoritative = user-spec .md "Состав и источники строк". ***
+      sysstat verbose (one-row aggregates, consistent with full panels):
+        iostat = max-%util disk device -> devices/util/rMB-s/r-s/wMB-s/w-s;
+        nicstat = max-%util nic -> devices/util/rMbps/wMbps/err-coll;
+        filesyst = data_directory FS -> device/mounted/fstype/size/used/use%.
+      pgstat verbose:
+        workload = pg_stat_database rate (tps=commit+rollback, ins/upd/del/ret/s, tmp/s,
+          others=deadlocks+conflicts+checksum_failures interval value);
+        databases = sum(pg_database_size) + count + growth/s + per-interval cache hit;
+        workers = max_worker_processes umbrella + logical/parallel (active from backend_type);
+        replication = pg_wal size, lag bytes, slots/max-retain, archiving backlog
+          (count(*.ready)*wal_segment_size), senders/receivers (backend_type);
+        bgwr/ckpt = timed/req (abs), write/sync ms (delta), maxwritten; version-aware PG17+.
+      Formatting: integers rounded up; reserved digits; dynamic unit suffix (new).
+      --- historical (pre-Q6) below ---
       Metric -> source (from code-research §6):
       REUSE existing: sessions-by-state (Activity.Conn*, common.go:54); longest xact
         (Activity.XactMaxTime, common.go:112); checkpoint (bgwriter.go version-split);
@@ -440,9 +527,9 @@ decision_rules:
   optional_threshold: 50
 
 progress:
-  current_phase: "phase8_create_userspec"
-  questions_asked: 15
-  last_question: "Completeness follow-up: first-tick collecting hint + silent stale backoff"
+  current_phase: "phase9_validation"
+  questions_asked: 17
+  last_question: "Verbose data layout — final field-level decisions (Q7)"
   completion_estimate: "98%"
 
 notes: |
@@ -461,3 +548,9 @@ notes: |
     the layout + concept + the dashboard machinery, not a complete metric catalog.
   - Code research artifact: 010-feat-overview-dashboard-code-research.md (8 gating questions
     answered; key finding: free-form Fprintf render path already exists, reuse it).
+  - MAJOR PIVOT (Q6/Q7): the feature is now a VERBOSE TOGGLE of the sysstat/pgstat top panels,
+    NOT a separate card screen. This SUPERSEDES the earlier separate-screen / card-grid concept,
+    the dev-customer variant-A thinning, and the adequacy M-sizing. Reasons recorded in Q6.
+    Size is L again (R1 all-three-system collection + tiering return). The authoritative,
+    fully-rewritten artifact is the user-spec .md — sections below predating Q6 (ui_ux card-grid,
+    variant-A constraints, single-guard) are historical; read the .md for the current design.

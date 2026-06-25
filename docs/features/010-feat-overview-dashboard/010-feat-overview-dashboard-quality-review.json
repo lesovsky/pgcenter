@@ -1,0 +1,63 @@
+{
+  "status": "approved",
+  "checks": {
+    "completeness": "pass",
+    "edge_cases": "pass",
+    "acceptance_criteria": "pass",
+    "contradictions": "pass",
+    "template_compliance": "pass",
+    "size_check": "pass",
+    "clarity": "pass"
+  },
+  "findings": [
+    {
+      "check": "completeness",
+      "severity": "major",
+      "issue": "Сценарий из интервью обсуждён, но отсутствует в user-spec: разрыв соединения / рестарт сервера. В интервью (phase2.error_scenarios) явно зафиксировано поведение «Connection lost / server restart: применяется существующий reconnect-путь pgcenter; обзорник показывает стандартное состояние ошибки, а не частично-мусорный кадр». В спеке этот граничный случай не упомянут ни в «Граничные случаи», ни в критериях.",
+      "location": "Как должно работать → Граничные случаи",
+      "fix": "Добавить граничный случай: «Разрыв соединения / рестарт сервера → применяется существующий reconnect-путь pgcenter; overview показывает стандартное состояние ошибки, а не частичный кадр»."
+    },
+    {
+      "check": "acceptance_criteria",
+      "severity": "minor",
+      "issue": "Пример хоткея в критерии AC8 (`Replication [o]`) ссылается на карточку Replication, которой нет в составе v1 (вариант A, reuse-first слайс: Instance/Sessions/DB time/Checkpointer/System). Это не делает критерий непроверяемым, но пример указывает на карточку из целевого (post-v1) набора, что может сбить с толку.",
+      "location": "Критерии приёмки (пункт про хоткей рядом с заголовком)",
+      "fix": "Заменить пример на карточку из v1, например `Checkpointer [b]` или `Sessions [a]`, чтобы пример соответствовал составу карточек v1."
+    },
+    {
+      "check": "clarity",
+      "severity": "minor",
+      "issue": "В «Технические решения» формулировка «эти метрики и так собираются каждый тик» опирается на неявно подразумеваемый контекст (CPU/mem/swap/load для локального и remote-через-PL/Perl). Для читателя без кода связь «собираются каждый тик» с конкретным механизмом (db.Local / SchemaPgcenterAvail) не раскрыта в самой спеке. Стилистическая неполнота, не влияет на реализацию.",
+      "location": "Технические решения (решение про вариант A)",
+      "fix": "Опционально: уточнить, что CPU/mem/swap/load уже собираются существующим per-tick сбором как для локального (/proc), так и для удалённого (PL/Perl) подключения."
+    }
+  ],
+  "interview_coverage": {
+    "covered": [
+      "hotkey v, не landing (top стартует на activity)",
+      "TUI-only в v1, NotRecordable: true, record/report в backlog",
+      "free-form Fprintf render path (reuse printSysstat), новый printOverview",
+      "карточки не интерактивны в v1, hotkey-подсказка рядом с заголовком",
+      "вариант A: System = CPU/mem/swap/load, host IO/disk отложен в v1.1",
+      "reuse-first MVP-слайс карточек + database time, точный состав дорабатывается 2-м заходом",
+      "узкий терминал: compact-fit + min-size guard, без скролла/сбрасывания",
+      "независимость карточек: один источник падает → его ячейка n/a, дашборд рендерится",
+      "4 пользовательские истории (триаж, remote-контекст, честный n/a, низкая нагрузка)",
+      "конкретный инцидент-сценарий триажа (replica lag 03:00)",
+      "три внутренних ритма + backoff по латентности как деталь реализации, единственная ручка z",
+      "первый тик: n/a в ячейках + transient cmdline 'collecting...'",
+      "backoff: stale last value, тихо, авто-восстановление",
+      "remote без PL/Perl-схемы → System n/a + одно cmdline-сообщение (ровно один printCmdline)",
+      "standby/recovery: recovery-aware пути (checkpoint→restartpoint, lag)",
+      "PG 14/15 (нет pg_stat_io), <17 (checkpointer в bgwriter), track_io_timing off, нет pg_stat_statements → n/a",
+      "первый-тик n/a отличим от постоянного n/a",
+      "нулевая геометрия после пейджера/редактора (maxX==0) → рендер no-op",
+      "xid age = max(age(datfrozenxid)) по pg_database (дёшево)",
+      "тестовая пирамида 009: pure layout-fn + property-test, printOverview против буфера, ритмы/backoff юниты, интеграция PG14-18, ручной TUI QA"
+    ],
+    "missing": [
+      "Разрыв соединения / рестарт сервера → стандартное состояние ошибки через существующий reconnect-путь (error_scenarios в интервью; в спеке не отражён)"
+    ]
+  },
+  "summary": "Спека качественная, структурно полная и внутренне непротиворечивая — все 7 проверок пройдены, критических замечаний нет. Один major: граничный случай разрыва соединения/рестарта сервера обсуждался в интервью, но не попал в спеку; плюс два minor (пример хоткея ссылается на карточку вне v1, стилистическая неполнота). Статус: approved."
+}

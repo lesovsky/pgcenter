@@ -1,0 +1,28 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "overengineering",
+      "severity": "major",
+      "issue": "The three-rhythm collection tiering plus per-source latency backoff is committed as a v1 mechanism (acceptance criterion explicitly gates on backoff increasing the skip interval and holding stale values), yet v1 ships only 5 cards, of which 4 reuse metrics already collected every tick (Activity, system CPU/mem/swap/load, checkpointer single-row) and only ONE — database time (sum(total_exec_time)) — is a genuinely new aggregate. A single new lightweight aggregate query does not justify a three-tier scheduler with elapsed-time gating, per-source latency budgets and divisor backoff, all of which is testable surface (the spec mandates unit tests for tiering and backoff). This is machinery sized for the deferred 'wider target set' (replication lag, slot WAL, dead-tuples, db sizes, xid age, WAL growth — see code research §6), not for what v1 actually renders.",
+      "why_matters": "Building and unit-testing a self-throttling scheduler for a workload that is one cheap aggregate over what is already collected adds implementation, test and review cost with no v1 payoff, and bakes in behavior (stale-on-backoff vs n/a) that users must distinguish before there is any source slow enough to trigger it. It also raises the size from what the reuse-first card set actually needs.",
+      "fix": "Either (a) cut backoff and the 3rd 'slow-cached' rhythm from v1 acceptance criteria, keeping only 'cheap-every-tick + the one dear aggregate on a fixed every-N-ticks gate', and move full tiering/backoff into the v1.1 spec where the expensive aggregates land; or (b) if the seam must be designed now, scope it as an internal extensibility note rather than a tested, acceptance-gated v1 deliverable. Keep the single-knob (z) user contract either way."
+    },
+    {
+      "category": "sizing",
+      "severity": "major",
+      "issue": "Declared size is L, but the feature is explicitly a framework-only v1 that defers exact card composition to a 'second pass', defers host IO/disk to v1.1, defers record/report to backlog, and reuses the existing render idiom and existing system/activity collection verbatim. The actually-built v1 surface is: one new gocui view + one printer in an existing idiom, one new aggregate query, a CollectOverview hook (mirroring the established CollectExtra ADR [001]), an n/a sentinel formatter, a pure layout function (009 pattern), and view-count test updates. That is M-shaped work; the L weight comes largely from the tiering/backoff machinery flagged separately.",
+      "why_matters": "An inflated size invites the implementer to build the deferred-scope machinery now (over-collection of sources, full backoff) rather than the lean reuse-first v1 the spec otherwise argues for. Right-sizing keeps the iteration shippable and the 'second pass' boundary honest.",
+      "fix": "Resize to M if the tiering/backoff scope is trimmed per the overengineering finding (the single new aggregate, reuse-first cards, free-form render and CollectOverview hook are all M-scale and have direct precedents). If the full tiering/backoff stays in v1, L is defensible — but then the two findings should be resolved together, not independently."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "The 'DB time' card conflates two things the spec names but does not pin down: database time as a delta of sum(total_exec_time), and 'longest xact'. Code research §6 notes the existing 'longest' aggregate (SelectActivityTimes → XactMaxTime/PrepMaxTime) already conflates xact-max and query-max into one text-interval value. The spec lists 'longest xact' as a card line without resolving whether it is xact age, query age, or the existing conflated value, and whether sum(total_exec_time) is a per-interval delta or cumulative.",
+      "why_matters": "Database time as a load signal only works as a delta normalized against the tick interval (the triage scenario depends on 'database time exceeding the tick interval'). If the metric semantics (delta vs cumulative, which 'longest') are left to implementation, the headline differentiator metric can ship subtly wrong, and the conflated 'longest' value may mislead the DBA the dashboard is meant to orient.",
+      "fix": "In the spec, state that DB time is a per-interval delta of sum(total_exec_time) presented against the tick interval, and disambiguate which 'longest' is shown (xact age vs query age) or that it reuses the existing conflated Activity value with that caveat documented."
+    }
+  ],
+  "worst_category": "overengineering",
+  "summary": "The core architectural bets are sound and feasible on the current stack: reusing the free-form Fprintf render path is correct (printSysstat/printPgstat/printIostat are already non-PGresult Fprintf views, so the align width-floor and PGresult table machinery do not apply), the single-table assumption in printStat is a real but well-understood constraint the spec mitigates by mirroring the existing conditional 'extra'-panel create/render, the remote-system-stats-via-PL/Perl differentiator already works, and the database-time aggregate is feasible across the PG13/17 column splits because the codebase already version-dispatches total_time→total_exec_time and the blk_*_time→shared/local/temp split. No critical issues. The main adequacy concern is that the acceptance-gated three-rhythm + latency-backoff scheduler is over-engineered for a v1 that renders only one genuinely new aggregate over already-collected data, which also inflates the declared size from M to L."
+}
