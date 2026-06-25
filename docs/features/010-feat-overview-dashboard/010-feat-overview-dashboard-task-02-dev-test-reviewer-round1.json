@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Test_toggleVerbose is a meaningful behavior test: it asserts four real state mutations driven by the handler (channel-pushed v.Verbose, config.verbose, config.view.Verbose, and every config.views entry) across both transitions (false->true, true->false). It passes the litmus test — gutting toggleVerbose's mirror loop and assignments breaks the assertions. It correctly follows the established Test_toggleIdleConns goroutine-drain pattern and uses real config state, not mocks. The collectStat no-Reset branch is deliberately left to the existing top test run plus manual QA per the task spec, which is a defensible scoping decision for a goroutine with no isolated harness. Minor gaps noted below do not block.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/verbose.go:28-32 (printCmdline status branch) — top/verbose_test.go",
+      "issue": "The handler's user-visible side effect — the 'Verbose mode: on' / 'Verbose mode: off' cmdline message (an explicit acceptance criterion) — is not asserted. The test passes g=nil to fn, so printCmdline is exercised with a nil gui but its output/branch selection is never verified. The on/off branch could be inverted (or the strings swapped) and the test stays green.",
+      "recommendation": "This is hard to assert cleanly because printCmdline writes into a gocui view, not a return value, and the handler returns only nil. Two options: (a) leave as-is and rely on manual QA (acceptable — matches project pattern, the showExtra/toggleIdleConns precedents do not assert cmdline text either); or (b) if cheap to refactor, extract the message selection into a tiny pure helper (e.g. verboseStatusMsg(newVal bool) string returning 'Verbose mode: on'/'off') and assert verboseStatusMsg(true)=='Verbose mode: on', verboseStatusMsg(false)=='Verbose mode: off'. Not required to pass.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/verbose_test.go:20-52 (shared config across subtests + table tied to loop index ordering)",
+      "issue": "Persistence across screen switches is the headline guarantee of this task (mirror-into-all-views so the flag survives viewSwitchHandler), but the test never actually exercises a view switch. It asserts every config.views entry is updated — a reasonable structural proxy — yet does not call viewSwitchHandler/switchViewTo to confirm the flag is observable on config.view after a switch (and that it is NOT reset, unlike scrollOffset which has its own reset-on-switch test at Test_viewSwitchResetsScrollOffset). The current map-wide assertion would pass even if a future viewSwitchHandler change zeroed Verbose on switch.",
+      "recommendation": "Optionally add a small follow-up subtest: toggle verbose on, call viewSwitchHandler(config, \"databases_general\") (draining viewCh in a goroutine as the existing switch tests do), then assert config.view.Verbose remains true. This directly verifies the persistence acceptance criterion and would catch a regression where verbose gets reset on switch. Low priority — the map-wide assertion plus the design (verbose simply never zeroed) covers the common case.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat.go:103-106 (collectStat verbose-only no-Reset branch)",
+      "issue": "The single highest-risk change in the task (tech-spec Risks row) — the prevVerbose != v.Verbose continue branch that must precede BOTH Reset paths so CPU/mem/load deltas are not blanked on toggle — has no automated test. A reordering regression (e.g. the branch sliding below a Reset, or someone removing the continue) would not be caught by any test; it relies entirely on manual QA.",
+      "recommendation": "Accepted as-scoped: the task spec explicitly states collectStat has no isolated unit harness (it is a goroutine driving a live Collector against a real DB) and defers this to manual Final-Wave QA. That is a legitimate constraint, not a quality lapse — building a harness for one branch would be disproportionate. If cheap test seams emerge later (e.g. a pure helper that decides 'does this view delta require Reset?'), extract and unit-test that decision. No action required for this task.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
