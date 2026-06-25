@@ -105,18 +105,23 @@ func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv in
 
 // PostgresProperties is the container for details about Postgres
 type PostgresProperties struct {
-	VersionNum              int     // Numeric representation of Postgres version, e.g. XXYYZZ
-	Version                 string  // String representation of Postgres version, e.g. X.Y.Z
-	StartTime               float64 // Postgres start time
-	Recovery                string  // Recovery state
-	GucTrackCommitTimestamp string  // value of track_commit_timestamp GUC
-	GucAVMaxWorkers         int     // value of autovacuum_max_workers GUC
-	GucMaxConnections       int     // value of max_connections GUC
-	GucMaxPrepXacts         int     // value of max_prepared_transactions GUC
-	GucSharedPreLibraries   string  // value of shared_preload_libraries GUC
-	ExtPGSSSchema           string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
-	SchemaPgcenterAvail     bool    // is 'pgcenter' schema installed?
-	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
+	VersionNum                      int     // Numeric representation of Postgres version, e.g. XXYYZZ
+	Version                         string  // String representation of Postgres version, e.g. X.Y.Z
+	StartTime                       float64 // Postgres start time
+	Recovery                        string  // Recovery state
+	GucTrackCommitTimestamp         string  // value of track_commit_timestamp GUC
+	GucAVMaxWorkers                 int     // value of autovacuum_max_workers GUC
+	GucMaxConnections               int     // value of max_connections GUC
+	GucMaxPrepXacts                 int     // value of max_prepared_transactions GUC
+	GucSharedPreLibraries           string  // value of shared_preload_libraries GUC
+	GucMaxWorkerProcesses           int     // value of max_worker_processes GUC
+	GucMaxLogicalReplicationWorkers int     // value of max_logical_replication_workers GUC
+	GucMaxParallelWorkers           int     // value of max_parallel_workers GUC
+	GucWalSegmentSize               int64   // value of wal_segment_size GUC, in bytes
+	DataDirectory                   string  // value of data_directory GUC
+	ExtPGSSSchema                   string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
+	SchemaPgcenterAvail             bool    // is 'pgcenter' schema installed?
+	SysTicks                        float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
 }
 
 // GetPostgresProperties queries necessary properties from Postgres about it.
@@ -131,6 +136,11 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 		&props.GucSharedPreLibraries,
 		&props.Recovery,
 		&props.StartTime,
+		&props.GucMaxWorkerProcesses,
+		&props.GucMaxLogicalReplicationWorkers,
+		&props.GucMaxParallelWorkers,
+		&props.GucWalSegmentSize,
+		&props.DataDirectory,
 	)
 	if err != nil {
 		return PostgresProperties{}, err

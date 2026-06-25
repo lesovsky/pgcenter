@@ -47,7 +47,12 @@ const (
 		"current_setting('autovacuum_max_workers')::int AS autovacuum_max_workers, " +
 		"current_setting('shared_preload_libraries') AS shared_preload_libraries," +
 		"pg_is_in_recovery() AS recovery, " +
-		"extract(epoch from pg_postmaster_start_time()) AS start_time_unix"
+		"extract(epoch from pg_postmaster_start_time()) AS start_time_unix, " +
+		"current_setting('max_worker_processes')::int AS max_worker_processes, " +
+		"current_setting('max_logical_replication_workers')::int AS max_logical_replication_workers, " +
+		"current_setting('max_parallel_workers')::int AS max_parallel_workers, " +
+		"pg_size_bytes(current_setting('wal_segment_size'))::int8 AS wal_segment_size, " +
+		"current_setting('data_directory') AS data_directory"
 
 	// SelectActivityDefault is the default query for getting stats about connected clients from pg_stat_activity.
 	//   Postgres 10: The 'backend_type' has been introduced.

@@ -102,6 +102,10 @@ func TestGetPostgresProperties(t *testing.T) {
 	assert.NotEqual(t, "", got.Recovery)
 	assert.NotEqual(t, "", got.StartTime)
 	assert.NotEqual(t, 0, got.SysTicks)
+	assert.NotEqual(t, 0, got.GucMaxWorkerProcesses)
+	assert.NotEqual(t, 0, got.GucMaxParallelWorkers)
+	assert.NotEqual(t, int64(0), got.GucWalSegmentSize)
+	assert.NotEqual(t, "", got.DataDirectory)
 
 	// testing with already closed conn
 	conn.Close()
@@ -594,12 +598,12 @@ func Test_parseDuration(t *testing.T) {
 		{"00:05:23", 323, true},
 		{"01:00:00", 3600, true},
 		{"96:58:35", 349115, true},
-		{"791:04:45", 2847885, true},        // the value from issue #50
+		{"791:04:45", 2847885, true}, // the value from issue #50
 		{"1 day 00:00:00", 86400, true},
 		{"11 days 10:10:10", 987010, true},
 		{"2 days 03:30:45", 185445, true},
 		{"invalid", 0, false},
-		{"10:20", 0, false},                  // missing seconds — not a valid HH:MM:SS
+		{"10:20", 0, false}, // missing seconds — not a valid HH:MM:SS
 		{"abc:de:fg", 0, false},
 	}
 
