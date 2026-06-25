@@ -292,3 +292,24 @@ Critical устранён (commit c6c5938): добавлена per-source cadenc
 **Verification:**
 - `go test ./top/...` → ok (golden-строки nicstat/bgwr/replication/filesyst зелёные)
 - `go build ./...` → OK
+
+---
+
+## Task 08: Visual-review fix round 3 — резерв ширины n/a (статичные хвостовые подписи)
+
+**Status:** Done
+**Commit:** (this commit)
+**Agent:** rows-dev
+**Summary:** Правка по итогам ручного прогона живого TUI: в verbose-строке `databases` подпись `cache hit ratio` прыгала по горизонтали при переключении значения между `n/a` (3 симв.) и реальным `100.00%` (7 симв.), т.к. деградировавший `n/a` рендерился БЕЗ паддинга до зарезервированной ширины поля. Общий принцип фикса: sentinel `n/a` должен занимать ту же зарезервированную ширину, что и значение, которое он заменяет, — тогда он drop-in и не сдвигает хвостовую подпись. Введён хелпер `naReserve(width)` — `fmt.Sprintf("%*s", ...)` с right-align (зеркало `pretty.ReserveWidth` `%*d`) и защитой min-width = `len(naLiteral)` от усечения. Исправлены два поля с фиксированным резервом: (1) **cache hit ratio** (флагнутое) — значение теперь `%6.2f%%` (ширина 7: `100.00%` / ` 99.99%`), `n/a` → `naReserve(7)` = `    n/a`; подпись статична. (2) **workload rates** (`naInt`: tps/ins/upd/del/ret/tmp ширина 4, others ширина 3) — `naInt` теперь возвращает `naReserve(width)` вместо голого `naLiteral`, поэтому `n/a` → ` n/a` (ширина 4) попадает в слот значения.
+**Deviations:** Аудит остальных verbose-полей: НЕ трогались (1) **bgwr/ckpt maxwritten** — его `n/a` сцеплено с `HasPrev=false`, что одновременно n/a'ит намеренно-тесный post-slash `syncMs` (правило A/B-композита из 95656e8, защищено), поэтому смещение подписи `maxwritten` определяется тесным композитом, а не fixed-reserve n/a — резерв ширины тут не сделал бы подпись статичной; (2) **databases size/growth, replication lag/retain/backlog** — используют `pretty.Size`, ширина которого изначально переменная (нет фиксированного резерва), так что сопоставление n/a↔значение там ill-defined (значение и так прыгает). Значения и правило тесного композита не менялись — только ширина n/a. `bin/pgcenter` не трогался.
+**Tech debt:** Нет.
+
+**Reviews:** dev-code-reviewer round3 — approved, 0 critical / 0 major, 2 optional minor. Применено: расширил byte-offset-проверку статичности подписи на workload-поле `tps` (путь naInt). Отклонено: документировать min-width-инвариант `naReserve` в коде — уже в doc-комментарии, все вызовы width≥3. Отчёт: [010-feat-overview-dashboard-task-08-dev-code-reviewer-round3.json](010-feat-overview-dashboard-task-08-dev-code-reviewer-round3.json).
+
+**Verification:**
+- `go test ./top/...` → ok (обновлённые golden + новый `Test_renderPgstat_verboseNAWidthStatic`: byte-offset подписи cache hit ratio и tps идентичны в состояниях n/a и значение)
+- `go build ./...` → OK; `go vet ./top/...` → чисто
+- Рендер cache hit ratio (databases-строка), все 3 состояния выровнены по одной колонке:
+  - `... n/a growth/s,     n/a cache hit ratio`
+  - `... n/a growth/s, 100.00% cache hit ratio`
+  - `... n/a growth/s,  99.99% cache hit ratio`

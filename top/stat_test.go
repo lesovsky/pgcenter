@@ -329,11 +329,15 @@ func Test_renderPgstat_verboseNA(t *testing.T) {
 	if assert.Len(t, lines, 9, "4 compact + 5 verbose pgstat rows") {
 		// Full-line golden per row. First-tick rates n/a; unavailable sources n/a; always-available
 		// fields (count, wal size, workers, absolute ckpt counters, slots count, senders/receivers) render.
+		// Width-matched n/a: the rate fields reserve width 4, so n/a renders as " n/a" (right-aligned
+		// into 4) — the same columns the value occupies — keeping each unit label static. "others"
+		// reserves width 3, where n/a fits exactly. cache hit ratio reserves width 7, so n/a renders
+		// as "    n/a" (right-aligned into 7).
 		assert.Equal(t,
-			"    workload: n/a tps, n/a ins/s, n/a upd/s, n/a del/s, n/a ret/s, n/a tmp/s, n/a others",
+			"    workload:  n/a tps,  n/a ins/s,  n/a upd/s,  n/a del/s,  n/a ret/s,  n/a tmp/s, n/a others",
 			lines[4])
 		assert.Equal(t,
-			"   databases: n/a per  7 databases, n/a growth/s, n/a cache hit ratio",
+			"   databases: n/a per  7 databases, n/a growth/s,     n/a cache hit ratio",
 			lines[5])
 		assert.Equal(t,
 			"     workers:  1/8 workers/max,  0/4 logical workers,  2/8 parallel workers",
@@ -374,8 +378,11 @@ func Test_renderPgstat_verboseAvailable(t *testing.T) {
 		assert.Equal(t,
 			"    workload: 1432 tps, 4132 ins/s, 5421 upd/s, 4235 del/s, 2341 ret/s,  123 tmp/s,   4 others",
 			lines[4])
+		// cache hit ratio reserves width 7 ("%6.2f%%"): 99.99 renders as " 99.99%" (leading space),
+		// the same 7-column slot the n/a sentinel occupies — so the label position is identical to
+		// the n/a state (see Test_renderPgstat_verboseNA).
 		assert.Equal(t,
-			"   databases: 1.0T per  7 databases, 1.0M growth/s, 99.99% cache hit ratio",
+			"   databases: 1.0T per  7 databases, 1.0M growth/s,  99.99% cache hit ratio",
 			lines[5])
 		assert.Equal(t,
 			"     workers:  0/8 workers/max,  0/4 logical workers,  0/8 parallel workers",
@@ -388,6 +395,51 @@ func Test_renderPgstat_verboseAvailable(t *testing.T) {
 			lines[8])
 	}
 	assert.NotContains(t, buf.String(), "n/a")
+}
+
+// Test_renderPgstat_verboseNAWidthStatic verifies the core of the visual-review fix: when a verbose
+// field degrades to n/a, the n/a occupies the SAME reserved width as the value it replaces, so the
+// label that follows it does not move between the two states. It renders the verbose rows once with
+// the values available and once unavailable (n/a) and asserts that the trailing label sits at the
+// identical byte offset in both — for cache hit ratio (the regression the user flagged) AND for a
+// workload rate (the naInt path), locking both fixed-reserve paths against the same regression class.
+func Test_renderPgstat_verboseNAWidthStatic(t *testing.T) {
+	base := stat.PgstatOverview{Valid: true, HasPrev: true, DatabasesCount: 7}
+
+	render := func(o stat.PgstatOverview) []string {
+		var buf bytes.Buffer
+		assert.NoError(t, renderPgstat(&buf, stat.Stat{Pgstat: stat.Pgstat{Overview: o}}, pgstatTestProps(), pgstatTestDB(), true))
+		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	}
+
+	withVal := base
+	withVal.CacheHitRatio = 100.0
+	withVal.CacheHitRatioValid = true
+	withVal.TPSRate = 999
+	valRows := render(withVal)
+	// HasPrev false -> workload rates n/a; CacheHitRatioValid false -> cache hit ratio n/a.
+	naBase := base
+	naBase.HasPrev = false
+	naRows := render(naBase)
+
+	// cache hit ratio (databases row, index 5): value in a fixed 7-column slot ("100.00%"); n/a
+	// right-aligned into the same 7 ("    n/a"), so the trailing label offset is identical.
+	assert.Contains(t, valRows[5], "100.00% cache hit ratio")
+	assert.Contains(t, naRows[5], "    n/a cache hit ratio")
+	assert.Equal(t,
+		strings.Index(valRows[5], "cache hit ratio"),
+		strings.Index(naRows[5], "cache hit ratio"),
+		"cache hit ratio label must sit at the same offset in the value and n/a states")
+
+	// workload rate (workload row, index 4): the naInt path reserves width 4, so n/a (" n/a") spans
+	// the same columns as the value (" 999"), keeping the "tps" label static — a direct byte-offset
+	// assertion on the naInt path, not just an implied golden-string match.
+	assert.Contains(t, valRows[4], " 999 tps")
+	assert.Contains(t, naRows[4], " n/a tps")
+	assert.Equal(t,
+		strings.Index(valRows[4], "tps"),
+		strings.Index(naRows[4], "tps"),
+		"tps label must sit at the same offset in the value and n/a states")
 }
 
 // Test_renderPgstat_compactUnchanged verifies that verbose=false adds no rows AND that turning

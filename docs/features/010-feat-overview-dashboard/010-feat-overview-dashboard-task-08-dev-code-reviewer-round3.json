@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "The width-reservation fix is correct: naReserve right-aligns the n/a sentinel into the exact column slot the value occupies (cache hit ratio %6.2f%% = width 7; workload rates via naInt at widths 4/3), verified against pretty.ReserveWidth which uses %*d. The new offset-equality test directly proves the trailing label stays static, build and tests pass, and the 'deliberately not changed' reasoning (bgwr/ckpt composite, pretty.Size variable-width fields) is sound. No critical or major issues found.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat_test.go",
+      "line": 400,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_renderPgstat_verboseNAWidthStatic asserts the static-label invariant explicitly (strings.Index equality) only for the 'cache hit ratio' field. The workload-rate path (naInt -> naReserve at width 4/3) relies solely on golden-string equality spread across two separate tests (verboseNA vs verboseAvailable), so its offset-staticness is only implied, not directly asserted. Consider extending the offset-equality assertion to one workload field (e.g. 'tps') to lock in the naInt path against the same regression class.",
+      "benefit": "Directly guards the naInt/naReserve(width) path with the same byte-offset invariant used for cache hit ratio, instead of relying on a human noticing that two golden strings happen to align.",
+      "optional": true
+    },
+    {
+      "file": "top/stat.go",
+      "line": 527,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "naReserve's min-width guard (width < len(naLiteral) -> clamp to 3) keeps n/a from being truncated, but the static-alignment invariant only holds when the value side also reserves >= the same effective width. This is correctly stated in the doc comment ('the value side must reserve the same effective width'). All current call sites use width >= 3, so no action is needed now; just noting the invariant is enforced by convention, not by code, should a future caller pass width < 3.",
+      "benefit": "Documents the implicit contract so a future narrow-width caller does not silently break label alignment.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

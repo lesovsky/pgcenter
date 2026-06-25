@@ -313,6 +313,11 @@ func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir s
 // DBA can tell a missing signal from a real zero (user-spec degradation requirement).
 const naLiteral = "n/a"
 
+// cacheHitWidth is the reserved width of the verbose "cache hit ratio" value: 6 columns for the
+// number ("%6.2f") plus 1 for the trailing '%' = 7 (e.g. "100.00%", " 99.99%"). The n/a sentinel
+// is right-aligned into the same width so the trailing label stays static across ticks.
+const cacheHitWidth = 7
+
 // rateField formats a disk/net rate value (already in MB/s or Mbps) into a fixed-digit-reserve field
 // followed by a r/w-prefixed unit, switching to the next higher unit when the rounded integer no
 // longer fits the reserve. It is the dynamic-suffix companion to pretty.RateUnit, differing only in
@@ -514,11 +519,24 @@ func renderPgstat(w io.Writer, s stat.Stat, props stat.PostgresProperties, db *p
 	return nil
 }
 
-// naInt renders an int rate field as a fixed-width number, or n/a when this tick has no prev
-// snapshot (hasPrev == false) — so a first-tick delta is distinguishable from a real zero.
+// naReserve renders the n/a sentinel right-aligned into the SAME reserved width a value would
+// occupy, so n/a is a drop-in that preserves the column position of whatever label/field follows
+// it on the same line (a degraded value must not shift the trailing label). The effective width is
+// at least len(naLiteral) so the sentinel is never truncated; the value side must reserve the same
+// effective width for the toggle to be static.
+func naReserve(width int) string {
+	if width < len(naLiteral) {
+		width = len(naLiteral)
+	}
+	return fmt.Sprintf("%*s", width, naLiteral)
+}
+
+// naInt renders an int rate field as a fixed-width number, or n/a in the same reserved width when
+// this tick has no prev snapshot (hasPrev == false) — so a first-tick delta is distinguishable from
+// a real zero AND the n/a occupies the value's column slot, keeping the trailing label static.
 func naInt(v int64, width int, hasPrev bool) string {
 	if !hasPrev {
-		return naLiteral
+		return naReserve(width)
 	}
 	return pretty.ReserveWidth(int(v), width)
 }
@@ -545,9 +563,12 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 			growth = pretty.Size(float64(o.GrowthPerSec))
 		}
 	}
-	hit := naLiteral
+	// cache hit ratio is the trailing field before its label; reserve a fixed width for the value
+	// (6 digits + the '%' = 7, e.g. "100.00%" / " 99.99%") so the n/a sentinel (right-aligned into
+	// the same 7) is a drop-in and the "cache hit ratio" label never moves between ticks.
+	hit := naReserve(cacheHitWidth)
 	if o.CacheHitRatioValid {
-		hit = fmt.Sprintf("%.2f%%", o.CacheHitRatio)
+		hit = fmt.Sprintf("%6.2f%%", o.CacheHitRatio)
 	}
 	if _, err := fmt.Fprintf(w, "   databases: %s per %s databases, %s growth/s, %s cache hit ratio\n",
 		size, pretty.ReserveWidth(int(o.DatabasesCount), 2), growth, hit); err != nil {
@@ -584,7 +605,10 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 	}
 
 	// bgwr/ckpt row. timed/req are absolute cumulative; write/sync ms are interval deltas (n/a on
-	// the first tick); maxwritten is the interval delta count.
+	// the first tick); maxwritten is the interval delta count. The whole delta group toggles
+	// together on the first tick (hp), and syncMs is the intentionally tight post-slash value (its
+	// width varies by design — the A/B composite rule from 95656e8), so the downstream " maxwritten"
+	// label is governed by that tight composite, not by a fixed-reserve n/a — left as-is.
 	writeMs, syncMs, maxw := naLiteral, naLiteral, naLiteral
 	if hp {
 		writeMs = pretty.ReserveWidth(pretty.Ceil(o.CkptWriteMsDelta), 3)
