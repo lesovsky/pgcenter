@@ -164,3 +164,27 @@ Round 3 не запускался: оба ревьюера approved/passed.
 - `go test ./top/...` → ok (`Test_topBandLayout` зелёный, 6 подкейсов; регрессий нет)
 - `go build ./...` → OK; полный `go test ./...` → все пакеты ok
 - `go vet ./top/...` + `gofmt -l` + `gosec ./top/...` → чисто
+
+---
+
+## Task 07: All-three verbose system collection branch
+
+**Status:** Done
+**Commit:** aec74e9 (impl) + 8716d3c (round 1 fixes)
+**Agent:** collect-dev
+**Summary:** В `Collector.Update` (`internal/stat/stat.go`) добавлена verbose-ветка СТРОГО ПОСЛЕ нетронутого мьютекс-`switch c.config.collectExtra` (R1): под гейтом `if view.Verbose` собираются все три системных источника (`Diskstats`/`Netdevs`/`Fsstats`) каждый тик через переиспользование `collectDiskstats`/`collectNetdevs`/`collectFsstats` (та же `%util`-математика, что и полные боковые панели — Decision 5). Каждый источник под `== nil` guard'ом — уже наполненный активной боковой панелью не пересобирается. Per-source ошибка НЕ прерывает сэмпл (паттерн `if x, err := c.collect*(db); err == nil`, без `return s, err`): одна сбойная подсистема оставляет источник `nil` (Task 8 отрисует `n/a`), остальные собираются. Добавлены два приватных forward-compatible поля на `Collector`: `verboseFirstTick bool` (сигнал композеру Task 8 рисовать `n/a` на тике без валидного prev) и `prevVerboseActive bool` (был ли verbose активен на прошлом тике). Логика re-arm: при входе в ветку `c.verboseFirstTick = !c.prevVerboseActive` (покрывает и самый первый тик, и каждый OFF→ON re-enable БЕЗ смены view), в конце ветки `c.prevVerboseActive = true`, в `else`-ветке `c.prevVerboseActive = false`. Механизм НЕ зависит от `c.Reset()` (Decision 2: `toggleVerbose` его не зовёт) и НЕ опирается на `s.Diskstats == nil` (на первом тике срез уже наполнен нулевой дельтой — `collect*` делают `prev=curr` при несовпадении длин). Compact-путь и боковые панели не тронуты.
+**Deviations:** `make lint` не прогнан — golangci-lint в окружении отсутствует/несовместим с конфигом (как в Task 01/02/05/06); вместо него `go vet ./internal/stat/...` и `gofmt -l` чисты, полный lint остаётся на CI. Шорткатов и отложенных находок нет.
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved — 0 critical/major, 2 minor (оба опциональные, на стыке с будущими задачами: молчаливый drop ошибки источника — availability-трекинг отложен на Task 9 `verboseCollectState`; `== nil` vs `len()==0` — рендер `n/a` Task 8 должен опираться на `len()==0`) → [010-feat-overview-dashboard-task-07-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-07-dev-code-reviewer-round1.json)
+- dev-test-reviewer: passed — litmus 9/9, pyramid healthy, 3 minor → [010-feat-overview-dashboard-task-07-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-07-dev-test-reviewer-round1.json)
+
+Применены три test-minor (commit 8716d3c): добавлен под-кейс сосуществования с боковой панелью (`collectExtra=CollectDiskstats` + `Verbose=true` → Diskstats через switch под `== nil` guard'ом, Netdevs/Fsstats через verbose-ветку), прямой ассерт `prevVerboseActive == false` на OFF-тике (пин else-ветки re-arm), и per-source диагностические сообщения через `assert.NotEmpty`. Отклонены два code-minor — оба осознанно отложены на Task 8/9 (availability-маркер и `len()==0`-рендер — вне скоупа этой задачи, реализация корректна). Round 2 не запускался: оба ревьюера approved/passed в round 1, правки — некостыльное hardening теста без изменения поведения.
+
+**Verification:**
+- `go test ./internal/stat/...` → ok (live-PG кластер доступен; все три источника наполняются, флаг set/clear, OFF→ON re-arm без Reset, coexistence-кейс зелёные; существующие `TestCollector_Update`/`TestCollector_collectDiskstats` не падают)
+- `go build ./...` → OK
+- `go vet ./internal/stat/...` + `gofmt -l` → чисто
