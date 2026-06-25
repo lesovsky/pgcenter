@@ -206,3 +206,46 @@ functions, replication, replslots, wal, bgwriter, progress, all `statements` sub
 `pg_stat_io` screens, procpidstat) — all share the `printStatHeader`/`printStatData` render path.
 Relates to [006-feat-pg-stat-io], whose ADRs cited "no horizontal scroll" as the reason for the
 sub-screen splits; this feature removes that constraint but the splits are deliberately retained.
+
+---
+
+### [010-feat-overview-dashboard] Verbose Mode for the Top Summary Panels
+
+**What it does:** Adds a `v` toggle to `pgcenter top` that expands the two always-on summary
+panels — `sysstat` (left) and `pgstat` (right) — from 4 rows each into an extended instance-health
+overview: `sysstat` gains 3 rows (iostat / nicstat / filesyst), `pgstat` gains 5 rows (workload /
+databases / workers / replication / bgwr-ckpt). It is a display mode layered over the current
+screen (like the `B`/`F`/`N`/`L` side-panels), **not** a separate screen, so the extended header
+rides with the DBA over any detail table (activity, tables, …). Lets a DBA see disk/net/FS
+saturation, aggregate workload, total DB size + growth + cache-hit, worker-pool pressure,
+replication lag/slots/retained-WAL/archiving-backlog, and checkpoint cost at a glance without
+visiting the individual side-panels and screens.
+
+**Key scenarios:**
+- Press `v` to expand both panels; the stats table shrinks but stays visible. Press `v` again to
+  collapse. The verbose state **persists across screen switches** — turn it on and the health
+  summary stays above whatever detail screen you navigate to.
+- Verbose aggregates are **consistent with the full panels/screens** — the iostat/nicstat/filesyst
+  rows pick the max-`%util` device and match the full `B`/`N`/`F` panels for that device; the
+  pgstat rows match the `d`/`r`/`b` screens. Verbose just rounds rate fields up to integers.
+- Unavailable signals (no PL/Perl schema over the network, `archive_mode=off`, no replication, no
+  privileges, PG version without a needed view, first tick with no prior delta) render the literal
+  `n/a` — never `0` or blank — and one failing source does not blank the other rows. The first tick
+  shows a transient `collecting...` cmdline hint that clears after the first refresh.
+
+**Limitations:**
+- **TUI-only** — verbose is a display mode; it does not participate in `record`/`report`. The view
+  registers no new view (so no view-count test churn) and carries no `NotRecordable` flag.
+- **Host IO/disk per-device deferred (variant A)** — the iostat row aggregates the existing
+  disk/net/fs panel data; a richer host IO/disk breakdown is out of scope for this feature.
+- **filesyst shows the data-directory filesystem only** — WAL/tablespaces on other filesystems are
+  not shown; the `data_directory` symlink is resolved only in local mode (remote shows the
+  unresolved path).
+- **Wide-terminal assumption** — verbose rows are long and truncate at the panel edge on narrow
+  terminals; on a too-short terminal verbose does not expand (height-guard) and a cmdline hint says so.
+
+**Touches:** The `sysstat`/`pgstat` summary panels (always shown in `top`) and the
+iostat/nicstat/fsstat side-panels plus the `databases`/`replication`/`bgwriter` screens whose
+aggregates the verbose rows mirror. Builds on the [001] `CollectExtra` enrichment mechanism (the
+verbose collection is gated similarly but via a separate `view.Verbose` boolean) and the [009]
+pure-render-function precedent (`topBandLayout`).

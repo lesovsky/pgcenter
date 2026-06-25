@@ -248,3 +248,36 @@ filesyst: /dev/nvme0n1p2 on / (ext4), 468.1G size, 346.4G used, 74% use
 <!-- This section is filled automatically by /done during feature finalization.
      It captures divergences between the original spec and the actual result.
      DO NOT fill manually — this is maintained by the reconciliation process. -->
+
+**Updated:** 2026-06-25
+
+Shipped as specified — a verbose display mode (`v`) expanding the `sysstat`/`pgstat` panels (+3/+5
+rows), persistent across screens, with consistency against the full panels/screens, `n/a`
+degradation, first-tick `collecting...` hint, latency-guarded dear aggregates, and verbose-aware
+`topBandLayout` geometry. Divergences from the spec body:
+
+**Changed during implementation:**
+- **`databases` row split into two queries.** The spec showed `databases` as one row, but isolating
+  the expensive `sum(pg_database_size)` into its own `QueryRow` (so a size failure cannot blank the
+  cheap count/cache-hit, and so it can be throttled independently) required two queries —
+  `OverviewDatabases` (count + cache) and `OverviewDatabasesSize` (size). The rendered row is
+  unchanged. (ADR [010] "Split `databases` …".)
+- **`send/recv` label → `senders/receivers`.** The replication-row label was renamed during live-TUI
+  polish to drop the network send/recv connotation; values are identical.
+- **filesyst `use%` uses panel parity, not ceil.** To match the full fsstat panel exactly (74% vs a
+  ceil'd 75%), the verbose `use%` renders `fs.Pused` via `%3.0f` with **no** `Ceil`; the ceil rule
+  applies only to rate fields.
+- **Design already pivoted to a verbose panel mode** (not a separate card-grid screen) in the spec
+  body — confirmed in implementation: no new view, no `printStat` branch, zero view-count test churn.
+
+**Added during implementation:**
+- **`n/a`-width reservation for static trailing labels** (`naReserve`). Live-TUI testing showed that a
+  degraded `n/a` (3 chars) replacing a wider value made the trailing label jump; the `n/a` is now
+  reserved to the value's width for fixed-width fields (cache-hit ratio, workload rates).
+
+**Descoped / deferred:**
+- **Host IO/disk per-device breakdown (variant A)** — out of scope; the iostat row aggregates the
+  existing disk/net/fs panel data.
+- **Exact pgstat reserved-digit budgets / a fixed-width `Size`-field variant** — the `pretty.Size`
+  fields still breathe horizontally; left to user verification and recorded as tech-debt ([012]).
+  The `rateField`↔`pretty.RateUnit` duplication is also deferred (tech-debt [011]).

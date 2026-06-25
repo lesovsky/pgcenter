@@ -43,6 +43,56 @@ When the row identity is **composite** (more than one column), emit a synthetic 
 
 **Caveat learned in manual QA:** a window function that admits a scrollable column only when it fits *whole* silently drops a deliberately wide trailing column (e.g. `query`). Allow the last column to render *partially* (start-in-budget), and reserve marker-glyph width in **both** the forward and backward walk, or the last column becomes unreachable at the right edge. This class of bug is invisible to unit tests written against the original (whole-column) semantics — a litmus test that fails on the wrong semantics is the guard.
 
+## Verbose display-mode toggle (010-feat-overview-dashboard)
+
+When adding an on/off *display mode* that layers extra rows over the current screen (not a new screen),
+mirror the verbose top-panel mode rather than registering a view:
+
+- **Dual-home the flag like `showExtra`.** A mode that both the collector and the renderer must see needs
+  two homes: `view.View.Verbose bool` (rides `viewCh` to `Collector.Update`) and `top.config.verbose bool`
+  (read by the renderer/layout in the gocui handler goroutine). The toggle handler (`top/verbose.go:toggleVerbose`)
+  writes the flag into **every** view in `config.views` (the `showExtra` write-into-all-views idiom) so the
+  mode **persists across screen switches** — persistence is free because `viewSwitchHandler` simply never
+  zeroes it (unlike `scrollOffset`, which it deliberately resets). Prefer a dedicated boolean over
+  overloading `CollectExtra` (a mutually-exclusive `int` whose toggle path fires `Reset()` — see ADR [010]).
+- **Skip the `collectStat()` Reset on a mode-only toggle.** `collectStat()` calls `c.Reset()` on the
+  `viewCh` push, which blanks the `prev*` snapshots (one frame of empty CPU/mem/load deltas). Add an early
+  `if prevVerbose != v.Verbose { … continue }` branch (mirroring the existing `ShowExtra` branch, placed
+  **before** both Reset paths) so toggling the mode does not wipe the snapshots.
+
+## Panel/screen consistency — reuse the struct math (010-feat-overview-dashboard)
+
+When a summary row must show the *same* number a detail panel/screen shows, read the **same struct** the
+full panel renders and replicate any print-time conversion, do not recompute from scratch:
+
+- The verbose iostat/nicstat rows select the max-`%util` device and read `Util`/`Utilization` AS-IS from
+  the existing `count*Usage` structs (the full `B`/`N`/`F` panels' math), filtering active devices the same
+  way `printIostat`/`printNetdev` do. nicstat's rMbps/wMbps is **computed at print time** in `printNetdev`
+  (`Rbytes/1024/128`), so the verbose row replicates that exact conversion — recomputing independently is a
+  divergence bug.
+- The verbose filesyst `use%` uses panel parity (`fs.Pused` via `%3.0f`, **not** `Ceil`) so it matches the
+  full fsstat panel (a `Ceil` would read 75% where the panel reads 74%). The ceil rule applies only to rate
+  fields, not to percentages already computed by the struct.
+
+## Reserved-width `n/a` for static trailing labels (010-feat-overview-dashboard)
+
+A degraded field that renders `n/a` (3 chars) where a value (e.g. ` 99.99%`, 7 chars) would otherwise sit
+makes the **trailing label jump horizontally** as the signal appears/disappears. Reserve the `n/a` to the
+value's reserved width so it is a drop-in: `naReserve(width)` = `fmt.Sprintf("%*s", …)` right-aligned (the
+mirror of `pretty.ReserveWidth`'s `%*d`), with a `len("n/a")` min-width guard. Apply it only to
+**fixed-width** fields (cache-hit ratio `%6.2f%%`, the `%d` workload rates); fields formatted via
+`pretty.Size` are already variable-width, so an `n/a`↔value match is ill-defined there and the label still
+breathes (recorded as tech-debt).
+
+## Dynamic unit-suffix rate formatter (010-feat-overview-dashboard)
+
+For a fixed-digit-budget rate column that must not break layout on top-end hardware (NVMe arrays >9.7 GB/s,
+25/40/100GbE), `internal/pretty` has three net-new pure formatters: `Ceil` (round up via `math.Ceil` —
+`internal/math` had no ceil), `ReserveWidth` (`%*d` fixed width, never truncates), and `RateUnit` (promotes
+the unit one step on reserved-digit overflow — MB/s→GB/s with binary 1024, Mbps→Gbps with **decimal 1000**
+per network convention). Pure functions → property/table tests at the overflow boundary. `pretty.Size` was
+left untouched (it switches the byte unit but has no rate suffix, no fixed width, and rounds to one decimal).
+
 ## Adding a New View — test counts that must be updated
 
 Registering a view in `view.New()` couples to count-based tests that fail in CI (not always locally) if missed:

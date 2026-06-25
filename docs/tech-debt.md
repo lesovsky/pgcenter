@@ -7,6 +7,78 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — toolchain bump pending
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, pre-deploy QA)
+**Severity:** Low
+**Area:** CI toolchain (`go.mod` / workflows)
+
+**What:** `govulncheck` flags GO-2026-5037 in the stdlib `crypto/x509`, fixed in Go 1.25.11; the local toolchain is 1.25.10. Not project code — the resolution is a toolchain bump in CI. Same class as the [004]-era bump already applied once; re-surfaced because the local environment trails the patch version.
+
+**Why deferred:** Stdlib transitive path, not project code; the fix is the patch-version toolchain bump the CI gate requires (no source change).
+
+---
+
+### [014] bin/pgcenter is a tracked build artifact
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard)
+**Severity:** Low
+**Area:** repository root (`bin/pgcenter`), `.gitignore`
+
+**What:** `bin/pgcenter` is committed to the repo, so every `make build` rewrites it and dirties the working tree (and risks an accidental binary commit). Pre-existing, not introduced by feature 010 — only noticed because the manual-QA rebuild churned it.
+
+**Why deferred:** Removing a tracked artifact and gitignoring it is a repo-hygiene change orthogonal to the feature; left for a dedicated cleanup.
+
+---
+
+### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, every task)
+**Severity:** Low
+**Area:** `.golangci.yml`, local dev environment
+
+**What:** The repo's `.golangci.yml` is a v1-schema config, but the locally-installed `golangci-lint` is v2 (`unsupported version of the configuration`), so `make lint` cannot run locally — every task in feature 010 substituted `go vet` + `gofmt -l` (and `gosec` where available) and deferred the full golangci-lint run to CI. The proper fix migrates the config to v2 (or pins the tool version).
+
+**Why deferred:** Config migration is a cross-cutting change unrelated to the feature; CI still enforces the full lint, so coverage is not lost — only local convenience.
+
+---
+
+### [012] verbose pgstat Size-formatted fields width-breathe between values
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Severity:** Low
+**Area:** `top/stat.go` (verbose pgstat composers)
+
+**What:** The `n/a`-width reservation that keeps trailing labels static (`naReserve`) was applied only to fixed-width fields (cache-hit ratio, the `%d` workload rates). The verbose fields formatted via `pretty.Size` (databases size/growth, replication lag/retain/backlog) are inherently variable-width, so an `n/a`↔value width match is ill-defined and those fields/labels still shift horizontally between samples.
+
+**Why deferred:** Fixing it needs a fixed-width `Size` variant (or per-field reserved budgets), which the feature did not size; the exact pgstat digit budgets were left to user verification. Cosmetic, no correctness impact.
+
+---
+
+### [011] rateField duplicates pretty.RateUnit overflow logic
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Severity:** Low
+**Area:** `top/stat.go` (`rateField`), `internal/pretty/pretty.go` (`RateUnit`)
+
+**What:** `top/stat.go:rateField` re-implements the overflow/divisor logic of `pretty.RateUnit` (it differs only in placing the r/w prefix *between* the digits and the unit, as the spec layout `1135 rMB/s` requires). Consolidating into one shared helper would touch `internal/pretty/pretty.go`, which was outside the allowed file set for the row-composer task.
+
+**Why deferred:** Out of scope for the task that introduced it; the duplication is small and documented. A candidate for consolidation the next time `internal/pretty` is touched.
+
+---
+
+### [010] verbose recovery-`t` WAL standby path verified by substitution only
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Severity:** Low
+**Area:** `internal/query/overview.go` (replication-lag/slots templates), integration tests
+
+**What:** The verbose replication aggregates use the recovery-aware `{{.WalFunction1/2}}` templates, whose standby branch resolves to `pg_last_wal_receive_lsn()`. The fixture clusters (21914–21918) are all primaries, so the standby branch is verified only by string substitution through `query.Format`, not by live execution (running a standby-only function on a primary errors). Direct sibling of [006] (replslots `retained,KiB` standby path).
+
+**Why deferred:** The test harness has no standby cluster; adding one is disproportionate for a path that reuses the already-proven `replication`-screen template. Manual standby check is the practical verification.
+
+---
+
 ### [009] tar entry size trusted for allocation in stat.NewPGresultFile
 
 **Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
