@@ -80,9 +80,11 @@ A degraded field that renders `n/a` (3 chars) where a value (e.g. ` 99.99%`, 7 c
 makes the **trailing label jump horizontally** as the signal appears/disappears. Reserve the `n/a` to the
 value's reserved width so it is a drop-in: `naReserve(width)` = `fmt.Sprintf("%*s", …)` right-aligned (the
 mirror of `pretty.ReserveWidth`'s `%*d`), with a `len("n/a")` min-width guard. Apply it only to
-**fixed-width** fields (cache-hit ratio `%6.2f%%`, the `%d` workload rates); fields formatted via
-`pretty.Size` are already variable-width, so an `n/a`↔value match is ill-defined there and the label still
-breathes (recorded as tech-debt).
+**fixed-width** fields (cache-hit ratio `%6.2f%%`, the `%d` workload rates). Variable-width `pretty.Size`
+fields are made drop-in the same way via `pretty.SizeWidth(v, width)` (see the rate-formatter section) —
+since 011-refactor-tech-debt-paydown the verbose Size fields use it under a single `sizeFieldWidth = 8`
+const with `naReserve(sizeFieldWidth)` fallbacks, so value and `n/a` share the reserve. A row's first
+field (e.g. `wal size`) pushes no trailing label and stays a bare `Size`.
 
 ## Dynamic unit-suffix rate formatter (010-feat-overview-dashboard)
 
@@ -90,8 +92,15 @@ For a fixed-digit-budget rate column that must not break layout on top-end hardw
 25/40/100GbE), `internal/pretty` has three net-new pure formatters: `Ceil` (round up via `math.Ceil` —
 `internal/math` had no ceil), `ReserveWidth` (`%*d` fixed width, never truncates), and `RateUnit` (promotes
 the unit one step on reserved-digit overflow — MB/s→GB/s with binary 1024, Mbps→Gbps with **decimal 1000**
-per network convention). Pure functions → property/table tests at the overflow boundary. `pretty.Size` was
-left untouched (it switches the byte unit but has no rate suffix, no fixed width, and rounds to one decimal).
+per network convention). Pure functions → property/table tests at the overflow boundary.
+
+Since 011-refactor-tech-debt-paydown the overflow/divisor/ceil computation lives in one unexported core
+`rateUnitParts(v, family, width) (field, unit)`; `RateUnit` (no separator, `9999MB/s`) and
+`RateUnitPrefixed(v, family, prefix, width)` (a `" "+r/w` marker between digits and unit, `1135 rMB/s`,
+used by the verbose disk/net rows) both delegate to it — add a new assembly form there, never a second
+copy of the overflow logic. Also added: `pretty.SizeWidth(v, width)` = `fmt.Sprintf("%*s", width, Size(v))`,
+the fixed-width drop-in for `Size` (right-align, never truncate, digits/units unchanged) — `Size` itself
+stays variable-width for its other callers.
 
 ## Adding a New View — test counts that must be updated
 

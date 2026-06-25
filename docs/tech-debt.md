@@ -19,30 +19,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ---
 
-### [012] verbose pgstat Size-formatted fields width-breathe between values
-
-**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** `top/stat.go` (verbose pgstat composers)
-
-**What:** The `n/a`-width reservation that keeps trailing labels static (`naReserve`) was applied only to fixed-width fields (cache-hit ratio, the `%d` workload rates). The verbose fields formatted via `pretty.Size` (databases size/growth, replication lag/retain/backlog) are inherently variable-width, so an `n/a`↔value width match is ill-defined and those fields/labels still shift horizontally between samples.
-
-**Why deferred:** Fixing it needs a fixed-width `Size` variant (or per-field reserved budgets), which the feature did not size; the exact pgstat digit budgets were left to user verification. Cosmetic, no correctness impact.
-
----
-
-### [011] rateField duplicates pretty.RateUnit overflow logic
-
-**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** `top/stat.go` (`rateField`), `internal/pretty/pretty.go` (`RateUnit`)
-
-**What:** `top/stat.go:rateField` re-implements the overflow/divisor logic of `pretty.RateUnit` (it differs only in placing the r/w prefix *between* the digits and the unit, as the spec layout `1135 rMB/s` requires). Consolidating into one shared helper would touch `internal/pretty/pretty.go`, which was outside the allowed file set for the row-composer task.
-
-**Why deferred:** Out of scope for the task that introduced it; the duplication is small and documented. A candidate for consolidation the next time `internal/pretty` is touched.
-
----
-
 ### [010] verbose recovery-`t` WAL standby path verified by substitution only
 
 **Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
@@ -52,18 +28,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 **What:** The verbose replication aggregates use the recovery-aware `{{.WalFunction1/2}}` templates, whose standby branch resolves to `pg_last_wal_receive_lsn()`. The fixture clusters (21914–21918) are all primaries, so the standby branch is verified only by string substitution through `query.Format`, not by live execution (running a standby-only function on a primary errors). Direct sibling of [006] (replslots `retained,KiB` standby path).
 
 **Why deferred:** The test harness has no standby cluster; adding one is disproportionate for a path that reuses the already-proven `replication`-screen template. Manual standby check is the practical verification.
-
----
-
-### [009] tar entry size trusted for allocation in stat.NewPGresultFile
-
-**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
-**Severity:** Low
-**Area:** `internal/stat/postgres.go` (`NewPGresultFile`), `report/`
-
-**What:** Report replay deserializes recorded archives via `NewPGresultFile`, which does `make([]byte, hdr.Size)` from the tar header size — an attacker-controlled value if the archive is untrusted (A08 / CWE-789, unbounded allocation). Pre-existing pattern shared by all recordable views; feature 008 did not introduce it but widened the set of view types flowing through this trust boundary.
-
-**Why deferred:** Out of scope for feature 008 and low risk in practice — the operator owns and controls their own `pgcenter record` archives. A proper fix bounds `hdr.Size` against a sane maximum (or `io.LimitReader`) before allocating.
 
 ---
 
@@ -92,6 +56,45 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [012] verbose pgstat Size-formatted fields width-breathe between values
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 03, commit c89b686)
+**Severity:** Low
+**Area:** `top/stat.go` (verbose pgstat composers), `internal/pretty/pretty.go`
+
+**What:** The verbose pgstat fields formatted via `pretty.Size` (databases size/growth, replication lag/retain/backlog) were variable-width, so the fields and their trailing labels shifted horizontally between samples; `naReserve` covered only the fixed-width fields.
+
+**Resolution:** Added `pretty.SizeWidth(v, width)` (right-aligns `Size(v)` via `%*s`, never truncating — the `ReserveWidth` model) and applied it with a single `sizeFieldWidth = 8` const to the five Size fields, replacing their bare `naLiteral` n/a fallbacks with `naReserve(sizeFieldWidth)`. Value and n/a now share the reserve, so labels hold position across ticks and value↔n/a. `wal size` stays a bare `Size` (first field on its row, pushes no label). Locked by a value-vs-n/a byte-offset test (RED before, GREEN after) and updated goldens (padding only). Manual `v` check confirmed.
+
+---
+
+### [011] rateField duplicates pretty.RateUnit overflow logic
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 02, commit ee623fa)
+**Severity:** Low
+**Area:** `top/stat.go` (`rateField`), `internal/pretty/pretty.go`
+
+**What:** `top/stat.go:rateField` re-implemented the overflow/divisor/ceil logic of `pretty.RateUnit`, differing only by the `" " + r/w` prefix between digits and unit (`1135 rMB/s`).
+
+**Resolution:** Extracted the shared logic into an unexported `pretty.rateUnitParts(v, family, width) (field, unit)` core; `RateUnit` (byte-identical `9999MB/s` form) and a new exported `pretty.RateUnitPrefixed(v, family, prefix, width)` both delegate to it. `rateField` deleted, its four verbose disk/net call sites repointed. Byte-identity locked by a `TestRateUnitPrefixed` boundary table (hardcoded literals, not a circular call to the deleted func); the verbose disk/net goldens needed no edits — a positive equivalence signal.
+
+---
+
+### [009] tar entry size trusted for allocation in stat.NewPGresultFile
+
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 01, commit 9a3c630)
+**Severity:** Low
+**Area:** `internal/stat/postgres.go` (`NewPGresultFile`), `report/report.go`
+
+**What:** `NewPGresultFile` did `make([]byte, hdr.Size)` from the tar header size — an attacker-influenceable value for an archive received from a third party (A08 / CWE-789, unbounded allocation).
+
+**Resolution:** Added exported `stat.MaxResultFileSize int64 = 256 << 20` (≈300× the largest real ~817 KB entry) and an int64-only guard in `NewPGresultFile` rejecting `bufsz < 0` (distinct error) and `bufsz > MaxResultFileSize` (`result file size %d exceeds limit %d bytes`) **before** `make` — no `int()` narrowing, so no gosec G115. The two real pre-alloc sinks (`report.readTar` `meta.*`/stat) inherit the cap via `NewPGresultFile`; the `sysinfo.*` branch (`io.ReadAll`, not a pre-alloc sink) got the same cap inline as defense-in-depth. Tests cover under/at/over limit, negative, and all three tar branches.
+
+---
 
 ### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
 
