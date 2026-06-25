@@ -19,18 +19,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ---
 
-### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
-
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, every task)
-**Severity:** Low
-**Area:** `.golangci.yml`, local dev environment
-
-**What:** The repo's `.golangci.yml` is a v1-schema config, but the locally-installed `golangci-lint` is v2 (`unsupported version of the configuration`), so `make lint` cannot run locally — every task in feature 010 substituted `go vet` + `gofmt -l` (and `gosec` where available) and deferred the full golangci-lint run to CI. The proper fix migrates the config to v2 (or pins the tool version).
-
-**Why deferred:** Config migration is a cross-cutting change unrelated to the feature; CI still enforces the full lint, so coverage is not lost — only local convenience.
-
----
-
 ### [012] verbose pgstat Size-formatted fields width-breathe between values
 
 **Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
@@ -104,6 +92,19 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, every task)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `.golangci.yml`, `.github/workflows/{default,release}.yml`
+
+**What:** The repo's `.golangci.yml` was a v1-schema config, but the locally-installed `golangci-lint` is v2 (`unsupported version of the configuration`), so `make lint` could not run locally — tasks substituted `go vet` + `gofmt -l` and deferred the full lint to CI. (CI also silently ran v1, since its install path `…/cmd/golangci-lint@latest` omits the `/v2/` module prefix and resolves to the last v1 release.)
+
+**Resolution:** Migrated `.golangci.yml` to the v2 schema via `golangci-lint migrate`. v2 folds `stylecheck` (ST*) and the new quickfix (QF*) categories into `staticcheck`; the v1 config enabled neither, so `staticcheck.checks` now carries `-ST*` / `-QF*` to preserve the exact v1 effective rule set (verified: `make lint` reports 0 issues, same as before). Switched both CI workflows to install the v2 binary (`…/v2/cmd/golangci-lint@latest`) and bumped the lint-tools cache key (`lint-v2` → `lint-v3-golangciv2`) so the stale v1 binary is not restored. Local and CI now run the same v2 tool against the same config.
+
+---
 
 ### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — local toolchain trailed CI
 
