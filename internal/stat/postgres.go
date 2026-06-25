@@ -188,7 +188,11 @@ func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv in
 // snapshot. Expensive/privileged aggregates (sum of database sizes, archiving backlog) run as their
 // own QueryRow so a failure degrades only that field to n/a (availability flag) without aborting the
 // sample or surfacing the raw PG error text. itv is the refresh interval in seconds (>= 1).
-func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, prev PgstatOverview) PgstatOverview {
+//
+// skipDatabasesSize lets the caller's latency guard (Decision 9) throttle the dear no-twin db-size
+// aggregate: when true, the sum(pg_database_size) QueryRow is not run at all (the caller reuses a
+// cached stale value instead). The cheap aggregates and all other rows still collect unconditionally.
+func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, prev PgstatOverview, skipDatabasesSize bool) PgstatOverview {
 	var s PgstatOverview
 	s.Valid = true
 	s.HasPrev = prev.Valid
@@ -235,10 +239,14 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 	// databases aggregate: sum(pg_database_size(...)) is expensive/privileged, so it runs as its OWN
 	// QueryRow. A failure degrades only the size/growth field to n/a (TotalSizeValid stays false),
 	// leaving count and cache-hit above intact. The raw error is swallowed (paths must not surface).
-	if err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize); err == nil {
-		s.TotalSizeValid = true
-		if s.HasPrev && prev.TotalSizeValid {
-			s.GrowthPerSec = (s.TotalSize - prev.TotalSize) / int64(itv)
+	// When the caller's latency guard throttles this source (skipDatabasesSize), the query is not run
+	// at all and the caller reuses its cached stale value (Decision 9).
+	if !skipDatabasesSize {
+		if err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize); err == nil {
+			s.TotalSizeValid = true
+			if s.HasPrev && prev.TotalSizeValid {
+				s.GrowthPerSec = (s.TotalSize - prev.TotalSize) / int64(itv)
+			}
 		}
 	}
 

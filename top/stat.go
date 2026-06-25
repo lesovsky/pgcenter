@@ -141,8 +141,29 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	}
 }
 
+// firstTickHint decides the cmdline first-tick hint from the collected Stat. While the collector's
+// first-tick flag is set (propagated via Stat.System.VerboseFirstTick, the single source of truth — no
+// duplicate first-tick flag in top/), the dear/delta-based verbose rows render n/a, so the cmdline
+// shows "collecting...". The flag clears after the first successful refresh and re-arms on every verbose
+// OFF->ON re-enable (Task 7), so the hint reappears on re-enable too — not only after a screen switch.
+func firstTickHint(s stat.Stat) (string, bool) {
+	if s.System.VerboseFirstTick {
+		return "collecting...", true
+	}
+	return "", false
+}
+
 // printStat prints collected stats in UI.
 func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
+	// First-tick cmdline hint, keyed on the collector's first-tick flag (via Stat). printCmdline runs
+	// its own g.Update, so it is called here (outside the panel-render g.Update below) exactly once per
+	// path — only when the hint is shown — respecting the printCmdline mutual-exclusion (one call per
+	// path, no overwrite). The hint self-clears after 2s via printCmdline's timer; once the flag clears
+	// on the next refresh the hint is simply not re-emitted.
+	if msg, show := firstTickHint(s); show {
+		printCmdline(app.ui, "%s", msg)
+	}
+
 	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {

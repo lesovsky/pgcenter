@@ -53,6 +53,58 @@ type System struct {
 	VerboseFirstTick bool
 }
 
+// verboseGuardFloor is the absolute lower bound of the latency-guard threshold: the dear no-twin
+// aggregate (db sizes / growth) is never throttled for a latency below this floor, regardless of how
+// short the refresh interval is. See latencyGuardThreshold.
+const verboseGuardFloor = 500 * time.Millisecond
+
+// verboseGuardFraction is the relative part of the latency-guard threshold: a quarter (25%) of the
+// refresh interval. See latencyGuardThreshold.
+const verboseGuardFraction = 4
+
+// latencyGuardThreshold returns the latency budget for the dear no-twin aggregate (db sizes / growth):
+// the larger of 25% of the refresh interval and the 500ms floor. When the source's last query exceeded
+// this budget it is throttled (skipped next tick, reusing the cached stale value). Derived solely from
+// the refresh interval — no second user knob. A short interval (e.g. 1s -> 25% = 250ms) clamps to the
+// floor; a long interval (e.g. 4s -> 25% = 1s) uses the relative budget.
+func latencyGuardThreshold(refresh time.Duration) time.Duration {
+	relative := refresh / verboseGuardFraction
+	if relative > verboseGuardFloor {
+		return relative
+	}
+	return verboseGuardFloor
+}
+
+// verboseCollectState groups the verbose-mode collection state so verbose-specific fields do not leak
+// across the shared Collector (Decision 9). It carries the first-tick re-arm flags (moved here from
+// Collector, added forward-compatible by Task 7) and the per-source cadence/latency-guard state for the
+// dear no-twin aggregate (db sizes / growth): only that source is throttled — system rows and the cheap
+// aggregates collect every tick (consistency with the full panels a DBA cross-checks).
+type verboseCollectState struct {
+	// verboseFirstTick signals that delta-based verbose metrics have no valid prev point on this tick,
+	// so the composer must render n/a instead of a misleading zero delta.
+	verboseFirstTick bool
+	// prevVerboseActive tracks whether verbose was active on the previous tick; it re-arms
+	// verboseFirstTick on every OFF->ON re-enable without relying on c.Reset() (toggleVerbose skips Reset).
+	prevVerboseActive bool
+	// dbSizeLastLatency is the measured duration of the last real db-size query. When it exceeds the
+	// latency-guard threshold, the next collection of this source is throttled (skipped) and the cached
+	// value below is reused. Auto-resumes: a later real collection records a fresh (faster) latency.
+	dbSizeLastLatency time.Duration
+	// dbSizeCache holds the last successfully collected size/growth aggregate, reused (stale, not n/a)
+	// while the source is throttled.
+	dbSizeCache PgstatOverview
+	// dbSizeCacheValid is true once dbSizeCache holds a real collected value.
+	dbSizeCacheValid bool
+}
+
+// dbSizeThrottled reports whether the dear db-size source should be skipped on this tick because its
+// last query exceeded the latency-guard threshold. Pure decision (no clock), so the guard is testable
+// without live PG.
+func (s verboseCollectState) dbSizeThrottled(threshold time.Duration) bool {
+	return s.dbSizeLastLatency > threshold
+}
+
 // Collector defines container for stats objects.
 type Collector struct {
 	config Config // collector configuration
@@ -67,13 +119,8 @@ type Collector struct {
 	currNetdevs Netdevs
 	// mounted filesystems snapshot
 	currFsstats Fsstats
-	// verbose system-collection state (forward-compatible, grouped into verboseCollectState in a later task).
-	// verboseFirstTick signals that delta-based system metrics have no valid prev point on this tick,
-	// so the composer must render n/a instead of a misleading zero delta.
-	verboseFirstTick bool
-	// prevVerboseActive tracks whether verbose was active on the previous tick; it re-arms
-	// verboseFirstTick on every OFF->ON re-enable without relying on c.Reset() (toggleVerbose skips Reset).
-	prevVerboseActive bool
+	// verbose-mode collection state: first-tick re-arm flags + per-source latency-guard/cadence state.
+	verbose verboseCollectState
 	// postgres stats snapshots for previous and current intervals
 	prevPgStat Pgstat
 	currPgStat Pgstat
@@ -128,6 +175,12 @@ func (c *Collector) Reset() {
 	c.currProcPidStats = make(map[int]ProcPidStat)
 	c.prevProcPidIO = make(map[int]ProcPidIO)
 	c.currProcPidIO = make(map[int]ProcPidIO)
+	// Clear the verbose latency-guard/cadence state in lockstep with the prev/curr snapshots so a
+	// screen switch does not leave a "stuck" throttle blocking the first tick after the switch (the
+	// stale cache and last-latency must not survive a Reset). The first-tick re-arm flags are also
+	// cleared, but the re-arm itself does NOT rely on Reset — prevVerboseActive in the verbose branch
+	// re-arms verboseFirstTick on every OFF->ON (toggleVerbose skips Reset, Decision 2).
+	c.verbose = verboseCollectState{}
 }
 
 // Update implements stats collecting.
@@ -196,7 +249,7 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		// valid prev point, so signal the composer (Task 8) to draw n/a on this tick instead of a misleading
 		// zero delta. The flag persists for the rest of this Update so the composer can read it, and is
 		// cleared on the next verbose tick. This does not depend on c.Reset() (toggleVerbose skips Reset).
-		c.verboseFirstTick = !c.prevVerboseActive
+		c.verbose.verboseFirstTick = !c.verbose.prevVerboseActive
 
 		if s.Diskstats == nil {
 			if diskstats, err := c.collectDiskstats(db); err == nil {
@@ -214,14 +267,14 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 			}
 		}
 
-		c.prevVerboseActive = true
+		c.verbose.prevVerboseActive = true
 
 		// Propagate the first-tick signal into the Stat handed to the render goroutine: the
 		// composer (Task 8) draws n/a for delta-based system rows when this is set, since the
 		// populated zero-delta slice is indistinguishable from a genuinely idle device otherwise.
-		s.VerboseFirstTick = c.verboseFirstTick
+		s.VerboseFirstTick = c.verbose.verboseFirstTick
 	} else {
-		c.prevVerboseActive = false
+		c.verbose.prevVerboseActive = false
 	}
 
 	// Take refresh interval from view
@@ -331,7 +384,28 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 	// happens below), so its Overview is the correct prev snapshot for rate computation.
 	var overview PgstatOverview
 	if view.Verbose {
-		overview = collectOverviewStat(db, c.config.PostgresProperties, itv, c.currPgStat.Overview)
+		// Latency guard for the dear no-twin aggregate (db sizes / growth): when the last db-size query
+		// exceeded the threshold (max 25% of refresh, 500ms floor), skip it this tick and reuse the cached
+		// stale value (not n/a) — there is no live panel twin to cross-check, so staleness is acceptable
+		// (Decision 9). The cheap aggregates (workload/workers/...) and all system rows still collect every
+		// tick. On the genuine first verbose tick there is nothing cached yet, so we must collect it.
+		threshold := latencyGuardThreshold(refresh)
+		skipSize := c.verbose.dbSizeCacheValid && c.verbose.dbSizeThrottled(threshold)
+
+		start := time.Now()
+		overview = collectOverviewStat(db, c.config.PostgresProperties, itv, c.currPgStat.Overview, skipSize)
+		if skipSize {
+			// Reuse the cached stale size/growth fields; everything else in overview is fresh.
+			overview.TotalSize = c.verbose.dbSizeCache.TotalSize
+			overview.TotalSizeValid = c.verbose.dbSizeCache.TotalSizeValid
+			overview.GrowthPerSec = c.verbose.dbSizeCache.GrowthPerSec
+		} else {
+			// Real collection happened: record its latency (covers the whole overview, dominated by the
+			// dear size query) and refresh the cache so the next throttled tick has a stale value to reuse.
+			c.verbose.dbSizeLastLatency = time.Since(start)
+			c.verbose.dbSizeCache = overview
+			c.verbose.dbSizeCacheValid = true
+		}
 	}
 
 	c.prevPgStat = c.currPgStat

@@ -174,12 +174,12 @@ func TestCollector_Update_Verbose(t *testing.T) {
 	assert.NotEmpty(t, stat.System.Fsstats, "fsstats must populate under verbose")
 
 	// First-tick flag is set after the first verbose Update.
-	assert.True(t, c.verboseFirstTick)
+	assert.True(t, c.verbose.verboseFirstTick)
 
 	// Second verbose tick: flag is cleared.
 	_, err = c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
-	assert.False(t, c.verboseFirstTick)
+	assert.False(t, c.verbose.verboseFirstTick)
 
 	// OFF->ON re-enable WITHOUT Reset: one non-verbose tick, then verbose again.
 	off := baseView
@@ -189,14 +189,14 @@ func TestCollector_Update_Verbose(t *testing.T) {
 
 	_, err = c.Update(conn, offViews["activity"], time.Second)
 	assert.NoError(t, err)
-	assert.False(t, c.verboseFirstTick)
+	assert.False(t, c.verbose.verboseFirstTick)
 	// The else-branch must disarm prevVerboseActive so the next OFF->ON re-enables the flag.
-	assert.False(t, c.prevVerboseActive)
+	assert.False(t, c.verbose.prevVerboseActive)
 
 	// Re-enable verbose: flag must re-arm WITHOUT c.Reset().
 	stat, err = c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
-	assert.True(t, c.verboseFirstTick)
+	assert.True(t, c.verbose.verboseFirstTick)
 	assert.NotEmpty(t, stat.System.Diskstats, "diskstats must populate on re-enable")
 	assert.NotEmpty(t, stat.System.Netdevs, "netdevs must populate on re-enable")
 	assert.NotEmpty(t, stat.System.Fsstats, "fsstats must populate on re-enable")
@@ -204,7 +204,7 @@ func TestCollector_Update_Verbose(t *testing.T) {
 	// Following verbose tick clears the flag again.
 	_, err = c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
-	assert.False(t, c.verboseFirstTick)
+	assert.False(t, c.verbose.verboseFirstTick)
 
 	// Coexistence with an active side panel: collectExtra populates Diskstats via the switch,
 	// the == nil guard skips re-collecting it, and the verbose branch still fills Netdevs/Fsstats.
@@ -217,6 +217,62 @@ func TestCollector_Update_Verbose(t *testing.T) {
 	assert.NotEmpty(t, stat.System.Diskstats, "diskstats populated by side-panel switch")
 	assert.NotEmpty(t, stat.System.Netdevs, "netdevs populated by verbose branch")
 	assert.NotEmpty(t, stat.System.Fsstats, "fsstats populated by verbose branch")
+}
+
+// TestCollector_Update_DbSizeThrottle verifies the latency guard end-to-end against live PG: once the
+// db-size source is marked slow, the next verbose tick reuses the cached (stale) size/growth value
+// instead of re-querying, while the other overview aggregates (workload/workers/...) still refresh.
+func TestCollector_Update_DbSizeThrottle(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	baseView := view.View{
+		Name:      "activity",
+		QueryTmpl: query.PgStatActivityDefault,
+		DiffIntvl: [2]int{0, 0},
+		Ncols:     14,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show activity statistics",
+		Filters:   map[int]*regexp.Regexp{},
+		Refresh:   1 * time.Second,
+	}
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
+
+	v := baseView
+	v.Verbose = true
+	views := view.Views{"activity": v}
+	assert.NoError(t, views.Configure(opts))
+	v = views["activity"]
+
+	c, err := NewCollector(conn)
+	assert.NoError(t, err)
+
+	// Tick 1: real collection populates the size cache.
+	s1, err := c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.True(t, s1.Pgstat.Overview.TotalSizeValid, "first tick collects db size")
+	cachedSize := s1.Pgstat.Overview.TotalSize
+	assert.Greater(t, cachedSize, int64(0))
+	assert.Equal(t, cachedSize, c.verbose.dbSizeCache.TotalSize, "size cached after real collection")
+
+	// Force the guard: pretend the last db-size query was slow (over the 500ms floor for refresh=1s).
+	c.verbose.dbSizeLastLatency = 2 * time.Second
+
+	// Tick 2: throttled — the size/growth fields keep the cached stale value (not n/a), while the
+	// cheap aggregates still collect (DatabasesCount populated every tick).
+	s2, err := c.Update(conn, v, time.Second)
+	assert.NoError(t, err)
+	assert.True(t, s2.Pgstat.Overview.TotalSizeValid, "throttled source keeps stale value, not n/a")
+	assert.Equal(t, cachedSize, s2.Pgstat.Overview.TotalSize, "stale cached size reused while throttled")
+	assert.GreaterOrEqual(t, s2.Pgstat.Overview.DatabasesCount, int64(1), "cheap aggregates collect every tick")
+	// System rows still collect every tick (not throttled).
+	assert.NotEmpty(t, s2.System.Diskstats, "system rows collect every tick")
 }
 
 func TestCollector_collectDiskstats(t *testing.T) {
@@ -368,6 +424,58 @@ func TestCollectorUpdateNoEnrichment(t *testing.T) {
 	// PID maps stay empty when enrichment is not active.
 	assert.Equal(t, 0, len(c.currProcPidStats))
 	assert.Equal(t, 0, len(c.currProcPidIO))
+}
+
+// Test_latencyGuardThreshold pins the latency-guard threshold formula: max(25% of refresh, 500ms floor).
+// Short refresh intervals fall back to the 500ms floor; longer ones use the 25% relative budget.
+func Test_latencyGuardThreshold(t *testing.T) {
+	testcases := []struct {
+		refresh time.Duration
+		want    time.Duration
+	}{
+		{refresh: 1 * time.Second, want: 500 * time.Millisecond},   // 25% = 250ms < floor -> floor wins
+		{refresh: 2 * time.Second, want: 500 * time.Millisecond},   // 25% = 500ms == floor
+		{refresh: 4 * time.Second, want: 1 * time.Second},          // 25% = 1s > floor -> relative wins
+		{refresh: 10 * time.Second, want: 2500 * time.Millisecond}, // 25% = 2.5s
+		{refresh: 0, want: 500 * time.Millisecond},                 // degenerate -> floor
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, latencyGuardThreshold(tc.refresh), "refresh=%s", tc.refresh)
+	}
+}
+
+// Test_verboseCollectState_throttlesSlowSource verifies the pure throttle decision: a source whose
+// last measured latency exceeded the guard threshold is throttled (skipped) on the next tick, so the
+// caller reuses the cached stale value instead of re-querying.
+func Test_verboseCollectState_throttlesSlowSource(t *testing.T) {
+	threshold := latencyGuardThreshold(1 * time.Second) // 500ms
+
+	// Last query was slow (> threshold): throttle the next collection.
+	st := verboseCollectState{dbSizeLastLatency: 800 * time.Millisecond}
+	assert.True(t, st.dbSizeThrottled(threshold), "slow last query must throttle next collection")
+
+	// Last query was fast (<= threshold): do not throttle.
+	st = verboseCollectState{dbSizeLastLatency: 100 * time.Millisecond}
+	assert.False(t, st.dbSizeThrottled(threshold), "fast last query must not throttle")
+
+	// Exactly at threshold: not over, so not throttled.
+	st = verboseCollectState{dbSizeLastLatency: threshold}
+	assert.False(t, st.dbSizeThrottled(threshold), "at-threshold latency must not throttle")
+}
+
+// Test_verboseCollectState_autoResumes verifies throttling lifts once the source recovers: after a
+// slow query throttles the next tick, recording a fast latency (e.g. on a forced collection) makes
+// dbSizeThrottled report false again — no manual reset required.
+func Test_verboseCollectState_autoResumes(t *testing.T) {
+	threshold := latencyGuardThreshold(1 * time.Second)
+
+	st := verboseCollectState{dbSizeLastLatency: 900 * time.Millisecond}
+	assert.True(t, st.dbSizeThrottled(threshold), "slow source throttled")
+
+	// Source recovers: a subsequent real collection records a fast latency.
+	st.dbSizeLastLatency = 50 * time.Millisecond
+	assert.False(t, st.dbSizeThrottled(threshold), "recovered source auto-resumes")
 }
 
 func TestCollectorUpdateProcPidStat19Cols(t *testing.T) {

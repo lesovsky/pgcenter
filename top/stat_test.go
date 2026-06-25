@@ -949,3 +949,24 @@ func Test_printDbstat_clampsScrollOffset(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, cfg.scrollOffset, "scrollOffset must be clamped to maxOffset, not the inflated value")
 }
+
+// Test_firstTickCollectingHint pins the cmdline first-tick hint logic: while the collector's
+// first-tick flag is set (propagated via Stat.System.VerboseFirstTick), the cmdline shows
+// "collecting..."; after the first successful refresh (flag cleared) the hint goes away. Because
+// the flag re-arms on every verbose OFF->ON re-enable (Task 7), the hint reappears on re-enable —
+// not only after a screen switch.
+func Test_firstTickCollectingHint(t *testing.T) {
+	// First verbose tick: flag set -> hint shown.
+	msg, show := firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: true}})
+	assert.True(t, show, "hint must show while first-tick flag is set")
+	assert.Equal(t, "collecting...", msg)
+
+	// After first successful refresh: flag cleared -> hint not shown.
+	_, show = firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: false}})
+	assert.False(t, show, "hint must clear after first successful refresh")
+
+	// Re-armed first tick after OFF->ON re-enable: flag set again -> hint reappears.
+	msg, show = firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: true}})
+	assert.True(t, show, "hint must reappear on a re-armed first tick (OFF->ON re-enable)")
+	assert.Equal(t, "collecting...", msg)
+}
