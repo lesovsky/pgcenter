@@ -41,9 +41,14 @@ three per-task-committed tasks, all pure-logic/render changes verified by unit/t
 
 ### How it works
 
-- **[009]** `report.readTar` reads each tar entry; `meta.*`/stat go through `NewPGresultFile(r, hdr.Size)`,
-  which now checks `hdr.Size` against `MaxResultFileSize` (and `< 0`) and returns an error before
-  `make`. The `sysinfo.*` branch performs the same check inline before its `io.ReadAll(io.LimitReader)`.
+- **[009]** `report.readTar` reads each tar entry. The two **true CWE-789 pre-allocation sinks** are the
+  `meta.*` and stat branches: both go through `NewPGresultFile(r, hdr.Size)`, which does
+  `make([]byte, hdr.Size)` — a buffer pre-sized from the attacker-influenceable header before any data is
+  read. The guard checks `hdr.Size` against `MaxResultFileSize` (and `< 0`) and returns an error before
+  `make`. The `sysinfo.*` branch is **not** a pre-allocation sink: `io.ReadAll(io.LimitReader(r, hdr.Size))`
+  grows its buffer by bytes actually read (≤ the real entry payload), so a lying oversized header alone
+  cannot over-allocate there. We still add the same cap inline (with an explanatory comment) as
+  defense-in-depth and for uniform behavior, but its purpose is consistency, not closing a pre-alloc sink.
   An over-limit entry returns through the existing `readTar` error path (clean abort, `doneCh` still
   fires, no panic); `pgcenter report` exits with the error on stderr.
 - **[011]** `rateUnitParts(v, family, width)` computes the ceil-rounded value, applies the
@@ -60,10 +65,13 @@ three per-task-committed tasks, all pure-logic/render changes verified by unit/t
 
 ### Decision 1: [009] hard per-entry cap + error before allocation
 **Decision:** A single exported `const MaxResultFileSize int64 = 256 << 20` (256 MiB) in
-`internal/stat`. `NewPGresultFile` returns a wrapped error when `bufsz < 0 || bufsz > MaxResultFileSize`,
-before `make([]byte, bufsz)`. All three `report.readTar` branches (`meta.*`, `sysinfo.*`, stat) enforce
-the cap. Type is `int64` so `bufsz > MaxResultFileSize` is a pure int64 compare — no `int` conversion,
-no gosec G115.
+`internal/stat`. `NewPGresultFile` returns an error (e.g. `fmt.Errorf("result file size %d exceeds limit %d
+bytes", bufsz, MaxResultFileSize)`, and a distinct negative-size error) when
+`bufsz < 0 || bufsz > MaxResultFileSize`, **before** `make([]byte, bufsz)`. The `meta.*` and stat
+branches (the two real pre-alloc sinks) inherit the guard via `NewPGresultFile`; the `sysinfo.*` branch
+adds the same cap inline as defense-in-depth (see Architecture → How it works). Type is `int64` so
+`bufsz > MaxResultFileSize` is a pure int64 compare — no `int` conversion, no gosec G115; the
+implementation must not introduce `int(hdr.Size)` anywhere in the guard.
 **Rationale:** `json.Unmarshal` needs the full buffer, so a cap+reject is clearer than a truncated read.
 256 MiB is ~300× the largest real entry observed in the golden fixtures (~817 KB
 `statements_timings`), so it never rejects legitimate data while bounding a multi-GB malicious header.
@@ -195,7 +203,7 @@ out-of-range sizes. No external consumers.
 
 | Risk | Mitigation |
 |------|-----------|
-| [009] sysinfo branch bypasses `NewPGresultFile` and is easy to miss | Explicit cap in the `sysinfo` branch; report-path test covers all three branches |
+| [009] sysinfo branch bypasses `NewPGresultFile` (uses `io.ReadAll`, so it is bounded by actual bytes, **not** a pre-alloc CWE-789 sink) | Add the cap inline for defense-in-depth/consistency with an explanatory comment; report-path test still covers all three branches |
 | [009] negative/zero `hdr.Size` (`make` panic on negative) | Guard `bufsz < 0` (reject) and `== 0` (allow, empty); covered by the table test |
 | [009] cap too low rejects a legitimate large recording | 256 MiB ≈ 300× the largest observed entry; "legitimate entry still reads" test is the guard |
 | [011] subtle output drift (lost space/prefix, off-by-one at promotion boundary) | Capture pre-refactor `rateField` output as the TDD anchor table before deleting it |

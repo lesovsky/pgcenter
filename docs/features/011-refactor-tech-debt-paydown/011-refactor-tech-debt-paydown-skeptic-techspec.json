@@ -1,0 +1,32 @@
+{
+  "status": "approved",
+  "summary": "Checked 33 claims across [009]/[011]/[012], found 0 mirages. All file paths, function/struct/test names, line anchors, call-site counts, and the load-bearing 'RateUnit has no production callers' assertion verify against the real codebase.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 33,
+    "confirmed": 33,
+    "mirages_found": 0,
+    "verified_claims": [
+      "internal/stat/postgres.go:518 NewPGresultFile(r io.Reader, bufsz int64)",
+      "internal/stat/postgres.go:519 unbounded make([]byte, bufsz)",
+      "report/report.go:140 readTar",
+      "report/report.go:170 meta.* branch -> NewPGresultFile",
+      "report/report.go:191 sysinfo.* branch io.ReadAll(io.LimitReader(r, hdr.Size))",
+      "report/report.go:203 default/stat branch -> NewPGresultFile",
+      "top/stat.go:326 rateField(v,family,prefix,width)",
+      "rateField exactly 4 call sites: 363,365,383,384",
+      "rateField duplicates pretty.RateUnit (only diff = ' '+prefix)",
+      "internal/pretty/pretty.go:59 RateUnit",
+      "RateUnit NO production callers (tests + comments only)",
+      "top/stat.go:561 pretty.Size(o.TotalSize)",
+      "top/stat.go:563 pretty.Size(o.GrowthPerSec)",
+      "top/stat.go:590 pretty.Size(o.LagBytes)",
+      "top/stat.go:594 pretty.Size(o.RetainedBytes)",
+      "top/stat.go:598 pretty.Size(o.ArchivingBacklog)",
+      "top/stat.go:601 pretty.Size(o.WalSize) excluded (first field)",
+      "top/stat.go:527 naReserve",
+      "top/stat.go:314 naLiteral; 319 cacheHitWidth",
+      "test funcs: Test_NewPGresultFile, Test_readTar, TestRateUnit(_boundary/_property), Test_renderPgstat_verboseNAWidthStatic + others; writeEntry helper report_test.go:462"
+    ]
+  }
+}

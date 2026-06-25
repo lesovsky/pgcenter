@@ -1,0 +1,29 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": true
+  },
+  "requirements_total": 12,
+  "requirements_covered": 12,
+  "requirements_partial": 0,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "US-5/US-6: [011] rate-helper consolidation",
+      "detail": "Tech-spec introduces a newly EXPORTED public function pretty.RateUnitPrefixed, although the only consumers (top/stat.go disk/net rows) live in the in-package call sites that previously used the unexported rateField. An unexported helper would satisfy the requirement equally. The export is defensible (Decision 2 frames it as the parallel public form to the existing exported RateUnit, sharing the unexported rateUnitParts core, which keeps RateUnit byte-identical and preserves its property-test suite), so this is a justified, minor widening of the API surface rather than new functionality. Worth a conscious confirmation that a public export is intended.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "US-2: NewPGresultFile bufsz<0 / >limit guard",
+      "detail": "The guard returns a wrapped error before make([]byte, bufsz); the error message format is described in the user-spec scenario ('entry meta.<ts>: size ... exceeds limit ...') but the tech-spec does not pin the exact wrapped-error wording or wrap verb (%w) for the stat.MaxResultFileSize error, nor whether the limit value is surfaced. Minor — the existing readTar error path and table tests cover behavior, but a reader implementing Task 1 must infer the message shape from the user-spec rather than the tech-spec. Not blocking.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "12/12 user-spec requirements covered across Tasks 1-4. Full bidirectional traceability: [009] cap on all 3 readTar branches + negative/zero guard + 256 MiB int64 const -> Task 1; [011] rateField removal + byte-identical boundary table + r/w prefix -> Task 2; [012] five fixed-width Size fields + naReserve + reserve-width-8 + mandatory manual v check -> Task 3; make test/lint/vuln + independent commits -> Tasks 3/4. All boundary cases from the user-spec (hdr.Size == limit allowed, limit+1 rejected, 0 allowed, <0 rejected defensively, maxFit/maxFit+1 promotion boundary, n/a width reservation, value-wider-than-reserve deterministic widen, wal size correctly excluded as the row's first field) are addressed in tech-spec Decisions + Testing Strategy. Reverse traceability: every tech-spec element (rateUnitParts core, RateUnitPrefixed, SizeWidth, sizeFieldWidth const) traces to a user requirement; no new user-facing functionality was added. Right-sized for an internal M refactor (3 tasks + QA) — no enterprise scaffolding, no YAGNI abstractions (single shared core, single reserve width, no per-field budgets). Zero critical findings: PASS. Two minor notes: RateUnitPrefixed is a justified new public export; the exact over-limit error wording is left to the implementer."
+}

@@ -1,0 +1,40 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "pass",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "MaxResultFileSize exported from internal/stat and consumed by report/report.go is architecturally correct (report already imports stat), but the sysinfo branch check is an inline open-code of the same cap rather than routing through NewPGresultFile. This is deliberate (sysinfo uses io.ReadAll, not a PGresult path), but leaves the cap enforced in two places: once inside NewPGresultFile and once inline in readTar. A future maintainer adding a fourth branch must remember to add the check a third time. The risk is low given the code-research explicitly flags this and the test covers all three branches, but the dual-enforcement pattern slightly erodes the single-source-of-truth property the spec otherwise achieves.",
+      "location": "Architecture / How it works — [009]; report/report.go sysinfo.* branch",
+      "fix": "Document the dual-enforcement explicitly in a comment adjacent to the inline check (e.g. '// same cap as NewPGresultFile — sysinfo bypasses it because it uses io.ReadAll rather than PGresult'). No structural change needed; the test coverage is the main guard."
+    },
+    {
+      "check": "api_contracts",
+      "severity": "minor",
+      "issue": "RateUnitPrefixed is a new exported symbol in internal/pretty. The tech-spec correctly notes that RateUnit has no production callers today (tests only, confirmed by grep). However, RateUnit's existing test suite is a strong contract anchor. The refactor makes RateUnit a thin delegate to rateUnitParts, which is structurally clean, but the delegation introduces an indirection that the existing property test (TestRateUnit_property) must now exercise through the shared core. The spec mandates that RateUnit stays byte-identical — this is the right acceptance criterion — but the implementation notes should be explicit that rateUnitParts must NOT be called directly by any future caller that needs the unprefixed form; only RateUnit and RateUnitPrefixed are the public contract. Without a comment in pretty.go noting that rateUnitParts is an implementation detail, a future developer may call it directly and bypass the two public wrappers.",
+      "location": "Decision 2 — [011] shared rateUnitParts core",
+      "fix": "Add a comment to rateUnitParts in internal/pretty/pretty.go stating it is an unexported implementation detail; call sites outside the file must use RateUnit or RateUnitPrefixed. No functional change."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "The sizeFieldWidth const is proposed to live in top/stat.go near cacheHitWidth. This is consistent with the existing precedent (cacheHitWidth = 7 lives there). However, SizeWidth itself lives in internal/pretty. The width value (8) is thus split: the function in pretty, the constant in top. This is identical to the pattern used for cacheHitWidth (the constant is in top, the formatting is via fmt.Sprintf inline — no pretty helper was added for it), so the approach is locally consistent. Worth noting that if a second caller of SizeWidth ever appears outside top/, the caller would need to define their own width constant independently (there is no canonical 'sizeWidth' in pretty). For this feature's scope of one caller, the pattern is correct.",
+      "location": "Decision 3 — [012] pretty.SizeWidth + single reserve width 8",
+      "fix": "No change required for this feature. If a second caller of SizeWidth appears in a future feature, consider whether the width const should move to pretty as a documented default."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The spec is architecturally sound and fits the codebase cleanly: all three changes follow established patterns (internal/pretty as the home for shared formatting helpers per ADR [010], ReserveWidth/naReserve model for fixed-width fields, synthetic in-memory tar for report tests per ADR [008]), file ownership is correct, and the wave sequencing correctly serializes the [011]/[012] file conflict. Three minor observations are logged — the dual-enforcement of the cap in readTar (deliberate but undocumented), the lack of a comment marking rateUnitParts as unexported-by-design, and the split between SizeWidth in pretty and its width constant in top — none of which block implementation."
+}

@@ -1,0 +1,18 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Final Wave Task 4 (Pre-deploy QA) has no `Files to modify`/`Files to read` and an empty `Reviewers: none`. This is correct for a pre-deploy-qa task (per the skills-and-reviewers catalog, QA is its own verification and takes no reviewers), but the task carries no `Verify:` line of its own — the per-task verification table covers it (`make test && make lint && make vuln`). No action required; noted for completeness.",
+      "fix": "Optional: add an explicit `Verify:` line to Task 4 mirroring the table row, for self-containment."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Task 3 [012] and Task 4 QA both depend on a manual TUI `v`-keypress check that only the user can perform; the agent cannot self-verify the cosmetic outcome. This is acknowledged and intentional (user-confirmed, mirrors user-spec 'Пользователь проверяет'), and the bash portion is concrete and executable.",
+      "fix": "No change needed — the human-in-the-loop step is explicitly scoped and flagged as mandatory."
+    }
+  ],
+  "summary": "APPROVED. All template sections present and non-empty (Solution, Architecture with both required subsections, Decisions with Decision+Rationale+Alternatives for all 5, Data Models, Dependencies with New/Existing subsections, Testing Strategy with size M, Agent Verification Plan with all three subsections, Risks as table, Acceptance Criteria, Implementation Tasks by waves). Frontmatter valid (created 2026-06-25, status draft, branch develop, size M). All skills (code-writing, pre-deploy-qa) and reviewers (dev-code-reviewer, dev-security-auditor, dev-test-reviewer; QA=none) match the catalog and exist on disk. Tasks are brief scope descriptions (WHAT+WHY) — no implementation HOW, no line-number refs, no AC/TDD-Anchor blocks inside tasks; decision content lives in the Decisions section, not in task descriptions. Wave-conflict handling is sound: Wave 1 Task1 [009] (stat/postgres.go, report/report.go) and Task2 [011] (pretty/pretty.go, top/stat.go) are file-disjoint; Task3 [012] shares pretty/pretty.go + top/stat.go with Task2 and is correctly sequenced to Wave 2 (Decision 4), so no same-file-same-wave collision and no dependency-vs-wave-order violation. No time-based estimates. Final Wave has a Pre-deploy QA task. Standards-compliant: proposed paths (internal/stat, report, internal/pretty, top) match architecture.md package layout and patterns.md naming/precedents (naReserve, ReserveWidth, RateUnit). Only two minor, non-blocking notes. Zero critical findings -> approved."
+}
