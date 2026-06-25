@@ -14,7 +14,7 @@
   "phases": {
     "user_spec": { "status": "completed", "started": "2026-06-23 21:58:53", "ended": "2026-06-25 12:00:00", "human_wait_time_min": 0 },
     "tech_spec": { "status": "completed", "started": "2026-06-25 12:10:00", "ended": "2026-06-25 14:30:00", "human_wait_time_min": 0 },
-    "task_decomposition": null,
+    "task_decomposition": { "status": "in_progress", "started": "2026-06-25 14:35:00", "ended": null, "human_wait_time_min": 0 },
     "feature_execution": null,
     "done": null
   },
@@ -27,9 +27,9 @@
   },
   "volume": {
     "interview_questions": 17,
-    "tasks_count": 0,
-    "waves_count": 0,
-    "agents_spawned": 0,
+    "tasks_count": 10,
+    "waves_count": 6,
+    "agents_spawned": 23,
     "commits_count": 0
   }
 }
