@@ -166,14 +166,11 @@ func Test_renderSysstat_verboseIostatMaxUtil(t *testing.T) {
 	lines := verboseSysstatLines(t, s, true, "")
 	// 4 compact + 3 verbose
 	if assert.Len(t, lines, 7) {
-		iostat := lines[4]
-		// 2 active devices (sdb skipped), max util from sdc (80), sdc's rates.
-		assert.Contains(t, iostat, " 2 devices")
-		assert.Contains(t, iostat, "80% max util")
-		assert.Contains(t, iostat, "1135 rMB/s")
-		assert.Contains(t, iostat, "34152 r/s")
-		assert.Contains(t, iostat, "1546 wMB/s")
-		assert.Contains(t, iostat, "17852 w/s")
+		// Full-line golden locks the exact reserve-width layout and field order: 2 active devices
+		// (sdb skipped), max util from sdc (80), sdc's rates.
+		assert.Equal(t,
+			"  iostat:  2 devices,  80% max util, 1135 rMB/s, 34152 r/s, 1546 wMB/s, 17852 w/s",
+			lines[4])
 	}
 }
 
@@ -193,13 +190,10 @@ func Test_renderSysstat_verboseNicstatConversion(t *testing.T) {
 
 	lines := verboseSysstatLines(t, s, true, "")
 	if assert.Len(t, lines, 7) {
-		nicstat := lines[5]
-		assert.Contains(t, nicstat, " 1 devices")
-		assert.Contains(t, nicstat, "60% max util")
-		assert.Contains(t, nicstat, "4345 rMbps")
-		assert.Contains(t, nicstat, "6543 wMbps")
-		// err = Rerrs+Terrs = 3451, coll = Tcolls = 0
-		assert.Contains(t, nicstat, "3451/   0 err/coll")
+		// Full-line golden: /1024/128 parity (4345/6543), err=Rerrs+Terrs=3451, coll=Tcolls=0.
+		assert.Equal(t,
+			" nicstat:  1 devices,  60% max util, 4345 rMbps, 6543 wMbps, 3451/   0 err/coll",
+			lines[5])
 	}
 }
 
@@ -248,10 +242,11 @@ func Test_renderSysstat_verboseFilesystMounted10(t *testing.T) {
 
 	lines := verboseSysstatLines(t, s, false, "/var/lib/postgresql/data")
 	if assert.Len(t, lines, 7) {
-		filesyst := lines[6]
-		// mounted truncated to first 10 runes of "/var/lib/postgresql/data" -> "/var/lib/p".
-		assert.Contains(t, filesyst, "/dev/nvme0n1p2 on /var/lib/p (ext4)")
-		assert.NotContains(t, filesyst, "/var/lib/postgresql")
+		// Full-line golden: mounted truncated to first 10 runes of "/var/lib/postgresql/data".
+		assert.Equal(t,
+			"filesyst: /dev/nvme0n1p2 on /var/lib/p (ext4), 1.0K size, 512B used,  74% use",
+			lines[6])
+		assert.NotContains(t, lines[6], "/var/lib/postgresql")
 	}
 }
 
@@ -270,8 +265,10 @@ func Test_renderSysstat_verboseFilesystNA(t *testing.T) {
 	}
 }
 
-// Test_renderSysstat_compactUnchanged verifies that verbose=false produces byte-identical output to
-// the compact path (no verbose rows added).
+// Test_renderSysstat_compactUnchanged verifies that verbose=false adds no rows AND that turning
+// verbose on does not perturb the compact rows: the verbose output's first 4 lines must equal the
+// full compact output. This exercises the real invariant (verbose only appends), unlike comparing
+// verbose=false to itself.
 func Test_renderSysstat_compactUnchanged(t *testing.T) {
 	s := stat.Stat{System: stat.System{
 		LoadAvg:   stat.LoadAvg{One: 1, Five: 2, Fifteen: 3},
@@ -280,12 +277,19 @@ func Test_renderSysstat_compactUnchanged(t *testing.T) {
 		Fsstats:   stat.Fsstats{{Mount: stat.Mount{Mountpoint: "/"}}},
 	}}
 
-	var compact, verboseOff bytes.Buffer
+	var compact, verbose bytes.Buffer
 	assert.NoError(t, renderSysstat(&compact, s, false, true, "/"))
-	assert.NoError(t, renderSysstat(&verboseOff, s, false, true, "/"))
-	assert.Equal(t, compact.String(), verboseOff.String())
-	// exactly 4 lines, no verbose rows.
-	assert.Len(t, strings.Split(strings.TrimRight(compact.String(), "\n"), "\n"), 4)
+	assert.NoError(t, renderSysstat(&verbose, s, true, true, "/"))
+
+	compactLines := strings.Split(strings.TrimRight(compact.String(), "\n"), "\n")
+	verboseLines := strings.Split(strings.TrimRight(verbose.String(), "\n"), "\n")
+
+	// verbose=false: exactly 4 compact rows, no verbose rows leaked.
+	assert.Len(t, compactLines, 4)
+	// verbose=true: 4 compact + 3 verbose, and the compact prefix is byte-identical.
+	if assert.Len(t, verboseLines, 7) {
+		assert.Equal(t, compactLines, verboseLines[:4])
+	}
 }
 
 // pgstatTestProps returns properties with worker GUC limits for the verbose pgstat rows.
@@ -320,19 +324,23 @@ func Test_renderPgstat_verboseNA(t *testing.T) {
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
 	if assert.Len(t, lines, 9, "4 compact + 5 verbose pgstat rows") {
-		workload := lines[4]
-		assert.Contains(t, workload, "n/a tps") // first tick rates n/a
-		databases := lines[5]
-		assert.Contains(t, databases, "n/a per  7 databases") // size n/a, count present
-		assert.Contains(t, databases, "n/a cache hit ratio")  // ratio n/a
-		workers := lines[6]
-		assert.Contains(t, workers, "/8 workers/max") // always available
-		replication := lines[7]
-		assert.Contains(t, replication, "n/a lag")               // no standby
-		assert.Contains(t, replication, "n/a archiving backlog") // archive off
-		bgwr := lines[8]
-		assert.Contains(t, bgwr, "12/ 3 timed/req") // absolute counters present
-		assert.Contains(t, bgwr, "n/a/n/a ms write/sync")
+		// Full-line golden per row. First-tick rates n/a; unavailable sources n/a; always-available
+		// fields (count, wal size, workers, absolute ckpt counters, slots count, send/recv) render.
+		assert.Equal(t,
+			"    workload: n/a tps, n/a ins/s, n/a upd/s, n/a del/s, n/a ret/s, n/a tmp/s, n/a others",
+			lines[4])
+		assert.Equal(t,
+			"   databases: n/a per  7 databases, n/a growth/s, n/a cache hit ratio",
+			lines[5])
+		assert.Equal(t,
+			"     workers:  1/8 workers/max,  0/4 logical workers,  2/8 parallel workers",
+			lines[6])
+		assert.Equal(t,
+			" replication: 1.0K wal size, n/a lag,  0/n/a slots/retain, n/a archiving backlog, 0/0 send/recv",
+			lines[7])
+		assert.Equal(t,
+			"   bgwr/ckpt: 12/ 3 timed/req, n/a/n/a ms write/sync, n/a maxwritten",
+			lines[8])
 	}
 }
 
@@ -355,27 +363,52 @@ func Test_renderPgstat_verboseAvailable(t *testing.T) {
 
 	var buf bytes.Buffer
 	assert.NoError(t, renderPgstat(&buf, s, pgstatTestProps(), pgstatTestDB(), true))
-	out := buf.String()
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 
-	assert.Contains(t, out, "1432 tps")
-	assert.Contains(t, out, "99.99% cache hit ratio")
-	assert.Contains(t, out, "2/1 send/recv")
-	assert.Contains(t, out, "maxwritten")
-	assert.NotContains(t, out, "n/a")
+	if assert.Len(t, lines, 9) {
+		// Full-line golden per row: every field renders its real value (no n/a), including the
+		// bgwr write/sync ms deltas (245/30) and maxwritten delta count (4).
+		assert.Equal(t,
+			"    workload: 1432 tps, 4132 ins/s, 5421 upd/s, 4235 del/s, 2341 ret/s,  123 tmp/s,   4 others",
+			lines[4])
+		assert.Equal(t,
+			"   databases: 1.0T per  7 databases, 1.0M growth/s, 99.99% cache hit ratio",
+			lines[5])
+		assert.Equal(t,
+			"     workers:  0/8 workers/max,  0/4 logical workers,  0/8 parallel workers",
+			lines[6])
+		assert.Equal(t,
+			" replication: 1.0G wal size, 1.0M lag,  1/1.0G slots/retain, 1.0M archiving backlog, 2/1 send/recv",
+			lines[7])
+		assert.Equal(t,
+			"   bgwr/ckpt: 12/ 3 timed/req, 245/ 30 ms write/sync,  4 maxwritten",
+			lines[8])
+	}
+	assert.NotContains(t, buf.String(), "n/a")
 }
 
-// Test_renderPgstat_compactUnchanged verifies verbose=false output is byte-identical to compact.
+// Test_renderPgstat_compactUnchanged verifies that verbose=false adds no rows AND that turning
+// verbose on does not perturb the compact rows: the verbose output's first 4 lines must equal the
+// full compact output (verbose only appends).
 func Test_renderPgstat_compactUnchanged(t *testing.T) {
 	s := stat.Stat{Pgstat: stat.Pgstat{
 		Activity: stat.Activity{State: "up", Uptime: "01:00:00"},
 		Overview: stat.PgstatOverview{Valid: true, HasPrev: true, TPSRate: 999},
 	}}
 
-	var compact, verboseOff bytes.Buffer
+	var compact, verbose bytes.Buffer
 	assert.NoError(t, renderPgstat(&compact, s, pgstatTestProps(), pgstatTestDB(), false))
-	assert.NoError(t, renderPgstat(&verboseOff, s, pgstatTestProps(), pgstatTestDB(), false))
-	assert.Equal(t, compact.String(), verboseOff.String())
-	assert.Len(t, strings.Split(strings.TrimRight(compact.String(), "\n"), "\n"), 4)
+	assert.NoError(t, renderPgstat(&verbose, s, pgstatTestProps(), pgstatTestDB(), true))
+
+	compactLines := strings.Split(strings.TrimRight(compact.String(), "\n"), "\n")
+	verboseLines := strings.Split(strings.TrimRight(verbose.String(), "\n"), "\n")
+
+	// verbose=false: exactly 4 compact rows.
+	assert.Len(t, compactLines, 4)
+	// verbose=true: 4 compact + 5 verbose, and the compact prefix is byte-identical.
+	if assert.Len(t, verboseLines, 9) {
+		assert.Equal(t, compactLines, verboseLines[:4])
+	}
 }
 
 // Test_alignViewToResult reproduces issue #99: pressing 'x' to cycle pg_stat_statements

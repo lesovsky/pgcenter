@@ -123,6 +123,10 @@ func Test_readFilesystemStatsRemote(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// The task-08 TDD anchors name these tests Test_matchDataDirFs_* (unexported matcher). The matcher
+// is exported as MatchDataDirFs because the verbose composer lives in package top and calls it
+// across the package boundary, so the tests follow the exported name. Coverage is identical.
+
 // Test_MatchDataDirFs_longestPrefix verifies the longest-mount-prefix-wins rule: when both "/"
 // and "/var/lib/pgsql" are valid prefixes of the data_directory, the more specific mount wins.
 // local=false to skip EvalSymlinks (the test path does not exist on disk).
