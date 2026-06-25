@@ -37,7 +37,7 @@
   "manual_verification_required": {
     "step": "Press `v` in `pgcenter top` against an instance with changing DB sizes / replication lag",
     "expect": "In the databases: and replication: rows, the Size values are right-aligned in fixed 8-col slots; trailing labels (per, growth/s, lag, slots/retain, archiving backlog) hold a steady horizontal position across ticks and when a value drops to n/a. Numbers/units unchanged; wal size intentionally unchanged.",
-    "status": "pending"
+    "status": "confirmed by user (2026-06-25)"
   },
-  "verdict": "automated gate GREEN; feature ready pending the manual [012] visual check"
+  "verdict": "GREEN — automated gate passed and manual [012] visual check confirmed by user; feature accepted"
 }
