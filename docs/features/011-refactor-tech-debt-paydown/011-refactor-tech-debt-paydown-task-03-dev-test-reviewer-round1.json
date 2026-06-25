@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "approved",
+  "summary": "Test quality for Task 03 [012] is strong and matches the TDD Anchor. TestSizeWidth is a genuine behavioral table test covering padding-to-width, exact-fill, widen-on-overflow (value wider than reserve NOT truncated), the zero case, and a digits/units-identical-to-Size() invariant via strings.TrimLeft. The extended Test_renderPgstat_verboseNAWidthStatic adds both required offset-assertion groups for all five Size fields: (a) identical byte offset across two different-width value samples (1.0M vs 1000.0G), and (b) identical offset between value and n/a. I empirically confirmed the assertions are discriminating: reverting only the implementation (top/stat.go + pretty.go) while keeping the tests turns them RED — group (a) fails 'expected 18 / actual 21' and group (b) fails 'expected 18 / actual 17', exactly the claimed regression. The updated Test_renderPgstat_verboseAvailable goldens add only leading padding (digits/units byte-identical; the RED diff confirms only spaces changed) and assert.NotContains(buf, \"n/a\") stays green. Litmus test passes for every new/changed test. Coverage is sufficient; remaining items are minor edge-case nice-to-haves, not gaps that hide a regression.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "file": "internal/pretty/pretty_test.go",
+      "line": 77,
+      "issue": "The widest realistic Size string (7 chars, e.g. '1000.0G'/'1023.9T') is never exercised as a width-8 row in TestSizeWidth. The widest width-8 case is '477.1G' (6 chars). The 7-char-at-width-8 boundary (one space of margin, the design's stated worst case) is only checked structurally via the offset test (sampleB), not as a digits-preserving unit assertion.",
+      "suggestion": "Add a row {v: 1000 * (1<<30), width: 8, want: ' 1000.0G'} (one leading space) so the 7-char realistic maximum is locked with an explicit want string in the unit table, alongside the existing TrimLeft invariant."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "file": "internal/pretty/pretty_test.go",
+      "line": 77,
+      "issue": "TestSizeWidth covers B/K(implicit via none)/M/G units but has no T-unit row (1<<40 -> '1.0T'). The T unit is the production value used in the verboseAvailable golden (1.0T per), so it is covered there, but the unit-level table does not pin SizeWidth on a T value.",
+      "suggestion": "Optional: add {v: 1 << 40, width: 8, want: '    1.0T'} for symmetry; low value since the golden already covers the T path end-to-end."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "file": "top/stat_test.go",
+      "line": 489,
+      "issue": "The task Edge-cases note that databases 'growth' degrades to naReserve via two distinct branches: !TotalSizeValid (outer) and TotalSizeValid && !hp (inner). The n/a sample (sampleNA) only exercises the outer branch (all *Valid=false). The inner branch (TotalSizeValid true but HasPrev/hp false, so size is a value while growth is n/a) is not asserted for static width.",
+      "suggestion": "Optional: add a sample with TotalSizeValid=true, HasPrev=false and assert the ' growth/s' label offset matches the value/n/a samples. The fix is structurally correct (both paths route through naReserve(sizeFieldWidth)), so this is regression-hardening, not a hole."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
