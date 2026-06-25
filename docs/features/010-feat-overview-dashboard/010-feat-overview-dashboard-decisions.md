@@ -73,3 +73,27 @@
 - `go test ./internal/query/... ./internal/stat/...` → ok (live-PG кластер доступен)
 - `go build ./...` → OK
 - `gosec ./internal/query/... ./internal/stat/...` → 0 issues; `go vet` + `gofmt -l` → чисто
+
+---
+
+## Task 02: Verbose toggle plumbing
+
+**Status:** Done
+**Commit:** 2af9dd7 (impl) + 389ea24 (round 1 fixes)
+**Agent:** toggle-dev
+**Summary:** Реализована control-plane обвязка verbose-режима (Decision 2): добавлены `View.Verbose bool` (`internal/view/view.go`) и `config.verbose bool` (`top/config.go`). Новый `top/verbose.go::toggleVerbose(app)` зеркалит флаг по паттерну `showExtra` (write-into-all-views: каждая запись `config.views` + `config.view` + `config.verbose`), пушит вью в `viewCh` и печатает статус через `printCmdline` (`Verbose mode: on/off`). Хоткей `v` навешен на `sysstat` (`top/keybindings.go`), добавлена строка help (`top/help.go`). Ключевая, рисковая часть — в `collectStat()` (`top/stat.go`): seed `prevVerbose := v.Verbose` рядом с `prevCollectExtra`, и ранний `if prevVerbose != v.Verbose { … continue }` в ветке `case v = <-viewCh:` — размещён **до обоих** Reset-путей (условный CollectExtra-Reset и безусловный Reset), так что verbose-only toggle не вайпит prev-снапшот и не блэнкит дельты CPU/mem/load на один кадр. Персистентность через переключение экранов — бесплатно: флаг просто никогда не зануляется в `viewSwitchHandler` (в отличие от `scrollOffset`).
+**Deviations:** `make lint` не прогнан — golangci-lint не установлен в окружении (`command not found`); вместо него `go vet ./top/... ./internal/view/...` и `gofmt -l` чисты, полный lint остаётся на CI. Шорткатов и отложенных находок нет.
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical/major, 2 minor (опциональные) → [010-feat-overview-dashboard-task-02-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-02-dev-code-reviewer-round1.json)
+- dev-test-reviewer: passed, 3 minor (litmus 2/2, ничего блокирующего) → [010-feat-overview-dashboard-task-02-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-02-dev-test-reviewer-round1.json)
+
+Применены два сходящихся minor-найдинга (commit 389ea24): grouping-комментарий о порядке веток в `collectStat()` (защита load-bearing инварианта от будущих перестановок) и явный ассерт персистентности через реальный `viewSwitchHandler` в `Test_toggleVerbose`. Найдинг про ассерт cmdline-сообщения и про отсутствие изолированного теста ветки `collectStat` — отклонены как scoped (прецеденты `showExtra`/`toggleIdleConns` cmdline не ассертят; у `collectStat` нет изолированного харнесса по спеку, проверка — в ручном QA Final Wave). Round 2 не запускался: оба ревьюера уже approved, правки — некостыльное hardening без изменения поведения.
+
+**Verification:**
+- `go test ./top/...` → ok (`Test_toggleVerbose` зелёный, регрессий по keybindings/view-count нет); `go test ./internal/view/...` → ok
+- `go build ./...` → OK
+- `go vet ./top/... ./internal/view/...` + `gofmt -l` → чисто
