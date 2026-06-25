@@ -280,10 +280,16 @@ func TestCollector_Update_DbSizeThrottle(t *testing.T) {
 	// the last real collection, the guard force-collects to re-probe latency — even while dbSizeLastLatency
 	// still records the old slow value. Backdate dbSizeLastRun beyond the budget to simulate the elapsed
 	// cadence without sleeping. The re-probe re-measures the (now fast) live query and resumes.
-	c.verbose.dbSizeLastRun = time.Now().Add(-2 * time.Second) // > budget (1s) in the past
+	backdated := time.Now().Add(-2 * time.Second) // > budget (1s) in the past
+	c.verbose.dbSizeLastRun = backdated
 	s3, err := c.Update(conn, v, time.Second)
 	assert.NoError(t, err)
 	assert.True(t, s3.Pgstat.Overview.TotalSizeValid, "re-probe collects a fresh value")
+	// Deterministic proof that a REAL collection ran (the cadence clock was re-stamped) — independent of
+	// host timing. Without auto-resume the source would stay throttled and dbSizeLastRun would not advance.
+	assert.True(t, c.verbose.dbSizeLastRun.After(backdated), "re-probe re-stamped the cadence clock (real collection ran)")
+	// And the re-measured latency of the fast live query falls back within threshold (the 500ms floor at
+	// refresh=1s gives wide headroom on a local test DB, so this is not flaky in practice).
 	assert.LessOrEqual(t, c.verbose.dbSizeLastLatency, latencyGuardThreshold(time.Second),
 		"re-probe re-measured the fast live latency -> throttle auto-resumes")
 }

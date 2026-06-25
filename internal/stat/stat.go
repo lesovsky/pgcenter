@@ -409,6 +409,8 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		// source must collect.
 		threshold := latencyGuardThreshold(refresh)
 		budget := refresh
+		// On the very first tick dbSizeLastRun is the zero time, so time.Since(...) is enormous — but it is
+		// deliberately unused: dbSizeThrottled short-circuits on !dbSizeCacheValid before consulting it.
 		skipSize := c.verbose.dbSizeThrottled(threshold, budget, time.Since(c.verbose.dbSizeLastRun))
 
 		var sizeLatency time.Duration
