@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "TestCollector_Update_Verbose is a strong live-PG test that exercises the real Collector against actual /proc-backed stats with no mocks. All assertions pass the litmus test: each one fails if the corresponding implementation line is removed. It covers all three TDD anchors precisely — simultaneous Diskstats/Netdevs/Fsstats population, explicit verboseFirstTick set-then-clear (correctly avoiding the unreliable nil-slice signal), and OFF->ON re-arm without Reset() driven by prevVerboseActive. State-transition coverage is complete and ordered correctly. Matches the project connect-or-fail convention. Only minor (non-blocking) observations on edge coverage.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go:137 (TestCollector_Update_Verbose)",
+      "issue": "The == nil guard / side-panel-coexistence branch (verbose ON while a side panel already populated one source via collectExtra) is not exercised. The test always runs with collectExtra unset, so the guard's true branch (s.Diskstats already non-nil -> skip re-collect) never executes. AC line: '== nil guards prevent re-collecting a source already populated by the active side panel' has no direct assertion. This is a behavioral path with a real failure mode (double-collect would corrupt the prev/curr snapshot shift for that source).",
+      "recommendation": "Add a sub-case that sets c.config.collectExtra = CollectDiskstats AND view.Verbose = true, then asserts all three sources still populate (Netdevs/Fsstats via the verbose branch, Diskstats via the switch) in one Update. Optionally assert the disk snapshot was collected exactly once by checking the prev/curr disk snapshot is not double-shifted. This closes the guard coverage gap without adding a mock.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go:169-174",
+      "issue": "Assertions use assert.NotEqual(t, 0, len(...)) for the three slices. This proves non-empty but does not surface WHICH source failed in the failure message (a len==0 on Netdevs and on Fsstats produce identical-looking failures aside from the field name). Minor readability/diagnostics point, not a correctness issue.",
+      "recommendation": "Prefer assert.NotEmpty(t, stat.System.Netdevs, \"netdevs must populate under verbose\") with a per-source message, or assert.Greater(t, len(stat.System.Fsstats), 0, \"fsstats ...\"). Matches the style already used elsewhere in the file (assert.Greater with len). Purely diagnostic — does not change what is verified.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go:189-192",
+      "issue": "The OFF tick (Verbose=false) only asserts verboseFirstTick == false. It does not assert that prevVerboseActive was reset to false — the actual mechanism that arms the next OFF->ON re-enable. The subsequent re-enable assertion (line 197) indirectly proves it, so coverage is effectively complete, but the intermediate state transition is not asserted directly.",
+      "recommendation": "Optional: add assert.False(t, c.prevVerboseActive) right after the Verbose=false Update to document and pin the else-branch (c.prevVerboseActive = false) directly. Since the field is private and the test is same-package, this is accessible and would make the re-arm contract explicit rather than inferred.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 9,
+      "passed": 9,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 0,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

@@ -101,6 +101,10 @@ func doWork(ctx context.Context, app *app) {
 
 // layout defines UI layout - set of screen areas and their locations.
 func layout(app *app) func(g *gocui.Gui) error {
+	// Remembers whether the previous frame already showed the "terminal too short" hint, so the
+	// height-guard hint is emitted only when the guard state flips — not on every redraw frame.
+	var verboseTooShortShown bool
+
 	return func(_ *gocui.Gui) error {
 		maxX, maxY := app.ui.Size()
 
@@ -110,8 +114,12 @@ func layout(app *app) func(g *gocui.Gui) error {
 			return fmt.Errorf("")
 		}
 
+		// Verbose-aware band geometry. Pure arithmetic (see topBandLayout); config.verbose is
+		// read in the gocui handler goroutine, same as app.config.view.ShowExtra below — no race.
+		sysstatY1, pgstatY1, cmdlineY0, cmdlineY1, dbstatY0, expanded := topBandLayout(app.config.verbose, maxY)
+
 		// Sysstat view.
-		v, err := app.ui.SetView("sysstat", -1, -1, (maxX-1)/2, 4)
+		v, err := app.ui.SetView("sysstat", -1, -1, (maxX-1)/2, sysstatY1)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set sysstat view on layout failed: %w", err)
@@ -125,7 +133,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Postgres activity view.
-		v, err = app.ui.SetView("pgstat", maxX/2, -1, maxX, 4)
+		v, err = app.ui.SetView("pgstat", maxX/2, -1, maxX, pgstatY1)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set pgstat view on layout failed: %w", err)
@@ -136,7 +144,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Command line.
-		v, err = app.ui.SetView("cmdline", -1, 3, maxX, 5)
+		v, err = app.ui.SetView("cmdline", -1, cmdlineY0, maxX, cmdlineY1)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set cmdline view on layout failed: %w", err)
@@ -152,7 +160,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Postgres main stats view.
-		v, err = app.ui.SetView("dbstat", -1, 4, maxX, maxY-1)
+		v, err = app.ui.SetView("dbstat", -1, dbstatY0, maxX, maxY-1)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dbstat view on layout failed: %w", err)
@@ -160,6 +168,18 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 		if v != nil {
 			v.Frame = false
+		}
+
+		// Height-guard hint: verbose was requested but the terminal is too short to expand the
+		// band, so layout() stayed compact. Emit a one-line hint only when this state flips on,
+		// to avoid spamming printCmdline on every redraw frame.
+		if app.config.verbose && !expanded {
+			if !verboseTooShortShown {
+				printCmdline(app.ui, "terminal too short for verbose mode")
+				verboseTooShortShown = true
+			}
+		} else {
+			verboseTooShortShown = false
 		}
 
 		// Extra stats view.

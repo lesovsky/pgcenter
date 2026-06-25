@@ -1,0 +1,20 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["07", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "07",
+      "issue": "TDD anchor still references the 't.Skipf as in existing stat-tests' pattern. Verified against internal/stat/stat_test.go: existing TestCollector_Update (:27) and TestCollector_collectDiskstats (:71) do NOT skip without a cluster - they assert.NoError on postgres.NewTestConnect() (connect-or-fail). No t.Skip exists under internal/stat/*_test.go. The task text now hedges this ('t.Skipf they do NOT use; if a skip-guard is needed use the project-accepted one'), but the residual 'as in existing stat-tests' phrasing is still slightly misleading. Non-blocking.",
+      "fix": "Optional: drop the lingering 'as in existing stat-tests' wording and state the real convention is connect-or-fail, or have TestCollector_Update_Verbose explicitly t.Skip on NewTestConnect error and note the divergence."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 2,
+    "claims_verified": 21,
+    "issues_found": 1
+  }
+}

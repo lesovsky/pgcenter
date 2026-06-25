@@ -1,0 +1,86 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Live-PG integration tests are well-structured (t.Skipf guard, version matrix 14-18, synthetic-prev technique for cache-hit ratio) and most required anchors are present with meaningful assertions. However several anchors are asserted weakly: the core 'each aggregate executed AND scanned' anchor only checks NoError+Close without scanning a single column, so a query returning the wrong columns/types would pass; the archiving-backlog degradation and cache-hit-ratio paths are guarded by opportunistic `if` blocks that assert nothing in the actual primary-cluster environment (no negative/forced-degradation assertion); workload tps=commit+rollback and 'others over interval' are asserted only as >=0 (tautological — passes with any non-negative value, fails the litmus test); and the verbose-gate test does not assert the compact path's Result/Activity stay intact. No critical issues, no hidden-bug assertions. Recommend strengthening assertions before sign-off.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "internal/query/overview_test.go:33-44 (Test_OverviewQueries static queries) and :67-79 (Templates)",
+      "issue": "Anchor requires each aggregate be 'executed AND scanned' on PG 14-18, but the test only calls conn.Query(q), asserts NoError, and Close()s without ever Scan-ing a row. It never verifies a single row is returned, nor the column count/types collectOverviewStat depends on. A query that compiles but returns the wrong number/order of columns (e.g. a refactor that drops a column) would still pass — yet collectOverviewStat's fixed-arity Scan would break at runtime. Litmus: remove the SELECT-list columns down to one and the test still passes. This is the central data-layer contract and it is under-asserted.",
+      "recommendation": "Switch from Query+Close to a scan-based assertion that locks the column contract. For single-row aggregates use conn.QueryRow with the exact destination set collectOverviewStat uses, e.g. for OverviewWorkload scan into 10 int64 vars and assert err==NoError; for OverviewWorkers scan 3 ints; for OverviewDatabases scan count/size/hit/read and assert count>=1. At minimum assert rows.Next()==true and len(rows.FieldDescriptions())==expectedNcols per query so a column add/drop/reorder fails the test.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "internal/stat/postgres_test.go:116-121 (Test_collectOverviewStat second tick) and :118 OthersInterval",
+      "issue": "tps=commit+rollback and others-over-interval are asserted only as GreaterOrEqual(0). int64 rate/delta values on a live cluster are essentially always >=0, so these assertions are tautological — they pass with the rate logic deleted (TPSRate left at zero default). They do not prove tps == (Δcommit+Δrollback)/itv nor that 'others' is an interval delta rather than a /s rate. Litmus: remove the TPSRate/OthersInterval computation lines in collectOverviewStat and both asserts still pass (zero >= 0).",
+      "recommendation": "Make the rate math deterministic by driving it from a synthetic prev, mirroring the cache-hit-ratio approach already used at postgres_test.go:137. Build prev := PgstatOverview{Valid:true, WorkloadCommits: curr.WorkloadCommits-10, WorkloadRollbacks: curr.WorkloadRollbacks-5, WorkloadOthers: curr.WorkloadOthers-3} with itv=1, then assert second.TPSRate == (curr.WorkloadCommits+curr.WorkloadRollbacks)-(prev.WorkloadCommits+prev.WorkloadRollbacks) and second.OthersInterval == curr.WorkloadOthers-prev.WorkloadOthers. Also add one case with itv=2 to lock the /itv division for tps vs the non-divided OthersInterval (proves 'others' is per-interval, not per-second — a spec requirement currently untested).",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/stat/postgres_test.go:164-184 (Test_collectOverviewStat_Degradation) and overview_test.go:102-125 (Test_ArchivingBacklogQuery_Degrades)",
+      "issue": "The archiving-backlog degradation path (the task's headline security/resilience requirement: archive_mode=off / 42501 -> ArchivingBacklogValid=false, raw PG error never surfaced, sample not aborted) is NOT asserted through collectOverviewStat. Test_collectOverviewStat_Degradation only asserts lag/slots/retained degrade; it never touches ArchivingBacklogValid. Test_ArchivingBacklogQuery_Degrades exercises the raw query but the degradation branch (err != nil) is opportunistic: on the test clusters the fixtures role has pg_monitor, so the error branch is dead and only assert.Error(err) would run if it ever fired. There is no assertion that, when the aggregate fails, collectOverviewStat leaves the OTHER fields populated and surfaces no error/raw text. The 'one failed row does not blank the sample' contract for backlog specifically is unproven.",
+      "recommendation": "Add a degradation case driven by an unprivileged path that is deterministic in the environment: either (a) point OverviewArchivingBacklog at a guaranteed-failing source via a wrapper test that runs collectOverviewStat after revoking, or (b) add a unit-level test that calls collectOverviewStat against a connection where the backlog query is forced to error (e.g. a stub query) and assert got.ArchivingBacklogValid==false AND got.DatabasesCount>=1 AND got.Valid==true (sample survived). Also assert collectOverviewStat returns no error value at all (signature returns only PgstatOverview — confirm that and assert the struct is still Valid). If forcing 42501 in-env is impractical, at minimum assert in Test_collectOverviewStat_Degradation that whatever ArchivingBacklogValid's value, the rest of the struct is populated, and document that the off/42501 branch is covered by the query-level test.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "internal/stat/postgres_test.go:127-162 (Test_collectOverviewStat_CacheHitRatio)",
+      "issue": "Both halves of the cache-hit-ratio test are wrapped in `if` conditions on live I/O that may be false in the test environment, making the test assert nothing on a quiet cluster. Lines 145-149: the valid-ratio assertions only run `if got.BlksHit+got.BlksRead > 0` (cumulative absolute, so this is usually true) — but the synthetic prev has BlksHit=0/BlksRead=0, so it tests cumulative-vs-zero, not a true Δ over an interval, and the range [0,100] assertion is weak. Lines 158-161: the division-by-zero assertion only runs `if noio.BlksHit==prevEqual.BlksHit && noio.BlksRead==prevEqual.BlksRead`; on a live cluster background activity almost always advances blks between the two reads, so this guard is typically FALSE and the n/a/NaN assertion never executes — the most important edge case (division-by-zero -> n/a not NaN) is effectively untested.",
+      "recommendation": "Make division-by-zero deterministic instead of racing live I/O: call collectOverviewStat once to get curr, then immediately build prevEqual := PgstatOverview{Valid:true, TotalSizeValid:true, BlksHit: <large>, BlksRead: <large>} where prev counters EXCEED any plausible curr so Δ(hit+read) <= 0 deterministically — or better, unit-test the ratio computation in isolation: extract the Δhit/Δ(hit+read) logic or feed prev==curr exact values by reading curr first then passing curr's exact BlksHit/BlksRead as prev WITHOUT a second live read in between is impossible, so assert unconditionally that CacheHitRatio is never NaN (math.IsNaN(got.CacheHitRatio)==false) on EVERY path, and add a pure-function-level test of the ratio if the computation can be factored out. For the valid path, set prev BlksHit/BlksRead to curr-minus-known-delta and assert CacheHitRatio == expected percentage exactly, not just within [0,100].",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go:101-131 (TestCollector_Update_VerboseAggregates)",
+      "issue": "The verbose-gate test asserts Overview.Valid is false when off and true when on, but does NOT assert the compact path is untouched in either case. The anchor and AC explicitly require 'compact-путь не изменён' / 'compact path untouched'. The verbose_off subtest should prove that Activity and Result are still collected normally (the gate must not accidentally short-circuit the rest of Update). It also never asserts that with verbose ON the non-rate populated fields (e.g. WalSize, DatabasesCount) match what collectOverviewStat would produce — it trusts Valid alone.",
+      "recommendation": "In verbose_off add: assert.NotEqual(t, 0, len(stat.Pgstat.Result.Cols)) and assert.NotEmpty(stat.Pgstat.Activity.State) to prove the compact path still ran. In verbose_on second tick, assert at least one rate/availability field reflects real collection beyond HasPrev, e.g. assert.GreaterOrEqual(stat2.Pgstat.Overview.WalSize, int64(0)) and that DatabasesCount stayed >=1 across both ticks.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "internal/query/overview_test.go:127-135 (TestSelectStatBgwriterQuery_OverviewReuse)",
+      "issue": "This test asserts SelectStatBgwriterQuery returns a non-empty query with ncols>0 and no '{{' braces, across versions. SelectStatBgwriterQuery is pre-existing, already covered by its own tests in bgwriter_test.go, and this 'sanity' test adds little: it does not verify the column NAMES (ckpt_timed/ckpt_req/ckpt_write,ms/ckpt_sync,ms/maxwritten) that collectOverviewBgwriter maps by name — which is the actual integration risk for this task. If a version's column alias drifts, collectOverviewBgwriter silently parses 0 and this test stays green.",
+      "recommendation": "Replace the generic non-empty checks with a name-contract assertion that protects collectOverviewBgwriter: for each version, run the query against a live conn (already have the version matrix) and assert FieldDescriptions contain exactly the names collectOverviewBgwriter looks up: ckpt_timed, ckpt_req, \"ckpt_write,ms\", \"ckpt_sync,ms\", maxwritten. That catches the real regression (alias rename across PG14-16/17/18) instead of restating bgwriter_test.go.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/postgres.go:collectOverviewStat (databases aggregate) vs comment at :databases block",
+      "issue": "Implementation comment claims 'We split it: count + cache counters come from one row; the size sum from a separate row' to satisfy the AC 'sum of DB sizes runs as its OWN QueryRow'. The actual code scans count/total_size/hits/reads in a SINGLE QueryRow(OverviewDatabases), so a privilege failure on sum(pg_database_size) would blank the cache-hit counters too — contradicting the AC and the comment. No test detects this: Test_collectOverviewStat asserts TotalSizeValid==true on a privileged cluster, never the failure-isolation. This is primarily a code/comment mismatch, but the test suite provides no guard for the 'sum-of-sizes is its own QueryRow / one failure doesn't blank cache-hit' contract.",
+      "recommendation": "Flag the code/comment divergence to the dev (out of test scope to fix), and add a test guarding the contract once resolved: if the size sum is split into its own QueryRow, add a degradation case asserting that when the size query fails, TotalSizeValid==false while CacheHitRatio counters (BlksHit/BlksRead) and DatabasesCount remain populated. Until split, this AC is unverifiable.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/overview_test.go:85-100 (Test_OverviewQueries_Templates_Recovery)",
+      "issue": "Recovery substitution is asserted only at the string level (Contains pg_current_wal_lsn / pg_last_wal_receive_lsn, NotContains '{{') and hardcodes version 170000. The anchor wants templates 'run through Format with recovery f and t'; the substituted standby ('t') query is never executed against a cluster (only the 'f' form is executed in Test_OverviewQueries_Templates). Per the TDD-anchor-quality guidance, substring-presence checks verify structure, not behavior — acceptable as a complement but they should not be the only coverage of the 't' path.",
+      "recommendation": "Acceptable to keep the substring assertions, but execute the standby-formatted query too: in Test_OverviewQueries_Templates run BOTH NewOptions(version,\"f\",...) and NewOptions(version,\"t\",...) and conn.Query both forms (the standby WAL functions are valid SQL on a primary even if they return NULL/no-rows), asserting NoError so the 't' substitution is proven executable, not just textually correct. Drop the hardcoded 170000 in favor of the version loop.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 11,
+      "passed": 7,
+      "failed": 4
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 2,
+      "integration": 7,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "feature": "010-feat-overview-dashboard",
+  "task": "10 — Pre-deploy QA",
+  "date": "2026-06-25",
+  "branch": "feature/010-overview-dashboard",
+  "headCommit": "7c868d2",
+  "status": "passed",
+  "verdict": "PASS — all automated gates green; visual TUI criteria deferred to user manual verification",
+  "environment": {
+    "type": "PostgreSQL test clusters (connect-or-fail, not Docker rebuild for this project)",
+    "status": "healthy",
+    "rebuildAttempts": 0,
+    "services": [
+      "PG 14.23 @ 127.0.0.1:21914 healthy",
+      "PG 15.18 @ 127.0.0.1:21915 healthy",
+      "PG 16.14 @ 127.0.0.1:21916 healthy",
+      "PG 17.10 @ 127.0.0.1:21917 healthy",
+      "PG 18.4 @ 127.0.0.1:21918 healthy",
+      "fixtures DB 'pgcenter_fixtures' present"
+    ],
+    "fixCommits": [],
+    "note": "This is a Go CLI/TUI project; there is no Docker-compose env to rebuild. The Phase-1 'environment' is the live PG test clusters, verified healthy. All integration tests connect directly to 127.0.0.1:21914-21918 (internal/postgres/testing.go); no t.Skipf guard fired, so the full integration suite ran live against PG 14-18."
+  },
+  "gates": [
+    {
+      "gate": "make build (fresh, ./bin/pgcenter)",
+      "status": "passed",
+      "evidence": "rm -f ./bin/pgcenter && make build → exit 0; binary produced (18 MB), ldflags gitBranch=feature/010-overview-dashboard."
+    },
+    {
+      "gate": "make test (race + coverage, PG live)",
+      "status": "passed",
+      "evidence": "go test -race -p 1 -timeout 300s ./... → all packages ok, TEST_EXIT=0. Total coverage 69.7%. No SKIP, no FAIL across internal/stat, internal/query, top. Feature packages: internal/pretty 100%, internal/query 100%, internal/stat 87.5%, internal/view 97.1%, top 44.0%."
+    },
+    {
+      "gate": "gosec -quiet ./...",
+      "status": "passed",
+      "evidence": "gosec over project packages (internal/top/cmd/record/profile): 73 files, 11301 lines, Issues: 0, Nosec: 7. Clean."
+    },
+    {
+      "gate": "govulncheck ./...",
+      "status": "passed_with_advisory",
+      "evidence": "1 stdlib advisory GO-2026-5037 (crypto/x509 inefficient hostname parsing) — toolchain go1.25.10, fixed in go1.25.11. NOT in project/feature code; reachable only via stdlib TLS path (postgres.go io.ReadFull, cobra Execute). 0 vulns in imported packages, 3 in required modules not called by our code. Resolution = CI toolchain bump to go1.25.11+, not a code change. Recorded as minor/environmental finding."
+    },
+    {
+      "gate": "go vet ./... (golangci-lint local proxy)",
+      "status": "passed",
+      "evidence": "go vet ./... → exit 0, clean."
+    },
+    {
+      "gate": "gofmt -l . (golangci-lint local proxy)",
+      "status": "passed_for_feature",
+      "evidence": "All 21 feature-changed Go files are gofmt-clean. gofmt -l flags two PRE-EXISTING files unrelated to feature 010 — internal/query/wal_test.go (last touched by 1ebf907, issue #132) and internal/stat/procpidstat_test.go (99c8413, feature 008) — struct-field-alignment only; neither is in the feature's Files-to-modify set. Remaining gofmt-l entries are under .claude/worktrees/ (leftover agent worktrees, not part of the codebase). Recorded as minor pre-existing repo debt, not a feature regression."
+    }
+  ],
+  "lintDeferredToCI": "golangci-lint is NOT available locally (v1 config vs v2 tool incompatibility). Local proxy used: `go vet ./...` (clean) + `gofmt -l .` (feature files clean). The full golangci-lint + gosec run is deferred to CI; gosec ran locally and is clean.",
+  "summary": {
+    "totalChecks": 12,
+    "automatedGates": 6,
+    "gatesPassed": 6,
+    "acceptancePass": 6,
+    "acceptanceDeferredToUser": 6,
+    "acceptanceFail": 0,
+    "criticals": 0,
+    "majors": 0,
+    "minors": 2
+  },
+  "acceptanceCriteria": [
+    {
+      "criterion": "Compact-mode output byte-identical to current behavior (refactor behavior-preserving) — tech-spec AC #2, user-spec",
+      "status": "passed",
+      "evidence": "Task-03 writer/golden tests: top/stat_test.go Test_renderSysstat_compact, Test_renderPgstat_compact, Test_renderSysstat_compactUnchanged — assert byte-for-byte compact rows against bytes.Buffer. All green."
+    },
+    {
+      "criterion": "n/a degradation is a literal distinct from 0/empty; one failing source does not blank the others — tech-spec AC #4, user-spec",
+      "status": "passed",
+      "evidence": "Formatter tests internal/pretty/pretty_test.go (TestCeil, TestReserveWidth, TestRateUnit_boundary) + composer tests top/stat_test.go (Test_renderSysstat_verboseFirstTickNA, Test_renderSysstat_verboseFilesystNA, Test_renderPgstat_verboseNA) verify n/a sentinel rendering and per-source independence. Green."
+    },
+    {
+      "criterion": "GUC + data_directory scan in lockstep with SelectCommonProperties — tech-spec backward-compat / Task-04",
+      "status": "passed",
+      "evidence": "internal/query/common_test.go Test_CommonQueries + internal/stat/postgres_test.go TestGetPostgresProperties verify SELECT column set and .Scan(...) arity stay in lockstep with the 5 new fields (max_worker_processes, max_logical_replication_workers, max_parallel_workers, wal_segment_size, data_directory). Green live on PG 14-18."
+    },
+    {
+      "criterion": "First-tick deltas n/a + re-arm (toggle does not trigger Reset; tiering keeps stale not n/a) — user-spec, tech-spec Decision 2/9; Task-02/07/09",
+      "status": "passed",
+      "evidence": "top/verbose_test.go Test_toggleVerbose (flip + persist, no Reset). internal/stat/stat_test.go: Test_verboseCollectState_firstTickNotThrottled, Test_verboseCollectState_throttlesSlowSource, Test_verboseCollectState_autoResumes, Test_latencyGuardThreshold, TestCollector_Update_DbSizeThrottle, TestCollector_Update_Verbose. Green."
+    },
+    {
+      "criterion": "No view-count / keybinding / existing-panel regressions; all unit+integration tests pass — tech-spec AC #6, user-spec",
+      "status": "passed",
+      "evidence": "Full suite green (TEST_EXIT=0). internal/view/view.go diff is exactly one line (+Verbose bool field, zero-value false); internal/view/view_test.go has NO content diff vs master (no view-count assertion change). View tests (TestViews_Configure, TestView_VersionOK, etc.) all PASS. top/keybindings.go adds only the `v` binding. No new view registered."
+    },
+    {
+      "criterion": "New aggregate queries version-correct on PG 14-18 and degrade to n/a — tech-spec AC #8, user-spec; Task-05",
+      "status": "passed",
+      "evidence": "internal/query/overview_test.go Test_OverviewQueries (workload/databases/databases_size/workers/wal_size/send_recv) ran live across 5 PG versions (subtests #00..#04) all PASS; Test_OverviewQueries_Templates (replication lag/slots) PASS per-version; Test_SelectStatBgwriterQuery + Test_StatBgwriterQueries cover the PG14-16 / 17 / 18 bgwr/ckpt split (pg_stat_bgwriter vs pg_stat_checkpointer). All green."
+    },
+    {
+      "criterion": "VISUAL: verbose band geometry + height-guard on several terminal sizes (layout() recompute, cmdline shift, dbstat shrink; fallback to compact + hint on short terminal) — user-spec, tech-spec AC #5, Task-06",
+      "status": "deferred_to_user",
+      "evidence": "Pure topBandLayout is unit-tested (top/layout_test.go), but the rendered geometry across real terminal sizes requires a running TUI — no E2E harness in the project. Manual TUI verification required."
+    },
+    {
+      "criterion": "VISUAL: verbose rows consistent with the full B/N/F panels and d/r/b screens (same device, same number, ceil rounding) — user-spec, tech-spec AC #3, Task-08",
+      "status": "deferred_to_user",
+      "evidence": "Composer math is unit-tested against fixed structs, but cross-checking the live verbose row against the full panel/screen for the same max-%util device requires a running TUI against a live instance. Manual verification required."
+    },
+    {
+      "criterion": "VISUAL: first-tick collecting... hint clears; verbose persists over detail screens; toggle off → compact — user-spec, Task-09",
+      "status": "deferred_to_user",
+      "evidence": "Underlying first-tick n/a and re-arm logic unit-tested (above), but the cmdline hint lifecycle and on-screen persistence across screen switches are observable only in the running TUI. Manual verification required."
+    }
+  ],
+  "deferredToPostDeploy": [
+    {
+      "criterion": "Verbose toggle expands both panels (sysstat +3, pgstat +5); layout recompute + height-guard",
+      "reason": "TUI render not automatable (no E2E harness)",
+      "verificationCondition": "Run ./bin/pgcenter top on a wide terminal",
+      "verificationSteps": "Press v: both panels expand (3 iostat/nicstat/filesyst rows left, 5 workload/databases/workers/replication/bgwr-ckpt rows right); dbstat shrinks; cmdline shifts down. On a short terminal verbose must NOT expand and a cmdline hint must show. Layout must not break."
+    },
+    {
+      "criterion": "Row consistency with full B/N/F panels and d/r/b screens",
+      "reason": "Requires live cross-check in TUI",
+      "verificationCondition": "Verbose on, against a live instance with disk/net/fs activity",
+      "verificationSteps": "Compare the iostat/nicstat/filesyst verbose rows to the full B/N/F panels for the same max-%util device — numbers match (verbose ceil-rounds to integers, full panels show fractions). Compare databases/replication/bgwr rows to d/r/b screens."
+    },
+    {
+      "criterion": "First-tick collecting... hint / stale-on-throttle / degradation paths",
+      "reason": "TUI + special instance states (standby, archive_mode=off, remote no-PL/Perl)",
+      "verificationCondition": "Observe first refresh; test on standby / archive_mode=off / remote without schema",
+      "verificationSteps": "First tick shows n/a deltas + collecting... in cmdline, clears after first refresh. On standby/no replication: lag/slots/send-recv empty/n/a. archive_mode=off: archiving backlog → n/a. Remote without PL/Perl: iostat/nicstat/filesyst → n/a. Panel never crashes; throttled db-size source holds last value (not n/a)."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "title": "govulncheck advisory GO-2026-5037 in stdlib crypto/x509 (toolchain go1.25.10)",
+      "expected": "govulncheck clean",
+      "actual": "1 stdlib advisory; fixed in go1.25.11. Not in project/feature code.",
+      "reproduction": "PATH+=/home/lesovsky/go/bin; govulncheck ./... → exit 3, GO-2026-5037 traced via crypto/x509 in the stdlib TLS path. Resolution: bump Go toolchain to >=1.25.11 in CI; no code change."
+    },
+    {
+      "severity": "minor",
+      "title": "Pre-existing gofmt drift in two non-feature test files",
+      "expected": "gofmt -l clean",
+      "actual": "internal/query/wal_test.go and internal/stat/procpidstat_test.go have struct-field-alignment gofmt drift; both predate feature 010 (commits 1ebf907, 99c8413) and are outside its scope. All 21 feature-changed files are gofmt-clean.",
+      "reproduction": "gofmt -d internal/query/wal_test.go — alignment-only diff. Optional cleanup; not a feature regression."
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Round 2 re-review of Task 05 live-PG integration tests. All four round-1 major findings are resolved with meaningful, non-tautological, non-flaky assertions. Query tests now QueryRow().Scan into the exact receivers collectOverviewStat uses (arity/type drift now fails at the query layer). tps/others are asserted against an independently-recomputed exact formula with itv=2 making the /itv division observable. cache-hit ratio has a pure-function table test (incl. division-by-zero and negative-denom) with an unconditional !IsNaN assert, plus a deterministic synthetic-prev wiring test. Archiving-backlog degradation is asserted through collectOverviewStat (degraded replication rows do not blank count/size/cache). Both round-1 minors (verbose-gate compact-path untouched; bgwriter by-name columns) are addressed. The recovery-'t' substring-only check remains by design and is acceptable for a primary-only test fleet.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/stat/postgres_test.go:199-203 (Test_collectOverviewStat_CacheHitRatio, division-by-zero block)",
+      "issue": "The deterministic division-by-zero wiring assertion is still guarded by `if noio.BlksHit == prevEqual.BlksHit && noio.BlksRead == prevEqual.BlksRead`. On a live cluster the re-read counters are not guaranteed to equal the prev (background blks I/O between ticks), so the inner asserts (CacheHitRatioValid==false, !IsNaN) can be skipped entirely, silently passing. The division-by-zero behavior is already covered unconditionally by the pure-function Test_cacheHitRatio (`no io -> n/a`), so the residual risk is low, but this collect-level branch is not deterministically exercised.",
+      "recommendation": "This is acceptable as-is because Test_cacheHitRatio covers denom==0 -> (0,false) and !IsNaN unconditionally. If tighter wiring coverage is wanted later, extract the prev/curr delta computation so the n/a path can be asserted on a synthetic curr without depending on live counter stability, or assert that when the guard is false the ratio is still a valid percentage in [0,100] (an else branch with a real assertion) so the test never no-ops.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/overview_test.go:106-121 (Test_OverviewQueries_Templates_Recovery)",
+      "issue": "recovery-'t' (standby) WAL-function substitution is verified by substring assertion only (Contains pg_last_wal_receive_lsn); the standby form is never executed against PG. Noted by the author as intentional: the test fleet are primaries and executing standby WAL functions errors there.",
+      "recommendation": "Intentional and acceptable given a primary-only fixture fleet. The substring check still protects against template wiring regressions (wrong function name, unsubstituted {{). No change required unless a standby fixture becomes available.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 14,
+      "passed": 13,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 8,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "iteration": 2,
+  "tasks_checked": ["05", "07", "08", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "frontmatter / depends_on",
+      "issue": "Task 07 declares depends_on: [\"02\", \"05\"], while the tech-spec Wave 3 entry names only Task 5 as a dependency. The added \"02\" is a justified extension (the verbose branch reads view.Verbose introduced by Task 2) and is explained in Description and Details, so this is a defensible carry-forward extension rather than a contradiction. Wave ordering holds (wave 2=1, wave 5=2, both < 3).",
+      "fix": "No change required. Optionally note in the tech-spec that Task 7 also depends on Task 2 for the verbose flag, to keep spec and task in lockstep."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 1
+  },
+  "notes": {
+    "dependency_graph": "Acyclic. 05->[02,04]; 07->[02,05]; 08->[01,03,05,07]; 09->[05,07,08]. All referenced IDs exist; every dependency sits in an earlier wave (waves: 01-04=1, 05=2, 07=3, 08=4, 09=5). No cycles.",
+    "first_tick_mechanism": "Consistent across 07/08/09. Task 07 introduces an explicit verboseFirstTick flag on Collector (set on first verbose collect, cleared after); Task 08 composers read the flag (not len(slice)==0) to render n/a, with an explicit counter-case (filled zero-delta slice without flag -> 0); Task 09 moves the flag into verboseCollectState and binds the 'collecting...' cmdline hint to it. All three repeat the same prev=curr-before-count rationale; no contradiction introduced by the edits.",
+    "context_links": "Context File links normalized to markdown [name](path) form with both name and path in all four tasks; no bare links or plain-text paths observed.",
+    "carry_forward": "Files-to-modify in each task match the tech-spec Implementation Tasks entry exactly (05: common.go/overview.go/postgres.go/stat.go; 07: stat.go; 08: top/stat.go/top/stat_test.go/fsstat.go; 09: stat.go/top/stat.go). AC and TDD anchors from the tech-spec descriptions are present and extended, none dropped.",
+    "frontmatter": "All four: status=planned, depends_on arrays, wave>=1, skills=[code-writing], reviewers arrays. skills and reviewers match the corresponding body sections. Tasks 05 and 08 include dev-security-auditor (security-sensitive: privileged aggregates / raw-path leakage); 07 and 09 omit it, consistent with the tech-spec.",
+    "tdd_anchors": "All present and behavior-checking (path::test_name -- description), including degradation, first-tick, and throttle/auto-resume behavior paths; no string-presence-only anchors."
+  }
+}

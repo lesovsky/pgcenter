@@ -1,0 +1,62 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Tests are genuine behavior tests, not mock-only — every test passes the litmus check (removing the core logic line in Ceil/ReserveWidth/RateUnit breaks the corresponding assertions). go test ./internal/pretty/... is green; existing TestSize is untouched. Boundary coverage (threshold-1/threshold/threshold+1) is present and correct for both disk and net families, and the suffix-switch is verified directly. The main gap is the spec-named 'theoretical max beyond reserve' edge case: the deterministic-widen path (e.g. RateUnit(1.0239e7, disk, 4) = '10000GB/s', a 5-digit numeric) is never asserted by any test, and the property walk deliberately stops just below the widen boundary — so the property-test invariant 'numeric field padded to exactly the reserve' is only exercised in the region where it is trivially true and is actually contradicted by the documented widen behavior. Two major findings, no critical.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/pretty/pretty_test.go:74-130 (TestRateUnit / TestRateUnit_boundary)",
+      "issue": "The spec and task explicitly call out the edge case 'значение шире резерва даже после переключения единицы (теоретический максимум) — поведение детерминировано и задокументировано, не молча ломает раскладку' (task-01 Edge cases; pretty.go:56-58 documents it). The implementation widens past the reserve via ReserveWidth's never-truncate behavior, producing e.g. RateUnit(10239000, FamilyDisk, 4) = '10000GB/s' (5-digit numeric). No test asserts this documented post-promotion widen behavior. The widen path through RateUnit's second return is therefore unverified for the over-reserve magnitude — a regression that broke it (e.g. accidental truncation or a second division) would not be caught.",
+      "recommendation": "Add a table case (or extend TestRateUnit_boundary) asserting the widen path explicitly. Disk widens when ceil(v/1024) > 9999, i.e. v > ~10238976. Assert: RateUnit(10239000.0, FamilyDisk, 4) == \"10000GB/s\" and the analogous net case RateUnit(10000000.0, FamilyNet, 4) == \"10000Gbps\" (ceil(1e7/1000)=10000). These pin both that the unit is promoted exactly once (still GB/s/Gbps, not divided twice) and that the field widens deterministically rather than truncating to 4 digits.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "internal/pretty/pretty_test.go:135-162 (TestRateUnit_property)",
+      "issue": "The property test asserts two invariants: (a) numeric digits <= width, and (b) len(numeric) == width (padded to exactly the reserve). Invariant (b) is presented as a universal layout guarantee, but it is false in the documented widen region (where the field intentionally grows to 5 digits). The walk range top = 9999*1000 was chosen to stay strictly below the widen boundary for both families (disk top divided = ceil(9999000/1024) = 9765, net = 9999), so invariant (b) is only ever evaluated in the region where it is trivially true. As written the property test gives false confidence: it reads as proving 'the field is always exactly the reserve width', but it never visits the case that would violate that claim, and the implementation deliberately violates it at the extreme.",
+      "recommendation": "Make the invariant honest about the two regimes. Option A: split the assertion — within the in-reserve range assert len(numeric) == width (exactly padded); for the widen range assert len(numeric) >= width AND that the result is never silently truncated (no information loss). Option B: keep invariant (a) (digits >= width-safe / never-truncate) as the universal property and drop the absolute-equality claim, then cover exact padding separately via the explicit table cases. Either way the comment at lines 137-140 should state that beyond the walk top the field is documented to widen, so the equality invariant is scoped to the in-reserve range.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/pretty/pretty_test.go:50-72 (TestReserveWidth) and TestRateUnit",
+      "issue": "Spec 'Состав и источники строк' enumerates concrete digit reserves: devices=2, max util=3, r/s & w/s=5, speeds=4, err & coll=4. TestReserveWidth covers widths 2, 3, 5; the speeds/err/coll reserve of 4 is the one width that RateUnit always uses but ReserveWidth itself is never directly tested at width 4 with a value that exactly fills it (e.g. 9999) or just exceeds it (10000). This is partially implied through RateUnit tests but not asserted at the ReserveWidth helper level.",
+      "recommendation": "Add ReserveWidth cases for the err/coll/speed reserve: {v:9999,width:4,want:\"9999\"} (exactly fills) and {v:10000,width:4,want:\"10000\"} (one over → widens, not truncated). Cheap and makes the helper's contract complete against every reserve the spec names.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/pretty/pretty_test.go:74-105 (TestRateUnit)",
+      "issue": "RateUnit silently defaults any non-FamilyNet string to the disk unit pair (pretty.go:60-65: base/high default to MB/s/GB/s, only family==FamilyNet flips them). This fallback branch — including an unknown/empty family — is never exercised. Verified: RateUnit(50, \"bogus\", 4) == \"  50MB/s\". A future refactor that, say, made the disk path the explicit branch could regress an empty-family call without any failing test.",
+      "recommendation": "Add one defensive case asserting the default-family behavior, e.g. RateUnit(50.0, \"\", 4) == \"  50MB/s\" (or assert it matches FamilyDisk output for the same value), documenting that unknown/empty family falls back to the disk MB/s family.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/pretty/pretty_test.go:75-77 (TestRateUnit comment)",
+      "issue": "The explanatory comment is imprecise/garbled ('the value 9999.x still fits the integer reserve ... so stays MB/s until it would need a 5th digit'). The mechanism is ceil(v) compared against 10^width-1, not a fractional 9999.x staying MB/s. The comment risks misleading a future maintainer about why 9999 vs 10000 is the boundary. The test data itself is correct.",
+      "recommendation": "Tighten the comment to state the actual rule: 'overflow occurs when Ceil(v) > 10^width - 1 (=9999 for width 4); at that point the value is divided once and the unit promoted'. Mirrors the implementation comment in pretty.go.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 4,
+      "passed": 4,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

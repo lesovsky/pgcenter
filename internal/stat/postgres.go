@@ -11,12 +11,92 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Pgstat describes collected Postgres stats.
 type Pgstat struct {
 	Activity Activity
 	Result   PGresult
+	Overview PgstatOverview
+}
+
+// PgstatOverview holds the flat aggregates backing the five verbose pgstat panel rows
+// (workload, databases, workers, replication, bgwr/ckpt). Absolute counters are stored so rates
+// can be computed against the previous snapshot; already-computed rates carry the *Rate suffix.
+// Signals that may be unavailable (no replication, no slots, archive_mode=off, missing privilege,
+// first tick with no prev) use sql.NullInt64/availability flags so Task 8 can render a literal
+// "n/a" that is distinguishable from a real 0.
+type PgstatOverview struct {
+	// Valid is true once at least one tick has populated the struct; the rate fields below are only
+	// meaningful when a previous snapshot existed (HasPrev).
+	Valid   bool
+	HasPrev bool // false on the first tick (no prev snapshot) -> delta-based fields are n/a
+
+	// workload row. tps = (Δcommits + Δrollbacks)/itv. ins/upd/del/ret/tmp are per-second rates.
+	// others = Δ(deadlocks + conflicts + checksum_failures) over the interval (not /s).
+	WorkloadCommits   int64 // absolute, for rate
+	WorkloadRollbacks int64 // absolute, for rate
+	WorkloadInserts   int64 // absolute, for rate
+	WorkloadUpdates   int64 // absolute, for rate
+	WorkloadDeletes   int64 // absolute, for rate
+	WorkloadReturned  int64 // absolute, for rate
+	WorkloadTempFiles int64 // absolute, for rate
+	WorkloadOthers    int64 // absolute sum of deadlocks+conflicts+checksum_failures, for interval delta
+
+	TPSRate        int64 // (Δcommits+Δrollbacks)/itv
+	InsertsRate    int64 // Δinserts/itv
+	UpdatesRate    int64 // Δupdates/itv
+	DeletesRate    int64 // Δdeletes/itv
+	ReturnedRate   int64 // Δreturned/itv
+	TempFilesRate  int64 // Δtemp_files/itv
+	OthersInterval int64 // Δothers over the interval (value, not /s)
+
+	// databases row.
+	DatabasesCount int64 // number of databases
+	TotalSize      int64 // sum(pg_database_size), bytes; n/a if the (privileged) aggregate failed
+	TotalSizeValid bool  // false -> TotalSize/GrowthPerSec are n/a
+	GrowthPerSec   int64 // Go-side delta of TotalSize over the interval, bytes/s
+
+	BlksHit  int64 // absolute, for per-interval cache hit ratio
+	BlksRead int64 // absolute, for per-interval cache hit ratio
+	// CacheHitRatio is the per-interval Δhit/Δ(hit+read), as a percentage [0,100].
+	// CacheHitRatioValid is false when Δ(hit+read) == 0 (no I/O in the interval) or on the first tick.
+	CacheHitRatio      float64
+	CacheHitRatioValid bool
+
+	// workers row. Active counts from pg_stat_activity; limits from GUCs.
+	WorkersUmbrellaActive int // background-worker backends occupying max_worker_processes slots
+	WorkersLogicalActive  int // logical replication worker backends
+	WorkersParallelActive int // parallel worker backends
+
+	// replication row.
+	WalSize int64 // pg_wal directory size, bytes
+
+	LagBytes      int64 // worst-case replication lag, bytes
+	LagBytesValid bool  // false when there are no standbys (n/a)
+
+	SlotsCount    int64 // number of replication slots
+	RetainedBytes int64 // largest retained WAL across slots, bytes
+	RetainedValid bool  // false when there are no slots (n/a)
+
+	ArchivingBacklog      int64 // count(.ready) * wal_segment_size, bytes
+	ArchivingBacklogValid bool  // false on archive_mode=off / missing privilege (42501) -> n/a
+
+	Senders   int // active walsenders
+	Receivers int // active walreceivers
+
+	// bgwr/ckpt row. timed/req are absolute cumulative; write/sync ms are per-interval deltas.
+	CkptTimed int64 // absolute
+	CkptReq   int64 // absolute
+
+	CkptWriteMs      float64 // absolute, for rate
+	CkptSyncMs       float64 // absolute, for rate
+	CkptWriteMsDelta float64 // Δwrite_ms over the interval
+	CkptSyncMsDelta  float64 // Δsync_ms over the interval
+
+	MaxWritten      int64 // absolute, for rate
+	MaxWrittenDelta int64 // Δmaxwritten over the interval
 }
 
 // collectPostgresStat collect Postgres activity stats and stats returned by passed query.
@@ -103,20 +183,220 @@ func collectActivityStat(db *postgres.DB, version int, pgssSchema string, itv in
 	return s, nil
 }
 
+// collectOverviewStat collects the flat aggregates backing the five verbose pgstat panel rows.
+// It mirrors collectActivityStat: a version dispatcher selects the proper queries, each independent
+// aggregate is scanned via its OWN QueryRow, and Go-side rates are computed against the prev
+// snapshot. Expensive/privileged aggregates (sum of database sizes, archiving backlog) run as their
+// own QueryRow so a failure degrades only that field to n/a (availability flag) without aborting the
+// sample or surfacing the raw PG error text. itv is the refresh interval in seconds (>= 1).
+//
+// skipDatabasesSize lets the caller's latency guard (Decision 9) throttle the dear no-twin db-size
+// aggregate: when true, the sum(pg_database_size) QueryRow is not run at all (the caller reuses a
+// cached stale value instead). The cheap aggregates and all other rows still collect unconditionally.
+//
+// The second return value is the wall-clock latency of the dear sum(pg_database_size) QueryRow alone
+// (zero when skipped), measured narrowly so the caller's guard attributes slowness to the source it
+// actually throttles — not to a momentarily slow neighbour aggregate.
+func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, prev PgstatOverview, skipDatabasesSize bool) (PgstatOverview, time.Duration) {
+	var s PgstatOverview
+	s.Valid = true
+	s.HasPrev = prev.Valid
+	var sizeLatency time.Duration
+
+	if itv < 1 {
+		itv = 1
+	}
+	version := props.VersionNum
+
+	// Build recovery-aware options for the WAL-function templates.
+	opts := query.NewOptions(version, props.Recovery, props.GucTrackCommitTimestamp, 0, "")
+
+	// workload aggregate (single QueryRow over pg_stat_database). deadlocks/conflicts/checksum_failures
+	// are scanned into locals and summed into WorkloadOthers.
+	var deadlocks, conflicts, csumFailures int64
+	err := db.QueryRow(query.OverviewWorkload).Scan(
+		&s.WorkloadCommits, &s.WorkloadRollbacks, &s.WorkloadInserts, &s.WorkloadUpdates,
+		&s.WorkloadDeletes, &s.WorkloadReturned, &s.WorkloadTempFiles,
+		&deadlocks, &conflicts, &csumFailures,
+	)
+	if err == nil {
+		s.WorkloadOthers = deadlocks + conflicts + csumFailures
+		if s.HasPrev {
+			s.TPSRate = ((s.WorkloadCommits + s.WorkloadRollbacks) - (prev.WorkloadCommits + prev.WorkloadRollbacks)) / int64(itv)
+			s.InsertsRate = (s.WorkloadInserts - prev.WorkloadInserts) / int64(itv)
+			s.UpdatesRate = (s.WorkloadUpdates - prev.WorkloadUpdates) / int64(itv)
+			s.DeletesRate = (s.WorkloadDeletes - prev.WorkloadDeletes) / int64(itv)
+			s.ReturnedRate = (s.WorkloadReturned - prev.WorkloadReturned) / int64(itv)
+			s.TempFilesRate = (s.WorkloadTempFiles - prev.WorkloadTempFiles) / int64(itv)
+			s.OthersInterval = s.WorkloadOthers - prev.WorkloadOthers
+		}
+	}
+
+	// databases aggregate: the cheap, always-available signals (count + cache counters).
+	if err := db.QueryRow(query.OverviewDatabases).Scan(
+		&s.DatabasesCount, &s.BlksHit, &s.BlksRead,
+	); err == nil {
+		// Per-interval cache hit ratio: Δhit / Δ(hit + read). Division by zero (no I/O) -> n/a.
+		if s.HasPrev {
+			s.CacheHitRatio, s.CacheHitRatioValid = cacheHitRatio(s.BlksHit-prev.BlksHit, s.BlksRead-prev.BlksRead)
+		}
+	}
+
+	// databases aggregate: sum(pg_database_size(...)) is expensive/privileged, so it runs as its OWN
+	// QueryRow. A failure degrades only the size/growth field to n/a (TotalSizeValid stays false),
+	// leaving count and cache-hit above intact. The raw error is swallowed (paths must not surface).
+	// When the caller's latency guard throttles this source (skipDatabasesSize), the query is not run
+	// at all and the caller reuses its cached stale value (Decision 9).
+	if !skipDatabasesSize {
+		sizeStart := time.Now()
+		err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize)
+		sizeLatency = time.Since(sizeStart)
+		if err == nil {
+			s.TotalSizeValid = true
+			if s.HasPrev && prev.TotalSizeValid {
+				s.GrowthPerSec = (s.TotalSize - prev.TotalSize) / int64(itv)
+			}
+		}
+	}
+
+	// workers aggregate. On error the active counts stay zero (the struct remains Valid).
+	_ = db.QueryRow(query.OverviewWorkers).Scan(
+		&s.WorkersUmbrellaActive, &s.WorkersLogicalActive, &s.WorkersParallelActive,
+	)
+
+	// replication: wal size (own QueryRow; reads pg_wal directory).
+	_ = db.QueryRow(query.OverviewWalSize).Scan(&s.WalSize)
+
+	// replication: worst-case lag bytes (template). NULL (no standbys) -> n/a.
+	if q, ferr := query.Format(query.OverviewReplicationLag, opts); ferr == nil {
+		var lag sql.NullInt64
+		if err := db.QueryRow(q).Scan(&lag); err == nil && lag.Valid {
+			s.LagBytes = lag.Int64
+			s.LagBytesValid = true
+		}
+	}
+
+	// replication: slots count + largest retained WAL (template). retained NULL (no slots) -> n/a.
+	if q, ferr := query.Format(query.OverviewReplicationSlots, opts); ferr == nil {
+		var retained sql.NullInt64
+		if err := db.QueryRow(q).Scan(&s.SlotsCount, &retained); err == nil && retained.Valid {
+			s.RetainedBytes = retained.Int64
+			s.RetainedValid = true
+		}
+	}
+
+	// replication: archiving backlog. OWN QueryRow: pg_ls_dir requires pg_monitor/superuser; a 42501
+	// privilege error or archive_mode=off degrades this field to n/a. The raw error (which contains a
+	// filesystem path) is deliberately swallowed and never logged or surfaced.
+	var backlog sql.NullInt64
+	if err := db.QueryRow(query.OverviewArchivingBacklog).Scan(&backlog); err == nil && backlog.Valid {
+		s.ArchivingBacklog = backlog.Int64
+		s.ArchivingBacklogValid = true
+	}
+
+	// replication: senders/receivers.
+	_ = db.QueryRow(query.OverviewSendRecv).Scan(&s.Senders, &s.Receivers)
+
+	// bgwr/ckpt: reuse SelectStatBgwriterQuery (no new SQL). Column layout differs across PG14-16/17/18,
+	// so scan generically by column name.
+	collectOverviewBgwriter(db, version, &s, prev)
+
+	return s, sizeLatency
+}
+
+// collectOverviewBgwriter scans the bgwr/ckpt aggregate via SelectStatBgwriterQuery and fills the
+// timed/req (absolute), write/sync ms (delta) and maxwritten fields. Column positions differ between
+// PG14-16, 17 and 18, so values are mapped by column name rather than ordinal.
+func collectOverviewBgwriter(db *postgres.DB, version int, s *PgstatOverview, prev PgstatOverview) {
+	q, _, _ := query.SelectStatBgwriterQuery(version)
+
+	rows, err := db.Query(q)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	descs := rows.FieldDescriptions()
+	ncols := len(descs)
+	if !rows.Next() {
+		return
+	}
+
+	values := make([]sql.NullString, ncols)
+	pointers := make([]any, ncols)
+	for i := range pointers {
+		pointers[i] = &values[i]
+	}
+	if err := rows.Scan(pointers...); err != nil {
+		return
+	}
+
+	byName := make(map[string]string, ncols)
+	for i, d := range descs {
+		byName[string(d.Name)] = values[i].String
+	}
+
+	s.CkptTimed = parseInt64(byName["ckpt_timed"])
+	s.CkptReq = parseInt64(byName["ckpt_req"])
+	s.CkptWriteMs = parseFloat64(byName["ckpt_write,ms"])
+	s.CkptSyncMs = parseFloat64(byName["ckpt_sync,ms"])
+	s.MaxWritten = parseInt64(byName["maxwritten"])
+
+	if s.HasPrev {
+		s.CkptWriteMsDelta = s.CkptWriteMs - prev.CkptWriteMs
+		s.CkptSyncMsDelta = s.CkptSyncMs - prev.CkptSyncMs
+		s.MaxWrittenDelta = s.MaxWritten - prev.MaxWritten
+	}
+}
+
+// cacheHitRatio computes the per-interval cache hit ratio as a percentage [0,100] from the deltas
+// of blks_hit and blks_read. The second return value is false when there was no I/O in the interval
+// (Δ(hit+read) <= 0): the ratio is then n/a, never NaN or a stale cumulative value.
+func cacheHitRatio(dHit, dRead int64) (float64, bool) {
+	denom := dHit + dRead
+	if denom <= 0 {
+		return 0, false
+	}
+	return float64(dHit) / float64(denom) * 100, true
+}
+
+// parseInt64 parses an integer string, returning 0 on any error (the field is treated as absent).
+func parseInt64(s string) int64 {
+	v, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
+// parseFloat64 parses a float string, returning 0 on any error.
+func parseFloat64(s string) float64 {
+	v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+	if err != nil {
+		return 0
+	}
+	return v
+}
+
 // PostgresProperties is the container for details about Postgres
 type PostgresProperties struct {
-	VersionNum              int     // Numeric representation of Postgres version, e.g. XXYYZZ
-	Version                 string  // String representation of Postgres version, e.g. X.Y.Z
-	StartTime               float64 // Postgres start time
-	Recovery                string  // Recovery state
-	GucTrackCommitTimestamp string  // value of track_commit_timestamp GUC
-	GucAVMaxWorkers         int     // value of autovacuum_max_workers GUC
-	GucMaxConnections       int     // value of max_connections GUC
-	GucMaxPrepXacts         int     // value of max_prepared_transactions GUC
-	GucSharedPreLibraries   string  // value of shared_preload_libraries GUC
-	ExtPGSSSchema           string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
-	SchemaPgcenterAvail     bool    // is 'pgcenter' schema installed?
-	SysTicks                float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
+	VersionNum                      int     // Numeric representation of Postgres version, e.g. XXYYZZ
+	Version                         string  // String representation of Postgres version, e.g. X.Y.Z
+	StartTime                       float64 // Postgres start time
+	Recovery                        string  // Recovery state
+	GucTrackCommitTimestamp         string  // value of track_commit_timestamp GUC
+	GucAVMaxWorkers                 int     // value of autovacuum_max_workers GUC
+	GucMaxConnections               int     // value of max_connections GUC
+	GucMaxPrepXacts                 int     // value of max_prepared_transactions GUC
+	GucSharedPreLibraries           string  // value of shared_preload_libraries GUC
+	GucMaxWorkerProcesses           int     // value of max_worker_processes GUC
+	GucMaxLogicalReplicationWorkers int     // value of max_logical_replication_workers GUC
+	GucMaxParallelWorkers           int     // value of max_parallel_workers GUC
+	GucWalSegmentSize               int64   // value of wal_segment_size GUC, in bytes
+	DataDirectory                   string  // value of data_directory GUC
+	ExtPGSSSchema                   string  // Schema where 'pg_stat_statements' extension installed (empty if not installed)
+	SchemaPgcenterAvail             bool    // is 'pgcenter' schema installed?
+	SysTicks                        float64 // ad-hoc implementation of GET_CLK for cases when Postgres is remote
 }
 
 // GetPostgresProperties queries necessary properties from Postgres about it.
@@ -131,6 +411,11 @@ func GetPostgresProperties(db *postgres.DB) (PostgresProperties, error) {
 		&props.GucSharedPreLibraries,
 		&props.Recovery,
 		&props.StartTime,
+		&props.GucMaxWorkerProcesses,
+		&props.GucMaxLogicalReplicationWorkers,
+		&props.GucMaxParallelWorkers,
+		&props.GucWalSegmentSize,
+		&props.DataDirectory,
 	)
 	if err != nil {
 		return PostgresProperties{}, err

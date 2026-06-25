@@ -183,6 +183,67 @@ func readMountpointStat(mountpoint string, ch chan Fsstat, wg *sync.WaitGroup) {
 	}
 }
 
+// MatchDataDirFs returns the Fsstat whose mountpoint is the longest path-component prefix of the
+// data_directory path, and ok=true. It backs the verbose "filesyst" row, which shows the filesystem
+// of the Postgres data directory.
+//
+// When local is true the data_directory is first resolved through filepath.EvalSymlinks (after a
+// filepath.Clean, matching the rest of this file): a symlinked data_directory must resolve to its
+// real mount before matching. Any EvalSymlinks failure (broken symlink, EACCES) degrades to ok=false
+// without panicking — the raw path is never logged or surfaced. When local is false (remote
+// connection) the path is matched as-is, since the symlink cannot be resolved over the wire.
+//
+// Matching is by path component so that mount "/var" does not spuriously match data_directory
+// "/variable/data"; only a true ancestor (or exact match) of the directory qualifies. On an empty
+// data_directory or no matching mount, ok is false.
+func MatchDataDirFs(dataDir string, fss Fsstats, local bool) (Fsstat, bool) {
+	if dataDir == "" {
+		return Fsstat{}, false
+	}
+
+	path := filepath.Clean(dataDir)
+	if local {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			// Broken symlink / EACCES — degrade to n/a, never panic, never surface the raw path.
+			return Fsstat{}, false
+		}
+		path = resolved
+	}
+
+	var best Fsstat
+	bestLen := -1
+	for _, fs := range fss {
+		mp := filepath.Clean(fs.Mount.Mountpoint)
+		if !pathHasPrefix(path, mp) {
+			continue
+		}
+		if len(mp) > bestLen {
+			best = fs
+			bestLen = len(mp)
+		}
+	}
+
+	if bestLen < 0 {
+		return Fsstat{}, false
+	}
+	return best, true
+}
+
+// pathHasPrefix reports whether mount is a path-component prefix (an ancestor or exact match) of
+// path. Both are expected to be cleaned absolute paths. The root mount "/" is a prefix of every
+// absolute path; otherwise path must equal mount or continue with a "/" right after mount, so
+// "/var" matches "/var/lib" but not "/variable".
+func pathHasPrefix(path, mount string) bool {
+	if mount == "/" {
+		return true
+	}
+	if path == mount {
+		return true
+	}
+	return strings.HasPrefix(path, mount+"/")
+}
+
 // readFilesystemStatsRemote returns mounted filesystems stats from SQL stats schema.
 func readFilesystemStatsRemote(db *postgres.DB) (Fsstats, error) {
 	q := "SELECT device, fstype, (pgcenter.get_filesystem_stats(mountpoint)).* FROM pgcenter.sys_proc_mounts"

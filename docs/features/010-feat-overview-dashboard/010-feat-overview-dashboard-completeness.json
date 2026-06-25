@@ -1,0 +1,36 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": true
+  },
+  "requirements_total": 21,
+  "requirements_covered": 20,
+  "requirements_partial": 1,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-2: sysstat 3 verbose rows — exact field layout (nicstat `err/coll` composite IErr+Oerr/Coll, filesyst `mounted` truncation to 10 chars, per-field reserved-digit budgets)",
+      "detail": "The tech-spec and tasks address the three sysstat rows at the aggregate level (max-%util device selection, nicstat /1024/128 parity, data_directory mount-prefix matching), but never carry the user-spec's field-level specifics: the nicstat `err/coll` composite (IErr+Oerr and Coll, format `1111/2222`, 4-digit reserve each), the filesyst mount-point truncation to 10 chars, and the per-field reserved-digit budgets (devices=2, max util=3, rMB/s/wMB/s=4, r/s/w/s=5). These are load-bearing layout details a downstream implementer must read out of the user-spec; the tech-spec relies on the user-spec implicitly rather than restating or explicitly pointing to it. Core consistency/selection logic IS covered, so this is partial, not a gap.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "US-7 / Decision 9: per-source tiering + latency guard",
+      "detail": "Decision 9 and Task 10 describe throttling the dear no-twin aggregates and keeping a stale value, but neither the decision nor the task states the concrete throttle trigger/threshold (what latency, measured how, what skip-divisor / cadence). The user-spec mandates a `guard по латентности` but is equally vague, so this is inherited ambiguity rather than introduced — flagged as minor so the implementer is prompted to pin down the guard's actual trigger condition during Task 10 rather than inventing arbitrary numbers.",
+      "severity": "minor"
+    },
+    {
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "Decision 9 / Task 10: extensible source registry for v.next",
+      "detail": "Decision 9 mentions an `extensible source registry for v.next` and the user-spec risk section calls for a `collect-функция как реестр источников с пер-источниковым состоянием ритма`. This is a seam for future signals, not a current requirement. The tech-spec correctly rejects a generic multi-rhythm scheduler as YAGNI (Decision 9 alternatives), and Task 10 scopes only the two current dear aggregates (db sizes, growth) — so the registry is kept lightweight and traces to a user-spec risk mitigation. Acceptable infrastructure extensibility, flagged only so the registry does not grow beyond the per-source cadence state actually needed now.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "20/21 requirements covered, 1 partial, 0 missing. Bidirectional traceability is strong: every user-spec requirement (v toggle+persistence, 3 sysstat rows, 5 pgstat rows, consistency/ceil, n/a per-source independence, first-tick hint, latency-guard stale, dynamic unit suffix, reserved-digit/ceil formatting, height-guard, data_directory-only filesyst + no remote symlink, layout() rework, 4 GUCs + data_directory, archiving backlog via .ready count, workers umbrella, tps=commit+rollback, per-interval cache hit, replication details, version-aware bgwr/ckpt, TUI-only, single z knob) maps to a task (Tasks 1-11 across 4 waves). No scope creep into new user-facing functionality. No critical findings. One partial (minor): the sysstat field-level layout — nicstat err/coll composite and filesyst mount truncation — is delegated to the user-spec without being restated. Decisions are self-contained in the Decisions section (no structural_gap). Solution has real technical substance (pure topBandLayout geometry, all-three verbose-gated collection branch after the mutual-exclusion switch, lockstep Scan update, reuse of SelectStatBgwriterQuery and wal.go .ready precedent). No overengineering: generic scheduler rejected as YAGNI; bgwr/ckpt trimmed to avoid duplicating the bgwriter screen. Status: pass."
+}

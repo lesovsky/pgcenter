@@ -1,0 +1,31 @@
+{
+  "status": "approved",
+  "summary": "Checked 38 verifiable claims (file paths, functions, structs, query consts, GUC reads, helpers, geometry literals), found 0 mirages. Every cited code anchor exists and is named correctly. The 3 NEW files (top/verbose.go, top/layout.go, internal/query/overview.go) are correctly absent and explicitly proposed for creation.",
+  "findings": [],
+  "stats": {
+    "total_claims_checked": 38,
+    "confirmed": 38,
+    "mirages_found": 0,
+    "verified_claims": [
+      "top/stat.go:214 printSysstat(v *gocui.View, s stat.Stat) — takes *gocui.View (refactor-to-io.Writer claim correct)",
+      "top/stat.go:253 printPgstat(v *gocui.View, s, props, db) — takes *gocui.View",
+      "top/stat.go:349 renderDbstat(w io.Writer, ...) — io.Writer split precedent confirmed",
+      "top/stat.go:429 visibleColumns(...) — 009 pure-function precedent confirmed",
+      "top/extra.go:11 showExtra + mirror-into-all-views loop (extra.go:70-75) confirmed",
+      "internal/stat/stat.go:156 collectExtra mutually-exclusive switch confirmed",
+      "internal/stat/stat.go:122 Collector.Update + prev/curr Diskstats/Netdevs/Fsstats snapshots confirmed",
+      "internal/query/common.go:43 SelectCommonProperties — 5 proposed GUCs genuinely absent today",
+      "internal/stat/postgres.go GetPostgresProperties .Scan(...) lockstep with SELECT confirmed",
+      "internal/query/bgwriter.go:41 SelectStatBgwriterQuery(version) — PG14-16/17/18 split confirmed",
+      "internal/query/query.go:68 selectWalFunctions + Format/NewOptions/Options confirmed",
+      "internal/query/wal.go:6 count(1)*pg_size_bytes(current_setting('wal_segment_size')) precedent confirmed",
+      "internal/stat/diskstats.go:190 countDiskstatsUsage; Util = sValue(...)/10 at :211 confirmed",
+      "internal/stat/netdev.go:179 countNetdevsUsage; Utilization computed confirmed",
+      "top/stat.go:741 nicstat Rbytes/1024/128 conversion at print time confirmed",
+      "top/stat.go:765 printFsstats uses pretty.Size confirmed",
+      "internal/pretty/pretty.go:8 Size(v float64) — no rate suffix/fixed width/ceil confirmed",
+      "internal/math/math.go has only Min/Max — no ceil; zero math.Ceil/Round/Floor repo-wide confirmed",
+      "internal/stat/log.go:129 data_directory read via query.GetSetting confirmed (new prop)"
+    ]
+  }
+}

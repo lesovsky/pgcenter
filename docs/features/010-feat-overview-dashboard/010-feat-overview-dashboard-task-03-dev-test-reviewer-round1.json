@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Two new writer-based golden tests (Test_renderSysstat_compact, Test_renderPgstat_compact) correctly pin the byte-identical compact output of the renderSysstat/renderPgstat cores extracted in this enabling refactor. Golden strings (including ANSI SGR codes, field widths, and the buff/cached sum) are accurate — both tests pass on the real code. Litmus testing via four code mutations confirmed the assertions genuinely fail on divergence: ANSI-code change, load-average reorder, autovacuum field-width change, and an injected 5th line were all caught. The regexp line1 assertion is adequate because the test uses asymmetric distinguishable load-average values (1.23/0.45/6.78) anchored with ^...$, so a reorder is detected. The assert.Len(lines, 4) guard enforces the 'no verbose rows here (Task 8)' boundary and is correctly wrapped in an if to gate index access. No critical or major findings; only one minor stylistic note.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:120 (Test_renderPgstat_compact, line1 assertion)",
+      "issue": "Line1 of renderPgstat is asserted against a live call of formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery) rather than a literal golden string. This makes line1 a tie-test: it verifies renderPgstat delegates to formatInfoString with the right args, but it would not catch a regression inside formatInfoString itself (both sides change together). This is intentional per the task TDD anchor (the literal pinning of formatInfoString lives in the separate Test_formatInfoString), so it is an acceptable design rather than a real coverage gap.",
+      "recommendation": "Acceptable as-is. If stronger isolation is desired, optionally assert line1 against a literal golden string (e.g. \"state [up]: 127.0.0.1:1234 test@testdb (ver: 13.1 on x86_64-~, up 01:23:48, recovery: f)\") so renderPgstat's first line is pinned independently of formatInfoString. Low priority since Test_formatInfoString already pins that function against literals.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 2,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

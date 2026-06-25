@@ -1,0 +1,22 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "All 4 visual-polish fixes are correct. Tight A/B pairs drop only the post-slash ReserveWidth while preserving leading-column padding; filesyst use% now matches printFsstats' %.0f rounding exactly (parity confirmed); the send/recv -> senders/receivers rename is label-only. Type usage (strconv.Itoa over int-returning pretty.Ceil) is correct, strconv is already imported, and all 4 affected golden tests pass.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate"
+  },
+  "verification": {
+    "fix1_nicstat_errcoll": "Pre-slash Rerrs+Terrs keeps ReserveWidth(...,4); post-slash Tcolls now strconv.Itoa(pretty.Ceil(...)). pretty.Ceil returns int, Itoa is type-correct. Leading alignment intact. Golden '3451/0 err/coll' correct.",
+    "fix2_bgwr_pairs": "timed/req: CkptTimed keeps ReserveWidth(...,2), CkptReq now Itoa -> tight. write/sync ms: writeMs keeps ReserveWidth(Ceil,3), syncMs now Itoa -> tight; NA branch leaves both as naLiteral producing 'n/a/n/a ms'. slots/retain (ReserveWidth/pretty.Size) and workers/max (ReserveWidth/%d) untouched and were already tight post-slash. Pre-slash padding preserved in all cases.",
+    "fix3_filesyst_usepct": "fs.Pused is float64 (internal/stat/fsstat.go:70). Composer now uses %3.0f%% directly on fs.Pused; printFsstats (top/stat.go:1079) uses %8.0f%% on s[i].Pused. Both are %.0f -> identical printf round-half-to-even. 74.3 -> 74 (not Ceil's 75). 3-wide reserve right-pads (' 74'), preserving column alignment. Genuine parity confirmed.",
+    "fix4_replication_label": "Format string label 'send/recv' -> 'senders/receivers'; value args (o.Senders, o.Receivers via %d/%d) unchanged. Label-only change correct.",
+    "tests": "go test for the 4 affected golden tests (NicstatConversion, FilesystMounted10, verboseNA, verboseAvailable) passes. No stale old-format/label references remain in top/.",
+    "imports": "strconv already imported (top/stat.go:10); no unused-import risk."
+  }
+}

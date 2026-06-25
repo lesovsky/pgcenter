@@ -1,0 +1,41 @@
+{
+  "status": "needs_work",
+  "checks": {
+    "clarity": "pass",
+    "value": "pass",
+    "scope": "fail",
+    "risks": "pass"
+  },
+  "findings": [
+    {
+      "check": "scope",
+      "severity": "major",
+      "issue": "Variant B (host IO/disk in v1) was chosen without a clear user demand. The stated differentiator vs pg_activity is remote system stats via PL/Perl. But the interview answer was a single word — 'variant B' — with no articulated reason why IO/disk is needed at v1 versus CPU/mem/load alone. The collectExtra rework is identified in the spec itself as Risk R1 (potential destabilisation of iostat/nicstat/fsstats side panels). The incremental user value of disk IO cards over CPU/mem/swap/load on a triage screen is marginal: a DBA who sees high load and wants disk IO triage has screen `j` one keypress away.",
+      "fix": "Ship variant A (CPU/mem/swap/load only) as v1. The core differentiator — remote system stats via PL/Perl — is fully delivered by variant A. Defer host IO/disk to a follow-up once the dashboard is in production and users confirm they want disk context on the overview. This eliminates R1 entirely and reduces implementation scope by removing the always-on disk/fs collection branch."
+    },
+    {
+      "check": "scope",
+      "severity": "major",
+      "issue": "~8 cards is a large MVP for a first-version composite screen. The interview confirmed the exact card composition will be 'refined after MVP', yet the spec still carries 8 card groups including new aggregate SQL for xid-age/wraparound, dead tuples, database time sum, replication lag+retained-WAL, and WAL growth. Roughly half the metrics are new SQL that the codebase does not have. Shipping 8 cards simultaneously means a longer development cycle, more surface for bugs, and no ability to learn what DBAs actually look at first before committing to the full card set.",
+      "fix": "Define a genuine v1 slice of 4-5 cards that reuse existing queries: Sessions (already in Activity struct), Checkpointer (bgwriter.go already has it), Replication lag (lift from replication.go), System host (CPU/mem/load already collected). Defer the 3 cards requiring all-new aggregate SQL (Vacuum/Wraparound, DB time, Throughput aggregate) to v1.1. This ships a usable dashboard faster, validates the concept, and reduces the risk that the card layout does not fit 80x24 before we add more cards."
+    },
+    {
+      "check": "value",
+      "severity": "minor",
+      "issue": "The value proposition 'one screen instead of pressing several hotkeys' is real but modest. The existing activity screen already surfaces sessions, longest xact, autovacuum state, and cache hit in the pgstat summary block. A DBA who knows pgcenter well presses 4-5 hotkeys in under 10 seconds; the dashboard saves that traversal only for someone unfamiliar with the tool or during a high-stress incident. The spec does not articulate what a DBA does differently *after* seeing the dashboard that they could not do before — the drill-down hotkey hints are useful but the DBA already knows the hotkeys.",
+      "fix": "Add one concrete incident scenario to the user-spec that shows the dashboard catching something a DBA would have missed or caught later without it. Without that example the feature risks being 'nice to have' rather than 'must have'. If no such scenario exists, lower expectations accordingly in scope — a smaller dashboard is easier to justify."
+    },
+    {
+      "check": "risks",
+      "severity": "minor",
+      "issue": "The decision to include host IO/disk (variant B) was locked in a single-question batch answer during the interview, without a dedicated discussion of the risk. The spec notes in the risks section that R1 (collectExtra rework destabilising side panels) is the top structural risk, yet the choice was made without surfacing that trade-off explicitly to the product owner. This is a process concern: a consequential scope decision (significant new collection code path) was bundled with three other lower-stakes decisions and answered in bulk.",
+      "fix": "Before starting implementation, confirm variant B vs variant A explicitly as a standalone decision, presenting R1 clearly: 'choosing variant B requires a new always-on disk/fs collection branch and carries risk of breaking the existing iostat/nicstat/fsstats panels; variant A delivers the core differentiator without this risk. Which do you prefer?' This ensures the trade-off is understood, not implicit."
+    }
+  ],
+  "questions": [
+    "Which specific incident or monitoring gap motivated this feature? Is there a concrete case where a DBA using pgcenter was slower to triage because there was no overview screen — or is this feature anticipating a need?",
+    "Is there a user (DBA) who has asked for this, or is it driven by the pg_activity comparison? If the latter, does the competitive comparison actually matter to the target audience (DBAs who chose a CLI tool over pg_activity)?",
+    "If v1 ships only 4-5 cards (reuse-only metrics), would that be useful enough to release, or does the dashboard only become useful at 8+ cards?"
+  ],
+  "summary": "The feature has genuine value as a triage hub and the remote-system-stats differentiator is real. The main concern is scope: variant B (host IO/disk) adds structural risk for marginal v1 value, and an 8-card MVP with half-new SQL is a large first slice. Recommend shipping variant A with 4-5 reuse-only cards, validating the concept, then adding the riskier cards in v1.1."
+}

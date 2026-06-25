@@ -1,0 +1,35 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "feasibility",
+      "severity": "major",
+      "issue": "The spec frames verbose as 'just extra label:value rows in printSysstat/printPgstat' and treats the layout impact as a one-liner ('dbstat ужимается'). But the gocui layout in top/ui.go:103-184 hard-codes the panel geometry: sysstat/pgstat are fixed at y1=4 (4 rows), cmdline sits at y=3..5, and dbstat starts at a fixed y=4. Growing the panels to 7/9 rows is NOT a printer change — it requires making layout() height-aware (verbose-state-dependent SetView coordinates) AND relocating the cmdline view, which currently overlaps the panel band at y=3..5. The extra-panel precedent the spec cites (ui.go:166) is conditional CREATION, not a dynamic resize of the always-present top band.",
+      "why_matters": "This is the single most invasive part of the feature and the spec under-weights it relative to R1. Code research §8 explicitly names the fixed single-band geometry (not the printers) as the real structural constraint. If a tech-spec is written treating layout as trivial, the cmdline-overlap and per-tick geometry recompute will surface as rework. The printer extension itself is genuinely easy (confirmed: printSysstat/printPgstat are pure Fprintf into Frame=false views with no PGresult/align coupling).",
+      "fix": "Add an explicit constraint/risk line: 'layout() must become verbose-aware — recompute sysstat/pgstat/cmdline/dbstat Y-coordinates from a verbose flag; cmdline currently shares the y=3..5 band with the top panels and must be repositioned below the expanded band'. Tie the height-guard to this dynamic geometry, not just to row availability."
+    },
+    {
+      "category": "feasibility",
+      "severity": "minor",
+      "issue": "The 'workers' row needs three GUCs (max_worker_processes, max_parallel_workers, max_logical_replication_workers) and the archiving-backlog / WAL rows need wal_segment_size; none are in SelectCommonProperties (internal/stat/postgres.go:111-131 reads only track_commit_timestamp, max_connections, autovacuum_max_workers, shared_preload_libraries, max_prepared_transactions). These are net-new GUC reads.",
+      "why_matters": "Minor and bounded — current_setting() reads are trivial and already done elsewhere (log.go reads data_directory; wal.go reads wal_segment_size inline in SQL). But the spec presents workers/limits as a pure 'GUC vs backend_type' lookup without flagging that the GUC side is not yet collected, so effort is slightly understated.",
+      "fix": "Note that worker/segment-size limits are new GUC reads (one-time props, not per-tick rates) — either widen SelectCommonProperties or fold them into the verbose collect path."
+    },
+    {
+      "category": "sizing",
+      "severity": "minor",
+      "issue": "Size L is justified, but the spec itself enumerates ~four independent deliverable increments the user deliberately bundled: (1) the verbose toggle + layout/printer plumbing with system rows reusing existing collect; (2) R1 all-three-system-sources branch; (3) the new pg-side aggregate SQL (workload/databases/workers/replication/bgwr-ckpt); (4) the tiering/latency-guard collect seam + dynamic unit-suffix formatter. The decisions-log shows this project habitually ships M-sized slices (004-009 each one screen).",
+      "why_matters": "Not an over/under-engineering defect — the increments are real and the consistency requirement (same structs/SQL as full panels/screens) does couple them. But L here is at the high end, and the tiering + per-source latency-guard 'source registry with per-source rhythm' (R5 mitigation) is the part most likely to balloon.",
+      "fix": "Optional: in the tech-spec, sequence delivery so the toggle/layout/system-rows land before the expensive-aggregate + tiering machinery, even though shipped together. Keep the collect seam minimal (a registry is fine; do not pre-build a generic scheduler — the spec already commits to this)."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "The tiering + per-source latency guard is described as a risk mitigation but its observable behavior is left implicit: when a source's internal divisor is raised due to a latency-budget breach, the displayed value goes stale silently. The spec distinguishes n/a (unavailable) from real 0, but does not say how a throttled-but-previously-available source presents (stale value? n/a? a marker?).",
+      "why_matters": "On a struggling instance (the exact scenario the guard exists for) a DBA could read a stale aggregate as current and mis-triage. Consistency-with-full-panels is a stated AC; a silently-throttled verbose value could diverge from the full panel the DBA cross-checks.",
+      "fix": "State the throttle's display contract: a source skipped this tick shows last value (acceptable for slow-cached sizes) vs. a latency-degraded source — decide whether it stays last-good or degrades to n/a, and whether a staleness hint applies beyond the first tick."
+    }
+  ],
+  "worst_category": "feasibility",
+  "summary": "The revised verbose-toggle design is sound, well-matched to the stack, and architecturally fitter than the prior separate-screen design — reusing printSysstat/printPgstat (confirmed pure Fprintf, no PGresult/align coupling) correctly eliminates a duplication antipattern. Every PG-side claim checks out against existing precedent (bgwriter PG17 split, backend_type counts, pg_ls_dir+wal_segment_size archive backlog, data_directory FS resolution, dynamic unit-suffix as a genuinely new but small pure function). No critical issues; size L is defensible. Main caveat: the spec under-weights the layout/geometry rework (verbose-aware SetView + cmdline relocation) relative to R1 — that, not the printers, is the invasive core."
+}

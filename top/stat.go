@@ -55,6 +55,10 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	// Collector.Update() (not via ToggleCollectExtra), so changes must trigger
 	// a Reset() to discard stale per-PID snapshots.
 	prevCollectExtra := v.CollectExtra
+	// Track Verbose separately too — toggling it only changes how the top panels are
+	// rendered, not what is collected, so a verbose-only view update must NOT Reset()
+	// the collector (which would blank the CPU/mem/load deltas for one frame).
+	prevVerbose := v.Verbose
 
 	// Collect stat in loop and send it to stat channel.
 	for {
@@ -79,6 +83,12 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 		ticker := time.NewTicker(refresh)
 		select {
 		case v = <-viewCh:
+			// Branch order is load-bearing: refresh -> ShowExtra -> Verbose -> CollectExtra
+			// -> unconditional Reset. The render-only early-outs (refresh, Verbose) MUST
+			// precede both Reset() paths below, otherwise a toggle that changes nothing the
+			// collector reads would still wipe the "previous" snapshot and blank the deltas.
+			// Do not move the Verbose early-out below a Reset.
+
 			// Update refresh interval if it is changed.
 			if refresh != v.Refresh && v.Refresh > 0 {
 				refresh = v.Refresh
@@ -89,6 +99,15 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			if extra != v.ShowExtra {
 				extra = v.ShowExtra
 				c.ToggleCollectExtra(extra)
+				continue
+			}
+
+			// Detect a verbose-only toggle. Verbose changes only how the top panels are
+			// rendered, not what is collected, so it must not fall through to either Reset()
+			// path below — doing so would discard the "previous" snapshot and blank the
+			// CPU/mem/load deltas for one frame. Update the tracked value and skip the resets.
+			if prevVerbose != v.Verbose {
+				prevVerbose = v.Verbose
 				continue
 			}
 
@@ -122,15 +141,38 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 	}
 }
 
+// firstTickHint decides the cmdline first-tick hint from the collected Stat. While the collector's
+// first-tick flag is set (propagated via Stat.System.VerboseFirstTick, the single source of truth — no
+// duplicate first-tick flag in top/), the dear/delta-based verbose rows render n/a, so the cmdline
+// shows "collecting...". The flag clears after the first successful refresh and re-arms on every verbose
+// OFF->ON re-enable (Task 7), so the hint reappears on re-enable too — not only after a screen switch.
+func firstTickHint(s stat.Stat) (string, bool) {
+	if s.System.VerboseFirstTick {
+		return "collecting...", true
+	}
+	return "", false
+}
+
 // printStat prints collected stats in UI.
 func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
+	// First-tick cmdline hint, keyed on the collector's first-tick flag (via Stat). printCmdline runs
+	// its own g.Update, so it is called here (outside the panel-render g.Update below) exactly once per
+	// path — only when the hint is shown — respecting the printCmdline mutual-exclusion (one call per
+	// path, no overwrite). The cmdline is event-driven (it is NOT rewritten on every refresh; it stays
+	// empty until something prints to it), so there is intentionally no explicit "clear" here: the hint
+	// self-clears via printCmdline's own 2s timer, and once the first-tick flag clears on the next refresh
+	// it is simply not re-emitted. On an OFF->ON re-enable the flag re-arms, so the hint reappears.
+	if msg, show := firstTickHint(s); show {
+		printCmdline(app.ui, "%s", msg)
+	}
+
 	app.ui.Update(func(g *gocui.Gui) error {
 		v, err := g.View("sysstat")
 		if err != nil {
 			return fmt.Errorf("set focus on sysstat view failed: %w", err)
 		}
 		v.Clear()
-		err = printSysstat(v, s)
+		err = printSysstat(v, s, app.config.verbose, app.db.Local, props.DataDirectory)
 		if err != nil {
 			return fmt.Errorf("print sysstat failed: %w", err)
 		}
@@ -140,7 +182,7 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 			return fmt.Errorf("set focus on pgstat view failed: %w", err)
 		}
 		v.Clear()
-		err = printPgstat(v, s, props, app.db)
+		err = printPgstat(v, s, props, app.db, app.config.verbose)
 		if err != nil {
 			return fmt.Errorf("print summary postgres stat failed: %w", err)
 		}
@@ -210,12 +252,24 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	})
 }
 
-// printSysstat prints system stats on UI.
-func printSysstat(v *gocui.View, s stat.Stat) error {
+// printSysstat prints system stats on UI. It is a thin wrapper that delegates to the
+// writer-based renderSysstat (*gocui.View implements io.Writer), so the render core can be
+// unit-tested without a live terminal — mirroring the printDbstat → renderDbstat precedent.
+func printSysstat(v *gocui.View, s stat.Stat, verbose bool, local bool, dataDir string) error {
+	return renderSysstat(v, s, verbose, local, dataDir)
+}
+
+// renderSysstat is the writer-based core of printSysstat: it prints the system stats to w.
+// When verbose is set it appends three extended rows (iostat/nicstat/filesyst) consistent with the
+// full B/N/F side panels: the iostat/nicstat rows select the max-%util device reusing the struct
+// math already computed by count*Usage (never recomputed), and filesyst shows the data_directory's
+// filesystem. local/dataDir drive the filesyst mount-prefix match (data_directory symlinks are
+// resolved only when local).
+func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string) error {
 	var err error
 
 	/* line1: current time and load average */
-	_, err = fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
+	_, err = fmt.Fprintf(w, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
 	if err != nil {
@@ -223,7 +277,7 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line2: cpu usage */
-	_, err = fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
+	_, err = fmt.Fprintf(w, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
 		s.CPUStat.User, s.CPUStat.Sys, s.CPUStat.Nice, s.CPUStat.Idle,
 		s.CPUStat.Iowait, s.CPUStat.Irq, s.CPUStat.Softirq, s.CPUStat.Steal)
 	if err != nil {
@@ -231,7 +285,7 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line3: memory usage */
-	_, err = fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
+	_, err = fmt.Fprintf(w, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
 		s.Meminfo.MemTotal, s.Meminfo.MemFree, s.Meminfo.MemUsed,
 		s.Meminfo.MemCached+s.Meminfo.MemBuffers+s.Meminfo.MemSlab)
 	if err != nil {
@@ -239,26 +293,201 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line4: swap usage, dirty and writeback */
-	_, err = fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
+	_, err = fmt.Fprintf(w, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
 		s.Meminfo.SwapTotal, s.Meminfo.SwapFree, s.Meminfo.SwapUsed,
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
 	if err != nil {
 		return err
 	}
 
+	if verbose {
+		if err := renderSysstatVerbose(w, s, local, dataDir); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-// printPgstat prints summary Postgres stats on UI.
-func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *postgres.DB) error {
+// naLiteral is the literal rendered for an unavailable signal — never "0" and never empty, so a
+// DBA can tell a missing signal from a real zero (user-spec degradation requirement).
+const naLiteral = "n/a"
+
+// cacheHitWidth is the reserved width of the verbose "cache hit ratio" value: 6 columns for the
+// number ("%6.2f") plus 1 for the trailing '%' = 7 (e.g. "100.00%", " 99.99%"). The n/a sentinel
+// is right-aligned into the same width so the trailing label stays static across ticks.
+const cacheHitWidth = 7
+
+// rateField formats a disk/net rate value (already in MB/s or Mbps) into a fixed-digit-reserve field
+// followed by a r/w-prefixed unit, switching to the next higher unit when the rounded integer no
+// longer fits the reserve. It is the dynamic-suffix companion to pretty.RateUnit, differing only in
+// that the read/write prefix is placed between the digits and the unit (the user-spec layout shows
+// "1135 rMB/s", "1546 wMB/s"). The value is rounded up (ceil) so verbose stays whole-number.
+func rateField(v float64, family string, prefix string, width int) string {
+	base, high := "MB/s", "GB/s"
+	var divisor float64 = 1024
+	if family == pretty.FamilyNet {
+		base, high = "Mbps", "Gbps"
+		divisor = 1000
+	}
+
+	max := 1
+	for i := 0; i < width; i++ {
+		max *= 10
+	}
+	max-- // largest integer that fits the reserve, e.g. width 4 -> 9999
+
+	if pretty.Ceil(v) <= max {
+		return pretty.ReserveWidth(pretty.Ceil(v), width) + " " + prefix + base
+	}
+	return pretty.ReserveWidth(pretty.Ceil(v/divisor), width) + " " + prefix + high
+}
+
+// renderSysstatVerbose appends the three verbose system rows to w. Each row degrades independently:
+// no active device / first tick / no mount match renders n/a for that row without aborting the others.
+func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) error {
+	// iostat row: select the max-%util device among active ones (Completed != 0), the same device
+	// set printIostat shows. The first verbose tick (s.VerboseFirstTick) has no valid prev, so the
+	// delta fields render n/a rather than a misleading zero — NOT keyed on len(slice) (the slice is
+	// populated zero-delta on the first tick).
+	if idx := maxUtilDisk(s.Diskstats); idx < 0 || s.VerboseFirstTick {
+		if _, err := fmt.Fprintf(w, "  iostat: %s devices, %s max util, %s, %s, %s, %s\n",
+			pretty.ReserveWidth(activeDiskCount(s.Diskstats), 2), naLiteral, naLiteral, naLiteral, naLiteral, naLiteral); err != nil {
+			return err
+		}
+	} else {
+		d := s.Diskstats[idx]
+		if _, err := fmt.Fprintf(w, "  iostat: %s devices, %s%% max util, %s, %s r/s, %s, %s w/s\n",
+			pretty.ReserveWidth(activeDiskCount(s.Diskstats), 2),
+			pretty.ReserveWidth(pretty.Ceil(d.Util), 3),
+			rateField(d.Rsectors, pretty.FamilyDisk, "r", 4),
+			pretty.ReserveWidth(pretty.Ceil(d.Rcompleted), 5),
+			rateField(d.Wsectors, pretty.FamilyDisk, "w", 4),
+			pretty.ReserveWidth(pretty.Ceil(d.Wcompleted), 5)); err != nil {
+			return err
+		}
+	}
+
+	// nicstat row: select the max-Utilization interface among active ones (Packets != 0), the same
+	// set printNetdev shows. rMbps/wMbps replicate printNetdev's print-time Rbytes/1024/128 exactly.
+	if idx := maxUtilNet(s.Netdevs); idx < 0 || s.VerboseFirstTick {
+		if _, err := fmt.Fprintf(w, " nicstat: %s devices, %s max util, %s, %s, %s err/coll\n",
+			pretty.ReserveWidth(activeNetCount(s.Netdevs), 2), naLiteral, naLiteral, naLiteral, naLiteral); err != nil {
+			return err
+		}
+	} else {
+		n := s.Netdevs[idx]
+		if _, err := fmt.Fprintf(w, " nicstat: %s devices, %s%% max util, %s, %s, %s/%s err/coll\n",
+			pretty.ReserveWidth(activeNetCount(s.Netdevs), 2),
+			pretty.ReserveWidth(pretty.Ceil(n.Utilization), 3),
+			rateField(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
+			rateField(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
+			pretty.ReserveWidth(pretty.Ceil(n.Rerrs+n.Terrs), 4),
+			strconv.Itoa(pretty.Ceil(n.Tcolls))); err != nil {
+			return err
+		}
+	}
+
+	// filesyst row: the data_directory's filesystem by longest mount-prefix. Any match failure
+	// (no mount, empty data_directory, EvalSymlinks failure) renders n/a.
+	if fs, ok := stat.MatchDataDirFs(dataDir, s.Fsstats, local); ok {
+		if _, err := fmt.Fprintf(w, "filesyst: %s on %s (%s), %s size, %s used, %3.0f%% use\n",
+			fs.Mount.Device, truncate(fs.Mount.Mountpoint, 10), fs.Mount.Fstype,
+			pretty.Size(fs.Size), pretty.Size(fs.Used), fs.Pused); err != nil {
+			return err
+		}
+	} else {
+		if _, err := fmt.Fprintf(w, "filesyst: %s\n", naLiteral); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// maxUtilDisk returns the index of the active disk (Completed != 0, the printIostat filter) with the
+// highest Util, or -1 when no device is active. Util is read as-is from countDiskstatsUsage (never
+// recomputed) so the verbose row matches the full B panel exactly (Decision 5).
+func maxUtilDisk(s stat.Diskstats) int {
+	best, bestUtil := -1, -1.0
+	for i := range s {
+		if s[i].Completed == 0 {
+			continue
+		}
+		if s[i].Util > bestUtil {
+			best, bestUtil = i, s[i].Util
+		}
+	}
+	return best
+}
+
+// activeDiskCount counts active disks (Completed != 0), the device set printIostat displays.
+func activeDiskCount(s stat.Diskstats) int {
+	n := 0
+	for i := range s {
+		if s[i].Completed != 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// maxUtilNet returns the index of the active interface (Packets != 0, the printNetdev filter) with
+// the highest Utilization, or -1 when none is active. Utilization is read as-is from
+// countNetdevsUsage (never recomputed) so the verbose row matches the full N panel exactly.
+func maxUtilNet(s stat.Netdevs) int {
+	best, bestUtil := -1, -1.0
+	for i := range s {
+		if s[i].Packets == 0 {
+			continue
+		}
+		if s[i].Utilization > bestUtil {
+			best, bestUtil = i, s[i].Utilization
+		}
+	}
+	return best
+}
+
+// activeNetCount counts active interfaces (Packets != 0), the set printNetdev displays.
+func activeNetCount(s stat.Netdevs) int {
+	n := 0
+	for i := range s {
+		if s[i].Packets != 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// truncate shortens s to at most n runes (the filesyst "mounted" field is capped at 10).
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+// printPgstat prints summary Postgres stats on UI. It is a thin wrapper that delegates to the
+// writer-based renderPgstat (*gocui.View implements io.Writer), so the render core can be
+// unit-tested without a live terminal — mirroring the printDbstat → renderDbstat precedent.
+func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *postgres.DB, verbose bool) error {
+	return renderPgstat(v, s, props, db, verbose)
+}
+
+// renderPgstat is the writer-based core of printPgstat: it prints the summary Postgres stats to w.
+// When verbose is set it appends five extended rows (workload/databases/workers/replication/bgwr-ckpt)
+// from the PgstatOverview aggregate, consistent with the full d/r/b screens. Delta-based metrics with
+// no prev snapshot (Overview.HasPrev == false) and unavailable sources (availability flags) render n/a.
+func renderPgstat(w io.Writer, s stat.Stat, props stat.PostgresProperties, db *postgres.DB, verbose bool) error {
 	// line1: details of used connection, version, uptime and recovery status
-	_, err := fmt.Fprintln(v, formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery))
+	_, err := fmt.Fprintln(w, formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery))
 	if err != nil {
 		return err
 	}
 
 	// line2: current state of connections: total, idle, idle xacts, active, waiting, others
-	_, err = fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
+	_, err = fmt.Fprintf(w, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
 		s.Activity.ConnTotal, props.GucMaxConnections, s.Activity.ConnPrepared, props.GucMaxPrepXacts,
 		s.Activity.ConnIdle, s.Activity.ConnIdleXact, s.Activity.ConnActive,
 		s.Activity.ConnWaiting, s.Activity.ConnOthers)
@@ -267,7 +496,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	}
 
 	// line3: current state of autovacuum: number of workers, anti-wraparound, manual vacuums and time of oldest vacuum
-	_, err = fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
+	_, err = fmt.Fprintf(w, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.Activity.AVWorkers, props.GucAVMaxWorkers,
 		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
 	if err != nil {
@@ -275,9 +504,120 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	}
 
 	// line4: current workload
-	_, err = fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
+	_, err = fmt.Fprintf(w, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.Activity.CallsRate, s.Activity.StmtAvgTime, s.Activity.XactMaxTime, s.Activity.PrepMaxTime)
 	if err != nil {
+		return err
+	}
+
+	if verbose {
+		if err := renderPgstatVerbose(w, s.Pgstat.Overview, props); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// naReserve renders the n/a sentinel right-aligned into the SAME reserved width a value would
+// occupy, so n/a is a drop-in that preserves the column position of whatever label/field follows
+// it on the same line (a degraded value must not shift the trailing label). The effective width is
+// at least len(naLiteral) so the sentinel is never truncated; the value side must reserve the same
+// effective width for the toggle to be static.
+func naReserve(width int) string {
+	if width < len(naLiteral) {
+		width = len(naLiteral)
+	}
+	return fmt.Sprintf("%*s", width, naLiteral)
+}
+
+// naInt renders an int rate field as a fixed-width number, or n/a in the same reserved width when
+// this tick has no prev snapshot (hasPrev == false) — so a first-tick delta is distinguishable from
+// a real zero AND the n/a occupies the value's column slot, keeping the trailing label static.
+func naInt(v int64, width int, hasPrev bool) string {
+	if !hasPrev {
+		return naReserve(width)
+	}
+	return pretty.ReserveWidth(int(v), width)
+}
+
+// renderPgstatVerbose appends the five verbose pgstat rows from the PgstatOverview aggregate. Each
+// field degrades independently to n/a (first tick or unavailable source) without aborting the rest.
+func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.PostgresProperties) error {
+	hp := o.HasPrev
+
+	// workload row. All fields are interval rates (no prev -> n/a); others is the interval value.
+	if _, err := fmt.Fprintf(w, "    workload: %s tps, %s ins/s, %s upd/s, %s del/s, %s ret/s, %s tmp/s, %s others\n",
+		naInt(o.TPSRate, 4, hp), naInt(o.InsertsRate, 4, hp), naInt(o.UpdatesRate, 4, hp),
+		naInt(o.DeletesRate, 4, hp), naInt(o.ReturnedRate, 4, hp), naInt(o.TempFilesRate, 4, hp),
+		naInt(o.OthersInterval, 3, hp)); err != nil {
+		return err
+	}
+
+	// databases row. Size/growth are n/a when the privileged aggregate failed; cache hit ratio is
+	// n/a on the first tick or when there was no I/O in the interval.
+	size, growth := naLiteral, naLiteral
+	if o.TotalSizeValid {
+		size = pretty.Size(float64(o.TotalSize))
+		if hp {
+			growth = pretty.Size(float64(o.GrowthPerSec))
+		}
+	}
+	// cache hit ratio is the trailing field before its label; reserve a fixed width for the value
+	// (6 digits + the '%' = 7, e.g. "100.00%" / " 99.99%") so the n/a sentinel (right-aligned into
+	// the same 7) is a drop-in and the "cache hit ratio" label never moves between ticks.
+	hit := naReserve(cacheHitWidth)
+	if o.CacheHitRatioValid {
+		hit = fmt.Sprintf("%6.2f%%", o.CacheHitRatio)
+	}
+	if _, err := fmt.Fprintf(w, "   databases: %s per %s databases, %s growth/s, %s cache hit ratio\n",
+		size, pretty.ReserveWidth(int(o.DatabasesCount), 2), growth, hit); err != nil {
+		return err
+	}
+
+	// workers row. Active counts / GUC limits (umbrella max_worker_processes, logical, parallel).
+	if _, err := fmt.Fprintf(w, "     workers: %s/%d workers/max, %s/%d logical workers, %s/%d parallel workers\n",
+		pretty.ReserveWidth(o.WorkersUmbrellaActive, 2), props.GucMaxWorkerProcesses,
+		pretty.ReserveWidth(o.WorkersLogicalActive, 2), props.GucMaxLogicalReplicationWorkers,
+		pretty.ReserveWidth(o.WorkersParallelActive, 2), props.GucMaxParallelWorkers); err != nil {
+		return err
+	}
+
+	// replication row. lag/slots-retain/archiving-backlog are n/a when their source is unavailable
+	// (no standby, no slots, archive_mode=off / missing privilege).
+	lag := naLiteral
+	if o.LagBytesValid {
+		lag = pretty.Size(float64(o.LagBytes))
+	}
+	retain := naLiteral
+	if o.RetainedValid {
+		retain = pretty.Size(float64(o.RetainedBytes))
+	}
+	backlog := naLiteral
+	if o.ArchivingBacklogValid {
+		backlog = pretty.Size(float64(o.ArchivingBacklog))
+	}
+	if _, err := fmt.Fprintf(w, " replication: %s wal size, %s lag, %s/%s slots/retain, %s archiving backlog, %d/%d senders/receivers\n",
+		pretty.Size(float64(o.WalSize)), lag,
+		pretty.ReserveWidth(int(o.SlotsCount), 2), retain,
+		backlog, o.Senders, o.Receivers); err != nil {
+		return err
+	}
+
+	// bgwr/ckpt row. timed/req are absolute cumulative; write/sync ms are interval deltas (n/a on
+	// the first tick); maxwritten is the interval delta count. The whole delta group toggles
+	// together on the first tick (hp), and syncMs is the intentionally tight post-slash value (its
+	// width varies by design — the A/B composite rule from 95656e8), so the downstream " maxwritten"
+	// label is governed by that tight composite, not by a fixed-reserve n/a — left as-is.
+	writeMs, syncMs, maxw := naLiteral, naLiteral, naLiteral
+	if hp {
+		writeMs = pretty.ReserveWidth(pretty.Ceil(o.CkptWriteMsDelta), 3)
+		syncMs = strconv.Itoa(pretty.Ceil(o.CkptSyncMsDelta)) // tight post-slash value
+		maxw = pretty.ReserveWidth(int(o.MaxWrittenDelta), 2)
+	}
+	if _, err := fmt.Fprintf(w, "   bgwr/ckpt: %s/%s timed/req, %s/%s ms write/sync, %s maxwritten\n",
+		pretty.ReserveWidth(int(o.CkptTimed), 2), strconv.Itoa(int(o.CkptReq)),
+		writeMs, syncMs, maxw); err != nil {
 		return err
 	}
 

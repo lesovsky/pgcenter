@@ -17,6 +17,7 @@ type config struct {
 	menu         menuStyle      // When working with menus, keep properties of the menu.
 	procMask     int            // Process mask used for selecting group of process.
 	scrollOffset int            // Horizontal scroll position: index into scrollable columns (1..Ncols-1); 0 means no scroll. Ephemeral, reset on view switch.
+	verbose      bool           // Verbose display mode for the top summary panels. Persistent: unlike scrollOffset, it is NOT reset on view switch (mirrored into every views entry).
 }
 
 // newConfig creates 'top' initial configuration.

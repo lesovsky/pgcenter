@@ -35,6 +35,95 @@ func Test_formatInfoString(t *testing.T) {
 	}
 }
 
+// Test_renderSysstat_compact is the writer-based golden test for the system-stats panel.
+// renderSysstat is the io.Writer core extracted from printSysstat (task 03 refactor); its
+// compact output must stay byte-identical. Line 1 carries a dynamic timestamp, so it is
+// matched by pattern (with the exact load-average format), while lines 2..4 are asserted
+// byte-for-byte against the golden, including the ANSI SGR codes.
+func Test_renderSysstat_compact(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg: stat.LoadAvg{One: 1.23, Five: 0.45, Fifteen: 6.78},
+		CPUStat: stat.CPUStat{
+			User: 1.1, Sys: 2.2, Nice: 3.3, Idle: 4.4,
+			Iowait: 5.5, Irq: 6.6, Softirq: 7.7, Steal: 8.8,
+		},
+		Meminfo: stat.Meminfo{
+			MemTotal: 1000, MemFree: 200, MemUsed: 800,
+			MemCached: 10, MemBuffers: 20, MemSlab: 30,
+			SwapTotal: 500, SwapFree: 400, SwapUsed: 100,
+			MemDirty: 5, MemWriteback: 7,
+		},
+	}}
+
+	var buf bytes.Buffer
+	err := renderSysstat(&buf, s, false, true, "")
+	assert.NoError(t, err)
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if assert.Len(t, lines, 4, "compact sysstat must be exactly 4 lines") {
+		// line1: dynamic timestamp, fixed load-average format.
+		assert.Regexp(t,
+			`^pgcenter: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}, load average: 1\.23, 0\.45, 6\.78$`,
+			lines[0])
+		// line2..4: byte-identical golden, including ANSI codes.
+		assert.Equal(t,
+			"    %cpu: \033[37;1m 1.1\033[0m us, \033[37;1m 2.2\033[0m sy, \033[37;1m 3.3\033[0m ni, \033[37;1m 4.4\033[0m id, \033[37;1m 5.5\033[0m wa, \033[37;1m 6.6\033[0m hi, \033[37;1m 7.7\033[0m si, \033[37;1m 8.8\033[0m st",
+			lines[1])
+		assert.Equal(t,
+			" MiB mem: \033[37;1m  1000\033[0m total, \033[37;1m   200\033[0m free, \033[37;1m   800\033[0m used, \033[37;1m      60\033[0m buff/cached",
+			lines[2])
+		assert.Equal(t,
+			"MiB swap: \033[37;1m   500\033[0m total, \033[37;1m   400\033[0m free, \033[37;1m   100\033[0m used, \033[37;1m     5/7\033[0m dirty/writeback",
+			lines[3])
+	}
+}
+
+// Test_renderPgstat_compact is the writer-based golden test for the summary Postgres-stats
+// panel. renderPgstat is the io.Writer core extracted from printPgstat (task 03 refactor);
+// its compact output must stay byte-identical. Line 1 is formatInfoString output; lines 2..4
+// are asserted byte-for-byte against the golden, including the ANSI SGR codes.
+func Test_renderPgstat_compact(t *testing.T) {
+	db := &postgres.DB{Config: postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{
+		Host: "127.0.0.1", Port: 1234, User: "test", Database: "testdb",
+	}}}}
+	props := stat.PostgresProperties{
+		Version:           "13.1 on x86_64-pc-linux-gnu Debian",
+		Recovery:          "f",
+		GucMaxConnections: 100,
+		GucMaxPrepXacts:   0,
+		GucAVMaxWorkers:   3,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Activity: stat.Activity{
+		State: "up", Uptime: "01:23:48",
+		ConnTotal: 5, ConnPrepared: 1, ConnIdle: 2, ConnIdleXact: 0,
+		ConnActive: 3, ConnWaiting: 0, ConnOthers: 0,
+		AVWorkers: 1, AVUser: 0, AVAntiwrap: 0, AVMaxTime: "00:00:01",
+		CallsRate: 42, StmtAvgTime: 1.234, XactMaxTime: "00:00:02", PrepMaxTime: "00:00:00",
+	}}}
+
+	var buf bytes.Buffer
+	err := renderPgstat(&buf, s, props, db, false)
+	assert.NoError(t, err)
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if assert.Len(t, lines, 4, "compact pgstat must be exactly 4 lines") {
+		// line1: formatInfoString output (ties to Test_formatInfoString).
+		assert.Equal(t,
+			formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery),
+			lines[0])
+		// line2..4: byte-identical golden, including ANSI codes.
+		assert.Equal(t,
+			"  activity:\033[37;1m  5/100\033[0m conns,\033[37;1m  1/0\033[0m prepared,\033[37;1m  2\033[0m idle,\033[37;1m  0\033[0m idle_xact,\033[37;1m  3\033[0m active,\033[37;1m  0\033[0m waiting,\033[37;1m  0\033[0m others",
+			lines[1])
+		assert.Equal(t,
+			"autovacuum: \033[37;1m 1/3\033[0m workers/max, \033[37;1m 0\033[0m manual, \033[37;1m 0\033[0m wraparound, \033[37;1m00:00:01\033[0m vac_maxtime",
+			lines[2])
+		assert.Equal(t,
+			"statements: \033[37;1m 42\033[0m stmt/s, \033[37;1m1.234\033[0m stmt_avgtime, \033[37;1m00:00:02\033[0m xact_maxtime, \033[37;1m00:00:00\033[0m prep_maxtime",
+			lines[3])
+	}
+}
+
 func Test_formatError(t *testing.T) {
 	testcases := []struct {
 		err  error
@@ -51,6 +140,329 @@ func Test_formatError(t *testing.T) {
 	for _, tc := range testcases {
 		got := formatError(tc.err)
 		assert.Equal(t, tc.want, got)
+	}
+}
+
+// verboseLines renders sysstat in verbose mode against a buffer and returns the rows split by line.
+func verboseSysstatLines(t *testing.T, s stat.Stat, local bool, dataDir string) []string {
+	t.Helper()
+	var buf bytes.Buffer
+	assert.NoError(t, renderSysstat(&buf, s, true, local, dataDir))
+	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+}
+
+// Test_renderSysstat_verboseIostatMaxUtil verifies the iostat verbose row selects the active device
+// with the highest Util (devices with Completed==0 are skipped, matching printIostat) and reads that
+// device's rates as-is from the struct (Decision 5 consistency).
+func Test_renderSysstat_verboseIostatMaxUtil(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Diskstats: stat.Diskstats{
+			{Device: "sda", Completed: 100, Util: 30, Rsectors: 11, Wsectors: 22, Rcompleted: 33, Wcompleted: 44},
+			{Device: "sdb", Completed: 0, Util: 99}, // inactive -> skipped even though Util is highest
+			{Device: "sdc", Completed: 200, Util: 80, Rsectors: 1135, Wsectors: 1546, Rcompleted: 34152, Wcompleted: 17852},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, true, "")
+	// 4 compact + 3 verbose
+	if assert.Len(t, lines, 7) {
+		// Full-line golden locks the exact reserve-width layout and field order: 2 active devices
+		// (sdb skipped), max util from sdc (80), sdc's rates.
+		assert.Equal(t,
+			"  iostat:  2 devices,  80% max util, 1135 rMB/s, 34152 r/s, 1546 wMB/s, 17852 w/s",
+			lines[4])
+	}
+}
+
+// Test_renderSysstat_verboseNicstatConversion verifies the nicstat verbose row applies the same
+// print-time Rbytes/1024/128 conversion as printNetdev, selects the max-Utilization active interface
+// (Packets==0 skipped), and composes err/coll as (Rerrs+Terrs)/Tcolls.
+func Test_renderSysstat_verboseNicstatConversion(t *testing.T) {
+	// Rbytes/1024/128 = 4345.0 Mbps exactly (4345*128*1024 = 569425920);
+	// Tbytes/1024/128 = 6543.0 exactly (6543*128*1024 = 857604096).
+	s := stat.Stat{System: stat.System{
+		Netdevs: stat.Netdevs{
+			{Ifname: "eth0", Packets: 0, Utilization: 100}, // inactive -> skipped
+			{Ifname: "eth1", Packets: 10, Utilization: 60,
+				Rbytes: 569425920, Tbytes: 857604096, Rerrs: 3000, Terrs: 451, Tcolls: 0},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, true, "")
+	if assert.Len(t, lines, 7) {
+		// Full-line golden: /1024/128 parity (4345/6543), err=Rerrs+Terrs=3451, coll=Tcolls=0.
+		assert.Equal(t,
+			" nicstat:  1 devices,  60% max util, 4345 rMbps, 6543 wMbps, 3451/0 err/coll",
+			lines[5])
+	}
+}
+
+// Test_renderSysstat_verboseFirstTickNA verifies the first verbose tick (VerboseFirstTick set, the
+// slice already populated zero-delta) renders n/a for iostat/nicstat delta fields, NOT 0; and the
+// counter-case: the same populated slice WITHOUT the flag renders 0 (the flag is the only n/a trigger).
+func Test_renderSysstat_verboseFirstTickNA(t *testing.T) {
+	base := stat.System{
+		Diskstats: stat.Diskstats{
+			{Device: "sda", Completed: 100, Util: 0, Rsectors: 0, Wsectors: 0, Rcompleted: 0, Wcompleted: 0},
+		},
+		Netdevs: stat.Netdevs{
+			{Ifname: "eth0", Packets: 10, Utilization: 0, Rbytes: 0, Tbytes: 0},
+		},
+	}
+
+	// First tick: flag set -> n/a.
+	first := base
+	first.VerboseFirstTick = true
+	lines := verboseSysstatLines(t, stat.Stat{System: first}, true, "")
+	if assert.Len(t, lines, 7) {
+		assert.Contains(t, lines[4], "n/a")
+		assert.Contains(t, lines[5], "n/a")
+	}
+
+	// Counter-case: genuinely idle device, real zero deltas, flag NOT set -> 0, not n/a.
+	idle := base
+	idle.VerboseFirstTick = false
+	lines = verboseSysstatLines(t, stat.Stat{System: idle}, true, "")
+	if assert.Len(t, lines, 7) {
+		assert.NotContains(t, lines[4], "n/a")
+		assert.NotContains(t, lines[5], "n/a")
+		assert.Contains(t, lines[4], "0% max util")
+	}
+}
+
+// Test_renderSysstat_verboseFilesystMounted10 verifies the filesyst "mounted" field is truncated to
+// 10 characters.
+func Test_renderSysstat_verboseFilesystMounted10(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Fsstats: stat.Fsstats{
+			{Mount: stat.Mount{Device: "/dev/nvme0n1p2", Mountpoint: "/var/lib/postgresql/data", Fstype: "ext4"},
+				Size: 1024, Used: 512, Pused: 74.3},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, false, "/var/lib/postgresql/data")
+	if assert.Len(t, lines, 7) {
+		// Full-line golden: mounted truncated to first 10 runes of "/var/lib/postgresql/data".
+		// use-% mirrors printFsstats' %.0f of Pused exactly (74.3 -> 74, NOT Ceil's 75) — the
+		// verbose row must agree with the full fsstat panel for the same filesystem.
+		assert.Equal(t,
+			"filesyst: /dev/nvme0n1p2 on /var/lib/p (ext4), 1.0K size, 512B used,  74% use",
+			lines[6])
+		assert.NotContains(t, lines[6], "/var/lib/postgresql")
+		assert.NotContains(t, lines[6], "75")
+	}
+}
+
+// Test_renderSysstat_verboseFilesystNA verifies that when no mount matches the data_directory, the
+// filesyst row renders n/a (the iostat/nicstat rows are still rendered).
+func Test_renderSysstat_verboseFilesystNA(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Fsstats: stat.Fsstats{
+			{Mount: stat.Mount{Device: "/dev/sda1", Mountpoint: "/srv/other", Fstype: "ext4"}},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, false, "/var/lib/pgsql/data")
+	if assert.Len(t, lines, 7) {
+		assert.Equal(t, "filesyst: n/a", lines[6])
+	}
+}
+
+// Test_renderSysstat_compactUnchanged verifies that verbose=false adds no rows AND that turning
+// verbose on does not perturb the compact rows: the verbose output's first 4 lines must equal the
+// full compact output. This exercises the real invariant (verbose only appends), unlike comparing
+// verbose=false to itself.
+func Test_renderSysstat_compactUnchanged(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg:   stat.LoadAvg{One: 1, Five: 2, Fifteen: 3},
+		Diskstats: stat.Diskstats{{Device: "sda", Completed: 100, Util: 50}},
+		Netdevs:   stat.Netdevs{{Ifname: "eth0", Packets: 10, Utilization: 50}},
+		Fsstats:   stat.Fsstats{{Mount: stat.Mount{Mountpoint: "/"}}},
+	}}
+
+	var compact, verbose bytes.Buffer
+	assert.NoError(t, renderSysstat(&compact, s, false, true, "/"))
+	assert.NoError(t, renderSysstat(&verbose, s, true, true, "/"))
+
+	compactLines := strings.Split(strings.TrimRight(compact.String(), "\n"), "\n")
+	verboseLines := strings.Split(strings.TrimRight(verbose.String(), "\n"), "\n")
+
+	// verbose=false: exactly 4 compact rows, no verbose rows leaked.
+	assert.Len(t, compactLines, 4)
+	// verbose=true: 4 compact + 3 verbose, and the compact prefix is byte-identical.
+	if assert.Len(t, verboseLines, 7) {
+		assert.Equal(t, compactLines, verboseLines[:4])
+	}
+}
+
+// pgstatTestProps returns properties with worker GUC limits for the verbose pgstat rows.
+func pgstatTestProps() stat.PostgresProperties {
+	return stat.PostgresProperties{
+		Version: "13.1", Recovery: "f", GucMaxConnections: 100, GucAVMaxWorkers: 3,
+		GucMaxWorkerProcesses: 8, GucMaxLogicalReplicationWorkers: 4, GucMaxParallelWorkers: 8,
+	}
+}
+
+func pgstatTestDB() *postgres.DB {
+	return &postgres.DB{Config: postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{
+		Host: "127.0.0.1", Port: 1234, User: "test", Database: "testdb",
+	}}}}
+}
+
+// Test_renderPgstat_verboseNA verifies that an unavailable pgstat source (sentinel flags false,
+// HasPrev false) renders n/a while the always-available rows still render.
+func Test_renderPgstat_verboseNA(t *testing.T) {
+	o := stat.PgstatOverview{
+		Valid:   true,
+		HasPrev: false, // first tick: all delta fields n/a
+		// TotalSizeValid/LagBytesValid/RetainedValid/ArchivingBacklogValid/CacheHitRatioValid all false.
+		DatabasesCount: 7, WalSize: 1024,
+		WorkersUmbrellaActive: 1, WorkersLogicalActive: 0, WorkersParallelActive: 2,
+		CkptTimed: 12, CkptReq: 3,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Overview: o}}
+
+	var buf bytes.Buffer
+	assert.NoError(t, renderPgstat(&buf, s, pgstatTestProps(), pgstatTestDB(), true))
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	if assert.Len(t, lines, 9, "4 compact + 5 verbose pgstat rows") {
+		// Full-line golden per row. First-tick rates n/a; unavailable sources n/a; always-available
+		// fields (count, wal size, workers, absolute ckpt counters, slots count, senders/receivers) render.
+		// Width-matched n/a: the rate fields reserve width 4, so n/a renders as " n/a" (right-aligned
+		// into 4) — the same columns the value occupies — keeping each unit label static. "others"
+		// reserves width 3, where n/a fits exactly. cache hit ratio reserves width 7, so n/a renders
+		// as "    n/a" (right-aligned into 7).
+		assert.Equal(t,
+			"    workload:  n/a tps,  n/a ins/s,  n/a upd/s,  n/a del/s,  n/a ret/s,  n/a tmp/s, n/a others",
+			lines[4])
+		assert.Equal(t,
+			"   databases: n/a per  7 databases, n/a growth/s,     n/a cache hit ratio",
+			lines[5])
+		assert.Equal(t,
+			"     workers:  1/8 workers/max,  0/4 logical workers,  2/8 parallel workers",
+			lines[6])
+		assert.Equal(t,
+			" replication: 1.0K wal size, n/a lag,  0/n/a slots/retain, n/a archiving backlog, 0/0 senders/receivers",
+			lines[7])
+		assert.Equal(t,
+			"   bgwr/ckpt: 12/3 timed/req, n/a/n/a ms write/sync, n/a maxwritten",
+			lines[8])
+	}
+}
+
+// Test_renderPgstat_verboseAvailable verifies that with a prev snapshot and available sources the
+// verbose pgstat rows render real values (not n/a).
+func Test_renderPgstat_verboseAvailable(t *testing.T) {
+	o := stat.PgstatOverview{
+		Valid: true, HasPrev: true,
+		TPSRate: 1432, InsertsRate: 4132, UpdatesRate: 5421, DeletesRate: 4235,
+		ReturnedRate: 2341, TempFilesRate: 123, OthersInterval: 4,
+		DatabasesCount: 7, TotalSize: 1 << 40, TotalSizeValid: true, GrowthPerSec: 1 << 20,
+		CacheHitRatio: 99.99, CacheHitRatioValid: true,
+		WorkersUmbrellaActive: 0, WorkersLogicalActive: 0, WorkersParallelActive: 0,
+		WalSize: 1 << 30, LagBytes: 1 << 20, LagBytesValid: true,
+		SlotsCount: 1, RetainedBytes: 1 << 30, RetainedValid: true,
+		ArchivingBacklog: 1 << 20, ArchivingBacklogValid: true, Senders: 2, Receivers: 1,
+		CkptTimed: 12, CkptReq: 3, CkptWriteMsDelta: 245, CkptSyncMsDelta: 30, MaxWrittenDelta: 4,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Overview: o}}
+
+	var buf bytes.Buffer
+	assert.NoError(t, renderPgstat(&buf, s, pgstatTestProps(), pgstatTestDB(), true))
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	if assert.Len(t, lines, 9) {
+		// Full-line golden per row: every field renders its real value (no n/a), including the
+		// bgwr write/sync ms deltas (245/30) and maxwritten delta count (4).
+		assert.Equal(t,
+			"    workload: 1432 tps, 4132 ins/s, 5421 upd/s, 4235 del/s, 2341 ret/s,  123 tmp/s,   4 others",
+			lines[4])
+		// cache hit ratio reserves width 7 ("%6.2f%%"): 99.99 renders as " 99.99%" (leading space),
+		// the same 7-column slot the n/a sentinel occupies — so the label position is identical to
+		// the n/a state (see Test_renderPgstat_verboseNA).
+		assert.Equal(t,
+			"   databases: 1.0T per  7 databases, 1.0M growth/s,  99.99% cache hit ratio",
+			lines[5])
+		assert.Equal(t,
+			"     workers:  0/8 workers/max,  0/4 logical workers,  0/8 parallel workers",
+			lines[6])
+		assert.Equal(t,
+			" replication: 1.0G wal size, 1.0M lag,  1/1.0G slots/retain, 1.0M archiving backlog, 2/1 senders/receivers",
+			lines[7])
+		assert.Equal(t,
+			"   bgwr/ckpt: 12/3 timed/req, 245/30 ms write/sync,  4 maxwritten",
+			lines[8])
+	}
+	assert.NotContains(t, buf.String(), "n/a")
+}
+
+// Test_renderPgstat_verboseNAWidthStatic verifies the core of the visual-review fix: when a verbose
+// field degrades to n/a, the n/a occupies the SAME reserved width as the value it replaces, so the
+// label that follows it does not move between the two states. It renders the verbose rows once with
+// the values available and once unavailable (n/a) and asserts that the trailing label sits at the
+// identical byte offset in both — for cache hit ratio (the regression the user flagged) AND for a
+// workload rate (the naInt path), locking both fixed-reserve paths against the same regression class.
+func Test_renderPgstat_verboseNAWidthStatic(t *testing.T) {
+	base := stat.PgstatOverview{Valid: true, HasPrev: true, DatabasesCount: 7}
+
+	render := func(o stat.PgstatOverview) []string {
+		var buf bytes.Buffer
+		assert.NoError(t, renderPgstat(&buf, stat.Stat{Pgstat: stat.Pgstat{Overview: o}}, pgstatTestProps(), pgstatTestDB(), true))
+		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	}
+
+	withVal := base
+	withVal.CacheHitRatio = 100.0
+	withVal.CacheHitRatioValid = true
+	withVal.TPSRate = 999
+	valRows := render(withVal)
+	// HasPrev false -> workload rates n/a; CacheHitRatioValid false -> cache hit ratio n/a.
+	naBase := base
+	naBase.HasPrev = false
+	naRows := render(naBase)
+
+	// cache hit ratio (databases row, index 5): value in a fixed 7-column slot ("100.00%"); n/a
+	// right-aligned into the same 7 ("    n/a"), so the trailing label offset is identical.
+	assert.Contains(t, valRows[5], "100.00% cache hit ratio")
+	assert.Contains(t, naRows[5], "    n/a cache hit ratio")
+	assert.Equal(t,
+		strings.Index(valRows[5], "cache hit ratio"),
+		strings.Index(naRows[5], "cache hit ratio"),
+		"cache hit ratio label must sit at the same offset in the value and n/a states")
+
+	// workload rate (workload row, index 4): the naInt path reserves width 4, so n/a (" n/a") spans
+	// the same columns as the value (" 999"), keeping the "tps" label static — a direct byte-offset
+	// assertion on the naInt path, not just an implied golden-string match.
+	assert.Contains(t, valRows[4], " 999 tps")
+	assert.Contains(t, naRows[4], " n/a tps")
+	assert.Equal(t,
+		strings.Index(valRows[4], "tps"),
+		strings.Index(naRows[4], "tps"),
+		"tps label must sit at the same offset in the value and n/a states")
+}
+
+// Test_renderPgstat_compactUnchanged verifies that verbose=false adds no rows AND that turning
+// verbose on does not perturb the compact rows: the verbose output's first 4 lines must equal the
+// full compact output (verbose only appends).
+func Test_renderPgstat_compactUnchanged(t *testing.T) {
+	s := stat.Stat{Pgstat: stat.Pgstat{
+		Activity: stat.Activity{State: "up", Uptime: "01:00:00"},
+		Overview: stat.PgstatOverview{Valid: true, HasPrev: true, TPSRate: 999},
+	}}
+
+	var compact, verbose bytes.Buffer
+	assert.NoError(t, renderPgstat(&compact, s, pgstatTestProps(), pgstatTestDB(), false))
+	assert.NoError(t, renderPgstat(&verbose, s, pgstatTestProps(), pgstatTestDB(), true))
+
+	compactLines := strings.Split(strings.TrimRight(compact.String(), "\n"), "\n")
+	verboseLines := strings.Split(strings.TrimRight(verbose.String(), "\n"), "\n")
+
+	// verbose=false: exactly 4 compact rows.
+	assert.Len(t, compactLines, 4)
+	// verbose=true: 4 compact + 5 verbose, and the compact prefix is byte-identical.
+	if assert.Len(t, verboseLines, 9) {
+		assert.Equal(t, compactLines, verboseLines[:4])
 	}
 }
 
@@ -591,4 +1003,25 @@ func Test_printDbstat_clampsScrollOffset(t *testing.T) {
 	err := renderDbstat(&buf, cfg, s, 40)
 	assert.NoError(t, err)
 	assert.Equal(t, 2, cfg.scrollOffset, "scrollOffset must be clamped to maxOffset, not the inflated value")
+}
+
+// Test_firstTickCollectingHint pins the cmdline first-tick hint logic: while the collector's
+// first-tick flag is set (propagated via Stat.System.VerboseFirstTick), the cmdline shows
+// "collecting..."; after the first successful refresh (flag cleared) the hint goes away. Because
+// the flag re-arms on every verbose OFF->ON re-enable (Task 7), the hint reappears on re-enable —
+// not only after a screen switch.
+func Test_firstTickCollectingHint(t *testing.T) {
+	// First verbose tick: flag set -> hint shown.
+	msg, show := firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: true}})
+	assert.True(t, show, "hint must show while first-tick flag is set")
+	assert.Equal(t, "collecting...", msg)
+
+	// After first successful refresh: flag cleared -> hint not shown.
+	_, show = firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: false}})
+	assert.False(t, show, "hint must clear after first successful refresh")
+
+	// Re-armed first tick after OFF->ON re-enable: flag set again -> hint reappears.
+	msg, show = firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: true}})
+	assert.True(t, show, "hint must reappear on a re-armed first tick (OFF->ON re-enable)")
+	assert.Equal(t, "collecting...", msg)
 }

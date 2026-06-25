@@ -1,0 +1,20 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["10"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_file",
+      "task": "10",
+      "issue": "Task references 010-feat-overview-dashboard-decisions.md in Context Files (line 63, described as containing 'отчёты задач 01–09') and in Post-completion (line 117, target for the QA report). That file does not exist in the feature directory. The existing artifact is 010-feat-overview-dashboard-code-research.md.",
+      "fix": "Either create the decisions log before/at QA time, or update the two references to point to the actual artifact (code-research.md) or to wherever per-task reports are recorded. Not blocking: the file is a write target for the QA summary, not a code dependency."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 18,
+    "issues_found": 1
+  }
+}
