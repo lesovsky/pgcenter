@@ -45,3 +45,25 @@
 - `go test ./internal/pretty/... ./top/...` → ok
 - `golangci-lint run` → 0 issues; `gosec` → 0; `make vuln` → clean
 - `grep -n rateField top/stat.go` → empty (function fully removed)
+
+---
+
+## Task 03: [012] Fixed-width verbose Size fields
+
+**Status:** Done
+**Commit:** c89b686
+**Agent:** implementer (general-purpose, opus)
+**Summary:** Added exported `pretty.SizeWidth(v, width)` (right-aligns `Size(v)` via `%*s`, never truncating — `ReserveWidth` model, digits/units identical to `Size`) and applied it with a single named const `sizeFieldWidth = 8` to the 5 verbose pgstat Size fields (databases size/growth, replication lag/retain/archiving-backlog), replacing their bare `naLiteral` n/a fallbacks with `naReserve(sizeFieldWidth)`. The trailing labels no longer breathe across ticks or between value and n/a states.
+**Deviations:** Нет. `wal size` deliberately left as bare `pretty.Size` (Decision 5 — first field on its row, pushes no trailing label).
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 findings, no tech debt → [011-refactor-tech-debt-paydown-task-03-dev-code-reviewer-round1.json]
+- dev-test-reviewer: approved, RED-before empirically confirmed, 3 advisory minor → [011-refactor-tech-debt-paydown-task-03-dev-test-reviewer-round1.json]
+
+**Verification:**
+- `go test ./internal/pretty/... ./top/...` → ok (new value-vs-n/a offset assertion was RED pre-impl, green after)
+- `golangci-lint run` → 0 issues; `gosec` → 0; `make vuln` → clean
+- Manual `v` check (deferred to Final Wave QA): Size columns/labels hold steady horizontal position across ticks.
