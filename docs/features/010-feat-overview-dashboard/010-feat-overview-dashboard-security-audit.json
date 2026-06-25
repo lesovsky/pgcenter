@@ -1,0 +1,47 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 4,
+    "critical": 0,
+    "major": 0,
+    "minor": 4
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "New aggregate SQL must remain static templates over fixed catalogs/GUC names — no interpolation of runtime values",
+      "description": "Tech-spec proposes ~8 new aggregate queries plus 4 new GUC reads and data_directory. The existing codebase consistently builds queries as static const string templates over PG catalogs and uses current_setting('<literal>') with hardcoded GUC names (internal/query/common.go:43-48, wal.go:6), and parameterizes the one dynamic setting read via GetSetting = \"SELECT current_setting($1)\". The spec's archiving query reuses the proven pattern count(1) * pg_size_bytes(current_setting('wal_segment_size')) and pg_ls_dir('pg_wal/archive_status') with a literal directory argument. There is no SQL injection surface as designed because no value derives from terminal/user input. The risk is only that future implementation could be tempted to fmt.Sprintf a value (e.g. a GUC name, a database name, or wal_segment_size) into the query string. Keep every new query a static template; the only dynamic piece (version split) is selected by integer comparison, not string interpolation.",
+      "impact": "If a future edit interpolated a server-supplied or computed string into the SQL text, it could change query semantics on a misconfigured/compromised server. Negligible for a read-only monitoring tool reading its own catalogs, but worth pinning as an implementation constraint.",
+      "recommendation": "Implement all new queries in internal/query/ as const string templates exactly like wal.go / common.go. Use literal GUC names inside current_setting(...). If any value must be dynamic, pass it as a bind parameter ($1) via db.QueryRow args (as GetSetting does), never via string concatenation. Verify in code review that internal/query/overview.go contains no fmt.Sprintf into query bodies.",
+      "cwe": "CWE-89"
+    },
+    {
+      "severity": "minor",
+      "category": "A01: Broken Access Control",
+      "title": "pg_ls_dir / pg_monitor privilege path must degrade to n/a, never error-out or blank sibling rows",
+      "description": "Decision 6 and Backward Compatibility note that pg_ls_dir('pg_wal/archive_status') requires pg_monitor or superuser. On a connection lacking that grant, PostgreSQL returns SQLSTATE 42501 (insufficient_privilege). The spec correctly states the row should render n/a, and Acceptance Criteria require 'one failing source does not blank the other rows'. This is the right design and matches the read-only posture, but the implementation must (a) scope the privilege error so it only nulls the archiving row, not the whole pgstat verbose collection, and (b) not surface the raw PG error text to the UI/logs (it could include the data directory path). Grep shows no existing 42501-specific handling in internal/stat, so this is net-new error discrimination.",
+      "impact": "If the archiving query error aborts the enclosing collection (as several existing collectors do — they return on first scan error, e.g. postgres.go:59-97), a non-superuser monitoring role would lose unrelated verbose rows, or in the worst case the verbose panel would crash/blank. A read-only tool should fail soft.",
+      "recommendation": "Run the archiving backlog query independently (its own QueryRow) and treat any error as n/a for that single metric. Do not propagate the privilege error up; do not include the raw error string (which may embed pg_wal/archive_status paths) in any user-facing message — just emit the literal 'n/a'. Add an integration/degradation test for the insufficient-privileges path (already listed in Testing Strategy line 179).",
+      "cwe": "CWE-285"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "filepath.EvalSymlinks on data_directory must fail soft and is correctly gated local-only",
+      "description": "Decision 7 resolves data_directory via filepath.EvalSymlinks only when db.Local, matching it against /proc/mounts by longest mount-prefix. This is sound: data_directory comes from current_setting (trusted server config set by the PG admin, not from terminal/user input), so classic path-traversal from untrusted input does not apply. The local-only gating is consistent with how the project already segregates local procfile reads from remote PL/Perl reads (cpu.go:33, memstat.go:31, fsstat.go:82-88) via db.Local / SchemaPgcenterAvail. The residual concern is robustness, not exploitability: EvalSymlinks can fail (broken symlink, ELOOP, EACCES on an intermediate directory the pgcenter OS user cannot traverse) and longest-prefix matching against /proc/mounts can return no match (data_directory on a filesystem type filtered out by the ext3|ext4|xfs|btrfs allowlist in fsstat.go:40, e.g. zfs/nfs, or a bind mount). Both must degrade to n/a, not panic or show a wrong filesystem.",
+      "impact": "An unhandled EvalSymlinks error or empty mount match could crash the verbose render path or attribute the wrong device's %util/usage to the data directory, misleading a DBA during a disk-fill incident. No information disclosure beyond paths the operating user already controls.",
+      "recommendation": "Treat EvalSymlinks error and no-mount-match as the n/a sentinel for the filesyst row (Decision 7 / Risk row already imply this — make it explicit in the composer). Do not log the resolved absolute path at info level. Add table tests for: broken symlink, data_directory on a non-allowlisted fstype, and nested-mount longest-prefix selection (Testing Strategy line 173 covers mount-prefix matching — extend with the failure cases). Confirm the remote branch uses the unresolved path as the spec states, so no realpath is attempted over the wire.",
+      "cwe": "CWE-22"
+    },
+    {
+      "severity": "minor",
+      "category": "A09: Security Logging and Monitoring",
+      "title": "Do not log connection/server details when new collectors fail; no PII/secrets in verbose path",
+      "description": "Review of the proposed data flow found no secrets, credentials, or PII introduced: the feature reads PG statistics catalogs, GUCs, /proc files, and the pgcenter.* PL/Perl helper schema — all monitoring data. The connection password is handled by the existing postgres package and is not touched here. The only sensitive-ish strings the new code handles are filesystem paths (data_directory, mount points) and PG error texts on the degradation paths. Several existing collectors return raw errors upward (postgres.go) and the codebase has a pre-existing 'TODO: log error' (postgres.go:163 area / isLocalhost). The new collectors should follow the project's read-only, low-noise posture: surface n/a to the UI and avoid dumping raw driver errors (which can echo back query text / paths) into any log sink.",
+      "impact": "Low. Verbose error logging of failed aggregate queries could leak data_directory paths or internal catalog details into operator logs. No credential exposure.",
+      "recommendation": "On collection failure for any new aggregate, set the metric to n/a and avoid logging the raw error with embedded paths/query text. Keep the existing pattern of silent degradation used by side-panel collectors. Ensure make lint (gosec) stays clean — particularly G304 (file path from variable) around the new EvalSymlinks/data_directory handling; the existing fsstat.go already wraps os.Open in filepath.Clean (fsstat.go:90) and should be mirrored.",
+      "cwe": "CWE-532"
+    }
+  ]
+}

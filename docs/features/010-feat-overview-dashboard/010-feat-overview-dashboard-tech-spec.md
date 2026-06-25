@@ -68,6 +68,9 @@ antipattern, invasive `printStat` branch, view-count test churn). Documented in 
 ### Decision 2: `view.Verbose bool` + `config.verbose bool`, not overloading `CollectExtra`
 **Decision:** A dedicated boolean on both `view.View` (rides `viewCh` to the collector) and `top.config`
 (read by renderer/layout), kept in sync by the handler (the `showExtra` mirror-into-all-views pattern).
+The `v` push must NOT trigger the unconditional `c.Reset()` in `collectStat()` — add a
+`prev.Verbose != v.Verbose → continue` branch mirroring the existing `ShowExtra` branch, so toggling
+verbose does not wipe the `prev*` snapshots (which would blank CPU/mem/load deltas for one frame).
 **Rationale:** `CollectExtra` is a single mutually-exclusive `int` (with `CollectProcPidStat`); verbose
 must coexist with the active view's enrichment and needs no `c.Reset()`. A separate bool is cleaner.
 **Alternatives considered:** A `CollectVerboseSystem` `CollectExtra` constant (ADR [001]) — rejected (mutual
@@ -124,10 +127,14 @@ at overflow boundaries.
 
 ### Decision 9: Per-source tiering + latency guard on the Collector; single knob
 **Decision:** Throttle only the dear aggregates without a live panel twin (db sizes, growth) via
-per-source cadence/latency state on `Collector`; system rows collect every tick (consistency). Throttled
-source keeps its last (stale) value, not `n/a`. All behind the single `z` interval.
+per-source cadence/latency state grouped in a `verboseCollectState` sub-struct on `Collector`; system rows
+collect every tick (consistency). Throttled source keeps its last (stale) value, not `n/a`. All behind the
+single `z` interval. Default guard threshold: skip a source's next collection when its last query exceeded
+~25% of the refresh interval (or an absolute ~500ms floor), resuming automatically when latency recovers —
+the exact constant is finalized in task-decomposition.
 **Rationale:** System rows must stay consistent with the full panels a DBA cross-checks, so they are never
-throttled; only the no-twin aggregates are. No second user knob. Extensible source registry for v.next.
+throttled; only the no-twin aggregates are. No second user knob. A named sub-struct avoids leaking
+verbose-specific fields across the shared `Collector`. Extensible source registry for v.next.
 **Alternatives considered:** A generic multi-rhythm scheduler now — rejected (YAGNI; the seam suffices).
 
 ### Decision 10: bgwr/ckpt reuses the version-split query; counters absolute
@@ -195,16 +202,15 @@ with full panels, height-guard, first-tick hint) — by the user, since no TUI E
 | Task | verify: | What to check |
 |------|---------|--------------|
 | 1 | bash | `go test ./internal/pretty/...` — formatter ceil/width/suffix |
-| 2 | bash | `go test ./top/...` — toggleVerbose flips + persists flag |
+| 2 | bash | `go test ./top/...` — toggleVerbose flips + persists; no Reset on toggle |
 | 3 | bash | `go test ./top/...` — compact output byte-identical (writer tests) |
 | 4 | bash | `go test ./internal/query/... ./internal/stat/...` — GUC scan lockstep |
 | 5 | bash | `go test ./internal/...` — new aggregate queries (live PG, t.Skipf) |
 | 6 | user | verbose band geometry + height-guard on several terminal sizes |
 | 7 | bash | `go test ./internal/stat/...` — all-three populate under verbose |
-| 8 | user | pgstat verbose rows render correct values |
-| 9 | user | sysstat verbose rows consistent with `B`/`N`/`F` panels |
-| 10 | user | slow source stays stale; first-tick `collecting...` hint |
-| 11 | bash | `make build && make test && make lint` |
+| 8 | user | verbose rows consistent with the full `B`/`N`/`F`/`d`/`r`/`b` panels |
+| 9 | user | slow source stays stale; first-tick `collecting...` hint clears |
+| 10 | bash | `make build && make test && make lint` |
 
 ### Tools required
 bash (go test, make). No MCP/Playwright/curl — terminal TUI app verified manually.
@@ -236,6 +242,9 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 | Dynamic unit-suffix new pattern | Pure formatter + property/table tests at overflow boundaries |
 | Vertical space on short terminals | Height-guard: don't expand if band+cmdline+header+≥1 row doesn't fit; cmdline hint |
 | New live-PG tests panic without a cluster (tech-debt [005]/[008]) | New tests use the `t.Skipf` guard pattern, not panic |
+| `toggleVerbose` triggers `collectStat()`'s unconditional `Reset()` → blanks deltas every `v` press | Add a `prev.Verbose != v.Verbose → continue` branch (mirror the `ShowExtra` branch) so the push skips Reset (Decision 2, Task 2) |
+| A privilege/IO error on one verbose source aborts the whole sample | Run the archiving / dear aggregates as their own `QueryRow` (not the first-scan-error-returns collector pattern); per-source error → that row `n/a`, never the raw PG error text (paths) |
+| `filepath.EvalSymlinks` / mount-match fails (broken symlink, EACCES, fstype not in the ext/xfs/btrfs allowlist) | Treat any resolution/match failure as `n/a`, never panic; wrap new path handling in `filepath.Clean` (the `fsstat.go` pattern), no raw error logging |
 
 ## Acceptance Criteria
 
@@ -252,13 +261,17 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 
 ## Implementation Tasks
 
+<!-- Waves are file-disjoint internally (no two parallel tasks touch the same file). Hot files
+     (top/stat.go, internal/stat/stat.go, internal/query/common.go, internal/stat/postgres.go) are
+     sequenced across waves. Detailed field layout, AC, and TDD anchors are added in task-decomposition;
+     exact verbose-row field formats (e.g. nicstat `IErr+Oerr / Coll`, mount-truncation to 10, digit
+     budgets) live in the user-spec "Состав и источники строк" section. -->
+
 ### Wave 1 (независимые)
 
 #### Task 1: Net-new formatting helpers
-- **Description:** Add pure formatters for the verbose rows: integer ceil rounding, reserved-digit fixed-width
-  columns (static layout, only digits change), and a dynamic rate-unit suffix that switches MB/s→GB/s and
-  Mbps→Gbps on digit overflow. Needed because `pretty.Size` has no rate suffix / fixed width / ceil and
-  `internal/math` has no ceil.
+- **Description:** Add pure formatters for the verbose rows — integer ceil rounding, reserved-digit
+  fixed-width columns, and a dynamic rate-unit suffix (MB/s→GB/s, Mbps→Gbps on overflow). Feeds every verbose row.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/pretty/...`
@@ -266,20 +279,20 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 - **Files to read:** `internal/pretty/pretty.go`, `internal/math/math.go`, `top/stat.go`
 
 #### Task 2: Verbose toggle plumbing
-- **Description:** Add the `verbose` mode flag on `view.View` (rides `viewCh`) and `top.config` (read by
-  renderer/layout), the `v` keybinding and a `toggleVerbose` handler mirroring `showExtra` (write the flag
-  into every view in the map for persistence, then push `viewCh`), and a help-screen entry. The flag must NOT
-  be reset on screen switch.
+- **Description:** Add the `verbose` mode flag on `view.View` and `top.config`, the `v` keybinding, a
+  `toggleVerbose` handler (mirror `showExtra`'s write-into-all-views persistence + `viewCh` push), and a help
+  entry. The flag is not reset on screen switch, and the `collectStat()` viewCh handler gets a
+  `prev.Verbose != v.Verbose → continue` branch so toggling does not trigger `Reset()` (Decision 2).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** bash — `go test ./top/...` (toggleVerbose flips + persists)
+- **Verify:** bash — `go test ./top/...` (toggleVerbose flips + persists; no Reset on toggle)
 - **Files to modify:** `internal/view/view.go`, `top/config.go`, `top/keybindings.go`, `top/verbose.go`, `top/help.go`
-- **Files to read:** `top/extra.go`, `top/config_view.go`, `internal/view/view.go`, `top/keybindings.go`
+- **Files to read:** `top/extra.go`, `top/config_view.go`, `top/stat.go`, `internal/view/view.go`
 
 #### Task 3: io.Writer refactor of printSysstat/printPgstat
 - **Description:** Split `printSysstat`/`printPgstat` into thin `*gocui.View` wrappers calling
-  `renderSysstat`/`renderPgstat` that take `io.Writer` (the `renderDbstat` precedent), so the panel rows
-  become unit-testable against a `bytes.Buffer`. Behavior-preserving: compact output stays byte-identical.
+  `renderSysstat`/`renderPgstat(w io.Writer, …)` (the `renderDbstat` precedent), making the panel rows
+  testable against a `bytes.Buffer`. Behavior-preserving — compact output stays byte-identical.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...` (compact output unchanged)
@@ -289,80 +302,73 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 #### Task 4: GUC + data_directory reads
 - **Description:** Extend `SelectCommonProperties` with `max_worker_processes`,
   `max_logical_replication_workers`, `max_parallel_workers`, `wal_segment_size`, `data_directory`; add the
-  matching fields to `PostgresProperties` and update the `GetPostgresProperties` `.Scan(...)` in lockstep
-  (else scan arity fails). These feed the workers / archiving / filesyst verbose rows.
+  fields to `PostgresProperties` and the `GetPostgresProperties` `.Scan(...)` in lockstep. Feeds the workers /
+  archiving / filesyst rows.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/... ./internal/stat/...`
 - **Files to modify:** `internal/query/common.go`, `internal/stat/postgres.go`
 - **Files to read:** `internal/query/common.go`, `internal/stat/postgres.go`, `internal/query/common_test.go`, `internal/stat/postgres_test.go`
 
+### Wave 2 (зависит от Wave 1)
+
 #### Task 5: New aggregate SQL queries + collection
-- **Description:** Add the version-aware aggregate queries and structs for the pgstat verbose rows —
-  workload (`sum` over `pg_stat_database`), databases (`sum(pg_database_size)`+count+growth+per-interval cache
-  hit), workers (active `backend_type` counts), replication (wal size, lag, slots/retain, `.ready` archiving
-  backlog, send/recv), and bgwr/ckpt (reuse `SelectStatBgwriterQuery`) — with Go-side rate computation vs a
-  prev snapshot. Wire the collect calls into `Collector.Update` gated on the verbose flag.
+- **Description:** Add version-aware aggregate queries and structs for the pgstat verbose rows (workload,
+  databases, workers, replication incl. the `.ready` archiving backlog, bgwr/ckpt via `SelectStatBgwriterQuery`)
+  with Go-side rates vs a prev snapshot, and wire the collect calls into `Collector.Update` gated on the
+  verbose flag. The archiving / dear aggregates run as their own `QueryRow` so a privilege error degrades one
+  row to `n/a` without aborting the sample. Depends on Task 4 GUCs.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/...` (live PG, t.Skipf)
 - **Files to modify:** `internal/query/common.go`, `internal/query/overview.go`, `internal/stat/postgres.go`, `internal/stat/stat.go`
 - **Files to read:** `internal/query/databases.go`, `internal/query/replication.go`, `internal/query/replication_slots.go`, `internal/query/wal.go`, `internal/query/bgwriter.go`, `internal/query/query.go`, `internal/stat/postgres.go`
 
-### Wave 2 (зависит от Wave 1)
-
 #### Task 6: Verbose-aware layout() geometry
 - **Description:** Extract a pure `topBandLayout(verbose, maxY)` returning the band/cmdline/dbstat
-  y-coordinates and an `expanded` flag, and rewire `layout()` to use it: panels grow (`sysstat` +3, `pgstat`
-  +5), `cmdline` and `dbstat` shift down, with a height-guard that falls back to compact + a cmdline hint when
-  the terminal is too short. This is the invasive core touching the shared UI loop.
+  y-coordinates and an `expanded` flag, and rewire `layout()` to use it (panels grow, `cmdline`/`dbstat` shift
+  down, height-guard falls back to compact + cmdline hint). The `config.verbose` read is in the gocui handler
+  goroutine (same as `layout()`), so no race. Depends on Task 2.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** user — verbose band geometry + height-guard on several terminal sizes
 - **Files to modify:** `top/ui.go`, `top/layout.go`, `top/layout_test.go`
 - **Files to read:** `top/ui.go`, `top/stat.go`
 
+### Wave 3 (зависит от Wave 2)
+
 #### Task 7: All-three system collection branch (R1)
-- **Description:** Add a verbose-gated branch in `Collector.Update`, after the existing mutually-exclusive
-  `collectExtra` switch, that collects disk+net+fs each tick with `==nil` guards (no double-collect when a
-  side panel already populated one) and records per-source availability instead of aborting the sample. The
-  existing switch stays untouched so the side panels are unaffected.
+- **Description:** Add a verbose-gated branch in `Collector.Update`, after the mutually-exclusive
+  `collectExtra` switch, collecting disk+net+fs each tick with `==nil` guards and per-source availability
+  recording (no sample abort). The existing switch is untouched so the side panels are unaffected. Depends on
+  Task 5 (same file, prior wave).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/...` (all-three populate under verbose)
 - **Files to modify:** `internal/stat/stat.go`
 - **Files to read:** `internal/stat/stat.go`, `internal/stat/diskstats.go`, `internal/stat/netdev.go`, `internal/stat/fsstat.go`
 
-#### Task 8: pgstat verbose row composers
-- **Description:** Render the 5 right-panel verbose rows (workload, databases, workers, replication,
-  bgwr/ckpt) from the Wave-1 aggregates + GUCs, using the new formatters, gated on the verbose flag inside
-  `renderPgstat`. Includes the `n/a` sentinels for unavailable sources (no replication, `archive_mode=off`,
-  missing privileges).
-- **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** user — pgstat verbose rows render correct values
-- **Files to modify:** `top/stat.go`, `top/stat_test.go`
-- **Files to read:** `top/stat.go`, `internal/stat/postgres.go`, `internal/pretty/pretty.go`
+### Wave 4 (зависит от Wave 3)
 
-### Wave 3 (зависит от Wave 2)
-
-#### Task 9: sysstat verbose row composers + data_directory FS matching
-- **Description:** Render the 3 left-panel verbose rows (iostat, nicstat, filesyst) by selecting the
-  max-`%util` device from the existing `Diskstats`/`Netdevs` structs (reusing the exact panel math, including
-  nicstat's print-time `/1024/128` conversion) and the `data_directory` filesystem via longest mount-prefix
-  matching (`filepath.EvalSymlinks` local-only). Emits `n/a` on first tick (no prev) and when a source is
-  unavailable.
+#### Task 8: Verbose row composers (both panels)
+- **Description:** Render the 3 sysstat rows (iostat/nicstat/filesyst — max-`%util` device from the existing
+  structs, replicating nicstat's print-time `/1024/128`; data_directory FS via longest mount-prefix,
+  `filepath.EvalSymlinks` local-only with any failure → `n/a`) and the 5 pgstat rows (workload/databases/
+  workers/replication/bgwr-ckpt) inside the refactored `renderSysstat`/`renderPgstat`, using the formatters.
+  Emits `n/a` on first tick and for unavailable sources; never logs raw PG/path error text. Depends on Tasks 1, 3, 5, 7.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** user — sysstat verbose rows consistent with `B`/`N`/`F` panels
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Verify:** user — verbose rows consistent with the full `B`/`N`/`F`/`d`/`r`/`b` panels and screens
 - **Files to modify:** `top/stat.go`, `top/stat_test.go`, `internal/stat/fsstat.go`
-- **Files to read:** `top/stat.go`, `internal/stat/diskstats.go`, `internal/stat/netdev.go`, `internal/stat/fsstat.go`
+- **Files to read:** `top/stat.go`, `internal/stat/diskstats.go`, `internal/stat/netdev.go`, `internal/stat/fsstat.go`, `internal/pretty/pretty.go`, `internal/stat/postgres.go`
 
-#### Task 10: Tiering + latency guard + first-tick handling
-- **Description:** Add per-source cadence/latency-guard state on `Collector` so the dear no-twin aggregates
-  (db sizes, growth) are throttled (keeping a cached stale value, not `n/a`) while system rows collect every
-  tick; all behind the single `z` knob. Wire the first-tick `collecting...` cmdline hint that clears after the
-  first successful refresh.
+### Wave 5 (зависит от Wave 4)
+
+#### Task 9: Tiering + latency guard + first-tick handling
+- **Description:** Add a `verboseCollectState` sub-struct on `Collector` carrying per-source cadence/latency
+  state so the dear no-twin aggregates (db sizes, growth) throttle to a cached stale value (not `n/a`) while
+  system rows collect every tick, all behind the single `z` knob. Wire the first-tick `collecting...` cmdline
+  hint that clears after the first successful refresh. Depends on Tasks 5, 7, 8.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** user — slow source stays stale; first-tick `collecting...` hint clears
@@ -371,7 +377,7 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 
 ### Final Wave
 
-#### Task 11: Pre-deploy QA
+#### Task 10: Pre-deploy QA
 - **Description:** Acceptance testing: run all tests, verify acceptance criteria from user-spec and tech-spec
   (verbose toggle, panel growth, consistency with full panels, `n/a` paths, height-guard, first-tick hint,
   remote/standby/archive_mode=off degradation) on a fresh `make build`.

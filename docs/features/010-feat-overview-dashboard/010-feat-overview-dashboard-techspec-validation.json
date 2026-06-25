@@ -1,0 +1,42 @@
+{
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Tasks 4 and 5 both modify `internal/query/common.go` AND `internal/stat/postgres.go` in Wave 1. Tasks in the same wave run in parallel, so two tasks editing the same files will collide / merge-conflict.",
+      "fix": "Move Task 5 to a later wave (it logically depends on Task 4's new GUC fields anyway: `wal_segment_size`/`data_directory` from SelectCommonProperties feed the archiving/filesyst rows), or merge Tasks 4 and 5 into one query+collection task."
+    },
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Tasks 9 and 10 both modify `top/stat.go` in Wave 3. Same file in the same wave = merge conflict when run in parallel.",
+      "fix": "Sequence them across waves (e.g. Task 10 in a separate later wave) or merge the two, since Task 10's first-tick `collecting...` hint and Task 9's sysstat row composers both touch the render path in `top/stat.go`."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Several task descriptions embed technical decisions/rationale that belong in the Decisions section (markers: 'because', 'so', 'else'). Task 1: 'Needed because `pretty.Size` has no rate suffix / fixed width / ceil...'. Task 3: '...so the panel rows become unit-testable against a `bytes.Buffer`'. Task 4: '...update the `GetPostgresProperties` `.Scan(...)` in lockstep (else scan arity fails)'. Task 7: '...with `==nil` guards (no double-collect when a side panel already populated one)'. This rationale is already captured in Decisions 8, 3, and 4 / Backward Compatibility.",
+      "fix": "Trim task descriptions to WHAT+WHY scope (2-3 sentences) and let the Decisions section own the rationale. Remove the duplicated 'because/so/else' justifications already present in Decisions 3/4/8 and Backward Compatibility."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 5 description is over-detailed for tech-spec altitude: it enumerates per-row implementation specifics (sum over pg_stat_database, sum(pg_database_size)+count+growth+per-interval cache hit, active backend_type counts, wal size/lag/slots/retain, `.ready` archiving backlog, send/recv, reuse SelectStatBgwriterQuery, Go-side rate vs prev snapshot). This is step-level detail that belongs in the task file, not the tech-spec.",
+      "fix": "Compress Task 5 to scope: 'Add version-aware aggregate queries + structs for the five pgstat verbose rows and wire collection into Collector.Update gated on the verbose flag.' Per-row column lists move to the decomposed task file."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "code-writing default reviewer set is {dev-code-reviewer, dev-security-auditor, dev-test-reviewer}. Tasks 8 and 9 render values derived from SQL/system input and Task 9 performs filesystem path / symlink handling (`filepath.EvalSymlinks`, mount-prefix matching), yet both omit dev-security-auditor.",
+      "fix": "Consider adding dev-security-auditor to Task 9 (path/symlink handling) and optionally Task 8. Tasks 1,2,3,6,7,10 reasonably omit it (pure math / plumbing / geometry, no input or SQL)."
+    },
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Task 9 lists `internal/stat/fsstat.go` under 'Files to modify' but the description only reads from the existing Fsstats struct via the same panel math; it is unclear what mutation fsstat.go needs (possibly a data_directory mount-match helper). If no change is required there it should be in 'Files to read'.",
+      "fix": "Confirm whether fsstat.go needs a new exported helper for mount-prefix matching; if it is read-only, move it to 'Files to read'."
+    }
+  ],
+  "summary": "Tech-spec is structurally complete and template-compliant: frontmatter valid (created/status/branch/size), all required sections present and non-empty, 10 well-formed Decisions, table-format Risks, full Agent Verification Plan, no time-based estimates, 11 tasks (<=15) organized in waves with a pre-deploy-qa Final Wave, and all referenced existing files verified to exist. Two CRITICAL wave conflicts block approval: Tasks 4+5 share two files in Wave 1, and Tasks 9+10 share top/stat.go in Wave 3. Plus major task-quality issues (decision rationale embedded in descriptions; Task 5 over-detailed) and minor reviewer/file-placement notes. Status: changes_required due to the two critical wave conflicts."
+}
