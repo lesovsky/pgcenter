@@ -103,6 +103,9 @@ func TestCollector_Update_VerboseAggregates(t *testing.T) {
 		stat, err := c.Update(conn, views["activity"], time.Second)
 		assert.NoError(t, err)
 		assert.False(t, stat.Pgstat.Overview.Valid, "overview must not be collected when verbose is off")
+		// Compact path must be untouched: regular activity/result collection still works.
+		assert.True(t, stat.Pgstat.Result.Valid, "compact path (Result) must still be collected")
+		assert.Greater(t, stat.Pgstat.Activity.ConnTotal, 0)
 	})
 
 	// Verbose ON: overview aggregates are collected and populated.

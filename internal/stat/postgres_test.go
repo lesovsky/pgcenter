@@ -120,7 +120,51 @@ func Test_collectOverviewStat(t *testing.T) {
 		assert.GreaterOrEqual(t, second.CkptTimed, int64(0))
 		assert.GreaterOrEqual(t, second.CkptReq, int64(0))
 
+		// Exact rate formula against a synthetic prev with known deltas. Using prev counters BELOW the
+		// live ones guarantees positive, deterministic deltas regardless of background activity. This
+		// proves tps = (Δcommit+Δrollback)/itv and others = Δ(...) over the interval (not /s).
+		base := collectOverviewStat(conn, props, 1, PgstatOverview{})
+		synthPrev := PgstatOverview{
+			Valid:             true,
+			TotalSizeValid:    true,
+			WorkloadCommits:   base.WorkloadCommits - 100,
+			WorkloadRollbacks: base.WorkloadRollbacks - 40,
+			WorkloadInserts:   base.WorkloadInserts - 20,
+			WorkloadOthers:    base.WorkloadOthers - 7,
+		}
+		// itv = 2 so the /itv division is actually observable (not an identity).
+		withItv2 := collectOverviewStat(conn, props, 2, synthPrev)
+		expectedTPS := ((withItv2.WorkloadCommits + withItv2.WorkloadRollbacks) - (synthPrev.WorkloadCommits + synthPrev.WorkloadRollbacks)) / 2
+		assert.Equal(t, expectedTPS, withItv2.TPSRate, "tps must be (Δcommit+Δrollback)/itv")
+		// others is the raw interval delta, NOT divided by itv.
+		assert.Equal(t, withItv2.WorkloadOthers-synthPrev.WorkloadOthers, withItv2.OthersInterval, "others must be the interval delta, not /s")
+
 		conn.Close()
+	}
+}
+
+func Test_cacheHitRatio(t *testing.T) {
+	// Pure-function table test for the per-interval ratio, including the division-by-zero edge.
+	testcases := []struct {
+		name      string
+		dHit      int64
+		dRead     int64
+		wantRatio float64
+		wantValid bool
+	}{
+		{name: "all hits", dHit: 100, dRead: 0, wantRatio: 100, wantValid: true},
+		{name: "half", dHit: 50, dRead: 50, wantRatio: 50, wantValid: true},
+		{name: "no io -> n/a", dHit: 0, dRead: 0, wantRatio: 0, wantValid: false},
+		{name: "negative denom -> n/a", dHit: -5, dRead: 0, wantRatio: 0, wantValid: false},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ratio, valid := cacheHitRatio(tc.dHit, tc.dRead)
+			assert.Equal(t, tc.wantValid, valid)
+			assert.Equal(t, tc.wantRatio, ratio)
+			assert.False(t, math.IsNaN(ratio), "ratio must never be NaN")
+		})
 	}
 }
 
@@ -132,29 +176,27 @@ func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
 	props, err := GetPostgresProperties(conn)
 	assert.NoError(t, err)
 
-	// Construct a synthetic prev so Δ(hit+read) > 0 deterministically, exercising the per-interval
-	// ratio path (Δhit/Δ(hit+read)) without relying on live I/O timing.
+	base := collectOverviewStat(conn, props, 1, PgstatOverview{})
+
+	// Synthetic prev with counters strictly BELOW the live ones -> Δhit/Δread are deterministically
+	// positive, so the per-interval ratio path runs and the result is a valid percentage in [0,100].
 	prev := PgstatOverview{
 		Valid:          true,
 		TotalSizeValid: true,
-		BlksHit:        0,
-		BlksRead:       0,
+		BlksHit:        base.BlksHit - 800,
+		BlksRead:       base.BlksRead - 200,
 	}
 	got := collectOverviewStat(conn, props, 1, prev)
 	assert.True(t, got.HasPrev)
-	if got.BlksHit+got.BlksRead > 0 {
-		assert.True(t, got.CacheHitRatioValid)
-		assert.GreaterOrEqual(t, got.CacheHitRatio, float64(0))
-		assert.LessOrEqual(t, got.CacheHitRatio, float64(100))
-	}
+	assert.True(t, got.CacheHitRatioValid, "with positive Δ(hit+read) the ratio must be valid")
+	assert.GreaterOrEqual(t, got.CacheHitRatio, float64(0))
+	assert.LessOrEqual(t, got.CacheHitRatio, float64(100))
+	assert.False(t, math.IsNaN(got.CacheHitRatio))
 
-	// Division by zero: prev == curr counters -> Δ(hit+read) == 0 -> n/a, not NaN/panic.
-	prevSame := PgstatOverview{Valid: true, TotalSizeValid: true}
-	// Re-read curr to capture current absolute counters, then feed them back as prev.
-	curr := collectOverviewStat(conn, props, 1, prevSame)
-	prevEqual := PgstatOverview{Valid: true, TotalSizeValid: true, BlksHit: curr.BlksHit, BlksRead: curr.BlksRead}
+	// Deterministic division-by-zero: prev counters equal to current -> Δ(hit+read) == 0 -> n/a.
+	// (cacheHitRatio is unit-tested directly in Test_cacheHitRatio; here we assert the collect wiring.)
+	prevEqual := PgstatOverview{Valid: true, TotalSizeValid: true, BlksHit: got.BlksHit, BlksRead: got.BlksRead}
 	noio := collectOverviewStat(conn, props, 1, prevEqual)
-	// If no I/O happened between the two reads, ratio must be n/a (not NaN).
 	if noio.BlksHit == prevEqual.BlksHit && noio.BlksRead == prevEqual.BlksRead {
 		assert.False(t, noio.CacheHitRatioValid)
 		assert.False(t, math.IsNaN(noio.CacheHitRatio))
@@ -178,9 +220,19 @@ func Test_collectOverviewStat_Degradation(t *testing.T) {
 	// No slots -> retained is n/a, but SlotsCount is still a real 0.
 	assert.False(t, got.RetainedValid, "no slots -> retained WAL is n/a")
 	assert.Equal(t, int64(0), got.SlotsCount)
-	// Other rows remain populated despite the degraded replication fields.
+
+	// Archiving backlog: the fixtures role has pg_monitor, so the OWN-QueryRow aggregate must run.
+	// On archive_mode=off it is a real 0 with ArchivingBacklogValid=true; either way it must be a
+	// non-negative value distinguishable from n/a, and its outcome must NOT have blanked other rows.
+	if got.ArchivingBacklogValid {
+		assert.GreaterOrEqual(t, got.ArchivingBacklog, int64(0))
+	}
+
+	// The degraded replication fields (and whatever backlog state) must NOT gate the cheap rows:
+	// count, cache-counter source and the separately-queried size aggregate all stay populated.
 	assert.GreaterOrEqual(t, got.DatabasesCount, int64(1))
-	assert.True(t, got.TotalSizeValid)
+	assert.True(t, got.TotalSizeValid, "size runs as its own QueryRow and is unaffected by degraded rows")
+	assert.GreaterOrEqual(t, got.TotalSize, int64(0))
 }
 
 func TestGetPostgresProperties(t *testing.T) {

@@ -32,15 +32,23 @@ const (
 		"coalesce(sum(checksum_failures), 0)::bigint AS checksum_failures " +
 		"FROM pg_stat_database"
 
-	// OverviewDatabases aggregates database count, total size and cache counters. blks_hit/blks_read
-	// are absolute cumulative counters; the cache hit ratio is computed Go-side per-interval
-	// (Δhit / Δ(hit+read)). Total size and count are point-in-time; growth/s is a Go-side delta.
-	// Column layout (0-based): 0 count, 1 total_size, 2 hits, 3 reads.
+	// OverviewDatabases aggregates the cheap, always-available database signals: database count and
+	// the cache counters. blks_hit/blks_read are absolute cumulative counters; the cache hit ratio is
+	// computed Go-side per-interval (Δhit / Δ(hit+read)). This runs separately from the expensive
+	// size sum (OverviewDatabasesSize) so a size-aggregate failure cannot blank count/cache-hit
+	// (Decision 6/10). Column layout (0-based): 0 count, 1 hits, 2 reads.
 	OverviewDatabases = "SELECT " +
 		"count(*)::bigint AS count, " +
-		"coalesce(sum(pg_database_size(datname)), 0)::bigint AS total_size, " +
 		"coalesce(sum(blks_hit), 0)::bigint AS hits, " +
 		"coalesce(sum(blks_read), 0)::bigint AS reads " +
+		"FROM pg_stat_database WHERE datname IS NOT NULL"
+
+	// OverviewDatabasesSize sums the on-disk size of all databases. pg_database_size is expensive and
+	// can error for databases the role cannot access, so it runs as its OWN QueryRow: a failure
+	// degrades only the size/growth field to n/a (TotalSizeValid=false), leaving count and cache-hit
+	// intact (Decision 6/10). Single column.
+	OverviewDatabasesSize = "SELECT " +
+		"coalesce(sum(pg_database_size(datname)), 0)::bigint AS total_size " +
 		"FROM pg_stat_database WHERE datname IS NOT NULL"
 
 	// OverviewWorkers reports background-worker pool occupancy from pg_stat_activity by backend_type.

@@ -222,41 +222,33 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 		}
 	}
 
-	// databases aggregate. sum(pg_database_size(...)) is privileged/expensive: its own QueryRow so a
-	// failure degrades growth/size to n/a, leaving cache-hit and count intact. We split it: count +
-	// cache counters come from one row; the size sum from a separate row.
-	err = db.QueryRow(query.OverviewDatabases).Scan(
-		&s.DatabasesCount, &s.TotalSize, &s.BlksHit, &s.BlksRead,
-	)
-	if err == nil {
+	// databases aggregate: the cheap, always-available signals (count + cache counters).
+	if err := db.QueryRow(query.OverviewDatabases).Scan(
+		&s.DatabasesCount, &s.BlksHit, &s.BlksRead,
+	); err == nil {
+		// Per-interval cache hit ratio: Δhit / Δ(hit + read). Division by zero (no I/O) -> n/a.
+		if s.HasPrev {
+			s.CacheHitRatio, s.CacheHitRatioValid = cacheHitRatio(s.BlksHit-prev.BlksHit, s.BlksRead-prev.BlksRead)
+		}
+	}
+
+	// databases aggregate: sum(pg_database_size(...)) is expensive/privileged, so it runs as its OWN
+	// QueryRow. A failure degrades only the size/growth field to n/a (TotalSizeValid stays false),
+	// leaving count and cache-hit above intact. The raw error is swallowed (paths must not surface).
+	if err := db.QueryRow(query.OverviewDatabasesSize).Scan(&s.TotalSize); err == nil {
 		s.TotalSizeValid = true
 		if s.HasPrev && prev.TotalSizeValid {
 			s.GrowthPerSec = (s.TotalSize - prev.TotalSize) / int64(itv)
 		}
-		// Per-interval cache hit ratio: Δhit / Δ(hit + read). Division by zero (no I/O) -> n/a.
-		if s.HasPrev {
-			dHit := s.BlksHit - prev.BlksHit
-			dRead := s.BlksRead - prev.BlksRead
-			denom := dHit + dRead
-			if denom > 0 {
-				s.CacheHitRatio = float64(dHit) / float64(denom) * 100
-				s.CacheHitRatioValid = true
-			}
-		}
 	}
 
-	// workers aggregate.
-	if err := db.QueryRow(query.OverviewWorkers).Scan(
+	// workers aggregate. On error the active counts stay zero (the struct remains Valid).
+	_ = db.QueryRow(query.OverviewWorkers).Scan(
 		&s.WorkersUmbrellaActive, &s.WorkersLogicalActive, &s.WorkersParallelActive,
-	); err != nil {
-		// leave zero values; availability is expressed via Valid on the whole struct
-		_ = err
-	}
+	)
 
 	// replication: wal size (own QueryRow; reads pg_wal directory).
-	if err := db.QueryRow(query.OverviewWalSize).Scan(&s.WalSize); err != nil {
-		_ = err
-	}
+	_ = db.QueryRow(query.OverviewWalSize).Scan(&s.WalSize)
 
 	// replication: worst-case lag bytes (template). NULL (no standbys) -> n/a.
 	if q, ferr := query.Format(query.OverviewReplicationLag, opts); ferr == nil {
@@ -286,13 +278,11 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 	}
 
 	// replication: senders/receivers.
-	if err := db.QueryRow(query.OverviewSendRecv).Scan(&s.Senders, &s.Receivers); err != nil {
-		_ = err
-	}
+	_ = db.QueryRow(query.OverviewSendRecv).Scan(&s.Senders, &s.Receivers)
 
 	// bgwr/ckpt: reuse SelectStatBgwriterQuery (no new SQL). Column layout differs across PG14-16/17/18,
 	// so scan generically by column name.
-	collectOverviewBgwriter(db, version, &s, prev, itv)
+	collectOverviewBgwriter(db, version, &s, prev)
 
 	return s
 }
@@ -300,7 +290,7 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 // collectOverviewBgwriter scans the bgwr/ckpt aggregate via SelectStatBgwriterQuery and fills the
 // timed/req (absolute), write/sync ms (delta) and maxwritten fields. Column positions differ between
 // PG14-16, 17 and 18, so values are mapped by column name rather than ordinal.
-func collectOverviewBgwriter(db *postgres.DB, version int, s *PgstatOverview, prev PgstatOverview, itv int) {
+func collectOverviewBgwriter(db *postgres.DB, version int, s *PgstatOverview, prev PgstatOverview) {
 	q, _, _ := query.SelectStatBgwriterQuery(version)
 
 	rows, err := db.Query(q)
@@ -340,6 +330,17 @@ func collectOverviewBgwriter(db *postgres.DB, version int, s *PgstatOverview, pr
 		s.CkptSyncMsDelta = s.CkptSyncMs - prev.CkptSyncMs
 		s.MaxWrittenDelta = s.MaxWritten - prev.MaxWritten
 	}
+}
+
+// cacheHitRatio computes the per-interval cache hit ratio as a percentage [0,100] from the deltas
+// of blks_hit and blks_read. The second return value is false when there was no I/O in the interval
+// (Δ(hit+read) <= 0): the ratio is then n/a, never NaN or a stale cumulative value.
+func cacheHitRatio(dHit, dRead int64) (float64, bool) {
+	denom := dHit + dRead
+	if denom <= 0 {
+		return 0, false
+	}
+	return float64(dHit) / float64(denom) * 100, true
 }
 
 // parseInt64 parses an integer string, returning 0 on any error (the field is treated as absent).
