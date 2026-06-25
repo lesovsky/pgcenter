@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "approved",
+  "summary": "TestRateUnitPrefixed is a correct byte-identity anchor: 8 cases (disk/net x r/w x maxFit/maxFit+1) assert the FULL string field+\" \"+prefix+unit with hardcoded literals (not a call to the deleted rateField), locking the space separator, the r/w prefix, the 4-digit reserve padding, and the promotion boundary where an off-by-one would hide. The want values are non-circular hardcoded strings. Existing TestRateUnit/_boundary/_property are unchanged and still lock RateUnit's no-space form. The top/stat_test.go verbose goldens (1135 rMB/s, 1546 wMB/s, 4345 rMbps, 6543 wMbps) are unchanged and NOT in this commit (confirmed via git show --stat), proving byte-identity through delegation at the real call sites with mid-range non-boundary values. rateField is fully deleted from top/stat.go. go test ./internal/pretty/... ./top/... is green. Coverage is sufficient to prove the refactor is byte-identical; the two unexercised-via-prefixed-form regimes (unknown-family default, widen-beyond-reserve) are already locked for the shared rateUnitParts core through the unchanged RateUnit suite, so they are minor/advisory, not correctness gaps.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "file": "internal/pretty/pretty_test.go",
+      "line": 132,
+      "issue": "TestRateUnitPrefixed exercises only FamilyDisk and FamilyNet. The unknown/empty-family default branch (falls back to MB/s) is not driven through RateUnitPrefixed. This is the only family path not asserted in the prefixed form.",
+      "suggestion": "Optional: add one case {name: \"unknown family defaults to disk\", v: 50.0, family: \"\", prefix: \"r\", width: 4, want: \"  50 rMB/s\"}. Not required for correctness: the family->unit selection lives in the shared rateUnitParts core and is already locked byte-identical by TestRateUnit (line 108), and the prefix/space wrapping is family-independent. Captured as advisory only."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "file": "internal/pretty/pretty_test.go",
+      "line": 132,
+      "issue": "The anchor table tests only the two boundary inputs (maxFit=9999, maxFit+1=10000). A mid-range non-boundary value and the widen-beyond-reserve regime are not asserted directly on RateUnitPrefixed.",
+      "suggestion": "No change required. The mid-range case is already covered at the real call sites by the unchanged top/stat_test.go goldens (1135/1546 rMB-s, 4345/6543 rMbps); the widen-beyond-reserve regime is locked for the shared core by TestRateUnit_property. The boundary table deliberately and correctly targets the exact promotion boundary where a refactor off-by-one would hide. Advisory only."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 8,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

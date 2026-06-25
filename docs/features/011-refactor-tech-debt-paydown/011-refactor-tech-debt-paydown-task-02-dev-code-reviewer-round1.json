@@ -1,0 +1,35 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 02 cleanly consolidates the duplicated rate formatter. rateUnitParts is a correct unexported core; RateUnit stays a byte-identical thin wrapper (field+unit, '9999MB/s'); RateUnitPrefixed returns field+\" \"+prefix+unit with the space and prefix preserved. rateField is fully deleted with all four call sites repointed to identical args, no stale references, and no maxFit promotion-boundary drift. Build and tests pass.",
+  "findings": [],
+  "notes": [
+    {
+      "topic": "behavior-preservation",
+      "detail": "Verified maxFit boundary by hand against the pre-refactor rateField body. Base case (v=9999, width 4): Ceil=9999<=maxFit(9999) -> ReserveWidth(9999,4)='9999', unit base -> '9999 rMB/s'. Promotion case (v=10000): Ceil=10000>9999 -> ReserveWidth(Ceil(10000/1024)=10,4)='  10', unit high -> '  10 wGB/s'. Both match the hardcoded golden literals in TestRateUnitPrefixed. No off-by-one: the '<=' comparison and divisor selection live unchanged in the shared core, so RateUnit and RateUnitPrefixed share the exact same threshold."
+    },
+    {
+      "topic": "rateField deletion",
+      "detail": "grep -rn rateField across top/ and internal/ returns only three hits, all inside the explanatory comment of TestRateUnitPrefixed; the function itself and its doc comment are gone. No stale call sites."
+    },
+    {
+      "topic": "call sites",
+      "detail": "All four sites in renderSysstatVerbose use identical (v, family, prefix, width) arg order matching the original rateField calls: disk r (d.Rsectors,FamilyDisk,'r',4), disk w (d.Wsectors,FamilyDisk,'w',4), net r (n.Rbytes/1024/128,FamilyNet,'r',4), net w (n.Tbytes/1024/128,FamilyNet,'w',4). The top/stat_test.go verbose goldens ('1135 rMB/s', '1546 wMB/s', '4345 rMbps', '6543 wMbps') are unchanged and pass."
+    },
+    {
+      "topic": "builtin-shadowing",
+      "detail": "Return names field, unit and params v, family, prefix, width do not shadow Go builtins (field/unit are not builtins). revive redefines-builtin-id is satisfied; go build ./... clean."
+    },
+    {
+      "topic": "doc comments and idiom",
+      "detail": "RateUnitPrefixed and rateUnitParts both have accurate doc comments describing the separator/prefix layout and the shared boundary logic. RateUnit's original doc comment is retained verbatim above the wrapper, preserving the feature-010 API documentation. Idiomatic Go: named returns used appropriately, no new imports, no dead vars."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "excellent"
+  }
+}
