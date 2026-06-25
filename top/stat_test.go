@@ -35,6 +35,95 @@ func Test_formatInfoString(t *testing.T) {
 	}
 }
 
+// Test_renderSysstat_compact is the writer-based golden test for the system-stats panel.
+// renderSysstat is the io.Writer core extracted from printSysstat (task 03 refactor); its
+// compact output must stay byte-identical. Line 1 carries a dynamic timestamp, so it is
+// matched by pattern (with the exact load-average format), while lines 2..4 are asserted
+// byte-for-byte against the golden, including the ANSI SGR codes.
+func Test_renderSysstat_compact(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg: stat.LoadAvg{One: 1.23, Five: 0.45, Fifteen: 6.78},
+		CPUStat: stat.CPUStat{
+			User: 1.1, Sys: 2.2, Nice: 3.3, Idle: 4.4,
+			Iowait: 5.5, Irq: 6.6, Softirq: 7.7, Steal: 8.8,
+		},
+		Meminfo: stat.Meminfo{
+			MemTotal: 1000, MemFree: 200, MemUsed: 800,
+			MemCached: 10, MemBuffers: 20, MemSlab: 30,
+			SwapTotal: 500, SwapFree: 400, SwapUsed: 100,
+			MemDirty: 5, MemWriteback: 7,
+		},
+	}}
+
+	var buf bytes.Buffer
+	err := renderSysstat(&buf, s)
+	assert.NoError(t, err)
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if assert.Len(t, lines, 4, "compact sysstat must be exactly 4 lines") {
+		// line1: dynamic timestamp, fixed load-average format.
+		assert.Regexp(t,
+			`^pgcenter: \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}, load average: 1\.23, 0\.45, 6\.78$`,
+			lines[0])
+		// line2..4: byte-identical golden, including ANSI codes.
+		assert.Equal(t,
+			"    %cpu: \033[37;1m 1.1\033[0m us, \033[37;1m 2.2\033[0m sy, \033[37;1m 3.3\033[0m ni, \033[37;1m 4.4\033[0m id, \033[37;1m 5.5\033[0m wa, \033[37;1m 6.6\033[0m hi, \033[37;1m 7.7\033[0m si, \033[37;1m 8.8\033[0m st",
+			lines[1])
+		assert.Equal(t,
+			" MiB mem: \033[37;1m  1000\033[0m total, \033[37;1m   200\033[0m free, \033[37;1m   800\033[0m used, \033[37;1m      60\033[0m buff/cached",
+			lines[2])
+		assert.Equal(t,
+			"MiB swap: \033[37;1m   500\033[0m total, \033[37;1m   400\033[0m free, \033[37;1m   100\033[0m used, \033[37;1m     5/7\033[0m dirty/writeback",
+			lines[3])
+	}
+}
+
+// Test_renderPgstat_compact is the writer-based golden test for the summary Postgres-stats
+// panel. renderPgstat is the io.Writer core extracted from printPgstat (task 03 refactor);
+// its compact output must stay byte-identical. Line 1 is formatInfoString output; lines 2..4
+// are asserted byte-for-byte against the golden, including the ANSI SGR codes.
+func Test_renderPgstat_compact(t *testing.T) {
+	db := &postgres.DB{Config: postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{
+		Host: "127.0.0.1", Port: 1234, User: "test", Database: "testdb",
+	}}}}
+	props := stat.PostgresProperties{
+		Version:           "13.1 on x86_64-pc-linux-gnu Debian",
+		Recovery:          "f",
+		GucMaxConnections: 100,
+		GucMaxPrepXacts:   0,
+		GucAVMaxWorkers:   3,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Activity: stat.Activity{
+		State: "up", Uptime: "01:23:48",
+		ConnTotal: 5, ConnPrepared: 1, ConnIdle: 2, ConnIdleXact: 0,
+		ConnActive: 3, ConnWaiting: 0, ConnOthers: 0,
+		AVWorkers: 1, AVUser: 0, AVAntiwrap: 0, AVMaxTime: "00:00:01",
+		CallsRate: 42, StmtAvgTime: 1.234, XactMaxTime: "00:00:02", PrepMaxTime: "00:00:00",
+	}}}
+
+	var buf bytes.Buffer
+	err := renderPgstat(&buf, s, props, db)
+	assert.NoError(t, err)
+
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if assert.Len(t, lines, 4, "compact pgstat must be exactly 4 lines") {
+		// line1: formatInfoString output (ties to Test_formatInfoString).
+		assert.Equal(t,
+			formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery),
+			lines[0])
+		// line2..4: byte-identical golden, including ANSI codes.
+		assert.Equal(t,
+			"  activity:\033[37;1m  5/100\033[0m conns,\033[37;1m  1/0\033[0m prepared,\033[37;1m  2\033[0m idle,\033[37;1m  0\033[0m idle_xact,\033[37;1m  3\033[0m active,\033[37;1m  0\033[0m waiting,\033[37;1m  0\033[0m others",
+			lines[1])
+		assert.Equal(t,
+			"autovacuum: \033[37;1m 1/3\033[0m workers/max, \033[37;1m 0\033[0m manual, \033[37;1m 0\033[0m wraparound, \033[37;1m00:00:01\033[0m vac_maxtime",
+			lines[2])
+		assert.Equal(t,
+			"statements: \033[37;1m 42\033[0m stmt/s, \033[37;1m1.234\033[0m stmt_avgtime, \033[37;1m00:00:02\033[0m xact_maxtime, \033[37;1m00:00:00\033[0m prep_maxtime",
+			lines[3])
+	}
+}
+
 func Test_formatError(t *testing.T) {
 	testcases := []struct {
 		err  error

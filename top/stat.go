@@ -210,12 +210,19 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	})
 }
 
-// printSysstat prints system stats on UI.
+// printSysstat prints system stats on UI. It is a thin wrapper that delegates to the
+// writer-based renderSysstat (*gocui.View implements io.Writer), so the render core can be
+// unit-tested without a live terminal — mirroring the printDbstat → renderDbstat precedent.
 func printSysstat(v *gocui.View, s stat.Stat) error {
+	return renderSysstat(v, s)
+}
+
+// renderSysstat is the writer-based core of printSysstat: it prints the system stats to w.
+func renderSysstat(w io.Writer, s stat.Stat) error {
 	var err error
 
 	/* line1: current time and load average */
-	_, err = fmt.Fprintf(v, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
+	_, err = fmt.Fprintf(w, "pgcenter: %s, load average: %.2f, %.2f, %.2f\n",
 		time.Now().Format("2006-01-02 15:04:05"),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
 	if err != nil {
@@ -223,7 +230,7 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line2: cpu usage */
-	_, err = fmt.Fprintf(v, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
+	_, err = fmt.Fprintf(w, "    %%cpu: \033[37;1m%4.1f\033[0m us, \033[37;1m%4.1f\033[0m sy, \033[37;1m%4.1f\033[0m ni, \033[37;1m%4.1f\033[0m id, \033[37;1m%4.1f\033[0m wa, \033[37;1m%4.1f\033[0m hi, \033[37;1m%4.1f\033[0m si, \033[37;1m%4.1f\033[0m st\n",
 		s.CPUStat.User, s.CPUStat.Sys, s.CPUStat.Nice, s.CPUStat.Idle,
 		s.CPUStat.Iowait, s.CPUStat.Irq, s.CPUStat.Softirq, s.CPUStat.Steal)
 	if err != nil {
@@ -231,7 +238,7 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line3: memory usage */
-	_, err = fmt.Fprintf(v, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
+	_, err = fmt.Fprintf(w, " MiB mem: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%8d\033[0m buff/cached\n",
 		s.Meminfo.MemTotal, s.Meminfo.MemFree, s.Meminfo.MemUsed,
 		s.Meminfo.MemCached+s.Meminfo.MemBuffers+s.Meminfo.MemSlab)
 	if err != nil {
@@ -239,7 +246,7 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	}
 
 	/* line4: swap usage, dirty and writeback */
-	_, err = fmt.Fprintf(v, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
+	_, err = fmt.Fprintf(w, "MiB swap: \033[37;1m%6d\033[0m total, \033[37;1m%6d\033[0m free, \033[37;1m%6d\033[0m used, \033[37;1m%6d/%d\033[0m dirty/writeback\n",
 		s.Meminfo.SwapTotal, s.Meminfo.SwapFree, s.Meminfo.SwapUsed,
 		s.Meminfo.MemDirty, s.Meminfo.MemWriteback)
 	if err != nil {
@@ -249,16 +256,23 @@ func printSysstat(v *gocui.View, s stat.Stat) error {
 	return nil
 }
 
-// printPgstat prints summary Postgres stats on UI.
+// printPgstat prints summary Postgres stats on UI. It is a thin wrapper that delegates to the
+// writer-based renderPgstat (*gocui.View implements io.Writer), so the render core can be
+// unit-tested without a live terminal — mirroring the printDbstat → renderDbstat precedent.
 func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *postgres.DB) error {
+	return renderPgstat(v, s, props, db)
+}
+
+// renderPgstat is the writer-based core of printPgstat: it prints the summary Postgres stats to w.
+func renderPgstat(w io.Writer, s stat.Stat, props stat.PostgresProperties, db *postgres.DB) error {
 	// line1: details of used connection, version, uptime and recovery status
-	_, err := fmt.Fprintln(v, formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery))
+	_, err := fmt.Fprintln(w, formatInfoString(db.Config, s.Activity.State, props.Version, s.Activity.Uptime, props.Recovery))
 	if err != nil {
 		return err
 	}
 
 	// line2: current state of connections: total, idle, idle xacts, active, waiting, others
-	_, err = fmt.Fprintf(v, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
+	_, err = fmt.Fprintf(w, "  activity:\033[37;1m%3d/%d\033[0m conns,\033[37;1m%3d/%d\033[0m prepared,\033[37;1m%3d\033[0m idle,\033[37;1m%3d\033[0m idle_xact,\033[37;1m%3d\033[0m active,\033[37;1m%3d\033[0m waiting,\033[37;1m%3d\033[0m others\n",
 		s.Activity.ConnTotal, props.GucMaxConnections, s.Activity.ConnPrepared, props.GucMaxPrepXacts,
 		s.Activity.ConnIdle, s.Activity.ConnIdleXact, s.Activity.ConnActive,
 		s.Activity.ConnWaiting, s.Activity.ConnOthers)
@@ -267,7 +281,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	}
 
 	// line3: current state of autovacuum: number of workers, anti-wraparound, manual vacuums and time of oldest vacuum
-	_, err = fmt.Fprintf(v, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
+	_, err = fmt.Fprintf(w, "autovacuum: \033[37;1m%2d/%d\033[0m workers/max, \033[37;1m%2d\033[0m manual, \033[37;1m%2d\033[0m wraparound, \033[37;1m%s\033[0m vac_maxtime\n",
 		s.Activity.AVWorkers, props.GucAVMaxWorkers,
 		s.Activity.AVUser, s.Activity.AVAntiwrap, s.Activity.AVMaxTime)
 	if err != nil {
@@ -275,7 +289,7 @@ func printPgstat(v *gocui.View, s stat.Stat, props stat.PostgresProperties, db *
 	}
 
 	// line4: current workload
-	_, err = fmt.Fprintf(v, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
+	_, err = fmt.Fprintf(w, "statements: \033[37;1m%3d\033[0m stmt/s, \033[37;1m%3.3f\033[0m stmt_avgtime, \033[37;1m%s\033[0m xact_maxtime, \033[37;1m%s\033[0m prep_maxtime\n",
 		s.Activity.CallsRate, s.Activity.StmtAvgTime, s.Activity.XactMaxTime, s.Activity.PrepMaxTime)
 	if err != nil {
 		return err
