@@ -1,34 +1,20 @@
 {
   "validator": "dev-reality-checker",
   "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
-  "tasks_checked": ["07", "08", "09"],
+  "tasks_checked": ["07", "09"],
   "status": "approved",
   "findings": [
-    {
-      "severity": "major",
-      "category": "feasibility",
-      "task": "07",
-      "issue": "Flag RE-ARM trigger is unspecified, which can reintroduce the very bug the fix targets. The fix correctly replaces the nil-slice first-tick signal with an explicit verboseFirstTick flag ('set on first verbose collect-all-three, cleared after the first tick'). But it never pins down HOW the flag re-arms for a SECOND verbose session. Verified seam: the verbose-toggle viewCh push must NOT call c.Reset() (Decision 2 / tech-spec risk row), while the screen-switch viewCh path calls c.Reset() unconditionally on every push (top/stat.go:108). If verboseFirstTick re-arms only via Reset(), then toggling verbose OFF then ON (no Reset) leaves it false -> the second verbose session's first frame shows a deceptive 0 instead of n/a -> exactly the regression the fix exists to prevent. Task 07 defers Reset() coordination to Task 09, but Task 09 only addresses 'view-switch / Reset() must not leave a stuck throttle-state', not the verbose-OFF->ON re-arm. Since the set/clear logic lives in Task 07, the re-arm trigger must be pinned there.",
-      "fix": "In Task 07, make re-arm explicit and independent of Reset(): keep a 'was the verbose branch active last tick' bit and set verboseFirstTick whenever the branch is entered after an inactive tick (covers initial enable AND OFF->ON re-enable), clearing it after that single tick. State this in What-to-do / Edge-cases so Task 09's Reset() handling is not the sole re-arm path."
-    },
     {
       "severity": "minor",
       "category": "tdd",
       "task": "07",
-      "issue": "Task 07 TDD anchor and tech-spec testing strategy claim the new live-PG test uses 'the t.Skipf guard pattern, as in existing stat-tests'. Verified: the existing stat tests (TestCollector_Update at internal/stat/stat_test.go:27, TestCollector_collectDiskstats at :71) do NOT skip without a cluster - they assert.NoError on postgres.NewTestConnect(), so they FAIL rather than skip. No t.Skip exists anywhere under internal/stat/*_test.go. The 'as in existing stat-tests' reference is inaccurate; the real convention is connect-or-fail. (Carried over from the prior batch scope; orthogonal to the fix.)",
-      "fix": "Drop the 't.Skipf as in existing stat-tests' phrasing, or have TestCollector_Update_Verbose explicitly t.Skip when NewTestConnect errors and note it diverges from the existing connect-or-fail tests."
-    },
-    {
-      "severity": "minor",
-      "category": "hints",
-      "task": "07",
-      "issue": "Task 07 cites collectDiskstats/collectNetdevs prev=curr-before-count*Usage at '~303-331'. Exact anchors: prev=curr swap is at internal/stat/stat.go:307-309 (disk) and :327-329 (net); the switch is at 156-175 and Collector snapshot fields at 57-64 (both cited correctly). The mechanism described is accurate; only the disk/net swap line range is slightly loose.",
-      "fix": "Optional: tighten the citation to 307-309 / 327-329. Non-blocking."
+      "issue": "TDD anchor still references the 't.Skipf as in existing stat-tests' pattern. Verified against internal/stat/stat_test.go: existing TestCollector_Update (:27) and TestCollector_collectDiskstats (:71) do NOT skip without a cluster - they assert.NoError on postgres.NewTestConnect() (connect-or-fail). No t.Skip exists under internal/stat/*_test.go. The task text now hedges this ('t.Skipf they do NOT use; if a skip-guard is needed use the project-accepted one'), but the residual 'as in existing stat-tests' phrasing is still slightly misleading. Non-blocking.",
+      "fix": "Optional: drop the lingering 'as in existing stat-tests' wording and state the real convention is connect-or-fail, or have TestCollector_Update_Verbose explicitly t.Skip on NewTestConnect error and note the divergence."
     }
   ],
   "stats": {
-    "tasks_checked": 3,
-    "claims_verified": 28,
-    "issues_found": 3
+    "tasks_checked": 2,
+    "claims_verified": 21,
+    "issues_found": 1
   }
 }
