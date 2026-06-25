@@ -19,7 +19,7 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
+    "validation_rounds": { "user_spec": 2 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
