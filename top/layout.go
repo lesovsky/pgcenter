@@ -49,8 +49,12 @@ func topBandLayout(verbose bool, maxY int) (sysstatY1, pgstatY1, cmdlineY0, cmdl
 	cmdlineY1 = bandTop + 2
 	dbstatY0 = tallest + 1
 
-	// Height-guard: need room for dbstat header + >=1 data row below dbstatY0 (y1 is maxY-1).
-	if dbstatY0+2 > maxY-1 {
+	// minDbstatRows is the rows dbstat needs below dbstatY0 to be usable: 1 header + >=1 data row.
+	const minDbstatRows = 2
+
+	// Height-guard: dbstat's y1 is maxY-1, so it fits only if dbstatY0 + minDbstatRows <= maxY-1.
+	// This also degrades safely for non-positive maxY (the band never expands into broken coords).
+	if dbstatY0+minDbstatRows > maxY-1 {
 		return compactSysstatY1, compactPgstatY1, compactCmdlineY0, compactCmdlineY1, compactDbstatY0, false
 	}
 

@@ -39,8 +39,15 @@ func Test_topBandLayout(t *testing.T) {
 			sysstatY1: 7, pgstatY1: 9, cmdlineY0: 8, cmdlineY1: 10, dbstatY0: 10, expanded: true,
 		},
 		{
-			// height-guard: verbose requested but terminal too short -> graceful compact fallback.
-			name: "height-guard", verbose: true, maxY: 12,
+			// height-guard: verbose requested on a realistically tiny terminal well below the
+			// threshold -> graceful compact fallback (distinct small maxY, not the boundary value).
+			name: "height-guard", verbose: true, maxY: 5,
+			sysstatY1: 4, pgstatY1: 4, cmdlineY0: 3, cmdlineY1: 5, dbstatY0: 4, expanded: false,
+		},
+		{
+			// pathological: non-positive maxY must degrade to compact, never emit inverted/negative
+			// coords. layout() guards maxY==0 earlier, but the pure function must be safe regardless.
+			name: "verbose-zero-maxY", verbose: true, maxY: 0,
 			sysstatY1: 4, pgstatY1: 4, cmdlineY0: 3, cmdlineY1: 5, dbstatY0: 4, expanded: false,
 		},
 		{
