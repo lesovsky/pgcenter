@@ -69,6 +69,14 @@ func Test_app_record(t *testing.T) {
 	dbconfig, err := postgres.NewTestConfig()
 	assert.NoError(t, err)
 
+	// Skip when test PostgreSQL is unavailable — app.record would otherwise
+	// panic on a nil connection instead of failing cleanly.
+	if conn, err := postgres.NewTestConnect(); err != nil {
+		t.Skipf("skip: test postgres not available: %v", err)
+	} else {
+		conn.Close()
+	}
+
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			app := newApp(tc.config, dbconfig)

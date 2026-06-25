@@ -7,27 +7,15 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
-### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — toolchain bump pending
+### [016] Collector/parsers swallow errors silently — no logging facility
 
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, pre-deploy QA)
+**Added:** 2026-06-25 (surfaced during debt audit; pre-existing since original pgcenter)
 **Severity:** Low
-**Area:** CI toolchain (`go.mod` / workflows)
+**Area:** `internal/stat/*` (postgres.go, memstat.go, netdev.go, fsstat.go), `internal/postgres/postgres.go`
 
-**What:** `govulncheck` flags GO-2026-5037 in the stdlib `crypto/x509`, fixed in Go 1.25.11; the local toolchain is 1.25.10. Not project code — the resolution is a toolchain bump in CI. Same class as the [004]-era bump already applied once; re-surfaced because the local environment trails the patch version.
+**What:** A cluster of `// TODO: log error` / `// TODO: handle errors` markers across the stat collectors and parsers (e.g. `internal/stat/postgres.go:486,656,825,838`, `memstat.go:59,65,115`, `netdev.go:122`, `fsstat.go:129`, `internal/postgres/postgres.go:163`) where parse/collection errors are dropped on the floor. A malformed `/proc` line or a failed side collection degrades silently to `n/a` with no operator-visible trace.
 
-**Why deferred:** Stdlib transitive path, not project code; the fix is the patch-version toolchain bump the CI gate requires (no source change).
-
----
-
-### [014] bin/pgcenter is a tracked build artifact
-
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** repository root (`bin/pgcenter`), `.gitignore`
-
-**What:** `bin/pgcenter` is committed to the repo, so every `make build` rewrites it and dirties the working tree (and risks an accidental binary commit). Pre-existing, not introduced by feature 010 — only noticed because the manual-QA rebuild churned it.
-
-**Why deferred:** Removing a tracked artifact and gitignoring it is a repo-hygiene change orthogonal to the feature; left for a dedicated cleanup.
+**Why deferred:** pgcenter is a full-screen gocui TUI that owns the terminal — there is nowhere to write logs while rendering. Closing this needs a product decision (a file-based logger / `--log-file` flag) before the TODOs can be wired up; it is not a one-line fix and touches every collector.
 
 ---
 
@@ -91,18 +79,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ---
 
-### [008] record.Test_app_record panics instead of skipping without a live PG
-
-**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views)
-**Severity:** Low
-**Area:** `record/record_test.go` (`Test_app_record`), `record/record.go`
-
-**What:** `Test_app_record` panics (nil-pointer in `app.record`, record.go:167) instead of `t.Skipf` when no live PostgreSQL is available, so `go test ./record/...` fails locally whenever the test clusters are down. Sibling of [005] (`top/reload_test.go`); the rest of the suite skips unavailable versions gracefully. Pre-existing, not caused by feature 008. CI is unaffected (the container provides live PG).
-
-**Why deferred:** Pre-existing and environmental; the fix is the same `t.Skipf` guard pattern as the rest of the suite. Non-blocking.
-
----
-
 ### [006] replslots retained,KiB standby path not verified on a live standby
 
 **Added:** 2026-06-21 (feature: 005-feat-replication-slots)
@@ -112,18 +88,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 **What:** `retained,KiB` uses the recovery-aware `{{.WalFunction2}}()` template, which resolves to `pg_last_wal_receive_lsn()` on a standby. The integration tests (tier-1/2/3) run only against primaries, so the standby branch is correct-by-construction (same template the `replication` screen already uses on standbys) but not exercised by a dedicated live-standby test. Recorded as deferred-to-post-deploy in the QA report.
 
 **Why deferred:** The test harness has no standby cluster; adding one is disproportionate for a path that reuses an already-proven template. Manual standby check is the practical verification.
-
----
-
-### [005] Test_doReload panics instead of skipping when PG fixture is absent
-
-**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
-**Severity:** Low
-**Area:** `top/reload_test.go`
-
-**What:** `Test_doReload` panics (instead of `t.Skipf`) when the PG fixture on port 21917 is not running, so `make test` fails locally whenever the test clusters are down — unlike the rest of the suite, which skips unavailable versions gracefully. Pre-existing (confirmed on a clean baseline via `git stash`), not caused by feature 004. During feature 004 this panic masked local detection of a `record`-package test regression that CI later caught.
-
-**Why deferred:** Pre-existing and environmental; the fix is to replace the panic with a `t.Skipf` guard matching the rest of the suite. Non-blocking for the feature.
 
 ---
 
@@ -140,6 +104,58 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — local toolchain trailed CI
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, pre-deploy QA)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `go.mod`
+
+**What:** `govulncheck` flagged GO-2026-5037 in the stdlib `crypto/x509`, fixed in Go 1.25.11. CI already ran 1.25.11, but the local toolchain trailed at 1.25.10, so `make vuln` reported the finding locally.
+
+**Resolution:** Added `toolchain go1.25.11` to `go.mod`. With `GOTOOLCHAIN=auto`, every environment (local included) now builds and runs under ≥1.25.11, where the stdlib fix is present. Verified `go version` reports 1.25.11 after the directive. No source change.
+
+---
+
+### [014] bin/pgcenter was a tracked build artifact
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** repository root (`bin/pgcenter`), `.gitignore`
+
+**What:** `bin/pgcenter` was committed to the repo, so every `make build` rewrote it and dirtied the working tree (and risked an accidental binary commit).
+
+**Resolution:** `git rm --cached bin/pgcenter` (file kept on disk) and created `.gitignore` with `/bin/`. The build output is now ignored and no longer churns the working tree.
+
+---
+
+### [008] record.Test_app_record panicked instead of skipping without a live PG
+
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `record/record_test.go`
+
+**What:** `Test_app_record` panicked (nil-pointer in `app.record`) instead of `t.Skipf` when no live PostgreSQL was available, so `go test ./record/...` failed locally whenever the test clusters were down. Sibling of [005].
+
+**Resolution:** Added a `postgres.NewTestConnect()` probe before the test loop; on connect error the test `t.Skipf`s cleanly (matching the rest of the suite) instead of proceeding into a nil-connection panic.
+
+---
+
+### [005] Test_doReload panicked instead of skipping when PG fixture is absent
+
+**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `top/reload_test.go`
+
+**What:** `Test_doReload` panicked (nil conn in `doReload`) instead of `t.Skipf` when the PG fixture on port 21917 was not running, so `make test` failed locally whenever the test clusters were down.
+
+**Resolution:** Replaced `assert.NoError(t, err)` after `NewTestConnect()` with an `if err != nil { t.Skipf(...) }` guard, so the test skips cleanly instead of dereferencing a nil connection.
+
+---
 
 ### [007] pg_stat_io NULL-safety covered structurally, no behavioral diff() test
 

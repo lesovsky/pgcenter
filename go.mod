@@ -2,6 +2,8 @@ module github.com/lesovsky/pgcenter
 
 go 1.25.0
 
+toolchain go1.25.11
+
 require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
