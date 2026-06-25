@@ -1,0 +1,354 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Location: {feature_base}-interview.yml
+
+interview_metadata:
+  feature_name: "tech-debt-paydown"
+  feature_base: "docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown"
+  work_type: "refactoring"
+  started: "2026-06-25 18:07:30"
+  last_updated: "2026-06-25 18:09:30"
+  status: "completed"
+  can_resume: true
+  current_question_num: 3
+  feature_size: "M"
+
+conversation_history:
+- question_num: 1
+  timestamp: "2026-06-25 18:08:00"
+  topic: "scope / key decisions"
+  agent_question: |
+    Batch 1 (4 questions): [009] size bound + overflow behavior; [011] byte-equivalence
+    guarantee + internal/pretty in scope; [012] fixed-width Size approach (cosmetic only);
+    scope/bundle/testing strategy.
+  user_answer: |
+    1. agreed (256 MiB hard per-entry cap + hard error, no silent truncation).
+    2. agreed (output byte-identical, locked by overflow-boundary tests; internal/pretty in scope).
+    3. ok (fixed-width Size variant + naReserve, numbers/units identical, padding only).
+    4. agreed (one feature/PR 011, size M, no live-PG integration/E2E; unit/table/golden tests only).
+  summary: "All three items confirmed; one feature 011, size M, no integration tests."
+- question_num: 2
+  timestamp: "2026-06-25 18:09:30"
+  topic: "acceptance criteria + details"
+  agent_question: |
+    Batch 2: confirm per-item acceptance criteria; [009] single const in internal/stat applied
+    to all three tar branches incl. sysinfo; [012] reserve width = widest realistic Size string,
+    deterministic widen on overflow (exact number deferred to tech-spec).
+  user_answer: |
+    All points OK.
+  summary: "Acceptance criteria confirmed; limit unified across all tar branches; fixed-width principle confirmed."
+- question_num: 3
+  timestamp: "2026-06-25 18:14:00"
+  topic: "devil's advocate resolutions"
+  agent_question: |
+    dev-customer raised 3 points: (1) [009] "security fix (A08)" framing is overstated since the
+    operator owns their archives; (2) bundling risk — [012] could block ready [009]+[011];
+    (3) the 256 MiB cap and the reserve width are unjustified guesses.
+  user_answer: |
+    Accept all recommended options.
+  summary: |
+    (1) Reframe [009] as a DEFENSIVE allocation cap (Low), real scenario = a `pgcenter record`
+        archive received from a third party; drop the headline-security/threat-model phrasing.
+    (2) Keep one feature 011 but decompose into 3 INDEPENDENT tasks committed per-item, so a
+        stalled [012] does not hold [009]/[011]. (Three separate PRs rejected: CI/review overhead
+        outweighs the benefit at this scale.)
+    (3) Ground both numbers by measurement: 256 MiB cap justified — largest real golden-tar entry
+        is ~817 KB (statements_timings), so 256 MiB is ~300x headroom. Reserve width from the
+        widest realistic Size string ("1023.9M" = 7 chars, reserve 8). Manual verbose `v` check
+        for [012] is a REQUIRED acceptance step, not optional.
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+phase1_feature_overview:
+
+  feature_description:
+    score: 95
+    status: "complete"
+    value: |
+      Internal-quality "tech-debt paydown" feature bundling three registered debt items
+      (one PR, feature 011):
+      - [009] Security (A08/CWE-789): bound the per-entry size trusted from the tar header
+        before allocation in stat.NewPGresultFile / report replay.
+      - [011] Refactor: consolidate top/stat.go:rateField into internal/pretty (it duplicates
+        RateUnit's overflow/divisor/ceil logic, differing only by a " "+prefix separator).
+      - [012] Cosmetic: give the verbose pgstat Size-formatted fields a fixed-width rendering
+        so columns/labels stop shifting horizontally between samples.
+      No new user-facing screens; no behavior change to displayed values.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      - [009] An untrusted `pgcenter record` archive can carry an attacker-controlled tar header
+        size, causing make([]byte, hdr.Size) to allocate unbounded memory (OOM/DoS) during report.
+      - [011] Two copies of the rate-overflow logic drift apart over time; the duplication was
+        documented as debt when internal/pretty was out of the original task's file set.
+      - [012] Verbose Size fields breathe horizontally between samples, making the overview panel
+        visually unstable and harder to read.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 80
+    status: "complete"
+    value: |
+      - DBA running `pgcenter report` against recorded archives ([009] safety, [012] not visible here).
+      - DBA using the verbose overview panel in `pgcenter top` ([012] stable layout).
+      - Maintainers/contributors of pgcenter ([011] single source of truth for rate formatting).
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 95
+    status: "complete"
+    value: |
+      - [009] NewPGresultFile rejects bufsz > a single exported limit (256 MiB) before allocating;
+        the limit is applied uniformly to all tar branches in report (meta.*, sysinfo.*, stat).
+      - [011] rateField removed; verbose disk/net rows delegate to a shared internal/pretty helper;
+        an overflow-boundary table proves byte-identical output (incl. space + r/w prefix).
+      - [012] the 5 verbose Size fields render fixed-width; identical values across samples keep
+        column and trailing-label positions stable; numbers/units identical to pretty.Size.
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 95
+    status: "complete"
+    value: |
+      - Output must be byte-identical for [011] (no visible change) and value-identical for [012]
+        (padding only). [009] must not reject legitimate recordings (limit generously sized).
+      - internal/pretty is now in scope (was excluded from the original [011] task).
+      - Pure-function helpers, table/property tests (the existing internal/pretty convention).
+      - No live PostgreSQL: [009] tested via crafted in-memory tar entry; [012] via composer tests.
+      - Go 1.25+, golangci-lint v2 clean, gosec clean.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 95
+    status: "complete"
+    value: |
+      Size M, no integration/E2E (confirmed). Unit/table/property tests only:
+      - [009] table test on NewPGresultFile (under/at/over limit) + report-path test feeding a
+        crafted tar header size; assert error before allocation, legitimate entries still read.
+      - [011] overflow-boundary table test comparing the shared helper's output against the
+        pre-refactor rateField output for disk/net, r/w, at maxFit and maxFit+1.
+      - [012] table/golden test on the verbose composers asserting stable widths across samples.
+      Rationale: all three are pure-logic/render changes with no DB or terminal dependency.
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      1. As a DBA replaying a recorded archive from an untrusted source, I want `pgcenter report`
+         to refuse an entry whose declared size is absurd, so that a crafted archive cannot OOM my
+         machine.
+         Scenario: run `pgcenter report -f archive.tar`; an entry has hdr.Size = 8 GiB; report
+         exits with "entry meta.<ts>: size 8589934592 exceeds limit 268435456" without allocating.
+      2. As a DBA watching the verbose overview panel, I want the size/lag columns to stay aligned
+         as values change, so that the panel is readable at a glance.
+         Scenario: press `v` for verbose; databases size grows 900M -> 1.2G across samples; the
+         column and the trailing label stay in the same horizontal position.
+      3. As a pgcenter maintainer, I want one rate-formatting helper, so that a fix to the overflow
+         logic applies everywhere.
+         Scenario: change the overflow promotion once in internal/pretty; both the non-verbose rate
+         columns and the verbose disk/net rows pick it up.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 95
+    status: "complete"
+    value: |
+      [009]
+      - A single exported limit (stat.MaxResultFileSize = 256 MiB) exists in internal/stat.
+      - NewPGresultFile returns an error and does NOT allocate when bufsz > limit.
+      - report applies the limit to all tar branches (meta.*, sysinfo.*, stat) uniformly.
+      - Test: over-limit hdr.Size -> report errors with the limit message, no allocation;
+        a legitimate (< limit) entry reads exactly as before.
+      [011]
+      - rateField is removed; verbose disk/net rows use the shared internal/pretty helper.
+      - Boundary table (MB/s->GB/s, Mbps->Gbps, exactly maxFit, maxFit+1) yields output identical
+        to the current rateField, including the space and the r/w prefix.
+      [012]
+      - The 5 verbose Size fields (databases size, growth, replication lag, retain, backlog) render
+        fixed-width; for identical values across samples, column and trailing-label positions are
+        unchanged.
+      - Displayed numbers and unit letters are identical to pretty.Size; only padding is added.
+      - A value wider than the reserve widens the field deterministically (ReserveWidth semantics),
+        never breaks the layout.
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 90
+    status: "complete"
+    value: |
+      - [009] hdr.Size exactly == limit (allowed); == limit+1 (rejected); == 0 (allowed, empty).
+        Negative/garbage hdr.Size (tar lib yields int64; guard non-positive defensively).
+      - [009] sysinfo branch uses io.ReadAll(io.LimitReader) today — still trusts hdr.Size for the
+        cap; bring it under the same limit.
+      - [011] value exactly at maxFit vs maxFit+1 (the promotion boundary); width=4 reserve; ceil
+        rounding of fractional rates.
+      - [012] very large size (TB-range, 7-char string) at/above the reserve; the "n/a" degraded
+        state must still occupy the reserved width (naReserve) so the label does not jump.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 90
+    status: "complete"
+    value: |
+      - [009] over-limit entry: return a wrapped error ("entry %s: size %d exceeds limit %d");
+        report aborts the archive cleanly (existing error path returns from readTar), no panic.
+      - [009] legitimate large-but-under-limit recording must NOT be rejected (limit sized to never
+        hit real data).
+      - [011]/[012] are non-failing refactors; the only "error" is a test catching an output diff.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Agent: make test (race+coverage), make lint (golangci-lint v2 + gosec), make vuln.
+      Boundary/golden tables for [011]/[012]; crafted-tar table for [009].
+      User: optional manual `v` verbose check in top that size columns no longer breathe; optional
+      manual report run against a normal archive to confirm no regression.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 88
+    status: "complete"
+    value: |
+      No new screens. The only visible change is in `pgcenter top` verbose mode (`v`): the five
+      Size-formatted fields in the pgstat panel become right-aligned fixed-width, so the columns
+      and the static trailing labels stay put as values change. Format of the numbers/units is
+      unchanged. report has no UI change (CLI output of valid archives identical); the only new
+      observable behavior is a clear error line on an over-limit archive entry.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 90
+    status: "complete"
+    value: |
+      - [009] limit too low could reject a legitimate large recording -> mitigation: 256 MiB is far
+        above any real single-view JSON snapshot; covered by a "legitimate entry still reads" test.
+      - [011] subtle output drift (lost space/prefix, off-by-one at the promotion boundary) ->
+        mitigation: byte-for-byte boundary table captured BEFORE refactor (TDD anchor).
+      - [012] picking a reserve too narrow reintroduces breathing for large values -> mitigation:
+        reserve sized to the widest realistic Size string + deterministic widen; verified by test.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      - [009] hard per-entry cap (256 MiB) + error before allocation, single exported const.
+        Alternatives considered: pure io.LimitReader streaming (rejected: NewPGresultFile needs the
+        full buffer for json.Unmarshal, so a cap+error is clearer than a truncated read); archive
+        signing/trust (rejected: out of scope, operator owns archives — the goal is only to bound
+        the allocation, not authenticate).
+      - [011] shared helper in internal/pretty parametrized so RateUnit (no separator) and the
+        verbose rows (" "+r/w prefix) both delegate; exact signature deferred to tech-spec.
+        Alternative: leave duplication (rejected — the documented debt).
+      - [012] fixed-width Size variant + naReserve. Alternative: per-field width budgets (rejected
+        by user as more complex than a single widest-string reserve).
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      - internal/stat/postgres.go: NewPGresultFile (add limit check + exported const).
+      - report/report.go: readTar branches at lines ~170/191/203 call NewPGresultFile / LimitReader.
+      - internal/pretty/pretty.go: RateUnit/ReserveWidth/Ceil/Size (add shared rate helper + Size
+        fixed-width variant).
+      - top/stat.go: rateField (remove, delegate), verbose composers at ~561-601 (apply fixed-width
+        Size + naReserve), naReserve helper reused.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 85
+    status: "complete"
+    value: |
+      Depends on existing helpers: pretty.ReserveWidth, pretty.Ceil, naReserve, pretty.Size,
+      pretty.FamilyDisk/Net. No new external dependencies. Builds on conventions from feature 010
+      (naReserve / RateUnit) and the report tar pipeline (features 003/008).
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 70
+    status: "complete"
+    value: "No new data, storage, or schema. The tar archive format is unchanged."
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 80
+    status: "complete"
+    value: |
+      None. Archive format unchanged; older archives still replay (the limit only rejects
+      pathological entries). No config or user-facing migration.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: "docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown.md"
+  status: "approved"
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+  required_threshold: 85
+  optional_threshold: 50
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase3_integration"
+  questions_asked: 2
+  last_question: "Batch 2 — acceptance criteria + [009]/[012] details"
+  completion_estimate: "92%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  - Internal-quality refactor; "users" are the DBA (report/verbose) and maintainers.
+  - All three items independently testable -> natural decomposition into 3 tasks.
+  - Interview converged in 2 batches: the scope was pre-specified from docs/tech-debt.md and the
+    code was studied up front, so the open questions were genuine product decisions (limit value,
+    equivalence guarantee, fixed-width approach), all confirmed by the user.
+  - Exact numbers (helper signature for [011], reserve width for [012]) deliberately deferred to
+    the tech-spec.

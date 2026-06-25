@@ -249,3 +249,17 @@ iostat/nicstat/fsstat side-panels plus the `databases`/`replication`/`bgwriter` 
 aggregates the verbose rows mirror. Builds on the [001] `CollectExtra` enrichment mechanism (the
 verbose collection is gated similarly but via a separate `view.Verbose` boolean) and the [009]
 pure-render-function precedent (`topBandLayout`).
+
+---
+
+### [011-refactor-tech-debt-paydown] Tech-debt Paydown — Safer Report Replay & Stable Verbose Panel
+
+**What it does:** Internal-quality cleanup of three registered debt items. Bounds the memory `pgcenter report` will allocate when replaying a recorded archive, and stabilises the verbose (`v`) summary panel so its size/lag columns no longer drift horizontally as values change.
+
+**Key scenarios:**
+- Replaying a `pgcenter record` archive received from a third party: an entry declaring an absurd size is rejected with a clear error (`result file size … exceeds limit …`) instead of exhausting memory; legitimate archives replay unchanged.
+- Verbose mode (`v`) in `pgcenter top`: in the `databases:` and `replication:` rows the size/growth/lag/retain/backlog values are right-aligned in fixed-width slots, so trailing labels hold their horizontal position across ticks and when a value drops to `n/a`.
+
+**Limitations:** No new screens or commands; displayed numbers and units are unchanged (padding only). The `wal size` field is intentionally left variable-width (first field on its row). The internal rate-formatter consolidation is invisible to users.
+
+**Touches:** Hardens the `record`/`report` replay path ([003]/[008]); refines the verbose overview panel introduced by [010-feat-overview-dashboard] (reuses its `naReserve` reserved-width contract).

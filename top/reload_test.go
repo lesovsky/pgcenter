@@ -17,7 +17,9 @@ func Test_doReload(t *testing.T) {
 	}
 
 	conn, err := postgres.NewTestConnect()
-	assert.NoError(t, err)
+	if err != nil {
+		t.Skipf("skip: test postgres not available: %v", err)
+	}
 
 	for _, tc := range testcases {
 		assert.Equal(t, tc.want, doReload(tc.answer, conn))

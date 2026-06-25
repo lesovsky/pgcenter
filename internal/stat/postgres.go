@@ -514,8 +514,25 @@ func NewPGresultQuery(db *postgres.DB, query string) (PGresult, error) {
 	return res, nil
 }
 
+// MaxResultFileSize caps the pre-allocation size of a single tar-entry result
+// buffer in NewPGresultFile (256 MiB). The buffer size comes from the tar
+// header Size, which is attacker-controllable for untrusted archives; without
+// a cap a crafted multi-GB header would exhaust memory before any data is read
+// (CWE-789). 256 MiB is far above any realistic single-view JSON snapshot.
+const MaxResultFileSize int64 = 256 << 20
+
 // NewPGresultFile creates PGresult using reader interface.
 func NewPGresultFile(r io.Reader, bufsz int64) (PGresult, error) {
+	// Reject out-of-range sizes before make([]byte, bufsz): a negative size
+	// would panic, and an oversized one would be a pre-allocation memory sink.
+	// Compared strictly in int64 to avoid lossy conversions (gosec G115).
+	if bufsz < 0 {
+		return PGresult{}, fmt.Errorf("result file size %d is negative", bufsz)
+	}
+	if bufsz > MaxResultFileSize {
+		return PGresult{}, fmt.Errorf("result file size %d exceeds limit %d bytes", bufsz, MaxResultFileSize)
+	}
+
 	data := make([]byte, bufsz)
 
 	if _, err := io.ReadFull(r, data); err != nil {

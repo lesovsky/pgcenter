@@ -1,0 +1,23 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "approved",
+  "summary": "Both new tests (Test_NewPGresultFile_sizeCap, Test_readTar_sizeCap) are high quality and exercise real behavior. The unit table covers all five required cases (under-limit, ==limit allowed, ==limit+1 rejected, 0 allowed, negative rejected) with discriminating assertions: the ==limit and 0 cases assert the NON-cap error (unexpected EOF / unexpected end of JSON input) to prove the guard is passed and execution reaches make/ReadFull/Unmarshal, which is exactly what proves the boundary is inclusive (> not >=). The over-limit and negative cases assert distinct error texts (exceeds limit / negative) plus an empty PGresult{}, and pass the litmus test (removing the corresponding guard changes the failure mode). The report-path test drives all three readTar branches (meta./sysinfo./procpidstat default) through real tar routing, asserts the limit error and zero data sent on each, and proves a legitimate under-limit meta+stat tick still replays (count==1). The implementer's documented deviation (header-only tar entry, no body, no Close) is valid: every branch checks hdr.Size before touching the body (meta/stat via NewPGresultFile's pre-make guard, sysinfo via the inline pre-ReadAll check), so the header alone validly exercises the rejection on all three. Both tests run green. Only minor non-blocking observations below.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "file": "report/report_test.go",
+      "line": 583,
+      "issue": "The meta-branch and stat(default)-branch subtests assert the identical error substring 'exceeds limit' and count==0. They do route through different switch cases (different hdr.Name), which is the meaningful distinction, but the assertions alone do not pin which branch produced the error. The sysinfo inline check in report.go emits a byte-identical 'exceeds limit' message to NewPGresultFile's, so the test cannot positively confirm the sysinfo rejection came from the new inline check rather than elsewhere. Coverage is nonetheless real because sysinfo.* never calls NewPGresultFile, so the inline check is the only possible source.",
+      "suggestion": "Optional hardening: give the sysinfo inline error a slightly distinct wrapper (e.g. 'sysinfo entry size %d exceeds limit %d bytes') and assert that distinct text in the sysinfo subtest, so the three branches are positively discriminated by message origin as the TDD anchor's 'develop assertions by code-path' note suggests. Not required — current coverage is valid."
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "file": "internal/stat/postgres_test.go",
+      "line": 372,
+      "issue": "The 'no allocation before make' requirement is asserted only indirectly: a black-box test cannot observe that make([]byte, bufsz) was skipped. It is inferred from the error message (cap error returned, distinct from the post-make 'unexpected EOF'). This is the strongest possible black-box signal and is acceptable; flagged only for transparency that allocation-skipping is not directly observed.",
+      "suggestion": "No change needed. If a future regression test wanted to harden this, a benchmark/allocs assertion (testing.AllocsPerRun) on the over-limit path could assert zero large allocation, but that is overkill for this defensive guard."
+    }
+  ]
+}

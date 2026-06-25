@@ -7,63 +7,15 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
-### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — toolchain bump pending
+### [016] Collector/parsers swallow errors silently — no logging facility
 
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, pre-deploy QA)
+**Added:** 2026-06-25 (surfaced during debt audit; pre-existing since original pgcenter)
 **Severity:** Low
-**Area:** CI toolchain (`go.mod` / workflows)
+**Area:** `internal/stat/*` (postgres.go, memstat.go, netdev.go, fsstat.go), `internal/postgres/postgres.go`
 
-**What:** `govulncheck` flags GO-2026-5037 in the stdlib `crypto/x509`, fixed in Go 1.25.11; the local toolchain is 1.25.10. Not project code — the resolution is a toolchain bump in CI. Same class as the [004]-era bump already applied once; re-surfaced because the local environment trails the patch version.
+**What:** A cluster of `// TODO: log error` / `// TODO: handle errors` markers across the stat collectors and parsers (e.g. `internal/stat/postgres.go:486,656,825,838`, `memstat.go:59,65,115`, `netdev.go:122`, `fsstat.go:129`, `internal/postgres/postgres.go:163`) where parse/collection errors are dropped on the floor. A malformed `/proc` line or a failed side collection degrades silently to `n/a` with no operator-visible trace.
 
-**Why deferred:** Stdlib transitive path, not project code; the fix is the patch-version toolchain bump the CI gate requires (no source change).
-
----
-
-### [014] bin/pgcenter is a tracked build artifact
-
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** repository root (`bin/pgcenter`), `.gitignore`
-
-**What:** `bin/pgcenter` is committed to the repo, so every `make build` rewrites it and dirties the working tree (and risks an accidental binary commit). Pre-existing, not introduced by feature 010 — only noticed because the manual-QA rebuild churned it.
-
-**Why deferred:** Removing a tracked artifact and gitignoring it is a repo-hygiene change orthogonal to the feature; left for a dedicated cleanup.
-
----
-
-### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
-
-**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, every task)
-**Severity:** Low
-**Area:** `.golangci.yml`, local dev environment
-
-**What:** The repo's `.golangci.yml` is a v1-schema config, but the locally-installed `golangci-lint` is v2 (`unsupported version of the configuration`), so `make lint` cannot run locally — every task in feature 010 substituted `go vet` + `gofmt -l` (and `gosec` where available) and deferred the full golangci-lint run to CI. The proper fix migrates the config to v2 (or pins the tool version).
-
-**Why deferred:** Config migration is a cross-cutting change unrelated to the feature; CI still enforces the full lint, so coverage is not lost — only local convenience.
-
----
-
-### [012] verbose pgstat Size-formatted fields width-breathe between values
-
-**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** `top/stat.go` (verbose pgstat composers)
-
-**What:** The `n/a`-width reservation that keeps trailing labels static (`naReserve`) was applied only to fixed-width fields (cache-hit ratio, the `%d` workload rates). The verbose fields formatted via `pretty.Size` (databases size/growth, replication lag/retain/backlog) are inherently variable-width, so an `n/a`↔value width match is ill-defined and those fields/labels still shift horizontally between samples.
-
-**Why deferred:** Fixing it needs a fixed-width `Size` variant (or per-field reserved budgets), which the feature did not size; the exact pgstat digit budgets were left to user verification. Cosmetic, no correctness impact.
-
----
-
-### [011] rateField duplicates pretty.RateUnit overflow logic
-
-**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
-**Severity:** Low
-**Area:** `top/stat.go` (`rateField`), `internal/pretty/pretty.go` (`RateUnit`)
-
-**What:** `top/stat.go:rateField` re-implements the overflow/divisor logic of `pretty.RateUnit` (it differs only in placing the r/w prefix *between* the digits and the unit, as the spec layout `1135 rMB/s` requires). Consolidating into one shared helper would touch `internal/pretty/pretty.go`, which was outside the allowed file set for the row-composer task.
-
-**Why deferred:** Out of scope for the task that introduced it; the duplication is small and documented. A candidate for consolidation the next time `internal/pretty` is touched.
+**Why deferred:** pgcenter is a full-screen gocui TUI that owns the terminal — there is nowhere to write logs while rendering. Closing this needs a product decision (a file-based logger / `--log-file` flag) before the TODOs can be wired up; it is not a one-line fix and touches every collector.
 
 ---
 
@@ -79,30 +31,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ---
 
-### [009] tar entry size trusted for allocation in stat.NewPGresultFile
-
-**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
-**Severity:** Low
-**Area:** `internal/stat/postgres.go` (`NewPGresultFile`), `report/`
-
-**What:** Report replay deserializes recorded archives via `NewPGresultFile`, which does `make([]byte, hdr.Size)` from the tar header size — an attacker-controlled value if the archive is untrusted (A08 / CWE-789, unbounded allocation). Pre-existing pattern shared by all recordable views; feature 008 did not introduce it but widened the set of view types flowing through this trust boundary.
-
-**Why deferred:** Out of scope for feature 008 and low risk in practice — the operator owns and controls their own `pgcenter record` archives. A proper fix bounds `hdr.Size` against a sane maximum (or `io.LimitReader`) before allocating.
-
----
-
-### [008] record.Test_app_record panics instead of skipping without a live PG
-
-**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views)
-**Severity:** Low
-**Area:** `record/record_test.go` (`Test_app_record`), `record/record.go`
-
-**What:** `Test_app_record` panics (nil-pointer in `app.record`, record.go:167) instead of `t.Skipf` when no live PostgreSQL is available, so `go test ./record/...` fails locally whenever the test clusters are down. Sibling of [005] (`top/reload_test.go`); the rest of the suite skips unavailable versions gracefully. Pre-existing, not caused by feature 008. CI is unaffected (the container provides live PG).
-
-**Why deferred:** Pre-existing and environmental; the fix is the same `t.Skipf` guard pattern as the rest of the suite. Non-blocking.
-
----
-
 ### [006] replslots retained,KiB standby path not verified on a live standby
 
 **Added:** 2026-06-21 (feature: 005-feat-replication-slots)
@@ -112,18 +40,6 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 **What:** `retained,KiB` uses the recovery-aware `{{.WalFunction2}}()` template, which resolves to `pg_last_wal_receive_lsn()` on a standby. The integration tests (tier-1/2/3) run only against primaries, so the standby branch is correct-by-construction (same template the `replication` screen already uses on standbys) but not exercised by a dedicated live-standby test. Recorded as deferred-to-post-deploy in the QA report.
 
 **Why deferred:** The test harness has no standby cluster; adding one is disproportionate for a path that reuses an already-proven template. Manual standby check is the practical verification.
-
----
-
-### [005] Test_doReload panics instead of skipping when PG fixture is absent
-
-**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
-**Severity:** Low
-**Area:** `top/reload_test.go`
-
-**What:** `Test_doReload` panics (instead of `t.Skipf`) when the PG fixture on port 21917 is not running, so `make test` fails locally whenever the test clusters are down — unlike the rest of the suite, which skips unavailable versions gracefully. Pre-existing (confirmed on a clean baseline via `git stash`), not caused by feature 004. During feature 004 this panic masked local detection of a `record`-package test regression that CI later caught.
-
-**Why deferred:** Pre-existing and environmental; the fix is to replace the panic with a `t.Skipf` guard matching the rest of the suite. Non-blocking for the feature.
 
 ---
 
@@ -140,6 +56,110 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 ---
 
 ## Resolved Debt
+
+### [012] verbose pgstat Size-formatted fields width-breathe between values
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 03, commit c89b686)
+**Severity:** Low
+**Area:** `top/stat.go` (verbose pgstat composers), `internal/pretty/pretty.go`
+
+**What:** The verbose pgstat fields formatted via `pretty.Size` (databases size/growth, replication lag/retain/backlog) were variable-width, so the fields and their trailing labels shifted horizontally between samples; `naReserve` covered only the fixed-width fields.
+
+**Resolution:** Added `pretty.SizeWidth(v, width)` (right-aligns `Size(v)` via `%*s`, never truncating — the `ReserveWidth` model) and applied it with a single `sizeFieldWidth = 8` const to the five Size fields, replacing their bare `naLiteral` n/a fallbacks with `naReserve(sizeFieldWidth)`. Value and n/a now share the reserve, so labels hold position across ticks and value↔n/a. `wal size` stays a bare `Size` (first field on its row, pushes no label). Locked by a value-vs-n/a byte-offset test (RED before, GREEN after) and updated goldens (padding only). Manual `v` check confirmed.
+
+---
+
+### [011] rateField duplicates pretty.RateUnit overflow logic
+
+**Added:** 2026-06-25 (feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 02, commit ee623fa)
+**Severity:** Low
+**Area:** `top/stat.go` (`rateField`), `internal/pretty/pretty.go`
+
+**What:** `top/stat.go:rateField` re-implemented the overflow/divisor/ceil logic of `pretty.RateUnit`, differing only by the `" " + r/w` prefix between digits and unit (`1135 rMB/s`).
+
+**Resolution:** Extracted the shared logic into an unexported `pretty.rateUnitParts(v, family, width) (field, unit)` core; `RateUnit` (byte-identical `9999MB/s` form) and a new exported `pretty.RateUnitPrefixed(v, family, prefix, width)` both delegate to it. `rateField` deleted, its four verbose disk/net call sites repointed. Byte-identity locked by a `TestRateUnitPrefixed` boundary table (hardcoded literals, not a circular call to the deleted func); the verbose disk/net goldens needed no edits — a positive equivalence signal.
+
+---
+
+### [009] tar entry size trusted for allocation in stat.NewPGresultFile
+
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views, security audit)
+**Resolved:** 2026-06-25 (feature: 011-refactor-tech-debt-paydown, task 01, commit 9a3c630)
+**Severity:** Low
+**Area:** `internal/stat/postgres.go` (`NewPGresultFile`), `report/report.go`
+
+**What:** `NewPGresultFile` did `make([]byte, hdr.Size)` from the tar header size — an attacker-influenceable value for an archive received from a third party (A08 / CWE-789, unbounded allocation).
+
+**Resolution:** Added exported `stat.MaxResultFileSize int64 = 256 << 20` (≈300× the largest real ~817 KB entry) and an int64-only guard in `NewPGresultFile` rejecting `bufsz < 0` (distinct error) and `bufsz > MaxResultFileSize` (`result file size %d exceeds limit %d bytes`) **before** `make` — no `int()` narrowing, so no gosec G115. The two real pre-alloc sinks (`report.readTar` `meta.*`/stat) inherit the cap via `NewPGresultFile`; the `sysinfo.*` branch (`io.ReadAll`, not a pre-alloc sink) got the same cap inline as defense-in-depth. Tests cover under/at/over limit, negative, and all three tar branches.
+
+---
+
+### [013] golangci-lint v1 config vs locally-installed v2 tool — lint runs only in CI
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, every task)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `.golangci.yml`, `.github/workflows/{default,release}.yml`
+
+**What:** The repo's `.golangci.yml` was a v1-schema config, but the locally-installed `golangci-lint` is v2 (`unsupported version of the configuration`), so `make lint` could not run locally — tasks substituted `go vet` + `gofmt -l` and deferred the full lint to CI. (CI also silently ran v1, since its install path `…/cmd/golangci-lint@latest` omits the `/v2/` module prefix and resolves to the last v1 release.)
+
+**Resolution:** Migrated `.golangci.yml` to the v2 schema via `golangci-lint migrate`. v2 folds `stylecheck` (ST*) and the new quickfix (QF*) categories into `staticcheck`; the v1 config enabled neither, so `staticcheck.checks` now carries `-ST*` / `-QF*` to preserve the exact v1 effective rule set (verified: `make lint` reports 0 issues, same as before). Switched both CI workflows to install the v2 binary (`…/v2/cmd/golangci-lint@latest`) and bumped the lint-tools cache key (`lint-v2` → `lint-v3-golangciv2`) so the stale v1 binary is not restored. Local and CI now run the same v2 tool against the same config.
+
+---
+
+### [015] govulncheck GO-2026-5037 (crypto/x509 stdlib) — local toolchain trailed CI
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard, pre-deploy QA)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `go.mod`
+
+**What:** `govulncheck` flagged GO-2026-5037 in the stdlib `crypto/x509`, fixed in Go 1.25.11. CI already ran 1.25.11, but the local toolchain trailed at 1.25.10, so `make vuln` reported the finding locally.
+
+**Resolution:** Added `toolchain go1.25.11` to `go.mod`. With `GOTOOLCHAIN=auto`, every environment (local included) now builds and runs under ≥1.25.11, where the stdlib fix is present. Verified `go version` reports 1.25.11 after the directive. No source change.
+
+---
+
+### [014] bin/pgcenter was a tracked build artifact
+
+**Added:** 2026-06-25 (surfaced during feature: 010-feat-overview-dashboard)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** repository root (`bin/pgcenter`), `.gitignore`
+
+**What:** `bin/pgcenter` was committed to the repo, so every `make build` rewrote it and dirtied the working tree (and risked an accidental binary commit).
+
+**Resolution:** `git rm --cached bin/pgcenter` (file kept on disk) and created `.gitignore` with `/bin/`. The build output is now ignored and no longer churns the working tree.
+
+---
+
+### [008] record.Test_app_record panicked instead of skipping without a live PG
+
+**Added:** 2026-06-22 (surfaced during feature: 008-feat-record-report-0-11-views)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `record/record_test.go`
+
+**What:** `Test_app_record` panicked (nil-pointer in `app.record`) instead of `t.Skipf` when no live PostgreSQL was available, so `go test ./record/...` failed locally whenever the test clusters were down. Sibling of [005].
+
+**Resolution:** Added a `postgres.NewTestConnect()` probe before the test loop; on connect error the test `t.Skipf`s cleanly (matching the rest of the suite) instead of proceeding into a nil-connection panic.
+
+---
+
+### [005] Test_doReload panicked instead of skipping when PG fixture is absent
+
+**Added:** 2026-06-21 (surfaced during feature: 004-feat-bgwriter-checkpointer)
+**Resolved:** 2026-06-25 (debt audit)
+**Severity:** Low
+**Area:** `top/reload_test.go`
+
+**What:** `Test_doReload` panicked (nil conn in `doReload`) instead of `t.Skipf` when the PG fixture on port 21917 was not running, so `make test` failed locally whenever the test clusters were down.
+
+**Resolution:** Replaced `assert.NoError(t, err)` after `NewTestConnect()` with an `if err != nil { t.Skipf(...) }` guard, so the test skips cleanly instead of dereferencing a nil connection.
+
+---
 
 ### [007] pg_stat_io NULL-safety covered structurally, no behavioral diff() test
 

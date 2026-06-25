@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "011-refactor-tech-debt-paydown",
+    "feature_name": "tech-debt-paydown",
+    "feature_base": "docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "claude-opus-4-8",
+    "date_started": "2026-06-25",
+    "date_completed": "2026-06-25"
+  },
+  "phases": {
+    "user_spec": { "started": "2026-06-25 18:07:30", "ended": "2026-06-25 18:18:00", "duration_min": 10, "human_wait_time_min": 0 },
+    "tech_spec": { "started": "2026-06-25 18:19:00", "ended": "2026-06-25 18:34:00", "duration_min": 15, "human_wait_time_min": 0 },
+    "task_decomposition": { "started": "2026-06-25 18:35:00", "ended": "2026-06-25 18:45:00", "duration_min": 10, "human_wait_time_min": 0 },
+    "feature_execution": { "started": "2026-06-25 18:47:00", "ended": "2026-06-25 19:05:00", "duration_min": 18, "human_wait_time_min": 0 },
+    "done": { "started": "2026-06-25 19:06:00", "ended": "2026-06-25 19:12:00", "duration_min": 6, "human_wait_time_min": 0 }
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 1, "tech_spec": 2, "task_decomposition": 1 },
+    "validation_findings": { "critical": 0, "major": 1, "minor": 19 },
+    "review_rounds": { "task_01": 1, "task_02": 1, "task_03": 1 },
+    "review_findings": { "critical": 0, "major": 0, "minor": 9 },
+    "first_pass_rate_pct": 100
+  },
+  "volume": {
+    "interview_questions": 2,
+    "tasks_count": 4,
+    "waves_count": 3,
+    "agents_spawned": 28,
+    "commits_count": 22
+  }
+}

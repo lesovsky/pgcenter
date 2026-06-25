@@ -188,6 +188,14 @@ func readTar(r *tar.Reader, config Config, dataCh chan data, doneCh chan struct{
 			// into the metadata struct; does not gate the data channel send
 			// (metaOK is set only by the meta.* branch — sysinfo is
 			// supplementary under Option B).
+			// Cap hdr.Size against the same limit as the meta/stat branches.
+			// This is defense-in-depth / consistency, not a pre-allocation fix:
+			// io.ReadAll grows the buffer by the bytes actually read (bounded
+			// here by io.LimitReader), so it is not an allocation sink. Compared
+			// strictly in int64 to avoid lossy conversions (gosec G115).
+			if hdr.Size < 0 || hdr.Size > stat.MaxResultFileSize {
+				return fmt.Errorf("result file size %d exceeds limit %d bytes", hdr.Size, stat.MaxResultFileSize)
+			}
 			buf, err := io.ReadAll(io.LimitReader(r, hdr.Size))
 			if err != nil {
 				return fmt.Errorf("read sysinfo entry %s failed: %w", hdr.Name, err)

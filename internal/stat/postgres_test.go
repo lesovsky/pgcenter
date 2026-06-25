@@ -328,6 +328,82 @@ func Test_NewPGresultFile(t *testing.T) {
 	}
 }
 
+func Test_NewPGresultFile_sizeCap(t *testing.T) {
+	// A small, valid PGresult JSON used for the under-limit/at-limit cases.
+	validJSON := []byte(`{"Cols":["a"],"Ncols":1,"Nrows":1,"Valid":true,"Values":[[{"String":"x","Valid":true}]]}`)
+
+	testcases := []struct {
+		name        string
+		payload     []byte
+		bufsz       int64
+		wantErr     bool
+		errContains string
+		wantValues  bool
+	}{
+		{
+			name:       "under limit valid json",
+			payload:    validJSON,
+			bufsz:      int64(len(validJSON)),
+			wantErr:    false,
+			wantValues: true,
+		},
+		{
+			name:    "at limit allowed",
+			payload: validJSON,
+			bufsz:   MaxResultFileSize,
+			// bufsz == limit is allowed by the guard; the read itself fails
+			// (the reader has only a few bytes), but NOT with the cap error.
+			wantErr:     true,
+			errContains: "unexpected EOF",
+		},
+		{
+			name:        "over limit rejected before allocation",
+			payload:     validJSON,
+			bufsz:       MaxResultFileSize + 1,
+			wantErr:     true,
+			errContains: "exceeds limit",
+		},
+		{
+			name:    "zero allowed",
+			payload: []byte{},
+			bufsz:   0,
+			// 0-length buffer: io.ReadFull on 0 bytes returns nil, then
+			// json.Unmarshal on empty data fails — but NOT with the cap error.
+			wantErr:     true,
+			errContains: "unexpected end of JSON input",
+		},
+		{
+			name:        "negative rejected",
+			payload:     validJSON,
+			bufsz:       -1,
+			wantErr:     true,
+			errContains: "negative",
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := bytes.NewReader(tc.payload)
+			got, err := NewPGresultFile(r, tc.bufsz)
+			if tc.wantErr {
+				assert.Error(t, err)
+				if tc.errContains != "" {
+					assert.Contains(t, err.Error(), tc.errContains)
+				}
+				if !tc.wantValues {
+					assert.Equal(t, PGresult{}, got)
+				}
+			} else {
+				assert.NoError(t, err)
+				if tc.wantValues {
+					assert.NotNil(t, got.Values)
+					assert.NotNil(t, got.Cols)
+				}
+			}
+		})
+	}
+}
+
 func TestPGresult_validate(t *testing.T) {
 	testcases := []struct {
 		valid bool

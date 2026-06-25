@@ -1,0 +1,34 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "01",
+      "issue": "Task 01 says to reuse the report_test.go writeEntry harness (~461) for the over-limit case, but that closure hardcodes Size: int64(len(payload)) (report_test.go:463), so it cannot emit a crafted hdr.Size larger than the actual payload. The over-limit test must build a custom tar.Header with an inflated Size independently of writeEntry; reusing writeEntry verbatim would not exercise the cap.",
+      "fix": "In the over-limit test, write a header directly (tar.Header{Name, Size: stat.MaxResultFileSize+1, Mode}) with a small/empty payload instead of calling writeEntry; keep writeEntry only for the legitimate-replay control entry."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 only adds an inline cap to the sysinfo branch and explicitly says NOT to touch the meta.* (report.go:170) and stat (report.go:203) branches because they inherit the guard via NewPGresultFile. That is correct, but the TDD Anchor asks to assert the over-limit error on the meta.* branch too. With a crafted oversized hdr.Size on a meta.* entry, NewPGresultFile errors before make (good), yet io.ReadFull there will first try to read bufsz bytes from the short payload — the guard returns before make so the error is the limit error, which is fine. No code issue; just note the meta/stat over-limit assertions exercise NewPGresultFile's new guard, not report.go logic.",
+      "fix": "No code change. Ensure the meta/stat over-limit test cases assert the limit error string surfaced via readTar's return path, and the sysinfo case asserts the new inline report.go check (different code path)."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "02",
+      "issue": "Task 02's 'capture-before-delete ordering' is satisfiable but relies on the executor manually computing the literal want strings from the rateField body. The TestRateUnitPrefixed table uses hardcoded literals (not a call to the soon-deleted rateField), so the ordering risk the task warns about is real only if the executor instead tries to call rateField from the new test after deletion. Worth making explicit that want values are literals.",
+      "fix": "Confirm TestRateUnitPrefixed encodes the expected strings as literals (e.g. \"9999 rMB/s\", \"  10 wGB/s\") computed by hand from rateField at lines 326-344, written before deleting rateField; never reference rateField from the test."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 41,
+    "issues_found": 3
+  }
+}

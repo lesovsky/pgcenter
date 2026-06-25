@@ -318,30 +318,12 @@ const naLiteral = "n/a"
 // is right-aligned into the same width so the trailing label stays static across ticks.
 const cacheHitWidth = 7
 
-// rateField formats a disk/net rate value (already in MB/s or Mbps) into a fixed-digit-reserve field
-// followed by a r/w-prefixed unit, switching to the next higher unit when the rounded integer no
-// longer fits the reserve. It is the dynamic-suffix companion to pretty.RateUnit, differing only in
-// that the read/write prefix is placed between the digits and the unit (the user-spec layout shows
-// "1135 rMB/s", "1546 wMB/s"). The value is rounded up (ceil) so verbose stays whole-number.
-func rateField(v float64, family string, prefix string, width int) string {
-	base, high := "MB/s", "GB/s"
-	var divisor float64 = 1024
-	if family == pretty.FamilyNet {
-		base, high = "Mbps", "Gbps"
-		divisor = 1000
-	}
-
-	maxFit := 1
-	for i := 0; i < width; i++ {
-		maxFit *= 10
-	}
-	maxFit-- // largest integer that fits the reserve, e.g. width 4 -> 9999
-
-	if pretty.Ceil(v) <= maxFit {
-		return pretty.ReserveWidth(pretty.Ceil(v), width) + " " + prefix + base
-	}
-	return pretty.ReserveWidth(pretty.Ceil(v/divisor), width) + " " + prefix + high
-}
+// sizeFieldWidth is the reserved width of the verbose Size fields (databases size/growth,
+// replication lag/retain/archiving-backlog). The widest realistic Size string is 7 chars
+// ("1023.9M"/"1023.9G"/"1023.9T"); reserving 8 gives one column of margin and right-aligns
+// cleanly. The value (pretty.SizeWidth) and its n/a sentinel (naReserve) share this width so
+// the trailing label stays static across ticks and between the value and n/a states.
+const sizeFieldWidth = 8
 
 // renderSysstatVerbose appends the three verbose system rows to w. Each row degrades independently:
 // no active device / first tick / no mount match renders n/a for that row without aborting the others.
@@ -360,9 +342,9 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 		if _, err := fmt.Fprintf(w, "  iostat: %s devices, %s%% max util, %s, %s r/s, %s, %s w/s\n",
 			pretty.ReserveWidth(activeDiskCount(s.Diskstats), 2),
 			pretty.ReserveWidth(pretty.Ceil(d.Util), 3),
-			rateField(d.Rsectors, pretty.FamilyDisk, "r", 4),
+			pretty.RateUnitPrefixed(d.Rsectors, pretty.FamilyDisk, "r", 4),
 			pretty.ReserveWidth(pretty.Ceil(d.Rcompleted), 5),
-			rateField(d.Wsectors, pretty.FamilyDisk, "w", 4),
+			pretty.RateUnitPrefixed(d.Wsectors, pretty.FamilyDisk, "w", 4),
 			pretty.ReserveWidth(pretty.Ceil(d.Wcompleted), 5)); err != nil {
 			return err
 		}
@@ -380,8 +362,8 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 		if _, err := fmt.Fprintf(w, " nicstat: %s devices, %s%% max util, %s, %s, %s/%s err/coll\n",
 			pretty.ReserveWidth(activeNetCount(s.Netdevs), 2),
 			pretty.ReserveWidth(pretty.Ceil(n.Utilization), 3),
-			rateField(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
-			rateField(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
+			pretty.RateUnitPrefixed(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
+			pretty.RateUnitPrefixed(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
 			pretty.ReserveWidth(pretty.Ceil(n.Rerrs+n.Terrs), 4),
 			strconv.Itoa(pretty.Ceil(n.Tcolls))); err != nil {
 			return err
@@ -556,11 +538,11 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 
 	// databases row. Size/growth are n/a when the privileged aggregate failed; cache hit ratio is
 	// n/a on the first tick or when there was no I/O in the interval.
-	size, growth := naLiteral, naLiteral
+	size, growth := naReserve(sizeFieldWidth), naReserve(sizeFieldWidth)
 	if o.TotalSizeValid {
-		size = pretty.Size(float64(o.TotalSize))
+		size = pretty.SizeWidth(float64(o.TotalSize), sizeFieldWidth)
 		if hp {
-			growth = pretty.Size(float64(o.GrowthPerSec))
+			growth = pretty.SizeWidth(float64(o.GrowthPerSec), sizeFieldWidth)
 		}
 	}
 	// cache hit ratio is the trailing field before its label; reserve a fixed width for the value
@@ -585,17 +567,17 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 
 	// replication row. lag/slots-retain/archiving-backlog are n/a when their source is unavailable
 	// (no standby, no slots, archive_mode=off / missing privilege).
-	lag := naLiteral
+	lag := naReserve(sizeFieldWidth)
 	if o.LagBytesValid {
-		lag = pretty.Size(float64(o.LagBytes))
+		lag = pretty.SizeWidth(float64(o.LagBytes), sizeFieldWidth)
 	}
-	retain := naLiteral
+	retain := naReserve(sizeFieldWidth)
 	if o.RetainedValid {
-		retain = pretty.Size(float64(o.RetainedBytes))
+		retain = pretty.SizeWidth(float64(o.RetainedBytes), sizeFieldWidth)
 	}
-	backlog := naLiteral
+	backlog := naReserve(sizeFieldWidth)
 	if o.ArchivingBacklogValid {
-		backlog = pretty.Size(float64(o.ArchivingBacklog))
+		backlog = pretty.SizeWidth(float64(o.ArchivingBacklog), sizeFieldWidth)
 	}
 	if _, err := fmt.Fprintf(w, " replication: %s wal size, %s lag, %s/%s slots/retain, %s archiving backlog, %d/%d senders/receivers\n",
 		pretty.Size(float64(o.WalSize)), lag,

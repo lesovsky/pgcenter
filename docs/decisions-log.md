@@ -696,3 +696,51 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** System rows must never diverge from the full panels, so only the no-twin aggregate is throttled. A stale value is more honest than `n/a` for a value that merely lagged. The floor/fraction keeps the guard sane at both short (`refresh=1s` → 500ms floor) and long (`refresh=4s` → 1s) intervals; the exact constant was deferred from the tech-spec to task-decomposition.
 
 **Alternatives considered:** A generic multi-rhythm scheduler now — rejected (YAGNI; the per-source seam suffices). Throttling system rows too — rejected (breaks the consistency promise).
+
+---
+
+## [011-refactor-tech-debt-paydown] Hard per-entry allocation cap + reject before make, not streaming
+
+**Date:** 2026-06-25
+**Feature:** 011-refactor-tech-debt-paydown
+**Status:** Accepted
+
+**Context:** `stat.NewPGresultFile` did `make([]byte, hdr.Size)` from an attacker-influenceable tar header (CWE-789) during `report` replay of an archive received from a third party.
+
+**Decision:** Exported `stat.MaxResultFileSize int64 = 256 << 20`; `NewPGresultFile` rejects `bufsz < 0` and `bufsz > MaxResultFileSize` with an error **before** `make`. The `report.readTar` `meta.*`/stat branches inherit the cap via `NewPGresultFile`; the `sysinfo.*` branch (`io.ReadAll`) gets the same cap inline as defense-in-depth only.
+
+**Rationale:** `json.Unmarshal` needs the whole buffer, so a cap+reject is clearer than a truncated `io.LimitReader` read. 256 MiB ≈ 300× the largest real entry (~817 KB), so it never rejects legitimate data. The const is `int64` so the comparison introduces no `int()` narrowing (no gosec G115). Only `meta`/`stat` are true pre-alloc sinks — `io.ReadAll` grows by bytes actually read, so the sysinfo cap is consistency, not a fix.
+
+**Alternatives considered:** Streaming `io.LimitReader` (rejected — partial buffer breaks `json.Unmarshal`); archive signing/trust (rejected — out of scope; bound the allocation, do not authenticate).
+
+---
+
+## [011-refactor-tech-debt-paydown] Shared `rateUnitParts` core; `RateUnit` + `RateUnitPrefixed` delegate
+
+**Date:** 2026-06-25
+**Feature:** 011-refactor-tech-debt-paydown
+**Status:** Accepted
+
+**Context:** `top/stat.go:rateField` duplicated `pretty.RateUnit`'s overflow/divisor/ceil logic, differing only by a `" " + r/w` prefix between digits and unit. `RateUnit` had **no production callers** (tests only) — the verbose rows used the divergent copy.
+
+**Decision:** Unexported `pretty.rateUnitParts(v, family, width) (field, unit)` holds the shared computation. `RateUnit` returns `field+unit` (byte-identical `9999MB/s`); new exported `RateUnitPrefixed(v, family, prefix, width)` returns `field+" "+prefix+unit`. `rateField` deleted, its four call sites repointed.
+
+**Rationale:** The two output forms differ only by the separator, so the shared piece is the parts computation and the public funcs assemble differently. Keeping `RateUnit` byte-identical preserves its property-test suite. Byte-identity is locked by a boundary table of hardcoded literals (not a circular call to the deleted func) and the unchanged verbose goldens.
+
+**Alternatives considered:** Generalize `RateUnit` with a separator param (rejected — changes its output, breaks its tests); delete `RateUnit` as dead code (rejected — documented feature-010 API with tests; churn without benefit).
+
+---
+
+## [011-refactor-tech-debt-paydown] `pretty.SizeWidth` + single `sizeFieldWidth = 8` for verbose Size fields
+
+**Date:** 2026-06-25
+**Feature:** 011-refactor-tech-debt-paydown
+**Status:** Accepted
+
+**Context:** The five verbose pgstat Size fields used bare `pretty.Size` (variable width), so columns and trailing labels breathed between samples; `naReserve` covered only fixed-width fields.
+
+**Decision:** New exported `pretty.SizeWidth(v, width) = fmt.Sprintf("%*s", width, Size(v))` (right-align, never truncate — the `ReserveWidth` model). The five fields use a single `sizeFieldWidth = 8` const; their `n/a` fallbacks use `naReserve(sizeFieldWidth)` so value and `n/a` share the reserve. `wal size` stays a bare `Size` — it is the first field on its row and pushes no trailing label.
+
+**Rationale:** Width 8 covers the widest realistic Size string (`1023.9M` = 7 chars) with one column of margin; beyond it the field widens deterministically rather than breaking. One reserve is simpler than per-field budgets. The fix is purely additive padding — digits/units are unchanged (`Size` itself untouched). A value-vs-`n/a` byte-offset test (RED before, GREEN after) is the regression lock.
+
+**Alternatives considered:** Per-field width budgets (rejected — more complex, no benefit); making `Size` itself fixed-width (rejected — `Size` has other variable-width callers).

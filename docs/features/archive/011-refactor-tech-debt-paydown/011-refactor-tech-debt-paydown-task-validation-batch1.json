@@ -1,0 +1,48 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/011-refactor-tech-debt-paydown/011-refactor-tech-debt-paydown",
+  "tasks_checked": ["01", "02", "03", "04"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "Project-knowledge link is labeled `[project.md]` but points at `.claude/skills/project-knowledge/overview.md`. This project's PK has no `project.md` file (it uses `overview.md`); the substitution is correct, but the link text `project.md` is misleading.",
+      "fix": "Relabel the link to `[overview.md](.claude/skills/project-knowledge/overview.md)` to match the actual filename (as tasks 02/03/04 already do)."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "02",
+      "section": "frontmatter",
+      "issue": "`verify` value is `bash — go test ./internal/pretty/... ./top/...` (full command), while task 01 uses `verify: bash` and task 03 uses `verify: bash + user`. The verify-field convention across the batch is inconsistent (tool name vs tool+command).",
+      "fix": "Pick one convention. Either keep just the tool token (`bash`) consistently across tasks, or include the command consistently. Cosmetic only — value is a valid string."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "`verify` value is `bash — make test && make lint && make vuln` (full command), consistent with task 02 but not with task 01/03. Same batch-level inconsistency noted on task 02.",
+      "fix": "Align the verify-field format across all four tasks. Cosmetic; value is a valid string."
+    }
+  ],
+  "checks_passed": {
+    "frontmatter": "All four tasks: status=planned (correct for iteration=1); depends_on arrays correct (01=[], 02=[], 03=[\"02\"], 04=[\"01\",\"02\",\"03\"]); waves correct (01=1, 02=1, 03=2, 04=3) and monotonic w.r.t. dependencies; skills arrays valid (01-03 [code-writing], 04 [pre-deploy-qa]); reviewers arrays valid (01 has all three code reviewers incl. security-auditor matching the security-sensitive [009] work; 02/03 [dev-code-reviewer, dev-test-reviewer]; 04 [] for QA); no extra frontmatter fields beyond template.",
+    "structure": "All required sections present and in template order. Tasks 01-03 (code) correctly include TDD Anchor; task 04 (pre-deploy-qa, non-code) correctly omits TDD Anchor. No template placeholders or TODO/FIXME/TBD markers found.",
+    "skills_reviewers_mapping": "code-writing -> includes dev-code-reviewer + dev-test-reviewer in all of 01-03 (task 01 additionally includes dev-security-auditor, appropriate for the CWE-789 allocation-cap work and matching the tech-spec's stated reviewers); pre-deploy-qa -> reviewers [] per skills-and-reviewers.md. Frontmatter skills/reviewers match the Required Skills and Reviewers sections in every task.",
+    "carry_forward": "Tech-spec Acceptance Criteria and Testing Strategy TDD anchors are carried into the tasks. Task 01 carries the [009] AC (256 MiB int64 cap, error-before-alloc on <0 and >limit, all three readTar branches, no G115) plus the table + report-path tests. Task 02 carries the [011] AC (rateUnitParts core, RateUnit byte-identical, new RateUnitPrefixed, rateField deleted, 4 call sites repointed) plus the boundary table and the existing RateUnit/golden green-guards. Task 03 carries the [012] AC (SizeWidth, sizeFieldWidth=8, five fields, naReserve fallback, wal-size excluded per Decision 5, value/n-a offset stability) plus the extended NAWidthStatic and updated goldens. Task 04 aggregates all three sets of AC plus the make test/lint/vuln gate and the mandatory manual `v` check.",
+    "decomposition": "depends_on values reference existing task IDs; no cycles (01,02 -> 03 -> 04 is acyclic and waves increase along edges). Files-to-modify trace to the tech-spec's Implementation Tasks entries exactly (task 01: internal/stat/postgres.go + report/report.go + their tests; task 02 & 03: internal/pretty/pretty.go + top/stat.go + their tests). The shared-file sequencing of 02 (wave1) before 03 (wave2) matches Decision 4. No merge/split/over-decomposition concerns: 4 tasks for 3 independent tech-debt items + 1 QA is right-sized.",
+    "reality_spotcheck": "Code line references in the tasks were spot-checked against the codebase and match: internal/stat/postgres.go NewPGresultFile at 517 with `make([]byte, bufsz)` at 519; top/stat.go cacheHitWidth const at 319; rateField at 326 with call sites at 363/365/383/384. All Context Files links resolve to existing files (task 01/04 root-relative, task 02 dir-relative `../../../`, task 03 mixed — all verified present)."
+  },
+  "stats": {
+    "tasks_checked": 4,
+    "issues_found": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  }
+}

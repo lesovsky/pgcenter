@@ -23,6 +23,16 @@ func Size(v float64) string {
 	}
 }
 
+// SizeWidth right-aligns the human-readable Size(v) string into a space-padded fixed-width
+// field. It mirrors ReserveWidth (which does the same for integers via %*d): the column
+// position stays static and only the digits/units change, so a trailing label does not shift
+// between ticks. If Size(v) is wider than the reserve, the field deterministically widens
+// (Go's %*s never truncates). The digits and units emitted by Size are unchanged — only
+// leading padding is added.
+func SizeWidth(v float64, width int) string {
+	return fmt.Sprintf("%*s", width, Size(v))
+}
+
 // Rate-unit families for RateUnit. Disk streams are reported in MB/s (binary, like Size),
 // network streams in Mbps (decimal, the nicstat panel convention — see printNetdev).
 const (
@@ -57,6 +67,24 @@ func ReserveWidth(v int, width int) string {
 // laid back into the reserve. At theoretical extremes the divided value may still exceed
 // the reserve; the field then widens deterministically (ReserveWidth never truncates).
 func RateUnit(v float64, family string, width int) string {
+	field, unit := rateUnitParts(v, family, width)
+	return field + unit
+}
+
+// RateUnitPrefixed is the read/write-prefixed companion to RateUnit: it returns the same
+// fixed-digit-reserve field and dynamic unit, but with " " + prefix inserted between the
+// digits and the unit (e.g. "9999 rMB/s", "  10 wGB/s"). The verbose disk/net rows use it
+// to mark read vs write streams. It shares the exact boundary/overflow logic of RateUnit.
+func RateUnitPrefixed(v float64, family, prefix string, width int) string {
+	field, unit := rateUnitParts(v, family, width)
+	return field + " " + prefix + unit
+}
+
+// rateUnitParts computes the shared building blocks of RateUnit and RateUnitPrefixed: the
+// base/high/divisor selection, the maxFit reserve, the ceil rounding, and the reserve-width
+// formatting. It returns the numeric field (e.g. "9999", "  10") and the resolved unit
+// (e.g. "MB/s", "GB/s") separately, with no separator or prefix.
+func rateUnitParts(v float64, family string, width int) (field, unit string) {
 	base, high := "MB/s", "GB/s"
 	var divisor float64 = 1024
 	if family == FamilyNet {
@@ -72,7 +100,7 @@ func RateUnit(v float64, family string, width int) string {
 	maxFit-- // 10^width - 1
 
 	if Ceil(v) <= maxFit {
-		return ReserveWidth(Ceil(v), width) + base
+		return ReserveWidth(Ceil(v), width), base
 	}
-	return ReserveWidth(Ceil(v/divisor), width) + high
+	return ReserveWidth(Ceil(v/divisor), width), high
 }

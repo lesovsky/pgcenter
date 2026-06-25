@@ -1,37 +1,51 @@
-run:
-  timeout: 5m
-
+version: "2"
 linters:
   enable:
-    - errcheck
     - gocritic
-    - gosimple
-    - govet
-    - ineffassign
     - revive
-    - staticcheck
-    - unused
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-
-  revive:
+  settings:
+    errcheck:
+      check-type-assertions: true
+    staticcheck:
+      # v2 folds stylecheck (ST*) and quickfix (QF*) into staticcheck; the v1
+      # config enabled neither (only SA staticcheck + S gosimple). Disable both
+      # categories to keep the v1 effective rule set.
+      checks:
+        - all
+        - -ST*
+        - -QF*
+    revive:
+      rules:
+        - name: unused-parameter
+          severity: warning
+        - name: var-naming
+          severity: warning
+        - name: superfluous-else
+          severity: warning
+        - name: redefines-builtin-id
+          severity: error
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: unused-parameter
-        severity: warning
-      - name: var-naming
-        severity: warning
-      - name: superfluous-else
-        severity: warning
-      - name: redefines-builtin-id
-        severity: error
-
-
+      - linters:
+          - errcheck
+        path: _test.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  max-same-issues: 0
   max-issues-per-linter: 0
-  exclude-rules:
-    - path: "_test.go"
-      linters:
-        - errcheck
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

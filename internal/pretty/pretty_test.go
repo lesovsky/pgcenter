@@ -74,6 +74,30 @@ func TestReserveWidth(t *testing.T) {
 	}
 }
 
+func TestSizeWidth(t *testing.T) {
+	testcases := []struct {
+		v     float64
+		width int
+		want  string
+	}{
+		{v: 0, width: 8, want: "       0"},            // "0" right-aligned into 8
+		{v: 512, width: 8, want: "    512B"},          // "512B" padded to 8
+		{v: 1 << 20, width: 8, want: "    1.0M"},      // value narrower than reserve: leading padding
+		{v: 512254851486, width: 8, want: "  477.1G"}, // 6-char value, padded to 8 (two leading spaces)
+		{v: 1 << 20, width: 4, want: "1.0M"},          // value exactly fills reserve: no padding
+		{v: 512254851486, width: 4, want: "477.1G"},   // value wider than reserve: NOT truncated, widens
+	}
+
+	for _, tc := range testcases {
+		got := SizeWidth(tc.v, tc.width)
+		assert.Equal(t, tc.want, got, "SizeWidth(%v, %d)", tc.v, tc.width)
+		// Invariant: result is never shorter than the reserve (never truncates).
+		assert.GreaterOrEqual(t, len(got), tc.width, "SizeWidth(%v, %d) must be at least reserve wide", tc.v, tc.width)
+		// Digits/units are identical to Size — only leading padding differs.
+		assert.Equal(t, Size(tc.v), strings.TrimLeft(got, " "), "SizeWidth(%v, %d) must preserve Size digits/units", tc.v, tc.width)
+	}
+}
+
 func TestRateUnit(t *testing.T) {
 	// Reserve = 4 digits. Overflow occurs when Ceil(v) > 10^width-1 (=9999 for width 4);
 	// at that point the value is divided once (disk /1024, net /1000) and the unit promoted.
@@ -111,6 +135,42 @@ func TestRateUnit(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, RateUnit(tc.v, tc.family, tc.width), "RateUnit(%v, %q, %d)", tc.v, tc.family, tc.width)
+		})
+	}
+}
+
+// TestRateUnitPrefixed locks the prefixed rate form byte-identical to the pre-refactor
+// rateField output (top/stat.go): field + " " + prefix + unit. The want values are the
+// exact strings rateField produced, hand-computed from its body for the boundary inputs
+// (disk/net, r/w, at maxFit=9999 base unit and maxFit+1=10000 promoted unit) — they are
+// NOT obtained by calling rateField (it is deleted). Asserts the space, the prefix, and
+// the promotion boundary all survive the move into internal/pretty unchanged.
+func TestRateUnitPrefixed(t *testing.T) {
+	testcases := []struct {
+		name   string
+		v      float64
+		family string
+		prefix string
+		width  int
+		want   string
+	}{
+		// Disk family: MB/s -> GB/s, divisor 1024.
+		{name: "disk r at maxFit", v: 9999.0, family: FamilyDisk, prefix: "r", width: 4, want: "9999 rMB/s"},
+		{name: "disk r at maxFit+1", v: 10000.0, family: FamilyDisk, prefix: "r", width: 4, want: "  10 rGB/s"},
+		{name: "disk w at maxFit", v: 9999.0, family: FamilyDisk, prefix: "w", width: 4, want: "9999 wMB/s"},
+		{name: "disk w at maxFit+1", v: 10000.0, family: FamilyDisk, prefix: "w", width: 4, want: "  10 wGB/s"},
+
+		// Network family: Mbps -> Gbps, divisor 1000.
+		{name: "net r at maxFit", v: 9999.0, family: FamilyNet, prefix: "r", width: 4, want: "9999 rMbps"},
+		{name: "net r at maxFit+1", v: 10000.0, family: FamilyNet, prefix: "r", width: 4, want: "  10 rGbps"},
+		{name: "net w at maxFit", v: 9999.0, family: FamilyNet, prefix: "w", width: 4, want: "9999 wMbps"},
+		{name: "net w at maxFit+1", v: 10000.0, family: FamilyNet, prefix: "w", width: 4, want: "  10 wGbps"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, RateUnitPrefixed(tc.v, tc.family, tc.prefix, tc.width),
+				"RateUnitPrefixed(%v, %q, %q, %d)", tc.v, tc.family, tc.prefix, tc.width)
 		})
 	}
 }

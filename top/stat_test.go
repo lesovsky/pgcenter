@@ -337,13 +337,13 @@ func Test_renderPgstat_verboseNA(t *testing.T) {
 			"    workload:  n/a tps,  n/a ins/s,  n/a upd/s,  n/a del/s,  n/a ret/s,  n/a tmp/s, n/a others",
 			lines[4])
 		assert.Equal(t,
-			"   databases: n/a per  7 databases, n/a growth/s,     n/a cache hit ratio",
+			"   databases:      n/a per  7 databases,      n/a growth/s,     n/a cache hit ratio",
 			lines[5])
 		assert.Equal(t,
 			"     workers:  1/8 workers/max,  0/4 logical workers,  2/8 parallel workers",
 			lines[6])
 		assert.Equal(t,
-			" replication: 1.0K wal size, n/a lag,  0/n/a slots/retain, n/a archiving backlog, 0/0 senders/receivers",
+			" replication: 1.0K wal size,      n/a lag,  0/     n/a slots/retain,      n/a archiving backlog, 0/0 senders/receivers",
 			lines[7])
 		assert.Equal(t,
 			"   bgwr/ckpt: 12/3 timed/req, n/a/n/a ms write/sync, n/a maxwritten",
@@ -382,13 +382,13 @@ func Test_renderPgstat_verboseAvailable(t *testing.T) {
 		// the same 7-column slot the n/a sentinel occupies — so the label position is identical to
 		// the n/a state (see Test_renderPgstat_verboseNA).
 		assert.Equal(t,
-			"   databases: 1.0T per  7 databases, 1.0M growth/s,  99.99% cache hit ratio",
+			"   databases:     1.0T per  7 databases,     1.0M growth/s,  99.99% cache hit ratio",
 			lines[5])
 		assert.Equal(t,
 			"     workers:  0/8 workers/max,  0/4 logical workers,  0/8 parallel workers",
 			lines[6])
 		assert.Equal(t,
-			" replication: 1.0G wal size, 1.0M lag,  1/1.0G slots/retain, 1.0M archiving backlog, 2/1 senders/receivers",
+			" replication: 1.0G wal size,     1.0M lag,  1/    1.0G slots/retain,     1.0M archiving backlog, 2/1 senders/receivers",
 			lines[7])
 		assert.Equal(t,
 			"   bgwr/ckpt: 12/3 timed/req, 245/30 ms write/sync,  4 maxwritten",
@@ -440,6 +440,72 @@ func Test_renderPgstat_verboseNAWidthStatic(t *testing.T) {
 		strings.Index(valRows[4], "tps"),
 		strings.Index(naRows[4], "tps"),
 		"tps label must sit at the same offset in the value and n/a states")
+
+	// The five verbose Size fields (databases: size before " per", growth before " growth/s";
+	// replication: lag before " lag", retain before " slots/retain", backlog before " archiving
+	// backlog") render via the fixed-width SizeWidth(width 8); their n/a fallback uses naReserve(8).
+	// Two groups of offset assertions lock the column/label position:
+	//   (a) identical between two value samples of DIFFERENT width (1.0M vs 1023.9G);
+	//   (b) identical between the value state and the n/a state (the regression that breathes today).
+	type sizeField struct {
+		row   int    // line index of the row the field lives on
+		label string // trailing label whose byte offset must stay static
+	}
+	sizeFields := []sizeField{
+		{row: 5, label: " per"},               // databases size
+		{row: 5, label: " growth/s"},          // databases growth
+		{row: 7, label: " lag"},               // replication lag
+		{row: 7, label: " slots/retain"},      // replication retain (post-slash)
+		{row: 7, label: " archiving backlog"}, // replication backlog
+	}
+
+	// Sample A: all five Size sources valid with narrow values (1<<20 -> "1.0M").
+	sampleA := base
+	sampleA.TotalSize = 1 << 20
+	sampleA.TotalSizeValid = true
+	sampleA.GrowthPerSec = 1 << 20
+	sampleA.LagBytes = 1 << 20
+	sampleA.LagBytesValid = true
+	sampleA.RetainedBytes = 1 << 20
+	sampleA.RetainedValid = true
+	sampleA.ArchivingBacklog = 1 << 20
+	sampleA.ArchivingBacklogValid = true
+	rowsA := render(sampleA)
+
+	// Sample B: same fields valid but WIDER values (1000 GiB worth of bytes -> "1000.0G", 7 chars).
+	wide := int64(1000) * (1 << 30) // 1000 GiB, just under 1 TiB -> "1000.0G"
+	sampleB := base
+	sampleB.TotalSize = wide
+	sampleB.TotalSizeValid = true
+	sampleB.GrowthPerSec = wide
+	sampleB.LagBytes = wide
+	sampleB.LagBytesValid = true
+	sampleB.RetainedBytes = wide
+	sampleB.RetainedValid = true
+	sampleB.ArchivingBacklog = wide
+	sampleB.ArchivingBacklogValid = true
+	rowsB := render(sampleB)
+
+	// n/a sample: every Size source unavailable -> naReserve(8) fallback.
+	sampleNA := base
+	sampleNA.TotalSizeValid = false
+	sampleNA.LagBytesValid = false
+	sampleNA.RetainedValid = false
+	sampleNA.ArchivingBacklogValid = false
+	rowsNA := render(sampleNA)
+
+	for _, f := range sizeFields {
+		// (a) two value samples of different width keep the label at the same byte offset.
+		assert.Equal(t,
+			strings.Index(rowsA[f.row], f.label),
+			strings.Index(rowsB[f.row], f.label),
+			"%q label must sit at the same offset across different-width Size samples", f.label)
+		// (b) value vs n/a keep the label at the same byte offset (RED on bare naLiteral today).
+		assert.Equal(t,
+			strings.Index(rowsA[f.row], f.label),
+			strings.Index(rowsNA[f.row], f.label),
+			"%q label must sit at the same offset in the value and n/a states", f.label)
+	}
 }
 
 // Test_renderPgstat_compactUnchanged verifies that verbose=false adds no rows AND that turning

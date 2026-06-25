@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "category": "overengineering",
+      "severity": "minor",
+      "issue": "The user-spec carries a notable amount of HOW-level implementation detail that belongs in the tech-spec: exact symbol names (`MaxResultFileSize`, `naReserve`, `rateField`), specific file:line references (`top/stat.go:601` wal size, `report/report.go` branch names), the precise allocation mechanism (`make([]byte, hdr.Size)` before/after the guard), the `sysinfo.*` branch's `io.ReadAll(io.LimitReader(...))` internals, and the exact gosec rule (G115). The spec even says 'Точная сигнатура — в тех-спеке' yet specifies much of the surrounding implementation.",
+      "why_matters": "User-spec defines WHAT and WHY; bleeding HOW into it duplicates the tech-spec, couples the spec to code that may shift, and blurs the review boundary. For a tech-debt paydown some code anchoring is justified (the items ARE about specific code), so this is a soft flag, not a blocker.",
+      "fix": "Keep the user-spec at the level of observable behavior and named debt items; move concrete symbol names, file:line anchors, branch-level mechanics, and lint-rule specifics into the code-research / tech-spec. Acceptance criteria can reference behavior (e.g. 'all three tar branches enforce the limit') without naming the allocation call."
+    },
+    {
+      "category": "underengineering",
+      "severity": "minor",
+      "issue": "Observability of the [009] over-limit rejection is unspecified. The spec defines the error string returned to the user but does not say whether the event is logged anywhere, which matters when `pgcenter report` is run non-interactively or scripted and the operator wants to know which entry tripped the cap.",
+      "why_matters": "For a defensive cap whose whole purpose is graceful failure on a hostile archive, a clear single error to stderr is arguably sufficient at severity Low — but the spec should state the decision explicitly rather than leave it implicit.",
+      "fix": "Add one line confirming the over-limit case surfaces only as the returned error (no extra logging) and that the entry name is included in the message (the spec's sample error already does this) — make the 'no logging' choice explicit so it is a decision, not an omission."
+    }
+  ],
+  "worst_category": "overengineering",
+  "summary": "Sound, well-bounded, and fully buildable with the current Go/pgx/gocui stack — every code claim (NewPGresultFile allocation, the three readTar branches, rateField duplication, the five verbose Size fields with bare naLiteral fallbacks) verified against the actual files, and all three debt items match the registry. The 256 MiB cap (~300x the ~817 KB observed max), reserve-width-8 for the widest realistic Size string, int64-const to avoid G115, and the bundle-with-independent-commits decision are all reasonable; alternatives (LimitReader streaming, archive signing, per-field width budgets, three PRs) were considered and rejected with valid rationale. Only minor flags: some HOW-detail belongs in the tech-spec, and the over-limit logging/observability choice should be made explicit."
+}
