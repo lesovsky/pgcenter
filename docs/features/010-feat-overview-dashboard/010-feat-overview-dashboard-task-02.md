@@ -32,13 +32,19 @@ free — no change to `viewSwitchHandler` is required. This is Decision 2 in the
 on both `view.View` and `top.config`, not an overload of the mutually-exclusive `CollectExtra` int).
 
 The critical, non-obvious part is the `collectStat()` change-detection in `top/stat.go`. The `viewCh`
-receive branch ends with an **unconditional** `c.Reset()` (`top/stat.go:108`) that wipes the collector's
-`prev*` snapshots and re-runs `Update`. If a bare `v` press falls through to that line, every toggle would
-blank the CPU/mem/load deltas for one frame (they are computed against the now-wiped previous snapshot).
-The fix (Decision 2 / Risks row) is to add a `prev.Verbose != v.Verbose → continue` early-out branch
-**before** the unconditional Reset, mirroring the existing `ShowExtra` branch at `top/stat.go:89-93`: when
-only the verbose flag changed, update the tracked value and `continue` so the loop skips the Reset and
-keeps emitting correct deltas.
+receive branch contains **two** `c.Reset()` calls: a **conditional** one in the `CollectExtra`-change path
+(~`top/stat.go:101`, inside `if prevCollectExtra != v.CollectExtra`) and an **unconditional** one further
+down (~`top/stat.go:108`) that always wipes the collector's `prev*` snapshots and re-runs `Update`. If a
+bare `v` press falls through, the unconditional Reset (and, depending on ordering, the conditional one)
+would blank the CPU/mem/load deltas for one frame (they are computed against the now-wiped previous
+snapshot). The fix (Decision 2 / Risks row) is to add a `prev.Verbose != v.Verbose → continue` early-out
+branch that precedes **both** Reset paths — i.e. placed early enough in the `viewCh` case (alongside the
+existing `ShowExtra` branch at ~`top/stat.go:89-93`, before the `CollectExtra` check). When only the
+verbose flag changed, update the tracked value and `continue` so the loop skips every Reset path and keeps
+emitting correct deltas.
+
+(All `top/stat.go` line numbers in this task are approximate and will drift as the file changes — locate
+the branches by their surrounding code, not by exact line.)
 
 ## What to do
 
@@ -59,11 +65,14 @@ keeps emitting correct deltas.
    "extra stats actions" block near the `B,N,F,L` entry is the natural home, or a new line in the same
    block).
 6. In `top/stat.go`, inside the `case v = <-viewCh:` block of `collectStat()`, add a verbose
-   change-detection branch **before** the unconditional `c.Reset()` (`top/stat.go:108`), mirroring the
-   `ShowExtra` branch (`top/stat.go:89-93`): track the previous verbose value (a local like
-   `prevVerbose := v.Verbose`, initialized next to `prevCollectExtra` at `top/stat.go:57`), and when
+   change-detection branch placed early enough to precede **both** Reset paths — the conditional
+   `c.Reset()` in the `CollectExtra`-change check (~`top/stat.go:100-103`) AND the unconditional
+   `c.Reset()` further down (~`top/stat.go:108`). Put it alongside the `ShowExtra` branch
+   (~`top/stat.go:89-93`), before the `CollectExtra` check: track the previous verbose value (a local like
+   `prevVerbose := v.Verbose`, initialized next to `prevCollectExtra` at ~`top/stat.go:57`), and when
    `prevVerbose != v.Verbose`, update it and `continue` — so a verbose-only toggle does NOT fall through to
-   `Reset()`. Do not change the refresh/extra/CollectExtra branches.
+   either `Reset()`. Do not change the refresh/extra/CollectExtra branches. (Cited line numbers are
+   approximate and will drift.)
 
 ## TDD Anchor
 
@@ -88,8 +97,9 @@ above and confirm `go test ./top/...` stays green.)
 - [ ] `v` is bound on the `sysstat` view to `toggleVerbose`; help text documents `v`.
 - [ ] The verbose flag persists across screen switches (mirrored into the views map; not reset in
       `viewSwitchHandler`).
-- [ ] `collectStat()` has a `prev.Verbose != v.Verbose → continue` branch so a verbose-only `viewCh` push
-      does NOT trigger `c.Reset()` (CPU/mem/load deltas are not blanked on toggle).
+- [ ] `collectStat()` has a `prev.Verbose != v.Verbose → continue` branch placed before BOTH Reset paths
+      (the conditional `CollectExtra` Reset and the unconditional Reset), so a verbose-only `viewCh` push
+      does NOT trigger any `c.Reset()` (CPU/mem/load deltas are not blanked on toggle).
 - [ ] `Test_toggleVerbose` passes; `go test ./top/...` is green; no existing keybinding/view-count test
       regressions.
 - [ ] `make lint` clean for the touched files.
@@ -115,14 +125,14 @@ above and confirm `go test ./top/...` stays green.)
 - [top/help.go](top/help.go) — add `v` help line to `helpTemplate`
 - [top/extra.go](top/extra.go) — reference: `showExtra` mirror-into-all-views pattern (lines 70-75)
 - [top/config_view.go](top/config_view.go) — reference: `toggleIdleConns` (411-435) boolean-toggle precedent; `viewSwitchHandler` (240-245) `scrollOffset` reset (verbose must NOT be reset here)
-- [top/stat.go](top/stat.go) — `collectStat()` viewCh handler: add the no-Reset verbose branch (mirror ShowExtra branch at 89-93, before the unconditional Reset at 108)
+- [top/stat.go](top/stat.go) — `collectStat()` viewCh handler: add the no-Reset verbose branch (mirror ShowExtra branch at ~89-93), placed before BOTH the conditional CollectExtra Reset (~100-103) and the unconditional Reset (~108); line numbers approximate
 
 ## Verification Steps
 
 - Run `go test ./top/...` — `Test_toggleVerbose` passes; all existing `top` tests green (keybindings,
   view counts, toggles unaffected).
-- Inspect: `collectStat()` has the verbose change-detection `continue` branch ahead of the unconditional
-  `c.Reset()`; the toggle path does not reach Reset.
+- Inspect: `collectStat()` has the verbose change-detection `continue` branch ahead of BOTH the conditional
+  `CollectExtra` Reset and the unconditional `c.Reset()`; the verbose-toggle path does not reach any Reset.
 - `make lint` clean on touched files.
 - (Manual, deferred to Final Wave QA) `v` flips the mode, status line shows it, and CPU/mem deltas in the
   sysstat panel do not blink on toggle.
@@ -145,11 +155,13 @@ above and confirm `go test ./top/...` stays green.)
   other lowercase `sysstat` bindings, e.g. near the `B/N/F/L` showExtra bindings at lines 53-56).
 - `top/help.go` — `helpTemplate` const (lines 10-46). Add a one-line `v` entry (e.g. in the "extra stats
   actions" block) describing the verbose toggle. Keep the existing alignment style.
-- `top/stat.go` — `collectStat()` (lines 25-123). Two edits: (1) near line 57 add `prevVerbose :=
-  v.Verbose` next to `prevCollectExtra := v.CollectExtra`; (2) in the `case v = <-viewCh:` block, add — in
-  the same style as the `ShowExtra` branch (89-93) and BEFORE the unconditional `c.Reset()` at line 108 —
+- `top/stat.go` — `collectStat()` (~lines 25-123; numbers approximate, will drift). Two edits: (1) near
+  line 57 add `prevVerbose := v.Verbose` next to `prevCollectExtra := v.CollectExtra`; (2) in the
+  `case v = <-viewCh:` block, add — in the same style as the `ShowExtra` branch (~89-93) and positioned to
+  precede BOTH Reset paths (i.e. before the `CollectExtra` check at ~100-103 with its conditional
+  `c.Reset()`, and thus also before the unconditional `c.Reset()` at ~108) —
   `if prevVerbose != v.Verbose { prevVerbose = v.Verbose; continue }`. A verbose-only toggle then returns
-  to the top of the loop without resetting snapshots, so the next `Update` still has valid `prev*` data.
+  to the top of the loop without hitting either Reset, so the next `Update` still has valid `prev*` data.
 
 **Dependencies:** None — Wave 1, `depends_on: []`. Tasks 3, 6, 8, 9 consume the flag this task introduces.
 stdlib + existing imports only.
@@ -158,7 +170,8 @@ stdlib + existing imports only.
 - Verbose toggled on, then user switches screens repeatedly → flag stays on (mirrored into all views map
   entries; never zeroed in `viewSwitchHandler`). Add/keep this guarantee by writing into every map entry.
 - Toggling verbose must NOT blank CPU/mem/load deltas — guaranteed only by the no-Reset `continue` branch
-  in `collectStat()`. This is the single highest-risk line in the task (tech-spec Risks row).
+  in `collectStat()`, which must sit ahead of BOTH the conditional `CollectExtra` Reset and the
+  unconditional Reset. This is the single highest-risk spot in the task (tech-spec Risks row).
 - `viewSwitchHandler` resets `scrollOffset` (line 243) — do NOT add a verbose reset there; verbose is
   persistent by design.
 - The `collectStat` first-update block (lines 41-57) already reads the initial view; `prevVerbose` must be

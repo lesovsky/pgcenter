@@ -1,0 +1,45 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files",
+      "issue": "Project-knowledge link uses text `project.md` but points to `.claude/skills/project-knowledge/overview.md` ([project.md](.claude/skills/project-knowledge/overview.md)). The repo has no project.md (it is overview.md). The link text is misleading.",
+      "fix": "Rename the link text to match the target file: [overview.md](.claude/skills/project-knowledge/overview.md). Tasks 01, 02, 05 already do this correctly."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files",
+      "issue": "Project-knowledge link uses text `project.md` but points to `.claude/skills/project-knowledge/overview.md`. Same mislabel as task 03.",
+      "fix": "Use [overview.md](.claude/skills/project-knowledge/overview.md) to match the actual filename."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "`verify:` value is `bash — go test ./internal/query/... ./internal/stat/...` — the command is embedded in the value rather than placed in a trailing comment as the template illustrates (`verify: bash  # ...`). It is still a valid string, but the form is inconsistent with tasks 01/02/03/05 which use `verify: bash` + comment.",
+      "fix": "Normalize to `verify: bash` with the command in a trailing comment, matching the other tasks in the batch."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "01",
+      "section": "frontmatter",
+      "issue": "`verify: bash` carries the command in an inline comment (`# go test ./internal/pretty/...`). Acceptable, but note for consistency the verify-comment phrasing differs slightly across tasks. No functional impact.",
+      "fix": "Optional: align the verify comment style across the batch; not blocking."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 4
+  }
+}

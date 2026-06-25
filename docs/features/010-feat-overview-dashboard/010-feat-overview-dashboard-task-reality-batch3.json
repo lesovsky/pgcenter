@@ -1,0 +1,27 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["07", "08", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "First-tick 'no prev -> nil slice -> n/a' assumption does not hold for disk/net. collectDiskstats (internal/stat/stat.go:303-309) and collectNetdevs (:323-331) set prevDiskstats=currDiskstats / prevNetdevs=currNetdevs on length mismatch BEFORE calling countDiskstatsUsage/countNetdevsUsage. So on the first verbose tick the count* functions receive prev==curr (equal lengths) and return a NON-nil slice of zero-delta entries, not nil. The count*Usage nil-on-mismatch path (diskstats.go:191-193, netdev.go:180-183) is therefore NOT reached via the collect* wrappers. Task 07 edge case 'Первый тик verbose: prev-снимок пустой, count*Usage возвращает nil' and Task 08 edge case 'countDiskstatsUsage/countNetdevsUsage возвращают nil при len(curr)!=len(prev), поэтому s.Diskstats/s.Netdevs пусты' are both inaccurate for the collect* call path the task itself mandates (hint: 'звать именно collect*, а не read* напрямую').",
+      "fix": "Reconcile the first-tick mechanism. Either (a) Task 08 composer must detect first-tick by a means other than empty slice (e.g. all-zero deltas / a Collector-side first-tick flag, which Task 09's verboseCollectState could carry), or (b) document that the nil path is only reachable when device COUNT changes mid-session, and the genuine first tick yields a populated zero-delta slice -> composer must treat zero-delta-with-no-prev as n/a. Update Task 07 and Task 08 edge-case wording accordingly so the implementer does not rely on s.Diskstats==nil for first-tick detection."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "08",
+      "issue": "Implementation hint states data_directory 'читался ad hoc в log.go:129'. The actual path is internal/stat/log.go:129 (relative 'log.go' is ambiguous; there is also top/log.go context). Verified: internal/stat/log.go:129 reads current_setting('data_directory'); a separate gucDataDir='data_directory' constant lives in top/pgconfig.go:25. DataDirectory field does not yet exist on PostgresProperties (correctly added by Task 4).",
+      "fix": "Qualify the path as internal/stat/log.go:129 to avoid ambiguity."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 27,
+    "issues_found": 2
+  }
+}
