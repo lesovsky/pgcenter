@@ -48,3 +48,28 @@
 - `go test ./top/...` → ok (включая новые golden-тесты и существующие)
 - `go build ./...` → OK
 - `go vet ./top/...` + `gofmt -l top/stat.go top/stat_test.go` → чисто
+
+---
+
+## Task 04: GUC + data_directory reads
+
+**Status:** Done
+**Commit:** 8ca1188
+**Agent:** guc-dev
+**Summary:** `SelectCommonProperties` (`internal/query/common.go`) расширен пятью net-new чтениями в конце SELECT-списка: `max_worker_processes`/`max_logical_replication_workers`/`max_parallel_workers` (`::int`), `wal_segment_size` обёрнут в `pg_size_bytes(current_setting('wal_segment_size'))::int8` для получения int64-байт (приём из `wal.go:6`, а не pretty-строка), и `data_directory` (text). Соответствующие пять полей добавлены в `PostgresProperties` и пять scan-целей — в `.Scan(...)` функции `GetPostgresProperties` (`internal/stat/postgres.go`) строго в lockstep-порядке с SELECT (8 старых + 5 новых = 13). `TestGetPostgresProperties` расширен 4 ассертами; `GucMaxLogicalReplicationWorkers` намеренно не ассертится на значение (дефолт 4, но 0 допустим — важен только успех скана). `GucMaxPrepXacts` (declared-but-never-scanned placeholder) не тронут. `data_directory` нигде не логируется — только пробрасывается в поле структуры.
+**Deviations:** `gofmt -w` при выравнивании struct-комментариев также нормализовал две предсуществующие неровные строки комментариев в `Test_parseDuration` (postgres_test.go) — out-of-scope, но это чистая gofmt-нормализация (никакого изменения поведения), оставлена ради gofmt-чистоты файла. `make lint` не прогнан — golangci-lint в окружении — битый симлинк; вместо него прогнаны `gosec` (0 issues), `go vet` и `gofmt -l` (чисто), полный lint остаётся на CI.
+**Tech debt:** Нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved, 0 critical/major, 2 minor (информативные, действий не требуют) → [010-feat-overview-dashboard-task-04-dev-code-reviewer-round1.json](010-feat-overview-dashboard-task-04-dev-code-reviewer-round1.json)
+- dev-security-auditor: approved, 0 findings (A03 injection — статический const, ввод не интерполируется; data_directory не утекает в логи) → [010-feat-overview-dashboard-task-04-dev-security-auditor-round1.json](010-feat-overview-dashboard-task-04-dev-security-auditor-round1.json)
+- dev-test-reviewer: passed, 0 findings (litmus 4/4) → [010-feat-overview-dashboard-task-04-dev-test-reviewer-round1.json](010-feat-overview-dashboard-task-04-dev-test-reviewer-round1.json)
+
+Исправлений не потребовалось — round 2 не запускался.
+
+**Verification:**
+- `go test ./internal/query/... ./internal/stat/...` → ok (live-PG кластер доступен)
+- `go build ./...` → OK
+- `gosec ./internal/query/... ./internal/stat/...` → 0 issues; `go vet` + `gofmt -l` → чисто
