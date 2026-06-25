@@ -1,5 +1,5 @@
 ---
-status: planned                    # planned -> in_progress -> done
+status: done                    # planned -> in_progress -> done
 depends_on: ["05", "07", "08"]     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 5                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
