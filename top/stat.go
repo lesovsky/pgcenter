@@ -318,31 +318,6 @@ const naLiteral = "n/a"
 // is right-aligned into the same width so the trailing label stays static across ticks.
 const cacheHitWidth = 7
 
-// rateField formats a disk/net rate value (already in MB/s or Mbps) into a fixed-digit-reserve field
-// followed by a r/w-prefixed unit, switching to the next higher unit when the rounded integer no
-// longer fits the reserve. It is the dynamic-suffix companion to pretty.RateUnit, differing only in
-// that the read/write prefix is placed between the digits and the unit (the user-spec layout shows
-// "1135 rMB/s", "1546 wMB/s"). The value is rounded up (ceil) so verbose stays whole-number.
-func rateField(v float64, family string, prefix string, width int) string {
-	base, high := "MB/s", "GB/s"
-	var divisor float64 = 1024
-	if family == pretty.FamilyNet {
-		base, high = "Mbps", "Gbps"
-		divisor = 1000
-	}
-
-	maxFit := 1
-	for i := 0; i < width; i++ {
-		maxFit *= 10
-	}
-	maxFit-- // largest integer that fits the reserve, e.g. width 4 -> 9999
-
-	if pretty.Ceil(v) <= maxFit {
-		return pretty.ReserveWidth(pretty.Ceil(v), width) + " " + prefix + base
-	}
-	return pretty.ReserveWidth(pretty.Ceil(v/divisor), width) + " " + prefix + high
-}
-
 // renderSysstatVerbose appends the three verbose system rows to w. Each row degrades independently:
 // no active device / first tick / no mount match renders n/a for that row without aborting the others.
 func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) error {
@@ -360,9 +335,9 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 		if _, err := fmt.Fprintf(w, "  iostat: %s devices, %s%% max util, %s, %s r/s, %s, %s w/s\n",
 			pretty.ReserveWidth(activeDiskCount(s.Diskstats), 2),
 			pretty.ReserveWidth(pretty.Ceil(d.Util), 3),
-			rateField(d.Rsectors, pretty.FamilyDisk, "r", 4),
+			pretty.RateUnitPrefixed(d.Rsectors, pretty.FamilyDisk, "r", 4),
 			pretty.ReserveWidth(pretty.Ceil(d.Rcompleted), 5),
-			rateField(d.Wsectors, pretty.FamilyDisk, "w", 4),
+			pretty.RateUnitPrefixed(d.Wsectors, pretty.FamilyDisk, "w", 4),
 			pretty.ReserveWidth(pretty.Ceil(d.Wcompleted), 5)); err != nil {
 			return err
 		}
@@ -380,8 +355,8 @@ func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) 
 		if _, err := fmt.Fprintf(w, " nicstat: %s devices, %s%% max util, %s, %s, %s/%s err/coll\n",
 			pretty.ReserveWidth(activeNetCount(s.Netdevs), 2),
 			pretty.ReserveWidth(pretty.Ceil(n.Utilization), 3),
-			rateField(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
-			rateField(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
+			pretty.RateUnitPrefixed(n.Rbytes/1024/128, pretty.FamilyNet, "r", 4),
+			pretty.RateUnitPrefixed(n.Tbytes/1024/128, pretty.FamilyNet, "w", 4),
 			pretty.ReserveWidth(pretty.Ceil(n.Rerrs+n.Terrs), 4),
 			strconv.Itoa(pretty.Ceil(n.Tcolls))); err != nil {
 			return err

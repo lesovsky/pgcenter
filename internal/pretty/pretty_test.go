@@ -115,6 +115,42 @@ func TestRateUnit(t *testing.T) {
 	}
 }
 
+// TestRateUnitPrefixed locks the prefixed rate form byte-identical to the pre-refactor
+// rateField output (top/stat.go): field + " " + prefix + unit. The want values are the
+// exact strings rateField produced, hand-computed from its body for the boundary inputs
+// (disk/net, r/w, at maxFit=9999 base unit and maxFit+1=10000 promoted unit) — they are
+// NOT obtained by calling rateField (it is deleted). Asserts the space, the prefix, and
+// the promotion boundary all survive the move into internal/pretty unchanged.
+func TestRateUnitPrefixed(t *testing.T) {
+	testcases := []struct {
+		name   string
+		v      float64
+		family string
+		prefix string
+		width  int
+		want   string
+	}{
+		// Disk family: MB/s -> GB/s, divisor 1024.
+		{name: "disk r at maxFit", v: 9999.0, family: FamilyDisk, prefix: "r", width: 4, want: "9999 rMB/s"},
+		{name: "disk r at maxFit+1", v: 10000.0, family: FamilyDisk, prefix: "r", width: 4, want: "  10 rGB/s"},
+		{name: "disk w at maxFit", v: 9999.0, family: FamilyDisk, prefix: "w", width: 4, want: "9999 wMB/s"},
+		{name: "disk w at maxFit+1", v: 10000.0, family: FamilyDisk, prefix: "w", width: 4, want: "  10 wGB/s"},
+
+		// Network family: Mbps -> Gbps, divisor 1000.
+		{name: "net r at maxFit", v: 9999.0, family: FamilyNet, prefix: "r", width: 4, want: "9999 rMbps"},
+		{name: "net r at maxFit+1", v: 10000.0, family: FamilyNet, prefix: "r", width: 4, want: "  10 rGbps"},
+		{name: "net w at maxFit", v: 9999.0, family: FamilyNet, prefix: "w", width: 4, want: "9999 wMbps"},
+		{name: "net w at maxFit+1", v: 10000.0, family: FamilyNet, prefix: "w", width: 4, want: "  10 wGbps"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, RateUnitPrefixed(tc.v, tc.family, tc.prefix, tc.width),
+				"RateUnitPrefixed(%v, %q, %q, %d)", tc.v, tc.family, tc.prefix, tc.width)
+		})
+	}
+}
+
 // TestRateUnit_boundary focuses tightly on threshold-1 / threshold / threshold+1
 // for both families, where the suffix switches.
 func TestRateUnit_boundary(t *testing.T) {
