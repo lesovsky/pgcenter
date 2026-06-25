@@ -517,6 +517,143 @@ func Test_readMeta_with_sysinfo(t *testing.T) {
 	}
 }
 
+// Test_readTar_sizeCap verifies that a crafted oversized tar header Size is
+// rejected on each of the three readTar branches (meta.*, sysinfo.*, stat)
+// before any allocation, no data is sent to the channel, and a legitimate
+// under-limit entry still replays. The crafted entries set hdr.Size far above
+// stat.MaxResultFileSize independently of the (tiny) real payload length, so
+// writeEntry (which hardcodes Size=len(payload)) cannot be used here — the
+// header is built directly via tw.WriteHeader.
+func Test_readTar_sizeCap(t *testing.T) {
+	overLimit := stat.MaxResultFileSize + 1
+
+	// Legitimate (under-limit) meta + stat entries, used to prove a normal
+	// entry still replays after the guard is in place.
+	metaRes := stat.PGresult{
+		Valid: true, Ncols: 7, Nrows: 1,
+		Cols: []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "recovery", "start_time_unix"},
+		Values: [][]sql.NullString{
+			{
+				{String: "14.9", Valid: true}, {String: "140009", Valid: true},
+				{String: "off", Valid: true}, {String: "100", Valid: true}, {String: "3", Valid: true},
+				{String: "false", Valid: true}, {String: "1622828486655396e-6", Valid: true},
+			},
+		},
+	}
+	metaBytes, err := json.Marshal(metaRes)
+	assert.NoError(t, err)
+
+	statRes := stat.PGresult{
+		Valid: true, Ncols: 19, Nrows: 1,
+		Cols: []string{
+			"pid", "datname", "usename", "state", "wait_etype", "wait_event",
+			"cpu_time_user", "cpu_time_system", "cpu_time_total",
+			"read_total,KiB", "write_total,KiB", "iodelay_total,s",
+			"min_flt", "maj_flt", "vsize", "rss", "%cpu", "%all", "query",
+		},
+		Values: [][]sql.NullString{
+			{
+				{String: "1234", Valid: true}, {String: "postgres", Valid: true}, {String: "postgres", Valid: true},
+				{String: "active", Valid: true}, {String: "", Valid: true}, {String: "", Valid: true},
+				{String: "00:00:01", Valid: true}, {String: "00:00:00", Valid: true}, {String: "00:00:01", Valid: true},
+				{String: "0", Valid: true}, {String: "0", Valid: true}, {String: "00:00:00", Valid: true},
+				{String: "0", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true}, {String: "0", Valid: true},
+				{String: "0.0", Valid: true}, {String: "0.0", Valid: true}, {String: "SELECT 1", Valid: true},
+			},
+		},
+	}
+	statBytes, err := json.Marshal(statRes)
+	assert.NoError(t, err)
+
+	config := Config{
+		ReportType: "procpidstat",
+		TsStart:    time.Date(2026, 5, 19, 0, 0, 0, 0, time.Now().Location()),
+		TsEnd:      time.Date(2026, 5, 19, 23, 59, 59, 0, time.Now().Location()),
+	}
+
+	// oversizedTar returns tar bytes containing a single entry whose header
+	// Size is crafted above the limit. Only the header is emitted (no body and
+	// no Close): the tar.Writer enforces Size == bytes-written, so we cannot
+	// pair a huge declared Size with a tiny real payload. readTar rejects on
+	// the header Size before reading any body, so the header alone is enough.
+	oversizedTar := func(name string) []byte {
+		var tarBuf bytes.Buffer
+		tw := tar.NewWriter(&tarBuf)
+		hdr := &tar.Header{Name: name, Size: overLimit, Mode: 0644}
+		assert.NoError(t, tw.WriteHeader(hdr))
+		return tarBuf.Bytes()
+	}
+
+	// runReadTar drives readTar over the given tar bytes and returns the
+	// error plus how many data items were sent to the channel.
+	runReadTar := func(tarBytes []byte) (error, int) {
+		tr := tar.NewReader(bytes.NewReader(tarBytes))
+		dataCh := make(chan data)
+		doneCh := make(chan struct{})
+		var count int
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-dataCh:
+					count++
+				case <-doneCh:
+					return
+				}
+			}
+		}()
+		rerr := readTar(tr, config, dataCh, doneCh)
+		wg.Wait()
+		return rerr, count
+	}
+
+	// meta.* branch — hits the NewPGresultFile guard (over-limit error).
+	t.Run("meta branch over limit", func(t *testing.T) {
+		err, count := runReadTar(oversizedTar("meta.20260519T100000.000.json"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds limit")
+		assert.Equal(t, 0, count)
+	})
+
+	// stat (default) branch — hits the NewPGresultFile guard (over-limit error).
+	t.Run("stat branch over limit", func(t *testing.T) {
+		err, count := runReadTar(oversizedTar("procpidstat.20260519T100000.000.json"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds limit")
+		assert.Equal(t, 0, count)
+	})
+
+	// sysinfo.* branch — hits the inline check in report.go (defense-in-depth).
+	t.Run("sysinfo branch over limit", func(t *testing.T) {
+		err, count := runReadTar(oversizedTar("sysinfo.20260519T100000.000.json"))
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "exceeds limit")
+		assert.Equal(t, 0, count)
+	})
+
+	// Legitimate under-limit entries still replay: a full tick (meta + stat)
+	// produces exactly one data item with no error.
+	t.Run("under limit replays", func(t *testing.T) {
+		var tarBuf bytes.Buffer
+		tw := tar.NewWriter(&tarBuf)
+		writeEntry := func(name string, payload []byte) {
+			hdr := &tar.Header{Name: name, Size: int64(len(payload)), Mode: 0644}
+			assert.NoError(t, tw.WriteHeader(hdr))
+			_, werr := tw.Write(payload)
+			assert.NoError(t, werr)
+		}
+		writeEntry("meta.20260519T100000.000.json", metaBytes)
+		writeEntry("procpidstat.20260519T100000.000.json", statBytes)
+		assert.NoError(t, tw.Close())
+
+		err, count := runReadTar(tarBuf.Bytes())
+		assert.NoError(t, err)
+		assert.Equal(t, 1, count)
+	})
+}
+
 // Test_emitProcPidStatAvailabilityWarnings exercises the one-shot WARNING
 // detection that scans the first procpidstat result for empty IO / iodelay
 // column sentinels. Covers acceptance criteria for empty IO columns (9–10)
