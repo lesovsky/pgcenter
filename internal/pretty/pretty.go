@@ -65,13 +65,13 @@ func RateUnit(v float64, family string, width int) string {
 	}
 
 	// Largest integer that fits the reserve, e.g. width 4 -> 9999.
-	max := 1
+	maxFit := 1
 	for i := 0; i < width; i++ {
-		max *= 10
+		maxFit *= 10
 	}
-	max-- // 10^width - 1
+	maxFit-- // 10^width - 1
 
-	if Ceil(v) <= max {
+	if Ceil(v) <= maxFit {
 		return ReserveWidth(Ceil(v), width) + base
 	}
 	return ReserveWidth(Ceil(v/divisor), width) + high

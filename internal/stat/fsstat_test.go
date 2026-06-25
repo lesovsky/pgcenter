@@ -199,10 +199,10 @@ func Test_MatchDataDirFs_evalSymlinksFailure(t *testing.T) {
 // mount selects that mount.
 func Test_MatchDataDirFs_localResolvesSymlink(t *testing.T) {
 	dir := t.TempDir()
-	real := filepath.Join(dir, "real")
-	assert.NoError(t, os.Mkdir(real, 0o750))
+	realPath := filepath.Join(dir, "real")
+	assert.NoError(t, os.Mkdir(realPath, 0o750))
 	link := filepath.Join(dir, "link")
-	assert.NoError(t, os.Symlink(real, link))
+	assert.NoError(t, os.Symlink(realPath, link))
 
 	// The resolved path is dir/real; a mount at dir is its longest prefix.
 	fss := Fsstats{

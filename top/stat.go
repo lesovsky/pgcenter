@@ -331,13 +331,13 @@ func rateField(v float64, family string, prefix string, width int) string {
 		divisor = 1000
 	}
 
-	max := 1
+	maxFit := 1
 	for i := 0; i < width; i++ {
-		max *= 10
+		maxFit *= 10
 	}
-	max-- // largest integer that fits the reserve, e.g. width 4 -> 9999
+	maxFit-- // largest integer that fits the reserve, e.g. width 4 -> 9999
 
-	if pretty.Ceil(v) <= max {
+	if pretty.Ceil(v) <= maxFit {
 		return pretty.ReserveWidth(pretty.Ceil(v), width) + " " + prefix + base
 	}
 	return pretty.ReserveWidth(pretty.Ceil(v/divisor), width) + " " + prefix + high
