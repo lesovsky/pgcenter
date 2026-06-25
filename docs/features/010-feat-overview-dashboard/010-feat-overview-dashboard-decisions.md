@@ -255,3 +255,23 @@ Critical устранён (commit c6c5938): добавлена per-source cadenc
 - `go test ./internal/stat/... ./top/...` → ok (live-PG кластер доступен; пороговый table-тест, чистые throttle/auto-resume/first-tick тесты, end-to-end троттлинг со stale-кешем и system-rows-every-tick, cmdline-hint тест — зелёные; существующие тесты не падают)
 - `go build ./...` → OK; полный `go test ./...` → все пакеты ok
 - `go vet ./internal/stat/... ./top/...` + `gofmt -l` → чисто
+
+---
+
+## Task 10: Pre-deploy QA
+
+**Status:** Done
+**Commit:** (this commit)
+**Agent:** qa
+**Summary:** Приёмочный прогон на свежем билде. Все автоматические гейты зелёные: `make build` (бинарь собран), `make test` (race+coverage, 69.7%, 0 FAIL / 0 SKIP — интеграционные тесты прошли вживую против PG 14-18 на 127.0.0.1:21914-21918), `gosec` (73 файла, 0 issues), `go vet` чисто, `gofmt -l` чисто по всем 21 изменённым файлам фичи. 6 автоматически-проверяемых критериев приёмки — PASS с привязкой к тестам (byte-identical compact, n/a-деградация, GUC scan-lockstep, first-tick+re-arm без Reset, no view-count/keybinding регрессий, version-correct агрегаты PG 14-18). 6 визуальных TUI-критериев (геометрия verbose+height-guard, консистентность строк с полными панелями B/N/F/d/r/b, first-tick collecting.../stale-on-throttle) — DEFERRED-TO-USER (нет TUI E2E-харнесса), оформлены чек-листом ручной верификации в JSON-отчёте. Полный отчёт: [010-feat-overview-dashboard-qa-report.json](010-feat-overview-dashboard-qa-report.json).
+**Deviations:** `golangci-lint` недоступен локально (v1-конфиг vs v2-инструмент) — заменён прокси `go vet` + `gofmt -l`, полный golangci-lint оставлен на CI (gosec прогнан локально, чисто).
+**Tech debt:** Нет нового. Зафиксированы 2 minor-находки вне скоупа фичи: (1) `govulncheck` advisory GO-2026-5037 в stdlib crypto/x509 (тулчейн go1.25.10 → фикс в go1.25.11; не код проекта; резолв = бамп Go в CI); (2) pre-existing gofmt-дрейф в `internal/query/wal_test.go` и `internal/stat/procpidstat_test.go` (выравнивание полей, коммиты 1ebf907/99c8413, вне набора файлов фичи).
+
+**Reviews:** N/A — приёмочная QA-задача без ревьюеров; результат самой проверки и есть отчёт.
+
+**Verification:**
+- `make build` → exit 0, ./bin/pgcenter
+- `make test` → все пакеты ok, TEST_EXIT=0, coverage 69.7%, без SKIP/FAIL
+- `gosec -quiet ./...` → 0 issues; `go vet ./...` + `gofmt -l .` (файлы фичи) → чисто
+- `govulncheck ./...` → 1 stdlib-advisory (тулчейн, не код) — задокументирован как minor
+- Визуальные TUI-критерии → DEFERRED-TO-USER (чек-лист в qa-report.json `deferredToPostDeploy`)
