@@ -9,6 +9,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/stretchr/testify/assert"
 	"io"
+	"math"
 	"os"
 	"testing"
 )
@@ -83,6 +84,103 @@ func Test_collectActivityStat(t *testing.T) {
 	conn.Close()
 	_, err = collectActivityStat(conn, 0, "public", 1, 0)
 	assert.Error(t, err)
+}
+
+func Test_collectOverviewStat(t *testing.T) {
+	versions := []int{140000, 150000, 160000, 170000, 180000}
+
+	for _, version := range versions {
+		conn, err := postgres.NewTestConnectVersion(version)
+		if err != nil {
+			t.Skipf("postgres %d not available in test environment", version)
+		}
+
+		props, err := GetPostgresProperties(conn)
+		assert.NoError(t, err)
+
+		// First tick: no prev snapshot. Must not panic; rates stay zero/n/a.
+		first := collectOverviewStat(conn, props, 1, PgstatOverview{})
+		assert.True(t, first.Valid)
+		assert.False(t, first.HasPrev)
+		assert.False(t, first.CacheHitRatioValid, "cache hit ratio is n/a on the first tick")
+		assert.GreaterOrEqual(t, first.DatabasesCount, int64(1))
+		assert.True(t, first.TotalSizeValid)
+		assert.GreaterOrEqual(t, first.TotalSize, int64(0))
+		assert.GreaterOrEqual(t, first.WalSize, int64(0))
+
+		// Second tick with first as prev: rates are computed, no panic on deltas.
+		second := collectOverviewStat(conn, props, 1, first)
+		assert.True(t, second.Valid)
+		assert.True(t, second.HasPrev)
+		// tps = (Δcommits + Δrollbacks)/itv; >= 0 (counters never go backwards on a live cluster).
+		assert.GreaterOrEqual(t, second.TPSRate, int64(0))
+		// others is an interval delta (value, not /s).
+		assert.GreaterOrEqual(t, second.OthersInterval, int64(0))
+		// bgwr/ckpt absolute counters populated; write/sync deltas computed.
+		assert.GreaterOrEqual(t, second.CkptTimed, int64(0))
+		assert.GreaterOrEqual(t, second.CkptReq, int64(0))
+
+		conn.Close()
+	}
+}
+
+func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	// Construct a synthetic prev so Δ(hit+read) > 0 deterministically, exercising the per-interval
+	// ratio path (Δhit/Δ(hit+read)) without relying on live I/O timing.
+	prev := PgstatOverview{
+		Valid:          true,
+		TotalSizeValid: true,
+		BlksHit:        0,
+		BlksRead:       0,
+	}
+	got := collectOverviewStat(conn, props, 1, prev)
+	assert.True(t, got.HasPrev)
+	if got.BlksHit+got.BlksRead > 0 {
+		assert.True(t, got.CacheHitRatioValid)
+		assert.GreaterOrEqual(t, got.CacheHitRatio, float64(0))
+		assert.LessOrEqual(t, got.CacheHitRatio, float64(100))
+	}
+
+	// Division by zero: prev == curr counters -> Δ(hit+read) == 0 -> n/a, not NaN/panic.
+	prevSame := PgstatOverview{Valid: true, TotalSizeValid: true}
+	// Re-read curr to capture current absolute counters, then feed them back as prev.
+	curr := collectOverviewStat(conn, props, 1, prevSame)
+	prevEqual := PgstatOverview{Valid: true, TotalSizeValid: true, BlksHit: curr.BlksHit, BlksRead: curr.BlksRead}
+	noio := collectOverviewStat(conn, props, 1, prevEqual)
+	// If no I/O happened between the two reads, ratio must be n/a (not NaN).
+	if noio.BlksHit == prevEqual.BlksHit && noio.BlksRead == prevEqual.BlksRead {
+		assert.False(t, noio.CacheHitRatioValid)
+		assert.False(t, math.IsNaN(noio.CacheHitRatio))
+	}
+}
+
+func Test_collectOverviewStat_Degradation(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	// Test clusters are primaries with no replication and (typically) no slots: lag/slots/retained
+	// degrade to n/a while the rest of the struct is populated (one failed row does not blank the sample).
+	got := collectOverviewStat(conn, props, 1, PgstatOverview{})
+	assert.True(t, got.Valid)
+	// No standbys -> lag is n/a.
+	assert.False(t, got.LagBytesValid, "no replication -> lag is n/a")
+	// No slots -> retained is n/a, but SlotsCount is still a real 0.
+	assert.False(t, got.RetainedValid, "no slots -> retained WAL is n/a")
+	assert.Equal(t, int64(0), got.SlotsCount)
+	// Other rows remain populated despite the degraded replication fields.
+	assert.GreaterOrEqual(t, got.DatabasesCount, int64(1))
+	assert.True(t, got.TotalSizeValid)
 }
 
 func TestGetPostgresProperties(t *testing.T) {

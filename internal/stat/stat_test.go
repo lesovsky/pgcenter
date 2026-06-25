@@ -68,6 +68,69 @@ func TestCollector_Update(t *testing.T) {
 	assert.NotEqual(t, 0, len(stat.Pgstat.Result.Cols))
 }
 
+func TestCollector_Update_VerboseAggregates(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	baseView := view.View{
+		Name:      "activity",
+		QueryTmpl: query.PgStatActivityDefault,
+		DiffIntvl: [2]int{0, 0},
+		Ncols:     14,
+		OrderKey:  0,
+		OrderDesc: true,
+		ColsWidth: map[int]int{},
+		Msg:       "Show activity statistics",
+		Filters:   map[int]*regexp.Regexp{},
+		Refresh:   1 * time.Second,
+	}
+	opts := query.NewOptions(props.VersionNum, props.Recovery, props.GucTrackCommitTimestamp, 256, "public")
+
+	// Verbose OFF: overview aggregates must not be collected (compact path untouched).
+	t.Run("verbose_off", func(t *testing.T) {
+		c, err := NewCollector(conn)
+		assert.NoError(t, err)
+
+		v := baseView
+		v.Verbose = false
+		views := view.Views{"activity": v}
+		assert.NoError(t, views.Configure(opts))
+
+		stat, err := c.Update(conn, views["activity"], time.Second)
+		assert.NoError(t, err)
+		assert.False(t, stat.Pgstat.Overview.Valid, "overview must not be collected when verbose is off")
+	})
+
+	// Verbose ON: overview aggregates are collected and populated.
+	t.Run("verbose_on", func(t *testing.T) {
+		c, err := NewCollector(conn)
+		assert.NoError(t, err)
+
+		v := baseView
+		v.Verbose = true
+		views := view.Views{"activity": v}
+		assert.NoError(t, views.Configure(opts))
+		v = views["activity"]
+
+		// First tick: no prev -> rates n/a but struct is valid.
+		stat, err := c.Update(conn, v, time.Second)
+		assert.NoError(t, err)
+		assert.True(t, stat.Pgstat.Overview.Valid)
+		assert.False(t, stat.Pgstat.Overview.HasPrev)
+		assert.GreaterOrEqual(t, stat.Pgstat.Overview.DatabasesCount, int64(1))
+
+		// Second tick: prev exists -> rates computed.
+		stat2, err := c.Update(conn, v, time.Second)
+		assert.NoError(t, err)
+		assert.True(t, stat2.Pgstat.Overview.Valid)
+		assert.True(t, stat2.Pgstat.Overview.HasPrev)
+	})
+}
+
 func TestCollector_collectDiskstats(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)

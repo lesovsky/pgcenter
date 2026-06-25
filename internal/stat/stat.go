@@ -274,8 +274,19 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		res = enriched
 	}
 
+	// Collect verbose overview aggregates only when verbose mode is enabled; the compact path is
+	// untouched. Rates are computed against the previous snapshot's Overview. The collect function
+	// never returns an error: each privileged/expensive aggregate degrades its own field to n/a.
+	// c.currPgStat still holds the previous tick's snapshot at this point (the curr->prev shift
+	// happens below), so its Overview is the correct prev snapshot for rate computation.
+	var overview PgstatOverview
+	if view.Verbose {
+		overview = collectOverviewStat(db, c.config.PostgresProperties, itv, c.currPgStat.Overview)
+	}
+
 	c.prevPgStat = c.currPgStat
-	c.currPgStat = Pgstat{Activity: activity, Result: res}
+	c.currPgStat = Pgstat{Activity: activity, Result: res, Overview: overview}
+	s.Pgstat.Overview = overview
 
 	// Compare previous and current Postgres stats snapshots and calculate delta.
 	diff, err := calculateDelta(c.currPgStat.Result, c.prevPgStat.Result, itv, view.DiffIntvl, view.OrderKey, view.OrderDesc, view.UniqueKey)
