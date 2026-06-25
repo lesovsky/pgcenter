@@ -1,0 +1,54 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Strong, behavior-focused test suite. All 7 TDD anchors are covered, several beyond the spec minimum (component-boundary prefix, empty inputs, symlink resolution). Tests assert real rendered output against bytes.Buffer with no mocking — every litmus check passes against the rendering logic. Two minor weaknesses: the *_compactUnchanged tests compare verbose=false to verbose=false (a tautological equality that adds no protection beyond the line-count assertion), and the verbose system/pgstat rows lean on Contains-substring assertions rather than full-line golden equality, so column layout/reserve-width regressions can slip through. Neither blocks the task; byte-identity of the compact path is already anchored by the pre-existing golden tests.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:651 (Test_renderSysstat_compactUnchanged), top/stat_test.go:744 (Test_renderPgstat_compactUnchanged)",
+      "issue": "Both tests render with verbose=false twice and assert.Equal(compact.String(), verboseOff.String()). The two calls are byte-for-byte identical by construction, so the Equal assertion is a tautology — it can only fail if rendering is nondeterministic, which it is not. The only assertion doing real work here is assert.Len(..., 4), which confirms no verbose rows leaked into the compact path. Litmus: delete the entire verbose-row composer and this Equal still passes; only the Len check would catch a leaked row.",
+      "recommendation": "Either (a) drop the redundant second verbose=false render and keep only the Len(4) check, or (b) make it meaningful by comparing the verbose=false output to a known compact golden / to the same input rendered through the pre-existing compact path. The strongest form: render once with verbose=true, split the lines, and assert the first 4 lines equal the verbose=false output (compact prefix is preserved AND verbose only appends). That actually exercises that verbose does not perturb the compact rows.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:533 (Test_renderSysstat_verboseIostatMaxUtil), :559 (verboseNicstatConversion), :683 (Test_renderPgstat_verboseNA), :717 (verboseAvailable)",
+      "issue": "Verbose-row assertions use assert.Contains on substrings ('1135 rMB/s', '80% max util', '1432 tps') rather than full-line equality. This verifies the selected value and unit but does not pin the column layout, reserve-width padding, field order, or separators of the verbose rows. A regression that changes ReserveWidth budgets, reorders fields, or alters the label spacing would not be caught as long as the asserted token still appears somewhere in the line. The spec explicitly calls reserve-digit layout and dynamic suffix load-bearing (Acceptance Criteria: 'резерв разрядов статичен').",
+      "recommendation": "Add at least one full-line golden assertion per verbose row (assert.Equal on the whole line) for a representative populated case, mirroring the byte-for-byte approach already used in Test_renderSysstat_compact lines 2..4. Keep the Contains assertions for the targeted value/skip-logic cases, but anchor the exact layout once so reserve-width and field-order regressions fail loudly.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:717 (Test_renderPgstat_verboseAvailable)",
+      "issue": "The test asserts assert.NotContains(out, 'n/a') over the entire concatenated output to prove 'no field degraded'. This is a coarse negative assertion: it depends on the incidental fact that no legitimate rendered token contains the substring 'n/a'. It also does not assert the actual values for most rows (workers, replication wal size, growth, retain, archiving backlog, write/sync ms) — only tps, cache hit ratio, send/recv, and the literal 'maxwritten' label are positively checked. The 'maxwritten' assertion checks a static label, not the MaxWrittenDelta value (4).",
+      "recommendation": "Replace the global NotContains('n/a') with positive per-field assertions for the available case: assert.Contains for growth (Size of 1<<20), lag, slots/retain, archiving backlog, and the bgwr write/sync ms ('245/30 ms write/sync' or the ceil'd reserve-width form) and maxwritten count ('4 maxwritten'). This makes the test fail when a specific available field is wrongly rendered n/a or with a wrong value, which the broad NotContains cannot localize.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/stat/fsstat_test.go:85 onward (Test_MatchDataDirFs_* naming)",
+      "issue": "The TDD anchor names in task-08 spec are Test_matchDataDirFs_longestPrefix / _noMatch / _evalSymlinksFailure (lowercase first letter, implying an unexported matcher). The implementation exported the function as MatchDataDirFs and named tests Test_MatchDataDirFs_*. This is a cosmetic divergence from the spec anchor names, not a coverage gap — all three named anchors are functionally covered. Worth flagging only for traceability between spec anchors and test names.",
+      "recommendation": "No code change required. If anchor-to-test traceability is enforced downstream, note the rename (matchDataDirFs -> MatchDataDirFs, exported because the composer lives in package top and calls it across the package boundary) in the decisions log so the anchor-name mismatch is intentional and documented.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 13,
+      "passed": 11,
+      "failed": 2
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 13,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
