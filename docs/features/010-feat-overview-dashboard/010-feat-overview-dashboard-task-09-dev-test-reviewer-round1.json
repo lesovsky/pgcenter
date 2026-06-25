@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Task 09 tests are behavior-asserting and litmus-clean. The pure latency-guard tests (latencyGuardThreshold table, throttlesSlowSource, autoResumes) assert real return values with correct boundary handling (at-threshold uses '>' so equal latency does not throttle; degenerate refresh=0 falls to the floor). The live-PG TestCollector_Update_DbSizeThrottle asserts the load-bearing behaviors: stale cached size is reused (not n/a), cheap aggregates and system rows still collect every tick. The firstTickHint helper test covers shown/cleared/re-armed states. The forced dbSizeLastLatency in the throttle test is a legitimate test seam, not a tautology. Findings are all minor coverage refinements; no critical or major issues.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go: TestCollector_Update_DbSizeThrottle",
+      "issue": "The genuine-first-tick-not-throttled path is asserted only implicitly. The throttle branch is gated by `c.verbose.dbSizeCacheValid && dbSizeThrottled(threshold)`; on the genuine first verbose tick dbSizeCacheValid is false, so even a (hypothetically) slow prior latency must NOT throttle — the source must collect to seed the cache. The end-to-end test forces dbSizeLastLatency only AFTER tick 1 has already populated the cache, so it never exercises the case where the throttle predicate is true but dbSizeCacheValid is false. A regression that dropped the `dbSizeCacheValid &&` guard (throttling before anything is cached) would still pass every current assertion, because on tick 1 dbSizeLastLatency is zero (not slow).",
+      "recommendation": "Add a pure-state assertion (no live PG needed) for the cache-guard: construct verboseCollectState{dbSizeLastLatency: 2*time.Second} with dbSizeCacheValid:false and assert that the *caller-level* skip decision `dbSizeCacheValid && dbSizeThrottled(threshold)` is false. Or, in stat.go, extract the full skip predicate into a small pure method (e.g. `skipDbSize(threshold) bool { return s.dbSizeCacheValid && s.dbSizeThrottled(threshold) }`) and table-test it with {cacheValid:false, slow} -> false and {cacheValid:true, slow} -> true. This pins 'genuine first tick is never throttled even if marked slow', which the spec's edge-case list calls out explicitly.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/stat/stat_test.go: TestCollector_Update_DbSizeThrottle",
+      "issue": "Auto-resume is verified only at the pure-state level (Test_verboseCollectState_autoResumes), not end-to-end. The live test stops after tick 2 (throttled). There is no end-to-end assertion that a subsequent real collection refreshes dbSizeLastLatency to a fast value and re-resumes querying (TotalSize changes / cache re-written). A regression where the throttled path forgot to ever record a fresh latency (so the source stays stuck stale forever) would not be caught end-to-end.",
+      "recommendation": "Extend TestCollector_Update_DbSizeThrottle with a tick 3: after the throttled tick 2, do NOT re-force dbSizeLastLatency; the implementation only records latency on a real collection, so tick 2 (throttled) left the 2s value in place and tick 3 would also throttle — which is actually correct behavior. To genuinely test resume, reset c.verbose.dbSizeLastLatency to a small value before tick 3 and assert the size is re-collected (cache may update, TotalSizeValid true, and dbSizeThrottled now false). Keep it cheap; this just closes the end-to-end resume loop the pure test already covers in isolation.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "internal/stat/stat_test.go: TestCollector_Update_Verbose (firstTick + re-arm coverage)",
+      "issue": "firstTickFlag and firstTickReArmsOnReEnable from the TDD anchor list are folded into the existing live-PG TestCollector_Update_Verbose rather than separate funcs. Coverage is adequate (the OFF->ON-without-Reset sequence and prevVerboseActive disarm are asserted on lines 177-207), but the assertions on field names (`c.verbose.verboseFirstTick`, `c.verbose.prevVerboseActive`) couple the test to the unexported sub-struct shape, and the re-arm intent is buried inside a long multi-phase live-PG test that also exercises diskstats/netdevs/fsstats and side-panel coexistence. This makes the re-arm regression signal harder to read and ties a behavioral invariant to a live-PG-required test when it is pure logic.",
+      "recommendation": "Acceptable as-is for this round (the behavior IS asserted). Optional improvement: the re-arm logic (`verboseFirstTick = !prevVerboseActive`, else `prevVerboseActive = false`) is pure and could be lifted into a tiny pure helper and table-tested (ON->set, 2nd tick->clear, OFF->disarm, ON-again->re-set) without live PG, mirroring how firstTickHint was extracted. Then TestCollector_Update_Verbose can keep just the end-to-end sanity assertions. Not required to pass.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 4,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

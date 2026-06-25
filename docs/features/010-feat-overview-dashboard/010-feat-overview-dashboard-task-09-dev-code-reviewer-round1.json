@@ -1,0 +1,43 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "changes_required",
+  "summary": "The first-tick re-arm migration into verboseCollectState, the skipDatabasesSize deviation to postgres.go, the named threshold constant, the Reset clearing, and the printCmdline mutual-exclusion are all correct and minimal. However, the latency guard is implemented as a one-way latch rather than a throttle: once dbSizeLastLatency exceeds the threshold it is never re-measured (the slow-path else-branch that records latency only runs on a real collection, which never happens while throttled), so in production the source throttles permanently and the required auto-resume never occurs. The auto-resume unit test passes only because it manually mutates the latency field, masking the bug.",
+  "criticalIssues": [
+    {
+      "file": "internal/stat/stat.go",
+      "line": 393,
+      "severity": "critical",
+      "category": "error-handling",
+      "issue": "Latency guard is a permanent latch, not a throttle: there is no re-probe/cadence mechanism. skipSize is derived solely from dbSizeLastLatency, and dbSizeLastLatency is updated ONLY in the else-branch (line 405) that runs when a real collection happens. But once dbSizeLastLatency > threshold, skipSize is true on every subsequent tick, so the real collection (and thus the latency re-measurement) never runs again. The state machine has no path back to collecting.",
+      "impact": "Auto-resume — an explicit Acceptance Criterion and Decision 9 requirement ('resuming automatically when latency recovers') — never happens in production. After a single slow db-size query the size/growth row is frozen on the stale cached value forever (until a screen switch triggers Reset() or verbose is toggled OFF->ON). The spec's 'skip the NEXT collection' (a single tick) semantics are violated: all subsequent collections are skipped indefinitely. Test_verboseCollectState_autoResumes does not catch this because it manually assigns st.dbSizeLastLatency = 50ms, an event that cannot occur in the real Update path.",
+      "recommendation": "Add the per-source cadence the spec/struct doc-comment and code-research §7-new call for (a lastRun/lastSizesRun time.Time, or a bounded skip counter). Throttle should skip the dear query for at most a cadence budget (e.g. time.Since(lastSizesRun) < budget) and then force one real collection to re-measure latency, which either re-arms the throttle (still slow) or resumes (now fast). Update lastSizesRun and dbSizeLastLatency on every real collection. Then make Test_verboseCollectState_autoResumes (or an Update-level test) drive resume through the real code path — not by mutating internal latency state."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "internal/stat/stat.go",
+      "line": 405,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "dbSizeLastLatency is measured around the ENTIRE collectOverviewStat call (workload, databases, workers, wal size, replication lag, plus the dear size query), not just the sum(pg_database_size) query it guards. The comment acknowledges it is 'dominated by the dear size query', but a momentarily slow replication-lag template or wal-size read could trip the guard for the wrong source.",
+      "benefit": "Measuring latency narrowly around the OverviewDatabasesSize QueryRow (e.g. returning the measured duration from collectOverviewStat, or timing that scan specifically) makes the guard attribute slowness to the source it actually throttles. Lower priority once the latch bug above is fixed, since a re-probe would self-correct a one-off misattribution.",
+      "optional": true
+    },
+    {
+      "file": "top/stat.go",
+      "line": 161,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The 'collecting...' hint relies on printCmdline's 2s self-clear timer. On a 1s refresh the first-tick flag clears after ~1s (next tick) but the hint lingers ~2s, and printStat never explicitly restores the cmdline because it only calls printCmdline when the hint is shown. This is acceptable (cmdline is event-driven and normally empty), but the coupling to a 2s timer in another function is implicit.",
+      "benefit": "A brief note that the cmdline is event-driven (not rewritten every refresh) and that the hint intentionally self-clears via printCmdline's timer would make the 'no explicit clear' choice self-documenting for future maintainers.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 1,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "insufficient"
+  }
+}

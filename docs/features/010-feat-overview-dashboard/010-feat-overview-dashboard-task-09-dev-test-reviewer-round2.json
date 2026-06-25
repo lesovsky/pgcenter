@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Round-2 re-review after the latency-guard latch fix (c6c5938). Both round-1 minors are resolved. (1) Genuine-first-tick-not-throttled is now pinned by a dedicated pure test (Test_verboseCollectState_firstTickNotThrottled): dbSizeCacheValid=false + a stale slow latency must NOT throttle — this exercises the `if !s.dbSizeCacheValid { return false }` guard that the round-1 end-to-end test could never reach (tick 1 had zero latency). (2) Auto-resume is now driven through the real code path, not field mutation: Test_verboseCollectState_autoResumes pushes sinceLastRun to and past the budget (pure), and TestCollector_Update_DbSizeThrottle gained an end-to-end tick 3 that backdates dbSizeLastRun beyond the budget and asserts dbSizeLastLatency re-measures back within threshold through the live Update path. The new cadence boundary (sinceLastRun == budget) is covered with the correct '<' semantics (equal -> re-probe). The pure dbSizeThrottled tests are litmus-clean: each of the three guard clauses (no-cache, at/below-threshold, within-budget) has a distinct asserting case, so removing any one fails a specific assertion. Pyramid health is preserved (more pure unit tests added, live-PG count unchanged). All findings are minor.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/stat/stat_test.go: TestCollector_Update_DbSizeThrottle (s3 auto-resume assertion)",
+      "issue": "The end-to-end auto-resume assertion `assert.LessOrEqual(c.verbose.dbSizeLastLatency, latencyGuardThreshold(time.Second))` depends on the live sum(pg_database_size) query actually completing under the 500ms floor on the test host. On a fast local test DB this holds, but it couples a pass/fail signal to environment timing rather than to the throttle decision itself. The deterministic part of the invariant (the source IS re-probed once the cadence budget elapses, regardless of the recorded slow latency) is already pinned purely by Test_verboseCollectState_autoResumes; the live assertion adds 'the re-probe re-measures a fresh latency' on top, which is the timing-dependent bit.",
+      "recommendation": "Keep the existing TotalSizeValid + cached-value assertions for s3 (those are deterministic and prove the re-collection happened). For the latency-recovery claim, either (a) accept it as a coarse smoke check and relax it to assert only that dbSizeLastRun advanced past the backdated value (proving a real collection re-stamped the cadence clock) — fully deterministic; or (b) leave as-is but add a comment noting the 500ms floor gives wide headroom on a local test DB so it is not flaky in practice. Not blocking.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "internal/stat/stat_test.go: TestCollector_Update_Verbose (firstTick + re-arm coverage)",
+      "issue": "Carried over from round 1, unchanged: the first-tick re-arm invariant (verboseFirstTick re-arms on OFF->ON without Reset via prevVerboseActive) is asserted inside the long multi-phase live-PG TestCollector_Update_Verbose rather than as a pure table test. The re-arm logic is pure (verboseFirstTick = !prevVerboseActive) and ties a behavioral invariant to a live-PG-required test plus the unexported sub-struct field names.",
+      "recommendation": "Optional, not required to pass (the behavior IS asserted end-to-end). If touched later, lift the re-arm decision into a tiny pure helper and table-test ON->set / 2nd-tick->clear / OFF->disarm / ON-again->re-set, mirroring how firstTickHint and dbSizeThrottled were extracted, leaving TestCollector_Update_Verbose with just end-to-end sanity checks.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 6,
+      "integration": 2,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
