@@ -10,37 +10,9 @@
   },
   "findings": [
     {
-      "check": "architectural_fit",
-      "severity": "major",
-      "issue": "collectStat() has an unconditional c.Reset() on every viewCh receive (top/stat.go:108). When `v` toggles Verbose without switching the view — which is what `toggleVerbose` does (it pushes config.view, the same view name) — the existing viewCh branch at top/stat.go:100-113 first checks CollectExtra change, then calls c.Reset() and re-runs Update(). Resetting erases prevDiskstats/prevNetdevs/prevCPUStat, producing a spurious first-tick n/a frame after every `v` press even for the always-collected CPU/mem/load rows. The showExtra handler (extra.go:74-75) works correctly only because it does `continue` after toggling extra, skipping the Reset(); the spec's toggleVerbose needs the same early-continue treatment rather than falling through to the unconditional Reset().",
-      "location": "Architecture → How it works, step 1 (viewCh push); top/stat.go:80-114 (collectStat select)",
-      "fix": "In collectStat()'s viewCh case, add a Verbose-change branch analogous to the ShowExtra branch: detect `prev.Verbose != v.Verbose`, set the flag, `continue` (skip Reset+prefill). This mirrors the ShowExtra pattern at top/stat.go:88-93 and is the only safe path for a flag that changes collection behavior without invalidating prior snapshots."
-    },
-    {
-      "check": "architectural_fit",
-      "severity": "minor",
-      "issue": "The spec reads `config.verbose` in `layout()` via `app.config.verbose`, but the existing `layout()` closure only reads `app.config.view.ShowExtra` (ui.go:166) — it does not reference `app.config` directly for any other flag today. The spec correctly identifies this and proposes reading `app.config.verbose` the same way. No structural issue, but the implementation must ensure that `config.verbose` is updated before the gocui update triggered by the `viewCh` push, because `layout()` is called synchronously by gocui's main loop during `g.Update()` — not from the collector goroutine. If `config.verbose` is mutated only in the handler (which runs in the gocui goroutine), this is safe. The spec should make this sequencing explicit to avoid a race between `layout()` reading `config.verbose` and the handler writing it.",
-      "location": "Architecture → topBandLayout pure function + layout() rewiring; Decisions → Decision 3",
-      "fix": "Verify (and document in the task) that `config.verbose` is mutated only inside the gocui event handler (same goroutine as `layout()`), not from the collector goroutine — which would be a data race. Since `toggleVerbose` is a keybinding handler running in the gocui goroutine and `layout()` also runs there, this is structurally safe. A note in Task 6 would remove ambiguity."
-    },
-    {
-      "check": "coupling",
-      "severity": "minor",
-      "issue": "The tiering/guard state (lastRunSizes time.Time, per-source divisors, cached stale values) is added to `stat.Collector` in `internal/stat/stat.go`. Collector is a shared, general-purpose object; adding verbose-specific cadence state here couples the collector to the verbose feature's UX policy (which sources are 'dear', what stale timeout to use). This is a mild abstraction leak — if verbose is ever extended or the cadence policy changes, the Collector struct accumulates more feature-specific fields. The ADR [001] CollectExtra pattern uses typed constants on the view to keep policy in the view layer. The spec acknowledges this ('extensible source registry for v.next') but does not provide a seam to avoid direct Collector field proliferation.",
-      "location": "Architecture → Tiering/guard state on Collector; Decisions → Decision 9; Data Models → stat.Collector",
-      "fix": "Acceptable as-is for this feature size (L). As a minor improvement, group the tiering state into a named sub-struct (e.g. `verboseCollectState`) on `Collector` so that future removal or extension is a single-field change. This is not blocking."
-    },
-    {
-      "check": "architectural_fit",
-      "severity": "minor",
-      "issue": "The spec describes two uses of `nicstat` rMbps/wMbps: the full panel uses `s[i].Rbytes/1024/128` at print time (top/stat.go:741), while the verbose row must replicate this exact conversion. The code-research correctly identifies this (§4-new), but the conversion is not in countNetdevsUsage — it is a print-time calculation. The verbose composer (Task 9) must call the same expression, not read a precomputed field. This is a consistency trap that would produce divergent numbers if the implementer reads `Rbytes` without the /1024/128 factor or uses a different scale.",
-      "location": "Decisions → Decision 5 (nicstat replication); Architecture → sysstat verbose row composers",
-      "fix": "In Task 9, explicitly document that the rMbps/wMbps values MUST be computed as `s[i].Rbytes/1024/128` (matching stat.go:741), not read from a struct field. A unit test asserting byte-for-byte parity between the verbose row and printNetdev output for the same Netdevs fixture enforces this."
-    },
-    {
       "check": "backward_compat",
       "severity": "minor",
-      "issue": "SelectCommonProperties scan arity: the spec correctly identifies that adding 5 GUC columns to the SELECT (Task 4) requires updating the `.Scan(...)` call in GetPostgresProperties in the same task. The existing Scan at internal/stat/postgres.go:126-134 scans exactly 8 columns; adding 5 columns without updating Scan produces a scan-arity runtime error on startup. The tech-spec explicitly calls this out as a lockstep requirement and lists it as a risk with the mitigation of updating in the same task. The test postgres_test.go:TestGetPostgresProperties covers this path with a live PG. The risk is real but the mitigation (single-task lockstep + test coverage) is sound.",
+      "issue": "SelectCommonProperties scan arity: adding 5 GUC columns to the SELECT (Task 4) requires updating the .Scan(...) call in GetPostgresProperties in the same task. The existing Scan at internal/stat/postgres.go:126-134 scans exactly 8 columns; adding 5 columns without updating Scan produces a scan-arity runtime error on startup. The tech-spec explicitly calls this out as a lockstep requirement and lists it as a risk with the mitigation of updating in the same task. The test postgres_test.go:TestGetPostgresProperties covers this path with a live PG. The risk is real but the mitigation (single-task lockstep + test coverage) is sound.",
       "location": "Backward Compatibility; Risks → SelectCommonProperties scan-arity break; Task 4",
       "fix": "No additional fix needed beyond what the spec prescribes (lockstep edit in Task 4, verified by TestGetPostgresProperties). Ensure the task explicitly forbids splitting the SELECT extension and the Scan update into separate commits."
     }
@@ -50,5 +22,5 @@
     "complexity": "medium",
     "tech_debt": "low"
   },
-  "summary": "The spec is architecturally sound and well-aligned with the codebase. All five decisions correctly mirror established patterns (showExtra mirror-into-all-views, visibleColumns pure-function, CollectExtra separation, io.Writer refactor). One major finding: the unconditional c.Reset() in collectStat()'s viewCh branch will fire on every `v` press and produce a spurious n/a frame; the fix is a Verbose-change early-continue analogous to the existing ShowExtra branch. Three minor findings cover gocui goroutine sequencing clarity, collector coupling to tiering policy, and the print-time nicstat conversion trap. None are blocking; the major finding has a precise fix."
+  "summary": "All four round-1 findings are fixed. Decision 2 + Task 2 now carry an explicit prev.Verbose != v.Verbose → continue branch that mirrors the ShowExtra pattern and skips the unconditional Reset(). Decision 9 introduces a named verboseCollectState sub-struct with a concrete guard threshold (25% of refresh interval or 500ms floor). Task 6 documents the same-goroutine sequencing of config.verbose. Task 8 calls out the print-time /1024/128 nicstat conversion parity. The 5-wave dependency order is topologically sound: foundations → aggregates/geometry → system collection → row composers → tiering, with no intra-wave file conflicts. Approved with zero critical or major findings."
 }

@@ -360,7 +360,7 @@ against the monitored instance only when verbose is on; `pg_ls_dir('pg_wal/archi
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** user — verbose rows consistent with the full `B`/`N`/`F`/`d`/`r`/`b` panels and screens
 - **Files to modify:** `top/stat.go`, `top/stat_test.go`, `internal/stat/fsstat.go`
-- **Files to read:** `top/stat.go`, `internal/stat/diskstats.go`, `internal/stat/netdev.go`, `internal/stat/fsstat.go`, `internal/pretty/pretty.go`, `internal/stat/postgres.go`
+- **Files to read:** `top/stat.go`, `internal/stat/diskstats.go`, `internal/stat/netdev.go`, `internal/pretty/pretty.go`, `internal/stat/postgres.go`
 
 ### Wave 5 (зависит от Wave 4)
 
