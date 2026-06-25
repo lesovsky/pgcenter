@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Task 08 implements the verbose row composers for both top panels cleanly and consistently with the spec. Cross-file consistency is solid: all PgstatOverview / Diskstat / Netdev / props fields exist with matching types, the nicstat Rbytes/1024/128 print-time parity and the Completed!=0 / Packets!=0 active-device filters faithfully mirror printNetdev/printIostat, and Util/Utilization are read as-is (never recomputed) per Decision 5. The VerboseFirstTick bridge is a justified, minimal, well-documented deviation. No critical or major issues; build, go test and go vet are clean (golangci-lint not installed in env, so make lint could not be executed). Remaining notes are minor maintainability/layout items.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 298,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "rateField duplicates pretty.RateUnit almost verbatim: the family base/high/divisor table, the 10^width-1 reserve computation, and the Ceil-overflow branch are copied. The only real difference is that the read/write prefix is injected between the digits and the unit ('1135 rMB/s'). Consider refactoring pretty.RateUnit to expose the (number, unit) split (e.g. an internal helper returning value-string + unit-string, or a variant taking an infix), then build both the existing suffix form and the verbose prefixed form on top of it. This keeps the overflow/divisor logic in one place so a future unit-table change (e.g. divisor or threshold) cannot drift between the two copies.",
+      "benefit": "Single source of truth for rate-unit overflow logic; eliminates the risk of pretty.RateUnit and rateField diverging on the divisor (1024/1000) or threshold boundaries.",
+      "optional": true
+    },
+    {
+      "file": "top/stat.go",
+      "line": 515,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Minor cosmetic divergence from the user-spec layout examples: the spec shows '245/30ms write/sync' and '1/12GB slots/retain' (unit attached to the number), while the implementation emits '%s/%s ms write/sync' and '%s/%s slots/retain' (space before 'ms', and slots/retain joins a reserve-width count with a pretty.Size string). The verbose budgets for pgstat rows are not strictly specified in the user-spec the way the sysstat reserves are, so this is acceptable, but the user verification step (verify: user) should confirm the rendered layout reads as intended against the live panels.",
+      "benefit": "Ensures the rendered verbose rows match the DBA's expected layout from the user-spec mockup before the feature is signed off.",
+      "optional": true
+    },
+    {
+      "file": "top/stat_test.go",
+      "line": 561,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The writer-based tests assert with substring Contains on whole lines rather than asserting the full expected line string. This is robust against reserve-width changes but means a regression in field ordering or an accidental extra/duplicated field could pass undetected as long as each fragment appears somewhere on the line. Consider adding at least one assert.Equal on a full expected line per row (the way Test_renderSysstat_verboseFilesystNA already does for 'filesyst: n/a') to lock the exact composed layout, including spacing and field order.",
+      "benefit": "Locks the exact rendered layout (ordering, spacing, reserve widths) so cosmetic regressions are caught by unit tests rather than only at user verification.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

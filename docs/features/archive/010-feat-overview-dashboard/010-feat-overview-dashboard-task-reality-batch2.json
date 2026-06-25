@@ -1,0 +1,52 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Task 05 reads and gates collection on view.Verbose (the bool added by Task 2) and the body's Dependencies section (line 190-192) explicitly states it relies on Task 2 'view.View.Verbose bool already exists'. But the depends_on frontmatter declares only [\"04\"], omitting \"02\". view.View today has only ShowExtra (internal/view/view.go:26); Verbose does not exist yet. Wave ordering (Task 02 is wave 1, Task 05 is wave 2) covers it temporally, but the explicit dependency edge is missing from depends_on — a do-feature/orchestrator reading depends_on literally would not block Task 05 on Task 02.",
+      "fix": "Set depends_on: [\"02\", \"04\"] in Task 05 frontmatter (it already depends on 04 for GUCs and on 02 for the view.Verbose gate flag)."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Task 05 'What to do' step 4 instructs gating collection in Collector.Update via 'if view.Verbose { ... }'. Confirmed Update has the signature (db, view view.View, refresh) at internal/stat/stat.go:122 and the prev/curr swap at :277 (c.prevPgStat = c.currPgStat). However the verbose-collection branch must read view.Verbose off the passed-in view.View value, which only carries the flag once Task 2 mirrors it onto every view in the views map and pushes it on viewCh — a sequencing assumption that holds only if Task 2 lands first (see the depends_on gap above).",
+      "fix": "No code change; covered by fixing the depends_on edge. Optionally note in Task 05 that view.Verbose arrives on the view.View argument of Update."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 27,
+    "issues_found": 2
+  },
+  "verification_notes": {
+    "task_04": [
+      "SelectCommonProperties (internal/query/common.go:43-50) confirmed to have exactly 8 columns: version, version_num, track_commit_timestamp, max_connections, autovacuum_max_workers, shared_preload_libraries, recovery, start_time_unix. The 5 new GUCs (max_worker_processes, max_logical_replication_workers, max_parallel_workers, wal_segment_size, data_directory) are genuinely absent — net-new claim verified.",
+      "GetPostgresProperties .Scan(...) at internal/stat/postgres.go:125-134 matches SELECT column order (8 targets). PostgresProperties struct at :107-120 confirmed. Cited line ranges (struct 107-120, scan 125-134) are accurate.",
+      "GucMaxPrepXacts declared-but-never-scanned placeholder confirmed: present in struct at postgres.go:115 but absent from the .Scan(...) target list — Task 04 edge-case warning (line 142) is accurate; correctly told not to touch it.",
+      "wal.go:6 precedent confirmed verbatim: count(1) * pg_size_bytes(current_setting('wal_segment_size')). wal_segment_size from current_setting is a pretty string (e.g. 16MB), so the pg_size_bytes(...)::int8 wrapping to obtain int64 bytes is genuinely required, not redundant.",
+      "data_directory is text from current_setting; scanning into a Go string is correct. No version-dispatch needed — all 5 GUCs exist on PG 14-18 (single SelectCommonProperties query)."
+    ],
+    "task_05": [
+      "SelectStatBgwriterQuery(version) confirmed at internal/query/bgwriter.go:41 with PG14-16 / 17 / 18 column-layout split — reuse claim (no new bgwr/ckpt SQL) is valid. ckpt_timed/ckpt_req are absolute (outside diff block), ckpt_write,ms/ckpt_sync,ms and maxwritten are inside/around the diffed block, matching Task 05's description.",
+      "databases.go pg_stat_database column names confirmed (xact_commit, xact_rollback, blks_hit, blks_read, tup_inserted/updated/deleted/returned, temp_files, deadlocks, conflicts, checksum_failures all present as catalog columns wrapped in coalesce at databases.go:5-16). The sum() aggregate query Task 05 proposes targets real columns.",
+      "replication.go:5-15 WAL-fn lag-diff templates ({{.WalFunction1}}({{.WalFunction2}}(), replay_lsn)) confirmed. replication_slots.go:14-31 retained-WAL expression ({{.WalFunction1}}({{.WalFunction2}}(), s.restart_lsn)) confirmed.",
+      "query.go helpers confirmed: NewOptions(version, recovery, track, querylen, pgssSchema) at :41, selectWalFunctions at :68, Format at :90, version constants PostgresV14/V17/V18 at :17/20/21. WAL-fn template Format() path is real.",
+      "collectActivityStat collection-chain template confirmed at internal/stat/postgres.go:56; the cited rate line :94 is exactly s.CallsRate = (s.Calls - prevCalls) / itv. Collector internals confirmed: prevPgStat/currPgStat (Pgstat) at stat.go:66-67, collectExtra switch at :156, prev/curr swap at :277.",
+      "wal.go:6 archiving-backlog precedent count(1) * pg_size_bytes(current_setting('wal_segment_size')) confirmed; adapting pg_ls_waldir() -> pg_ls_dir('pg_wal/archive_status') with .ready suffix filter is a reasonable, non-hallucinated adaptation.",
+      "NEW file internal/query/overview.go does not exist yet — expected (to be created), not a hallucination."
+    ],
+    "task_06": [
+      "All five SetView literals confirmed at the exact cited lines in top/ui.go: sysstat :114 (-1,-1,(maxX-1)/2,4), pgstat :128 (maxX/2,-1,maxX,4), cmdline :139 (-1,3,maxX,5), dbstat :155 (-1,4,maxX,maxY-1), extra :167 (left untouched). The compact literals 4/4/3/5/4 the task asks to reproduce are accurate.",
+      "layout(app) closure span ~ui.go:103-184 confirmed; printCmdline(g, format, ...) exists at ui.go:187. Frame=false / SetCurrentView('sysstat') / error-handling blocks confirmed as described.",
+      "config.verbose read happening in the layout closure (gocui handler goroutine, same as ShowExtra read at ui.go:166) confirmed — no data-race claim is sound.",
+      "NEW files top/layout.go and top/layout_test.go do not exist yet — expected (to be created), not a hallucination.",
+      "Task 06 correctly declares depends_on: [\"02\"] for config.verbose (which does not exist in top/config.go yet — added by Task 2). Dependency edge is correctly captured here (unlike Task 05)."
+    ]
+  }
+}

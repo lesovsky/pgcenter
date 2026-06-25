@@ -9,6 +9,7 @@ import (
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/stretchr/testify/assert"
 	"io"
+	"math"
 	"os"
 	"testing"
 )
@@ -85,6 +86,155 @@ func Test_collectActivityStat(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func Test_collectOverviewStat(t *testing.T) {
+	versions := []int{140000, 150000, 160000, 170000, 180000}
+
+	for _, version := range versions {
+		conn, err := postgres.NewTestConnectVersion(version)
+		if err != nil {
+			t.Skipf("postgres %d not available in test environment", version)
+		}
+
+		props, err := GetPostgresProperties(conn)
+		assert.NoError(t, err)
+
+		// First tick: no prev snapshot. Must not panic; rates stay zero/n/a.
+		first, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+		assert.True(t, first.Valid)
+		assert.False(t, first.HasPrev)
+		assert.False(t, first.CacheHitRatioValid, "cache hit ratio is n/a on the first tick")
+		assert.GreaterOrEqual(t, first.DatabasesCount, int64(1))
+		assert.True(t, first.TotalSizeValid)
+		assert.GreaterOrEqual(t, first.TotalSize, int64(0))
+		assert.GreaterOrEqual(t, first.WalSize, int64(0))
+
+		// Second tick with first as prev: rates are computed, no panic on deltas.
+		second, _ := collectOverviewStat(conn, props, 1, first, false)
+		assert.True(t, second.Valid)
+		assert.True(t, second.HasPrev)
+		// tps = (Δcommits + Δrollbacks)/itv; >= 0 (counters never go backwards on a live cluster).
+		assert.GreaterOrEqual(t, second.TPSRate, int64(0))
+		// others is an interval delta (value, not /s).
+		assert.GreaterOrEqual(t, second.OthersInterval, int64(0))
+		// bgwr/ckpt absolute counters populated; write/sync deltas computed.
+		assert.GreaterOrEqual(t, second.CkptTimed, int64(0))
+		assert.GreaterOrEqual(t, second.CkptReq, int64(0))
+
+		// Exact rate formula against a synthetic prev with known deltas. Using prev counters BELOW the
+		// live ones guarantees positive, deterministic deltas regardless of background activity. This
+		// proves tps = (Δcommit+Δrollback)/itv and others = Δ(...) over the interval (not /s).
+		base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+		synthPrev := PgstatOverview{
+			Valid:             true,
+			TotalSizeValid:    true,
+			WorkloadCommits:   base.WorkloadCommits - 100,
+			WorkloadRollbacks: base.WorkloadRollbacks - 40,
+			WorkloadInserts:   base.WorkloadInserts - 20,
+			WorkloadOthers:    base.WorkloadOthers - 7,
+		}
+		// itv = 2 so the /itv division is actually observable (not an identity).
+		withItv2, _ := collectOverviewStat(conn, props, 2, synthPrev, false)
+		expectedTPS := ((withItv2.WorkloadCommits + withItv2.WorkloadRollbacks) - (synthPrev.WorkloadCommits + synthPrev.WorkloadRollbacks)) / 2
+		assert.Equal(t, expectedTPS, withItv2.TPSRate, "tps must be (Δcommit+Δrollback)/itv")
+		// others is the raw interval delta, NOT divided by itv.
+		assert.Equal(t, withItv2.WorkloadOthers-synthPrev.WorkloadOthers, withItv2.OthersInterval, "others must be the interval delta, not /s")
+
+		conn.Close()
+	}
+}
+
+func Test_cacheHitRatio(t *testing.T) {
+	// Pure-function table test for the per-interval ratio, including the division-by-zero edge.
+	testcases := []struct {
+		name      string
+		dHit      int64
+		dRead     int64
+		wantRatio float64
+		wantValid bool
+	}{
+		{name: "all hits", dHit: 100, dRead: 0, wantRatio: 100, wantValid: true},
+		{name: "half", dHit: 50, dRead: 50, wantRatio: 50, wantValid: true},
+		{name: "no io -> n/a", dHit: 0, dRead: 0, wantRatio: 0, wantValid: false},
+		{name: "negative denom -> n/a", dHit: -5, dRead: 0, wantRatio: 0, wantValid: false},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			ratio, valid := cacheHitRatio(tc.dHit, tc.dRead)
+			assert.Equal(t, tc.wantValid, valid)
+			assert.Equal(t, tc.wantRatio, ratio)
+			assert.False(t, math.IsNaN(ratio), "ratio must never be NaN")
+		})
+	}
+}
+
+func Test_collectOverviewStat_CacheHitRatio(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+
+	// Synthetic prev with counters strictly BELOW the live ones -> Δhit/Δread are deterministically
+	// positive, so the per-interval ratio path runs and the result is a valid percentage in [0,100].
+	prev := PgstatOverview{
+		Valid:          true,
+		TotalSizeValid: true,
+		BlksHit:        base.BlksHit - 800,
+		BlksRead:       base.BlksRead - 200,
+	}
+	got, _ := collectOverviewStat(conn, props, 1, prev, false)
+	assert.True(t, got.HasPrev)
+	assert.True(t, got.CacheHitRatioValid, "with positive Δ(hit+read) the ratio must be valid")
+	assert.GreaterOrEqual(t, got.CacheHitRatio, float64(0))
+	assert.LessOrEqual(t, got.CacheHitRatio, float64(100))
+	assert.False(t, math.IsNaN(got.CacheHitRatio))
+
+	// Deterministic division-by-zero: prev counters equal to current -> Δ(hit+read) == 0 -> n/a.
+	// (cacheHitRatio is unit-tested directly in Test_cacheHitRatio; here we assert the collect wiring.)
+	prevEqual := PgstatOverview{Valid: true, TotalSizeValid: true, BlksHit: got.BlksHit, BlksRead: got.BlksRead}
+	noio, _ := collectOverviewStat(conn, props, 1, prevEqual, false)
+	if noio.BlksHit == prevEqual.BlksHit && noio.BlksRead == prevEqual.BlksRead {
+		assert.False(t, noio.CacheHitRatioValid)
+		assert.False(t, math.IsNaN(noio.CacheHitRatio))
+	}
+}
+
+func Test_collectOverviewStat_Degradation(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	// Test clusters are primaries with no replication and (typically) no slots: lag/slots/retained
+	// degrade to n/a while the rest of the struct is populated (one failed row does not blank the sample).
+	got, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+	assert.True(t, got.Valid)
+	// No standbys -> lag is n/a.
+	assert.False(t, got.LagBytesValid, "no replication -> lag is n/a")
+	// No slots -> retained is n/a, but SlotsCount is still a real 0.
+	assert.False(t, got.RetainedValid, "no slots -> retained WAL is n/a")
+	assert.Equal(t, int64(0), got.SlotsCount)
+
+	// Archiving backlog: the fixtures role has pg_monitor, so the OWN-QueryRow aggregate must run.
+	// On archive_mode=off it is a real 0 with ArchivingBacklogValid=true; either way it must be a
+	// non-negative value distinguishable from n/a, and its outcome must NOT have blanked other rows.
+	if got.ArchivingBacklogValid {
+		assert.GreaterOrEqual(t, got.ArchivingBacklog, int64(0))
+	}
+
+	// The degraded replication fields (and whatever backlog state) must NOT gate the cheap rows:
+	// count, cache-counter source and the separately-queried size aggregate all stay populated.
+	assert.GreaterOrEqual(t, got.DatabasesCount, int64(1))
+	assert.True(t, got.TotalSizeValid, "size runs as its own QueryRow and is unaffected by degraded rows")
+	assert.GreaterOrEqual(t, got.TotalSize, int64(0))
+}
+
 func TestGetPostgresProperties(t *testing.T) {
 	conn, err := postgres.NewTestConnect()
 	assert.NoError(t, err)
@@ -102,6 +252,10 @@ func TestGetPostgresProperties(t *testing.T) {
 	assert.NotEqual(t, "", got.Recovery)
 	assert.NotEqual(t, "", got.StartTime)
 	assert.NotEqual(t, 0, got.SysTicks)
+	assert.NotEqual(t, 0, got.GucMaxWorkerProcesses)
+	assert.NotEqual(t, 0, got.GucMaxParallelWorkers)
+	assert.NotEqual(t, int64(0), got.GucWalSegmentSize)
+	assert.NotEqual(t, "", got.DataDirectory)
 
 	// testing with already closed conn
 	conn.Close()
@@ -594,12 +748,12 @@ func Test_parseDuration(t *testing.T) {
 		{"00:05:23", 323, true},
 		{"01:00:00", 3600, true},
 		{"96:58:35", 349115, true},
-		{"791:04:45", 2847885, true},        // the value from issue #50
+		{"791:04:45", 2847885, true}, // the value from issue #50
 		{"1 day 00:00:00", 86400, true},
 		{"11 days 10:10:10", 987010, true},
 		{"2 days 03:30:45", 185445, true},
 		{"invalid", 0, false},
-		{"10:20", 0, false},                  // missing seconds — not a valid HH:MM:SS
+		{"10:20", 0, false}, // missing seconds — not a valid HH:MM:SS
 		{"abc:de:fg", 0, false},
 	}
 

@@ -85,6 +85,55 @@ The main stats table (the `dbstat` area, shared by every stat screen) scrolls ho
 - **Windowed render.** `printStatHeader`/`printStatData` (`top/stat.go`) render column 0 (frozen) then iterate only the columns inside the window, indexing values by **absolute** column index. The header bolds the frozen column name (sort-column highlight takes priority on column 0) and draws `‹`/`›` edge markers near the edges when columns are hidden in that direction; the marker cells are budgeted into the width so header and data rows stay aligned. The print functions take an `io.Writer` and the precomputed `columnWindow` (instead of reading `v.Size()` internally) so they are unit-testable without a live gocui terminal; the window is computed once in `renderDbstat` and the clamped offset is written back to `config.scrollOffset`. Terminal width comes from `v.Size()`, which returns the true drawing width because the `dbstat` view is created with `Frame=false`.
 - **Hotkeys** (`top/config_view.go`, `top/keybindings.go`): `scrollLeft`/`scrollRight` adjust `config.scrollOffset` and re-send `config.view` on `viewCh` only to retrigger an immediate re-render (the view itself is not mutated — unlike sort, which mutates `view.OrderKey`). Existing arrows (sort column / width), `<`, `/` are unchanged. Documented on the help screen (`top/help.go`).
 
+## Verbose Top-Panel Mode (010-feat-overview-dashboard)
+
+The `v` hotkey expands the two always-on summary panels — `sysstat` (left, +3 rows: iostat /
+nicstat / filesyst) and `pgstat` (right, +5 rows: workload / databases / workers / replication /
+bgwr-ckpt) — into an extended instance-health overview. It is a display **mode**, not a registered
+view: it reuses the free-form `printSysstat`/`printPgstat` render path, registers no `view.View`, and
+therefore has **zero view-count test impact** (no `TestNew`/`Test_filterViews` churn). It is gated by a
+dedicated `view.View.Verbose bool` (rides `viewCh` to the collector) mirrored into `top.config.verbose`
+(read by the renderer/layout) — see the patterns.md "Verbose display-mode toggle" pattern and ADR
+[010] for why this is a separate boolean rather than an overloaded `CollectExtra`.
+
+- **Pure geometry — `topBandLayout` (`top/layout.go:33`).** `topBandLayout(verbose, maxY)` returns the
+  band/cmdline/dbstat y-coordinates plus an `expanded` flag; `layout()` (`top/ui.go`) feeds the result
+  into the four `SetView` calls. Compact (and the height-guard fallback) reproduces the historical
+  literals (`4/4/3/5/4`) byte-identically; verbose grows the panels asymmetrically (`sysstat` +3,
+  `pgstat` +5) and shifts `cmdline`/`dbstat` down. The height-guard refuses to expand when the band +
+  cmdline + table header + ≥1 data row would not fit (threshold `maxY ≥ 13`), falling back to compact +
+  a one-shot cmdline hint. Pure-function, gocui-free, table-tested — the [009] `visibleColumns` precedent.
+- **All-three system collection branch (`internal/stat/stat.go:262`, `:401`).** When `view.Verbose` is
+  set, `Collector.Update` runs a verbose-gated branch placed **after** the existing mutually-exclusive
+  `switch c.config.collectExtra` (`stat.go:236`) that collects disk+net+fs **every tick** via the same
+  `collectDiskstats`/`collectNetdevs`/`collectFsstats` readers the side panels use (same `%util` math →
+  consistency). Each source is `== nil` guarded so a source already populated by an active side panel is
+  not re-collected; a per-source error leaves that source `nil` (rendered `n/a`) without aborting the
+  sample. The existing switch is untouched, so the side panels are unaffected.
+- **`verboseCollectState` sub-struct (`internal/stat/stat.go:83`, field at `:138`).** A named sub-struct
+  on `Collector` groups all verbose-specific collection state so it does not leak across the shared
+  `Collector`. It carries the first-tick flag + re-arm fields (`verboseFirstTick = !prevVerboseActive` on
+  every OFF→ON, so a first tick or a re-enable without a view change emits `n/a` for deltas) — bridged to
+  the renderer via the public `System.VerboseFirstTick` (collector and renderer talk only through
+  `stat.Stat` on `statCh`) — and the per-source latency guard for the one dear no-twin aggregate (DB
+  sizes/growth): `dbSizeThrottled(threshold, budget, sinceLastRun)` (a pure function) throttles it to a
+  cached **stale** value (not `n/a`) when its last query exceeded `latencyGuardThreshold(refresh) =
+  max(refresh/4, 500ms)`, auto-resuming after a one-refresh cadence budget. System rows are never
+  throttled (consistency with the full panels). The re-arm does **not** rely on `c.Reset()` —
+  `toggleVerbose` never calls it (ADR [010]); `Reset()` clears the sub-struct in lockstep with prev/curr.
+- **Aggregate queries (`internal/query/overview.go`).** New flat single-row aggregates for the pgstat
+  verbose rows: `OverviewWorkload`/`OverviewDatabases`/`OverviewDatabasesSize`/`OverviewWorkers`/
+  WAL-size/send-recv (static SQL) and recovery-aware `{{.WalFunction1/2}}` templates for
+  replication-lag/slots; the archiving backlog reuses the `count(.ready) × wal_segment_size` idiom from
+  `wal.go`; bgwr/ckpt reuses `SelectStatBgwriterQuery(version)` (no new SQL). `collectOverviewStat`
+  (`internal/stat/postgres.go`) scans each aggregate as its own `QueryRow` (a privilege/feature failure
+  degrades one field to `n/a` via `*Valid`/`sql.NullInt64` sentinels, never the raw PG error text), with
+  Go-side rates vs a prev snapshot (tps = `(Δcommit+Δrollback)/itv`; `others` = interval delta, no `/s`;
+  cache hit = per-interval `Δhit/Δ(hit+read)`). Four GUCs (`max_worker_processes`,
+  `max_logical_replication_workers`, `max_parallel_workers`, `wal_segment_size`) and `data_directory`
+  were added to `SelectCommonProperties` + `PostgresProperties` + the `GetPostgresProperties` `.Scan(...)`
+  in lockstep.
+
 View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` and `Ncols` per view at connection time.
 
 The `view.View.NotRecordable` field and the `record/record.go:filterViews()` branch that honors it still exist, but no production view sets it anymore (feature 008 cleared the last of them — the five 0.11.0 screens, plus a stale flag on `procpidstat`). The mechanism is kept solely for the synthetic drop-branch test (`record.TestFilterViews_dropsExplicitNotRecordable`).

@@ -1,0 +1,34 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Hint and What-to-do point to internal/stat/netdev.go for the nicstat Mbps divisor (\"как считается Mbps в netdev.go\"). netdev.go only stores raw Rbytes/Tbytes (bytes/s) fields; the actual Mbps conversion (Rbytes/1024/128) is performed at print time in top/stat.go:741 (printNetdev), not in netdev.go. The tech-spec itself (Decision 5) correctly locates it in the print path.",
+      "fix": "Point the Mbps-divisor reference to top/stat.go printNetdev (line ~741, `s[i].Rbytes/1024/128 // conversion to Mbps`) rather than netdev.go. netdev.go remains a valid reference for the source byte fields."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Task 2 documents the collectStat() viewCh handler as ending in a single 'unconditional c.Reset() at top/stat.go:108', and instructs inserting the verbose continue-branch before it. The actual code has TWO Reset paths in the case v = <-viewCh block: a conditional Reset at line 101 (prevCollectExtra change) AND the unconditional Reset at line 108. The CollectExtra branch (95-103) does NOT `continue`, so it falls through to the line-108 Reset. The verbose early-out must be placed so a verbose-only toggle returns before reaching line 101 as well, otherwise a future combined change could double-reset. The instruction (insert before 108, mirror ShowExtra branch at 89-93 with a `continue`) is correct, but the 'single unconditional Reset' framing understates the surrounding structure.",
+      "fix": "Clarify that the verbose `if prevVerbose != v.Verbose { prevVerbose = v.Verbose; continue }` branch goes alongside the other early-out branches (refresh 83-86, ShowExtra 89-93) — i.e. BEFORE the CollectExtra Reset at line 101 and the unconditional Reset at line 108 — so a verbose-only push exits the case via continue and reaches neither Reset."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Line-number references in Task 2 are approximate/slightly off against current code. config_view.go: toggleIdleConns is at line 411 (task says 411-435 — OK); viewSwitchHandler is at 240 with the scrollOffset reset at line 243 (task says 240-245 / 243 — OK). top/extra.go showExtra mirror loop is at lines 70-75 (confirmed exact). view.View struct ShowExtra/CollectExtra at lines 26-27 (task says struct 'lines 10-31' — OK). config struct in top/config.go is lines 10-20 with scrollOffset at line 19 (confirmed). These are accurate; only the collectStat internal line citations (57/89-93/108) should be treated as guidance since edits will shift them.",
+      "fix": "No code change required; treat all cited line numbers as approximate anchors. The referenced symbols (showExtra mirror loop, ShowExtra branch, unconditional Reset, viewSwitchHandler scrollOffset reset, toggleIdleConns) all exist as described."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 38,
+    "issues_found": 3
+  }
+}

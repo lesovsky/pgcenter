@@ -1,0 +1,58 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "08",
+      "section": "Context Files",
+      "issue": "Context File links use deep-relative paths (e.g. `[top/stat.go](../../../top/stat.go)`, `[overview.md](../../../.claude/skills/project-knowledge/overview.md)`), while sibling tasks 06/07 use repo-root-relative paths (`[top/ui.go](top/ui.go)`, `[overview.md](.claude/skills/project-knowledge/overview.md)`). The path style is inconsistent across the batch; only one convention can resolve correctly relative to the task file's own directory.",
+      "fix": "Pick one link convention for the whole batch (repo-root-relative is the dev-task-creator/template default) and apply it uniformly to all Context File links in task 08."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "09",
+      "section": "Context Files / Post-completion",
+      "issue": "Feature-artifact links use the full `docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard-*.md` path (e.g. user-spec, tech-spec, decisions log), whereas tasks 06/07/08 use the template's bare `{feature_base}-*.md` form (`010-feat-overview-dashboard.md`). Since the task file already lives in that directory, the full-path links will not resolve relative to the task file. Same inconsistency repeats in the Post-completion decisions-log link.",
+      "fix": "Use bare relative names for feature artifacts (e.g. `[...](010-feat-overview-dashboard-decisions.md)`) to match the template convention and the other tasks in the batch."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "10",
+      "section": "Context Files / Post-completion",
+      "issue": "Feature-artifact links use the full `docs/features/010-feat-overview-dashboard/...` path while PK links use repo-root-relative `.claude/skills/...`, mixing two conventions within the same task and diverging from tasks 06/07/08. The full-path feature-artifact links do not resolve relative to the task file's directory.",
+      "fix": "Normalize feature-artifact links to the bare `010-feat-overview-dashboard-*.md` form used elsewhere in the batch; keep PK links repo-root-relative consistently."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "10",
+      "section": "frontmatter",
+      "issue": "`verify` is set to `bash — make build && make test && make lint`. The template treats `verify` as the verification tool/channel (curl|bash|user). The value is a valid string but folds the tool plus a command into one field; tech-spec's per-task verify for task 10 is simply `bash`.",
+      "fix": "Optional: set `verify: bash` and keep the concrete commands in Verification Steps (where they already appear), to match the tech-spec verify column and the template's intent. Non-blocking."
+    }
+  ],
+  "checks_passed": {
+    "frontmatter": "All five tasks have valid YAML frontmatter; status=planned (iteration 1); depends_on are arrays of ID strings; wave is a number >=1; skills is an array; reviewers is an array (empty [] for task 10). No extra fields.",
+    "structure": "All required sections present and in correct order. Tasks 06-09 (code) include TDD Anchor; task 10 (pre-deploy-qa) correctly omits TDD Anchor. No template placeholders or TODO/TBD markers.",
+    "skills": "Skills match content: tasks 06-09 [code-writing] with /skill:code-writing in Required Skills; task 10 [pre-deploy-qa] with /skill:pre-deploy-qa. Frontmatter skills == Required Skills section in every task.",
+    "reviewers": "Frontmatter reviewers match Reviewers section in every task. Task 08 correctly carries dev-security-auditor (touches new path/symlink handling). Task 10 reviewers=[] is correct for a self-verifying QA task — not a defect.",
+    "depends_on_waves": "All depends_on reference existing task IDs and every dependency sits in an earlier wave: 06->[02] w2>w1; 07->[02,05] w3>w1,w2; 08->[01,03,05,07] w4>w1,w2,w3; 09->[05,07,08] w5>w2,w3,w4; 10->[01..09] w6>all. No cycles. Matches requested expectations and tech-spec waves.",
+    "verify_column": "verify values match the tech-spec Agent Verification Plan per-task column: 06=user, 07=bash, 08=user, 09=user, 10=bash.",
+    "carry_forward": "Tech-spec Implementation Tasks entries for tasks 6-10 carry no per-task AC or TDD anchors (the tech-spec explicitly defers field layout/AC/TDD to task-decomposition). Each task's Description faithfully reflects its tech-spec entry, Decisions, and Risks. No AC/TDD items were dropped — nothing to carry forward was lost.",
+    "atomicity": "Each task is one cohesive unit. File sets are disjoint within waves and hot files (top/stat.go, internal/stat/stat.go, internal/query/common.go) are sequenced across waves as the tech-spec intends. No merge/split/over-decomposition concerns."
+  },
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 4,
+    "critical": 0,
+    "major": 0,
+    "minor": 4
+  }
+}

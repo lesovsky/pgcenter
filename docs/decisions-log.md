@@ -568,3 +568,131 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** Layering two bold/background escape sequences on one cell risks a garbled render. Sort state is the more actionable signal, and both states reading as "emphasized" is visually consistent.
 
 **Alternatives considered:** A third combined style for the overlap — extra escape-sequence handling for a rare case, rejected as over-engineering.
+
+---
+
+## [010-feat-overview-dashboard] Instance overview as a verbose panel mode, not a new view
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** The roadmap asked for an instance-overview "dashboard". The two top panels (`sysstat`/`pgstat`) already are an always-on mini-overview, so a separate full-screen card-grid view would duplicate them and also incur view-count test churn (`TestNew`, `Test_filterViews`, `TestView_VersionOK`).
+
+**Decision:** Implement the overview as a display **mode** toggled by `v` that expands the two existing panels with extra `label:value` rows. It reuses the free-form `printSysstat`/`printPgstat` render path and registers **no** `view.View`.
+
+**Rationale:** A separate screen would duplicate the always-visible header (antipattern) and force a new `printStat` branch + view-count test churn. A mode adds zero registered views and rides with the DBA over any detail screen — the actual differentiator vs pg_activity, whose rich block is pinned only over the process list.
+
+**Alternatives considered:** A separate full-screen `overview` view with a card grid — rejected (duplication antipattern, invasive `printStat` branch, view-count test churn).
+
+---
+
+## [010-feat-overview-dashboard] `view.Verbose` + `config.verbose` dual boolean, not an overloaded `CollectExtra`
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** The mode flag must reach both the collector (to gate the dear collection) and the renderer/layout, and it must coexist with the active view's existing enrichment. The closest precedent is `CollectExtra` (ADR [001]).
+
+**Decision:** A dedicated `view.View.Verbose bool` (rides `viewCh` to `Collector.Update`) mirrored into `top.config.verbose` (read by renderer/layout), kept in sync by `toggleVerbose` via the `showExtra` write-into-all-views idiom.
+
+**Rationale:** `CollectExtra` is a single mutually-exclusive `int` (paired with `CollectProcPidStat`) — verbose must coexist with the active view's enrichment, not displace it. A separate boolean is cleaner and avoids the `prevCollectExtra` Reset path entirely (see the next ADR).
+
+**Alternatives considered:** A `CollectVerboseSystem` `CollectExtra` constant — rejected (mutual exclusivity + would fire the `prevCollectExtra` Reset).
+
+---
+
+## [010-feat-overview-dashboard] Pure `topBandLayout` geometry function
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** Historically the panel heights were hard-coded literals (`y1=4`) and `cmdline` sat on `y=3..5`. Verbose grows the band to 7/9 rows, which requires recomputing the band height, shifting `cmdline`/`dbstat` down, and a height-guard — the invasive core, touching the shared UI loop on every screen.
+
+**Decision:** Extract the band/cmdline/dbstat coordinate arithmetic into a pure `topBandLayout(verbose, maxY)` (`top/layout.go`) and keep `layout()` to `SetView` plumbing. Compact (and the guard fallback) reproduces the historical literals byte-identically.
+
+**Rationale:** A pure function makes the only non-trivial geometry table-testable without gocui (the [009] `visibleColumns` precedent); the compact path stays unchanged.
+
+**Alternatives considered:** Inline literal coords in `layout()` — rejected (untestable, error-prone).
+
+---
+
+## [010-feat-overview-dashboard] All-three system collection in a branch after (not modifying) the `collectExtra` switch
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** Verbose shows iostat+nicstat+filesyst simultaneously, but the existing `switch c.config.collectExtra` collects disk/net/fs **mutually exclusively** (one side panel at a time). Reusing that switch for all three (R1) would alter side-panel behavior.
+
+**Decision:** Add a verbose-gated branch **after** the untouched switch, collecting disk+net+fs each tick with `== nil` guards (a source already populated by an active side panel is not re-collected); a per-source error leaves that source `nil` (→ `n/a`) without aborting the sample.
+
+**Rationale:** Leaving the mutual-exclusion switch untouched and adding a parallel branch keeps the side panels unaffected. Per-source prev/curr snapshots already live on `Collector`, so collecting all three does not interfere.
+
+**Alternatives considered:** Modify the mutual-exclusion switch to collect all three — rejected (R1: would change side-panel behavior).
+
+---
+
+## [010-feat-overview-dashboard] `verboseCollectState` first-tick re-arm without relying on `Reset()`
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** Delta rows have no prior sample on the first tick and on every OFF→ON re-enable, and must render `n/a` (not `0`) then. The natural "first tick" signal would be `c.Reset()`, but `toggleVerbose` deliberately does **not** call `Reset()` (ADR above), so re-arm cannot depend on it.
+
+**Decision:** Group the verbose collection state in a named `verboseCollectState` sub-struct on `Collector`. Set `verboseFirstTick = !prevVerboseActive` on entry to the verbose branch (covers the very first tick and each OFF→ON re-enable without a view change), bridged to the renderer via the public `System.VerboseFirstTick`. `Reset()` clears the sub-struct in lockstep with prev/curr, but the re-arm does not rely on it.
+
+**Rationale:** A named sub-struct keeps verbose-specific fields from leaking across the shared `Collector`. Deriving the flag from `prevVerboseActive` (not `Reset()`, not `len(slice)==0` — the first-tick slice is already filled with a zero delta) makes the first-tick `n/a` correct regardless of the toggle's no-Reset semantics.
+
+**Alternatives considered:** Key first-tick off `c.Reset()` (broken — verbose toggle skips Reset) or off `len(Diskstats)==0` (broken — slice is non-empty on the first tick). Both rejected.
+
+---
+
+## [010-feat-overview-dashboard] Archiving backlog via `count(.ready) × wal_segment_size`
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** The replication row needs a WAL-archiving backlog signal that works over the network (no PL/Perl) and degrades cleanly when archiving is off.
+
+**Decision:** `count(*)` of `.ready` entries in `pg_wal/archive_status` × `wal_segment_size` — pure SQL via `pg_ls_dir`, run as its own `QueryRow`. `n/a` on `archive_mode=off` / insufficient privileges (`pg_monitor`).
+
+**Rationale:** Operationally that *is* the backlog, and pure SQL works remote with no PL/Perl. It adapts the exact existing precedent `count(1) * pg_size_bytes(current_setting('wal_segment_size'))` (`wal.go:6`).
+
+**Alternatives considered:** LSN-diff `current_lsn − LSN(last_archived_wal)` — rejected (filename→LSN conversion is fiddly; lags non-linearly on archiver failure).
+
+---
+
+## [010-feat-overview-dashboard] Split `databases` into two queries to isolate the size aggregate
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** The `databases` row shows count + cache-hit (cheap, always available) **and** `sum(pg_database_size)` (expensive). One combined query would let a size-aggregate failure (or its cost) blank the cheap, always-available signals.
+
+**Decision:** Two queries — `OverviewDatabases` (count + cache counters, cheap, always populated) and `OverviewDatabasesSize` (size sum, its own `QueryRow`, the only thing that gates `TotalSizeValid` and feeds the latency guard).
+
+**Rationale:** Isolating the dear/fallible size aggregate means its failure or throttling degrades only the size/growth fields, leaving count + cache-hit intact. It is also the single source the latency guard throttles.
+
+**Alternatives considered:** One combined query — rejected (a size failure would blank count/cache, and the dear aggregate could not be throttled independently).
+
+---
+
+## [010-feat-overview-dashboard] Latency guard threshold `max(refresh/4, 500ms)`, system rows never throttled
+
+**Date:** 2026-06-25
+**Feature:** 010-feat-overview-dashboard
+**Status:** Accepted
+
+**Context:** The dear no-twin aggregate (DB sizes/growth) can be costly on a loaded instance, but the system rows (iostat/nicstat/filesyst) must stay consistent with the full panels a DBA cross-checks. All cadence is hidden behind the single `z` interval knob — no second user knob.
+
+**Decision:** Throttle **only** the dear no-twin aggregate via a per-source latency guard: skip its next collection when its last query exceeded `latencyGuardThreshold(refresh) = max(refresh/4, 500ms)` (named `verboseGuardFraction = 4`, `verboseGuardFloor = 500ms`), serving its last (**stale**) value — not `n/a` — and auto-resuming after a one-refresh cadence budget (`dbSizeThrottled` pure function). System rows collect every tick.
+
+**Rationale:** System rows must never diverge from the full panels, so only the no-twin aggregate is throttled. A stale value is more honest than `n/a` for a value that merely lagged. The floor/fraction keeps the guard sane at both short (`refresh=1s` → 500ms floor) and long (`refresh=4s` → 1s) intervals; the exact constant was deferred from the tech-spec to task-decomposition.
+
+**Alternatives considered:** A generic multi-rhythm scheduler now — rejected (YAGNI; the per-source seam suffices). Throttling system rows too — rejected (breaks the consistency promise).

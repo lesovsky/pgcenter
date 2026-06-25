@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "010-feat-overview-dashboard",
+    "feature_name": "overview-dashboard",
+    "feature_base": "docs/features/010-feat-overview-dashboard/010-feat-overview-dashboard",
+    "project": "pgcenter",
+    "feature_size": "L",
+    "_note_size": "revised M->L by verbose-panel pivot (Q6/Q7); was L, thinned to M, restored to L",
+    "model": "claude-opus-4-8[1m]",
+    "date_started": "2026-06-23",
+    "date_completed": "2026-06-25"
+  },
+  "phases": {
+    "user_spec": { "status": "completed", "started": "2026-06-23 21:58:53", "ended": "2026-06-25 12:00:00", "duration_min": 2281, "touch_time_min": 2281, "human_wait_time_min": 0 },
+    "tech_spec": { "status": "completed", "started": "2026-06-25 12:10:00", "ended": "2026-06-25 14:30:00", "duration_min": 140, "touch_time_min": 140, "human_wait_time_min": 0 },
+    "task_decomposition": { "status": "completed", "started": "2026-06-25 14:35:00", "ended": "2026-06-25 16:00:00", "duration_min": 85, "touch_time_min": 85, "human_wait_time_min": 0 },
+    "feature_execution": { "status": "completed", "started": "2026-06-25 16:05:00", "ended": "2026-06-25 17:30:00", "duration_min": 85, "touch_time_min": 85, "human_wait_time_min": 0 },
+    "done": { "status": "completed", "started": "2026-06-25 17:30:00", "ended": "2026-06-25 17:45:00", "duration_min": 15, "touch_time_min": 15, "human_wait_time_min": 0 }
+  },
+  "quality": {
+    "validation_rounds": { "user_spec": 2, "tech_spec": 2, "task_decomposition": 2 },
+    "validation_findings": { "critical": 0, "major": 4, "minor": 29 },
+    "review_rounds": { "task_01": 2, "task_02": 1, "task_03": 1, "task_04": 1, "task_05": 2, "task_06": 1, "task_07": 1, "task_08": 3, "task_09": 2 },
+    "review_findings": { "critical": 2, "major": 7, "minor": 51 },
+    "first_pass_rate_pct": 66.7
+  },
+  "volume": {
+    "interview_questions": 17,
+    "tasks_count": 10,
+    "waves_count": 6,
+    "agents_spawned": 28,
+    "commits_count": 54
+  },
+  "totals": {
+    "total_lead_time_min": 2626,
+    "total_touch_time_min": 2606,
+    "total_human_wait_time_min": 0,
+    "flow_efficiency_pct": 99.2
+  }
+}

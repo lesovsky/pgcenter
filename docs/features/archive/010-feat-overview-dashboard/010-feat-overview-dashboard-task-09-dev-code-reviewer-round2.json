@@ -1,0 +1,24 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "All three round-1 findings are resolved correctly and minimally. The critical latch is gone: dbSizeThrottled is now a pure 3-arg decision (threshold, budget, sinceLastRun) gated by a per-source cadence (dbSizeLastRun), and Update stamps BOTH dbSizeLastRun and dbSizeLastLatency on every real collection, so a slow source is skipped only for one refresh budget and then force-collected to re-probe — a genuine throttle with auto-resume reachable on the real Update path. The two minors (narrow db-size latency measurement returned from collectOverviewStat; documented printCmdline self-clear coupling) are addressed. The cadence logic introduces no off-by-one and the zero-time first-tick case is harmless because the dbSizeCacheValid guard short-circuits before sinceLastRun is consulted. No regressions from the verboseCollectState field migration.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/stat.go",
+      "line": 412,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "skipSize is computed from time.Since(c.verbose.dbSizeLastRun) read at the top of the verbose branch, but the value is only meaningful once dbSizeCacheValid is true (otherwise dbSizeThrottled ignores it). This is correct and intentional, but a one-line note that the huge time.Since(zero-time) on the very first tick is deliberately unused (short-circuited by the !dbSizeCacheValid guard inside dbSizeThrottled) would make the harmlessness self-documenting at the call site.",
+      "benefit": "Removes a momentary double-take for a future maintainer who sees an unguarded time.Since on a possibly-zero timestamp; the safety currently lives only in the callee's first guard.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  }
+}

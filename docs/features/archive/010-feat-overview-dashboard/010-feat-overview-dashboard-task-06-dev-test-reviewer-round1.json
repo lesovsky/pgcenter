@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Test_topBandLayout is a meaningful, gocui-free table test that covers all four required TDD-anchor sub-cases (compact, verbose, height-guard, boundary on both sides). Every returned coordinate plus the expanded flag is asserted with named messages, mirroring the visibleColumns precedent. The guard threshold (maxY>=13) is verified at both adjacent values (12 fallback / 13 expand), which is exactly the litmus-protected behavior. Only minor, optional hardening gaps remain (no explicit zero/negative maxY case, and the verbose-fallback path is the SAME compact tuple as the unconditional compact case, so a single boundary asymmetry is theoretically possible but already pinned by the +1/-1 boundary pair).",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/layout_test.go:30 (Test_topBandLayout table)",
+      "issue": "No sub-case exercises pathological maxY values: maxY=0 and negative maxY. layout() in ui.go returns early on maxX==0||maxY==0 (ui.go:113) so topBandLayout is never called with maxY==0 in production, but the function itself is public-to-package and the task's Edge cases section explicitly calls out 'very short terminal (maxY small) ... never return coordinates that overlap, invert (y0>y1), or push dbstat off-screen'. The current guard (dbstatY0+2 > maxY-1) does fall back correctly for maxY<=0, but that safety is asserted nowhere — a regression that flipped the comparison would still pass all five existing rows.",
+      "recommendation": "Add a row e.g. {name:\"verbose-zero-maxY\", verbose:true, maxY:0, sysstatY1:4,pgstatY1:4,cmdlineY0:3,cmdlineY1:5,dbstatY0:4, expanded:false} (and optionally maxY:-5) to pin that the guard degrades to compact for non-positive maxY rather than emitting inverted/negative-clearing coords. This is the litmus guard for the 'never broken coords' acceptance criterion.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/layout_test.go:42-55 (height-guard vs boundary-fallback)",
+      "issue": "The 'height-guard' (maxY=12) and 'boundary-fallback' (maxY=12) rows assert byte-identical inputs and outputs. They are the same test executed twice. The boundary intent (the threshold flips at 13) is fully carried by the boundary-expands(13)/boundary-fallback(12) pair; the separate height-guard(12) row catches no failure that boundary-fallback(12) does not.",
+      "recommendation": "Either remove the redundant 'height-guard' row, or repurpose it to a DIFFERENT short value (e.g. maxY=5, a realistically tiny terminal well below the threshold) so it covers a distinct point on the input range instead of duplicating maxY=12. Keeping a distinct small value also partially addresses the pathological-maxY gap above.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

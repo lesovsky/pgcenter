@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "The all-three verbose system-collection branch is correct and minimal: it is placed strictly after the untouched mutually-exclusive collectExtra switch, uses == nil guards to avoid double-collection, and never returns on a per-source error so one failing subsystem cannot blank the others. The verboseFirstTick / prevVerboseActive re-arm logic is implemented exactly per Decision 2 (independent of c.Reset()) and is well covered by TestCollector_Update_Verbose, including the OFF->ON-without-Reset scenario. Build and go vet are clean.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/stat.go",
+      "line": 197,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Inside each guard the local err from `if diskstats, err := c.collectDiskstats(db); err == nil` shadows the outer `err` declared at the top of Update. This is intentional and correct here (the error is deliberately discarded so the sample is not aborted), but the spec also notes 'do not log raw PG/path error text'. Currently the error is silently dropped entirely. Consider whether a debug-level availability marker (without the raw error text) is wanted now, or leave it for Task 8 where n/a rendering lives. No change required if availability tracking is deferred to Task 9's verboseCollectState as planned.",
+      "benefit": "Makes the deliberate error-swallow explicit/observable for future debugging without leaking filesystem paths.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/stat.go",
+      "line": 196,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The == nil guard distinguishes 'not collected' from 'collected but empty'. collectFsstats returns c.currFsstats, and readFsstats returns a non-nil empty `Fsstats{}` on the remote-without-pgcenter-schema path (fsstat.go:89). In that case s.Fsstats becomes a non-nil empty slice and the test assertion `len(stat.System.Fsstats) != 0` would pass only on local clusters. This matches the spec edge-case (remote => empty, not an abort) and the live test runs on a local cluster, so behavior is correct; just be aware the guard treats empty-non-nil as 'populated'. Task 8's n/a rendering should key off len()==0, not == nil, for delta sources.",
+      "benefit": "Prevents a downstream Task 8 bug where an empty-but-non-nil source is mistaken for a populated one.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

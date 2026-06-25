@@ -1,0 +1,33 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Task 02 verbose toggle plumbing is implemented faithfully to the tech-spec (Decision 2) and the task file. It correctly mirrors the showExtra write-into-all-views persistence pattern, adds the no-Reset verbose change-detection branch in collectStat() ahead of both Reset paths, and is covered by a test modeled on Test_toggleIdleConns. Build, go vet, and the new Test_toggleVerbose all pass; no view-count or keybinding regressions.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 113,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "There are now two consecutive change-detection branches (verbose at ~99-106 and CollectExtra at ~108-116) that each end in `continue` or a Reset. The ordering invariant 'verbose branch must precede both Reset paths' is load-bearing and only documented in code comments. Consider a brief grouping comment above the ShowExtra branch noting the intentional order (refresh -> ShowExtra -> Verbose -> CollectExtra -> unconditional Reset) so a future edit does not accidentally move the verbose early-out below a Reset.",
+      "benefit": "Protects the single highest-risk invariant of the task (no delta-blanking on toggle) against future reordering during later-wave edits to the same hot file.",
+      "optional": true
+    },
+    {
+      "file": "top/verbose_test.go",
+      "line": 21,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The test uses config.views[\"activity\"] as the active view but does not assert that toggling verbose leaves config.view.Name unchanged, nor that a subsequent viewSwitchHandler preserves Verbose (the persistence-across-switch AC). The map-entry assertion (lines 46-48) covers the mechanism, but an explicit 'switch view, flag still set' assertion would lock the persistence AC directly rather than by proxy.",
+      "benefit": "Directly verifies acceptance criterion 'verbose flag persists across screen switches' instead of inferring it from the views-map write, hardening against a future viewSwitchHandler change.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 7,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}
