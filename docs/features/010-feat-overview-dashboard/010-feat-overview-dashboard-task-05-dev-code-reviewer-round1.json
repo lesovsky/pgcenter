@@ -1,0 +1,61 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "changes_required",
+  "summary": "The data layer is well-structured and closely mirrors the established collectActivityStat pattern; cross-file consistency (NewOptions signature, PostgresProperties fields, bgwriter column names, DB methods) all check out and build/vet are clean. However, the database-size aggregate is NOT split into its own QueryRow as the spec mandates and as the code's own comment falsely claims, so a failure of sum(pg_database_size) cascades and blanks count + cache-hit-ratio too. There is also a minor sentinel inconsistency where TotalSizeValid is set true unconditionally on a successful combined scan.",
+  "criticalIssues": [
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 220,
+      "severity": "critical",
+      "category": "error-handling",
+      "issue": "The expensive/privileged sum(pg_database_size(datname)) aggregate is NOT executed as its own QueryRow. It is bundled with count(*), blks_hit and blks_read in the single OverviewDatabases query, scanned in one Scan call. The inline comment explicitly claims the opposite ('its own QueryRow ... We split it: count + cache counters come from one row; the size sum from a separate row'), but no split exists in the code.",
+      "impact": "Task 05 Acceptance Criteria and tech-spec Decision 6/10 require: 'Expensive/privileged aggregates (archiving backlog, sum of database sizes) run as their own QueryRow; failure of one -> n/a for that field, others populated.' Because pg_database_size is combined with the other columns, any failure of that function (e.g. a database the monitoring role cannot stat, a transient error, or a privilege issue) fails the whole OverviewDatabases scan. That silently blanks DatabasesCount, BlksHit/BlksRead and therefore the per-interval cache-hit ratio — exactly the row-wide cascade the spec was written to prevent. The misleading comment also makes future maintainers believe the resilience requirement is satisfied when it is not.",
+      "recommendation": "Split into two queries: (1) a cheap row 'SELECT count(*), sum(blks_hit), sum(blks_read) FROM pg_stat_database WHERE datname IS NOT NULL' that always populates DatabasesCount + cache counters; (2) a separate QueryRow 'SELECT coalesce(sum(pg_database_size(datname)),0) FROM pg_stat_database WHERE datname IS NOT NULL' whose failure sets only TotalSizeValid=false (n/a for TotalSize/GrowthPerSec) without touching count or cache-hit. Set TotalSizeValid=true only when the size query succeeds. Update the OverviewDatabases constant and its doc comment in internal/query/overview.go accordingly. Then correct the comment in collectOverviewStat to match reality."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 222,
+      "severity": "major",
+      "category": "best-practices",
+      "suggestion": "TotalSizeValid is set to true whenever the combined OverviewDatabases scan succeeds, conflating 'database size is available' with 'count/cache row succeeded'. Once the size sum is moved to its own QueryRow (see critical finding), TotalSizeValid should track only the success of that dedicated size query, so n/a for size is independent of the count/cache row.",
+      "benefit": "Makes the availability flag semantically precise and aligned with the sentinel design (n/a distinguishable from a real 0), so Task 8 renders growth/size n/a correctly without falsely suppressing it when only the cache row failed.",
+      "optional": false
+    },
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 246,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The workers, wal-size and send/recv aggregates swallow scan errors with 'if err := ...; err != nil { _ = err }' leaving silent zero values that are indistinguishable from a real 0 (no availability flag). For these always-present aggregates that is acceptable, but the bare '_ = err' blocks read as accidental error-swallowing. Consider a one-line comment per block stating the zero-on-error behavior is intentional (the WAL-size/send-recv blocks already do; the workers block does), or drop the redundant '_ = err' since the err is already scoped to the if.",
+      "benefit": "Removes the appearance of an accidentally swallowed error and clarifies intent for reviewers and gosec.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 290,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "collectOverviewStat is ~95 lines. It is below the 100-line critical threshold and reads sequentially, but it mixes seven independent aggregates. Extracting the workload and databases blocks into small helpers (as bgwriter already is) would keep each aggregate's rate logic self-contained and easier to test in isolation.",
+      "benefit": "Lower cyclomatic complexity per function and clearer per-row responsibility, matching the bgwriter extraction already present.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 88,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Tests do not cover the database-size degradation path (failure of the size aggregate leaving count/cache populated). Once the size query is split per the critical finding, add a Test_collectOverviewStat_Degradation case (or a unit-level check) asserting TotalSizeValid=false while DatabasesCount and CacheHitRatio remain populated, mirroring the existing lag/slots degradation assertions.",
+      "benefit": "Locks in the spec's per-row resilience guarantee for the database-size aggregate, which is currently untested and was the source of the critical finding.",
+      "optional": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 1,
+    "majorIssuesCount": 2,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate"
+  }
+}

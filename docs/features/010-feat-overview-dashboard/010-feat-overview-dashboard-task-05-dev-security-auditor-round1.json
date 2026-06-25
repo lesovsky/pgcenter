@@ -1,0 +1,35 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A09:2021-Security Logging and Monitoring",
+      "title": "Silent error swallowing across all overview aggregates limits operator observability",
+      "description": "By design (and per the task spec) every aggregate in collectOverviewStat and collectOverviewBgwriter swallows its error silently: privileged/expensive rows (archiving backlog, sum of database sizes) and all others use `_ = err` or `if err == nil` guards, and the function returns no error at all. This correctly prevents raw PG error text (filesystem paths, object names) from leaking, which is the stated requirement and the right call for the security-sensitive aggregates. The only downside is purely operational: a persistently misconfigured/under-privileged role produces a permanent silent 'n/a' with no diagnostic signal anywhere. This is acceptable for a TUI sampling loop and matches the existing pattern at internal/stat/postgres.go (the commented-out `log.Warnf` TODO around line 468). No code change is required to satisfy the security requirements; noted only for completeness. If future diagnostics are added, surface only a sanitized, static message (e.g. error code class) and never err.Error().",
+      "location": "internal/stat/postgres.go:185-247 (collectOverviewStat), :252-295 (collectOverviewBgwriter)",
+      "impact": "No security impact. Operators cannot distinguish 'feature genuinely absent' (no standbys/slots, archive_mode=off) from 'role lacks pg_monitor' without external investigation. Acceptable trade-off given the no-error-leak requirement.",
+      "recommendation": "No change required. Keep errors swallowed for the privileged aggregates. If diagnostics are ever desired, log only a static, code-class message (e.g. 'archiving backlog unavailable: insufficient privilege') and never the raw err.Error().",
+      "cwe": "CWE-778"
+    }
+  ],
+  "focusVerification": {
+    "1_static_sql_no_injection": {
+      "verdict": "PASS",
+      "evidence": "All queries in internal/query/overview.go are `const` string-concatenation literals. No fmt.Sprintf, string formatting, or concatenation of user/external input into any query. The only dynamic part is Go text/template substitution of {{.WalFunction1}}/{{.WalFunction2}} in OverviewReplicationLag and OverviewReplicationSlots, applied via query.Format(tmpl, opts). Those two placeholders resolve to hardcoded constant function names ('pg_wal_lsn_diff', 'pg_current_wal_lsn', 'pg_last_wal_receive_lsn', etc.) chosen by selectWalFunctions purely from version (int) and recovery (PG-derived 'f'/'t' string) — see internal/query/query.go:53,68-87. No user-controlled data reaches the SQL. Tests assert no residual '{{' after Format (overview_test.go:178,201,205). collectOverviewBgwriter reuses the existing static SelectStatBgwriterQuery (no new SQL)."
+    },
+    "2_archiving_backlog_own_queryrow_degrades": {
+      "verdict": "PASS",
+      "evidence": "OverviewArchivingBacklog (pg_ls_dir('pg_wal/archive_status'), privileged) runs as its OWN db.QueryRow(...).Scan(&backlog) at internal/stat/postgres.go:283. On any error (42501 privilege error, archive_mode=off, or a NULL backlog), the `err == nil && backlog.Valid` guard fails, so ArchivingBacklogValid stays false (-> n/a) and execution continues to the next aggregate. The failure of this single row never aborts the sample; collectOverviewStat always returns a valid struct. Test_collectOverviewStat_Degradation confirms other rows remain populated when replication/privileged fields degrade."
+    },
+    "3_no_raw_pg_error_leakage": {
+      "verdict": "PASS",
+      "evidence": "No err.Error() call exists in the changed code. In collectOverviewStat every error is either consumed by an `if err == nil` guard (workload, databases, lag, slots, archiving backlog, send/recv) or explicitly discarded with `_ = err` (workers, wal size, send/recv). The function signature returns only PgstatOverview (no error), so nothing propagates up. In collectOverviewBgwriter (postgres.go:252) db.Query/rows.Scan errors cause an early silent `return` — never logged or surfaced. stat.go:294 invokes collectOverviewStat without capturing or surfacing any error. No log.* call touches these aggregates. Raw PG error text containing filesystem paths / object names is never surfaced, returned, or logged."
+    }
+  }
+}

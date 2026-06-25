@@ -1,0 +1,67 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Round 2 re-review of Task 05. All round-1 findings are resolved: the database-size aggregate is now its own const (OverviewDatabasesSize) scanned via an independent QueryRow, TotalSizeValid is set exclusively by that QueryRow, a degradation test now covers the size aggregate's independence, the cacheHitRatio() pure helper was extracted, and the redundant `_ = err` was dropped. Build and vet are clean; prev-snapshot ordering, TotalSizeValid semantics, and two-QueryRow independence all verified correct. No regressions introduced.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "excellent"
+  },
+  "round1Resolution": [
+    {
+      "severity": "critical",
+      "finding": "sum(pg_database_size) merged into the count/cache QueryRow",
+      "status": "resolved",
+      "evidence": "internal/query/overview.go:56-58 defines OverviewDatabasesSize as a standalone single-column const; internal/stat/postgres.go:443 scans it via its own db.QueryRow, separate from the count+cache scan at postgres.go:431. A size failure no longer aborts the count/cache row."
+    },
+    {
+      "severity": "major",
+      "finding": "TotalSizeValid tracked the combined count+size scan",
+      "status": "resolved",
+      "evidence": "internal/stat/postgres.go:444 — TotalSizeValid=true is set only inside the OverviewDatabasesSize QueryRow success branch. The OverviewDatabases scan (postgres.go:431-438) never touches it. GrowthPerSec is additionally guarded by `prev.TotalSizeValid` (postgres.go:445) so a prior n/a size yields no garbage delta."
+    },
+    {
+      "severity": "major",
+      "finding": "No degradation/size assertions in tests",
+      "status": "resolved",
+      "evidence": "internal/stat/postgres_test.go Test_collectOverviewStat_Degradation asserts TotalSizeValid stays true and is unaffected while replication rows (lag/slots/retained) degrade to n/a; internal/query/overview_test.go databases_size subtest scans OverviewDatabasesSize standalone (total >= 0)."
+    },
+    {
+      "severity": "minor",
+      "finding": "Cosmetic `_ = err` and function length",
+      "status": "resolved",
+      "evidence": "cacheHitRatio() extracted as a pure helper (postgres.go:543) with a dedicated table test (Test_cacheHitRatio incl. div-by-zero and negative-denom edges); the redundant `_ = err` was dropped."
+    }
+  ],
+  "regressionChecks": [
+    {
+      "check": "prev-snapshot ordering",
+      "result": "correct",
+      "evidence": "internal/stat/stat.go:283 calls collectOverviewStat with c.currPgStat.Overview (the previous tick) BEFORE the c.prevPgStat = c.currPgStat shift at line 288. Comment accurately documents this."
+    },
+    {
+      "check": "two-QueryRow independence",
+      "result": "correct",
+      "evidence": "OverviewDatabases (count+blks_hit+blks_read) and OverviewDatabasesSize run as separate db.QueryRow calls; a failure of either does not affect the other's validity flags."
+    },
+    {
+      "check": "cache-hit ratio after split",
+      "result": "safe",
+      "evidence": "CacheHitRatio is computed only inside the OverviewDatabases success branch (postgres.go:433-437); on scan failure it is skipped. cacheHitRatio() returns (0,false) for denom<=0, never NaN."
+    },
+    {
+      "check": "bgwriter by-name scan keys",
+      "result": "correct",
+      "evidence": "Scan keys ckpt_timed/ckpt_req/'ckpt_write,ms'/'ckpt_sync,ms'/maxwritten (postgres.go:527-531) match the aliases in internal/query/bgwriter.go across PG14-16/17/18 variants; Test_OverviewBgwriterColumns guards against renames."
+    },
+    {
+      "check": "build & vet",
+      "result": "clean",
+      "evidence": "go build ./internal/... and go vet ./internal/query ./internal/stat both pass; strconv/strings/database/sql imports present."
+    }
+  ]
+}
