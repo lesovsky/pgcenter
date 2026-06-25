@@ -74,6 +74,30 @@ func TestReserveWidth(t *testing.T) {
 	}
 }
 
+func TestSizeWidth(t *testing.T) {
+	testcases := []struct {
+		v     float64
+		width int
+		want  string
+	}{
+		{v: 0, width: 8, want: "       0"},            // "0" right-aligned into 8
+		{v: 512, width: 8, want: "    512B"},          // "512B" padded to 8
+		{v: 1 << 20, width: 8, want: "    1.0M"},      // value narrower than reserve: leading padding
+		{v: 512254851486, width: 8, want: "  477.1G"}, // 6-char value, padded to 8 (two leading spaces)
+		{v: 1 << 20, width: 4, want: "1.0M"},          // value exactly fills reserve: no padding
+		{v: 512254851486, width: 4, want: "477.1G"},   // value wider than reserve: NOT truncated, widens
+	}
+
+	for _, tc := range testcases {
+		got := SizeWidth(tc.v, tc.width)
+		assert.Equal(t, tc.want, got, "SizeWidth(%v, %d)", tc.v, tc.width)
+		// Invariant: result is never shorter than the reserve (never truncates).
+		assert.GreaterOrEqual(t, len(got), tc.width, "SizeWidth(%v, %d) must be at least reserve wide", tc.v, tc.width)
+		// Digits/units are identical to Size — only leading padding differs.
+		assert.Equal(t, Size(tc.v), strings.TrimLeft(got, " "), "SizeWidth(%v, %d) must preserve Size digits/units", tc.v, tc.width)
+	}
+}
+
 func TestRateUnit(t *testing.T) {
 	// Reserve = 4 digits. Overflow occurs when Ceil(v) > 10^width-1 (=9999 for width 4);
 	// at that point the value is divided once (disk /1024, net /1000) and the unit promoted.

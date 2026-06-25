@@ -318,6 +318,13 @@ const naLiteral = "n/a"
 // is right-aligned into the same width so the trailing label stays static across ticks.
 const cacheHitWidth = 7
 
+// sizeFieldWidth is the reserved width of the verbose Size fields (databases size/growth,
+// replication lag/retain/archiving-backlog). The widest realistic Size string is 7 chars
+// ("1023.9M"/"1023.9G"/"1023.9T"); reserving 8 gives one column of margin and right-aligns
+// cleanly. The value (pretty.SizeWidth) and its n/a sentinel (naReserve) share this width so
+// the trailing label stays static across ticks and between the value and n/a states.
+const sizeFieldWidth = 8
+
 // renderSysstatVerbose appends the three verbose system rows to w. Each row degrades independently:
 // no active device / first tick / no mount match renders n/a for that row without aborting the others.
 func renderSysstatVerbose(w io.Writer, s stat.Stat, local bool, dataDir string) error {
@@ -531,11 +538,11 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 
 	// databases row. Size/growth are n/a when the privileged aggregate failed; cache hit ratio is
 	// n/a on the first tick or when there was no I/O in the interval.
-	size, growth := naLiteral, naLiteral
+	size, growth := naReserve(sizeFieldWidth), naReserve(sizeFieldWidth)
 	if o.TotalSizeValid {
-		size = pretty.Size(float64(o.TotalSize))
+		size = pretty.SizeWidth(float64(o.TotalSize), sizeFieldWidth)
 		if hp {
-			growth = pretty.Size(float64(o.GrowthPerSec))
+			growth = pretty.SizeWidth(float64(o.GrowthPerSec), sizeFieldWidth)
 		}
 	}
 	// cache hit ratio is the trailing field before its label; reserve a fixed width for the value
@@ -560,17 +567,17 @@ func renderPgstatVerbose(w io.Writer, o stat.PgstatOverview, props stat.Postgres
 
 	// replication row. lag/slots-retain/archiving-backlog are n/a when their source is unavailable
 	// (no standby, no slots, archive_mode=off / missing privilege).
-	lag := naLiteral
+	lag := naReserve(sizeFieldWidth)
 	if o.LagBytesValid {
-		lag = pretty.Size(float64(o.LagBytes))
+		lag = pretty.SizeWidth(float64(o.LagBytes), sizeFieldWidth)
 	}
-	retain := naLiteral
+	retain := naReserve(sizeFieldWidth)
 	if o.RetainedValid {
-		retain = pretty.Size(float64(o.RetainedBytes))
+		retain = pretty.SizeWidth(float64(o.RetainedBytes), sizeFieldWidth)
 	}
-	backlog := naLiteral
+	backlog := naReserve(sizeFieldWidth)
 	if o.ArchivingBacklogValid {
-		backlog = pretty.Size(float64(o.ArchivingBacklog))
+		backlog = pretty.SizeWidth(float64(o.ArchivingBacklog), sizeFieldWidth)
 	}
 	if _, err := fmt.Fprintf(w, " replication: %s wal size, %s lag, %s/%s slots/retain, %s archiving backlog, %d/%d senders/receivers\n",
 		pretty.Size(float64(o.WalSize)), lag,

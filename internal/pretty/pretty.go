@@ -23,6 +23,16 @@ func Size(v float64) string {
 	}
 }
 
+// SizeWidth right-aligns the human-readable Size(v) string into a space-padded fixed-width
+// field. It mirrors ReserveWidth (which does the same for integers via %*d): the column
+// position stays static and only the digits/units change, so a trailing label does not shift
+// between ticks. If Size(v) is wider than the reserve, the field deterministically widens
+// (Go's %*s never truncates). The digits and units emitted by Size are unchanged — only
+// leading padding is added.
+func SizeWidth(v float64, width int) string {
+	return fmt.Sprintf("%*s", width, Size(v))
+}
+
 // Rate-unit families for RateUnit. Disk streams are reported in MB/s (binary, like Size),
 // network streams in Mbps (decimal, the nicstat panel convention — see printNetdev).
 const (
