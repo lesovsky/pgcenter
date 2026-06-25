@@ -46,6 +46,11 @@ type System struct {
 	Diskstats
 	Netdevs
 	Fsstats
+	// VerboseFirstTick mirrors Collector.verboseFirstTick into the Stat handed to the render
+	// goroutine: the delta-based verbose system rows (iostat/nicstat) have no valid prev point on
+	// this tick, so the composer must render n/a instead of a misleading zero delta. The collector
+	// and renderer share state only through Stat, so the flag is propagated here (Task 8).
+	VerboseFirstTick bool
 }
 
 // Collector defines container for stats objects.
@@ -210,6 +215,11 @@ func (c *Collector) Update(db *postgres.DB, view view.View, refresh time.Duratio
 		}
 
 		c.prevVerboseActive = true
+
+		// Propagate the first-tick signal into the Stat handed to the render goroutine: the
+		// composer (Task 8) draws n/a for delta-based system rows when this is set, since the
+		// populated zero-delta slice is indistinguishable from a genuinely idle device otherwise.
+		s.VerboseFirstTick = c.verboseFirstTick
 	} else {
 		c.prevVerboseActive = false
 	}

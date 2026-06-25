@@ -56,7 +56,7 @@ func Test_renderSysstat_compact(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	err := renderSysstat(&buf, s)
+	err := renderSysstat(&buf, s, false, true, "")
 	assert.NoError(t, err)
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -102,7 +102,7 @@ func Test_renderPgstat_compact(t *testing.T) {
 	}}}
 
 	var buf bytes.Buffer
-	err := renderPgstat(&buf, s, props, db)
+	err := renderPgstat(&buf, s, props, db, false)
 	assert.NoError(t, err)
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -141,6 +141,241 @@ func Test_formatError(t *testing.T) {
 		got := formatError(tc.err)
 		assert.Equal(t, tc.want, got)
 	}
+}
+
+// verboseLines renders sysstat in verbose mode against a buffer and returns the rows split by line.
+func verboseSysstatLines(t *testing.T, s stat.Stat, local bool, dataDir string) []string {
+	t.Helper()
+	var buf bytes.Buffer
+	assert.NoError(t, renderSysstat(&buf, s, true, local, dataDir))
+	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+}
+
+// Test_renderSysstat_verboseIostatMaxUtil verifies the iostat verbose row selects the active device
+// with the highest Util (devices with Completed==0 are skipped, matching printIostat) and reads that
+// device's rates as-is from the struct (Decision 5 consistency).
+func Test_renderSysstat_verboseIostatMaxUtil(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Diskstats: stat.Diskstats{
+			{Device: "sda", Completed: 100, Util: 30, Rsectors: 11, Wsectors: 22, Rcompleted: 33, Wcompleted: 44},
+			{Device: "sdb", Completed: 0, Util: 99}, // inactive -> skipped even though Util is highest
+			{Device: "sdc", Completed: 200, Util: 80, Rsectors: 1135, Wsectors: 1546, Rcompleted: 34152, Wcompleted: 17852},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, true, "")
+	// 4 compact + 3 verbose
+	if assert.Len(t, lines, 7) {
+		iostat := lines[4]
+		// 2 active devices (sdb skipped), max util from sdc (80), sdc's rates.
+		assert.Contains(t, iostat, " 2 devices")
+		assert.Contains(t, iostat, "80% max util")
+		assert.Contains(t, iostat, "1135 rMB/s")
+		assert.Contains(t, iostat, "34152 r/s")
+		assert.Contains(t, iostat, "1546 wMB/s")
+		assert.Contains(t, iostat, "17852 w/s")
+	}
+}
+
+// Test_renderSysstat_verboseNicstatConversion verifies the nicstat verbose row applies the same
+// print-time Rbytes/1024/128 conversion as printNetdev, selects the max-Utilization active interface
+// (Packets==0 skipped), and composes err/coll as (Rerrs+Terrs)/Tcolls.
+func Test_renderSysstat_verboseNicstatConversion(t *testing.T) {
+	// Rbytes/1024/128 = 4345.0 Mbps exactly (4345*128*1024 = 569425920);
+	// Tbytes/1024/128 = 6543.0 exactly (6543*128*1024 = 857604096).
+	s := stat.Stat{System: stat.System{
+		Netdevs: stat.Netdevs{
+			{Ifname: "eth0", Packets: 0, Utilization: 100}, // inactive -> skipped
+			{Ifname: "eth1", Packets: 10, Utilization: 60,
+				Rbytes: 569425920, Tbytes: 857604096, Rerrs: 3000, Terrs: 451, Tcolls: 0},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, true, "")
+	if assert.Len(t, lines, 7) {
+		nicstat := lines[5]
+		assert.Contains(t, nicstat, " 1 devices")
+		assert.Contains(t, nicstat, "60% max util")
+		assert.Contains(t, nicstat, "4345 rMbps")
+		assert.Contains(t, nicstat, "6543 wMbps")
+		// err = Rerrs+Terrs = 3451, coll = Tcolls = 0
+		assert.Contains(t, nicstat, "3451/   0 err/coll")
+	}
+}
+
+// Test_renderSysstat_verboseFirstTickNA verifies the first verbose tick (VerboseFirstTick set, the
+// slice already populated zero-delta) renders n/a for iostat/nicstat delta fields, NOT 0; and the
+// counter-case: the same populated slice WITHOUT the flag renders 0 (the flag is the only n/a trigger).
+func Test_renderSysstat_verboseFirstTickNA(t *testing.T) {
+	base := stat.System{
+		Diskstats: stat.Diskstats{
+			{Device: "sda", Completed: 100, Util: 0, Rsectors: 0, Wsectors: 0, Rcompleted: 0, Wcompleted: 0},
+		},
+		Netdevs: stat.Netdevs{
+			{Ifname: "eth0", Packets: 10, Utilization: 0, Rbytes: 0, Tbytes: 0},
+		},
+	}
+
+	// First tick: flag set -> n/a.
+	first := base
+	first.VerboseFirstTick = true
+	lines := verboseSysstatLines(t, stat.Stat{System: first}, true, "")
+	if assert.Len(t, lines, 7) {
+		assert.Contains(t, lines[4], "n/a")
+		assert.Contains(t, lines[5], "n/a")
+	}
+
+	// Counter-case: genuinely idle device, real zero deltas, flag NOT set -> 0, not n/a.
+	idle := base
+	idle.VerboseFirstTick = false
+	lines = verboseSysstatLines(t, stat.Stat{System: idle}, true, "")
+	if assert.Len(t, lines, 7) {
+		assert.NotContains(t, lines[4], "n/a")
+		assert.NotContains(t, lines[5], "n/a")
+		assert.Contains(t, lines[4], "0% max util")
+	}
+}
+
+// Test_renderSysstat_verboseFilesystMounted10 verifies the filesyst "mounted" field is truncated to
+// 10 characters.
+func Test_renderSysstat_verboseFilesystMounted10(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Fsstats: stat.Fsstats{
+			{Mount: stat.Mount{Device: "/dev/nvme0n1p2", Mountpoint: "/var/lib/postgresql/data", Fstype: "ext4"},
+				Size: 1024, Used: 512, Pused: 74},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, false, "/var/lib/postgresql/data")
+	if assert.Len(t, lines, 7) {
+		filesyst := lines[6]
+		// mounted truncated to first 10 runes of "/var/lib/postgresql/data" -> "/var/lib/p".
+		assert.Contains(t, filesyst, "/dev/nvme0n1p2 on /var/lib/p (ext4)")
+		assert.NotContains(t, filesyst, "/var/lib/postgresql")
+	}
+}
+
+// Test_renderSysstat_verboseFilesystNA verifies that when no mount matches the data_directory, the
+// filesyst row renders n/a (the iostat/nicstat rows are still rendered).
+func Test_renderSysstat_verboseFilesystNA(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		Fsstats: stat.Fsstats{
+			{Mount: stat.Mount{Device: "/dev/sda1", Mountpoint: "/srv/other", Fstype: "ext4"}},
+		},
+	}}
+
+	lines := verboseSysstatLines(t, s, false, "/var/lib/pgsql/data")
+	if assert.Len(t, lines, 7) {
+		assert.Equal(t, "filesyst: n/a", lines[6])
+	}
+}
+
+// Test_renderSysstat_compactUnchanged verifies that verbose=false produces byte-identical output to
+// the compact path (no verbose rows added).
+func Test_renderSysstat_compactUnchanged(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg:   stat.LoadAvg{One: 1, Five: 2, Fifteen: 3},
+		Diskstats: stat.Diskstats{{Device: "sda", Completed: 100, Util: 50}},
+		Netdevs:   stat.Netdevs{{Ifname: "eth0", Packets: 10, Utilization: 50}},
+		Fsstats:   stat.Fsstats{{Mount: stat.Mount{Mountpoint: "/"}}},
+	}}
+
+	var compact, verboseOff bytes.Buffer
+	assert.NoError(t, renderSysstat(&compact, s, false, true, "/"))
+	assert.NoError(t, renderSysstat(&verboseOff, s, false, true, "/"))
+	assert.Equal(t, compact.String(), verboseOff.String())
+	// exactly 4 lines, no verbose rows.
+	assert.Len(t, strings.Split(strings.TrimRight(compact.String(), "\n"), "\n"), 4)
+}
+
+// pgstatTestProps returns properties with worker GUC limits for the verbose pgstat rows.
+func pgstatTestProps() stat.PostgresProperties {
+	return stat.PostgresProperties{
+		Version: "13.1", Recovery: "f", GucMaxConnections: 100, GucAVMaxWorkers: 3,
+		GucMaxWorkerProcesses: 8, GucMaxLogicalReplicationWorkers: 4, GucMaxParallelWorkers: 8,
+	}
+}
+
+func pgstatTestDB() *postgres.DB {
+	return &postgres.DB{Config: postgres.Config{Config: &pgx.ConnConfig{Config: pgconn.Config{
+		Host: "127.0.0.1", Port: 1234, User: "test", Database: "testdb",
+	}}}}
+}
+
+// Test_renderPgstat_verboseNA verifies that an unavailable pgstat source (sentinel flags false,
+// HasPrev false) renders n/a while the always-available rows still render.
+func Test_renderPgstat_verboseNA(t *testing.T) {
+	o := stat.PgstatOverview{
+		Valid:   true,
+		HasPrev: false, // first tick: all delta fields n/a
+		// TotalSizeValid/LagBytesValid/RetainedValid/ArchivingBacklogValid/CacheHitRatioValid all false.
+		DatabasesCount: 7, WalSize: 1024,
+		WorkersUmbrellaActive: 1, WorkersLogicalActive: 0, WorkersParallelActive: 2,
+		CkptTimed: 12, CkptReq: 3,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Overview: o}}
+
+	var buf bytes.Buffer
+	assert.NoError(t, renderPgstat(&buf, s, pgstatTestProps(), pgstatTestDB(), true))
+	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+
+	if assert.Len(t, lines, 9, "4 compact + 5 verbose pgstat rows") {
+		workload := lines[4]
+		assert.Contains(t, workload, "n/a tps") // first tick rates n/a
+		databases := lines[5]
+		assert.Contains(t, databases, "n/a per  7 databases") // size n/a, count present
+		assert.Contains(t, databases, "n/a cache hit ratio")  // ratio n/a
+		workers := lines[6]
+		assert.Contains(t, workers, "/8 workers/max") // always available
+		replication := lines[7]
+		assert.Contains(t, replication, "n/a lag")               // no standby
+		assert.Contains(t, replication, "n/a archiving backlog") // archive off
+		bgwr := lines[8]
+		assert.Contains(t, bgwr, "12/ 3 timed/req") // absolute counters present
+		assert.Contains(t, bgwr, "n/a/n/a ms write/sync")
+	}
+}
+
+// Test_renderPgstat_verboseAvailable verifies that with a prev snapshot and available sources the
+// verbose pgstat rows render real values (not n/a).
+func Test_renderPgstat_verboseAvailable(t *testing.T) {
+	o := stat.PgstatOverview{
+		Valid: true, HasPrev: true,
+		TPSRate: 1432, InsertsRate: 4132, UpdatesRate: 5421, DeletesRate: 4235,
+		ReturnedRate: 2341, TempFilesRate: 123, OthersInterval: 4,
+		DatabasesCount: 7, TotalSize: 1 << 40, TotalSizeValid: true, GrowthPerSec: 1 << 20,
+		CacheHitRatio: 99.99, CacheHitRatioValid: true,
+		WorkersUmbrellaActive: 0, WorkersLogicalActive: 0, WorkersParallelActive: 0,
+		WalSize: 1 << 30, LagBytes: 1 << 20, LagBytesValid: true,
+		SlotsCount: 1, RetainedBytes: 1 << 30, RetainedValid: true,
+		ArchivingBacklog: 1 << 20, ArchivingBacklogValid: true, Senders: 2, Receivers: 1,
+		CkptTimed: 12, CkptReq: 3, CkptWriteMsDelta: 245, CkptSyncMsDelta: 30, MaxWrittenDelta: 4,
+	}
+	s := stat.Stat{Pgstat: stat.Pgstat{Overview: o}}
+
+	var buf bytes.Buffer
+	assert.NoError(t, renderPgstat(&buf, s, pgstatTestProps(), pgstatTestDB(), true))
+	out := buf.String()
+
+	assert.Contains(t, out, "1432 tps")
+	assert.Contains(t, out, "99.99% cache hit ratio")
+	assert.Contains(t, out, "2/1 send/recv")
+	assert.Contains(t, out, "maxwritten")
+	assert.NotContains(t, out, "n/a")
+}
+
+// Test_renderPgstat_compactUnchanged verifies verbose=false output is byte-identical to compact.
+func Test_renderPgstat_compactUnchanged(t *testing.T) {
+	s := stat.Stat{Pgstat: stat.Pgstat{
+		Activity: stat.Activity{State: "up", Uptime: "01:00:00"},
+		Overview: stat.PgstatOverview{Valid: true, HasPrev: true, TPSRate: 999},
+	}}
+
+	var compact, verboseOff bytes.Buffer
+	assert.NoError(t, renderPgstat(&compact, s, pgstatTestProps(), pgstatTestDB(), false))
+	assert.NoError(t, renderPgstat(&verboseOff, s, pgstatTestProps(), pgstatTestDB(), false))
+	assert.Equal(t, compact.String(), verboseOff.String())
+	assert.Len(t, strings.Split(strings.TrimRight(compact.String(), "\n"), "\n"), 4)
 }
 
 // Test_alignViewToResult reproduces issue #99: pressing 'x' to cycle pg_stat_statements
