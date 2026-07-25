@@ -58,7 +58,7 @@ When a probe fails, the corresponding columns render as `""`. `switchViewToProcP
 Stats views change between PG versions. Version detection at connect time via `SELECT version()`.
 
 Version-specific query selectors in `internal/query/`:
-- `SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10
+- `SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10 and PG 13. The PG 13 branch is an early return on `PostgresV13` above the historical switch (which therefore keeps covering PG 10–12 in its default case) and widens the screen 14 → 17 columns: `leader` (`coalesce(leader_pid, pid)`, so a parallel group collapses under one value), `backend_xid` (cast to text, no coalesce — an unwritten transaction renders blank) and `horizon_xacts` (`age(backend_xmin)`).
 - `SelectStatReplicationQuery(version, track)` — branches at PG 10
 - `SelectStatDatabaseGeneralQuery(version)` — branches at PG 12
 - `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17

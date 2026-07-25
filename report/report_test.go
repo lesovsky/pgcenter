@@ -1254,6 +1254,76 @@ func Test_describeProgressColumnOrder(t *testing.T) {
 	}
 }
 
+func Test_describeActivityColumnOrder(t *testing.T) {
+	// Same reason as Test_describeProgressColumnOrder: Test_describeReport compares descriptions
+	// by identity and cannot notice a row that landed in the wrong slot. The list below is the
+	// column order of query.PgStatActivityPG13 (internal/query/activity.go) - the layout that
+	// `report -d -A` claims to document.
+	columns := []string{
+		"pid", "leader", "cl_addr", "cl_port", "datname", "usename", "appname", "backend_type",
+		"wait_etype", "wait_event", "state", "backend_xid", "horizon_xacts", "xact_age",
+		"query_age", "change_age", "query",
+	}
+
+	prev := -1
+	for _, c := range columns {
+		// The marker is anchored on both sides: "\n- " keeps it off words inside the prose
+		// (leader_pid, Process ID), and the trailing tab keeps a short name off a longer row -
+		// without it "\n- query" matches the "- query_age" row and the offsets compared below
+		// are not the ones being checked.
+		pos := strings.Index(pgStatActivityDescription, "\n- "+c+"\t")
+		// Presence first: strings.Index returns -1 for a missing marker, and -1 is less than
+		// anything, so an ordering-only assertion would pass on a row that is not there at all.
+		require.NotEqual(t, -1, pos, "description must contain a row for %q", c)
+		assert.Greater(t, pos, prev, "row %q is out of order", c)
+		prev = pos
+	}
+}
+
+func Test_describeActivityCaveats(t *testing.T) {
+	// Each of the three new columns can be misread into a wrong pg_terminate_backend decision,
+	// and there is nothing to catch in code for any of them - the caveats in this block are the
+	// only place the traps are written down. So every caveat is asserted on its own: deleting any
+	// single one must redden a subtest that names it.
+	assert.Contains(t, pgStatActivityDescription, "available since PG13",
+		"block must say the three new columns require PG13+")
+
+	testcases := []struct {
+		name    string
+		markers []string
+	}{
+		{
+			// Derived leader: an empty one would otherwise read as "not a parallel backend".
+			name:    "leader is derived, not the raw leader_pid",
+			markers: []string{"leader is derived", "leader_pid"},
+		},
+		{
+			// Backends are not the only holders of the horizon, and the others are not in the view.
+			name:    "horizon covers backend sources only",
+			markers: []string{"replication slots", "prepared transactions", "standby feedback"},
+		},
+		{
+			// Same column name on the replication screen, different formula, incomparable numbers.
+			name:    "horizon_xacts is computed differently than on the replication screen",
+			markers: []string{"age(backend_xmin)", "pg_last_committed_xact()", "replication report"},
+		},
+		{
+			// The operationally heaviest one: blank may mean "not allowed to see", not "holds nothing".
+			name:    "an empty cell may mean missing privileges",
+			markers: []string{"not a proof", "unprivileged"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, m := range tc.markers {
+				assert.Contains(t, pgStatActivityDescription, m,
+					"caveat %q is missing or reworded: no %q in the block", tc.name, m)
+			}
+		})
+	}
+}
+
 // Test_printStatSample_zeroWidthGuard pins the zero-width guard of the report
 // truncation path to the semantics of its twin, top/printDataCell
 // (top/stat.go:997-1016): when the column width reads as zero or negative the

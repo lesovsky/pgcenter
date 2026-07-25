@@ -116,3 +116,91 @@ below as a tech-debt candidate for Task 5 rather than silently dropped.
 - dev-code-reviewer: [round 1](013-feat-activity-xmin-horizon-task-03-dev-code-reviewer-review.json) `changes_required` (1 critical) → [round 2](013-feat-activity-xmin-horizon-task-03-dev-code-reviewer-review-round2.json) `approved_with_suggestions`
 - dev-security-auditor: [round 1](013-feat-activity-xmin-horizon-task-03-dev-security-auditor-review.json) `approved` (0 critical; all findings pre-existing and outside the diff)
 - dev-test-reviewer: [round 1](013-feat-activity-xmin-horizon-task-03-dev-test-reviewer-review.json) `needs_improvement` (2 major) → [round 2](013-feat-activity-xmin-horizon-task-03-dev-test-reviewer-review-round2.json) `passed`
+
+## Task 04: Describe the new columns and their caveats
+
+**Summary:** `pgStatActivityDescription` now lists all 17 PG 13+ columns in the order of
+`query.PgStatActivityPG13` (row order transcribed from `internal/query/activity.go`, not from the
+spec table), carries a `Note:` line for the PG 13+ boundary and a `Caveats:` block with the four
+required caveats. Two new tests pin it: `Test_describeActivityColumnOrder` (presence-then-order over
+the 17 rows) and `Test_describeActivityCaveats` (the note plus one subtest per caveat).
+
+**Marker anchoring — deviation from the copied sample.** `Test_describeProgressColumnOrder` uses
+`"\n- name"` markers; the activity block needs `"\n- name\t"` as well, because `"\n- query"` matches
+the `- query_age` row first and the ordering check would then compare an offset that is not the one
+under test. The trailing tab is the only difference from the sample; the `require.NotEqual(t, -1, …)`
+presence check is kept verbatim.
+
+**Caveat assertions.** Each caveat is a subtest asserting the phrases specific to its *claim*
+(`leader is derived` + `leader_pid`; `prepared transactions` + `replication slots` +
+`standby feedback`; `age(backend_xmin)` + `pg_last_committed_xact()` + `replication report`;
+`not a proof` + `unprivileged`), so a rewrite that keeps the word "Note" but drops the assertion
+still reddens.
+
+**Red step.** `Test_describeActivityColumnOrder` failed on `description must contain a row for
+"leader"`; `Test_describeActivityCaveats` failed on the PG 13+ note plus all four subtests. Both
+green after the edit; `Test_describeReport` and `Test_describeProgressColumnOrder` untouched and
+green throughout.
+
+**"Delete a caveat" check (observed).** Removing the four privilege-caveat lines from `describe.go`
+and re-running `go test ./report/ -run Test_describeActivityCaveats`:
+
+```
+--- FAIL: Test_describeActivityCaveats/an_empty_cell_may_mean_missing_privileges
+    caveat "an empty cell may mean missing privileges" is missing or reworded: no "not a proof" in the block
+    caveat "an empty cell may mean missing privileges" is missing or reworded: no "unprivileged" in the block
+```
+
+Only that subtest reddened, and its message names the caveat. Reverted afterwards.
+
+**Rendering.** Verified by eye via `go run ./cmd report -d -A | expand -t 8`: the three new rows keep
+`origin` at column 16 and `description` at column 40 in line with the fourteen existing ones. Caveat
+prose wraps inside 80 columns; the bullets use `*` rather than `-` so they cannot collide with the
+`"\n- "` row markers.
+
+**Scope.** `internal/stat/help.go` not touched (Decision 8) — confirmed by an empty
+`git diff internal/stat/help.go`. Code diff is `report/describe.go` and `report/report_test.go` only;
+no golden changed (`git diff --name-only` shows no `report/testdata/`). `make lint` green (0 issues,
+gosec clean), full `go test -count=1 ./report/...` green.
+
+**Deviations:** the marker tab suffix described above; nothing else.
+
+**Reviews:** pending — see task file for reviewer report paths.
+
+## Task 05: Tech debt register and the selector inventory line
+
+**Summary:** Five new Active entries — `[022]` dead-and-stale `internal/stat/help.go`, `[023]` one
+`horizon_xacts` name over two formulas, `[024]` a test port map promising clusters the image lacks,
+`[025]` `PGresult.sort` without a bounds check on its key, `[026]` report error paths that leave the
+reader blocked — plus `[021]` moved to Resolved with the three resets and the restored zero-width
+guard described from `report/report.go` rather than from the spec, `[020]`'s justification rebuilt on
+what `PGresult.validate` actually checks, and the `SelectStatActivityQuery` line in
+`architecture.md` rewritten to the PG 9.6 / PG 10 / PG 13 reality. Every claim was read out of the
+code: constant names and the replication-vs-activity naming split in `help.go`, both horizon formulas
+and the `track_commit_timestamp` gate, the thirteen port mappings against `testing/Dockerfile`'s
+PG 14–19, and the two panics the task-03 security review reproduced end to end.
+
+**Two entries beyond the three the task file named.** `[025]` and `[026]` come from the task-03
+security audit, which recommended registering rather than widening that task. They are recorded here
+because both are consequences the feature leaves behind: the restored seed `OrderKey` re-enters the
+unguarded sort path (no new failure class, but no closure either), and the restored zero-width guard
+converts a panic into a returned error inside a pipeline that then hangs — a silent failure mode
+worse than the crash it replaced, and worth stating plainly next to the entry that celebrates the
+guard.
+
+**`[020]` stays open on a different reason than before.** The old text claimed unreachability from a
+guarantee that does not exist; the register now names the actual boundary (`validate` checks row
+width against `len(Cols)` and `Nrows` against the decoded rows, and neither `Ncols` against `Cols`
+nor width across adjacent samples) and the actual reason for deferral (`activity` runs `DiffIntvl
+{0,0}`, so `diff()` is never called on the screen this feature touches). Status, severity and `What`
+untouched, as specified. Both cross-references between `[020]` and `[021]` were rewritten so neither
+points at a section its target has left.
+
+**Scope.** Documentation only, no code touched. `git diff --name-only` outside the feature directory
+shows `docs/tech-debt.md` and `.claude/skills/project-knowledge/architecture.md` from this task
+(`report/describe.go` and `report/report_test.go` in the same tree belong to task 04).
+
+**Deviations:** none from the task file; the two additional entries are an addition to it, not a
+departure from it.
+
+**Reviews:** pending — see task file for reviewer report paths.

@@ -181,6 +181,7 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 
   column	origin			description
 - pid		pid			Process ID of this backend
+- leader	leader_pid,pid		Process ID of the parallel query group leader, or own PID if there is no leader
 - cl_addr	client_addr		IP address of the client connected to this backend
 - cl_port	client_port		TCP port number that the client is using for communication with this backend
 - datname	datname			Name of the database this backend is connected to
@@ -190,10 +191,32 @@ Details: https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-
 - wait_etype	wait_event_type		The type of event for which the backend is waiting, if any
 - wait_event	wait_event		Wait event name if backend is currently waiting
 - state		state			Current overall state of this backend
+- backend_xid	backend_xid		Transaction ID of this backend, empty until the transaction has written anything
+- horizon_xacts	backend_xmin		Number of transactions this backend holds the xmin horizon back by
 - xact_age	xact_start		Current transaction's duration if active
 - query_age	query_start		Current query's duration if active
 - change_age	state_change		Age since last state has been changed
 - query		query			Text of this backend's most recent query
+
+Note: leader, backend_xid and horizon_xacts are available since PG13.
+
+Caveats:
+* leader is derived, not the raw leader_pid: it is the leader's PID when the
+  backend belongs to a parallel query group and the backend's own PID otherwise.
+  Raw leader_pid is empty for the leader itself, so an empty leader would not
+  have meant "this is not a parallel backend".
+* The xmin horizon is shown for backends only: prepared transactions,
+  replication slots and standby feedback hold it back too and do not appear in
+  pg_stat_activity at all, so an empty horizon_xacts does not mean that nobody
+  holds the horizon.
+* horizon_xacts here is age(backend_xmin) and is not the horizon_xacts of the
+  replication report, which subtracts backend_xmin from
+  pg_last_committed_xact(). One name, two screens, numbers that are not
+  directly comparable.
+* An empty backend_xid or horizon_xacts is not a proof that the session holds
+  nothing: pg_stat_activity hides the state of other users' sessions from an
+  unprivileged role by returning NULL rather than an error, so the value may
+  exist and just not be visible here.
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ACTIVITY-VIEW
 `
