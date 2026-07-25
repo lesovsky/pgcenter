@@ -1,6 +1,6 @@
 ---
 created: 2026-07-25
-status: draft
+status: approved
 type: feature
 size: M
 # На второй ступени развилки probe (миграция базового образа входит в фичу)

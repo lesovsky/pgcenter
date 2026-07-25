@@ -19,7 +19,7 @@ interview_metadata:
   work_type: "feature"
   started: "2026-07-25 10:46:53"
   last_updated: "2026-07-25 10:46:53"
-  status: "in_progress" # not_started | in_progress | completed
+  status: "completed"   # not_started | in_progress | completed
   can_resume: true
   current_question_num: 0
   feature_size: "M"     # preliminary: CI/fixture + verification pass + 3 progress-view column additions
@@ -621,8 +621,8 @@ phase3_integration:
 # Phase 4: Completion
 # ============================================================================
 phase4_completion:
-  userspec_file: ""  # e.g. docs/features/001-feat-add-auth.md
-  status: "pending"  # pending | created | approved
+  userspec_file: "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md"
+  status: "approved"  # pending | created | approved
 
 # ============================================================================
 # Decision Rules
