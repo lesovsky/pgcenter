@@ -1,0 +1,261 @@
+---
+status: planned                    # planned -> in_progress -> done
+depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
+wave: 1                            # волна параллельного выполнения
+skills: [code-writing]             # МАССИВ скиллов для загрузки
+verify: bash                       # инструмент верификации (опционально: curl, bash, user)
+reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
+teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
+---
+
+# Task 03: Recompute report layout on a mid-archive version change
+
+## Required Skills
+
+Перед выполнением задачи загрузи:
+- `/skill:code-writing` — [skills/code-writing/SKILL.md](~/.claude/skills/code-writing/SKILL.md)
+
+## Description
+
+Закрываем техдолг **[021]** и две его соседние проблемы, живущие в том же месте — в `processData`
+(`report/report.go`). Когда архив `pgcenter record -a` охватывает мажорный апгрейд, в потоке samples
+меняется `meta.version`, и `processData` уходит в ветку `!prevStat.Valid || prevMeta.version != d.meta.version`:
+там пересоздаётся `view` через `views.Configure(...)`, но **три состояния переживают границу версий** и
+остаются от старой раскладки.
+
+1. **Флаг выравнивания.** `formatStatSample` возвращается сразу, если `view.Aligned` уже `true`,
+   а `Configure` этот флаг не сбрасывает (см. `internal/view/view.go:367-427` — переписываются только
+   `QueryTmpl`/`Ncols`/`Query`). Ширины колонок (`ColsWidth`) и имена колонок (`Cols`) остаются от прежней
+   раскладки. Это и есть [021] в том виде, в каком он зарегистрирован.
+2. **Счётчик повторной печати заголовка.** `linesPrinted` не сбрасывается, а `printStatHeader` печатает
+   шапку только когда счётчик дорос до `repeatHeaderAfter` (20). Даже с правильно пересчитанными ширинами
+   оператор ещё до 20 строк видит **старую шапку над новыми данными** — то есть исправление одного лишь
+   выравнивания выглядит рабочим, но врёт.
+3. **Разрешённый индекс сортировки.** `orderConfigured` защёлкивается на первом sample и разрешает
+   запрошенное `-o <имя колонки>` в **индекс** относительно списка колонок именно того sample;
+   ветка version-change его не пересматривает.
+
+По пункту 3 важно правильно понимать риск, и это стоит держать в голове при ревью. Громкий отказ —
+устаревший индекс уезжает за конец более узкой строки, и `PGresult.sort` читает за границу — требует,
+чтобы новая раскладка была **уже** старой, а ни одна реальная граница (9.6→10, 12→13) такой не является.
+**Достижимый вред — тихий:** эта фича вставляет колонки **в середину** раскладки, поэтому после границы
+тот же индекс обозначает уже другую колонку, и отчёт молча сортируется не по тому, что просил оператор.
+Пример на нашей же раскладке: `-o state` — это индекс 9 в 14-колоночной раскладке PG 10–12 и индекс 10
+в 17-колоночной PG 13+; без переразрешения после границы отчёт сортируется по `wait_event`. Неверный
+ответ без единого симптома хуже падения, и он достижим ровно на тех архивах, которые эта фича делает
+возможными.
+
+Дополнительно **восстанавливаем zero-width guard** в пути усечения `printStatSample`, зеркально
+`top/printDataCell` (`top/stat.go:997-1016`). `view.ColsWidth` — это `map[int]int`, поэтому отсутствующий
+ключ молча даёт `0`, а `value[:width-1]` при `width == 0` — это `[:-1]`, то есть паника
+`slice bounds out of range`. Именно так проявлялся баг: шапка/ширины от 14-колоночной раскладки, а строка
+пришла 17-колоночная — для индексов 14, 15, 16 ключа в мапе нет. Семантика guard'а должна совпадать с
+близнецом **точно**: он **возвращает ошибку**, и ячейка не печатается — он **не** рисует молча пустую
+ячейку. Корневой фикс делает этот путь недостижимым, но близнец в `top` уже носит такой guard (добавлен
+после реального падения, issue #99), и оставлять `report/` единственной незащищённой точкой усечения —
+значит держать две копии одного кода, из которых одна усвоила урок, а другая нет. Приземляются оба.
+
+Задача самодостаточна и **не зависит от Task 1**: `report/` выводит имена колонок, ширины и ключ
+сортировки из самого архива и никогда не читает `view.Ncols`. Тест строит `stat.PGresult` со своими
+списками колонок, поэтому наличие нового PG 13+ запроса ему не требуется.
+
+## What to do
+
+- В `processData` (`report/report.go`) на смене версии записанных статистик сбросить все три состояния,
+  перечисленные в Description: флаг выравнивания вместе с производными от него `ColsWidth`/`Cols`,
+  счётчик повторной печати шапки и защёлку разрешённого индекса сортировки. Сбросы должны отработать
+  до `continue` в этой ветке и подействовать на ту копию `view`, с которой цикл продолжит работу.
+- Сбросить индекс сортировки так, чтобы после границы отчёт либо переразрешил `-o` против нового списка
+  колонок, либо (если такой колонки в новой раскладке нет) вернулся к дефолтному ключу сортировки экрана —
+  но ни при каких условиях не остался с индексом, разрешённым против старой раскладки.
+- Отделить смену версии от «первого sample»: обе ситуации сегодня живут в одном `if`, и код должен
+  оставаться читаемым насчёт того, что именно и почему сбрасывается.
+- В `printStatSample` (`report/report.go`) восстановить проверку нулевой/отрицательной ширины колонки
+  внутри ветки усечения — с той же семантикой, что у `top/printDataCell`: возврат ошибки, ячейка не
+  печатается. Ошибка уходит наверх по уже существующему error-пути функции.
+- Написать тесты из TDD Anchor **до** реализации; тесты гонять через `processData`/`printStatSample`
+  напрямую, а не через `app.doReport` (обоснование — в Details/Edge cases).
+- `docs/tech-debt.md` в этой задаче **не редактировать** — перевод [021] в Resolved Debt принадлежит
+  Task 5 (wave 2). Прочитать его нужно только чтобы понимать формулировки [019], [020], [021].
+- Закоммитить задачу отдельным коммитом.
+
+## TDD Anchor
+
+Тесты пишем ДО реализации: пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.
+
+- `report/report_test.go::Test_processData_versionChange_recomputesLayout` — синтетический
+  двухверсионный in-memory tar (паттерн из фичи [008], см. `report/report_record_replslots_test.go:58-190`),
+  прогоняемый через `readTar` в горутине и `processData`, вызванный **напрямую** в горутине теста.
+  Архив: 2 sample'а PG 12 с 14-колоночной activity-раскладкой + 2 sample'а PG 13 с 17-колоночной
+  (`meta.*` с соответствующим `version_num` в каждом тике). Проверяем:
+  - в выводе после границы печатается шапка **новой** раскладки (присутствуют `leader`, `backend_xid`,
+    `horizon_xacts`), причём сразу с первой напечатанной строкой новой версии, а не через 20 строк;
+  - ширины пересчитаны по новому sample'у: длинное значение в сдвинувшейся колонке не усечено `~`
+    по ширине старой раскладки;
+  - паники нет, `processData` возвращает `nil`.
+- `report/report_test.go::Test_processData_versionChange_reresolvesOrderColumn` — тот же двухверсионный
+  поток, `Config.OrderColName = "state"` (индекс 9 в старой раскладке, 10 в новой). После границы строки
+  упорядочены по значениям `state`, а не по `wait_event`; значения в колонках подобраны так, что два
+  порядка различимы (иначе тест зелёный по совпадению).
+- `report/report_test.go::Test_processData_versionChange_orderColumnMissing` — `-o` указывает колонку,
+  которой в новой раскладке нет. После границы отчёт печатается без ошибки и без выхода за границы строки,
+  сортировка падает на дефолтный ключ экрана, а не на индекс, разрешённый против старой раскладки.
+- `report/report_test.go::Test_printStatSample_zeroWidthGuard` — прямой вызов `printStatSample` с
+  `view.ColsWidth`, в котором нет ключа для колонки с непустым значением (ширина читается как `0`).
+  Ожидаем: возвращена ошибка, паники нет, ячейка не напечатана (в буфер не попало ни усечённое, ни пустое
+  значение этой колонки). Отдельный подкейс на регресс: при нормальных ширинах вывод не изменился.
+
+## Acceptance Criteria
+
+- [ ] На смене `meta.version` в потоке sample'ов сбрасываются все три состояния: флаг выравнивания
+      (вместе с `ColsWidth`/`Cols`), счётчик повторной печати шапки и защёлка разрешённого индекса сортировки.
+- [ ] После границы версий шапка новой раскладки печатается немедленно — с первой же напечатанной строкой
+      новой версии, а не после накопления 20 строк.
+- [ ] После границы версий ширины колонок пересчитаны по новому sample'у, а не унаследованы от старой раскладки.
+- [ ] После границы версий `-o <колонка>` переразрешается против нового списка колонок; если колонки в новой
+      раскладке нет — используется дефолтный ключ сортировки экрана, устаревший индекс не сохраняется.
+- [ ] Путь усечения в `printStatSample` несёт guard нулевой/отрицательной ширины с семантикой близнеца
+      `top/printDataCell`: возвращается ошибка и ячейка не печатается — не молча пустая ячейка.
+- [ ] Синтетический двухверсионный архив несёт не менее двух sample'ов **после** смены версии (и не менее
+      двух до неё), так что отчёт после границы действительно непустой.
+- [ ] Тесты гоняют `processData`/`printStatSample` напрямую, а не через `app.doReport`.
+- [ ] Существующие golden-тесты `report/` проходят без изменения goldens.
+- [ ] `go test ./report/...` — зелёный.
+- [ ] `make test`, `make lint`, `make vuln` — зелёные.
+- [ ] `docs/tech-debt.md` этой задачей не изменён (перевод [021] в Resolved — зона Task 5).
+
+## Context Files
+
+**Feature artifacts:**
+- [013-feat-activity-xmin-horizon.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon.md) — user-spec
+- [013-feat-activity-xmin-horizon-tech-spec.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-tech-spec.md) — tech-spec (Decision 6, Testing Strategy, Risks, Data Models)
+- [013-feat-activity-xmin-horizon-code-research.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-code-research.md) — исследование кода
+- [013-feat-activity-xmin-horizon-decisions.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-decisions.md) — decisions log (создаётся при выполнении)
+
+**Project knowledge:**
+- [overview.md](.claude/skills/project-knowledge/overview.md) — обзор проекта, поддерживаемые статистики
+- [architecture.md](.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных record/report, обработка версий PG
+- [patterns.md](.claude/skills/project-knowledge/patterns.md) — паттерны кода и тестирования (testify, table/golden tests)
+
+**Code files:**
+- [report/report.go](report/report.go) — `processData` (233-347, ветка version-change 250-268), `formatStatSample` (476-486), `printStatHeader` (508-525), `printStatSample` (528-603, усечение 566-571); изменяем
+- [report/report_test.go](report/report_test.go) — `Test_processData` (239-306) как образец прямого вызова, `Test_printStatSample` (1105-1170), `Test_formatStatSample` (1012-1047); добавляем тесты
+- [report/report_record_replslots_test.go](report/report_record_replslots_test.go) — паттерн синтетического in-memory tar из [008] (58-190), хелперы `stripANSI`/`ansiRE` (30-35); читаем и переиспользуем
+- [top/stat.go](top/stat.go) — `printDataCell` (997-1016), близнец с эталонной семантикой guard'а; читаем, не меняем
+- [internal/align/align.go](internal/align/align.go) — `SetAlign` (14-79): ширины считаются только для колонок текущего результата, минимум 1; читаем
+- [internal/view/view.go](internal/view/view.go) — `View.Aligned`/`ColsWidth`/`OrderKey` (17-22), `Views.Configure` (367-427) не сбрасывает выравнивание; читаем
+- [docs/tech-debt.md](docs/tech-debt.md) — записи [019] (41), [020] (57), [021] (73); читаем, НЕ редактируем
+
+## Verification Steps
+
+- Прогнать `go test ./report/...` — зелёный, новые тесты проходят, существующие golden-тесты не изменились
+  (goldens не перегенерировать, флаг `-update` не использовать).
+- Убедиться, что новые тесты действительно краснели до реализации (порядок TDD соблюдён).
+- Проверить, что тест на порядок сортировки различает старый и новый индекс: временно убрать сброс
+  `orderConfigured` — `Test_processData_versionChange_reresolvesOrderColumn` должен упасть.
+- Проверить, что тест на шапку различает наличие/отсутствие сброса счётчика: временно убрать сброс
+  `linesPrinted` — `Test_processData_versionChange_recomputesLayout` должен упасть.
+- Прогнать `make test` (race + coverage), `make lint` (golangci-lint + gosec), `make vuln` — все зелёные.
+- Убедиться, что `docs/tech-debt.md` не попал в diff задачи.
+
+## Details
+
+**Files:**
+
+- `report/report.go` — текущее состояние:
+  - `processData` (233-347). Локальные `linesPrinted` (237, инициализируется значением `repeatHeaderAfter`)
+    и `orderConfigured` (238). Ветка `if !prevStat.Valid || prevMeta.version != d.meta.version` (250-268):
+    копирует `d` в `prev*`, собирает временную `view.Views{config.ReportType: v}`, вызывает
+    `views.Configure(query.Options{Version: d.meta.version})`, затем `v = views[config.ReportType]` и
+    `continue`. Ключевой момент: временная мапа строится **из текущего `v`**, поэтому `Aligned`, `ColsWidth`,
+    `Cols`, `OrderKey` переживают `Configure` — сбрасывать их нужно явно на `v` (или на записи мапы до
+    переприсваивания), именно в этой ветке и до `continue`.
+  - Разрешение `-o` (296-302): `if config.OrderColName != "" && !orderConfigured { ... v.OrderKey = idx;
+    v.OrderDesc = config.OrderDesc; orderConfigured = true }`. Порядок вызовов в теле цикла —
+    разрешение order → `countDiff` → `formatStatSample` → `printStatHeader` → `printStatSample`, поэтому
+    после сброса переразрешение случится на том же sample'е, который первым напечатается.
+  - `formatStatSample` (476-486) — ранний `return` при `view.Aligned`; сам ничего не сбрасывает и менять
+    его не нужно.
+  - `printStatSample` (528-603), блок усечения 566-571: `valuelen := len(...)`;
+    `if valuelen > view.ColsWidth[i] { width := view.ColsWidth[i]; ...[:width-1] + "~" }`. Guard кладём
+    внутрь этой ветки, до слайсинга, как в `top/printDataCell`. Функция возвращает `(int, error)`;
+    существующие error-пути возвращают `0, err` — держаться того же вида.
+- `report/report_test.go` — добавить четыре теста из TDD Anchor. Для tar-based тестов взять harness из
+  `report_record_replslots_test.go`: локальный `writeEntry(name string, payload []byte)` поверх
+  `tar.NewWriter(&tarBuf)`, имена записей в формате рекордера `20060102T150405.000`, тики по одной секунде
+  (тогда `itv == 1`). На каждый тик — записи `meta.*`, `activity.*`, `sysinfo.*`. `meta` — 7-колоночный
+  `PGresult`, `readMeta` читает только индекс 1 (`version_num`): `120000` для старых тиков и `130000` для
+  новых. Для ассертов удобно нормализовать вывод существующими `stripANSI` + `strings.Fields`, как это
+  сделано в replslots-тесте (`report_record_replslots_test.go:178-180`) — новые golden-файлы не заводить.
+
+**Раскладки для теста** (из Data Models tech-spec; `report/` их только читает из архива):
+
+- PG 10–12, 14 колонок: `pid, cl_addr, cl_port, datname, usename, appname, backend_type, wait_etype,
+  wait_event, state, xact_age, query_age, change_age, query` — `state` на индексе 9.
+- PG 13+, 17 колонок: `pid, leader, cl_addr, cl_port, datname, usename, appname, backend_type, wait_etype,
+  wait_event, state, backend_xid, horizon_xacts, xact_age, query_age, change_age, query` — `state` на
+  индексе 10, индекс 9 занимает `wait_event`.
+
+**Dependencies:**
+- От других задач не зависит (`depends_on: []`, wave 1). Файлы `report/report.go` и `report/report_test.go`
+  в wave 1 больше никем не трогаются; Task 4 (wave 2) правит `report/describe.go` и добавляет свой тест в
+  `report/report_test.go` — конфликт разведён волнами.
+- Новых пакетов нет: `archive/tar`, `bytes`, `database/sql`, `encoding/json`, `strings`, `time` в тестах уже
+  используются в пакете.
+
+**Edge cases:**
+- **Архиву нужно ≥2 sample'а после смены версии.** Первый sample новой версии съедается веткой version-change
+  как `prev` и уходит в `continue`; печать начинается со второго. Более короткий архив оставит тест зелёным
+  на пустом отчёте — то есть тест не проверит ничего.
+- **И ≥2 sample'а до смены версии.** Первый съедается как `prev` (`!prevStat.Valid`), второй печатается —
+  и только он защёлкивает `Aligned`, `orderConfigured` и обнуляет счётчик шапки. Без него сбрасывать нечего
+  и дефект не воспроизводится.
+- **Строк в sample'е должно быть заметно меньше 20.** `printStatHeader` возвращает `0` после печати шапки,
+  дальше `linesPrinted += n`. При 2–3 строках на sample счётчик к границе версий остаётся сильно ниже
+  `repeatHeaderAfter`, и отсутствие сброса счётчика видно как «старой шапки не сменилось». При большом
+  числе строк шапка перепечаталась бы сама собой и тест стал бы зелёным по совпадению.
+- **Тест гоняем мимо `app.doReport`.** `doReport` поднимает `readTar` и `processData` в горутинах; паника
+  в горутине кладёт весь процесс `go test`, а не краснит один тест. Поэтому `processData` вызываем прямо
+  в горутине теста, а `readTar` — в отдельной горутине как поставщика в канал (либо кормим `dataCh`
+  вручную, как `Test_processData` на 283-297). Обратная сторона: маршрут через пайплайн остаётся
+  непокрытым — это дополнительный аргумент за guard, а не повод его выкинуть.
+- **`-o` колонки нет в новой раскладке** — `getColumnIndex` вернёт `false`, `orderConfigured` останется
+  `false`, и без явного восстановления дефолта `v.OrderKey` сохранит индекс от старой раскладки. Это тот
+  самый путь к «громкому» отказу, поэтому дефолт восстанавливать надо, а не полагаться на переразрешение.
+- **Значение с длиной 0 при нулевой ширине.** В `top/printDataCell` guard стоит **внутри**
+  `if valuelen > width`, поэтому пустое значение при `width == 0` ошибку не даёт. Повторить ровно так же —
+  расхождение с близнецом здесь дороже мнимой строгости.
+- **Смена версии «вниз»** (архив, склеенный из двух записей) обрабатывается тем же кодом: сравнивается
+  неравенство версий, а не порядок.
+
+**Implementation hints:**
+- Счётчик шапки сбрасывается в `repeatHeaderAfter`, **не** в `0` — см. комментарий на `report.go:237`:
+  начальное значение `repeatHeaderAfter` означает «печатать шапку немедленно». Ноль даст ровно
+  противоположный эффект и это неочевидно при чтении.
+- Дефолтный ключ сортировки экрана удобно снять один раз до входа в цикл (`v` на этот момент ещё несёт
+  seed из `view.New()`), и восстанавливать из сохранённой пары `OrderKey`/`OrderDesc`.
+- `formatStatSample` пересчитывает `ColsWidth`/`Cols` только при `Aligned == false`; сброса флага
+  достаточно, чтобы ширины пересчитались, но старые `ColsWidth`/`Cols` лучше обнулить в той же точке —
+  иначе между сбросом и следующим `formatStatSample` в `v` живёт заведомо неверная мапа.
+- Техдолг **[020]** (диф-цикл индексирует предыдущий снимок шириной текущего) этой задачей **не становится
+  достижимым**: ветка version-change по-прежнему заменяет `prevStat` на новый sample, поэтому `curr`/`prev`
+  всегда одной версии и одной ширины. Guard в общий диф-движок не добавляем.
+- В `printStatSample` параллельно ходят `i` (индекс по `res.Cols`/`ColsWidth`) и `colnum` (индекс по
+  `Values`), они всегда равны — не рефакторить, задача не про это.
+- Формулировка ошибки guard'а — по образцу близнеца (`top/stat.go:1006`: `zero or negative width, skip`);
+  расходиться с ним без причины не стоит.
+- Безопасность (для dev-security-auditor): guard закрывает `slice bounds out of range [:-1]` на
+  недоверенном архиве — `report` читает файл, полученный от кого угодно, и падение процесса на крафтовом
+  архиве это DoS-путь того же семейства, что закрытый ранее [009].
+
+## Reviewers
+
+- **dev-code-reviewer** → `docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-task-03-dev-code-reviewer-review.json`
+- **dev-security-auditor** → `docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-task-03-dev-security-auditor-review.json`
+- **dev-test-reviewer** → `docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-task-03-dev-test-reviewer-review.json`
+
+## Post-completion
+
+- [ ] Записать краткий отчёт в [013-feat-activity-xmin-horizon-decisions.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [ ] Если отклонились от спека — описать отклонение и причину
+- [ ] Обновить user-spec/tech-spec если что-то изменилось

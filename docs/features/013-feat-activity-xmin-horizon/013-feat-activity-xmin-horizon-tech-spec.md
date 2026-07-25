@@ -34,13 +34,13 @@ constraint on this screen.
 
 - **`internal/query/activity.go`** — new `PgStatActivityPG13` constant, returned from an early
   guard above the existing switch, which is left untouched (see Decision 3). Signature stays
-  `(string, int)`. A `PostgresV13` constant is added to `query.go` alongside the existing
-  `PostgresV15`–`PostgresV19`.
+  `(string, int)`. No new version constant is needed: `PostgresV13` already exists in `query.go`
+  alongside the full `PostgresV10`–`PostgresV19` range.
 - **`internal/stat/postgres.go`** — `PGresult.sort` gains non-empty sample selection and
   empty-last ordering across all three comparator modes.
-- **`report/report.go`** — reset the alignment flag, the header-repeat counter and the resolved
-  sort-column index when a replayed sample's PG version changes; restore the zero-width guard in
-  the truncation path.
+- **`report/report.go`** — on a replayed version change, reset the alignment flag, the
+  header-repeat counter, and the sort column (restoring the view's seed `OrderKey`/`OrderDesc`,
+  not merely re-arming the latch); restore the zero-width guard in the truncation path.
 - **`report/describe.go`** — three new column descriptions plus four caveats and a PG 13+ note in
   the activity block.
 - **`docs/tech-debt.md`** — three new register entries.
@@ -273,7 +273,14 @@ through the replay pipeline.
    columns *mid-layout*, so after the boundary the same index denotes a different column and the
    report is silently sorted by something the operator did not ask for. A wrong answer with no
    symptom is worse than a crash, and it is reachable on exactly the archives this feature makes
-   possible.
+   possible. Concretely, `state` is index 9 in the 14-column layout and index 10 in the
+   17-column one, where index 9 is `wait_event` — so the mis-sort is demonstrable, not theoretical.
+
+   **Clearing the latch is not sufficient.** If the requested column is absent from the new
+   layout, `getColumnIndex` returns false, the latch simply stays down, and `OrderKey` keeps the
+   index resolved against the *old* layout — which is the loud-failure path again. The reset must
+   therefore restore the view's seed `OrderKey`/`OrderDesc`, captured once before the loop, rather
+   than only re-arming the latch.
 
 On the guard: an earlier draft of this spec rejected it as "treating the symptom". That was wrong,
 and the reason is parity rather than defence in depth. `view.ColsWidth` is a `map[int]int`, so a
@@ -371,13 +378,19 @@ None.
 - `PGresult.sort` on a sparse duration column and a sparse string column — the rule is uniform.
 - `PGresult.sort` on a fully empty column — no-op, input order preserved.
 - Report formatting across a version change: widths recomputed, header redrawn immediately, sort
-  column re-resolved against the new column list, no panic. Driven against the formatting function
-  directly, not the replay goroutine.
+  column re-resolved against the new column list — including the case where the requested column
+  is absent from the later layout — and no panic. Driven against the formatting function directly,
+  not the replay goroutine. The archive needs at least two samples on *each* side of the change:
+  two before, or nothing latches and there is nothing to reset; two after, because the branch
+  consumes the first.
 - The zero-width guard in the truncation path: a width of zero or less returns an error and stops
   the cell from being printed, exactly as its twin in `top` does — not a silently empty cell.
 - A replay case where a blank value meets a sparse **default** sort key — the empty
   `retained,KiB` path — since this is the only place the changed sort behaviour meets real
-  recorded data.
+  recorded data. **The case must be constructed to actually diverge:** a lone blank under
+  descending sort lands last under both the old and the new behaviour, so such a test would pass
+  either way and prove nothing. It must either place a genuine `"0"` beside the blank, or put the
+  blank in the first row so the old code falls into string mode.
 - Describe block ordering for the activity screen, following the existing progress-screen
   precedent.
 
