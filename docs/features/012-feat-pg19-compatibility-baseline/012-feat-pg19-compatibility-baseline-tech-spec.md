@@ -16,8 +16,9 @@ Three independent workstreams, sequenced so the riskiest one retires first.
    through the test suite. Separately, replace the silent PG 14 fallback in `NewTestConnectVersion` with an
    error — the function's own doc comment already promises that behaviour.
 2. **Three version-aware progress selectors.** Each of `progress_vacuum`, `progress_analyze` and
-   `progress_basebackup` gains a second query constant and a `Select…Query(version) (string, int, [2]int)`
-   selector wired into `view.Configure()`, following the `io.go` / `bgwriter.go` idiom. New columns are
+   `progress_basebackup` gains a second query constant and a
+   `SelectStatProgressXxxQuery(version) (string, int, [2]int)` selector wired into `view.Configure()`,
+   following the `io.go` / `bgwriter.go` idiom. New columns are
    inserted mid-layout, so `Ncols` and `DiffIntvl` both become version-dependent.
 3. **Verification pass** over every registered `top` screen on a live PG 19 cluster, plus report-replay
    coverage proving that pre-0.12 archives are unaffected.
@@ -34,7 +35,9 @@ No new views, hotkeys, menu entries or recorder changes. The `p`/`P` progress gr
 - **`internal/postgres/testing.go`** — `190000: 21919` in the ports map, and `NewTestConnectVersion`
   returns an error for an unmapped version instead of falling back to the PG 14 cluster.
 - **`internal/query/progress_vacuum.go` / `progress_analyze.go` / `progress_basebackup.go`** — one PG 19
-  query constant and one selector each.
+  query constant and one selector each, named `SelectStatProgressVacuumQuery`,
+  `SelectStatProgressAnalyzeQuery` and `SelectStatProgressBasebackupQuery` to match the existing
+  `SelectStatXxxQuery` family.
 - **`internal/view/view.go`** — three new `case` blocks in `Configure()`. The static `New()` map keeps its
   pre-19 values; it is the pre-Configure default and is pinned by tests.
 - **`report/describe.go`** — the three progress description texts gain rows for the new columns.
@@ -160,16 +163,19 @@ once the hole is fixed.
 
 ### Decision 8: Per-version query constants, never NULL-padded unified columns
 **Decision:** Two constants per screen; the pre-19 constant is untouched.
-**Rationale:** ADR [004] settled this for `bgwriter`: a `NULL AS started_by` column on PG 18 would show a
-permanently blank column to users of a version that simply does not have the data.
+**Rationale:** ADR [004] settled this for `bgwriter`.
+**Alternatives considered:** One unified query with `NULL AS started_by` for pre-19 — rejected by ADR [004]:
+it shows a permanently blank column to users of a version that simply does not have the data.
 
 ### Decision 9: Autopilot assumption — branch and task granularity
 **Decision:** Work happens on `feature/pg19-compatibility-baseline`. The three progress screens are one task
 rather than three, and the test-suite sweep is a separate task that owns every `_test.go` file the selector
 task does not.
-**Rationale:** Autopilot default branch strategy. The three screens share `internal/view/view.go`, so
-parallel tasks would collide in the same file; file ownership is stated per task so waves can run
+**Rationale:** Autopilot default branch strategy. File ownership is stated per task so waves can run
 concurrently without conflicts.
+**Alternatives considered:** One task per progress screen — rejected: all three share `internal/view/view.go`
+and would collide in the same file if run in parallel, and serialising them into three waves buys nothing
+over a single cohesive task.
 
 ### Deferred items to record at feature finalization
 
@@ -341,10 +347,10 @@ mapped literals, none changes behaviour.
 #### Task 1: PG 19 probe and test-image environment
 - **Description:** Add a PG 19 cluster to the testing image: the beta apt channel in its own source file,
   pinned per Decision 5a so it cannot displace the existing clusters' packages, the PG 19 packages
-  installed from it explicitly, and PG 19 in the six version loops of the environment preparation script. Build the
-  image locally and confirm the cluster starts and the fixtures load. This is the feature's first task and
-  runs before any Go code, because its outcome decides whether the feature proceeds, absorbs a base-image
-  migration, or pauses. Does not touch the e2e script or the workflows (Decision 4).
+  installed from it explicitly, and PG 19 in the six version loops of the environment preparation script.
+  Build the image locally and confirm the cluster starts and the fixtures load; leave it running, because
+  every later task verifies against that local cluster. Runs before any Go code — see the probe ladder in
+  Risks. Does not touch the e2e script or the workflows (Decision 4).
 - **Skill:** infrastructure-setup
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-infrastructure-reviewer
 - **Verify:** bash — build the image, start the PG 19 cluster, load fixtures
@@ -370,14 +376,15 @@ mapped literals, none changes behaviour.
   with the new columns in the positions the user-spec specifies, a selector returning query plus column
   count plus diff interval, and the matching wiring in the view configuration. Owns the three progress query
   files and their test files, including switching their execution tests from the bare constant to the
-  selector.
+  selector. Also owns the view package's tests, so the PG 19 rows that prove this wiring land in the same
+  task as the wiring itself.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/... ./internal/view/...`
 - **Files to modify:** `internal/query/progress_vacuum.go`, `internal/query/progress_analyze.go`,
   `internal/query/progress_basebackup.go`, `internal/query/progress_vacuum_test.go`,
   `internal/query/progress_analyze_test.go`, `internal/query/progress_basebackup_test.go`,
-  `internal/view/view.go`
+  `internal/view/view.go`, `internal/view/view_test.go`
 - **Files to read:** `internal/query/io.go`, `internal/query/bgwriter.go`, `internal/query/bgwriter_test.go`,
   `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
@@ -385,9 +392,9 @@ mapped literals, none changes behaviour.
 
 #### Task 4: Thread PG 19 through the rest of the test suite
 - **Description:** Add the PG 19 version to every live-connection version loop and every per-version
-  assertion table outside the three progress test files, and add PG 19 rows to the two count-based tests
-  that run without a database, deriving their expectations from the actual per-view version gates rather
-  than copying a lower row.
+  assertion table outside the files owned by Task 3, and add a PG 19 row to the recording filter test that
+  runs without a database, deriving its expectation from the actual per-view version gates rather than
+  copying a lower row.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `make test`
@@ -399,7 +406,9 @@ mapped literals, none changes behaviour.
   `internal/query/progress_create_index_test.go`, `internal/query/replication_slots_test.go`,
   `internal/query/replication_test.go`, `internal/query/sizes_test.go`,
   `internal/query/statements_test.go`, `internal/query/tables_test.go`, `internal/query/wal_test.go`,
-  `internal/stat/postgres_test.go`, `internal/view/view_test.go`, `record/record_test.go`
+  `internal/stat/postgres_test.go`, `record/record_test.go`
+  <!-- internal/view/view_test.go is deliberately excluded — owned by Task 3, whose Configure wiring it proves -->
+
 - **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-code-research.md`,
   `.claude/skills/project-knowledge/patterns.md`
 
@@ -421,7 +430,9 @@ mapped literals, none changes behaviour.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; the three existing progress goldens unchanged
-- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new), `report/testdata/` (new goldens)
+- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new),
+  `report/testdata/report_record_progress_vacuum_pg18.golden` (new),
+  `report/testdata/report_record_progress_vacuum_pg19.golden` (new)
 - **Files to read:** `report/report_record_bgwriter_test.go`, `report/report.go`
 
 #### Task 7: Documentation update
@@ -434,7 +445,7 @@ mapped literals, none changes behaviour.
   `.claude/skills/project-knowledge/deployment.md`, `.claude/skills/project-knowledge/architecture.md`
 - **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
-### Wave 5 (зависит от Wave 4 — действие пользователя)
+### Wave 5 (зависит от Wave 1 — действие пользователя)
 
 #### Task 8: Publish the test image (user action)
 - **Description:** Build and push the new testing image tag to DockerHub, then run it against unmodified
@@ -450,10 +461,11 @@ mapped literals, none changes behaviour.
 
 #### Task 9: Switch CI to the new image and extend the e2e script
 - **Description:** Point both workflows at the new image tag and add the PG 19 port to the end-to-end
-  script. Both land together and only after the image is published, per Decision 4.
+  script. Both land together and only after the image is published, per Decision 4. This is also the first
+  point where the whole Go suite runs against the published image rather than a locally built one.
 - **Skill:** deploy-pipeline
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-deploy-reviewer
-- **Verify:** bash — `./testing/e2e.sh` passes including the PG 19 port
+- **Verify:** bash — `make test` and `./testing/e2e.sh` against the published image, including the PG 19 port
 - **Files to modify:** `testing/e2e.sh`, `.github/workflows/default.yml`, `.github/workflows/release.yml`
 - **Files to read:** `testing/prepare-test-environment.sh`
 
@@ -470,3 +482,6 @@ mapped literals, none changes behaviour.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
 - **Verify:** bash + user — full QA per the user-spec "Как проверить" section
+- **Files to modify:** none
+- **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`,
+  `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-tech-spec.md`
