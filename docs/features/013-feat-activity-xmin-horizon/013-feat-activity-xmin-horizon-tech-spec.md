@@ -11,16 +11,18 @@ size: M
 
 Add a PG-13+ branch to the `activity` query carrying three new columns — `leader`,
 `backend_xid`, `horizon_xacts` — inserted at fixed positions in the existing column list. The
-existing `PgStatActivityDefault` becomes the PG 10–12 branch, unchanged.
+branch is an early return above the existing selector switch, which is left untouched, so
+`PgStatActivityDefault` keeps naming that switch's `default:` case and now covers PG 10–12.
 
 Two defects that this feature walks into are fixed alongside it:
 
 1. **Sort-mode detection** (`internal/stat/postgres.go`) picks the comparator by inspecting a
    single cell and lets empty cells parse as `0`. Sparse columns therefore sort wrongly, which
    breaks the feature's primary user story.
-2. **Tech debt [021]** — column widths are not recomputed when an archive's recorded PG version
-   changes mid-replay. This feature adds a second version boundary to that path, and the
-   failure mode is a panic, not a cosmetic defect.
+2. **Stale layout state across a replayed version change** — tech debt [021] plus two neighbours
+   it sits with: the header counter and the resolved sort-column index. This feature adds a
+   boundary to that path where the column *positions* shift, so a latched index silently sorts a
+   report by the wrong column.
 
 Everything else the feature needs already exists: `view.Configure` already calls the activity
 selector, `report/` never reads `view.Ncols`, and horizontal scroll already removed the width
@@ -30,20 +32,23 @@ constraint on this screen.
 
 ### What we're building/modifying
 
-- **`internal/query/activity.go`** — the PG-13+ query becomes `PgStatActivityDefault`, the existing
-  text is renamed `PgStatActivityPG10`, and `SelectStatActivityQuery` gains a branch at PG 13
-  (see Decision 3). Signature stays `(string, int)`.
+- **`internal/query/activity.go`** — new `PgStatActivityPG13` constant, returned from an early
+  guard above the existing switch, which is left untouched (see Decision 3). Signature stays
+  `(string, int)`. A `PostgresV13` constant is added to `query.go` alongside the existing
+  `PostgresV15`–`PostgresV19`.
 - **`internal/stat/postgres.go`** — `PGresult.sort` gains non-empty sample selection and
   empty-last ordering across all three comparator modes.
 - **`report/report.go`** — reset the alignment flag, the header-repeat counter and the resolved
   sort-column index when a replayed sample's PG version changes; restore the zero-width guard in
   the truncation path.
-- **`report/describe.go`** — three new column descriptions plus three caveats in the activity block.
+- **`report/describe.go`** — three new column descriptions plus four caveats and a PG 13+ note in
+  the activity block.
 - **`docs/tech-debt.md`** — three new register entries.
 
-Not modified: `internal/view/view.go` (the `Configure` wiring already exists and the seed must
-stay at 14 — see Decision 3), `internal/stat/help.go` (dead code — see Decision 8),
-`internal/align/`, the `procpidstat` screen, the `replication` screen.
+Not modified: `internal/view/view.go` (the `Configure` wiring already exists and the seed stays as
+it is — see Decision 3), `internal/stat/help.go` (dead code — see Decision 8), `internal/align/`,
+the `replication` screen, and the `procpidstat` screen — whose *code* is untouched, though its
+sorting changes through the shared function (Decision 4).
 
 ### How it works
 
@@ -56,7 +61,7 @@ column 0.
 The three columns are produced entirely in SQL:
 
 - `coalesce(leader_pid, pid) AS leader`
-- `backend_xid::text` — explicit cast, matching the `replication.go` precedent
+- `backend_xid::text` — explicit cast so the value scans (Decision 7)
 - `age(backend_xmin) AS horizon_xacts` — returns `integer`, no cast needed
 
 NULL reaches the renderer as an empty string because no `coalesce` is applied to the xid columns;
@@ -122,38 +127,42 @@ PG 13 on the new one.
 fixture set); adding a PG 13 cluster to the test image (rejected — disproportionate, and PG 13 is
 past EOL).
 
-### Decision 3: Constant naming — `Default` stays the newest branch; the seed keeps 14 columns
+### Decision 3: New branch as an early return; nothing is renamed and the seed keeps 14 columns
 
-**Decision:** rename the existing constant to `PgStatActivityPG10` (the PG 10–12 branch) and give
-the new PG-13+ query the name `PgStatActivityDefault`. The `activity` seed in `view.New()` points
-at `PgStatActivityPG10` with `Ncols: 14`.
+**Decision:** add `PgStatActivityPG13` and return it from an early `if version >= PostgresV13`
+guard placed **above** the existing `switch`, which is left exactly as it is. Nothing is renamed.
+The `activity` seed in `view.New()` is untouched — still `PgStatActivityDefault` with `Ncols: 14`.
 
-**Rationale:** the project's convention across `wal.go`, `bgwriter.go`, `io.go` and the progress
-selectors is `Default` = newest branch, `PG{N}` = the branch starting at version N; bare-digit
-names (`PgStatActivity95/96`) exist only for the 9.x legacy constants. Keeping the old text as
-`Default` while adding `PgStatActivityPG13` would invert that, and — worse — `Default` would no
-longer name the selector's `default:` case, which is exactly what it names today. That is a trap
-for the next reader, and it costs nothing to avoid now.
+**Rationale:** the naming question here is not what it first appears. There is **no consistent
+project convention** to appeal to: `wal.go` returns `PgStatWALDefault` for the *newest* branch,
+while `progress_vacuum.go` — feature 012, the most recent precedent — returns
+`PgStatProgressVacuumPG19` for the newest and keeps `Default` for the older one. `bgwriter.go` and
+`io.go` have no `Default` constant at all. Any claim that one of these is "the" convention would be
+manufactured.
 
-The rename is mechanical: every non-test use is a placeholder that `Configure` overwrites
-immediately, so no behaviour changes.
+What *is* specific and real: in `activity.go` today `PgStatActivityDefault` literally names the
+`switch`'s `default:` case. Appending a newer branch to that switch would quietly break that
+correspondence. An early return above the switch keeps it intact — the newest version is handled
+first and the historical ladder below is untouched — and it is the same shape both `wal.go` and
+`progress_vacuum.go` already use. So the local meaning is preserved, the newest precedent is
+followed, and no identifier moves.
 
-The seed keeps `Ncols: 14`, and pointing it at the PG 10–12 query keeps the placeholder internally
-consistent — before connecting, the version is unknown, so the narrowest layout is the honest
-default. Measured: raising it to 17 breaks exactly two assertions in `top/config_view_test.go`,
-which derive the last-column index from the seed, while `internal/view`, `internal/query`,
-`report` and `internal/align` stay unaffected either way. Feature 012 made the same choice for the
-same reason.
+The seed stays as it is because `Configure` overwrites it at connect time; it is a placeholder, not
+a fact. Measured: raising `Ncols` to 17 breaks exactly two assertions in `top/config_view_test.go`,
+which derive the last-column index from the seed, while `internal/view`, `internal/query`, `report`
+and `internal/align` are unaffected either way. Feature 012 made the same choice for the same
+reason.
 
-Caveat on that measurement: `top` and `record` have failing tests without live clusters
+Caveat on that measurement: `top` and `record` have tests that fail without live clusters
 independently of this feature (`Test_getQueryReport`, `Test_app_setup`, `Test_tarRecorder`), so
-"unaffected" there means relative to the same baseline, not green in absolute terms.
+"unaffected" means relative to that same baseline, not green in absolute terms.
 
-**Alternatives considered:** adding `PgStatActivityPG13` and leaving `Default` on the old text
-(rejected — inverts the convention and misnames the `default:` case); raising the seed to 17
-(rejected — changes nothing at runtime and breaks tests that legitimately assert the pre-connect
-state); pointing the seed at the new `Default` while keeping `Ncols: 14` (rejected — a 17-column
-template beside a 14-column count reads as a bug).
+**Alternatives considered:** renaming the existing constant to `PgStatActivityPG10` so `Default`
+could name the new query (rejected — an earlier draft of this spec did exactly that, justified by a
+convention that turned out not to exist; it churns five files to solve a problem the early return
+solves for free); appending the new branch to the existing switch (rejected — leaves `Default`
+naming a case that is no longer the default); raising the seed to 17 (rejected — changes nothing at
+runtime and breaks tests that legitimately assert the pre-connect state).
 
 ### Decision 4: Empty values sort last in every comparator mode, including strings
 
@@ -253,11 +262,15 @@ through the replay pipeline.
    this is tech debt [021] as registered.
 2. **Header counter.** Resetting alignment alone recomputes widths but leaves the previous header
    on screen for another 20 rows, because the header is redrawn on a counter.
-3. **Sort column.** `orderConfigured` is latched on the first sample and resolves
-   `OrderColName` to an index against that sample's column list; the version-change branch never
-   revisits it. If the later layout is narrower, that stale index can exceed the row width and
-   `PGresult.sort` indexes past the end. This feature creates exactly the kind of boundary where
-   the column count changes, so leaving it latched would be knowingly stepping past a live defect.
+3. **Sort column.** `orderConfigured` is latched on the first sample and resolves the requested
+   `-o` column name to an *index* against that sample's column list; the version-change branch
+   never revisits it. The loud failure — a stale index exceeding a narrower row, so `PGresult.sort`
+   reads past the end — needs the later layout to be narrower, which neither real boundary
+   (9.6→10, 12→13) produces. **The quiet failure is the one that matters:** this feature inserts
+   columns *mid-layout*, so after the boundary the same index denotes a different column and the
+   report is silently sorted by something the operator did not ask for. A wrong answer with no
+   symptom is worse than a crash, and it is reachable on exactly the archives this feature makes
+   possible.
 
 On the guard: an earlier draft of this spec rejected it as "treating the symptom". That was wrong,
 and the reason is parity rather than defence in depth. `view.ColsWidth` is a `map[int]int`, so a
@@ -289,14 +302,23 @@ evaluate.
 arithmetic on the value rather than to make it scannable. The technique is established in the
 codebase; the motivation here is different and worth stating so the two are not conflated.
 
+**Alternatives considered:** casting both for visual symmetry (rejected — an unnecessary cast reads
+as load-bearing and costs the next reader a lookup to discover it is not); casting neither and
+relying on the driver (rejected — measured, `xid` does not scan into the string matrix).
+
 ### Decision 8: Documentation goes only to `report/describe.go`
 
-**Decision:** the three new column descriptions and the three caveats are added to
+**Decision:** the three new column descriptions and the four caveats are added to
 `report/describe.go`. `internal/stat/help.go` is left untouched and recorded as tech debt.
 
 **Rationale:** `internal/stat/help.go` has no consumers anywhere in the repository and is already
 stale — it still calls `horizon_xacts` by its old name. Editing it would spread the new columns
 into dead code and imply it is live.
+
+**Alternatives considered:** documenting in both files (rejected — doubles the surface and makes
+dead code look maintained); deleting `internal/stat/help.go` in this feature (rejected — its
+deadness is not this feature's doing, and a deletion deserves its own change; registered as debt
+instead by Task 5).
 
 ## Data Models
 
@@ -348,8 +370,8 @@ None.
 - Report formatting across a version change: widths recomputed, header redrawn immediately, sort
   column re-resolved against the new column list, no panic. Driven against the formatting function
   directly, not the replay goroutine.
-- The zero-width guard in the truncation path: a width of zero renders an empty cell instead of
-  panicking.
+- The zero-width guard in the truncation path: a width of zero or less returns an error and stops
+  the cell from being printed, exactly as its twin in `top` does — not a silently empty cell.
 - A replay case where a blank value meets a sparse **default** sort key — the empty
   `retained,KiB` path — since this is the only place the changed sort behaviour meets real
   recorded data.
@@ -393,7 +415,7 @@ cells render blank rather than `0`, and whether the parallel-query group visuall
 | 1 | bash | `go test ./internal/query/...` — boundary pinned both sides; live name/order assertion green on PG 14–19 |
 | 2 | bash | `go test ./internal/stat/... ./report/...` — sort rules hold; goldens still pass with the fix present |
 | 3 | bash | `go test ./report/...` — two-version archive replays with correct widths and header, no panic |
-| 4 | bash | `go test ./report/...` — describe order test green; `pgcenter report -d -A` shows the three caveats |
+| 4 | bash | `go test ./report/...` — describe order test green; `pgcenter report -d -A` shows all four caveats and the PG 13+ note |
 | 5 | bash | register entries present in `docs/tech-debt.md` |
 | 6 | bash + user | full QA per the user-spec "Как проверить" section |
 
@@ -456,7 +478,9 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
       sources only; `horizon_xacts` is computed differently here than on the `replication` screen;
       and a blank cell may mean the viewer lacks the privileges to see another session's state,
       not that the session holds nothing
-- [ ] Three entries added to `docs/tech-debt.md`
+- [ ] Three entries added to `docs/tech-debt.md`; `[021]` moved to Resolved Debt; the "why
+      deferred" text of `[020]` corrected; the Project Knowledge sentence describing the activity
+      selector's version branches brought up to date
 - [ ] `make test`, `make lint`, `make vuln` green
 
 ## Implementation Tasks
@@ -470,12 +494,12 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
   are both actually asserted rather than assumed.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/query/... ./internal/view/... ./internal/stat/...`
+- **Verify:** bash — `go test ./internal/query/... ./internal/view/...`
 - **Files to modify:** `internal/query/activity.go`, `internal/query/activity_test.go`,
-  `internal/view/view.go`, `internal/view/view_test.go`, `internal/stat/stat_test.go`,
-  `internal/query/procpidstat.go`
+  `internal/query/query.go`, `internal/view/view_test.go`
 - **Files to read:** `internal/query/replication.go`, `internal/query/wal.go`,
-  `internal/query/progress_vacuum_test.go`, `internal/query/bgwriter_test.go`
+  `internal/query/progress_vacuum.go`, `internal/query/progress_vacuum_test.go`,
+  `internal/query/bgwriter_test.go`, `internal/view/view.go`
 
 #### Task 2: Sort empty-last and non-empty mode selection
 - **Description:** Make sorting of sparse columns correct per Decisions 4 and 5, so that a blank
@@ -486,15 +510,18 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/... ./report/...` (needs live fixture clusters:
   without them `./internal/stat/...` panics rather than failing, an instance of active debt [019])
-- **Files to modify:** `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
+- **Files to modify:** `internal/stat/postgres.go`, `internal/stat/postgres_test.go`,
+  `report/report_record_replslots_test.go`
 - **Files to read:** `internal/query/replication_slots.go`, `internal/view/view.go`,
   `.claude/skills/project-knowledge/patterns.md`
 
 #### Task 3: Recompute report layout on a mid-archive version change
 - **Description:** Close tech debt [021] so an archive spanning a major-version upgrade replays
-  with a correct layout instead of crashing, per Decision 6. Cover it with a synthetic
-  two-version archive, observing the constraints that decision records about archive length and
-  about where the test drives the code from.
+  with a correct layout instead of a stale one, and restore the zero-width guard in the truncation
+  path so a width mismatch fails loudly rather than crashing the process — both per Decision 6.
+  Cover it with a synthetic two-version archive; note that the archive needs at least two samples
+  after the version change, because the replay path consumes the first, and that the test drives
+  the formatting function directly so a failure reddens a test instead of taking down the run.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`
@@ -520,16 +547,18 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - **Description:** Record the debt this feature surfaced but deliberately did not fix: the dead and
   stale `internal/stat/help.go`, the divergent formulas behind the same `horizon_xacts` name on two
   screens, and the gap between the test port map and the versions actually present in the test
-  image. Mark [021] resolved, and correct the "why deferred" text of [020], which currently rests
-  on a reason this feature has shown to be incomplete — archive width consistency is not in fact
-  guaranteed by the version-change path alone.
+  image. Mark [021] resolved, and correct the "why deferred" text of [020], which rests on a reason
+  this feature has shown to be incomplete. Also refresh the Project Knowledge sentence describing
+  the activity selector's version branches, which this feature makes stale.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
-- **Verify:** bash — `grep -c "help.go\|horizon_xacts\|port map" docs/tech-debt.md` returns the
-  three new entries, and `[021]` appears under Resolved Debt
-- **Files to modify:** `docs/tech-debt.md`
+- **Verify:** bash — `grep -n "help.go" docs/tech-debt.md`, `grep -n "\[021\]" docs/tech-debt.md`
+  shows it under Resolved Debt, and `grep -n "SelectStatActivityQuery" .claude/skills/project-knowledge/architecture.md`
+  no longer says "branches at PG 9.6, PG 10"
+- **Files to modify:** `docs/tech-debt.md`,
+  `.claude/skills/project-knowledge/architecture.md`
 - **Files to read:** `internal/stat/help.go`, `internal/postgres/testing.go`,
-  `internal/query/replication.go`
+  `internal/query/replication.go`, `internal/query/activity.go`
 
 ### Final Wave
 

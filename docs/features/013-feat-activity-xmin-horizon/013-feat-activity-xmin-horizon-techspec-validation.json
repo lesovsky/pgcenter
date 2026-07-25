@@ -3,52 +3,58 @@
   "findings": [
     {
       "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 2 (Sort empty-last): описание дублирует Decision 4 и содержит HOW-уровень — «choose its comparator from the first non-empty cell», «in every mode and both directions». Маркер решения: «since the earlier compatibility measurement was taken without it».",
-      "fix": "Сократить до WHAT+WHY: «Исправить сортировку разреженных колонок в PGresult.sort по правилу из Decision 4, чтобы пустая ячейка не совпадала с настоящим нулём.» Механику (выбор образца, порядок пустых, оба направления) оставить в Decisions и перенести в task-файл при декомпозиции."
+      "category": "structure",
+      "issue": "Decision 7 (Cast only `backend_xid`) и Decision 8 (Documentation goes only to `report/describe.go`) не содержат блока «Alternatives considered» — шаблон требует Decision + Rationale + Alternatives для каждого решения. У Decision 8 альтернатива очевидна и по сути изложена внутри Rationale («editing help.go would spread the new columns into dead code»), но не вынесена как рассмотренная и отклонённая.",
+      "fix": "Добавить «Alternatives considered» в Decisions 7 и 8: для 7 — каст `age()` к тексту / каст обоих значений по образцу `replication.go` (отклонено — шум); для 8 — обновить `internal/stat/help.go` вместе с describe.go (отклонено — мёртвый код), удалить help.go в рамках фичи (отклонено — не наша причина, идёт в реестр техдолга)."
     },
     {
       "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 3 (Recompute report layout): описание целиком повторяет Decision 5, включая и решение, и его обоснование — «reset both the alignment flag and the header-repeat counter», «instead of 20 rows later», «driving the formatting function directly so the failure is a test failure rather than a panic inside a goroutine». Маркеры: «instead of», «rather than».",
-      "fix": "Оставить в описании только область: «Закрыть техдолг [021] — пересчитывать раскладку отчёта при смене версии PG внутри архива (детали в Decision 5).» Оба сброса и способ тестирования — в Decisions / task-файл."
+      "category": "structure",
+      "issue": "Внутреннее противоречие после переработки Decision 3. В разделе Architecture написано: «Not modified: `internal/view/view.go` (the `Configure` wiring already exists and the seed must stay at 14 — see Decision 3)». Но Decision 3 требует, чтобы seed в `view.New()` указывал на `PgStatActivityPG10`, а сегодня он указывает на `PgStatActivityDefault` (`internal/view/view.go:42`), который по этому же решению становится PG-13+ запросом. Task 1 честно включает `internal/view/view.go` в Files to modify — то есть файл меняется, а Architecture утверждает обратное.",
+      "fix": "Убрать `internal/view/view.go` из списка «Not modified» и переформулировать: файл меняется ровно на одну строку — переуказание seed на `PgStatActivityPG10`; `Ncols: 14` и остальная wiring `Configure` остаются как есть."
     },
     {
       "severity": "major",
-      "category": "task_quality",
-      "issue": "Task 1 (PG 13+ activity query branch): конкретное значение границы `130000` присутствует и в Decision 2, и в описании задачи — дублирование конфигурационного значения. Также маркер решения «instead of merely checking the query runs».",
-      "fix": "Ссылаться на Decision 2 вместо повторения числа: «Добавить ветку запроса activity для PG 13+ с колонками leader/backend_xid/horizon_xacts на позициях из Data Models; граница ветвления — по Decision 2.»"
-    },
-    {
-      "severity": "minor",
-      "category": "task_quality",
-      "issue": "Task 4 (Describe the new columns): описание перечисляет содержимое всех трёх caveat'ов — это контент task-файла, а не область задачи. Формулировка «leader is derived rather than the raw leader_pid» также содержит маркер решения.",
-      "fix": "Свести к «Добавить три новые колонки в describe-блок activity вместе с caveat'ами, которых требует user-spec, и зафиксировать порядок строк тестом». Тексты caveat'ов — в task-файл."
-    },
-    {
-      "severity": "minor",
       "category": "tasks",
-      "issue": "Task 4 использует скилл `code-writing`, но в Reviewers отсутствует `dev-security-auditor`, входящий в дефолтный набор для этого скилла по каталогу skills-and-reviewers.md.",
-      "fix": "Либо добавить `dev-security-auditor`, либо явно обосновать сокращение набора (задача правит только текстовые описания в `report/describe.go`)."
+      "issue": "У ключевого теста нет владельца. Testing Strategy и таблица Risks называют replay-кейс с пустым `retained,KiB` единственным местом, где изменённая сортировка встречается с реальными записанными данными («coverage of the change therefore comes from…»). Этот тест живёт в `report/report_record_replslots_test.go`, но этот файл не входит в Files to modify ни одной задачи: Task 2 правит только `internal/stat/postgres*.go`, Task 3 — `report/report.go` и `report/report_test.go`, Task 4 — `report/describe.go` и `report/report_test.go`. При декомпозиции обязательное покрытие потеряется.",
+      "fix": "Добавить `report/report_record_replslots_test.go` в Files to modify задачи Task 2 (там же, где меняется сортировка) и упомянуть этот кейс в её описании как второй результат задачи, либо выделить отдельную задачу на покрытие sparse default sort key."
+    },
+    {
+      "severity": "major",
+      "category": "verification",
+      "issue": "Строка Task 4 в таблице Per-task verification проверяет «`pgcenter report -d -A` shows the three caveats», тогда как Acceptance Criteria и описание Task 4 после правок требуют четырёх оговорок (добавлена оговорка про нехватку привилегий). Таблица Risks прямо утверждает, что четвёртая оговорка «named in both the Acceptance Criteria and Task 4 so it cannot be dropped» — но точка проверки её не ловит и пройдёт зелёной без неё.",
+      "fix": "Исправить строку Task 4 в таблице на «four caveats», согласовав с AC и описанием задачи."
     },
     {
       "severity": "minor",
       "category": "standards",
-      "issue": "Имя новой константы `PgStatActivity13` расходится с преобладающей в проекте конвенцией `PgStat{View}PG{version}` (`PgStatWALPG14`, `PgStatBgwriterPG17`, `PgStatIOPG16`, `PgStatProgressVacuumPG19`, `PgStatStatementsTimingPG13`). Голые цифры без `PG` используются только в легаси-константах (`PgStatActivity96`, `PgStatReplication96`).",
-      "fix": "Переименовать в `PgStatActivityPG13` либо явно зафиксировать в Decisions, что для activity.go сохраняется локальная нумерация без префикса PG."
+      "issue": "Обоснование Decision 3 частично не соответствует коду. Утверждение «the project's convention across `wal.go`, `bgwriter.go`, `io.go` and the progress selectors is `Default` = newest branch» верно только для `wal.go` (Default = PG 18+) и `statements.go` (Timing/JIT Default = PG 17+). В `internal/query/progress_vacuum.go` наоборот: `PgStatProgressVacuumPG19` — новая ветка, `PgStatProgressVacuumDefault` — старая (это прецедент фичи 012). В `bgwriter.go` и `io.go` константы `Default` нет вовсе, новейшие ветки называются `PgStatBgwriterPG18` / `PgStatIOPG18`. Кроме того, patterns.md документирует правило буквально как «Add `PgStatXxxPGNN` constant».",
+      "fix": "Само именование (`PgStatActivityDefault` = PG 13+, `PgStatActivityPG10` = PG 10–12) прецедент имеет и претензию round 1 снимает — исправить нужно текст обоснования: сослаться на `wal.go` и селекторы `statements.go`, честно отметить, что progress-селекторы после 012 используют обратную раскладку, и что решающий аргумент здесь — совпадение имени `Default` с веткой `default:` в самом селекторе."
     },
     {
       "severity": "minor",
       "category": "verification",
-      "issue": "Verify у Task 5 — «entries present in `docs/tech-debt.md`» — помечен как bash, но исполняемой команды не содержит; проверка сформулирована абстрактно.",
-      "fix": "Указать конкретную команду, например `grep -n '\\[021\\]' docs/tech-debt.md` и grep по новым идентификаторам записей."
+      "issue": "Verify у Task 5 стал конкретной командой, но её ожидаемый результат не определён: `grep -c \"help.go\\|horizon_xacts\\|port map\" docs/tech-debt.md` считает строки, а не записи реестра, и одна запись даст несколько совпадений (сейчас в `docs/tech-debt.md` ни одного вхождения этих строк нет, так что базовая линия — 0, но итоговое число непредсказуемо). Плюс строка Task 5 в таблице Per-task verification осталась абстрактной («register entries present in `docs/tech-debt.md`») и разошлась с самой задачей.",
+      "fix": "Заменить на проверку по заголовкам записей, например `grep -n '^### \\[0' docs/tech-debt.md` с ожиданием трёх новых номеров и `[021]` в разделе Resolved Debt; ту же команду продублировать в строке Task 5 таблицы Per-task verification."
     },
     {
       "severity": "minor",
       "category": "task_quality",
-      "issue": "Описание Task 6 (Pre-deploy QA) разворачивает полный ручной чек-лист, дублируя раздел «Как проверить» user-spec.",
-      "fix": "Оставить ссылку на раздел user-spec «Как проверить» вместо перечисления пунктов — так чек-лист не разъедется с источником."
+      "issue": "Task 3 — единственное описание, которое после сокращения ушло в сторону «отсылки вместо содержания». Вторая фраза «Cover it with a synthetic two-version archive, observing the constraints that decision records about archive length and about where the test drives the code from» не сообщает ни одного из двух ограничений (≥2 сэмпла после смены версии; тест драйвит функцию форматирования напрямую) и вдобавок грамматически спотыкается. Также в области задачи не виден восстанавливаемый zero-width guard, хотя это отдельный пункт Acceptance Criteria и отдельная правка в `report/report.go`.",
+      "fix": "Переписать вторую фразу так, чтобы она читалась самостоятельно, и назвать второй результат: «Покрыть синтетическим двухверсионным архивом (ограничения по длине архива и по точке входа теста — в Decision 6) и восстановить защиту от нулевой ширины в пути усечения отчёта, по образцу `top/printDataCell`.» Task 1, 2, 4 и 6 после правок баланс WHAT+WHY держат — переделывать их не нужно."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Ни одна задача не обновляет Project Knowledge, хотя `.claude/skills/project-knowledge/architecture.md` перечисляет точки ветвления дословно — «`SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10» — и после фичи станет неверной; правило сортировки пустых ячеек так же просится в `patterns.md` (там сейчас есть только раздел про `sort.SliceStable`). В фиче 012 обновление PK было отдельной задачей (task 07), а не только шагом финализации.",
+      "fix": "Либо добавить задачу в Wave 2 на обновление `architecture.md` (точка ветвления activity) и `patterns.md` (правило empty-last и выбор образца режима сортировки), либо явно записать в spec, что PK обновляется на этапе `/done`, чтобы это не выглядело пропуском."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task 5 делает больше, чем зафиксировано в Acceptance Criteria: помимо трёх новых записей она помечает [021] как resolved и правит текст «why deferred» у [020]. В AC есть только «Three entries added to `docs/tech-debt.md`», поэтому приёмка (Task 6) две из трёх правок реестра не проверит.",
+      "fix": "Дополнить пункт AC: три новые записи, [021] в разделе Resolved Debt, скорректированное обоснование отсрочки у [020]."
     }
   ],
-  "summary": "Шаблон соблюдён полностью: frontmatter корректен (created 2026-07-25, status draft, branch feature/activity-xmin-horizon, size M), все секции присутствуют и заполнены, Final Wave содержит только Pre-deploy QA (Deploy/Post-deploy обоснованно отсутствуют), 6 задач при лимите 15, все скиллы и ревьюеры — из каталога и существуют в ~/.claude/agents/. Конфликтов волн нет: внутри Wave 1 и Wave 2 пересечений по «Files to modify» не найдено, порядок волн соответствует зависимостям, циклов нет. Оценок времени в документе нет. Критических находок нет — статус approved. Основная претензия (3 major) — технические решения из Decisions 2, 4 и 5 продублированы внутри описаний задач 1–3 на уровне HOW, что при декомпозиции даст расхождение источников правды."
+  "summary": "Критических находок нет — статус approved. Все семь замечаний round 1 закрыты: описания Task 1–4 и 6 сокращены до области и больше не повторяют Decisions на уровне HOW (значение 130000 из Task 1 убрано, механика сортировки — из Task 2, оба сброса и способ тестирования — из Task 3, тексты caveat'ов — из Task 4, чек-лист user-spec — из Task 6); Task 4 получила dev-security-auditor; verify у Task 5 стал командой; именование констант переработано. Обратного перекоса нет: Task 1, 2, 4 и 6 сообщают WHAT и WHY самостоятельно, отсылки к Decisions идут поверх содержания, а не вместо него; единственное исключение — вторая фраза Task 3. Шаблон соблюдён, кроме отсутствующих «Alternatives considered» в Decisions 7 и 8. Разросшийся Decision 6 и новая подсекция Decision 4 структуру не ломают и в описания задач не протекли. Новый материал принёс две рассинхронизации: четвёртая оговорка (privileges) попала в AC, Risks и Task 4, но не в таблицу Per-task verification, а replay-кейс с пустым `retained,KiB`, объявленный единственным реальным покрытием правки сортировки, не принадлежит ни одной задаче по Files to modify. Конфликтов волн нет — внутри Wave 1 и Wave 2 пересечений по Files to modify не найдено (`report/report_test.go` делят Task 3 и Task 4, но они в разных волнах), порядок волн соответствует зависимостям, циклов нет. 6 задач при лимите 15, все скиллы и ревьюеры — из каталога и существуют в ~/.claude/agents/, оценок времени в документе нет."
 }

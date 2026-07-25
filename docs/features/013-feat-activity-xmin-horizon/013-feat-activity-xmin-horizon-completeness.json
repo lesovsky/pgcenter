@@ -1,5 +1,6 @@
 {
   "status": "pass",
+  "round": 2,
   "sources": {
     "user_spec": true,
     "tech_spec": true,
@@ -13,139 +14,163 @@
     {
       "id": "US-1",
       "requirement": "На PG 13+ activity показывает 17 колонок в зафиксированном порядке; живая проверка на PG 14-19",
-      "covered_by": "Solution; Decision 1 (порядок воспроизведён дословно, совпадает); Data Models; Task 1; tech-spec AC 1-2",
+      "covered_by": "Solution; Decision 1 (порядок воспроизведён дословно, совпадает с user-spec); Data Models; Integration tests; Task 1; tech-spec AC 1-2",
       "status": "covered"
     },
     {
       "id": "US-2",
       "requirement": "На PG 10-12 селектор возвращает прежний запрос и 14 колонок; только табличный юнит-тест",
-      "covered_by": "Decision 2 (граница 130000, фиксация с обеих сторон); Task 1; tech-spec AC 1",
+      "covered_by": "Decision 2 (граница 130000, фиксация с обеих сторон); Decision 3; Task 1; tech-spec AC 1",
       "status": "covered"
     },
     {
       "id": "US-3",
       "requirement": "leader = собственный pid у лидера/бэкенда, pid лидера у воркера; сортировка группирует",
-      "covered_by": "Architecture (coalesce(leader_pid, pid)); Decision 1; Task 6 (ручная приёмка parallel group)",
+      "covered_by": "Architecture (coalesce(leader_pid, pid)); Decision 1; tech-spec AC 'column semantics'; Task 6 (ручная приёмка parallel group)",
       "status": "covered"
     },
     {
       "id": "US-4",
-      "requirement": "backend_xid пуст у не писавшей транзакции, непуст у писавшей; никогда не 0",
-      "covered_by": "Architecture (no coalesce -> NULL как пустая строка); Decision 6 (::text); Task 6 (blank-versus-zero)",
+      "requirement": "backend_xid пуст у не писавшей транзакции, непуст у писавшей, никогда не 0",
+      "covered_by": "Architecture (backend_xid::text без coalesce, NULL доходит пустой строкой); Decision 7; tech-spec AC 'column semantics'; Verification approach (ручная половина)",
       "status": "covered"
     },
     {
       "id": "US-5",
-      "requirement": "horizon_xacts пуст без активного снапшота, иначе неотрицательное число; никогда не 0 при отсутствии значения",
-      "covered_by": "Architecture (age(backend_xmin), no coalesce); Decision 4 (0 != пусто); Task 6",
+      "requirement": "horizon_xacts пуст без активного снапшота, иначе неотрицательное число, никогда не 0",
+      "covered_by": "Architecture (age(backend_xmin)); Decision 4 (0 как реальное состояние отделён от пустого); tech-spec AC 'column semantics'",
       "status": "covered"
     },
     {
       "id": "US-6",
       "requirement": "Сортировка по horizon_xacts численна независимо от первой строки; пустые в конец при обеих направлениях; не смешиваются с настоящим нулём",
-      "covered_by": "Decision 4; Task 2; Testing Strategy (unit); tech-spec AC 5-6",
+      "covered_by": "Decision 4; Decision 5; Unit tests (3 пункта про sort); Task 2; tech-spec AC 5-7",
       "status": "covered"
     },
     {
       "id": "US-7",
-      "requirement": "report -A на архиве до 0.12 воспроизводится байт-в-байт; эталоны перепроверить уже с правкой сортировки",
-      "covered_by": "Backward Compatibility; Testing Strategy (goldens re-run with the sort fix); Task 2; tech-spec AC 7",
+      "requirement": "report -A на архивах до 0.12 воспроизводится как сегодня; перемерить уже с правкой сортировки",
+      "covered_by": "Backward Compatibility (с явной оговоркой, что прежнее измерение сделано без правки); Integration tests; tech-spec AC 8 ('with the sort fix applied')",
       "status": "covered"
     },
     {
       "id": "US-8",
       "requirement": "report -d -A описывает новые колонки и содержит три оговорки",
-      "covered_by": "Decision 7; Task 4 (все три оговорки перечислены); tech-spec AC 9",
+      "covered_by": "Decision 8; Task 4; tech-spec AC (четыре оговорки — три из user-spec плюс privileges из Риска 2 user-spec)",
       "status": "covered"
     },
     {
       "id": "US-9",
-      "requirement": "Архив со сменой версии пересчитывает ширины; не меньше двух замеров после смены версии",
-      "covered_by": "Decision 5; Task 3; Testing Strategy; Risks; tech-spec AC 8",
+      "requirement": "Архив со сменой версии пересчитывает ширины; нет устаревшей раскладки и падения на нулевой ширине; >=2 замера после смены версии",
+      "covered_by": "Decision 6 (три сброса + восстановленный гард); Unit/Integration tests; Risks; Task 3; tech-spec AC 9-10",
       "status": "covered"
     },
     {
       "id": "US-10",
-      "requirement": "Тест запросов activity сверяет с живым сервером имена колонок и их порядок на PG 14-19",
-      "covered_by": "Task 1; Testing Strategy (Integration tests); tech-spec AC 2",
+      "requirement": "Тест запросов activity сверяет имена колонок и их порядок с живым сервером на PG 14-19",
+      "covered_by": "Integration tests (заменяет проверку 'запрос не падает'); Task 1 Verify; tech-spec AC 2",
       "status": "covered"
     },
     {
       "id": "US-11",
       "requirement": "Порядок строк описания новых колонок в report -d -A зафиксирован тестом",
-      "covered_by": "Task 4; Testing Strategy (Describe block ordering)",
+      "covered_by": "Unit tests ('Describe block ordering ... following the existing progress-screen precedent'); Task 4",
       "status": "covered"
     },
     {
       "id": "US-12",
-      "requirement": "Три записи в реестре техдолга: мёртвый help.go; расхождение формул horizon_xacts; порт-карта против состава тестового образа",
-      "covered_by": "Task 5 (все три названы явно); Decision 7; tech-spec AC 10",
+      "requirement": "Три записи в реестре техдолга: help.go, расхождение формул horizon_xacts, расхождение порт-карты и состава образа",
+      "covered_by": "Decision 8; Task 5; tech-spec AC 13",
       "status": "covered"
     },
     {
       "id": "US-13",
       "requirement": "make test, make lint, make vuln зелёные",
-      "covered_by": "Task 6; tech-spec AC 11",
+      "covered_by": "Agent Verification Plan; Task 6; tech-spec AC 14",
       "status": "covered"
     }
   ],
+  "round_1_followup": [
+    {
+      "finding": "Goldens presented as evidence the sort change is safe",
+      "status": "resolved",
+      "evidence": "Testing Strategy: 'passing them is a regression check, not coverage of the sort change'; покрытие перенесено на replay-кейс с пустым retained,KiB; отдельная строка в Risks предупреждает против подмены покрытия зелёными голденами"
+    },
+    {
+      "finding": "TestViews_Configure activity assertions missing",
+      "status": "resolved",
+      "evidence": "Testing Strategy / Unit tests, второй пункт; internal/view/view_test.go добавлен в Task 1"
+    },
+    {
+      "finding": "Blast radius claimed but not enumerated",
+      "status": "resolved",
+      "evidence": "Decision 4 'Blast radius — enumerated, not gestured at': replslots (OrderKey 4 = retained,KiB), activity.cl_port (реальный -1 на unix-сокетах), procpidstat с явным примирением формулировки user-spec 'не затрагивается'"
+    },
+    {
+      "finding": "minor: Backward Compatibility измерена без правки сортировки",
+      "status": "resolved",
+      "evidence": "Backward Compatibility несёт оговорку и требует перемера"
+    },
+    {
+      "finding": "minor: нет критерия приёмки на семантику колонок",
+      "status": "resolved",
+      "evidence": "Acceptance Criteria: пункт про leader / backend_xid / horizon_xacts"
+    },
+    {
+      "finding": "minor: нет пометки о доступности с PG 13+ в describe",
+      "status": "resolved",
+      "evidence": "Task 4 и соответствующий критерий приёмки"
+    }
+  ],
+  "scope_growth_verdict": {
+    "decision_6_sort_index_reset": "authorized — инженерная необходимость в том же пути воспроизведения, которому фича добавляет границу (report/report.go:238 orderConfigured, ветка на 250 делает continue без сбросов). Обоснование слабее, чем могло быть, см. находку 4",
+    "decision_6_zero_width_guard": "authorized — критерий приёмки user-spec прямо требует 'нет ни устаревшей раскладки, ни падения на нулевой ширине', и Риск 4 user-spec называет отсутствие гарда в пути печати отчёта. Отклонением был отказ в раунде 1, а не восстановление. Поведение описано противоречиво, см. находку 3",
+    "decision_3_constant_rename": "authorized и пропорционально — механическое, сохраняет конвенцию проекта (Default = новейшая ветка, как в wal.go / bgwriter.go / io.go), поведение не меняет. Но радиус переименования противоречит списку 'Not modified', см. находки 1 и 2",
+    "size": "M остаётся честным. Продуктовые файлы: internal/query/activity.go, internal/view/view.go (одна строка сида), internal/stat/postgres.go, report/report.go, report/describe.go, docs/tech-debt.md плюс комментарийный internal/query/procpidstat.go. Рост после раунда 1 не добавил в план ни одного нового файла — report/report.go уже был в скоупе из-за [021]. 6 задач: 4 кодовые в 4 пакетах, одна документационная, одна QA. Единственное место, где заявка на M напрягается, — Task 1: 6 файлов и переименование через 4 пакета"
+  },
   "findings": [
     {
-      "type": "underengineering",
+      "type": "structural_gap",
       "source": "tech-spec",
-      "requirement": "US-6 / Risk 5 (радиус правки сортировки)",
-      "detail": "Таблица Risks называет митигацией 'goldens re-run with the fix present', но code-research §4.5 измерил, что корпус эталонов не покрывает изменённое поведение вовсе: все четыре report_activity*.golden сортируются по pid (никогда не пустой), а единственный разреженный ключ сортировки в корпусе — datname у databases_* — сортируется DESC, то есть в том единственном направлении, где старое и новое поведение совпадают. 'Эталоны не изменились' — доказательство того, что корпус ни разу не задел правку, а не того, что правка безопасна. Автотеста, где изменённое поведение встречается с дефолтным ключом сортировки, нет ни одного. Рекомендация из исследования (§4.4) — добавить в report/report_record_replslots_test.go строку слота с пустым retained,KiB и пустым stats_age в обеих направлениях — в tech-spec не перенесена. Частично компенсируется ручной проверкой replslots в Task 6.",
-      "severity": "major"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "US-1 / US-2 (выбор ветки запроса по версии)",
-      "detail": "internal/view/view_test.go не упомянут ни в 'What we're building/modifying', ни в файлах Task 1, хотя code-research помечает добавление ассертов в TestViews_Configure как обязательное в обоих чеклистах. Проверено в коде: блоки case 130000 (view_test.go:203) и case 120000 (:210) уже существуют, но утверждают только про replication и statements_timings — активити там нет. Прецедент 012 (case 190000 / case 140000, :183-201) фиксирует обе стороны новой границы именно через Configure. Табличный тест селектора доказывает, что SelectStatActivityQuery возвращает нужную константу, но не то, что Configure доносит её до view. Verify у Task 1 включает go test ./internal/view/..., который без этой правки пройдёт зелёным, ничего нового не доказав.",
-      "severity": "major"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "Честность границ проверки (сквозное требование user-spec)",
-      "detail": "Таблица Risks утверждает 'Blast radius enumerated in Decision 4', но Decision 4 не перечисляет радиус, а приводит один пример (replslots). Исследование перечисляет около 13 view. Два конкретных случая, которых нет в tech-spec: (1) activity.cl_port законно держит -1 для unix-socket соединений, поэтому при DESC пустая ячейка сегодня стоит выше реального значения и после правки переедет; (2) procpidstat — экран, про который user-spec прямо говорит 'не затрагивается', — имеет разреженные числовые колонки IO с пустыми сентинелами, которые пишет Go-стадия обогащения, так что его сортировка меняется. Tech-spec при этом перечисляет procpidstat в 'Not modified'. Формально это верно про файлы, но читается как 'экран не затронут'.",
+      "requirement": "Decision 3 (rename) vs Architecture 'Not modified' vs Task 1 vs Acceptance Criteria",
+      "detail": "Архитектурный раздел утверждает: 'Not modified: internal/view/view.go (the Configure wiring already exists and the seed must stay at 14)'. Но Decision 3 требует, чтобы сид указывал на PgStatActivityPG10, а сегодня view.go:42 указывает на PgStatActivityDefault — значит строку сида придётся править, и Task 1 честно перечисляет internal/view/view.go в Files to modify. Критерий приёмки 'view.New() seed untouched' по той же причине формально ложен. Компилятор поймает пропуск, но список 'Not modified' — это то, чем ревьюер сверяет диф, и сейчас он противоречит и решению, и задаче. Нужно: убрать view.go из 'Not modified' (или переписать как 'меняется только ссылка на константу, Ncols остаётся 14') и переформулировать критерий как 'сид сохраняет Ncols: 14 и указывает на запрос PG 10-12'.",
       "severity": "major"
     },
     {
       "type": "scope_creep",
       "source": "tech-spec",
-      "requirement": "US-6 (сортировка по разреженной числовой колонке)",
-      "detail": "Decision 4 распространяет правило 'пустые в конец' и на строковый компаратор. User-spec формулирует правило строго про числовую колонку ('Сортировка по разреженной числовой колонке работает численно'), а code-research §6.5 явно помечает это как нерешённый продуктовый выбор. Обоснование в Decision 4 состоятельное (одна формулировка без исключений, меньше кода) и юнит-тест на разреженную строковую колонку заявлен. Но это меняет повседневную операцию на самом используемом экране: сортировка activity по wait_event по возрастанию перестаёт начинаться с пустых. Ни один эталон это не различает (измерено), значит поймать регрессию нечем — решение должно попасть в пункт ручной приёмки Task 6, где сейчас его нет.",
+      "requirement": "Task 1, files to modify: internal/query/procpidstat.go",
+      "detail": "Task 1 правит internal/query/procpidstat.go — экран, который user-spec явно вывел из скоупа ('Экран procpidstat не затрагивается'), а сам tech-spec перечисляет в 'Not modified: ... the procpidstat screen'. Реальная причина безобидна и проверена: файл ссылается на PgStatActivityDefault только в doc-комментариях (procpidstat.go:16 и :23), и после переименования они станут врать. Но эта причина не названа нигде в спеке, поэтому исполнитель получает файл вне заявленного скоупа без указания границы правки. Нужно явно написать в Task 1: правка только комментариев, текст запроса не меняется.",
+      "severity": "major"
+    },
+    {
+      "type": "structural_gap",
+      "source": "tech-spec",
+      "requirement": "Decision 6: поведение гарда нулевой ширины",
+      "detail": "Гард описан двумя несовместимыми способами. Decision 6 и критерий приёмки говорят 'mirroring top/printDataCell' / 'matching its twin in top', а близнец в top/stat.go:1005-1007 возвращает ошибку ('zero or negative width, skip'), то есть прерывает печать. Testing Strategy требует противоположного: 'a width of zero renders an empty cell instead of panicking' — печать продолжается пустой ячейкой. Это разное наблюдаемое поведение отчёта, и тест зафиксирует то, что выберет исполнитель, а не то, что решила спека. Нужно выбрать одно и согласовать все три места.",
+      "severity": "major"
+    },
+    {
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "Decision 6: сброс разрешённого индекса колонки сортировки",
+      "detail": "Сам сброс оправдан и подтверждается кодом: orderConfigured — локальный флаг processData (report/report.go:238), ветка смены версии (строка 250) делает continue, не трогая ни его, ни v.Aligned, ни linesPrinted. Но обоснование в Decision 6 опирается на сценарий 'если поздняя раскладка уже — залипший индекс выйдет за границу строки', а обе границы (существующая 9.6->10 и вводимая 12->13) раскладку расширяют, значит паника в архиве, записанном pgcenter, недостижима. Достижимый вред другой и тише: колонки вставляются в середину раскладки, поэтому залипший индекс после смены версии указывает на другую колонку — отчёт молча сортируется не по тому, что просили через -o. Testing Strategy сейчас требует 'sort column re-resolved ... no panic'; тест должен утверждать именно правильную колонку после границы, иначе проверяется недостижимый случай.",
       "severity": "minor"
     },
     {
-      "type": "partial",
+      "type": "scope_creep",
       "source": "tech-spec",
-      "requirement": "US-3, US-4, US-5, US-11",
-      "detail": "Собственный список Acceptance Criteria tech-spec не зеркалит четыре критерия user-spec: семантику leader (US-3), пусто/непусто у backend_xid (US-4), пусто/неотрицательное у horizon_xacts (US-5) и фиксацию порядка строк описания тестом (US-11). Покрытие есть — US-3/4/5 перечислены в ручной части Task 6, US-11 в Task 4 и Testing Strategy, — но список AC в tech-spec это тот артефакт, по которому идёт pre-deploy-qa, и три семантических критерия, ради которых фича и делается, из него выпали.",
+      "requirement": "Task 5: правка текста 'why deferred' у долга [020]",
+      "detail": "Task 5 помимо трёх записей, которые требует user-spec, правит обоснование отложенного долга [020] (docs/tech-debt.md:69) и переводит [021] в Resolved. Первое — разумная гигиена и следствие того, что фича опровергла прежнюю формулировку, второе — прямое следствие починки. Но ни то ни другое не отражено в критериях приёмки: там сказано только 'Three entries added to docs/tech-debt.md', хотя команда Verify самой задачи уже проверяет [021] в Resolved. Дополнить критерий приёмки либо убрать правку [020] из задачи.",
       "severity": "minor"
     },
     {
-      "type": "partial",
+      "type": "scope_creep",
       "source": "tech-spec",
-      "requirement": "US-7 (совместимость воспроизведения архивов)",
-      "detail": "Раздел Backward Compatibility заявляет 'This was verified empirically by running the report suite against the PG 14 golden archive with the widened query in place' без оговорки, что измерение сделано до правки сортировки. Оговорка есть в Testing Strategy и в описании Task 2, но не здесь — а user-spec выносит её прямо в текст критерия приёмки. Читатель одного этого раздела примет вопрос закрытым.",
-      "severity": "minor"
-    },
-    {
-      "type": "partial",
-      "source": "tech-spec",
-      "requirement": "US-8 (описание новых колонок в report -d -A)",
-      "detail": "Task 4 перечисляет три оговорки, которых требует user-spec, но не упоминает note о доступности колонок с PG 13 — домашний стиль, зафиксированный фичей 012 (report/describe.go:221, 'Note: started_by and mode are available since PG19.'). User-spec этого не требует, но все прочие версионно-зависимые колонки в этом файле такую строку имеют.",
-      "severity": "minor"
-    },
-    {
-      "type": "underengineering",
-      "source": "tech-spec",
-      "requirement": "Структура волн",
-      "detail": "Конфликта по файлам внутри Wave 1 нет: Task 1 владеет internal/query/*, Task 2 — internal/stat/*, Task 3 — report/*. Пересечение report/report_test.go между Task 3 (Wave 1) и Task 4 (Wave 2) безопасно, волны последовательны. Но verify у Task 2 — 'go test ./internal/stat/... ./report/...' — читает состояние файлов, которыми в той же волне владеет Task 3. В общем рабочем дереве Task 2 может получить красный тест на чужом незавершённом коде и уйти чинить не своё. Основание для этого verify законное (US-7 требует перепрогона эталонов с правкой сортировки), поэтому чинить нужно не составом волн, а порядком: прогонять эталоны после закрытия Task 3, либо оговорить, что Task 2 отвечает только за ./internal/stat/.... Смежная мелочь: исследование рекомендует вынести тест Task 3 в отдельный файл report/report_record_activity_version_switch_test.go по образцу гарнесса 008/012, а tech-spec держит его в общем report/report_test.go — это и создаёт пересечение с Task 4.",
+      "requirement": "Task 6: дополнительная приёмочная проверка 'a few hundred sessions'",
+      "detail": "Task 6 вводит две ручные проверки сверх user-spec. Первая — сортировка по умолчанию на replslots — закреплена: она названа в таблице рисков и в Decision 4, и это самый видимый эффект общей правки. Вторая — 'the widened activity screen under a few hundred sessions, so the do-not-make-an-incident-worse rule is checked rather than argued' — не встречается больше нигде: ни в user-spec 'Как проверить' (там пользовательская проверка — субъективное впечатление от раскладки), ни в Decisions, ни в критериях приёмки; само правило, на которое ссылается задача, в user-spec не сформулировано. Либо закрепить проверку критерием приёмки, либо убрать.",
       "severity": "minor"
     }
   ],
-  "summary": "13/13 критериев приёмки user-spec покрыты, пропусков нет. Несанкционированных добавлений нет: обе структурные правки (сортировка, техдолг [021]) авторизованы user-spec, ничего сверх них tech-spec не вносит. Размер 6 задач для M адекватен, переусложнения не найдено — новых абстракций нет, задачи описывают объём, а не алгоритм. 8 замечаний: 3 major (эталоны выданы за покрытие правки сортировки, которого они не дают; не заведены ассерты activity в TestViews_Configure; радиус правки заявлен перечисленным, но не перечислен), 5 minor. Критических нет."
+  "summary": "Раунд 2: 13/13 требований user-spec покрыты, пробелов и частичных покрытий нет, критических находок нет — pass. Все три major и три minor находки раунда 1 закрыты по существу, а не косметически. Оба разрастания скоупа авторизованы: гард нулевой ширины прямо требуется критерием приёмки user-spec и Риском 4 (отклонением был отказ в раунде 1), сброс индекса сортировки — инженерная необходимость в том же пути воспроизведения, переименование констант — механическое и сохраняет конвенцию проекта. Остаются 3 major-несогласованности внутри самого tech-spec (список 'Not modified' противоречит Decision 3 и Task 1 по view.go; procpidstat.go попал в правки задачи без пометки, что правка комментарийная; поведение гарда описано двумя несовместимыми способами) и 3 minor (обоснование сброса индекса бьёт мимо достижимого вреда; правка [020] и нагрузочная проверка в Task 6 не отражены в критериях приёмки). Размер M с 6 задачами остаётся честным: рост не добавил в план ни одного нового файла."
 }
