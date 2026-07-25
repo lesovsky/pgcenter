@@ -143,13 +143,13 @@ Loop to run:
 - [report/testdata/report_record_progress_vacuum_pg18.golden](../../../report/testdata/report_record_progress_vacuum_pg18.golden) — new, generated
 - [report/testdata/report_record_progress_vacuum_pg19.golden](../../../report/testdata/report_record_progress_vacuum_pg19.golden) — new, generated
 - [report/report_record_bgwriter_test.go](../../../report/report_record_bgwriter_test.go) — the model to copy
-- [report/report.go](../../../report/report.go) — `newApp` (`:82`), the replay loop and `views.Configure` from
+- [report/report.go](../../../report/report.go) — `newApp` (`:83`), the replay loop and `views.Configure` from
   the archive's version (`:249-267`), `readMeta` (`:394`), `isFilenameOK`
 - [report/report_test.go](../../../report/report_test.go) — package-level `var update` flag (`:22`); the
   golden-tar cases for the three progress reports (`:107`, `:124`, `:129`)
 - [internal/query/progress_vacuum.go](../../../internal/query/progress_vacuum.go) — the two query constants
   and the selector from Task 3; source of truth for column aliases
-- [internal/stat/postgres.go](../../../internal/stat/postgres.go) — `Compare`/`diff` (`:585-660`); read for
+- [internal/stat/postgres.go](../../../internal/stat/postgres.go) — `Compare`/`diff` (`:575-660`); read for
   understanding only, do not modify
 
 ## Verification Steps
@@ -223,8 +223,11 @@ Loop to run:
   and one `Contains` on the known delta. Their job is to localise a future failure to "row missing" vs
   "header only" before the reader has to stare at a golden diff.
 - Fixture value guidance from research section F.2 and the user-spec value table: `started_by =
-  autovacuum`, `mode = aggressive`, percentages as text (`"50.00"`, `"25.00"`), `scanned,KiB` `1000` →
-  `1500` (delta 500) in **both** subcases, `vacuumed,KiB` a different growth. `query` a short
+  autovacuum`, `mode = aggressive`, percentages as text (`"50.00"`, `"25.00"`), `scanned,KiB` growing by a
+  fixed amount in **both** subcases, `vacuumed,KiB` a different growth. Pick the numbers so the delta's
+  digit string is **not** a substring of any raw value the report prints — with `1000` → `1500` the delta
+  `500` also appears inside `1500`, so a `Contains` sentinel on it passes even when the delta is wrong,
+  which is precisely the failure this test exists to catch. `1000` → `1700` has no such overlap. `query` a short
   `autovacuum: VACUUM …` string that survives `TruncLimit: 32`.
 - The reason `pg18` and not `pg14` is the pre-19 subcase: `180000` is the boundary version below the
   selector's `>= PostgresV19` branch, so the pair `180000` / `190000` pins the switch exactly where it

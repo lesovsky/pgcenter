@@ -39,10 +39,13 @@ Two constraints make this less trivial than "add four lines".
    the first research pass, it was superseded by Decision 1, and it must not be followed. Appendix C.2 of
    the same document has the corrected placement.
 
-2. **Nothing in the test suite can catch a mistake here.** `Test_describeReport` in `report/report_test.go`
-   compares `describeReport()`'s output against the constants themselves — identity, not content. Any text
-   edit passes it by construction, including a wrong row order or a typo. Verification is by eye, against
-   the rendered `report -d` output and the PG 19 query column order from Task 3.
+2. **The existing test is blind to it.** `Test_describeReport` in `report/report_test.go` compares
+   `describeReport()`'s output against the constants themselves — identity, not content. Any text edit
+   passes it by construction, including a wrong row order or a typo. So the row order gets a guard of its
+   own: a short ordering test (see TDD Anchor) asserting, inside each constant, that the new row sits after
+   the row it must follow and before the row it must precede — by comparing substring positions. That
+   covers order and only order; the wording, the origin column and the tab alignment are still checked by
+   eye, against the rendered `report -d` output and the PG 19 query column order from Task 3.
 
 The texts stay single flat strings describing the superset of columns, with no version-aware branching —
 the same way `pgStatBgwriterDescription` and `pgStatIODescription` already handle their version-varying
@@ -85,13 +88,50 @@ disproportionate machinery, and it was explicitly rejected.
    place the version information lives, and all three constants stay consistent with each other and with the
    existing bgwriter/IO precedent.
 
-6. Verify the result by eye: build the binary and run `report -d` for all three report types, then compare
-   the printed row order against the column order in Task 3's PG 19 query constants, column by column.
+6. Add the ordering test described in the TDD Anchor to `report/report_test.go` — written before the
+   constants are edited, so it fails first for the right reason (rows absent) and turns green once the rows
+   land in the right slots.
+
+7. Verify the rest by eye, which the test cannot do: build the binary and run `report -d` for all three
+   report types, then compare the printed rows against Task 3's PG 19 query constants column by column —
+   origin names, wording, and column alignment.
 
 **Out of scope:** the `//` doc comments above the three constants keep their current wording — do not add
 `(PG14 baseline)`-style annotations. That device exists on bgwriter/IO/JIT because their tables list only
 the baseline columns; here the table lists the superset, so the annotation would be inaccurate. No changes
-to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any other description constant.
+to `describeReport()` in `report/report.go`, to the existing `Test_describeReport` (the ordering test is a
+separate new function next to it), or to any other description constant.
+
+## TDD Anchor
+
+Write this before touching `report/describe.go`. One new test function in `report/report_test.go`, roughly
+twenty lines, no PostgreSQL and no golden file — it reads the three constants directly (same package) and
+compares `strings.Index` positions. It catches exactly the failure this task fears: a row in the wrong slot.
+
+- `report/report_test.go::Test_describeProgressColumnOrder/vacuum` — inside
+  `pgStatProgressVacuumDescription`, the position of `"\n- started_by"` is greater than that of
+  `"\n- relation"` and less than that of `"\n- mode"`, which in turn is less than that of `"\n- state"`.
+  Verifies the vacuum rows sit in emitted order.
+- `report/report_test.go::Test_describeProgressColumnOrder/analyze` — inside
+  `pgStatProgressAnalyzeDescription`, `"\n- started_by"` sits between `"\n- relation"` and `"\n- state"`.
+- `report/report_test.go::Test_describeProgressColumnOrder/basebackup` — inside
+  `pgStatProgressBasebackupDescription`, `"\n- backup_type"` sits between `"\n- duration"` and
+  `"\n- state"`.
+
+Three points that decide whether the test is worth anything:
+
+- **Assert every marker was found before comparing.** `strings.Index` returns `-1` for a missing substring,
+  and `-1 < anything` passes — a test that silently green-lights a row that was never added. Require each
+  position to be non-negative (`assert.NotEqual(t, -1, pos)` or `require.Positive`) first, then compare.
+- **Anchor markers on `"\n- "`, not on the bare column name.** The trailing note added in step 4 contains
+  the words `started_by`, `mode` and `backup_type`; matching a bare name would find the note instead of the
+  row. The leading newline plus `- ` pins the match to a table row.
+- **Red first.** Run the test before editing `describe.go`: it must fail on the missing-marker assertion,
+  not on the ordering one. A test that is green before the rows exist is matching the wrong thing.
+
+Drive it as a table with the three subtests, in the style of the surrounding tests in the file. Do not fold
+the assertions into `Test_describeReport` — that one is an identity check over the whole report map and has
+a different reason to fail.
 
 ## Acceptance Criteria
 
@@ -108,38 +148,43 @@ to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any
 - [ ] Row order in the rendered `report -d -P v|a|b` output matches the column order of the PG 19 queries.
 - [ ] Columns and alignment line up when the constants are printed — tab counts match the neighbouring rows
       within each constant.
-- [ ] No other constant in `report/describe.go` changed; `report/report.go` and `report/report_test.go`
-      untouched.
+- [ ] `Test_describeProgressColumnOrder` exists in `report/report_test.go` with the three subtests, checks
+      that each marker was found before comparing positions, and genuinely fails when a new row is moved out
+      of its slot (confirm once by temporarily moving one).
+- [ ] No other constant in `report/describe.go` changed; `report/report.go` untouched; `report/report_test.go`
+      changed only by the new ordering test — the existing `Test_describeReport` is not edited.
 - [ ] `go test ./report/...` green; `make lint` clean.
 
 ## Context Files
 
 **Feature artifacts:**
-- [012-feat-pg19-compatibility-baseline.md](docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md) — user-spec; «Дизайн и интерфейс» has the authoritative column order, «Значения колонок» the value domains
-- [012-feat-pg19-compatibility-baseline-tech-spec.md](docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-tech-spec.md) — tech-spec; Decision 1 (positions), Decision 3 (rows + note), Data Models table
-- [012-feat-pg19-compatibility-baseline-decisions.md](docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-decisions.md) — decisions log
-- [012-feat-pg19-compatibility-baseline-code-research.md](docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-code-research.md) — Appendix C has the table format and the note precedent; **§5.4's insert points are superseded — ignore them**
+- [012-feat-pg19-compatibility-baseline.md](012-feat-pg19-compatibility-baseline.md) — user-spec; «Дизайн и интерфейс» has the authoritative column order, «Значения колонок» the value domains
+- [012-feat-pg19-compatibility-baseline-tech-spec.md](012-feat-pg19-compatibility-baseline-tech-spec.md) — tech-spec; Decision 1 (positions), Decision 3 (rows + note), Data Models table
+- [012-feat-pg19-compatibility-baseline-decisions.md](012-feat-pg19-compatibility-baseline-decisions.md) — decisions log
+- [012-feat-pg19-compatibility-baseline-code-research.md](012-feat-pg19-compatibility-baseline-code-research.md) — Appendix C has the table format and the note precedent; **§5.4's insert points are superseded — ignore them**
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md) — project context, supported statistics, PostgreSQL version support
-- [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, report/replay data flow, PG version handling
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — «Adding a New PostgreSQL Version», version-specific query pattern, testing conventions
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md) — project context, supported statistics, PostgreSQL version support
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md) — package layout, report/replay data flow, PG version handling
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — «Adding a New PostgreSQL Version», version-specific query pattern, testing conventions
 
 **Code files:**
-- [report/describe.go](report/describe.go) — the only file to modify; three constants gain rows and a note
-- [report/report.go](report/report.go) — `describeReport()` at :606 maps report type → constant; read only, no change
-- [report/report_test.go](report/report_test.go) — `Test_describeReport` at :1170 compares by identity; read only, no change
-- [internal/query/progress_vacuum.go](internal/query/progress_vacuum.go) — source of truth for the vacuum PG 19 column order and catalog names (written by Task 3)
-- [internal/query/progress_analyze.go](internal/query/progress_analyze.go) — same, for analyze
-- [internal/query/progress_basebackup.go](internal/query/progress_basebackup.go) — same, for basebackup
+- [report/describe.go](../../../report/describe.go) — the only production file to modify; three constants gain rows and a note
+- [report/report.go](../../../report/report.go) — `describeReport()` at :606 maps report type → constant; read only, no change
+- [report/report_test.go](../../../report/report_test.go) — `Test_describeReport` at :1170 compares by identity; read only except for appending the new ordering test
+- [internal/query/progress_vacuum.go](../../../internal/query/progress_vacuum.go) — source of truth for the vacuum PG 19 column order and catalog names (written by Task 3)
+- [internal/query/progress_analyze.go](../../../internal/query/progress_analyze.go) — same, for analyze
+- [internal/query/progress_basebackup.go](../../../internal/query/progress_basebackup.go) — same, for basebackup
 
 ## Verification Steps
 
 - `go build ./... && go vet ./...` — the constants still compile (a stray backtick in a raw string breaks the
   whole file).
-- `go test ./report/...` — green. Note that this proves nothing about the text itself: `Test_describeReport`
-  compares the returned value against the constant, so it cannot see a wrong row order. It only guards
-  against having broken the mapping or the package.
+- `go test -run 'Test_describe' ./report/ -v` — both green, and the three
+  `Test_describeProgressColumnOrder` subtests visibly RUN. That covers row order. It says nothing about the
+  rest of the text: `Test_describeReport` compares the returned value against the constant itself, so it
+  cannot see wording, origin names or alignment — it only guards the mapping and the package.
+- `go test ./report/...` — green.
 - `make build`, then run all three describes and read the output:
   `./bin/pgcenter report -d -P v`, `./bin/pgcenter report -d -P a`, `./bin/pgcenter report -d -P b`.
   No archive file is needed — `describeReport` returns before any file is opened.
@@ -156,7 +201,7 @@ to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any
 
 **Files:**
 
-- `report/describe.go` — the only file changed. Three of its constants are touched:
+- `report/describe.go` — the only production file changed. Three of its constants are touched:
   - `pgStatProgressVacuumDescription` (currently around `:202-220`, table rows `:204-217`): today 13 rows,
     `pid, xact_age, datname, relation, state, waiting, phase, size_total,KiB, scanned_total,%,
     vacuumed_total,%, scanned,KiB, vacuumed,KiB, query`. After this task, 15 rows — `started_by` and `mode`
@@ -173,6 +218,11 @@ to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any
   Line numbers are indicative — locate the rows by content, since Task 3 does not touch this file but a
   concurrent Wave 4 task might shift nothing here at all.
 
+- `report/report_test.go` — one new test function appended, `Test_describeProgressColumnOrder` (see TDD
+  Anchor). Same package as the constants, so it references them directly, no export needed. `strings` is
+  not among the file's current imports (`:3-20`) — add it. `Test_describeReport` at `:1170` stays exactly
+  as it is.
+
 **Dependencies:**
 
 - Task 3 (wave 3) must be merged first. Not a compile dependency — `describe.go` is a block of string
@@ -183,8 +233,10 @@ to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any
 
 **Edge cases:**
 
-- **A row in the wrong slot is invisible to CI.** There is no golden file for `-d` output and the only test
-  compares by identity. The eye-check against the query constant is the whole verification, not a formality.
+- **Only the row order is under test; everything else is eye-checked.** There is no golden file for `-d`
+  output, and `Test_describeReport` compares by identity, so it cannot see content at all. The new ordering
+  test closes the row-order hole and nothing more — a wrong origin column, a misleading description or
+  broken alignment still passes CI. The eye-check against the query constant is not a formality.
 - **Tab alignment differs between the three constants.** The vacuum table uses a narrower origin column than
   the analyze and basebackup tables (compare the header rows). Copy the tab pattern from the row directly
   above the insertion point, not from a different constant. Tabs render at 8-column stops; `started_by` is
@@ -225,6 +277,6 @@ to `describeReport()` in `report/report.go`, to `Test_describeReport`, or to any
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [012-feat-pg19-compatibility-baseline-decisions.md](docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [ ] Записать краткий отчёт в [012-feat-pg19-compatibility-baseline-decisions.md](012-feat-pg19-compatibility-baseline-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

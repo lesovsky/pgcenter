@@ -308,8 +308,9 @@ bash, docker, tmux, psql. No MCP tooling.
 migration is the testing image tag, covered by Decision 4's merge order.
 
 **Consumer impact:** `view.Configure` callers (`top/top.go`, `record/record.go`, `report/report.go`) are
-unchanged — they already pass the server version. 41 `NewTestConnectVersion` call sites verified: all pass
-mapped literals, none changes behaviour.
+unchanged — they already pass the server version. Every `NewTestConnectVersion` call site was verified to
+receive a version present in the port map, so none changes behaviour; the count is re-derived during
+implementation rather than trusted from this document.
 
 ## Risks
 
@@ -335,15 +336,18 @@ mapped literals, none changes behaviour.
 - [ ] Three selectors return the documented `(query, Ncols, DiffIntvl)` triples on both branches; unit
       tables cover the 180000/190000 boundary.
 - [ ] `view.Configure()` patches all three views; the static `New()` map still holds pre-19 values.
-- [ ] Every live-connection version loop includes `190000`; the three progress execution tests call the
-      selector, not the bare constant.
+- [ ] Every live-connection version loop includes `190000` — including the single-version sessions loop,
+      which is the only place that query is executed at all. Only the string-inspection loops that never open
+      a connection stay as they are. The three progress execution tests call the selector, not the bare
+      constant.
 - [ ] `TestView_VersionOK` and `Test_filterViews` have derived (not copied) `190000` rows.
 - [ ] New replay test green on both `180000` and `190000`; the three existing progress goldens are byte-identical.
 - [ ] `report -d -P v|a|b` describes the new columns with the version note.
 - [ ] The new query constants contain no template placeholders — they stay static SQL, like the constants
       they sit beside.
-- [ ] Installing PG 19 leaves the PG 14–18 package versions in the image unchanged (the beta channel pin
-      works).
+- [ ] The beta channel pin holds: every PostgreSQL package except the PG 19 ones resolves from the stable
+      channel, checked by package origin and priority rather than by version equality (a routine stable-channel
+      minor release legitimately changes versions and must not be mistaken for a broken pin).
 - [ ] `make test`, `make lint`, `make vuln` clean; `testing/e2e.sh` passes including port 21919.
 - [ ] All user-spec acceptance criteria satisfied (verified in the Final Wave QA task).
 

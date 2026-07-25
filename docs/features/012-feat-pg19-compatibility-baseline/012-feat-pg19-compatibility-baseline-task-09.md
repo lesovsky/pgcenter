@@ -127,14 +127,14 @@ teammate_name:                     # имя агента-исполнителя 
 <!-- All details for task execution — technical, organizational, any other. -->
 
 **Files:**
-- `testing/e2e.sh` — 27 строк, `set -euxo pipefail` в шапке. Два цикла:
+- `testing/e2e.sh` — 26 строк, `set -euxo pipefail` в шапке. Два цикла:
   `for port in 21914 21915 21916 21917 21918` для `pgcenter record` (строка ~15) и такой же список для
   вложенного цикла `pgcenter report` (строка ~22). В **оба** списка добавляется `21919` в конец. Больше в
   файле ничего не меняется: набор аргументов отчёта (`-A -R -D -T -I -S -F -Xm -Xg -Xi -Xt -Xl -Xw -Pv -Pc
   -Pi -Pa -Pb -Pz`) уже покрывает все progress-экраны.
-- `.github/workflows/default.yml` — строка 9: `container: lesovsky/pgcenter-testing:0.0.10` → новый тег.
+- `.github/workflows/default.yml` — строка 8: `container: lesovsky/pgcenter-testing:0.0.10` → новый тег.
   Единственное изменение в файле.
-- `.github/workflows/release.yml` — строка 11: то же самое, в job `test`. Job `release` (goreleaser,
+- `.github/workflows/release.yml` — строка 10: то же самое, в job `test`. Job `release` (goreleaser,
   docker login) выполняется на голом `ubuntu-latest` без `container:` — его не трогать.
 - `testing/Dockerfile` (read-only здесь) — тег живёт в двух литералах: `LABEL version="0.0.10"` (строка 6)
   и `CMD ["echo", "pgcenter-testing 0.0.10: ..."]` (строка 38). Их бампит Task 01; здесь они читаются как
@@ -185,9 +185,9 @@ teammate_name:                     # имя агента-исполнителя 
 
 ## Reviewers
 
-- **dev-code-reviewer** → `012-feat-pg19-compatibility-baseline-task-09-dev-code-reviewer-review.json`
-- **dev-security-auditor** → `012-feat-pg19-compatibility-baseline-task-09-dev-security-auditor-review.json`
-- **dev-deploy-reviewer** → `012-feat-pg19-compatibility-baseline-task-09-dev-deploy-reviewer-review.json`
+- **dev-code-reviewer** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-09-dev-code-reviewer-review.json`
+- **dev-security-auditor** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-09-dev-security-auditor-review.json`
+- **dev-deploy-reviewer** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-09-dev-deploy-reviewer-review.json`
 
 ## Post-completion
 

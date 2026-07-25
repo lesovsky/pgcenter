@@ -207,7 +207,14 @@ cluster is running, the implementation is wrong.
   at connect time with a connection error, not the new mapping error. That distinction is intentional:
   "version I don't know about" and "version whose cluster isn't up" are different failures, and callers'
   `t.Skipf` handling covers the second. Do not remove or reorganise the EOL entries.
-- **Existing callers.** All 37 `NewTestConnectVersion(version)` call sites pass a loop variable rather than a
+- **Existing callers.** Re-derive the count by grep rather than trusting any document — an independent check
+  found 37 call sites taking a loop variable plus one internal call passing a literal from `NewTestConnect`,
+  where the tech-spec had said 41. What matters is the invariant, not the number: every version reaching the
+  map is present in it. Note also what the hardening does and does not buy: a forgotten map entry now makes
+  the affected subtests **skip** instead of silently exercising the oldest cluster. Skipping is honest but
+  still green in CI, so the one-off stopped-cluster check in the QA task remains the thing that proves the
+  new version is actually reached.
+- All `NewTestConnectVersion(version)` call sites pass a loop variable rather than a
   literal; the versions come from `versions := []int{...}` lists in the test files. The union of those
   literals today is `{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}`
   — a strict subset of the port map, so no existing caller changes behaviour. **Re-derive this with a grep

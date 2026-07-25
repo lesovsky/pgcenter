@@ -1,0 +1,99 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "AC \"Версии postgresql-14..18, postgresql-plperl-14..18 и postgresql-common в собранном образе идентичны версиям в lesovsky/pgcenter-testing:0.0.10 (пин отработал)\" is not a valid test of the pin and may be impossible to satisfy. testing/Dockerfile pins no package versions (plain `apt-get install -y postgresql-14 ... postgresql-18`), so any rebuild picks up whatever minor releases the *stable* jammy-pgdg suite currently carries. Image 0.0.10 was built around May 2026, the rebuild happens in July 2026, and pgdg ships minor releases quarterly — a version bump from the main channel is expected behaviour, not pin failure. The Details edge case (\"Пин не сработал. Симптом: в логе сборки postgresql-14..18 или postgresql-common идут на апгрейд. Это нарушение AC, а не «ну и ладно» — чинить пин\") and the Verification Step (\"dpkg -l 'postgresql-*' в новом образе и в 0.0.10 — строки по 14–18 и postgresql-common совпадают\") will then send the executor chasing a nonexistent pin bug or block the probe task on an unachievable criterion.",
+      "fix": "Re-state the AC as an origin check, not a version-equality check: `apt-cache policy postgresql-14 ... postgresql-18 postgresql-common` must show the installed/candidate version coming from the main `jammy-pgdg` suite at priority 500, and the beta suite entry must show priority 100. Keep the dpkg diff as informational evidence only, and add: a minor-version bump of 14–18 sourced from the main channel is acceptable; a version string carrying a beta/testing suffix or attributed to the beta suite is the actual AC violation."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Task 01 twice defers the update of `testing/README.md` to Task 7 (\"Обновление документации (deployment.md, testing/README.md) — задача 7\", repeated in Implementation hints). Task 7's file list (both in the tech-spec and in task-07) covers only `.claude/skills/project-knowledge/{overview,deployment,architecture}.md` — `testing/README.md` is owned by nobody. In fact `testing/README.md` contains no version numbers, port list or image tag (it only describes what each file in the directory is for), so it genuinely needs no change.",
+      "fix": "Drop `testing/README.md` from the deferral sentence, or replace it with an explicit \"testing/README.md contains no version-specific content and needs no update\" so the executor does not re-open the question and Task 7 is not blamed for an edit it does not own."
+    },
+    {
+      "severity": "minor",
+      "category": "security",
+      "task": "01",
+      "issue": "The task requires leaving the container running with ports 21914–21919 reachable from the host (\"либо проброс портов, либо host-сеть\"). `prepare-test-environment.sh` writes `listen_addresses = '*'` and a pg_hba of `host all all 0.0.0.0/0 trust`, so a plain `-p 21919:21919` or `--network host` exposes a trust-auth superuser cluster on every interface of the developer machine. This is pre-existing for PG 14–18, not introduced here, but the task is the one instructing the long-lived exposure.",
+      "fix": "In the Implementation hints, state the loopback form explicitly: `-p 127.0.0.1:21914-21919:21914-21919` (host networking only if the machine is not on an untrusted network). No change to pg_hba.conf or the script."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "02",
+      "issue": "Details/Edge cases claims \"All 37 NewTestConnectVersion call sites pass a loop variable rather than a literal\". Verified: there are 38 invocations. 37 live in `_test.go` files and do pass a loop variable, but the 38th is `NewTestConnect` in the non-test file `internal/postgres/testing.go:10`, which passes the literal `170000`. (The tech-spec's \"41 call sites verified: all pass mapped literals\" and Decision 5's \"Every call site lives in a test file\" are both wrong in the other direction.) Behaviour is unaffected — 170000 is mapped — but the sentence is what step 5 asks the executor to re-derive, so a correct grep will contradict the task text. Same paragraph: the version union is stated exactly right — verified as {90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000} across all `versions := []int{...}` lists, the package-level `overviewVersions` in overview_test.go, and the four inline `range []int{...}` loops in io_test.go/statements_test.go/databases_test.go; 90400 is in the port map but used by no caller. Also cosmetic: the file is 44 lines, not 45.",
+      "fix": "Reword to \"37 call sites in _test.go files pass a loop variable; the 38th is NewTestConnect in testing.go itself, which passes the literal 170000 (mapped, unaffected)\". Correct the same claim in the tech-spec's Consumer impact and Decision 5 when the task report is written back."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "02",
+      "issue": "The stated motivation — \"a forgotten map entry would make every PG 19 subtest connect to PG 14, pass, and report green coverage for a server that was never exercised\" — is only half closed by the change. Every one of the 37 call sites wraps the error in `t.Skipf(\"postgres %d not available in test environment\", version)`, so after the hardening a missing map entry produces a silently *skipped* PG 19 subtest, which still reports green in CI. The task does not say this; the only place the gap is caught is Task 03's verification step (\"A SKIP here means the cluster is down and the task is not verified\"), which covers three tests, not the sweep in Task 04.",
+      "fix": "Add one line to Task 02's Details (or its Post-completion report) making the residual failure mode explicit: after this change an unmapped or unreachable version degrades to SKIP, not FAIL, so the PG 19 subtests must be confirmed to actually execute (`go test -run ... -v` and read the output) rather than trusted to be green — and carry that instruction into Task 04's verification, which currently only runs `make test`."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "03",
+      "issue": "Description claims the three progress screens \"are the last version-static ones among the recordable views\". False: `Configure()` (internal/view/view.go:367-404) has selector cases for exactly 10 views (activity, replication, databases_general, statements_timings, statements_jit, wal, bgwriter, replslots, stat_io, stat_io_time). The other recordable views — `progress_cluster`, `progress_copy`, `progress_index`, `tables`, `indexes`, `sizes`, `functions`, `statements_general/io/local/temp`, `databases_sessions`, `procpidstat` — are all still version-static too. No implementation impact, but it overstates what the task closes.",
+      "fix": "Reword to \"the three progress screens PG 19 touches have no selector today\" and drop the \"last version-static\" claim, or move the accurate statement (Decision 6: cluster/copy/index are unchanged in PG 19, so they stay static) into its place."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "03",
+      "issue": "Step 3 says \"Branch on `version >= query.PostgresV19` (the constant Task 2 added)\". The selectors being written live in package `query` itself (internal/query/progress_{vacuum,analyze,basebackup}.go), where the `query.` qualifier does not compile. The two reference implementations the task points at use the unqualified forms: `SelectStatIOQuery` (io.go:88) writes `version >= PostgresV18`, `SelectStatBgwriterQuery` (bgwriter.go:42-46) writes bare literals `version >= 180000`.",
+      "fix": "Write `version >= PostgresV19` in step 3, and name `io.go:88` as the form to copy (constant, not bare literal) so the three new selectors are consistent with each other."
+    }
+  ],
+  "verified_claims": {
+    "task_01": [
+      "testing/prepare-test-environment.sh has exactly six `for v in 14 15 16 17 18` loops (create, configure, start, wait-ready, fixtures, final check) — lines 6, 13, 43, 48, 56, 62",
+      "port convention `port=\"219${v}\"` is derived from the major version (lines 14, 49, 57, 63) → 19 yields 21919 with no port-logic edit; datadir and log_filename likewise derive from $v",
+      "testing/Dockerfile: line 2 header comment `PostgreSQL 14-18 on Ubuntu 22.04`, `LABEL version=\"0.0.10\"` (line 6), `CMD [\"echo\", \"pgcenter-testing 0.0.10: ...\"]` (line 38) — all three edit points exist as described",
+      "Dockerfile single RUN layer matches the description: base packages → locale-gen → ACCC4CF8.asc into /usr/share/keyrings/pgdg.gpg → pgdg.list with `jammy-pgdg main` and `signed-by=` → apt-get update → five postgresql-N/postgresql-plperl-N pairs → cpanm Module::Build + Linux::Ethtool::Settings → mkdir /usr/local/testing/ → rm -rf /var/lib/apt/lists/* (last step of the layer)",
+      "testing/fixtures.sql matches: creates pgcenter_fixtures and pgcenter_fixtures_config, CREATE EXTENSION pg_stat_statements + plperlu, four LANGUAGE plperlu functions, one of them `use Linux::Ethtool::Settings`",
+      "out-of-scope files confirmed untouched-by-design and real: testing/e2e.sh has two port loops `for port in 21914 21915 21916 21917 21918` (lines 15, 22); both workflows pin `container: lesovsky/pgcenter-testing:0.0.10`"
+    ],
+    "task_02": [
+      "internal/postgres/testing.go has no import block at all (44 lines, package clause then three funcs) — the `fmt` import must indeed be added",
+      "NewTestConnectVersion falls back to the oldest cluster for unmapped versions: `port, ok := ports[version]; if !ok { port = ports[140000] }` (lines 34-37)",
+      "the doc comment already promises the opposite (\"Returns an error if the requested version is not available in the test environment\", line 14) — code contradicts contract, as claimed",
+      "ports map has exactly twelve entries split by comment into active 180000..140000 and \"EOL versions kept for reference\" 130000..90400; 21919 is free, no collision",
+      "every version actually passed to NewTestConnectVersion is a subset of the port map: union = {90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000} across 22 `versions := []int{...}` lists, `overviewVersions` (overview_test.go:13), and inline loops in io_test.go (68, 96, 179), statements_test.go (110, 129), databases_test.go (56); plus literal 170000 from NewTestConnect",
+      "internal/query/query.go const block runs PostgresV94..PostgresV18 = 180000 (lines 9-22), one constant per major version, numeric values",
+      "internal/query/io.go:88 is literally `if version >= PostgresV18 {` — the cited line reference is exact",
+      "internal/postgres/postgres.go:90 carries the `fmt.Errorf(\"failed connection establishing: %w\", err)` style the task says to match",
+      "internal/postgres has postgres_test.go and connopts_test.go, both `package postgres` (internal tests) and no test file for testing.go — a new testing_test.go in package postgres is consistent",
+      "patterns.md \"Adding a New PostgreSQL Version\" step 1 is the port map entry, step 2 the versions lists, step 3 the t.Skipf handling — as cited"
+    ],
+    "task_03": [
+      "progress_vacuum pre-19 layout confirmed by counting the SELECT list: 13 cols, pid(0) xact_age(1) datname(2) relation(3) state(4) waiting(5) phase(6) size_total,KiB(7) scanned_total,%(8) vacuumed_total,%(9) scanned,KiB(10) vacuumed,KiB(11) query(12); DiffIntvl {10,11} covers exactly the two KiB columns",
+      "progress_analyze pre-19: 12 cols, relation(3) then state(4); DiffIntvl {0,0}",
+      "progress_basebackup pre-19: 11 cols, pid(0) started_from(1) started_at(2) duration(3) state(4) waiting(5) phase(6) size_total,KiB(7) streamed,%(8) streamed,KiB(9) tablespaces(10); DiffIntvl {9,9} points at streamed,KiB",
+      "insert-before-state arithmetic checks out: vacuum 13→15 with {10,11}→{12,13}, analyze 12→13 with {0,0}, basebackup 11→12 with {9,9}→{10,10}; the full 15-row vacuum index table in Details is correct row for row",
+      "internal/view/view.go New() holds the three progress entries at lines 277-348 with exactly the pre-19 values the task pins (vacuum 13/{10,11}/MinRequiredVersion PostgresV96, analyze 12/{0,0}/V13, basebackup 11/{9,9}/V13); OrderKey 0 and UniqueKey unset (0) on all three",
+      "Configure() spans lines 367-405 with the switch closing at 404 — the cited range is exact; the ten existing cases use the three-field assignment form the task says to copy",
+      "all three execution tests currently open with the bare constant and use conn.Exec: progress_vacuum_test.go:15 (versions 90600..180000), progress_analyze_test.go:15 and progress_basebackup_test.go:15 (versions 140000..180000); t.Skipf sits inside the t.Run body in all three, as the task states",
+      "bgwriter_test.go is a valid model for both shapes: Test_SelectStatBgwriterQuery (unit table over version/wantNcols/wantDiffIntvl) and Test_StatBgwriterQueries (takes tmpl+wantNcols from the selector, conn.Query, assert.Len(rows.FieldDescriptions(), wantNcols))",
+      "internal/view/view_test.go really contains TestViews_Configure (line 99, matrix of version/recovery/trackCommit/querylen in 8-row blocks, per-version switch at 177, trailing `assert.NotEqual(t, \"\", v.Query)` loop at 218) and TestView_VersionOK (line 224, version→total table: 160000→27, 140000→24, 130000→19, 120000→16, 110000→14, 100000→14)",
+      "the TestView_VersionOK hint is correct: the highest MinRequiredVersion in New() is query.PostgresV16 (view.go:167, 180), so a derived 190000 row equals the 160000 total",
+      "report/testdata/pgcenter.stat.golden.tar meta record carries version_num \"140000\" — the claim that the three existing progress goldens take the pre-19 branch and must stay byte-identical is accurate",
+      "PgStatBgwriterPG18 (bgwriter.go:30) and PgStatIOPG18 (io.go) exist with the naming and per-branch comment style the task says to imitate",
+      "`sync_state AS mode` really does appear on the replication screen (replication.go:6,19,34,44) — the [014] handoff note is factual"
+    ]
+  },
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 45,
+    "issues_found": 7
+  }
+}

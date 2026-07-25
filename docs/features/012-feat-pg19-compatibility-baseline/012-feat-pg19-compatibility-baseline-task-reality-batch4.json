@@ -1,0 +1,97 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+  "tasks_checked": ["10"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Steps C.7 and E.12 require a running pg_basebackup on the test cluster, and an acceptance criterion depends on it (`progress_basebackup shows backup_type`). But testing/prepare-test-environment.sh:36-39 OVERWRITES each cluster's pg_hba.conf with exactly two lines — `local all all trust` and `host all all 0.0.0.0/0 trust`. Neither matches a physical replication connection: in pg_hba.conf the `all` database keyword does not match replication connections, a separate `replication` entry is required. pg_basebackup will therefore fail with `FATAL: no pg_hba.conf entry for replication connection`. Nothing in Task 01 (which only extends the `for v in 14 15 16 17 18` loops) or the tech-spec adds such an entry. A QA agent hitting this at the final gate can easily misfile it as a PG 19 finding.",
+      "fix": "Add an explicit note to the Details/Implementation hints of Task 10: before pg_basebackup, append `local replication all trust` and `host replication all 0.0.0.0/0 trust` to /etc/postgresql/19/main/pg_hba.conf inside the container and `pg_ctlcluster 19 main reload` (or SELECT pg_reload_conf()). Alternatively, have Task 01 add the replication lines to prepare-test-environment.sh for all versions and reference that here. Also state that max_wal_senders/wal_level are already sufficient (wal_level = logical is set in the same script), so pg_hba is the only blocker."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step A.1 tells the executor to 'run the published image, verify all six clusters accept connections and the pgcenter_fixtures database exists on each' — but the published image starts nothing: testing/Dockerfile's CMD is `echo pgcenter-testing ...`, and clusters are created, configured, started and loaded with fixtures only by `prepare-test-environment.sh`, which .github/workflows/default.yml runs as an explicit step. Step A.2 (`make test`, `make lint`, `make vuln`) is likewise not runnable in the image as shipped: the Dockerfile comment says 'Go and lint tools are installed by CI, not bundled here', and the workflow installs Go 1.25.11 plus golangci-lint/gosec/govulncheck before invoking those targets.",
+      "fix": "In step A.1, name `prepare-test-environment.sh` as the bootstrap that must run inside the container before any cluster check. In step A.2, state that Go and the lint tools must be installed first (mirroring .github/workflows/default.yml: Go tarball to /opt/go + `go install` of golangci-lint/gosec/govulncheck), or that lint/vuln may be run on the host against the same checkout while `make test` runs in the container."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "`depends_on: [\"09\"]` understates the real dependency set. The dependency graph is 10 <- 09 <- 08 <- 01, which does not transitively include Tasks 02-07. Yet Task 10's acceptance criteria verify artifacts owned by those tasks: the PG 19 port-map entry and the unknown-version error test (Task 02, internal/postgres/testing.go — today the map has no 190000 key and unknown versions silently fall back to `ports[140000]`, testing.go:35-37); the new query selectors (Task 03); the e2e/test coverage (Task 04); `report -d -P v|a|b` text (Task 05, report/describe.go); the two new goldens (Task 06); the overview.md/deployment.md/architecture.md updates (Task 07). Only `wave: 7` enforces the ordering.",
+      "fix": "Extend depends_on to [\"02\",\"04\",\"05\",\"06\",\"07\",\"09\"] (or the feature's convention for a final gate), so the declared graph matches the criteria being verified rather than relying solely on the wave number and the prose note 'Everything else in the feature is merged by the time this runs'."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Steps D.9-D.10 prescribe driving `pgcenter top` under tmux and running the per-process (`S`) leg 'from inside the container', but the published testing image contains neither tmux nor a pgcenter binary (testing/Dockerfile installs only locales/curl/gnupg/make/gcc/git, perl bits and postgresql-14..18; the repo binary is built by `make build` into ./bin, which is gitignored). The two workable shapes — tmux on the host driving `docker exec` panes, or bind-mounting ./bin and installing tmux in the container — have different capture semantics, and the task picks neither.",
+      "fix": "State the chosen mechanism explicitly: e.g. run tmux on the host, with each pane running `docker exec -it <container> /usr/bin/pgcenter top -h 127.0.0.1 -p 21919 -U postgres -d pgcenter_fixtures` after `make build && make install` inside the container (the CI workflow already does build+install in-container). Note that `tmux capture-pane` then captures the host pane rendering the container's TUI, which is sufficient for the artifact requirement."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step A.4 and the matching acceptance criterion require proof that PG 19 subtests executed rather than skipped, and tell the executor to 'check the verbose output'. `make test` (Makefile:33-36) runs `go test -race -p 1 -timeout 300s -coverprofile=... ./...` with no `-v`, and there is no verbose target — with the default output a `t.Skipf` subtest is invisible and the package still prints `ok`.",
+      "fix": "Name the concrete command, e.g. `go test -v -run 'TestPgStatProgress|TestSelectStat' ./internal/query/... 2>&1 | grep -E '190000|19$'` or `go test -v ./... | grep -c SKIP`, and require the PG 19 subtest lines (`--- PASS: .../190000`) as the evidence attached to that criterion."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step B.6 ('stop the 21919 cluster, run the suite, confirm PG 19 subtests skip rather than pass') will produce a noisier result than the task implies. Tech-spec Decision 7 records nine tests (common_test.go x4, overview_test.go x4, internal/stat/postgres_test.go) whose `t.Skipf` sits inside the version loop with no `t.Run` wrapper, so a missing 21919 cluster aborts the whole test for every version, not just PG 19. Without the heads-up this reads as a regression.",
+      "fix": "Add a line to 'Edge cases and expected non-findings': stopping 21919 makes the nine unwrapped tests from Decision 7 skip wholesale across all versions; that is the known shape recorded as tech debt, not a finding."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "10",
+      "issue": "The lock-counter claim is correct but unlocatable from the task. The `waiting` counter really is built on a hardcoded literal — `count(*) FILTER (WHERE wait_event_type = 'Lock') AS waiting` in internal/query/common.go:63 (SelectActivityDefault) and :74 (SelectActivityPG96), scanned into Activity.ConnWaiting (internal/stat/postgres.go:119,152) and rendered in the summary panel at top/stat.go:475. The same literal is duplicated for the process-group mask at top/signal.go:77. internal/query/common.go appears in neither the Context Files list nor the hints.",
+      "fix": "Add internal/query/common.go (and the top/stat.go:475 render point) to the read-only Context Files, and cite the exact line in step 14 so the executor can confirm the literal instead of inferring it. Mention top/signal.go:77 as the second copy, since a PG 19 rename would have to be handled in both places."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The 'expected non-findings' list covers empty replication/replslots screens but not the `statements_jit` screen, whose own view Msg says 'no rows when jit=off' (internal/view/view.go:237) and whose counters stay zero unless a query is expensive enough to trigger JIT. Under the 'no column is blank where psql returns data' rule this is a likely false positive during the walk.",
+      "fix": "Add statements_jit to the expected non-findings: zero/empty JIT counters on the generated load are normal; the bar for that screen is 'renders without errors', same as replication."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The breakage-routing rule is attributed to 'tech-spec Risks table, last row', but that row (tech-spec:327) names only [016]/[017]/[018]. Task 10 adds [019] locks. The addition is correct — the user-spec (012-...-baseline.md:22) lists all four, and [019] is the natural owner of lock-area breakage given the lock-counter check — but the citation does not support the fourth item.",
+      "fix": "Cite both sources in Details ('tech-spec Risks table, last row, plus the four-feature list in the user-spec intro'), or have the tech-spec Risks row extended to [019] so the two documents agree."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The task's adaptation of the pre-deploy-qa skill covers Phase 1 only. The skill also mandates Phase 4 (Coverage Verification): for each file in the tech-spec's 'Files to modify' a test must exist, and each `passed` criterion must be linked to a test that exercises the real code path. Task 10 writes no code, so Phase 4 is not vacuous here — it maps to confirming that the Task 04/06 tests actually cover the three new selectors. Nothing in steps A-G mentions it.",
+      "fix": "Add a step under G (or extend A) mapping Phase 4 to this feature: confirm each new selector from Task 03 has a live-cluster test from Task 04 and a replay golden from Task 06, and link those test names as the evidence for the corresponding acceptance criteria in qa-report.json."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "10",
+      "issue": "Step A.1 characterises the skill's Phase 1 as mandating a '--no-cache rebuild' that must be re-mapped. Read literally, the skill's Phase 1 detection would not even reach a rebuild for this repo: it looks for compose files (none here) or a Makefile with environment-management targets, and this Makefile's `build` target compiles the Go binary rather than managing an environment — the skill's own fallback is 'If neither found — skip this phase entirely'. The substance of the adaptation (do not rebuild from testing/Dockerfile; the published image is the artifact under test and a local rebuild would pull different beta packages) is sound and well argued; only the description of what the skill demands is overstated.",
+      "fix": "Reword step A.1 to: 'this project has no compose environment and its Makefile targets build the binary, so the skill's Phase 1 does not apply as written; the equivalent here is verifying the published image and its six live clusters. Do not rebuild from testing/Dockerfile — ...'. Keeps the (correct) refusal while stating the skill's actual rule."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "`logs/working/qa-report.json` is a git-tracked file (git ls-files confirms) that currently holds a previous feature's QA report. Step G.19 will overwrite it, destroying that history and producing a tracked diff unrelated to this feature. The task's own step F.17 asks the executor to reason about `git status` cleanliness, so the collision is worth naming.",
+      "fix": "Either state explicitly that overwriting logs/working/qa-report.json is intended (the skill's fixed path) and that the previous report is superseded, or write to a feature-scoped name and reference it from the decisions entry."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 31,
+    "issues_found": 12
+  }
+}

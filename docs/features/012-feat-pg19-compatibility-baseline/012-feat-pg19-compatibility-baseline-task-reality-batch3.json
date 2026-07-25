@@ -1,0 +1,77 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+  "tasks_checked": ["07", "08", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "08",
+      "issue": "Step 2 tells the maintainer to run the full CI set (`make lint`, `govulncheck ./...`, `make test`, `make build`) inside a container started from the new image, and calls that run \"достаточный и предпочтительный вариант\". The image deliberately contains no Go toolchain and no lint tools — testing/Dockerfile line 3: \"Go and lint tools are installed by CI, not bundled here\"; both workflows install Go 1.25.11 and go-install golangci-lint/gosec/govulncheck as separate steps before using them. As written the checklist stops at `make lint` with a missing toolchain. Task 09 already states the workable shape (hint: \"образ не содержит Go (его ставит CI), поэтому практичнее запустить контейнер с публикацией портов и prepare-test-environment.sh внутри, а make test / e2e.sh гонять с хоста\"), but Task 08 does not.",
+      "fix": "In Task 08 step 2, state explicitly that Go and the lint tools are not in the image: either replicate the CI install steps inside the container (download go1.25.11, `go install` golangci-lint/gosec/govulncheck) or run prepare-test-environment.sh inside the container with ports 21914–21919 published and execute lint/vuln/test/build/e2e from the host, as Task 09 describes."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "08",
+      "issue": "The reproduced CI step list omits `make install`. Both workflows run Build → Install (`make install`) → Run E2E tests, and testing/e2e.sh invokes `pgcenter` from PATH under `set -euxo pipefail`. Running only lint/vuln/test/build then `./testing/e2e.sh` either aborts on the first `pgcenter record` (command not found) or silently exercises a stale binary in /usr/bin — in both cases the \"clean image\" verdict is worthless. The step list appears twice (What to do step 2, and the Acceptance Criteria bullet) and both omit it; the hint even points at default.yml as the reference order but reproduces it as \"prepare → lint → vuln → test → build → e2e\".",
+      "fix": "Add `make install` between `make build` and `./testing/e2e.sh` in Task 08's What-to-do step 2, in the Acceptance Criteria bullet, and in the Implementation-hints ordering line (prepare → lint → vuln → test → build → install → e2e)."
+    },
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "08",
+      "issue": "\"версия проставлена в трёх местах Dockerfile: `LABEL version=`, комментарий-заголовок и строка `CMD`\" and the Context-Files line \"версия проставлена в трёх местах (комментарий-заголовок, `LABEL version`, `CMD`)\" do not match testing/Dockerfile. The image version literal `0.0.10` occurs exactly twice — `LABEL version=\"0.0.10\"` (line 6) and `CMD [\"echo\", \"pgcenter-testing 0.0.10: PostgreSQL 14-18 on Ubuntu 22.04\"]` (line 38). The header comment (lines 1–2) carries the PostgreSQL range \"PostgreSQL 14-18\", not the image version. Task 09 states the correct count for the same file (\"тег живёт в двух литералах ... (строка 6) и ... (строка 38)\"), so the two tasks contradict each other on the pre-push sanity check.",
+      "fix": "Reword Task 08 to: image version in two literals (`LABEL version`, `CMD`) plus the PG version range in the header comment and in the `CMD` string (14-18 → 14-19). This keeps the check aligned with Task 09 and with what Task 01 actually edits."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "09",
+      "issue": "The image tag in .claude/skills/project-knowledge/deployment.md has no owner across the feature. deployment.md carries `0.0.10` in three places (line 14 release.yml test container, line 31 CI container, line 35 \"Current version: 0.0.10\"), plus the stale image contents at line 36 and port list at line 38. Task 09 declines it (\"владелец Task 07, здесь не править\") and its AC says \"Никаких других файлов задача не трогает ... ни документацию\"; Task 08 modifies no files but its post-completion also routes the tag to \"deployment.md (Task 7)\"; Task 07 explicitly forbids itself (\"Тег образа (`0.0.10`) и инструкцию по сборке/публикации не трогать — их обновляют Task 8/Task 9\"). Net result: after the feature, deployment.md still documents `0.0.10` while both workflows run `0.0.11`.",
+      "fix": "Assign the deployment.md tag bump to one task. Cleanest: give it to Task 09 (it owns the workflow bump and knows the published tag) and drop the \"не трогать документацию\" clause for those three lines; alternatively keep it in Task 07 and remove the \"тег не трогать\" instruction there, accepting that Task 07 must then wait on Task 08. Either way the three tasks must state the same owner."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "Step 3 and AC #2 require overview.md to mention the new PG 19 progress columns \"так же кратко, как описаны остальные экраны\", implying an existing progress-screen entry to extend. overview.md's \"Supported PostgreSQL Statistics\" list has no progress entry at all — it covers pg_stat_activity, pg_stat_database, pg_stat_replication, user tables/indexes, bgwriter, replication slots, pg_stat_io, pg_stat_wal, pg_stat_statements, system stats. The executor must therefore add a brand-new bullet, which collides with the Implementation hint \"Стиль правок — минимальный diff: правим существующие строки, новые разделы не создаём\".",
+      "fix": "State in Task 07 that overview.md currently has no progress-screen bullet and that one new bullet (progress screens: vacuum/analyze/basebackup, with `started_by`/`mode`/`backup_type` on PG 19) is to be added, and reword the minimal-diff hint to allow that single addition."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "09",
+      "issue": "Verification says `make test` — \"PG 19-подтесты выполняются, а не скипаются (проверить по выводу `-v`/по отсутствию SKIP на 190000)\". The Makefile target is `go test -race -p 1 -timeout 300s -coverprofile=... ./...` with no `-v`, so skipped subtests are not printed and the stated check cannot be performed from `make test` output.",
+      "fix": "Point the check at an explicit verbose run, e.g. `go test -v ./internal/query/... ./internal/postgres/... 2>&1 | grep -i skip`, in addition to the green `make test`."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "09",
+      "issue": "Details says \"`testing/e2e.sh` — 27 строк\"; the file is 26 lines. The referenced loop positions are correct (record loop at line 15, report loop at line 22).",
+      "fix": "Drop the line count or correct it to 26."
+    }
+  ],
+  "verified_ok": [
+    "Task 07 — overview.md line 34 says exactly \"Active support: PG 14, 15, 16, 17, 18\"; bgwriter (line 21) and replication slots (line 22) carry \"PG 14–18\"; pg_stat_io is \"PG 16+\", pg_stat_wal is \"PG 14+\" with the PG 18 statements being historical facts, as the task describes.",
+    "Task 07 — deployment.md line 36 \"Ubuntu 22.04, PostgreSQL 14–18 with plperlu + CPAN modules\" and line 38 \"Ports: PG14=21914 ... PG18=21918\" match verbatim.",
+    "Task 07 — architecture.md \"PostgreSQL Version Handling\" (lines 60–68) lists exactly the eight selectors named in the task, including the \"version-independent on PG 14–18\" wording on SelectStatReplicationSlotsQuery; the Testing section (lines 149–157) has the port map and the NewTestConnectVersion \"returns error for unavailable versions\" sentence.",
+    "Task 07 — the pre-19 numbers in the facts table match internal/view/view.go exactly: progress_vacuum Ncols=13 DiffIntvl={10,11}, progress_analyze Ncols=12 DiffIntvl={0,0}, progress_basebackup Ncols=11 DiffIntvl={9,9}. The \"27 registered screens\" count is correct. None of the three views sets UniqueKey (defaults to 0 = pid), consistent with Decision 2.",
+    "Task 07 — README genuinely has no supported-versions list: the only relevant sentence is line 87 \"pgCenter supports a wide range of PostgreSQL versions...\". The user-spec records the same decision (line 193) and its AC (line 152) says \"README не трогаем\". Exclusion is justified.",
+    "Task 07 — patterns.md is version-range-free (its \"Adding a New PostgreSQL Version\" checklist is generic), so excluding it from the edited set is correct.",
+    "Task 09 — both workflows call `prepare-test-environment.sh` bare from PATH (default.yml line 60, release.yml line 62), and the script is baked in via `COPY prepare-test-environment.sh /usr/local/bin/` (Dockerfile line 35); e2e is run from the checkout (`run: ./testing/e2e.sh`). The inertness/immediacy asymmetry the ordering rests on is real.",
+    "Task 09 — testing/e2e.sh has `set -euxo pipefail` (line 7) with no skip mechanism, and two independent port loops: record (line 15) and report (line 22), both `21914 21915 21916 21917 21918`. The report arg list is exactly the 19 args quoted in the task and already contains -Pv, -Pa, -Pb.",
+    "Task 09 — container tag lives only in the test jobs: default.yml line 9 and release.yml line 11, both `lesovsky/pgcenter-testing:0.0.10`; the `release` job (release.yml lines 85–111) runs on bare ubuntu-latest with no `container:`. Dockerfile line/literal references (line 6 LABEL, line 38 CMD) are exact.",
+    "Task 09 — prepare-test-environment.sh has exactly six per-version loops (create, configure, start, wait, fixtures, final check) with port formula `219${v}`, as described. doc/development.md does carry stale ports and the `:latest` tag (lines 5–6), as the edge case notes.",
+    "Task 09 — ADR [005] in docs/decisions-log.md (line 333ff) says what the task attributes to it, including \"The image build/push is a manual maintainer step (no CI image-build job)\".",
+    "Task 08 — no automation in the repo can push the testing image: the only workflows are default.yml and release.yml (neither builds an image; release.yml's goreleaser job publishes the product image lesovsky/pgcenter), Makefile docker-build/docker-push target ${DOCKER_ACCOUNT}/${PROGRAM_NAME} (pgcenter), and the only pgcenter-testing build/push commands in the repo are the documented manual ones in deployment.md lines 42–43. The \"user action\" framing is justified, and the credential handling (agent must not seek or substitute DOCKER_USERNAME/DOCKER_PASSWORD, no creds in files or logs) is sound.",
+    "Dependency ordering — Task 07 depends_on [\"03\"] and reads artifacts of Tasks 01/02 (PostgresV19, port 21919, image contents), but the chain 03→02→01 and waves 1/2/3/4 guarantee ordering. Task 09 depends_on [\"08\"], which depends on [\"01\"], covering the Dockerfile tag literal it reads."
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 47,
+    "issues_found": 7
+  }
+}

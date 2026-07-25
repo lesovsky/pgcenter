@@ -26,7 +26,7 @@ views, and pgcenter has to render them on PG 19 while leaving PG 14–18 byte-id
 
 Each of the three screens today has exactly one query constant (`PgStatProgressVacuumDefault` and
 siblings) referenced directly from the static view registry in `internal/view/view.go: New()`, with no
-selector at all — the screens are the last version-static ones among the recordable views. This task gives
+selector at all — they are static query constants today. This task gives
 each screen a second query constant for PG 19 and a `SelectStatProgressXxxQuery(version) (string, int,
 [2]int)` selector, and wires all three into `view.Configure()`, following the `io.go` / `bgwriter.go` idiom
 already documented in `patterns.md`.
@@ -61,7 +61,7 @@ that prove the `Configure()` wiring land in the same task and the same wave as t
    `SelectStatProgressAnalyzeQuery`, `SelectStatProgressBasebackupQuery`, each
    `func(version int) (string, int, [2]int)`. All three carry the 3-tuple, including analyze whose diff
    interval is `{0,0}` on both branches (Decision 2) — the uniform arity is the point. Branch on
-   `version >= query.PostgresV19` (the constant Task 2 added), matching the `>=` idiom used by every other
+   `version >= PostgresV19` — unqualified, since the selectors live in the same package as the constant, so a package-qualified reference would not compile. Matches the `>=` idiom used by every other
    selector, and return the pre-19 triple on the fallthrough path.
 
 4. **Wire all three into `view.Configure()`** as three new `case` blocks in the existing switch, in the
@@ -256,7 +256,7 @@ Models table. Section 2.5 of `012-feat-pg19-compatibility-baseline-code-research
 and places the columns after `datname`/`pid` — it is superseded. The `(Ncols, DiffIntvl)` arithmetic is
 identical either way, so the tests cannot catch a wrong position; only reading the user-spec can.
 
-**Dependencies:** Task 2 (`query.PostgresV19`, port 21919 in the test-connection map, `NewTestConnectVersion`
+**Dependencies:** Task 2 (the `PostgresV19` constant, port 21919 in the test-connection map, `NewTestConnectVersion`
 erroring on unmapped versions). Task 1 for the live cluster. No new packages. Downstream: Task 5 mirrors the
 emitted column order in `report/describe.go`; Task 6's replay test relies on these selectors.
 
@@ -297,9 +297,9 @@ emitted column order in `report/describe.go`; Task 6's replay test relies on the
 
 ## Reviewers
 
-- **dev-code-reviewer** → `012-feat-pg19-compatibility-baseline-task-03-dev-code-reviewer-review.json`
-- **dev-security-auditor** → `012-feat-pg19-compatibility-baseline-task-03-dev-security-auditor-review.json`
-- **dev-test-reviewer** → `012-feat-pg19-compatibility-baseline-task-03-dev-test-reviewer-review.json`
+- **dev-code-reviewer** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-03-dev-code-reviewer-review.json`
+- **dev-security-auditor** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-03-dev-security-auditor-review.json`
+- **dev-test-reviewer** → `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-task-03-dev-test-reviewer-review.json`
 
 ## Post-completion
 

@@ -1,0 +1,82 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "06",
+      "section": "frontmatter / Reviewers",
+      "issue": "Task carries `skills: [code-writing]` but only `[dev-code-reviewer, dev-test-reviewer]` as reviewers; the skills-and-reviewers catalog default set for `code-writing` also includes `dev-security-auditor`. Frontmatter and the Reviewers section agree with each other and with the tech-spec's Task 6 entry, so this is a deliberate deviation, not a mismatch — flagged only so it is a conscious choice. Defensible here: the task adds test-only files under `report/` and explicitly forbids touching production code. Same pattern in sibling tasks 04 and 05.",
+      "fix": "Either accept as-is (test-only task, no production surface) or add `dev-security-auditor` to both the frontmatter array and the Reviewers section to match the catalog default."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "07",
+      "section": "Reviewers",
+      "issue": "Report path is written as a bare filename (`012-feat-pg19-compatibility-baseline-task-07-dev-code-reviewer-review.json`) rather than the template's `{feature_base}-task-{ID}-{name}-review.json`, where `feature_base` is a path prefix including `docs/features/.../`. The batch is inconsistent: tasks 02, 04, 05, 06 use the full path; tasks 01, 03, 07, 09 use bare filenames.",
+      "fix": "Normalise across the whole feature — prefix the report path with `docs/features/012-feat-pg19-compatibility-baseline/` as tasks 02/04/05/06 do."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "09",
+      "section": "Reviewers",
+      "issue": "Same as task 07: the three reviewer report paths are bare filenames rather than `{feature_base}`-prefixed paths, inconsistent with tasks 02/04/05/06 in the same feature.",
+      "fix": "Prefix all three paths with `docs/features/012-feat-pg19-compatibility-baseline/`."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "09",
+      "section": "Verification Steps / Details",
+      "issue": "Template guidance comments were left in the generated file: `<!-- How to verify task is complete. For code — run tests... -->` under `## Verification Steps` and `<!-- All details for task execution — technical, organizational, any other. -->` under `## Details`. Tasks 06, 07 and 08 removed them, so the batch is inconsistent.",
+      "fix": "Delete both HTML comments — the sections below them are fully written out."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "10",
+      "section": "Details",
+      "issue": "Template guidance comment `<!-- All details for task execution — technical, organizational, any other. -->` left in place under `## Details`, same as task 09.",
+      "fix": "Delete the HTML comment."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "09",
+      "section": "Details",
+      "issue": "Three line/size references in the **Files** subsection are off against the current repo: `.github/workflows/default.yml` has `container:` on line 8 (task says line 9); `.github/workflows/release.yml` has it on line 10 (task says line 11); `testing/e2e.sh` is 26 lines, not 27. The Dockerfile references (`LABEL version` line 6, `CMD` line 38) and the two e2e loop positions (~15, ~22) are correct, and both `container:` lines are unambiguous, so this misleads only slightly.",
+      "fix": "Correct to `default.yml:8`, `release.yml:10`, and drop or fix the `27 строк` figure — or drop the exact line numbers entirely, since the `container:` key is unique in each file."
+    },
+    {
+      "severity": "minor",
+      "category": "decomposition",
+      "task": "10",
+      "section": "frontmatter / Details",
+      "issue": "`depends_on: [\"09\"]` names only the CI task, but the acceptance criteria verify deliverables owned by other tasks that are not on the 09 → 08 → 01 dependency chain: `pgcenter report -d -P v|a|b` describes the new columns (Task 05), the two new report goldens plus the untouched existing ones (Task 06), and `overview.md` / `deployment.md` / `architecture.md` listing PG 19 (Task 07). The Details section states this in prose (\"Everything else in the feature is merged by the time this runs\") but the declaration does not carry it. Wave ordering (7 > 4) makes the execution order safe in practice, so this is a declaration-completeness issue, not a scheduling bug.",
+      "fix": "Extend to `depends_on: [\"05\", \"06\", \"07\", \"09\"]` (wave stays 7), or add one line to Details stating explicitly that waves 4–6 are relied on transitively rather than declared."
+    }
+  ],
+  "notes_reviewed_and_dismissed": [
+    "Tasks 07, 08, 09, 10 have no `## TDD Anchor` section — correct per the template instruction to delete it for non-code tasks (documentation, user action, deploy config, QA). Task 06 is the only code task in the batch and has a well-formed anchor with `path::test_name — description` entries plus an explicit red/green loop including a sabotage step.",
+    "Task 08 carries `skills: []` and `reviewers: []` with matching prose in the Required Skills and Reviewers sections — consistent, and correct for a maintainer-credentials user action. The blockquote guardrail between the title and `## Required Skills` is extra content, not a structural deviation; it is a useful instruction to the executing agent not to attempt an automated registry push.",
+    "Project knowledge links point at `overview.md` in place of the template's `project.md`; all five tasks link the real paths and tasks 08 and 10 annotate the substitution explicitly. `architecture.md` is present in all five.",
+    "Dependency graph 01←02←03←{04,05,06,07} and 01←08←09←10 is acyclic; every `depends_on` value references an existing task and every task's wave is strictly greater than its dependencies' waves.",
+    "Carry-forward from the tech-spec is complete for all five: files-to-modify sets match the Implementation Tasks entries exactly (06: the new test file plus two goldens; 07: the three PK docs; 08 and 10: none; 09: e2e.sh plus both workflows), and no tech-spec acceptance-criterion or Testing-Strategy item was dropped. Task 06 carries every constraint from the tech-spec's replay-test paragraph (basename = report type, one-second ticks, shared pid, golden names, existing goldens byte-identical). Task 10 covers all 13 user-spec acceptance criteria plus a catch-all requiring a verdict with evidence for every user-spec and tech-spec criterion.",
+    "No merge or split candidates: the five tasks touch disjoint file sets, and the three-file tasks (07 docs, 09 CI+e2e) are single-outcome — task 09's grouping is mandated by tech-spec Decision 4. Ten tasks against five user stories is not over-decomposition.",
+    "No template placeholders (`[Task Name]`, `{PK path}`, `{reviewer-name}`, …) and no TODO/FIXME/TBD markers in any of the five files. Section order matches the template in all five.",
+    "Factual spot-checks against the repo pass: `report/report_test.go:22` declares the `update` flag, `Test_app_doReport_Bgwriter` is at `report_record_bgwriter_test.go:31`, `internal/stat/postgres.go:611` is `diff.Ncols = len(curr.Cols)`, `internal/view/view_test.go:11` asserts 27 views, `testing/Dockerfile:6` and `:38` carry the `0.0.10` literals, both workflows pin `lesovsky/pgcenter-testing:0.0.10`, `e2e.sh` has the two port loops without 21919, and task 07's quoted current-state strings in `overview.md` / `deployment.md` / `architecture.md` all match the files verbatim. `logs/working/qa-report.json` in task 10 matches the pre-deploy-qa skill's documented output path."
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 7,
+    "critical": 0,
+    "major": 0,
+    "minor": 7
+  }
+}

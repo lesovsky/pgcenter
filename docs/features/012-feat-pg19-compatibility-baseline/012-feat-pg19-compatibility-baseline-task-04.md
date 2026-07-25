@@ -26,15 +26,16 @@ would stay green against a PG 19 cluster it never connects to. This task closes 
 The edits look mechanical but fall into **three groups that are not interchangeable**, and treating them as
 one kind is the main way this task goes wrong:
 
-1. **Plain live-connection version loops** (26 sites in 20 files). A `[]int{…}` fed to
+1. **Plain live-connection version loops** (27 sites in 20 files). A `[]int{…}` fed to
    `postgres.NewTestConnectVersion` inside or around a `t.Run`. Append `190000` to the tail, nothing else.
    Purely additive.
 
 2. **Per-version assertion tables** (8 tables). Pure unit tables with no PostgreSQL involved, asserting
    `(query constant, Ncols, DiffIntvl)` per version. A new row needs *expected values*, and those values
-   must be **derived from the selector code** — each of these selectors' newest branch is `>= PostgresV18`
-   (or lower), so a `190000` row proves this feature did not accidentally move a boundary. Getting a value
-   wrong here converts a guard test into a rubber stamp.
+   must be **derived from the selector code** — six of the eight selectors branch on version and their
+   newest branch is `>= PostgresV18` or lower, so a `190000` row proves this feature did not accidentally
+   move a boundary; the other two ignore the version entirely (see Group 3). Getting a value wrong here
+   converts a guard test into a rubber stamp.
 
 3. **The recording filter test** (`record/record_test.go: Test_filterViews`) — one row, and the only place
    in this task where copying a neighbouring row produces a **wrong but plausible-looking** number. This
@@ -44,9 +45,11 @@ one kind is the main way this task goes wrong:
 
 Two further constraints shape the diff:
 
-- **Some lists must not be touched at all** — one single-version smoke list and three string-inspection
-  loops that never open a connection. They are enumerated below; adding `190000` to them buys nothing and
-  in the string loops actively duplicates an assertion.
+- **Three lists must not be touched at all** — the string-inspection loops in `io_test.go` that never open a
+  connection. They are enumerated below; each element there stands for one *query branch*, so `190000` would
+  land on the same `>= PostgresV18` branch as `180000` and duplicate an assertion rather than add one. This
+  exclusion covers string loops only: a single-version list that *does* open a connection
+  (`databases_test.go:56`) is in Group 1, not here.
 - **Edit points and loops are not one-to-one.** Two package-level lists feed several tests each
   (`overview_test.go`'s `overviewVersions` drives four tests; `common_test.go`'s list drives four subtests,
   one of them through a `versions[3:]` slice), so a single edit changes several tests — and, for the slice,
@@ -59,7 +62,7 @@ version lists of exactly the shape this task appends to.
 
 ## What to do
 
-### Group 1 — append `190000` to plain live-connection loops (26 sites, 20 files)
+### Group 1 — append `190000` to plain live-connection loops (27 sites, 20 files)
 
 Append the value at the **tail** of the existing list; change nothing else in these tests.
 
@@ -68,60 +71,83 @@ Append the value at the **tail** of the existing list; change nothing else in th
 | 1 | `internal/query/activity_test.go:29` | …170000, 180000 | full 90500→ list |
 | 2 | `internal/query/bgwriter_test.go:36` | …180000 | asserts `Len(FieldDescriptions()) == wantNcols` — the shape that catches a catalog rename |
 | 3 | `internal/query/common_test.go:64` | …180000 | drives 4 subtests, one via `versions[3:]` at :99 — appending at the tail keeps the slice bound valid |
-| 4 | `internal/query/databases_test.go:34` | …180000 | the *general* loop only — see Group 2 for :56 |
-| 5 | `internal/query/functions_test.go:11` | …180000 | |
-| 6 | `internal/query/indexes_test.go:11` | …180000 | |
-| 7 | `internal/query/io_test.go:112` | `{160000,170000,180000}` | the PG 19 run also re-exercises the `version >= PostgresV18` `object='wal'` assertion at :138 — correct, it stays true; do not gate it off |
-| 8 | `internal/query/io_test.go:150` | `{160000,170000,180000}` | |
-| 9 | `internal/query/overview_test.go:13` | `overviewVersions` | package-level var, feeds 4 tests (`:18,:68,:128,:155`) — one edit, four call sites |
-| 10 | `internal/query/pgcenter_schema_test.go:21` | …180000 | the `plperlu` fixture gate; first thing to fail if PG 19's `plperlu` misbehaves |
-| 11 | `internal/query/procpidstat_test.go:81` | …180000 | |
-| 12 | `internal/query/progress_cluster_test.go:11` | `{120000…180000}` | append only — no PG 19 selector for this screen (Decision 6) |
-| 13 | `internal/query/progress_copy_test.go:11` | …180000 | append only |
-| 14 | `internal/query/progress_create_index_test.go:11` | `{120000…180000}` | append only |
-| 15-17 | `internal/query/replication_slots_test.go:34,113,161` | …180000 | three separate lists in one file |
-| 18 | `internal/query/replication_test.go:39` | …180000 | |
-| 19 | `internal/query/sizes_test.go:11` | …180000 | |
-| 20 | `internal/query/statements_test.go:59` | full | |
-| 21 | `internal/query/statements_test.go:110` | inline `{130000…180000}` | WAL section, PG13+ |
-| 22 | `internal/query/statements_test.go:129` | inline `{150000…180000}` | JIT section, PG15+ |
-| 23 | `internal/query/statements_test.go:176` | full | |
-| 24 | `internal/query/tables_test.go:11` | …180000 | |
-| 25 | `internal/query/wal_test.go:34` | …180000 | |
-| 26 | `internal/stat/postgres_test.go:90` | …180000 | `Test_collectOverviewStat`; its skip sits above the loop — see Decision 7 below |
+| 4 | `internal/query/databases_test.go:34` | …180000 | the *general* loop |
+| 5 | `internal/query/databases_test.go:56` | `[]int{140000}` | the **sessions** loop — `for _, version := range []int{140000}` around a `t.Run` that formats `PgStatDatabaseSessionsDefault`, opens a connection and runs `conn.Exec`. This is the **only** place in the repo that query is ever executed against a server, so without `190000` here `pg_stat_database`'s sessions shape gets zero PG 19 coverage in a PG-19-compatibility feature. Append `190000` → `[]int{140000, 190000}` |
+| 6 | `internal/query/functions_test.go:11` | …180000 | |
+| 7 | `internal/query/indexes_test.go:11` | …180000 | |
+| 8 | `internal/query/io_test.go:112` | `{160000,170000,180000}` | the PG 19 run also re-exercises the `version >= PostgresV18` `object='wal'` assertion at :138 — correct, it stays true; do not gate it off |
+| 9 | `internal/query/io_test.go:150` | `{160000,170000,180000}` | |
+| 10 | `internal/query/overview_test.go:13` | `overviewVersions` | package-level var, feeds 4 tests (`:18,:68,:128,:155`) — one edit, four call sites |
+| 11 | `internal/query/pgcenter_schema_test.go:21` | …180000 | the `plperlu` fixture gate; first thing to fail if PG 19's `plperlu` misbehaves |
+| 12 | `internal/query/procpidstat_test.go:81` | …180000 | |
+| 13 | `internal/query/progress_cluster_test.go:11` | `{120000…180000}` | append only — no PG 19 selector for this screen (Decision 6) |
+| 14 | `internal/query/progress_copy_test.go:11` | …180000 | append only |
+| 15 | `internal/query/progress_create_index_test.go:11` | `{120000…180000}` | append only |
+| 16-18 | `internal/query/replication_slots_test.go:34,113,161` | …180000 | three separate lists in one file |
+| 19 | `internal/query/replication_test.go:39` | …180000 | |
+| 20 | `internal/query/sizes_test.go:11` | …180000 | |
+| 21 | `internal/query/statements_test.go:59` | full | |
+| 22 | `internal/query/statements_test.go:110` | inline `{130000…180000}` | WAL section, PG13+ |
+| 23 | `internal/query/statements_test.go:129` | inline `{150000…180000}` | JIT section, PG15+ |
+| 24 | `internal/query/statements_test.go:176` | full | |
+| 25 | `internal/query/tables_test.go:11` | …180000 | |
+| 26 | `internal/query/wal_test.go:34` | …180000 | |
+| 27 | `internal/stat/postgres_test.go:90` | …180000 | `Test_collectOverviewStat`; its skip sits above the loop — see Decision 7 below |
 
 Line numbers are from the code-research pass; re-locate by content, not by line number, in case an earlier
 wave shifted them.
 
-### Group 2 — four sites that must NOT be touched
+### Group 2 — three sites that must NOT be touched
+
+All three are in `io_test.go`, all three are **string inspection with no connection**, and in all three the
+list has one element **per query branch**, not per supported version. `190000` resolves to the same
+`>= PostgresV18` branch as `180000`, so adding it re-asserts an already-asserted string.
 
 | file:line | list | why |
 |---|---|---|
-| `internal/query/databases_test.go:56` | `[]int{140000}` | single-version smoke of `PgStatDatabaseSessionsDefault` (a PG14+ shape with no version branch). A `190000` element would re-run an identical query and assert nothing new. |
-| `internal/query/io_test.go:68` | `{160000,180000}` | `Test_SelectStatIOQuery_NullSafety` — **string inspection, no connection.** Two elements = one per query branch (`<V18` / `>=V18`). `190000` lands on the same `>=V18` branch as `180000` → duplicate assertion. |
-| `internal/query/io_test.go:96` | `{160000,180000}` | same, for the time selector. |
-| `internal/query/io_test.go:179` | `{160000,180000}` | `Test_SelectStatIOQuery_NoTemplateArtifacts` — same one-per-branch logic. |
+| `internal/query/io_test.go:68` | `{160000,180000}` | `Test_SelectStatIOQuery_NullSafety` — one element per branch (`<V18` / `>=V18`) → `190000` duplicates the `>=V18` assertion |
+| `internal/query/io_test.go:96` | `{160000,180000}` | `Test_SelectStatIOTimeQuery_NullSafety` — same |
+| `internal/query/io_test.go:179` | `{160000,180000}` | `Test_SelectStatIOQuery_NoTemplateArtifacts` — same |
+
+The rule that decides membership here is **"does the loop body open a connection?"**, not "is the list short"
+and not "does the selector branch on version". A one-element list that calls `postgres.NewTestConnectVersion`
+belongs in Group 1 (site #5).
 
 ### Group 3 — add a `190000` row to eight per-version assertion tables
 
-These run without PostgreSQL. Derive each expected value from the selector's own branches (all of them keep
-returning their `>= PostgresV18`/newest-branch answer at 190000); the values below are the researched
-result — confirm them against the code rather than pasting blind:
+These run without PostgreSQL. For each table: **open the selector it calls, evaluate it at `190000`, and
+write the row from what the code returns.** Do not carry the `180000` row down — a copied row asserts that
+the test file agrees with itself, which is true no matter what the selector does. Deriving it is what makes
+the row detect a moved boundary.
 
-| table | new row |
-|---|---|
-| `internal/query/bgwriter_test.go:16-22` | `{version: 190000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}}` |
-| `internal/query/wal_test.go:16-20` | `{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}}` |
-| `internal/query/replication_slots_test.go:16-20` | `{version: 190000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}}` |
-| `internal/query/io_test.go:18-24` | `{version: 190000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}}` |
-| `internal/query/io_test.go:42-46` | `{version: 190000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}}` |
-| `internal/query/statements_test.go:15-25` | `{version: 190000, want: PgStatStatementsTimingDefault}` |
-| `internal/query/statements_test.go:42-46` | `{version: 190000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13}` |
-| `internal/query/statements_test.go:154-164` | `{version: 190000, want: PgStatStatementsReportQueryDefault}` |
+The eight tables and the selector each one calls:
+
+| table | selector to derive from | where |
+|---|---|---|
+| `internal/query/bgwriter_test.go:16-22` | `SelectStatBgwriterQuery` | `internal/query/bgwriter.go:41` |
+| `internal/query/wal_test.go:16-20` | `SelectStatWALQuery` | `internal/query/wal.go:25` |
+| `internal/query/replication_slots_test.go:16-20` | `SelectStatReplicationSlotsQuery` | `internal/query/replication_slots.go:39` — **takes `_ int`** |
+| `internal/query/io_test.go:18-24` | `SelectStatIOQuery` | `internal/query/io.go:87` |
+| `internal/query/io_test.go:42-46` | `SelectStatIOTimeQuery` | `internal/query/io.go:99` — **takes `_ int`** |
+| `internal/query/statements_test.go:15-25` | `SelectStatStatementsTimingQuery` | `internal/query/statements.go:333` |
+| `internal/query/statements_test.go:42-46` | `SelectStatStatementsJITQuery` | `internal/query/statements.go:347` |
+| `internal/query/statements_test.go:154-164` | `SelectQueryReportQuery` | `internal/query/statements.go:355` |
+
+**Two of these selectors have no branch to read.** `SelectStatReplicationSlotsQuery` and
+`SelectStatIOTimeQuery` are declared with an **ignored version parameter** (`_ int`) and return one constant
+triple unconditionally — do not go looking for a version condition in them, there is none. Their `190000`
+rows therefore pin nothing about version handling; they exist only so the table stays uniform with its
+siblings and so a future version branch added to either selector has to update this table. Say exactly that
+in the row comment (not "PG 19 keeps the PG 18 answer", which would imply a branch that does not exist).
+
+For the other six, read the condition and note which branch `190000` lands in — that is the fact the row
+records. Once every row is written, cross-check it against the researched values in **Details →
+"Group 3 cross-check"** before running anything; a mismatch means either the derivation or the research is
+wrong, and it must be resolved rather than papered over.
 
 Follow each table's existing comment convention: where a row marks a boundary the neighbouring rows explain
-(`// PG 18: …`), a short comment on the new row saying it pins that PG 19 keeps the PG 18 answer is in
-keeping with the file.
+(`// PG 18: …`), a short comment on the new row is in keeping with the file. Comment the new row only, not
+every row.
 
 **Out of scope for Group 3:** `internal/query/databases_test.go:17-22` and `internal/query/activity_test.go:16-18`.
 Both tables deliberately stop at their last branch boundary (130000 / 100000) and never listed 170000 or
@@ -131,13 +157,14 @@ Both tables deliberately stop at their last branch boundary (130000 / 100000) an
 
 Add one row for `190000` with `pgssSchema: "public"`, and **derive `wantN` / `wantV` yourself**:
 
-1. Read `filterViews` (`record/record.go:199-230`) — a view is dropped by `NotRecordable`, by
-   `!v.VersionOK(version)`, or (for `statements_*` keys) by an empty `pgssSchema`.
+1. Read `filterViews` (`record/record.go:200-233`) — a view is dropped by `NotRecordable`, by
+   `!v.VersionOK(version)` (`internal/view/view.go:421`), or (for `statements_*` keys) by an empty
+   `pgssSchema`.
 2. Read `view.New()` (`internal/view/view.go`) — count the registered views and read every
    `MinRequiredVersion`.
 3. Compute how many of them a version of `190000` with a non-empty pgss schema drops, and how many remain.
 
-The highest existing row is `{140000, "public", wantN: 3, wantV: 24}`; at PG 14 three views are still
+The highest existing row is `{140000, "public", wantN: 3, wantV: 24}` (`record/record_test.go:133`); at PG 14 three views are still
 dropped by their PG15/PG16 gates. Copying that row is the specific mistake this task exists to avoid — at
 PG 19 those three views pass. The code-research document's §B.5 table cell for this row contains the copied
 (wrong) values while its surrounding prose states the correct reasoning; **trust the derivation, not that
@@ -182,7 +209,7 @@ guessed, not derived):**
 - `internal/query/io_test.go::Test_SelectStatIOTimeQuery/version/190000`
 - `internal/query/statements_test.go::TestSelectStatStatementsTimingQuery` (190000 case)
 - `internal/query/statements_test.go::TestSelectStatStatementsJITQuery` (190000 case)
-- `internal/query/statements_test.go::TestSelectQueryReportQuery` / `…ReportQuery` table (190000 case)
+- `internal/query/statements_test.go::TestSelectQueryReportQuery` (190000 case)
 
 **Then the live-connection rows — verified by observing them run, not by a green summary line:**
 
@@ -192,6 +219,10 @@ guessed, not derived):**
   catalog rename.
 - `internal/query/io_test.go::Test_StatIOQueries/pg_stat_io/190000` — PASS with the cluster up, and its
   `version >= PostgresV18` `object='wal'` assertion still holds on PG 19.
+- `internal/query/databases_test.go::Test_SelectStatDatabaseGeneralQuery/pg_stat_database/sessions/190000` —
+  PASS with the cluster up. This subtest did not exist before this task and is the **only** PG 19 execution
+  of `PgStatDatabaseSessionsDefault` anywhere in the suite; if it reports SKIP or is absent from `-v` output,
+  that query has no PG 19 coverage at all and the task is not done.
 - `internal/query/pgcenter_schema_test.go` PG 19 subtest — PASS; this is the `plperlu` canary. A failure
   here is an environment/compatibility finding to route per the tech-spec Risks table, **not** a reason to
   drop `190000` from the list.
@@ -200,10 +231,15 @@ guessed, not derived):**
 
 ## Acceptance Criteria
 
-- [ ] All 26 Group 1 live-connection lists carry `190000` at the tail; no other change in those loops.
-- [ ] The four Group 2 sites are byte-identical to `develop` (`databases_test.go:56`, `io_test.go:68/96/179`).
-- [ ] All eight Group 3 assertion tables have a `190000` row with values derived from the selectors, each
-      asserting that the newest branch's answer is unchanged.
+- [ ] All 27 Group 1 live-connection lists carry `190000` at the tail; no other change in those loops.
+- [ ] `databases_test.go:56` — the single-version **sessions** loop — carries `190000`, so
+      `PgStatDatabaseSessionsDefault` is executed against PG 19 at least once.
+- [ ] The three Group 2 sites are byte-identical to `develop` (`io_test.go:68/96/179`) — they are the only
+      excluded sites, and each is a string-inspection loop that opens no connection.
+- [ ] All eight Group 3 assertion tables have a `190000` row derived from the selector code: six record which
+      branch `190000` lands in, and the two version-independent ones (`SelectStatReplicationSlotsQuery`,
+      `SelectStatIOTimeQuery`) say in their comment that the selector ignores the version rather than
+      claiming a branch.
 - [ ] `record/record_test.go: Test_filterViews` has a `190000` row whose `wantN`/`wantV` were computed from
       `filterViews` + `view.New()`, not copied from the `140000` row, with a comment recording why they
       differ.
@@ -228,9 +264,14 @@ guessed, not derived):**
 - [012-feat-pg19-compatibility-baseline-decisions.md](012-feat-pg19-compatibility-baseline-decisions.md) —
   decisions log (append the task report here)
 - [012-feat-pg19-compatibility-baseline-code-research.md](012-feat-pg19-compatibility-baseline-code-research.md)
-  — **§B is the per-file source of truth** (B.1 append list, B.2 do-not-touch, B.3 assertion tables, B.5
-  view/record rows). §A.3 explains the two skip shapes. §4.1's older table conflated the groups and is
-  superseded by §B
+  — **§B is the per-file source of truth for locating sites** (B.1 append list, B.2 do-not-touch, B.3
+  assertion tables, B.5 view/record rows). §A.3 explains the two skip shapes. §4.1's older table conflated
+  the groups and is superseded by §B. **Two known errors in §B, both corrected here and in the tech-spec:**
+  (a) §B.2 (and its line 259 summary) lists `databases_test.go:56` as do-not-touch on the grounds that it
+  "re-runs an identical query" — but that loop opens a connection and `Exec`s the sessions query, and is its
+  only execution site, so it belongs in Group 1 (site #5); §B.2 is a 3-site list, not 4. (b) §B.5's table
+  cell for the `Test_filterViews` PG 19 row carries copied PG 14 values that contradict its own prose —
+  see Group 4
 
 **Project knowledge:**
 - [overview.md](../../../.claude/skills/project-knowledge/overview.md) — what pgcenter is (this project has
@@ -248,10 +289,11 @@ guessed, not derived):**
 - [internal/query/activity_test.go](../../../internal/query/activity_test.go) — Group 1 (:29)
 - [internal/query/bgwriter_test.go](../../../internal/query/bgwriter_test.go) — Group 1 (:36) + Group 3 (:22)
 - [internal/query/common_test.go](../../../internal/query/common_test.go) — Group 1 (:64, tail append keeps `versions[3:]` valid)
-- [internal/query/databases_test.go](../../../internal/query/databases_test.go) — Group 1 (:34) only; :56 is Group 2
+- [internal/query/databases_test.go](../../../internal/query/databases_test.go) — Group 1 twice: the general
+  loop (:34) and the sessions loop (:56), the sole execution site of `PgStatDatabaseSessionsDefault`
 - [internal/query/functions_test.go](../../../internal/query/functions_test.go) — Group 1 (:11)
 - [internal/query/indexes_test.go](../../../internal/query/indexes_test.go) — Group 1 (:11)
-- [internal/query/io_test.go](../../../internal/query/io_test.go) — Group 1 (:112, :150) + Group 3 (:24, :46); :68/:96/:179 are Group 2
+- [internal/query/io_test.go](../../../internal/query/io_test.go) — Group 1 (:112, :150) + Group 3 (:18-24, :42-46); :68/:96/:179 are Group 2 (the only excluded sites in the task)
 - [internal/query/overview_test.go](../../../internal/query/overview_test.go) — Group 1 (`overviewVersions`, :13) — one edit, four tests
 - [internal/query/pgcenter_schema_test.go](../../../internal/query/pgcenter_schema_test.go) — Group 1 (:21), `plperlu` canary
 - [internal/query/procpidstat_test.go](../../../internal/query/procpidstat_test.go) — Group 1 (:81)
@@ -268,10 +310,10 @@ guessed, not derived):**
 - [record/record_test.go](../../../record/record_test.go) — Group 4 (`Test_filterViews`, :109-145), the derived row
 
 **Code files (read — do not modify):**
-- [record/record.go](../../../record/record.go) — `filterViews` (:199-230): the three drop reasons the
+- [record/record.go](../../../record/record.go) — `filterViews` (:200-233): the three drop reasons the
   derivation must account for
 - [internal/view/view.go](../../../internal/view/view.go) — `New()` registry and every `MinRequiredVersion`;
-  `VersionOK` (:422). The other input to the derivation
+  `VersionOK` (:421). The other input to the derivation
 - [internal/query/io.go](../../../internal/query/io.go),
   [internal/query/bgwriter.go](../../../internal/query/bgwriter.go),
   [internal/query/wal.go](../../../internal/query/wal.go),
@@ -290,9 +332,11 @@ guessed, not derived):**
 2. **Unit rows, no database:** `go test -run 'TestSelect|Test_Select' ./internal/query/` — all eight new
    table rows green on the first run. A failure here means a value was guessed.
 3. **Live rows, cluster up:** with the Task 1 image running,
-   `go test -v -run 'Test_Stat|Test_Common|Test_Overview|Test_collectOverviewStat' ./internal/query/ ./internal/stat/`
-   and read the output: each `…/190000` subtest reports `--- PASS`, not `--- SKIP`. A green package summary
-   alone is not evidence — a skipped subtest also reports green.
+   `go test -v -run 'Test_Stat|Test_Common|Test_Overview|Test_collectOverviewStat|Test_SelectStatDatabaseGeneralQuery' ./internal/query/ ./internal/stat/`
+   and read the output: each `…/190000` subtest reports `--- PASS`, not `--- SKIP` — including
+   `pg_stat_database/sessions/190000`, which is the site most likely to be silently missing because it is
+   the one that was previously (wrongly) listed as do-not-touch. A green package summary alone is not
+   evidence — a skipped subtest also reports green.
 4. **Live rows, cluster down:** stop the clusters and run `go test ./internal/query/... ./internal/stat/...`
    — packages green, PG 19 subtests SKIP. Then `go test ./record/... ./report/... ./top/... ./internal/view/...`
    — these run without PostgreSQL and must be green regardless; a failure here is a real stale count, not a
@@ -300,22 +344,43 @@ guessed, not derived):**
 5. **Boundary check:** `git diff --name-only` lists exactly the 21 files in this task and nothing else — in
    particular no `internal/view/view_test.go`, no `progress_{vacuum,analyze,basebackup}_test.go`, no
    production file.
-6. **Do-not-touch check:** `git diff internal/query/databases_test.go internal/query/io_test.go` shows no
-   change on the four Group 2 lines.
-7. **Coverage arithmetic:** the diff should add `190000` in 26 Group 1 lists + 8 Group 3 rows + 1
-   `Test_filterViews` row = 35 new occurrences. A different count means a site was missed or one of the
-   excluded sites was edited — reconcile before proceeding.
+6. **Do-not-touch check:** `git diff internal/query/io_test.go` shows no change on the three Group 2 lines
+   (:68, :96, :179) — while :112, :150 and both assertion tables in the same file *are* changed.
+7. **Coverage arithmetic:** the diff should add `190000` in 27 Group 1 lists + 8 Group 3 rows + 1
+   `Test_filterViews` row = 36 new occurrences. A different count means a site was missed or one of the
+   three excluded sites was edited — reconcile before proceeding. `databases_test.go` alone accounts for two
+   of the 27 (the general loop at :34 and the sessions loop at :56).
 8. `make test` — the gate for this task. Then `make lint`.
 
 ## Details
 
 **Files:**
 - 19 files in `internal/query/*_test.go` + `internal/stat/postgres_test.go` — append `190000` to the
-  live-connection lists per Group 1; four of them additionally gain Group 3 assertion-table rows
-  (`bgwriter`, `wal`, `replication_slots`, `io`, `statements`).
+  live-connection lists per Group 1 (27 lists across these 20 files: `databases_test.go` holds two,
+  `io_test.go` two, `replication_slots_test.go` three, `statements_test.go` four, the rest one each).
+  **Five** of these files additionally gain Group 3 assertion-table rows: `bgwriter_test.go`, `wal_test.go`,
+  `replication_slots_test.go`, `io_test.go` (two tables) and `statements_test.go` (three tables) — 5 files,
+  8 tables.
 - `record/record_test.go` — one derived row in `Test_filterViews`. This is the only file outside
   `internal/` in the task and the only edit that needs arithmetic.
-- Nothing else. No production code, no new test file.
+- Nothing else. No production code, no new test file. Total: 21 files, 36 new `190000` occurrences.
+
+**Group 3 cross-check (use only AFTER deriving each row from the selector):**
+
+These are the values a correct derivation produces. They are here, not in "What to do", on purpose: read
+them *after* you have written the row from the selector, as confirmation. If your derived row differs from
+the line below, stop and find out which one is wrong — do not silently adopt either.
+
+| table | expected row |
+|---|---|
+| `bgwriter_test.go:16-22` | `{version: 190000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}}` — `>= 180000` branch |
+| `wal_test.go:16-20` | `{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}}` — `>= 180000` branch |
+| `replication_slots_test.go:16-20` | `{version: 190000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}}` — no branch, selector ignores version |
+| `io_test.go:18-24` | `{version: 190000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}}` — `>= PostgresV18` branch |
+| `io_test.go:42-46` | `{version: 190000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}}` — no branch, selector ignores version |
+| `statements_test.go:15-25` | `{version: 190000, want: PgStatStatementsTimingDefault}` — `>= 170000` case |
+| `statements_test.go:42-46` | `{version: 190000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13}` — `>= PostgresV17` branch |
+| `statements_test.go:154-164` | `{version: 190000, want: PgStatStatementsReportQueryDefault}` — `>= 170000` case |
 
 **Dependencies:**
 - Task 3 (wave 3) — file-ownership boundary: it owns `internal/view/view_test.go` and the three progress
@@ -346,9 +411,12 @@ guessed, not derived):**
 **Implementation hints:**
 - Work group by group, not file by file: do all of Group 1, run the suite, then Group 3, then Group 4. Each
   group has a different failure signature, and mixing them makes a red run ambiguous.
-- For Group 3, open the selector next to the test and read its branch conditions before writing the row. All
-  eight selectors' newest branch is `>= PostgresV18` or lower, which is *why* the PG 19 row repeats the
-  PG 18 values — state that in the row comment so the next reader knows it is intentional, not a copy-paste.
+- For Group 3, open the selector next to the test before writing the row. Six of the eight branch on version
+  and their newest branch is `>= PostgresV18` or lower, which is *why* the PG 19 row repeats the PG 18
+  values — state that in the row comment so the next reader knows it is intentional, not a copy-paste. The
+  remaining two (`SelectStatReplicationSlotsQuery`, `SelectStatIOTimeQuery`) are declared `(_ int)` and have
+  no branch at all; their comment should say the selector is version-independent, so the row is a
+  regression net for a future branch rather than a boundary assertion.
 - For Group 4, the two inputs are `filterViews`'s drop conditions and every `MinRequiredVersion` in
   `view.New()`. Write the count out in the decisions report so a reviewer can check the arithmetic rather
   than re-deriving it.

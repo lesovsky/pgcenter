@@ -1,0 +1,68 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "04",
+      "issue": "Group 2 excludes internal/query/databases_test.go:56 with the rationale that adding 190000 'would re-run an identical query and assert nothing new'. That rationale is wrong for this site: unlike the three io_test.go string-inspection loops in the same table, :56 IS a live-connection loop (postgres.NewTestConnectVersion at :64) and it is the ONLY place PgStatDatabaseSessionsDefault is ever executed against a server — the general loop at :34 exercises SelectStatDatabaseGeneralQuery only. Excluding it leaves one production query with zero PG 19 live coverage in a feature whose entire premise is 'run every existing query against PG 19'.",
+      "fix": "Either move databases_test.go:56 into Group 1 (append 190000, keeping 140000 as the lower bound: []int{140000, 190000}), or keep the exclusion but replace the rationale with an honest one and record it as an explicit deferred item in the decisions log. The current wording will make a reviewer believe the site is a string-inspection loop like the io_test ones."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "05",
+      "issue": "Task 05 has no TDD Anchor section at all (tasks 04 and 06 both have one). The task states 'Nothing in the test suite can catch a mistake here' and makes eye-verification the sole gate — verified: Test_describeReport (report/report_test.go:1170) compares describeReport() output against the very constants it renders, so any text edit passes by construction. However, the specific failure mode the task fears (row in the wrong slot, missing Note) IS cheaply testable without a golden: the constants are package-level strings in the same package as the tests.",
+      "fix": "Add a TDD Anchor with a small ordering test in package report, e.g. for each of the three constants assert strings.Index(c, \"- started_by\") lies between Index(\"- relation\") and Index(\"- state\") (Index(\"- backup_type\") between \"- duration\" and \"- state\"), that \"- mode\" follows \"- started_by\" in the vacuum constant, and that each constant contains a 'PostgreSQL 19' Note line positioned before the 'Details:' block. That is ~20 lines and converts the whole 'invisible to CI' argument into a guarded invariant. If the team still prefers eye-only verification, say so explicitly as a deviation instead of leaving the section absent."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Group 3 instruction says 'each of these selectors' newest branch is >= PostgresV18 (or lower)' and that a 190000 row 'proves this feature did not accidentally move a boundary'. For two of the eight tables that is not what the code does: SelectStatReplicationSlotsQuery (internal/query/replication_slots.go:39) and SelectStatIOTimeQuery (internal/query/io.go:99) take the version as `_ int` and ignore it entirely — there is no branch to derive from and the new row cannot pin any boundary; it is a trivially-green regression pin. An implementer following 'open the selector next to the test and read its branch conditions' will look for a branch that does not exist.",
+      "fix": "Note in the Group 3 table that replication_slots and io_time selectors are version-independent (signature `_ int`), so their 190000 rows are constant-value pins, not boundary proofs. The six remaining tables (bgwriter >=V18, wal >=V18, io >=V18, statements timing/JIT/report >=170000) do have branches, and all eight proposed expected values were independently verified correct."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "06",
+      "issue": "Implementation hints prescribe scanned,KiB 1000 -> 1500 (delta 500) plus a sentinel `assert.Contains(out, \"500\")` copied from the bgwriter model (report_record_bgwriter_test.go:228). \"500\" is a substring of the cumulative value \"1500\" that the same cell prints when DiffIntvl is stale — i.e. the sentinel still passes under the exact regression the pg19 subcase exists to catch. The golden comparison does catch it, so the test is sound, but the sentinel adds no localisation value for the failure it was placed to localise.",
+      "fix": "Pick a delta that is not a substring of any fixture value in the row (e.g. 1000 -> 1700, delta 700, keeping the same delta across both subcases), or assert on a value only reachable through the diff path. Keep the pid Contains sentinel as-is."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_function",
+      "task": "06",
+      "issue": "Two line citations drift from the code: `newApp` is at report/report.go:83 (task says :82), and `Compare`/`diff` in internal/stat/postgres.go are at :575 and :605-659 (task says :585-660). All other citations in task 06 are exact: bgwriter test :31, sentinels :221-228 (task said 220-228), update flag report_test.go:22, progress golden cases report_test.go:107/:124/:129, diff.Ncols = len(curr.Cols) at :611, the !found verbatim-copy branch at :650-656, readMeta :394, the replay Configure block :249-267.",
+      "fix": "Adjust the two line numbers, or add the 'locate by content, not line number' caveat that task 04 carries."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Internal inconsistency in Details/Files: 'four of them additionally gain Group 3 assertion-table rows' followed by a five-file list (bgwriter, wal, replication_slots, io, statements). The correct count is five files carrying eight tables (io and statements carry two and three respectively). Also record/record.go filterViews is cited as :199-230; it is at :200-232.",
+      "fix": "Say 'five of them' and correct the filterViews range. The 26/8/1 = 35-occurrence arithmetic in Verification Step 7 and the 21-file boundary in Step 5 are both correct as written."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "05",
+      "issue": "Context Files links are written repo-root-relative (`[report/describe.go](report/describe.go)`, `[overview.md](.claude/skills/...)`) while tasks 04 and 06 use paths relative to the task file's own directory (`../../../report/describe.go`). From docs/features/012-.../, task 05's links do not resolve.",
+      "fix": "Prefix task 05's code and project-knowledge links with ../../../ to match tasks 04 and 06."
+    }
+  ],
+  "verified_claims": {
+    "task_04_recording_filter_derivation": "CONFIRMED INDEPENDENTLY. view.New() (internal/view/view.go:38-360) registers exactly 27 views. The highest MinRequiredVersion in the registry is query.PostgresV16 = 160000 (stat_io :167, stat_io_time :180); no constant above PostgresV18 exists in internal/query/query.go. No view sets NotRecordable: true anywhere in view.go (the field is declared at :31 and never assigned true). filterViews (record/record.go:200-232) drops on exactly three conditions: NotRecordable, !VersionOK(version) (view.go:421-423: version >= MinRequiredVersion), and prefix 'statements_' with empty pgssSchema. At version 190000 with pgssSchema \"public\": zero drops -> wantN: 0, wantV: 27. The task's derived expectation ('no dropped views and every registered view kept') is correct. Cross-check of the existing top row {140000, \"public\", 3, 24}: exactly stat_io, stat_io_time (V16) and statements_jit (V15) fail the gate -> 3 dropped, 24 kept, consistent. Copying that row at 190000 would indeed be wrong. The task's warning about the research doc is also accurate: code-research §B.5 line 903 carries the copied cell 'wantN: 3, wantV: 24' while its own surrounding prose states 'on >=16 ... wantN: 0, wantV: 27'.",
+    "task_04_inventory": "CONFIRMED. grep -rln NewTestConnectVersion --include=*_test.go returns exactly 23 files; 3 of them (progress_vacuum_test.go, progress_analyze_test.go, progress_basebackup_test.go) are Task 03's, leaving exactly the 20 files of Group 1. All 26 Group 1 file:line citations are exact against develop, including the two-site io_test.go (:112, :150), the three-site replication_slots_test.go (:34, :113, :161), the four-site statements_test.go (:59, :110, :129, :176), overviewVersions at overview_test.go:13 feeding tests at :18/:68/:128/:155, common_test.go:64 with the versions[3:] slice at :99, and internal/stat/postgres_test.go:90 (Test_collectOverviewStat, skip above the loop). Research §B.1's '29 sites' minus Task 03's three progress files = the task's 26. Group 2: io_test.go:68/:96/:179 verified as pure string-inspection with no connection (Test_SelectStatIOQuery_NullSafety, ..._IOTimeQuery_NullSafety, ..._NoTemplateArtifacts); databases_test.go:56 verified as a live loop (see major finding). Group 3: all eight tables exist at the cited lines and all eight proposed 190000 values match what the selectors return at 190000 (bgwriter.go:44 -> 14/{6,12}; wal.go:28 -> 7/{2,5}; replication_slots.go:40 -> 15/{6,13}; io.go:89 -> 16/{4,14}; io.go:100 -> 10/{4,8}; statements.go:337 -> TimingDefault; :349 -> JITDefault/15/{7,12}/13; :360 -> ReportQueryDefault). Out-of-scope tables databases_test.go:17-22 (stops at 130000) and activity_test.go:16-18 (stops at 100000) confirmed as described. Subtest name patterns used in the TDD Anchor ('version/%d', 'pg_stat_bgwriter/%d', 'pg_stat_io/%d') all match the code.",
+    "task_05_describe": "CONFIRMED. report/describe.go declares pgStatProgressVacuumDescription (:202, 13 rows, header ':204'), pgStatProgressAnalyzeDescription (:266, 12 rows), pgStatProgressBasebackupDescription (:286, 11 rows) — row inventories and orders match the task verbatim and match the emitted column order of the current query constants in internal/query/progress_{vacuum,analyze,basebackup}.go. The three-field '- name TAB origin TAB description' format is as described, and the vacuum table genuinely uses a narrower origin column than analyze/basebackup (three tabs vs four in the header), so the warning about copying alignment across constants is real. The version-note precedent exists exactly as quoted: pgStatBgwriterDescription :439 and pgStatIODescription :490 (plus a third at pgStatStatementsJITDescription :531), each one line, sentence case, blank-line separated, immediately before 'Details:'. The 'mode' collision with pgStatReplicationDescription is at :62 as claimed (origin sync_state). describeReport is at report/report.go:606 and maps all three constants; output goes through fmt.Fprint verbatim. Test_describeReport is at report/report_test.go:1170 and compares by identity, exactly as the task warns. Flags 'report -d -P v|a|b' exist (cmd/report/report.go:63 describe/-d, :76 progress/-P, mapping v/a/b -> progress_vacuum/analyze/basebackup at :187-196). Value domains (manual/autovacuum/autovacuum_wraparound, normal/aggressive/failsafe, full/incremental) and the insertion points (after relation / after duration) match the user-spec ':86-110' layout blocks, not the superseded research §5.4.",
+    "task_06_harness": "CONFIRMED. Test_app_doReport_Bgwriter exists at report/report_record_bgwriter_test.go:31 with exactly the described anatomy: testcase fields name/versionNum/versionStr/cols/prevVals/currVals/wantFile; a 7-column SelectCommonProperties-shaped metaRes whose index 1 is version_num; two stat.PGresult ticks; six tar entries (meta/bgwriter/sysinfo x2) named with the recorder's 20060102T150405.000 format one second apart; a Config bracketing the ticks; newApp + app.writer = &buf + app.doReport; sentinel asserts at :221-228; an `if *update` write branch. The update flag is declared once at report/report_test.go:22. Goldens report_record_bgwriter_pg{14,17,18}.golden exist and the pgNN naming convention holds. isFilenameOK (report/report.go:408) splits the name on '.' requiring 4 parts and accepts only s[0] == report || \"meta\" || \"sysinfo\" — so a mismatched basename does silently skip the stat entries, as claimed. diff() (internal/stat/postgres.go:605) sets diff.Ncols = len(curr.Cols) at :611 and, when no row matches on ukey, copies the whole row verbatim at :650-656 — so a differing pid between ticks does produce a green-but-meaningless test, as warned. progress_vacuum is registered with UniqueKey unset (default 0 = pid), Ncols 13, DiffIntvl {10,11} (view.go:277-288); view.Configure (:367) has no progress_vacuum case today, which is exactly the Task 03 dependency the pg19 subcase relies on. The index arithmetic checks out: current 13-column order puts scanned,KiB/vacuumed,KiB at 10/11 and scanned_total,%/vacuumed_total,% at 8/9; inserting started_by/mode at 4/5 shifts them to 12/13 and 10/11 respectively, so a stale {10,11} would diff the text percentages — and diff() treats dotted values as floats, so it would not error. report/testdata/report_progress_{vacuum,analyze,basebackup}.golden and pgcenter.stat.golden.tar exist; report_test.go drives them at :107/:124/:129; report_progress_vacuum.golden:1 does carry ESC[37;1m SGR escapes."
+  },
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 96,
+    "issues_found": 7
+  }
+}
