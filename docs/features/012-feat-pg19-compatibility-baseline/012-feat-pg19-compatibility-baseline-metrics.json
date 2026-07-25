@@ -1,0 +1,41 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "012-feat-pg19-compatibility-baseline",
+    "feature_name": "pg19-compatibility-baseline",
+    "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "Opus 5 (1M context)",
+    "date_started": "2026-07-25T05:46:58Z",
+    "date_completed": ""
+  },
+  "phases": {
+    "user_spec": {
+      "start_time": "2026-07-25T05:46:58Z",
+      "end_time": null,
+      "duration_min": null,
+      "touch_time_min": null,
+      "human_wait_time_min": 22,
+      "steps": {}
+    },
+    "tech_spec": null,
+    "task_decomposition": null,
+    "feature_execution": null,
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": {},
+    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_rounds": {},
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 21,
+    "tasks_count": 0,
+    "waves_count": 0,
+    "agents_spawned": 0,
+    "commits_count": 0
+  }
+}

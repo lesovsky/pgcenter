@@ -1,0 +1,649 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Updated after EACH user response with scoring, values, and remaining gaps.
+#
+# Location: {feature_base}-interview.yml
+#   e.g.  docs/features/001-feat-add-auth-interview.yml
+#
+# Scoring: 0-100% (how well we understand this aspect)
+# Status: pending → partial → complete
+# Required: true = must reach threshold, false = cover if relevant
+
+# ============================================================================
+# Interview Metadata (Session Recovery)
+# ============================================================================
+interview_metadata:
+  feature_name: "pg19-compatibility-baseline"
+  feature_base: "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline"
+  work_type: "feature"
+  started: "2026-07-25 10:46:53"
+  last_updated: "2026-07-25 10:46:53"
+  status: "in_progress" # not_started | in_progress | completed
+  can_resume: true
+  current_question_num: 0
+  feature_size: "M"     # preliminary: CI/fixture + verification pass + 3 progress-view column additions
+
+# ============================================================================
+# Conversation History (for session recovery)
+# ============================================================================
+# Preserves complete Q&A. Update after EVERY user response.
+#
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-07-25 10:52:00"
+    topic: "ci_image, verification_scope, additive_columns, success_criteria"
+    agent_question: |
+      1. Docker image / order of work: make a probe the first task — build testing/Dockerfile locally with
+         jammy-pgdg-testing + postgresql-19, verify cluster starts on 21919, only then write code. Fallback
+         if PG 19 beta packages are not built for jammy: (a) move testing image to ubuntu:24.04,
+         (b) build PG 19 from source, (c) postpone the whole PG 19 block to GA?
+         (Also flagged: roadmap says "GitHub Actions matrix" but there is none — PG versions come from the
+         lesovsky/pgcenter-testing container, so "add PG 19 to CI" = rebuild + push the image, bump 0.0.10 → 0.0.11,
+         update both workflows and prepare-test-environment.sh.)
+      2. What "verification pass over every existing screen" concretely means: automatic (190000 added to all
+         versions lists in internal/query/*_test.go, view_test.go TestView_VersionOK, record_test.go Test_filterViews)
+         plus manual TUI pass. Is a QA checklist artifact needed in the feature dir? Does the pass cover only
+         `top`, or also record/report/profile?
+      3. Additive columns on three progress screens (vacuum +started_by +mode, analyze +started_by,
+         basebackup +backup_type) — confirm all three, and column placement: (a) appended at the tail,
+         (b) near pid/datname at the head where they read as row attributes.
+      4. Success criteria proposal: CI green with PG 19 cluster; all top screens render without errors;
+         three progress screens show new columns on PG 19 and do not break on PG 14–18; overview.md + README
+         list PG 19. Keep pg_stat_wal_receiver `connecting` as a manual verification item or drop from scope?
+    user_answer: |
+      1. Согласен, если не взлетит переезжаем на ubuntu:24.04 — хотя это уже и так пора сделать давно,
+         на дворе 2026 год.
+      2. Достаточно прогона в QA-фазе, либо как вариант прогон на живой системе с PG19 и обходом по каждому
+         скрину и проверке что все работает и нет паник.
+      3. Да, подтверждаю. Показываем по вариант Б.
+      4. Все верно, pg_stat_wal_receiver убираем из критериев приемки.
+    summary: |
+      Probe-first accepted; fallback = ubuntu:24.04 base for the testing image (user considers the base bump
+      overdue anyway). No QA artifact needed — a live PG 19 walk over every screen checking "works, no panics"
+      during the QA phase is enough. All three progress screens confirmed, new columns placed at the head
+      (variant B). Success criteria accepted as proposed; pg_stat_wal_receiver `connecting` dropped from
+      acceptance criteria.
+
+  - question_num: 2
+    timestamp: "2026-07-25 11:05:00"
+    topic: "ubuntu_base, diffintvl_cost, started_by_redundancy, qa_perimeter"
+    agent_question: |
+      1. ubuntu:24.04 now or fallback-only? Recommendation: probe on jammy first, stay if PG 19 installs,
+         make the noble bump a separate task outside this feature (it re-creates the environment for all
+         PG 14–18 clusters right before the 0.12.0 release — a risk unrelated to PG 19).
+         Also: keep the `*-pgdg-testing` repo line forever, or drop it at the GA rebuild?
+      2. Cost of variant B: inserting columns at the head shifts indices, so DiffIntvl becomes
+         version-dependent ({10,11} → {12,13} for vacuum, {9,9} → {10,10} for basebackup). Selectors must
+         return (query, ncols, DiffIntvl) per io.go/bgwriter.go and Configure() patches three fields.
+         Replay survives it (report/report.go:258 reconfigures by the archive's PG version). Confirm?
+      3. started_by is partly redundant: the vacuum screen already filters on
+         `a.query ~* '^autovacuum:' OR ^vacuum` and shows the `query` column, so vacuum origin is already
+         visible — but only in the rightmost column, which [009] scroll can push out of the window. `mode`
+         (aggressiveness) is the genuinely new signal. Take both columns, or only `mode`/`backup_type`?
+      4. Manual walk perimeter: `top` only, or also record/report/profile? And where does live PG 19 run?
+    user_answer: |
+      1. Да, сначала probe на jammy; если PG 19 там ставится — остаёмся на jammy, а переезд на noble делаем
+         отдельной задачей вне этой фичи.
+         [batch 3] Да, при GA-пересборке строка *-pgdg-testing удаляется, PG 19 ставится из основного pgdg.
+         Это можно даже в тех.долг записать чтоб не потерялось.
+      2. Да, подтверждаю.
+      3. [after a detailed explanation of the redundancy] Ок понял, берем обе колонки.
+      4. Достаточно только top.
+    summary: |
+      Jammy stays; noble bump is out of scope. `*-pgdg-testing` line must be removed at the GA rebuild —
+      to be registered as tech debt. Version-dependent DiffIntvl accepted as the price of head placement.
+      Both started_by and mode are taken (user accepted the partial-redundancy argument). Manual QA
+      perimeter = `top` only.
+
+  - question_num: 3
+    timestamp: "2026-07-25 11:20:00"
+    topic: "column_width, exact_layout, null_rendering, user_stories"
+    agent_question: |
+      1. `started_by` width: longest value `autovacuum_wraparound` is 21 chars and internal/align sizes
+         columns from data. Options: (a) show raw server values, (b) abbreviate to manual/auto/auto-wrap,
+         (c) raw values but move started_by rightwards keeping only `mode` at the head.
+         Recommendation: (a) — abbreviations are a private vocabulary that must be memorised and documented,
+         and [009] scroll means width is no longer a verdict.
+      2. Exact proposed layouts:
+         progress_vacuum:      pid, xact_age, datname, relation, [started_by, mode], state, waiting, phase,
+                               size_total,KiB, scanned_total,%, vacuumed_total,%, scanned,KiB, vacuumed,KiB,
+                               query  -> 15 cols, DiffIntvl {12,13}
+         progress_analyze:     pid, xact_age, datname, relation, [started_by], state, waiting, phase, ...
+                               -> 13 cols, DiffIntvl {0,0}
+         progress_basebackup:  pid, started_from, started_at, duration, [backup_type], state, waiting, phase,
+                               ... -> 12 cols, DiffIntvl {10,10}
+         Rationale: row identity first, then operation origin/mode, then operation state.
+      3. NULL case: the vacuum query RIGHT JOINs pg_stat_activity, so a row can match the
+         `^autovacuum:|^vacuum` regexp with no pg_stat_progress_vacuum row behind it — all v.* NULL, so
+         started_by/mode render empty. Confirm the rule "NULL renders blank, no dashes, no `unknown`"
+         (same rule the roadmap fixes for [013])?
+      4. Four proposed user stories (PG 19 upgrader; long-vacuum observer wanting `mode`; distinguishing
+         manual/autovacuum/autovacuum_wraparound on the left instead of reading `query` on the right;
+         maintainer wanting green CI on PG 19 as the base for [016]-[019]).
+    user_answer: |
+      1. Вариант А.
+      2. Ок.
+      3. Да, NULL рендерим пустотой.
+      4. Да, все верно.
+    summary: |
+      Raw server values shown as-is (no abbreviation dictionary). Proposed column layouts accepted verbatim
+      for all three screens. NULL renders blank. All four user stories accepted as written.
+
+  - question_num: 4
+    timestamp: "2026-07-25 11:45:00"
+    topic: "probe_failure_plan, image_rebuild_risks, readme, pg19_reachability_criterion"
+    agent_question: |
+      1. If the jammy probe fails: (a) pull the noble migration INTO this feature (it blocks [012]),
+         (b) pause [012], run [013] next, return to PG 19 after a separate noble task,
+         (c) postpone the whole PG 19 block to GA. Recommendation was (b) — [013]-[015] do not depend on
+         PG 19, so the idle cost is zero.
+      2. Three image-rebuild risks, take all three into the spec?
+         - `apt-get update` during the 0.0.11 build pulls fresh PG 14-18 minors and rebuilds CPAN modules,
+           so CI can go red from a regression unrelated to this feature. Proposed ordering requirement: run
+           the rebuilt image against UNCHANGED develop first; green = the image is clean, later failures
+           are ours.
+         - The image must be pushed to DockerHub BEFORE the 0.0.10 -> 0.0.11 tag bump lands on a branch CI
+           runs, otherwise every push fails on image pull (from code research §8.5).
+         - Catalog drift between beta and GA (e.g. a fourth value appearing in `mode`): a finalization item
+           of release 0.12.0 fixed by point patches, not a re-opening of the feature.
+      3. README has no version list at all (README.md:87 says "a wide range of PostgreSQL versions"), so the
+         "README lists PG 19" criterion has nothing concrete to edit. Add an explicit supported-versions
+         line (which then needs maintaining every release), or drop README from the criteria and edit only
+         overview.md / deployment.md / architecture.md? Recommendation: the latter.
+      4. Because internal/postgres/testing.go:35-37 silently falls back to the PG 14 cluster for an unmapped
+         version, a forgotten port entry makes "PG 19" subtests pass while testing PG 14. Add an explicit
+         acceptance criterion — stop cluster 21919 and confirm the PG 19 subtests SKIP rather than pass?
+    user_answer: |
+      1. Я за а — переезд на noble втягивается внутрь этой фичи и блокирует её — я вижу это как более
+         правильное системное решение, которое можно сделать и забыть еще на 4 года.
+      2. Точечные патчи — согласен.
+      3. Согласен.
+      4. Берем в критерий приемки.
+    summary: |
+      Probe-failure plan = variant (a): if PG 19 is not installable on jammy, the ubuntu:24.04 migration is
+      pulled into this feature and blocks it — user's rationale is that noble is the systemically right base
+      for the next ~4 years, so better done once here than deferred. (Agent had recommended (b); user chose
+      (a) after the trade-off was stated — recorded as a conscious decision.) All three image-rebuild
+      requirements accepted. README dropped from the acceptance criteria — docs edits limited to
+      overview.md / deployment.md / architecture.md. PG-19-reachability check accepted as an acceptance
+      criterion.
+    alternatives_considered: |
+      Probe-failure plan:
+        CHOSEN: (a) noble migration inside this feature, blocking it. Reason: one-time systemic fix, good
+                for years; avoids a half-migrated harness.
+        REJECTED: (b) pause [012] and run [013] first — agent's recommendation on idle-cost grounds; user
+                overrode, preferring not to leave the base bump dangling as a separate task.
+        REJECTED: (c) postpone the PG 19 block to GA — would push the release's central promise out.
+
+  - question_num: 5
+    timestamp: "2026-07-25 12:05:00"
+    topic: "qa_stand, value_domain_coverage, test_perimeter"
+    agent_question: |
+      1. Where does the live PG 19 for the manual walk run — the rebuilt testing image cluster (21919) or a
+         separate stand?
+      2. How deep do we verify the new column values? Reproducibility is asymmetric: mode=normal/aggressive,
+         started_by=manual/autovacuum and backup_type=full are trivial; mode=failsafe needs an xid age above
+         vacuum_failsafe_age (practically unreproducible); started_by=autovacuum_wraparound needs a lowered
+         autovacuum_freeze_max_age; backup_type=incremental needs summarize_wal=on. Proposal: the acceptance
+         criterion is the weaker but honest one — columns present, populated, and matching what psql returns
+         — verifying the mechanism, not the whole value domain, since it is one and the same code path.
+      3. Test perimeter: existing live Test_StatProgress*Queries (query validity + column count on an empty
+         cluster) + new pure unit tables at the 180000/190000 boundary (Test_SelectStatBgwriterQuery model)
+         + a report replay test with versionNum 180000/190000. Explicitly against: a test that starts a real
+         VACUUM in the background and tries to catch the row — a race that would flake in CI.
+    user_answer: |
+      1. Прогонять тебе — что ты предпочитаешь, отдельный чистый стенд или текущая система?
+         [agent chose: the rebuilt testing-image cluster on port 21919 — reproducible, disposable, already
+         carries fixtures.sql with the pgcenter schema, and is the same PostgreSQL build CI runs against;
+         driven via tmux send-keys + capture-pane per screen, with generated load so the progress screens
+         are not empty. User did not object.]
+      2. Да, достаточно проверить механику (перебор всех значений это долго и дорого).
+      3. Согласен.
+    summary: |
+      QA stand = the PG 19 cluster from the rebuilt testing image (21919), walked by the agent via tmux
+      send-keys/capture-pane with generated load. Acceptance verifies the mechanism (columns present,
+      populated, matching psql), not the full value domain. Test perimeter accepted as proposed; no
+      VACUUM-racing test.
+
+  - question_num: 6
+    timestamp: "2026-07-25 12:15:00"
+    topic: "breakage_handling, delay_time"
+    agent_question: |
+      1. If the verification pass finds a real breakage on PG 19: (a) fix inside [012], (b) file a separate
+         bugfix and close [012] with a documented known defect. Recommendation: (a), with the caveat that if
+         the breakage falls into an area [016]-[018] will re-enter anyway (WAL, replication, tables), it is
+         fixed there — the roadmap's enter-each-area-once principle.
+      2. delay_time: initially presented (wrongly) as a PG 19 column from the same area, one line in two
+         queries. User then said "take it as a fourth column". A docs check showed it was added in **PG 18**,
+         not 19, which changes the decision: the selector becomes three-branch (>=V19 / >=V18 / older) on
+         both vacuum and analyze; taking it in the PG 19 branch only would hide from PG 18 users a column
+         their server reports; and it reads zero unless `track_cost_delay_timing` is on, which is off by
+         default. Re-asked: (a) take it honestly with three branches, or (b) leave it out.
+    user_answer: |
+      1. Вариант А.
+      2. Вариант б, не берем, но надо положить в тех.долг и подумать над ней отдельно.
+    summary: |
+      Breakages found by the verification pass are fixed inside [012], except where the area is re-entered
+      by [016]-[018] — those are fixed there. delay_time is OUT of scope after the correction; recorded as a
+      deferred item to be considered separately (agent noted it is closer to a roadmap backlog entry than to
+      tech debt; /done will place it appropriately).
+    alternatives_considered: |
+      delay_time:
+        CHOSEN: leave out. Reasons: PG 18 column, not PG 19 (so not part of the PG 19 catch-up); three-branch
+                selectors on two screens; reads zero unless track_cost_delay_timing=on (off by default), so
+                for most installations it is a column of zeros.
+        REJECTED: take with three honest branches — cost/benefit not justified now, revisit separately.
+        REJECTED OUTRIGHT: take in the PG 19 branch only — would hide from PG 18 users a column their server
+                reports, contradicting "show what the server says".
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+# Interview Cycle 1 scope
+phase1_feature_overview:
+
+  feature_description:
+    score: 85
+    status: "complete"
+    value: |
+      PostgreSQL 19 compatibility baseline (roadmap 0.12.0, feature [012], done first in the release).
+      Three parts:
+      1. Test/CI infrastructure for PG 19: PostgresV19 = 190000 in internal/query/query.go, port 21919 in
+         internal/postgres/testing.go, PG 19 cluster in the lesovsky/pgcenter-testing Docker image
+         (rebuild + push, 0.0.10 → 0.0.11, both workflows + prepare-test-environment.sh updated).
+      2. Verification pass over every existing screen on live PG 19 — turns "should work" into "tested".
+      3. Additive PG 19 columns on three progress screens only: progress_vacuum (started_by, mode),
+         progress_analyze (started_by), progress_basebackup (backup_type).
+      Framing is honest: pgcenter does not break on PG 19 (version selectors are `>= PostgresV18` so 190000
+      lands in the newest branch; all queries list columns explicitly). This is feature catch-up plus a
+      tested guarantee, not an emergency fix.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 85
+    status: "complete"
+    value: |
+      pgcenter's core promise is that it tracks current PostgreSQL statistics. PG 19 beta 1 shipped 2026-06-04,
+      GA expected September/October 2026. Today there is no evidence pgcenter works on PG 19 — no test cluster,
+      no version constant, no CI run. A DBA upgrading to PG 19 has no way to know whether their monitoring tool
+      still works until they try it in production. Additionally, on a long-running vacuum the DBA cannot see
+      from pgcenter whether it is aggressive (PG 19 `mode`) without leaving for psql.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 85
+    status: "complete"
+    value: |
+      Practicing PostgreSQL DBAs running or planning to run PG 19 (early adopters on beta/RC first, then the
+      GA wave). Secondary: the maintainer — CI against PG 19 is the regression net for every later 0.12.0
+      feature ([016]-[019] all add PG 19 queries).
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      Confirmed by user (batch 1, Q4):
+      1. CI is green with a PG 19 cluster in the test image.
+      2. Every `top` screen renders on live PG 19 without errors and without empty columns where data exists;
+         no panics.
+      3. The three progress screens show the new columns on PG 19 and do not break on PG 14–18.
+      4. overview.md + README list PG 19 as supported.
+      Explicitly NOT an acceptance criterion: pg_stat_wal_receiver `connecting` status (display-only, no code).
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      - PG 19 is beta: packages live in the separate pgdg-testing repo, catalog details can still change in
+        beta 2/3/RC. Implementation is against beta; re-verification at RC/GA is planned but does not block
+        the release.
+      - Test image base is ubuntu:22.04 (jammy). If PG 19 beta packages are not built for jammy, fallback is
+        moving the image to ubuntu:24.04 — user considers that bump overdue anyway (batch 1, Q1).
+      - No regression on PG 14–18: every version selector change must keep older versions on their current
+        queries.
+      - Anti-rework boundary from the roadmap: PG 19 WAL FPI column → [016], pg_stat_replication_slots columns
+        → [018], stats_reset/stats_age on tables/indexes/functions → [017]. Not in this feature.
+      - Ubuntu base — conditional, final wording (supersedes the batch-2 formulation):
+        * PG 19 installs on jammy  -> the base stays ubuntu:22.04; the noble bump is a separate task
+          OUTSIDE this feature (user, batch 2, Q1).
+        * PG 19 does NOT install on jammy -> the ubuntu:24.04 migration is pulled INTO this feature and
+          BLOCKS it (user, batch 4, Q1, variant a — a conscious override of the agent's recommendation of
+          variant b). On that path the feature effectively becomes "M + OS base migration"; size is
+          re-assessed at tech-spec time, once the probe result is known.
+      - The `*-pgdg-testing` repo line in testing/Dockerfile is temporary: at the GA rebuild it must be
+        removed and PG 19 installed from the main pgdg repo, otherwise the next rebuild silently pulls the
+        PG 20 beta. User asked for this to be registered as tech debt so it is not lost (batch 3, Q1).
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Feature size M. Unit tests always. The internal/query/*_test.go suite is de-facto integration (runs
+      against live clusters, t.Skipf on unavailable versions) — 190000 joins every versions list there, plus
+      view_test.go TestView_VersionOK and record_test.go Test_filterViews rows.
+      Manual QA (user, batch 1, Q2): a live PG 19 walk over every screen checking that everything works and
+      nothing panics. No QA checklist artifact required in the feature dir.
+      Manual walk scope = `top` only (user, batch 2, Q4). record/report/profile are covered by the automated
+      suite, not by a manual pass — but the `report -P v|a|b` describe texts in report/report.go still need
+      updating for the new columns (code change, not a QA item).
+      Integration tests: yes — they are the point of the feature (the PG 19 cluster is the tested guarantee).
+      E2E: no new ones; testing/e2e.sh runs as-is in CI against the new image.
+      The concrete test perimeter (new per-selector unit tables at the 180000/190000 boundary, the report
+      replay test with versionNum 180000/190000, and the deliberate exclusion of a VACUUM-racing test) is
+      recorded under phase2_user_experience.verification_strategy — see there, not duplicated here.
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 3)
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      All four accepted verbatim by the user (batch 3, Q4):
+      1. As a DBA who upgraded to PG 19, I want to run `pgcenter top` and find every screen working, so that
+         I do not discover compatibility problems on production by trial and error.
+      2. As a DBA watching a long vacuum, I want to see in the `mode` column that it is `aggressive` or
+         `failsafe`, so that I know whether the system is fighting wraparound right now — today that answer
+         requires leaving for psql.
+      3. As a DBA, I want to tell `manual` / `autovacuum` / `autovacuum_wraparound` apart on the left side of
+         the screen, so that I do not have to read the query text in the rightmost column (which [009] scroll
+         can push out of the window).
+      4. As the pgcenter maintainer, I want green CI with a PG 19 cluster, so that the later 0.12.0 features
+         ([016]-[019], all of which add PG 19 queries) are written against a verified base rather than blind.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      1. PG 19 cluster runs in the testing image on port 21919; `make test` and `testing/e2e.sh` are green
+         against PG 14-19 in CI.
+      2. Tests provably reach PG 19, not the PG 14 fallback: with cluster 21919 stopped, the PG 19 subtests
+         SKIP rather than pass (guards internal/postgres/testing.go:35-37) — user, batch 4 Q4.
+      3. Every `top` screen renders on live PG 19 with no errors and no panics (agent walk via tmux,
+         screen dump per screen).
+      4. progress_vacuum shows started_by and mode; progress_analyze shows started_by; progress_basebackup
+         shows backup_type — populated, matching what psql returns for the same moment.
+      5. Verification of the mechanism, not the value domain: `mode=failsafe` and
+         `started_by=autovacuum_wraparound` are NOT deliberately reproduced (user, batch 5 Q2).
+      6. On PG 14-18 the three screens are byte-identical to today (layout, Ncols, DiffIntvl).
+      7. `report -P v|a|b` replay of a pre-0.12 archive is unchanged; existing goldens need no regeneration.
+      8. overview.md / deployment.md / architecture.md list PG 19. README is NOT edited (user, batch 4 Q3).
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 88
+    status: "complete"
+    value: |
+      - RIGHT JOIN NULLs on progress_vacuum: a row matching `^vacuum` in pg_stat_activity with no
+        pg_stat_progress_vacuum entry has NULL v.* — started_by/mode render blank. No coalesce: they sit
+        OUTSIDE DiffIntvl, so the "NULL inside DiffIntvl aborts the sample" hazard ([005]/[006]) does not
+        apply, and blank is the honest rendering (user, batch 3 Q3).
+      - Wide value: `autovacuum_wraparound` is 21 chars; column widths come from data
+        (internal/align), and column hiding does not exist (ADR [006], width floored at 8). Mitigated by
+        [009] horizontal scroll; head placement keeps the column inside the initially visible window.
+      - Replay across a version boundary: report/report.go:250 re-Configures mid-archive, but
+        `view.Aligned` is set once and never reset, so a `record -a` archive spanning a major upgrade keeps
+        stale widths. Pre-existing latent issue, NOT introduced and NOT fixed here.
+      - Empty progress screens are the normal state (no vacuum/analyze/basebackup running) — the manual walk
+        must generate load, otherwise it verifies nothing.
+      - PG 19 cluster absent locally: every live test self-skips via t.Skipf; the view/record/report/top
+        packages run without PostgreSQL and would fail hard on a stale count instead.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 88
+    status: "complete"
+    value: |
+      - PG 19 beta packages not installable on jammy → the ubuntu:24.04 migration is pulled INTO this
+        feature and blocks it (user, batch 4 Q1, variant a).
+      - Image rebuild turns CI red for reasons unrelated to PG 19 (fresh PG 14-18 minors, rebuilt CPAN
+        modules): required ordering — run the rebuilt image against UNCHANGED develop first; green there
+        means the image is clean and every later failure is ours.
+      - Tag bump lands before the image is pushed → every CI run fails on image pull. Push first, bump after.
+      - The verification pass finds a real breakage on PG 19 → fixed inside [012] (user, batch 6 Q1,
+        variant a), EXCEPT where the area is re-entered by [016]-[018] (WAL, replication, tables) — fixed
+        there, so no area is entered twice.
+      - Catalog drift between beta and GA (renamed column, new value) → a finalization item of release
+        0.12.0 fixed by point patches, not a re-opened feature; the CI matrix reports it.
+      - Forgotten port map entry → PG 19 tests silently run against PG 14. Covered by acceptance criterion 2.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Agent:
+      - `make test` (race, -p 1), `make lint`, `make vuln`, `make build`, `testing/e2e.sh` — all against the
+        rebuilt image with PG 14-19.
+      - New pure unit tables at the 180000/190000 boundary per progress selector
+        (Test_SelectStatBgwriterQuery model); a report replay test with versionNum 180000 and 190000.
+      - PG-19-reachability check: stop cluster 21919, confirm the PG 19 subtests skip.
+      - Manual walk of every `top` screen on the PG 19 cluster (21919), driven via tmux send-keys +
+        capture-pane, with generated load (a few-hundred-MB table + VACUUM) so the progress screens have
+        rows; screen dumps are the artifact. Cross-check the new columns against psql for the same moment.
+      - Named checkpoint inside the walk (completeness-checker finding): the summary panel's `waiting`
+        counter, built on the hardcoded `wait_event_type = 'Lock'` literal (internal/query/common.go:63,74;
+        top/signal.go:77), must actually increment on PG 19 under a deliberately created lock wait. `Lock`
+        is not among the PG 19 wait-event renames, so it should hold — but a silent zero there would panic
+        nothing and pass a "renders without errors" check unnoticed.
+      - Explicitly NOT written: a test that starts a real VACUUM and races to catch the row (user, batch 5 Q3).
+      User: optional spot-check of the TUI; no formal QA checklist document required (user, batch 1 Q2).
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      No new screens, no new hotkeys, no menu changes. Three existing progress screens gain columns; layouts
+      accepted verbatim by the user (batch 3, Q2):
+
+      - progress_vacuum (V hotkey group): pid, xact_age, datname, relation, **started_by**, **mode**, state,
+        waiting, phase, size_total,KiB, scanned_total,%, vacuumed_total,%, scanned,KiB, vacuumed,KiB, query
+        -> Ncols 13 -> 15 on PG 19, DiffIntvl {10,11} -> {12,13}
+      - progress_analyze: pid, xact_age, datname, relation, **started_by**, state, waiting, phase,
+        sample_size,KiB, scanned,%, ext_total/done, child_total/done,%, child_in_progress
+        -> Ncols 12 -> 13 on PG 19, DiffIntvl stays {0,0}
+      - progress_basebackup: pid, started_from, started_at, duration, **backup_type**, state, waiting, phase,
+        size_total,KiB, streamed,%, streamed,KiB, tablespaces_total/streamed
+        -> Ncols 11 -> 12 on PG 19, DiffIntvl {9,9} -> {10,10}
+
+      Placement rationale: row identity first (pid/datname/relation), then operation origin and mode, then
+      operation state. On PG 14-18 the layouts are byte-identical to today.
+
+      Values are rendered raw, exactly as the server reports them (batch 3, Q1, option A) — no abbreviation
+      dictionary, even though `autovacuum_wraparound` is 21 chars wide. Rationale: abbreviations are a
+      private vocabulary that must be memorised and documented, and since [009] horizontal scroll a wide
+      column is no longer a hard constraint.
+
+      NULL renders blank — no dash, no `unknown` (batch 3, Q3).
+    gaps: ""
+    required: true
+
+  risks:
+    score: 90
+    status: "complete"
+    value: |
+      R1. PG 19 beta packages unavailable → three-step ladder, settled in batch 7:
+          1) installs on jammy  -> proceed as planned, base stays 22.04;
+          2) fails on jammy     -> the ubuntu:24.04 migration is pulled into this feature and blocks it;
+          3) fails on noble too -> no beta packages exist for any supported base: the WHOLE feature is
+             paused (not trimmed to code-without-cluster) and the release proceeds with [013]-[015];
+             [012] returns when GA packages ship. Rationale: shipping the code half without the
+             verification pass would turn the release's "tested guarantee" back into "should work" —
+             exactly the dishonest framing the roadmap rules out.
+          Mitigation: probe FIRST, before any Go code is written (day-one risk retirement, roadmap).
+      R2. Image rebuild breaks PG 14-18 for unrelated reasons. Mitigation: green run on unchanged develop
+          before any code change.
+      R3. Tag bump precedes the image push → CI cannot pull the image. Mitigation: fixed ordering.
+      R4. Beta catalog drift before GA. Mitigation: re-verification at RC/GA is a release finalization item;
+          point patches, not a re-opened feature.
+      R5. Silent PG 14 fallback masks an untested PG 19. Mitigation: acceptance criterion 2.
+      R6. Missing version-aware DiffIntvl would silently corrupt report replay of PG 19 recordings (diffing
+          the percentage columns instead of the KiB pair). Mitigation: the selector is mandatory, plus a
+          replay test with both versions.
+      R7. `*-pgdg-testing` apt line left in the image would pull the PG 20 beta at the next rebuild.
+          Mitigation: registered as debt, removed at the GA rebuild (user, batch 3 Q1).
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 90
+    status: "complete"
+    value: |
+      - Three-part scope: CI/fixture, verification pass, three progress screens. Nothing else — the PG 19 WAL
+        FPI column ([016]), pg_stat_replication_slots columns ([018]) and stats_reset/stats_age ([017]) stay
+        out so no code area is entered twice.
+      - New columns placed at the head, accepting a version-dependent DiffIntvl and 3-tuple selectors
+        (io.go/bgwriter.go pattern). UniqueKey stays 0 because pid remains column 0 — no 4-tuple ([007]).
+      - Per-version query constants, never one query with `NULL AS started_by` for old versions (ADR [004]).
+      - Selector arity kept uniform across the three screens (3-tuple even where DiffIntvl never changes)
+        to avoid sibling asymmetry.
+      - Raw server values, no abbreviation dictionary; NULL renders blank.
+      - describe texts in report/describe.go document the superset without version branching — the existing
+        pgStatBgwriterDescription / pgStatIODescription precedent.
+      - delay_time is out (see batch 6): a PG 18 column, zero without track_cost_delay_timing.
+      - Standby fixture is NOT built here despite the harness gaining a cluster — it belongs to [018],
+        where it retires debt [006] and [010] together.
+      - Note for [014]: `mode` as a column name is already used on the replication screen
+        (`sync_state AS mode`), and [014] colorization keys off column NAMES — a future rule named `mode`
+        would hit both screens.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+# Interview Cycle 2 scope (together with Phase 2)
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      Production (7 files): internal/query/query.go (PostgresV19), internal/postgres/testing.go (port map),
+      the three internal/query/progress_*.go (new PG19 const + selector each), internal/view/view.go
+      (three new Configure cases; the static New() map keeps pre-19 values), report/describe.go (three
+      describe tables gain rows).
+      Infrastructure (5 files): testing/Dockerfile, testing/prepare-test-environment.sh (6 version loops),
+      testing/e2e.sh (2 port loops), .github/workflows/default.yml:8 and release.yml:10 (image tag only —
+      there is no PG matrix in CI).
+      Untouched by design: top/ (no new screens or hotkeys — the `p` cycle and `P` menu are unchanged),
+      record/ (progress views are already recordable and pass the version gate), cmd/report flag surface.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 85
+    status: "complete"
+    value: |
+      - lesovsky/pgcenter-testing image rebuild (manual docker build + push by the maintainer) — the
+        blocking dependency; everything else waits on the probe.
+      - PG 19 beta packages in the pgdg-testing apt repository.
+      - Ships with [009] horizontal scroll already merged — it is what makes a wider progress layout
+        acceptable.
+      - Downstream: [016]-[019] all add PG 19 queries and depend on this feature's constant, fixture and CI.
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      No storage of pgcenter's own. Data comes from pg_stat_progress_{vacuum,analyze,basebackup} joined to
+      pg_stat_activity, read per refresh tick. The only persisted format touched is the record/report tar
+      layout, which is version-stamped (`server_version_num` in the meta entry) and therefore self-describing
+      on replay.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 85
+    status: "complete"
+    value: |
+      None for users: no config, no state, no archive rewriting. Old archives replay unchanged (verified —
+      goldens carry version_num 140000 and take the pre-19 branch). Operationally, the only migration is the
+      testing image tag 0.0.10 → 0.0.11, which must be pushed before the bump lands.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: ""  # e.g. docs/features/001-feat-add-auth.md
+  status: "pending"  # pending | created | approved
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase4_completion"
+  questions_asked: 21
+  last_question: "delay_time: take with three honest branches, or leave out?"
+  completion_estimate: "100%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  ## PG 19 catalog check (postgresql.org/docs/devel/progress-reporting.html, checked 2026-07-25)
+
+  Column names from the roadmap verified against the devel docs — all three exist with those exact names:
+
+  - pg_stat_progress_vacuum.mode        : text, values `normal` | `aggressive` | `failsafe`
+  - pg_stat_progress_vacuum.started_by  : text, values `manual` | `autovacuum` | `autovacuum_wraparound`
+  - pg_stat_progress_analyze.started_by : text, values `manual` | `autovacuum`
+  - pg_stat_progress_basebackup.backup_type : text, values `full` | `incremental`
+
+  Detail the roadmap missed: `started_by` has THREE values on vacuum, not two — wraparound autovacuum is
+  called out explicitly. Longest value `autovacuum_wraparound` is 21 chars, which is wide for a column
+  placed next to pid at the head of the layout (internal/align sizes columns from the data). Raised in
+  cycle 2 as a UI/UX question.
+
+  Also present in devel but NOT in scope here: pg_stat_progress_vacuum.delay_time /
+  pg_stat_progress_analyze.delay_time.
+
+  Roadmap requires settling column sets against the live catalog, not release notes — the docs check above
+  is a pre-verification; the live check happens on the PG 19 fixture during implementation.
+
+  ## Free-form notes
+  - Feature is the first of the 0.12.0 release and gates [016]-[019], all of which add PG 19 queries.
