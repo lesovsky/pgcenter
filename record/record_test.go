@@ -129,6 +129,10 @@ func Test_filterViews(t *testing.T) {
 		// On PG13 and below all five views are version-incompatible and dropped by the
 		// version gate regardless of NotRecordable, so those rows are unchanged from the
 		// pre-008 baseline.
+		// On PG 19 nothing is filtered: the highest MinRequiredVersion in the registry is
+		// PostgresV16, and with a pgss schema supplied no statements_* view is dropped either —
+		// so all 27 registered views survive. Copying the PG14 row here would be wrong.
+		{version: 190000, pgssSchema: "public", wantN: 0, wantV: 27},
 		{version: 140000, pgssSchema: "", wantN: 9, wantV: 18},
 		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 24},
 		{version: 130000, pgssSchema: "public", wantN: 8, wantV: 19},

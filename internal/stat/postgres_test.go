@@ -87,7 +87,7 @@ func Test_collectActivityStat(t *testing.T) {
 }
 
 func Test_collectOverviewStat(t *testing.T) {
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		conn, err := postgres.NewTestConnectVersion(version)

@@ -10,7 +10,7 @@ import (
 )
 
 // overviewVersions enumerates the actively supported Postgres versions for live-PG tests.
-var overviewVersions = []int{140000, 150000, 160000, 170000, 180000}
+var overviewVersions = []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 func Test_OverviewQueries(t *testing.T) {
 	// Static (non-template) aggregates: each must execute AND scan into exactly the receivers

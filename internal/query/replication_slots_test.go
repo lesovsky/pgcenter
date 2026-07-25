@@ -18,6 +18,7 @@ func Test_SelectStatReplicationSlotsQuery(t *testing.T) {
 		{version: 160000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}},
 		{version: 170000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}},
 		{version: 180000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}},
+		{version: 190000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}},
 	}
 
 	for _, tc := range testcases {
@@ -31,7 +32,7 @@ func Test_SelectStatReplicationSlotsQuery(t *testing.T) {
 
 // Test_StatReplicationSlotsQueries tests query execution against all supported Postgres versions.
 func Test_StatReplicationSlotsQueries(t *testing.T) {
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_replication_slots/%d", version), func(t *testing.T) {
@@ -110,7 +111,7 @@ func findSlotRow(t *testing.T, conn *postgres.DB, q string, slotName string) ([]
 // rather than NULL (Decision 2: an empty diffed column would abort the sample via ParseInt("")).
 func Test_StatReplicationSlotsQueries_PhysicalSlot(t *testing.T) {
 	const slotName = "pgcenter_test_phys"
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_replication_slots/%d", version), func(t *testing.T) {
@@ -158,7 +159,7 @@ func Test_StatReplicationSlotsQueries_PhysicalSlot(t *testing.T) {
 // It asserts the logical slot is present and the spill/stream diff columns exist in the result.
 func Test_StatReplicationSlotsQueries_LogicalSlot(t *testing.T) {
 	const slotName = "pgcenter_test_logical"
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_replication_slots/%d", version), func(t *testing.T) {

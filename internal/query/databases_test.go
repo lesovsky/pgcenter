@@ -31,7 +31,7 @@ func TestSelectStatDatabaseQuery(t *testing.T) {
 }
 
 func Test_SelectStatDatabaseGeneralQuery(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_database/general/%d", version), func(t *testing.T) {
@@ -53,7 +53,7 @@ func Test_SelectStatDatabaseGeneralQuery(t *testing.T) {
 		})
 	}
 
-	for _, version := range []int{140000} {
+	for _, version := range []int{140000, 190000} {
 		t.Run(fmt.Sprintf("pg_stat_database/sessions/%d", version), func(t *testing.T) {
 			tmpl := PgStatDatabaseSessionsDefault
 

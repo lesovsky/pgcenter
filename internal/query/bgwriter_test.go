@@ -20,6 +20,7 @@ func Test_SelectStatBgwriterQuery(t *testing.T) {
 		{version: 170000, wantNcols: 13, wantDiffIntvl: [2]int{6, 11}},
 		// PG 18: slru_written added to the diffed block.
 		{version: 180000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}},
+		{version: 190000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}},
 	}
 
 	for _, tc := range testcases {
@@ -33,7 +34,7 @@ func Test_SelectStatBgwriterQuery(t *testing.T) {
 
 // Test_StatBgwriterQueries tests query execution against all supported Postgres versions.
 func Test_StatBgwriterQueries(t *testing.T) {
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_bgwriter/%d", version), func(t *testing.T) {

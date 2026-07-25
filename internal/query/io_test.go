@@ -22,6 +22,7 @@ func Test_SelectStatIOQuery(t *testing.T) {
 		{version: 170000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}},
 		// PG18: native read_bytes/write_bytes/extend_bytes.
 		{version: 180000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}},
+		{version: 190000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}},
 	}
 
 	for _, tc := range testcases {
@@ -44,6 +45,7 @@ func Test_SelectStatIOTimeQuery(t *testing.T) {
 		{version: 160000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}},
 		{version: 170000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}},
 		{version: 180000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}},
+		{version: 190000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}},
 	}
 
 	for _, tc := range testcases {
@@ -65,7 +67,7 @@ func Test_SelectStatIOQuery_NullSafety(t *testing.T) {
 	// Raw view columns that land inside the count DiffIntvl [4,14] and can be NULL on some rows.
 	diffedCols := []string{"reads", "writes", "extends", "hits", "evictions", "writebacks", "reuses", "fsyncs"}
 
-	for _, version := range []int{160000, 180000} {
+	for _, version := range []int{160000, 180000, 190000} {
 		t.Run(fmt.Sprintf("version/%d", version), func(t *testing.T) {
 			q, _, _ := SelectStatIOQuery(version)
 			for _, col := range diffedCols {
@@ -93,7 +95,7 @@ func Test_SelectStatIOQuery_NullSafety(t *testing.T) {
 func Test_SelectStatIOTimeQuery_NullSafety(t *testing.T) {
 	diffedCols := []string{"read_time", "write_time", "writeback_time", "extend_time", "fsync_time"}
 
-	for _, version := range []int{160000, 180000} {
+	for _, version := range []int{160000, 180000, 190000} {
 		t.Run(fmt.Sprintf("version/%d", version), func(t *testing.T) {
 			q, _, _ := SelectStatIOTimeQuery(version)
 			for _, col := range diffedCols {
@@ -109,7 +111,7 @@ func Test_SelectStatIOTimeQuery_NullSafety(t *testing.T) {
 // gates the native *_bytes columns AND the presence of object='wal' rows (a shape the local PG17-only
 // environment cannot verify).
 func Test_StatIOQueries(t *testing.T) {
-	versions := []int{160000, 170000, 180000}
+	versions := []int{160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_io/%d", version), func(t *testing.T) {
@@ -147,7 +149,7 @@ func Test_StatIOQueries(t *testing.T) {
 
 // Test_StatIOTimeQueries tests time-screen query execution against all supported Postgres versions.
 func Test_StatIOTimeQueries(t *testing.T) {
-	versions := []int{160000, 170000, 180000}
+	versions := []int{160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_io_time/%d", version), func(t *testing.T) {
@@ -176,7 +178,7 @@ func Test_StatIOTimeQueries(t *testing.T) {
 // Test_SelectStatIOQuery_NoTemplateArtifacts guards against accidental Go-template delimiters in the
 // flat SQL: Configure() always runs the query through query.Format, so a stray {{ would break parsing.
 func Test_SelectStatIOQuery_NoTemplateArtifacts(t *testing.T) {
-	for _, version := range []int{160000, 180000} {
+	for _, version := range []int{160000, 180000, 190000} {
 		qCount, _, _ := SelectStatIOQuery(version)
 		qTime, _, _ := SelectStatIOTimeQuery(version)
 		assert.False(t, strings.Contains(qCount, "{{"), "count query must not contain template delimiters")

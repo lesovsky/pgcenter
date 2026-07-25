@@ -9,8 +9,8 @@ import (
 
 func Test_SelectStatWALQuery(t *testing.T) {
 	testcases := []struct {
-		version      int
-		wantNcols    int
+		version       int
+		wantNcols     int
 		wantDiffIntvl [2]int
 	}{
 		{version: 140000, wantNcols: 11, wantDiffIntvl: [2]int{2, 9}},
@@ -18,6 +18,7 @@ func Test_SelectStatWALQuery(t *testing.T) {
 		{version: 170000, wantNcols: 11, wantDiffIntvl: [2]int{2, 9}},
 		// PG 18: removed wal_write/wal_sync; stats_age must be outside the diff interval.
 		{version: 180000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}},
+		{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}},
 	}
 
 	for _, tc := range testcases {
@@ -31,7 +32,7 @@ func Test_SelectStatWALQuery(t *testing.T) {
 
 // Test_StatWALQueries tests query execution against all supported Postgres versions.
 func Test_StatWALQueries(t *testing.T) {
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		t.Run(fmt.Sprintf("pg_stat_wal/%d", version), func(t *testing.T) {

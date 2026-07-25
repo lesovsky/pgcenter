@@ -23,6 +23,7 @@ func TestSelectStatStatementsTimingQuery(t *testing.T) {
 		// PG 17+: blk_read_time/blk_write_time replaced by shared_blk_read_time etc.
 		{version: 170000, want: PgStatStatementsTimingDefault},
 		{version: 180000, want: PgStatStatementsTimingDefault},
+		{version: 190000, want: PgStatStatementsTimingDefault},
 	}
 
 	for _, tc := range testcases {
@@ -44,6 +45,7 @@ func TestSelectStatStatementsJITQuery(t *testing.T) {
 		// PG 17+: adds jit_deform_count/jit_deform_time columns.
 		{version: 170000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13},
 		{version: 180000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13},
+		{version: 190000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13},
 	}
 
 	for _, tc := range testcases {
@@ -56,7 +58,7 @@ func TestSelectStatStatementsJITQuery(t *testing.T) {
 }
 
 func Test_StatStatementsQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000, 190000}
 
 	queries := []string{
 		PgStatStatementsGeneralDefault,
@@ -107,7 +109,7 @@ func Test_StatStatementsQueries(t *testing.T) {
 	}
 
 	// WAL stats are available since PG 13; test all supported versions.
-	for _, version := range []int{130000, 140000, 150000, 160000, 170000, 180000} {
+	for _, version := range []int{130000, 140000, 150000, 160000, 170000, 180000, 190000} {
 		version := version
 		t.Run(fmt.Sprintf("pg_stat_statements_wal/%d", version), func(t *testing.T) {
 			opts := NewOptions(version, "f", "off", 256, "public")
@@ -126,7 +128,7 @@ func Test_StatStatementsQueries(t *testing.T) {
 	}
 
 	// JIT stats are available since PG 15; test all supported versions.
-	for _, version := range []int{150000, 160000, 170000, 180000} {
+	for _, version := range []int{150000, 160000, 170000, 180000, 190000} {
 		version := version
 		t.Run(fmt.Sprintf("pg_stat_statements_jit/%d", version), func(t *testing.T) {
 			tmpl, _, _, _ := SelectStatStatementsJITQuery(version)
@@ -162,6 +164,7 @@ func TestSelectQueryReportQuery(t *testing.T) {
 		// PG 17+: blk_read_time/blk_write_time replaced by shared_blk_read_time etc.
 		{version: 170000, want: PgStatStatementsReportQueryDefault},
 		{version: 180000, want: PgStatStatementsReportQueryDefault},
+		{version: 190000, want: PgStatStatementsReportQueryDefault},
 	}
 
 	for _, tc := range testcases {
@@ -173,7 +176,7 @@ func TestSelectQueryReportQuery(t *testing.T) {
 // Test_StatStatementsReportQueries runs each version in its own sub-test so a missing
 // PG instance skips only that version, not the entire suite (fixes the t.Skipf-in-loop bug).
 func Test_StatStatementsReportQueries(t *testing.T) {
-	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}
+	versions := []int{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, version := range versions {
 		version := version
