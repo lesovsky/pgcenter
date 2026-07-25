@@ -3,7 +3,7 @@ status: planned
 depends_on: []
 wave: 1
 skills: [code-writing]
-verify: "bash — go test ./internal/query/... ./internal/view/..."
+verify: "bash — go test ./internal/query/... ./internal/view/... && go test ./top/ -run 'Test_orderKey'"
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]
 teammate_name:
 ---
@@ -51,10 +51,10 @@ teammate_name:
 ## What to do
 
 1. **`internal/query/query.go`** — убедиться, что константа `PostgresV13 = 130000` есть.
-   **Она уже присутствует** (строка 16, рядом с `PostgresV12`/`PostgresV14`) — tech-spec в этом месте
-   устарел, добавлять ничего не нужно, второе объявление просто не скомпилируется. Файл, скорее
-   всего, останется неизменённым; если так — сказать об этом в отчёте, а не искать, что бы в нём
-   поправить.
+   **Она уже присутствует** (строка 16, рядом с `PostgresV12`/`PostgresV14`) — так же говорит и
+   tech-spec («No new version constant is needed: `PostgresV13` already exists in `query.go`»).
+   Добавлять ничего не нужно, второе объявление просто не скомпилируется. Файл, скорее всего,
+   останется неизменённым; если так — сказать об этом в отчёте, а не искать, что бы в нём поправить.
 
 2. **`internal/query/activity.go`** — добавить константу `PgStatActivityPG13` с раскладкой из 17
    колонок (таблица ниже, порядок обязателен дословно). Комментарий над константой — в стиле файла:
@@ -122,6 +122,7 @@ teammate_name:
 - [ ] `view.New()` не изменён — seed `activity` по-прежнему `PgStatActivityDefault` с `Ncols: 14`
 - [ ] `TestViews_Configure` проверяет `activity` по обе стороны границы
 - [ ] Список версий в `Test_StatActivityQueries` не расширялся
+- [ ] `go test ./top/ -run 'Test_orderKey'` зелёный — страж seed'а `Ncols == 14` не сдвинут
 - [ ] `go test ./internal/query/... ./internal/view/...` зелёный; `make lint` без замечаний
 
 ## Context Files
@@ -167,8 +168,11 @@ teammate_name:
   форма живого теста и отдельного табличного теста на селектор
 - [internal/query/bgwriter_test.go](../../../internal/query/bgwriter_test.go) — та же форма с
   `defer conn.Close()` и `rows.Err()`
-- [internal/view/view.go](../../../internal/view/view.go) — seed `activity` (строки 40–50) и
+- [internal/view/view.go](../../../internal/view/view.go) — seed `activity` (строки 39–49) и
   `Configure` (строка 375). **Не изменяем.**
+- [top/config_view_test.go](../../../top/config_view_test.go) — `Test_orderKeyLeft` (строка 13) и
+  `Test_orderKeyRight` (строка 45): два утверждения (`0 → 13`, `13 → 0`) считают последний индекс от
+  seed'а `activity`. Живой страж Decision 3. **Не изменяем**, но прогоняем.
 
 ## Verification Steps
 
@@ -180,9 +184,16 @@ teammate_name:
   скипнулись, живая проверка раскладки не состоялась — поднять кластеры и прогнать заново.
 - `go test -v -run 'TestSelectStatActivityQuery' ./internal/query/...` — в таблице видны кейсы
   `120000` и `130000`.
+- `go test ./top/ -run 'Test_orderKey'` — зелёный. Это прямой страж Decision 3: `Test_orderKeyLeft`
+  (`0 → 13`) и `Test_orderKeyRight` (`13 → 0`) считают последний индекс от seed'а `activity`
+  (`Ncols: 14`). Если seed случайно подняли до 17, оба падают — и падают только здесь, ни
+  `internal/query`, ни `internal/view` этого не заметят. Эти два теста БД не требуют и обязаны
+  выполниться, а не скипнуться.
 - Ручная перекрёстная сверка: имена и порядок колонок в тесте совпадают с таблицей Data Models
   tech-spec'а. Это единственный источник истины для PG 12/13, где живой проверки нет.
-- `make lint` — чисто (в частности, длинная строка константы не должна ловить lll/gofmt).
+- `make lint` — чисто. Длина строки самой константы не проверяется: `lll` в `.golangci.yml`
+  не включён (там поверх дефолтов v2 только `gocritic` и `revive`), а `gofmt` длину не трогает.
+  Соседние константы в этом файле уже длинные — ориентируйся на них.
 - `git diff --stat` — затронуты только четыре файла из «изменяем»; `internal/view/view.go`,
   `internal/stat/`, `report/`, `top/` в диффе отсутствуют.
 
@@ -269,11 +280,18 @@ teammate_name:
   чужих сессий — `pg_stat_activity` возвращает NULL, а не ошибку. В коде ловить нечего; оговорка
   для оператора добавляется в задаче 4.
 - **`Ncols = 17` и seed 14.** Расхождение намеренное: `Configure` перезаписывает seed при коннекте.
-  Поднятие seed до 17 ломает два утверждения в `top/config_view_test.go` и ничего не меняет в
-  рантайме (Decision 3).
-- **Тесты `top`/`record` падают без живых кластеров независимо от этой задачи**
-  (`Test_getQueryReport`, `Test_app_setup`, `Test_tarRecorder`) — это фоновый долг [019], не
-  регрессия от этой правки. Не «чинить» его здесь.
+  Поднятие seed до 17 ломает два утверждения в `top/config_view_test.go` (`Test_orderKeyLeft` `0 → 13`
+  и `Test_orderKeyRight` `13 → 0` — оба считают последний индекс как `Ncols-1`) и ничего не меняет в
+  рантайме (Decision 3). Поэтому эти два теста прогоняются явно: `go test ./top/ -run 'Test_orderKey'`.
+  Побочно: комментарий в тесте говорит `Ncols == 13`, хотя seed — 14; комментарий врёт, поведение
+  верное — **не трогать**, это не наша задача.
+- **Тесты `top`/`record` паникуют без живых кластеров независимо от этой задачи**
+  (`Test_getQueryReport`, `Test_app_setup`, `Test_tarRecorder`). Причина — nil-pointer в
+  `postgres.DB.Close` (`internal/postgres/postgres.go:135` разыменовывает `db.Conn` у `db == nil`)
+  после неудачного коннекта: тест идёт дальше вместо `t.Skipf`. Это то же семейство, что уже
+  закрытые долги [005] и [008], а **не** долг [019] (тот про девять тестов, где `t.Skipf` внутри
+  цикла версий скипает весь оставшийся цикл). Ни то, ни другое не является регрессией от этой
+  правки и здесь не «чинится» — важно лишь не принять эту панику за поломку своего кода.
 
 **Implementation hints:**
 - Форма селектора — как в `wal.go` и `progress_vacuum.go`: ранний `if` сверху, исторический
@@ -301,8 +319,8 @@ teammate_name:
 ## Post-completion
 
 - [ ] Записать краткий отчёт в [013-feat-activity-xmin-horizon-decisions.md](013-feat-activity-xmin-horizon-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
-- [ ] Отдельной строкой отметить, что `PostgresV13` в `query.go` уже существовала и файл не менялся —
-      tech-spec в этом месте устарел
+- [ ] Отдельной строкой отметить, что `PostgresV13` в `query.go` уже существовала и файл не менялся
+      (как и предупреждает tech-spec)
 - [ ] Зафиксировать фактический результат живой проверки имён колонок: на каких версиях реально
       выполнилось (не скипнулось) и совпал ли порядок с Data Models
 - [ ] Если отклонились от спека — описать отклонение и причину

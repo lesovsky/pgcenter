@@ -1,0 +1,83 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "tdd",
+      "task": "02",
+      "issue": "Details -> Coverage, вариант 2 replay-кейса опирается на ложное утверждение. Сказано: если пустой retained,KiB стоит первой строкой входа, то на старом коде колонка уходит в строковый компаратор и '\"2048\" сравнивается с \"1024\" лексикографически, вывод отличается от численного'. Для этих конкретных литералов лексикографический и численный порядок СОВПАДАЮТ. Проверено по коду: sort (internal/stat/postgres.go:663) берёт sample = r.Values[0][key].String; для \"\" и ParseFloat, и parseDuration (postgres.go:707, SplitN(\"\",\":\",3) даёт len 1 != 3) возвращают ошибку -> строковый компаратор. При desc он даёт \"2048\" > \"1024\" > \"\", то есть ровно тот же порядок, что и новый numeric + empty-last. Тест, построенный дословно по этому варианту, будет ЗЕЛЁНЫМ на старом коде, а Acceptance Criteria задачи требует «он падает на старом коде» и Verification Steps требует обязательный red-step.",
+      "fix": "Переписать вариант 2: значения должны различаться лексикографически и численно (например retained,KiB = \"512\" и \"1024\", либо \"9\" и \"1000000\"). Явно указать, что сравниваемая пара обязана нарушать лексикографический порядок, иначе red-step фальшивый."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "02",
+      "issue": "Details -> Coverage, вариант 1 (слот с настоящим retained,KiB = \"0\" рядом с пустым) работает только при неозвученном предусловии: ПЕРВАЯ строка входного (curr) результата обязана иметь непустой числовой retained,KiB. Иначе sample = \"\" -> старый код выбирает строковый компаратор, и при desc пустая ячейка и так уходит вниз ниже \"0\" — старое и новое поведение совпадают, тест зелёный на старом коде. Второе неозвученное предусловие: пустой слот должен стоять ВЫШЕ слота с \"0\" на входе, иначе стабильная сортировка старого кода уже даёт нужный порядок. Порядок строк в diff-результате равен порядку curr (internal/stat/postgres.go, diff() идёт по curr.Values), так что оба предусловия управляемы, но в задаче не сформулированы.",
+      "fix": "Дописать в вариант 1 оба предусловия: первая строка curr — с непустым числовым retained,KiB (чтобы старый код выбрал numeric-режим), и пустой слот расположен во входе выше слота с настоящим \"0\"."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "02",
+      "issue": "Преамбула TDD Anchor утверждает про все новые тесты: «пишем -> запускаем -> убеждаемся, что падают на текущем коде». Для Test_sort_fully_empty_column это неверно: при полностью пустой колонке sample = \"\" -> строковый компаратор -> все ячейки равны -> sort.SliceStable сохраняет входной порядок, то есть тест зелёный уже сегодня. Аналогично Test_sort_sparse_string краснеет только в направлении asc (при desc старый строковый компаратор и так ставит \"\" в хвост).",
+      "fix": "Отметить Test_sort_fully_empty_column как регрессионный guard (не red-step), а у Test_sort_sparse_string указать, что различающее направление — asc."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Verification Steps приписывают панику пакета ./internal/stat/... техдолгу [019]. Паника воспроизведена (go test ./internal/stat/... -> nil pointer dereference в postgres.(*DB).Close из internal/stat/cpu_test.go:15 после неудачного connect на 127.0.0.1:21917), но [019] (docs/tech-debt.md:41) описывает другое — каскадный t.Skipf без per-version t.Run в internal/query/common_test.go, overview_test.go, internal/stat/postgres_test.go. Реальная причина паники относится к семейству [005]/[008] («panicked instead of skipping»), обе записи уже в Resolved Debt. Предложенный обход проверен и работает: go test ./internal/stat/ -run 'Test_sort' -> ok.",
+      "fix": "Убрать ссылку на [019] или заменить на нейтральную формулировку («паника при отсутствии живых fixture-кластеров — предсуществующее поведение пакета, не результат правки»)."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "03",
+      "issue": "Description утверждает: «см. internal/view/view.go:367-427 — переписываются только QueryTmpl/Ncols/Query». Диапазон строк точен (Configure — 367-427), но Configure переписывает также DiffIntvl (databases_general, statements_jit, wal, bgwriter, replslots, stat_io, stat_io_time, progress_vacuum/analyze/basebackup) и UniqueKey (statements_jit). Для config.ReportType == \"activity\" утверждение верно (case \"activity\" трогает только QueryTmpl и Ncols), но report/ работает и с другими типами отчётов. Несущая часть претензии — что Aligned/ColsWidth/Cols/OrderKey переживают Configure — подтверждена.",
+      "fix": "Уточнить: «Configure переписывает только поля запроса (QueryTmpl/Ncols, для части экранов DiffIntvl/UniqueKey) и Query; Aligned, ColsWidth, Cols и OrderKey он не трогает»."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "03",
+      "issue": "Red-step для Test_processData_versionChange_recomputesLayout — не обычный fail, а паника. Проверено по коду: formatStatSample (report/report.go:476) выходит рано при Aligned == true, поэтому ColsWidth остаётся 14-колоночной мапой; printStatSample (report.go:566-571) для i = 14..16 читает view.ColsWidth[i] == 0 (map[int]int, отсутствующий ключ) и делает value[:width-1] -> slice bounds out of range [:-1]. Непойманная паника в тестовой горутине кладёт весь бинарник go test, а не краснит один тест — остальные тесты пакета не выполнятся. В TDD Anchor этот тест при этом заявлен как проверяющий «паники нет».",
+      "fix": "Зафиксировать в задаче порядок TDD: сначала guard в printStatSample (тогда red-step layout-теста — возвращённая ошибка, а не паника), затем корневой сброс состояний; либо явно предупредить, что red-step этого теста проявится как паника."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "Acceptance Criteria и Verification Steps требуют зелёный `make test`. Makefile:33-35 запускает go test ./... , который без живого тестового контейнера паникует в internal/stat (проверено) по причинам, не связанным с задачей. Task 01 явно перечисляет поднятый lesovsky/pgcenter-testing:0.0.11 как предусловие, Task 03 — нет, хотя его требование строже.",
+      "fix": "Добавить в Verification Steps Task 03 предусловие о поднятом тестовом контейнере, либо ограничить обязательный гейт до `go test ./report/...` + `make lint` + `make vuln`, а `make test` пометить как требующий кластеров."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Context Files указывает seed activity в internal/view/view.go как «строки 40–50». Фактически блок \"activity\": { начинается на строке 39 и закрывается на 49 (Name 40, QueryTmpl 41, DiffIntvl 42, Ncols 43, OrderKey 44, OrderDesc 45, ColsWidth 46, Msg 47, Filters 48). Сдвиг на одну строку.",
+      "fix": "Поправить на 39–49 либо убрать точные номера — файл не изменяется этой задачей."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01",
+      "issue": "Verification Steps: «make lint — чисто (в частности, длинная строка константы не должна ловить lll/gofmt)». В .golangci.yml (version: 2) включены только gocritic и revive поверх дефолтного набора; lll не включён, длина строки не проверяется вовсе. Проверка сформулирована на несуществующем линтере.",
+      "fix": "Убрать упоминание lll; оставить общее «make lint зелёный»."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "01",
+      "issue": "Edge cases: «Тесты top/record падают без живых кластеров независимо от этой задачи (Test_getQueryReport, Test_app_setup, Test_tarRecorder) — это фоновый долг [019]». Имена тестов существуют (top/report_test.go:9, top/top_test.go:18 и record/record_test.go:16, record/recorder_test.go:30) и действительно требуют живого PostgreSQL, но [019] (docs/tech-debt.md:41) описывает каскадный skip в internal/query/common_test.go, internal/query/overview_test.go и internal/stat/postgres_test.go — пакеты top/ и record/ в его Area не входят. Атрибуция долга неверна (та же ошибка, что и в Task 02).",
+      "fix": "Убрать ссылку на [019] или заменить на нейтральную формулировку о предсуществующей зависимости этих тестов от живых кластеров."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 68,
+    "issues_found": 10
+  }
+}

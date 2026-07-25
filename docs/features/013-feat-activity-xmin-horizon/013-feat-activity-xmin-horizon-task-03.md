@@ -1,11 +1,11 @@
 ---
-status: planned                    # planned -> in_progress -> done
-depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
-wave: 1                            # волна параллельного выполнения
-skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash                       # инструмент верификации (опционально: curl, bash, user)
-reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
-teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
+status: planned
+depends_on: []
+wave: 1
+skills: [code-writing]
+verify: "bash — go test ./report/..."
+reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]
+teammate_name:
 ---
 
 # Task 03: Recompute report layout on a mid-archive version change
@@ -24,9 +24,14 @@ teammate_name:                     # имя агента-исполнителя 
 остаются от старой раскладки.
 
 1. **Флаг выравнивания.** `formatStatSample` возвращается сразу, если `view.Aligned` уже `true`,
-   а `Configure` этот флаг не сбрасывает (см. `internal/view/view.go:367-427` — переписываются только
-   `QueryTmpl`/`Ncols`/`Query`). Ширины колонок (`ColsWidth`) и имена колонок (`Cols`) остаются от прежней
-   раскладки. Это и есть [021] в том виде, в каком он зарегистрирован.
+   а `Configure` этот флаг не сбрасывает (см. `internal/view/view.go:367-427`). Ни для одного экрана
+   `Configure` не трогает `Aligned`/`ColsWidth`/`Cols`/`OrderKey`; для `activity` она переписывает
+   `QueryTmpl` и `Ncols` (плюс `Query` во втором проходе) — другие экраны получают ещё `DiffIntvl`,
+   а `statements_jit` и `UniqueKey`, но к сбрасываемым здесь состояниям это отношения не имеет.
+   Ширины колонок (`ColsWidth`) и имена колонок (`Cols`) остаются от прежней раскладки. Это и есть
+   [021] в том виде, в каком он зарегистрирован. Задача чинит `processData` для **любого** экрана —
+   `config.ReportType` выбирает его из `view.New()`, — но раскладки в примерах и тестах взяты у
+   `activity`, потому что именно её эта фича расширяет в середину.
 2. **Счётчик повторной печати заголовка.** `linesPrinted` не сбрасывается, а `printStatHeader` печатает
    шапку только когда счётчик дорос до `repeatHeaderAfter` (20). Даже с правильно пересчитанными ширинами
    оператор ещё до 20 строк видит **старую шапку над новыми данными** — то есть исправление одного лишь
@@ -45,7 +50,8 @@ teammate_name:                     # имя агента-исполнителя 
 ответ без единого симптома хуже падения, и он достижим ровно на тех архивах, которые эта фича делает
 возможными.
 
-Дополнительно **восстанавливаем zero-width guard** в пути усечения `printStatSample`, зеркально
+Вместе с этим — и **первым по порядку работ** (см. What to do) — **восстанавливаем zero-width guard**
+в пути усечения `printStatSample`, зеркально
 `top/printDataCell` (`top/stat.go:997-1016`). `view.ColsWidth` — это `map[int]int`, поэтому отсутствующий
 ключ молча даёт `0`, а `value[:width-1]` при `width == 0` — это `[:-1]`, то есть паника
 `slice bounds out of range`. Именно так проявлялся баг: шапка/ширины от 14-колоночной раскладки, а строка
@@ -61,27 +67,49 @@ teammate_name:                     # имя агента-исполнителя 
 
 ## What to do
 
-- В `processData` (`report/report.go`) на смене версии записанных статистик сбросить все три состояния,
-  перечисленные в Description: флаг выравнивания вместе с производными от него `ColsWidth`/`Cols`,
-  счётчик повторной печати шапки и защёлку разрешённого индекса сортировки. Сбросы должны отработать
-  до `continue` в этой ветке и подействовать на ту копию `view`, с которой цикл продолжит работу.
-- Сбросить индекс сортировки так, чтобы после границы отчёт либо переразрешил `-o` против нового списка
-  колонок, либо (если такой колонки в новой раскладке нет) вернулся к дефолтному ключу сортировки экрана —
-  но ни при каких условиях не остался с индексом, разрешённым против старой раскладки.
-- Отделить смену версии от «первого sample»: обе ситуации сегодня живут в одном `if`, и код должен
-  оставаться читаемым насчёт того, что именно и почему сбрасывается.
-- В `printStatSample` (`report/report.go`) восстановить проверку нулевой/отрицательной ширины колонки
-  внутри ветки усечения — с той же семантикой, что у `top/printDataCell`: возврат ошибки, ячейка не
-  печатается. Ошибка уходит наверх по уже существующему error-пути функции.
-- Написать тесты из TDD Anchor **до** реализации; тесты гонять через `processData`/`printStatSample`
-  напрямую, а не через `app.doReport` (обоснование — в Details/Edge cases).
+**Порядок работы обязателен: guard идёт первым, сбросы — вторыми.** Причина в Details/Edge cases и
+коротко здесь: пока в `printStatSample` нет проверки нулевой ширины, красный шаг теста на раскладку
+проявляется не честным `FAIL`, а паникой `slice bounds out of range [:-1]`, которая кладёт весь
+тестовый бинарник пакета `report` — вместе с остальными тестами и с самим сигналом о том, что именно
+сломано. С уже поставленным guard'ом тот же красный шаг — обычное падение теста с читаемым диффом.
+Поэтому:
+
+1. **Сначала guard.** В `printStatSample` (`report/report.go`) восстановить проверку
+   нулевой/отрицательной ширины колонки внутри ветки усечения — с той же семантикой, что у
+   `top/printDataCell`: возврат ошибки, ячейка не печатается. Ошибка уходит наверх по уже
+   существующему error-пути функции. Его собственный TDD-цикл полноценный:
+   `Test_printStatSample_zeroWidthGuard` пишется первым и краснеет предсказуемо — он вызывает
+   `printStatSample` напрямую, и до фикса красный шаг **и есть** та самая паника, но локализованная
+   в одном тесте, который для этого и написан.
+2. **Потом три сброса.** В `processData` (`report/report.go`) на смене версии записанных статистик
+   сбросить все три состояния, перечисленные в Description: флаг выравнивания вместе с производными
+   от него `ColsWidth`/`Cols`, счётчик повторной печати шапки и защёлку разрешённого индекса
+   сортировки. Сбросы должны отработать до `continue` в этой ветке и подействовать на ту копию
+   `view`, с которой цикл продолжит работу. Тесты `Test_processData_versionChange_*` пишутся
+   на этом шаге — guard уже стоит, и их красный шаг честный.
+3. Сбросить индекс сортировки так, чтобы после границы отчёт либо переразрешил `-o` против нового
+   списка колонок, либо (если такой колонки в новой раскладке нет) вернулся к дефолтному ключу
+   сортировки экрана — но ни при каких условиях не остался с индексом, разрешённым против старой
+   раскладки.
+4. Отделить смену версии от «первого sample»: обе ситуации сегодня живут в одном `if`, и код должен
+   оставаться читаемым насчёт того, что именно и почему сбрасывается.
+
+Прочее:
+
+- Тесты из TDD Anchor пишутся **до** соответствующей им реализации (в порядке выше) и гоняются через
+  `processData`/`printStatSample` напрямую, а не через `app.doReport` (обоснование — в
+  Details/Edge cases).
 - `docs/tech-debt.md` в этой задаче **не редактировать** — перевод [021] в Resolved Debt принадлежит
   Task 5 (wave 2). Прочитать его нужно только чтобы понимать формулировки [019], [020], [021].
-- Закоммитить задачу отдельным коммитом.
 
 ## TDD Anchor
 
 Тесты пишем ДО реализации: пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.
+
+**Порядок внутри секции — не порядок написания.** Первым пишется и закрывается
+`Test_printStatSample_zeroWidthGuard` (последний в списке), потому что до guard'а красный шаг
+остальных трёх — паника, убивающая весь тестовый бинарник, а не читаемый `FAIL`. Он идёт первым
+именно затем, чтобы эта паника случилась ровно один раз, в тесте, который её и ждёт.
 
 - `report/report_test.go::Test_processData_versionChange_recomputesLayout` — синтетический
   двухверсионный in-memory tar (паттерн из фичи [008], см. `report/report_record_replslots_test.go:58-190`),
@@ -119,43 +147,56 @@ teammate_name:                     # имя агента-исполнителя 
 - [ ] Синтетический двухверсионный архив несёт не менее двух sample'ов **после** смены версии (и не менее
       двух до неё), так что отчёт после границы действительно непустой.
 - [ ] Тесты гоняют `processData`/`printStatSample` напрямую, а не через `app.doReport`.
+- [ ] Guard в `printStatSample` поставлен **до** написания тестов на сброс раскладки — их красный шаг
+      выглядел как обычный `FAIL`, а не как паника, снёсшая тестовый бинарник пакета.
 - [ ] Существующие golden-тесты `report/` проходят без изменения goldens.
 - [ ] `go test ./report/...` — зелёный.
-- [ ] `make test`, `make lint`, `make vuln` — зелёные.
+- [ ] `make test`, `make lint`, `make vuln` — зелёные. **Предусловие:** для `make test` подняты живые
+      fixture-кластеры (контейнер `lesovsky/pgcenter-testing:0.0.11`, PG 14–19 на портах 21914–21919).
+      Без них часть пакетов (`./internal/stat/...`, `./top/...`, `./record/...`) **паникует**, а не
+      падает честным fail — это фоновое состояние репозитория, не результат этой правки. Сама задача
+      живых кластеров не требует: `./report/...` полностью синтетический.
 - [ ] `docs/tech-debt.md` этой задачей не изменён (перевод [021] в Resolved — зона Task 5).
 
 ## Context Files
 
 **Feature artifacts:**
-- [013-feat-activity-xmin-horizon.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon.md) — user-spec
-- [013-feat-activity-xmin-horizon-tech-spec.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-tech-spec.md) — tech-spec (Decision 6, Testing Strategy, Risks, Data Models)
-- [013-feat-activity-xmin-horizon-code-research.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-code-research.md) — исследование кода
-- [013-feat-activity-xmin-horizon-decisions.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-decisions.md) — decisions log (создаётся при выполнении)
+- [013-feat-activity-xmin-horizon.md](013-feat-activity-xmin-horizon.md) — user-spec
+- [013-feat-activity-xmin-horizon-tech-spec.md](013-feat-activity-xmin-horizon-tech-spec.md) — tech-spec (Decision 6, Testing Strategy, Risks, Data Models)
+- [013-feat-activity-xmin-horizon-code-research.md](013-feat-activity-xmin-horizon-code-research.md) — исследование кода
+- [013-feat-activity-xmin-horizon-decisions.md](013-feat-activity-xmin-horizon-decisions.md) — decisions log (создаётся при выполнении)
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md) — обзор проекта, поддерживаемые статистики
-- [architecture.md](.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных record/report, обработка версий PG
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — паттерны кода и тестирования (testify, table/golden tests)
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md) — обзор проекта, поддерживаемые статистики
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md) — раскладка пакетов, поток данных record/report, обработка версий PG
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — паттерны кода и тестирования (testify, table/golden tests)
 
 **Code files:**
-- [report/report.go](report/report.go) — `processData` (233-347, ветка version-change 250-268), `formatStatSample` (476-486), `printStatHeader` (508-525), `printStatSample` (528-603, усечение 566-571); изменяем
-- [report/report_test.go](report/report_test.go) — `Test_processData` (239-306) как образец прямого вызова, `Test_printStatSample` (1105-1170), `Test_formatStatSample` (1012-1047); добавляем тесты
-- [report/report_record_replslots_test.go](report/report_record_replslots_test.go) — паттерн синтетического in-memory tar из [008] (58-190), хелперы `stripANSI`/`ansiRE` (30-35); читаем и переиспользуем
-- [top/stat.go](top/stat.go) — `printDataCell` (997-1016), близнец с эталонной семантикой guard'а; читаем, не меняем
-- [internal/align/align.go](internal/align/align.go) — `SetAlign` (14-79): ширины считаются только для колонок текущего результата, минимум 1; читаем
-- [internal/view/view.go](internal/view/view.go) — `View.Aligned`/`ColsWidth`/`OrderKey` (17-22), `Views.Configure` (367-427) не сбрасывает выравнивание; читаем
-- [docs/tech-debt.md](docs/tech-debt.md) — записи [019] (41), [020] (57), [021] (73); читаем, НЕ редактируем
+- [report/report.go](../../../report/report.go) — `processData` (233-347, ветка version-change 250-268), `formatStatSample` (476-486), `printStatHeader` (508-525), `printStatSample` (528-603, усечение 566-571); изменяем
+- [report/report_test.go](../../../report/report_test.go) — `Test_processData` (239-306) как образец прямого вызова, `Test_printStatSample` (1105-1170), `Test_formatStatSample` (1012-1047); добавляем тесты
+- [report/report_record_replslots_test.go](../../../report/report_record_replslots_test.go) — паттерн синтетического in-memory tar из [008] (58-190), хелперы `stripANSI`/`ansiRE` (30-35); читаем и переиспользуем
+- [top/stat.go](../../../top/stat.go) — `printDataCell` (997-1016), близнец с эталонной семантикой guard'а; читаем, не меняем
+- [internal/align/align.go](../../../internal/align/align.go) — `SetAlign` (14-79): ширины считаются только для колонок текущего результата, минимум 1; читаем
+- [internal/view/view.go](../../../internal/view/view.go) — `View.Aligned`/`ColsWidth`/`OrderKey` (17-22), `Views.Configure` (367-427) не сбрасывает выравнивание; читаем
+- [docs/tech-debt.md](../../../docs/tech-debt.md) — записи [019] (41), [020] (57), [021] (73); читаем, НЕ редактируем
 
 ## Verification Steps
 
 - Прогнать `go test ./report/...` — зелёный, новые тесты проходят, существующие golden-тесты не изменились
   (goldens не перегенерировать, флаг `-update` не использовать).
-- Убедиться, что новые тесты действительно краснели до реализации (порядок TDD соблюдён).
+- Убедиться, что новые тесты действительно краснели до реализации (порядок TDD соблюдён) и что
+  красный шаг тестов `Test_processData_versionChange_*` выглядел как `FAIL` конкретного теста, а не
+  как паника, оборвавшая прогон пакета. Если увидел `panic: runtime error: slice bounds out of range
+  [:-1]` — guard ещё не поставлен, порядок нарушен: вернуться к шагу 1.
 - Проверить, что тест на порядок сортировки различает старый и новый индекс: временно убрать сброс
   `orderConfigured` — `Test_processData_versionChange_reresolvesOrderColumn` должен упасть.
 - Проверить, что тест на шапку различает наличие/отсутствие сброса счётчика: временно убрать сброс
   `linesPrinted` — `Test_processData_versionChange_recomputesLayout` должен упасть.
 - Прогнать `make test` (race + coverage), `make lint` (golangci-lint + gosec), `make vuln` — все зелёные.
+  Для `make test` предварительно поднять контейнер `lesovsky/pgcenter-testing:0.0.11` (PG 14–19,
+  порты 21914–21919). Без него `./internal/stat/...`, `./top/...`, `./record/...` **паникуют**, а не
+  падают честным fail; это фоновое состояние репозитория, а не следствие этой правки — но и не повод
+  считать `make test` пройденным. Сам `./report/...` живых кластеров не требует.
 - Убедиться, что `docs/tech-debt.md` не попал в diff задачи.
 
 ## Details
@@ -214,6 +255,14 @@ teammate_name:                     # имя агента-исполнителя 
   дальше `linesPrinted += n`. При 2–3 строках на sample счётчик к границе версий остаётся сильно ниже
   `repeatHeaderAfter`, и отсутствие сброса счётчика видно как «старой шапки не сменилось». При большом
   числе строк шапка перепечаталась бы сама собой и тест стал бы зелёным по совпадению.
+- **Порядок «guard → сбросы» — не стилистика, а условие честного красного шага.** Без сброса
+  `Aligned` ширины остаются 14-колоночными, а строка приходит 17-колоночная; для индексов 14–16
+  ключа в `ColsWidth` нет, мапа отдаёт `0`, и `value[:width-1]` — это `[:-1]`. То есть ровно тот
+  дефект, который тесты на раскладку обязаны показать, до постановки guard'а проявляется паникой:
+  `go test` теряет весь тестовый бинарник пакета `report`, вместе с диагностикой и остальными
+  тестами. Обратный порядок (guard первым) превращает тот же красный шаг в обычный `FAIL` с диффом.
+  Это не значит, что guard'у не нужен свой красный шаг — `Test_printStatSample_zeroWidthGuard`
+  пишется до него и краснеет той же паникой, но в одном изолированном тесте, который её ожидает.
 - **Тест гоняем мимо `app.doReport`.** `doReport` поднимает `readTar` и `processData` в горутинах; паника
   в горутине кладёт весь процесс `go test`, а не краснит один тест. Поэтому `processData` вызываем прямо
   в горутине теста, а `readTar` — в отдельной горутине как поставщика в канал (либо кормим `dataCh`
@@ -256,6 +305,6 @@ teammate_name:                     # имя агента-исполнителя 
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [013-feat-activity-xmin-horizon-decisions.md](docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [ ] Записать краткий отчёт в [013-feat-activity-xmin-horizon-decisions.md](013-feat-activity-xmin-horizon-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

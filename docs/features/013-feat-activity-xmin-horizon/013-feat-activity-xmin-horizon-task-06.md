@@ -3,7 +3,7 @@ status: planned
 depends_on: ["01", "02", "03", "04", "05"]
 wave: 3
 skills: [pre-deploy-qa]
-verify: "bash + user — full QA per the user-spec «Как проверить» section, plus the string-column sort, the replslots default sort, and a few-hundred-session run"
+verify: "bash + user — full QA per the user-spec «Как проверить» section, plus the string-column sort, the replslots default sort, a measured few-hundred-session run, and a hand check of the tech-debt register"
 reviewers: []
 teammate_name:
 ---
@@ -94,8 +94,20 @@ accepted** — see the routing rule in Details.
    Tasks 2 and 3 are the exception; identify them from the decisions log rather than assuming.
 5. Confirm the PG 14–19 subtests **executed** rather than skipped. `t.Skipf` on an unreachable cluster is
    the normal mechanism, so a green suite with a stopped cluster is also green, and `make test` is not
-   verbose enough to tell the difference. Run a verbose, filtered invocation over `./internal/query/...` and
-   check for `--- PASS` lines on the per-version subtests of the activity query, with no `--- SKIP`.
+   verbose enough to tell the difference. Run a verbose, filtered invocation over `./internal/query/...`
+   (`Test_StatActivityQueries`) and read the per-version subtest lines.
+
+   The expected picture is **mixed, not uniformly green**: the test iterates `90500 … 190000`, and the
+   image carries only PG 14–19, so the split is fixed by the environment —
+
+   - `pg_stat_activity/140000` … `pg_stat_activity/190000` — must show `--- PASS`. Six of them, all six.
+   - `pg_stat_activity/90500`, `90600`, `100000`, `110000`, `120000`, `130000` — **expected** `--- SKIP`
+     (`postgres N not available in test environment`). These are not failures and not something to chase:
+     no such clusters exist in the image, which is the same fact that makes the PG 12/13 boundary
+     non-live-verifiable. Record them as expected skips.
+
+   A `--- SKIP` on any of PG 14–19 *is* a finding — it means a cluster that should be up is not, and the
+   suite went green without touching that version.
 6. Confirm Task 1's live assertion actually compares **column names and their order** against the server,
    not just the column count and not just "the query did not error" — that assertion is what makes the
    17-column layout a measured fact on PG 14–19 rather than a claim.
@@ -155,9 +167,18 @@ accepted** — see the routing rule in Details.
     preserves the existing order, not a reshuffle and not a crash.
 16. **A few hundred sessions.** Open several hundred idle and idle-in-transaction sessions against one
     cluster, then open the activity screen. Confirm it renders, that scrolling with `[` / `]` and switching
-    the sort column stay responsive, and that sorting by `horizon_xacts` at that row count produces the same
-    correct ordering as at ten rows. State what "responsive" meant concretely — a refresh interval that
-    visibly stretches is a finding; a subjective "felt fine" without a number is not evidence.
+    the sort column keep working, and that sorting by `horizon_xacts` at that row count produces the same
+    correct ordering as at ten rows.
+
+    Do not settle for "felt fine" — measure two things:
+
+    - **The screen keeps its refresh interval.** The sample updates once per configured interval with no
+      visible stall between redraws. Record the interval used and how the observation was made (a capture
+      loop with timestamps is enough); a redraw that visibly stretches past the interval is a finding.
+    - **The activity query is not the slowest thing on the screen.** Time the screen's own SQL in `psql`
+      at that session count and compare it against the other screens' queries timed the same way. It must
+      stay comfortably inside the refresh interval and must not become the most expensive query pgcenter
+      runs. Report the numbers, not an impression.
 
 ### E. Report
 
@@ -173,8 +194,15 @@ accepted** — see the routing rule in Details.
 - [ ] `go test ./report/...` green **with the sort fix present in the tree**, and no pre-existing golden
       regenerated (`git status` clean under `report/testdata/` apart from goldens Tasks 2–3 legitimately
       added). Recorded as a regression check, not as coverage of the sort change.
-- [ ] Per-version activity subtests demonstrably **executed** against the live clusters, not skipped; the
-      live assertion compares column **names and order**, not merely the count.
+- [ ] In verbose `Test_StatActivityQueries` output all six PG 14–19 subtests show `--- PASS`, and the
+      PG 9.5–13 subtests show `--- SKIP` — the latter is the **expected** result on this image (no such
+      clusters exist in it), not a defect. A skip on any of PG 14–19 is a finding.
+- [ ] The live assertion compares column **names and order** against the server, not merely the count.
+- [ ] `report/report_test.go::Test_processData_versionChange_recomputesLayout` (Task 3's synthetic
+      two-version archive) passes, and the decisions log confirms all three version-change resets landed —
+      not only the alignment flag.
+- [ ] `report/report_test.go::Test_describeActivityColumnOrder` (Task 4's describe-order test) passes,
+      including its presence-before-order check.
 - [ ] On every available version (PG 14–19) the activity screen shows the 17 columns in the exact order
       fixed in the tech-spec — verified by eye against a captured row, not inferred from the count.
 - [ ] An idle-in-transaction session shows a non-empty `horizon_xacts` and an **empty** `backend_xid`; after
@@ -188,14 +216,25 @@ accepted** — see the routing rule in Details.
       with blanks last in **both** directions and never mixed with a genuine `0`.
 - [ ] `pgcenter report -d -A` lists the three new columns, carries the PG 13+ note and carries **all four**
       caveats, the missing-privileges one included.
-- [ ] Sorting activity by a **string** column that is blank for many rows behaves as specified in both
-      directions, checked by hand, with the human judgement on readability recorded — this half of the sort
-      change has no automated cover.
+- [ ] Sorting the activity screen by `wait_event` (or `wait_etype`) — a **string** column blank on most
+      backends — gives, in **both** directions: rows with a blank value at the **end** (never at the top,
+      never interleaved), and the non-blank values ordered normally among themselves (alphabetically
+      ascending under `<`-ascending, reversed under descending). Checked by hand on a cluster where most
+      backends are not waiting, with the human judgement on readability recorded — this half of the sort
+      change has no automated cover at all.
 - [ ] The `replslots` default sort (`retained,KiB`) puts empty rows last in **both** directions and agrees
       with the screen's own `NULLS LAST`; sorting by an all-empty column (`safe,KiB`) is a no-op preserving
       input order.
-- [ ] The activity screen under a few hundred sessions renders, scrolls and re-sorts without perceptible
-      degradation, with the observation stated concretely rather than as an impression.
+- [ ] Under a few hundred sessions the activity screen renders, scrolls and re-sorts, and both measured
+      thresholds hold: the screen keeps redrawing once per configured refresh interval with no visible
+      stall (interval and method of observation recorded), and the screen's own SQL — timed in `psql` at
+      that session count — stays comfortably inside that interval and is not the slowest query pgcenter
+      runs. Numbers recorded, not impressions.
+- [ ] Task 5's register work is in place and verified by hand: three new entries in `docs/tech-debt.md`,
+      `[021]` moved to **Resolved Debt**, the "why deferred" text of `[020]` corrected, and the
+      `architecture.md` sentence describing the activity selector's version branches refreshed (it no
+      longer says "branches at PG 9.6, PG 10"). This criterion is closed by neither the test suite nor the
+      manual walk, so it has to be checked explicitly and reported explicitly.
 - [ ] The PG 12/13 boundary is reported as **not live-verifiable** on this image, resting on Task 1's table
       test, and that table test is confirmed to pin the boundary from both sides.
 - [ ] Every user-spec and tech-spec acceptance criterion has a verdict with evidence in the QA report.
@@ -244,7 +283,11 @@ usual `project.md`):
 - [top/help.go](../../../top/help.go) — the hotkey cheat-sheet: `Left`/`Right` change the sort column,
   `<` toggles direction, `[`/`]` scroll columns, `I`/`A` are the filters
 - [internal/postgres/testing.go](../../../internal/postgres/testing.go) — version → port map for the
-  fixture clusters
+  fixture clusters, including the two EOL groups that never connect
+- [internal/query/activity_test.go](../../../internal/query/activity_test.go) — `Test_StatActivityQueries`
+  and its `90500 … 190000` loop: the source of the expected PASS/SKIP split in step 5
+- [docs/tech-debt.md](../../../docs/tech-debt.md) — Task 5's three new entries, `[021]` under Resolved
+  Debt and the corrected `[020]` justification, all checked by hand in this task
 - [testing/prepare-test-environment.sh](../../../testing/prepare-test-environment.sh) — the cluster and
   fixtures bootstrap the container needs before anything works
 - [.github/workflows/default.yml](../../../.github/workflows/default.yml) — the image tag under test and
@@ -257,8 +300,14 @@ usual `project.md`):
   connections, and `pgcenter` is built and installed inside the container.
 - Run `make test`, `make lint`, `make vuln` — all clean.
 - Run `go test ./report/...` and `git status` — green, and no pre-existing golden regenerated.
-- Run the verbose filtered invocation from step 5 and confirm per-version activity subtests show `--- PASS`
-  with no `--- SKIP`.
+- Run the verbose filtered invocation from step 5 and confirm `Test_StatActivityQueries` shows `--- PASS`
+  on all six PG 14–19 subtests and `--- SKIP` on the PG 9.5–13 ones (expected — those clusters are not in
+  the image).
+- Confirm `Test_processData_versionChange_recomputesLayout` and `Test_describeActivityColumnOrder` each
+  appear as passed in the verbose output, individually and by name.
+- Confirm by hand that `docs/tech-debt.md` carries the three new entries with `[021]` under Resolved Debt
+  and `[020]`'s justification corrected, and that `architecture.md` no longer describes the activity
+  selector as branching only at PG 9.6 / PG 10.
 - Confirm a captured activity row from each available version shows the 17 columns in the fixed order.
 - Confirm captured evidence exists for each manual check: horizon holder before/after `INSERT`, the
   parallel group, blank-vs-zero, the numeric sort in both directions, the string-column sort in both
@@ -273,8 +322,6 @@ usual `project.md`):
   check can prove the columns are present but not that the screen still reads well.
 
 ## Details
-
-<!-- All details for task execution — technical, organizational, any other. -->
 
 **Files:** none modified — this task writes no code. It produces the QA report at
 `logs/working/qa-report.json`, the screen captures (suggested:
@@ -291,11 +338,16 @@ mentioned in the decisions entry rather than being a silent deletion.
 - **Task 2** — the sort fix. Steps 12, 14 and 15 are its only screen-level verification, and step 4 is the
   re-measurement the tech-spec's Backward Compatibility section demands.
 - **Task 3** — the version-change resets and the zero-width guard. Not directly exercisable by hand on
-  these clusters (no archive spans a real 12→13 upgrade here); verify via its tests and confirm from the
-  decisions log that all three resets landed, not just the alignment flag.
-- **Task 4** — the `describe.go` text checked in step 13.
-- **Task 5** — the tech-debt register entries and the Project Knowledge correction; confirm they exist
-  before declaring the feature's acceptance criteria met.
+  these clusters (no archive spans a real 12→13 upgrade here); it is carried by
+  `Test_processData_versionChange_recomputesLayout`, which has its own acceptance criterion, plus a check
+  in the decisions log that all three resets landed and not just the alignment flag.
+- **Task 4** — the `describe.go` text checked in step 13, plus `Test_describeActivityColumnOrder`, which
+  has its own acceptance criterion.
+- **Task 5** — the tech-debt register entries and the Project Knowledge correction. Nothing in the test
+  suite or the manual walk touches these, so they carry an explicit acceptance criterion of their own and
+  are checked by reading `docs/tech-debt.md` and `architecture.md` directly:
+  `grep -n "help.go" docs/tech-debt.md`, `grep -n "\[021\]" docs/tech-debt.md` (must land under Resolved
+  Debt), and `grep -n "SelectStatActivityQuery" .claude/skills/project-knowledge/architecture.md`.
 
 **Environment specifics** (verify each against the repo rather than trusting these numbers — the workflow
 is the source of truth and tags move):
@@ -303,8 +355,10 @@ is the source of truth and tags move):
 - Image: `lesovsky/pgcenter-testing`, tag pinned in `.github/workflows/default.yml` at `container:`
   (`0.0.11` at the time of writing). Ubuntu 22.04 with PostgreSQL 14–19; **PG 12 and PG 13 are not in the
   image**, which is precisely why the branch boundary is not live-verifiable.
-- Cluster ports: PG14→21914 … PG19→21919 (`internal/postgres/testing.go`). The EOL entries 21910–21913 are
-  in the map for reference only and will not connect.
+- Cluster ports: PG14→21914 … PG19→21919 (`internal/postgres/testing.go`). Two groups of EOL entries sit
+  in the same map for reference only and will not connect: **21910–21913** (PG 10–13) and **21994–21996**
+  (PG 9.4–9.6, which break the numbering pattern). Together they are why `Test_StatActivityQueries` skips
+  six of its twelve subtests here.
 - `testing/prepare-test-environment.sh` creates the clusters, writes `postgresql.auto.conf`
   (`shared_preload_libraries='pg_stat_statements'`, `wal_level = logical`, trust `pg_hba.conf` including
   replication lines), starts everything and loads `fixtures.sql`. The fixtures database is
@@ -351,6 +405,11 @@ screen without touching `A`.
 - **A green test suite with a stopped cluster is still green** — `t.Skipf` is the mechanism, and
   `patterns.md` says outright that proving a version is actually reached needs a deliberate check. Treat
   "green" as insufficient; look for executed subtests.
+- **Six skipped subtests in `Test_StatActivityQueries`** — the test iterates `90500 … 190000` while the
+  image carries PG 14–19, so PG 9.5, 9.6, 10, 11, 12 and 13 skip on every run, on CI as well. Expected;
+  do not "fix" it by narrowing the version list or by pointing a skipped version at a live port — the
+  version list is what pins the branch boundary, and the gap between it and the image is already
+  registered as debt by Task 5.
 
 **Problem routing.** Every manual check in this task exists because the tech-spec's Risks table named a
 specific failure mode; a check that reveals a problem is therefore reported **against the risk whose
