@@ -662,3 +662,597 @@ tables + `TestView_VersionOK` row + `Test_filterViews` row + `TestViews_Configur
 **Not in scope** (roadmap anti-rework boundary, `roadmap-0.12.0.md:93-96`): WAL FPI column → [016];
 `pg_stat_replication_slots` PG 19 columns → [018]; `stats_reset`/`stats_age` on
 tables/indexes/functions → [017]; `delay_time` on the progress views; the `ubuntu:24.04` base bump.
+
+---
+
+# Updated: 2026-07-25 — implementation-planning deepening
+
+Sources for this pass: the **approved** user-spec `{feature_base}.md` (which changed scope after §1–§9
+above were written), the code cited inline, and `https://www.postgresql.org/docs/19/progress-reporting.html`
+(re-fetched, not from memory). Everything below supersedes the earlier section it names.
+
+## 0. Corrections to §2.5 — column placement changed with the approved spec
+
+§2.5 was written from interview batch 1 ("head placement, variant B") and put the new columns
+**before** `relation` / immediately after `pid`. The approved spec fixes a different order — the rule
+stated at `{feature_base}.md:101` is *"сначала идентичность строки (`pid`, `datname`, `relation`),
+затем происхождение и режим операции, затем состояние и метрики"*. **Use the spec's layouts:**
+
+| screen | spec line | PG 19 layout | insert point | Ncols | DiffIntvl |
+|---|---|---|---|---|---|
+| `progress_vacuum` | `{feature_base}.md:86` | `0 pid · 1 xact_age · 2 datname · 3 relation · **4 started_by** · **5 mode** · 6 state · 7 waiting · 8 phase · 9 size_total,KiB · 10 scanned_total,% · 11 vacuumed_total,% · 12 scanned,KiB · 13 vacuumed,KiB · 14 query` | after `relation`, before `a.state` | 15 | `{12,13}` |
+| `progress_analyze` | `{feature_base}.md:92` | `0 pid · 1 xact_age · 2 datname · 3 relation · **4 started_by** · 5 state · 6 waiting · 7 phase · 8 sample_size,KiB · 9 scanned,% · 10 ext_total/done · 11 child_total/done,% · 12 child_in_progress` | after `relation`, before `a.state` | 13 | `{0,0}` |
+| `progress_basebackup` | `{feature_base}.md:98` | `0 pid · 1 started_from · 2 started_at · 3 duration · **4 backup_type** · 5 state · 6 waiting · 7 phase · 8 size_total,KiB · 9 streamed,% · 10 streamed,KiB · 11 tablespaces_total/streamed` | after `duration`, before `a.state` | 12 | `{10,10}` |
+
+The `(Ncols, DiffIntvl)` triples in §3.2 are **unchanged** — the counts are the same because the same
+number of columns is inserted ahead of the diffed block either way. Only the SQL column order and the
+`describe.go` row positions move. `OrderKey=0`/`UniqueKey=0` conclusions in §2.5 still hold (`pid`
+remains column 0 on all three).
+
+Concretely, in each `SELECT` list the new columns go **immediately before `a.state`**:
+- `internal/query/progress_vacuum.go:6` — `… v.relid::regclass AS relation, v.started_by, v.mode, a.state, …`
+- `internal/query/progress_analyze.go:6-7` — `… p.relid::regclass AS relation, p.started_by, a.state, …`
+- `internal/query/progress_basebackup.go:8` — `… AS duration, p.backup_type, a.state, …`
+
+PG 19 catalog re-verified this pass: `pg_stat_progress_vacuum` has `mode` + `started_by` (and
+`delay_time`, out of scope); `pg_stat_progress_analyze` has `started_by` (+ `delay_time`);
+`pg_stat_progress_basebackup` has `backup_type`. Value domains match `{feature_base}.md:107-110` exactly.
+
+---
+
+## A. Blast radius of hardening `NewTestConnectVersion`
+
+### A.1 The helper today
+
+`internal/postgres/testing.go:13-15` — the doc comment **already promises the hardened behaviour**:
+
+> `// Returns an error if the requested version is not available in the test environment.`
+> `// Callers should use t.Skip() when this returns an error for EOL versions.`
+
+…while `testing.go:34-37` does the opposite (`port = ports[140000]`). So this change makes the code
+match its own contract; no doc-comment churn is needed beyond dropping "EOL versions" wording if desired.
+
+### A.2 Every caller, and every version value reaching the ports map
+
+Three entry points exist. `NewTestConfig()` (`testing.go:4-6`) does **not** go through the map (hardcoded
+port 21917) — irrelevant. `NewTestConnect()` (`testing.go:9-11`) passes the literal `170000` — in the map.
+That leaves `NewTestConnectVersion` direct callers: **41 call sites in 20 files**, every one of them a
+`_test.go` file in `internal/query`, `internal/stat` or (via `NewTestConnect`) elsewhere. Full list from
+`grep -rn "NewTestConnectVersion" --include=*.go`:
+
+`internal/query/{activity,bgwriter,common(×4),databases(×2),functions,indexes,io(×2),overview(×4),pgcenter_schema,procpidstat,progress_analyze,progress_basebackup,progress_cluster,progress_copy,progress_create_index,progress_vacuum,replication,replication_slots(×3),sizes,statements(×5),tables,wal}_test.go`,
+`internal/stat/postgres_test.go:93`.
+
+Each of them passes a loop variable drawn from one of the literal lists inventoried in §B.1/§B.2 —
+**there is no computed, arithmetic or derived version anywhere**. Grep for arithmetic on a version
+variable in tests returns nothing; every list element is a written-out constant.
+
+**Union of every value that can reach the map:**
+`90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000` (+ `190000` after
+this feature). The map (`testing.go:17-32`) contains `90400, 90500, 90600, 100000, 110000, 120000, 130000,
+140000, 150000, 160000, 170000, 180000`. **Every passed value is present; `90400` is mapped but never
+passed.** Returning an error for an unmapped version therefore changes the behaviour of **zero existing
+call sites**. Confirmed: no caller passes a version absent from the map.
+
+### A.3 What callers do with the error — and the two shapes of the skip
+
+The universal idiom (35 of 41 sites):
+
+```go
+conn, err := postgres.NewTestConnectVersion(version)
+if err != nil {
+    t.Skipf("postgres %d not available in test environment", version)
+}
+```
+
+But **where** that idiom sits differs, and this matters for §G:
+
+| shape | sites | consequence of one unavailable version |
+|---|---|---|
+| `t.Skipf` **inside a per-version `t.Run`** | activity, bgwriter, databases(×2), functions, indexes, io(×2), pgcenter_schema, procpidstat, all 6 progress_*, replication, replslots(×3), sizes, statements(×5), tables, wal | only that version's subtest is skipped — the others still assert |
+| `t.Skipf` **outside/above the version loop** (whole test aborts) | `internal/query/common_test.go:86,102,114,128` (4 subtests, each looping all versions), `internal/query/overview_test.go:21,71,131,158` (4 tests), `internal/stat/postgres_test.go:95` (no `t.Run` at all) | the **entire** test/subtest is marked skipped at the first missing version |
+
+Two pre-existing consequences worth naming (not introduced here, but they shape the merge plan):
+
+- `internal/query/common_test.go:64` starts at `90500`, which is **never running in the CI image**
+  (port 21995). So `Test_CommonQueries/common_queries`, `/activity_activity_queries` and
+  `/activity_autovacuum_queries` already skip on their **first** iteration in CI today — they assert
+  nothing on PG 14-18. Appending `190000` neither helps nor hurts them. Flag it; do not fix it here.
+- `internal/query/overview_test.go` and `internal/stat/postgres_test.go:89` start at `140000`, so they
+  **do** run today. Appending `190000` to `overviewVersions` / `postgres_test.go:90` makes them run
+  14→18 and then skip on 19 when the PG 19 cluster is absent — assertions for 14-18 have already
+  executed by then, but the test reports as SKIP. If the tech-spec wants clean per-version reporting,
+  the minimal fix is to wrap those loop bodies in `t.Run(fmt.Sprintf("version/%d", version), …)`,
+  matching the dominant shape. **This is the only structural test change §A implies**; it is optional
+  for correctness and cheap.
+
+### A.4 The error itself — style consistent with the file/package
+
+`internal/postgres/testing.go` currently imports nothing. The package's single existing wrapped error is
+`internal/postgres/postgres.go:90` — `fmt.Errorf("failed connection establishing: %w", err)`: lowercase,
+no trailing punctuation, `fmt.Errorf`. There is no sentinel-error or `errors.New` precedent in the
+package. Matching form:
+
+```go
+port, ok := ports[version]
+if !ok {
+    return nil, fmt.Errorf("postgres version %d has no test cluster port mapping", version)
+}
+```
+
+This adds `"fmt"` as the file's only import. Two notes:
+- Do **not** introduce an exported sentinel (`ErrUnmappedVersion`) — no caller inspects the error, all 41
+  sites only branch on `err != nil`, and an exported symbol in a non-`_test.go` file widens the public
+  surface of `internal/postgres` for no consumer.
+- The acceptance criterion at `{feature_base}.md:142` ("закрыто тестом") wants a unit test in
+  `internal/postgres`. There is no `testing_test.go` today; the natural home is a new
+  `internal/postgres/testing_test.go` with a table of `{190001, 999999, 0}` asserting `assert.Error` and
+  one mapped-but-not-running version asserting the error is a *connection* error, not a mapping error.
+  This test needs no live PostgreSQL — the mapping check happens before `Connect`.
+
+---
+
+## B. The exact edit list for the `versions := []int{…}` sites
+
+§4.1 said "33 sites in 21 files". Re-derived exhaustively this pass, the count is **29 live-connection
+loop sites** that must gain `190000`, **4 sites that must not be touched**, and **8-10 per-version
+assertion tables** that should gain a `190000` row. §4.1's table conflated the two kinds; the grouping
+below replaces it.
+
+### B.1 Group 1 — plain live-connection loops: append `190000`, nothing else (29 sites)
+
+Each is a `[]int{…}` fed to `NewTestConnectVersion` inside (or around) a `t.Run`. The append is
+mechanical; nothing else in these tests is version-shaped.
+
+| # | file:line | current tail | note |
+|---|---|---|---|
+| 1 | `internal/query/activity_test.go:29` | …170000, 180000 | full 90500→ list |
+| 2 | `internal/query/bgwriter_test.go:36` | …180000 | asserts `Len(FieldDescriptions()) == wantNcols` |
+| 3 | `internal/query/common_test.go:64` | …180000 | drives 4 subtests incl. `versions[3:]` at :99 — slicing stays valid |
+| 4 | `internal/query/databases_test.go:34` | …180000 | |
+| 5 | `internal/query/functions_test.go:11` | …180000 | |
+| 6 | `internal/query/indexes_test.go:11` | …180000 | |
+| 7 | `internal/query/io_test.go:112` | `{160000,170000,180000}` | PG19 run also re-exercises the `>= PostgresV18` `object='wal'` assert at :138 — correct, it stays true |
+| 8 | `internal/query/io_test.go:150` | `{160000,170000,180000}` | |
+| 9 | `internal/query/overview_test.go:13` | `overviewVersions` | package-level var, feeds 4 tests (`:18,:68,:128,:155`) — one edit, four call sites |
+| 10 | `internal/query/pgcenter_schema_test.go:21` | …180000 | the `plperlu` fixture gate; first thing to fail if PG 19 `plperlu` misbehaves |
+| 11 | `internal/query/procpidstat_test.go:81` | …180000 | |
+| 12 | `internal/query/progress_analyze_test.go:11` | …180000 | **must also switch from the bare const to the selector** — see B.4 |
+| 13 | `internal/query/progress_basebackup_test.go:11` | …180000 | same |
+| 14 | `internal/query/progress_cluster_test.go:11` | `{120000…180000}` | append only; see §E |
+| 15 | `internal/query/progress_copy_test.go:11` | …180000 | append only |
+| 16 | `internal/query/progress_create_index_test.go:11` | `{120000…180000}` | append only |
+| 17 | `internal/query/progress_vacuum_test.go:11` | `{90600…180000}` | **must also switch to the selector** — see B.4 |
+| 18-20 | `internal/query/replication_slots_test.go:34,113,161` | …180000 | ×3 |
+| 21 | `internal/query/replication_test.go:39` | …180000 | |
+| 22 | `internal/query/sizes_test.go:11` | …180000 | |
+| 23 | `internal/query/statements_test.go:59` | full | |
+| 24 | `internal/query/statements_test.go:110` | inline `{130000…180000}` | WAL section, PG13+ |
+| 25 | `internal/query/statements_test.go:129` | inline `{150000…180000}` | JIT section, PG15+ |
+| 26 | `internal/query/statements_test.go:176` | full | |
+| 27 | `internal/query/tables_test.go:11` | …180000 | |
+| 28 | `internal/query/wal_test.go:34` | …180000 | |
+| 29 | `internal/stat/postgres_test.go:90` | …180000 | `Test_collectOverviewStat`; skip is above the loop (§A.3) |
+
+### B.2 Group 2 — do **not** touch (4 sites)
+
+| file:line | list | why |
+|---|---|---|
+| `internal/query/databases_test.go:56` | `[]int{140000}` | single-version smoke of `PgStatDatabaseSessionsDefault` (PG14+ shape, no version branch). Adding 190000 buys nothing and re-runs an identical query. |
+| `internal/query/io_test.go:68` | `[]int{160000,180000}` | `Test_SelectStatIOQuery_NullSafety` — **string inspection, no connection.** Two elements = one per query branch (`<V18` / `>=V18`). 190000 hits the same `>=V18` branch as 180000 → duplicate assertion. |
+| `internal/query/io_test.go:96` | `[]int{160000,180000}` | same, for the time selector. |
+| `internal/query/io_test.go:179` | `[]int{160000,180000}` | `…_NoTemplateArtifacts` — same one-per-branch logic. |
+
+(§4.1 listed the three `io_test.go` string loops among the "33 connection sites" — that was wrong; they
+never open a connection.)
+
+### B.3 Group 3 — per-version assertion tables needing a `190000` row
+
+These are pure unit tables (no PG). A `190000` row proves the `>=` newest branch keeps returning the
+PG 18 answer, i.e. that this feature did not accidentally move a boundary. Exact expected values:
+
+| table | new row |
+|---|---|
+| `internal/query/bgwriter_test.go:16-22` | `{version: 190000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}}` |
+| `internal/query/wal_test.go:16-20` | `{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}}` |
+| `internal/query/replication_slots_test.go:16-20` | `{version: 190000, wantNcols: 15, wantDiffIntvl: [2]int{6, 13}}` |
+| `internal/query/io_test.go:18-24` | `{version: 190000, wantNcols: 16, wantDiffIntvl: [2]int{4, 14}}` |
+| `internal/query/io_test.go:42-46` | `{version: 190000, wantNcols: 10, wantDiffIntvl: [2]int{4, 8}}` |
+| `internal/query/statements_test.go:15-25` | `{version: 190000, want: PgStatStatementsTimingDefault}` |
+| `internal/query/statements_test.go:42-46` | `{version: 190000, wantQuery: PgStatStatementsJITDefault, wantNcols: 15, wantDiff: [2]int{7, 12}, wantKey: 13}` |
+| `internal/query/statements_test.go:154-164` | `{version: 190000, want: PgStatStatementsReportQueryDefault}` |
+
+Optional (their tables deliberately stop at the last boundary and never listed 170000/180000 either —
+adding 190000 is consistent but not required): `internal/query/databases_test.go:17-22`
+(`{190000, PgStatDatabaseGeneralDefault, 19, [2]int{2,17}}`), `internal/query/activity_test.go:16-18`
+(`{190000, PgStatActivityDefault, 14}`).
+
+### B.4 Group 4 — three brand-new selector tables + a query-source switch
+
+`internal/query/progress_{vacuum,analyze,basebackup}_test.go` today hardcode
+`tmpl := PgStatProgressVacuumDefault` (`progress_vacuum_test.go:15`) etc. Once the selectors exist, line
+15 of each becomes `tmpl, wantNcols, _ := SelectStatProgress…Query(version)` — otherwise the PG 19
+subtest would execute the **PG 18** query against PG 19 and prove nothing about the new columns.
+Recommended: also adopt the `bgwriter_test.go:52-60` shape (`conn.Query` + `assert.Len(rows.
+FieldDescriptions(), wantNcols)`) instead of `conn.Exec`, so the live run gates the column count — that
+is the assertion that catches a beta→GA catalog rename (`{feature_base}.md:159`).
+
+New unit tables, modelled on `Test_SelectStatBgwriterQuery` (`internal/query/bgwriter_test.go:10-33`):
+
+```go
+{version: 180000, wantQuery: PgStatProgressVacuumDefault,     wantNcols: 13, wantDiffIntvl: [2]int{10, 11}},
+{version: 190000, wantQuery: PgStatProgressVacuumPG19,        wantNcols: 15, wantDiffIntvl: [2]int{12, 13}},
+{version: 180000, wantQuery: PgStatProgressAnalyzeDefault,    wantNcols: 12, wantDiffIntvl: [2]int{0, 0}},
+{version: 190000, wantQuery: PgStatProgressAnalyzePG19,       wantNcols: 13, wantDiffIntvl: [2]int{0, 0}},
+{version: 180000, wantQuery: PgStatProgressBasebackupDefault, wantNcols: 11, wantDiffIntvl: [2]int{9, 9}},
+{version: 190000, wantQuery: PgStatProgressBasebackupPG19,    wantNcols: 12, wantDiffIntvl: [2]int{10, 10}},
+```
+
+Add a low row (e.g. `140000`, and `90600` for vacuum) so the table also pins the floor, matching how the
+bgwriter table lists every supported version rather than just the boundary.
+
+### B.5 View-layer rows (unchanged from §4.2, restated with verified line numbers)
+
+- `internal/view/view_test.go:224-235` `TestView_VersionOK` — add `{version: 190000, total: 27}`.
+  Highest existing row is `{160000, 27}`; no existing row changes.
+- `record/record_test.go:132-137` `Test_filterViews` — add
+  `{version: 190000, pgssSchema: "public", wantN: 3, wantV: 24}`. **Note the corrected values**: §4.2
+  proposed `wantN: 0, wantV: 27`, which is wrong. The highest existing row is
+  `{140000, "public", wantN: 3, wantV: 24}`; on ≥16 the three PG15/16-gated views (`stat_io`,
+  `stat_io_time`, `statements_jit`) stop being dropped, so the ≥16 row is `wantN: 0, wantV: 27`. Since
+  no ≥16 row exists today, **the implementer must compute this from `view.New()` rather than copy** —
+  `filterViews` drops on `MinRequiredVersion` and the pgss gate only. Runs without PostgreSQL.
+- `internal/view/view_test.go:99-222` `TestViews_Configure` — the matrix runs 140000 down to 90400 and
+  its `switch tc.version` (`:177-216`) has **no case above 130000**. Add
+  `{version: 190000, recovery: "f", trackCommit: "on", querylen: 256}` (+ the `"off"` twin if following
+  the existing 8-row-per-version convention) and a `case 190000:` asserting
+  `query.PgStatProgressVacuumPG19` / `Ncols 15`, `…AnalyzePG19` / `13`, `…BasebackupPG19` / `12`.
+  The existing trailing loop `for _, v := range views { assert.NotEqual(t, "", v.Query) }` (`:218-220`)
+  already proves the three new templates survive `query.Format` — no extra template test needed.
+
+---
+
+## C. `report/describe.go` — exact format and the version-varying precedent
+
+### C.1 The table format
+
+Every description is one raw-string const of the shape:
+
+```
+<one-line title ending in ':'>
+<blank>
+  column<TAB(s)>origin<TAB(s)>description
+- <emitted column name><TABs><catalog column(s)><TABs><prose>
+…
+<blank>
+Details: https://www.postgresql.org/docs/current/…
+```
+
+Columns are **tab-separated with hand-tuned tab counts** so they line up at 8-space tab stops. The
+`origin` field names the underlying catalog column(s), comma-separated when a display column is derived
+from several (`wait_event_type,wait_event`), and `-` when it is synthetic (`report/describe.go:163`,
+`:426`, `:473`). Rows appear in **emitted order**, so a new row goes exactly where the column goes.
+
+### C.2 Line ranges and insert points (per the corrected §0 placement)
+
+| const | span | table span | insert |
+|---|---|---|---|
+| `pgStatProgressVacuumDescription` | `report/describe.go:202-220` | `:204-217` | two rows **after `relation` (`:208`), before `state` (`:209`)** |
+| `pgStatProgressAnalyzeDescription` | `report/describe.go:266-283` | `:268-280` | one row **after `relation` (`:272`), before `state` (`:273`)** |
+| `pgStatProgressBasebackupDescription` | `report/describe.go:286-302` | `:288-299` | one row **after `duration` (`:292`), before `state` (`:293`)** |
+
+Note the analyze and basebackup tables use a **wider origin column** (three tabs after a short name;
+see `:269` vs `:205`) — match the neighbours in the same const, not across consts.
+
+### C.3 The precedent for version-only columns: a trailing `Note:` line, not a per-row marker
+
+Two existing consts already document a superset, and both use the **same device**: the row table lists
+the baseline columns, and a single `Note:` line before `Details:` states what newer versions add.
+
+- `report/describe.go:439` (`pgStatBgwriterDescription`, header comment says "(PG14 baseline)" at `:422`):
+  `Note: on PG17+ checkpoint/restartpoint counters come from pg_stat_checkpointer; PG18 adds slru_written.`
+- `report/describe.go:490` (`pgStatIODescription`):
+  `Note: on PG18 KiB throughput comes from read_bytes/write_bytes/extend_bytes; op_bytes was removed.`
+- `report/describe.go:531` (`pgStatStatementsJITDescription`, "(PG15 baseline)" at `:513`):
+  `Note: on PG17+ this section also includes the jit_deform_count/jit_deform_time columns.`
+
+Note that in all three the version-only columns are **not** listed as rows at all — bgwriter's table has
+no `slru_written` row, IO's has no `read_bytes` row. That is the strict precedent. But it exists because
+those columns replaced or reshaped existing rows; here the three columns are pure additions the user
+wants described (`{feature_base}.md:151`: *"`pgcenter report -d -P v|a|b` описывает новые колонки"*).
+
+**Recommended reading of the precedent — list the rows AND add the Note:**
+
+```
+- started_by		started_by		Origin of the vacuum: manual, autovacuum or autovacuum_wraparound (PG19+)
+- mode			mode			Vacuum mode: normal, aggressive or failsafe (PG19+)
+…
+Note: started_by and mode are available on PG19+ only; on earlier versions these columns are absent.
+```
+
+The `(PG19+)` suffix inside the row is a **new** micro-convention (no existing row carries one) — the
+tech-spec should pick one of: rows-with-`(PG19+)`-suffix + Note, rows-without-suffix + Note (closest to
+`pgStatBgwriterDescription`'s style, where the Note carries all the version information), or Note-only.
+Do not leave it to the task author; three sibling consts must end up consistent.
+
+Header comments: follow `:422` / `:513` and add `(PG14 baseline)`-style annotations to the three
+progress consts' `//` lines so the reader knows the table is a baseline, not the PG 19 truth.
+
+`report/report_test.go:1184-1189` compares `describeReport()` output **by identity against the const**,
+so any text edit is invisible to it. There is no golden file for `-d` output. Confirmed: text edits here
+cannot break a test.
+
+---
+
+## D. `testing/prepare-test-environment.sh` and `testing/e2e.sh`
+
+### D.1 The six loops in `prepare-test-environment.sh` — all literally identical
+
+`grep -c "for v in 14 15 16 17 18"` → **6**, at lines `6, 13, 43, 48, 56, 62`. Each becomes
+`for v in 14 15 16 17 18 19; do`. Their purposes:
+
+| line | loop | body |
+|---|---|---|
+| `:6` | create | `pg_lsclusters \| grep -q "^$v "` guard, then `pg_createcluster "$v" main` |
+| `:13` | configure | appends the auto.conf block (`:18-33`), overwrites `/etc/postgresql/${v}/main/pg_hba.conf` (`:36-39`) |
+| `:43` | start | `pg_ctlcluster "$v" main start` |
+| `:48` | wait | `until pg_isready -h 127.0.0.1 -p "$port" -U postgres -t 5 -q; do … done` |
+| `:56` | fixtures | `su - postgres -c "psql … -f /usr/local/testing/fixtures.sql"` |
+| `:62` | final check | `pg_isready -t 10 … -d pgcenter_fixtures` |
+
+The port is derived at `:14` and `:49,:57,:63` as `port="219${v}"` — so **21919 falls out automatically**
+and matches the new `internal/postgres/testing.go` map entry by construction. No other version-dependent
+logic exists in the script: no per-version `if`, no version-conditional GUC, no version in `fixtures.sql`
+(flat 193-line SQL, applied identically to each cluster).
+
+### D.2 What in the auto.conf block PG 19 could reject — and what it can't
+
+The block is `prepare-test-environment.sh:19-32`:
+`listen_addresses`, `port`, `shared_buffers=16MB`, `ssl=on` + snakeoil cert/key, `logging_collector=on`,
+`log_directory`, `log_filename`, `track_io_timing=on`, `track_functions=all`,
+`shared_preload_libraries='pg_stat_statements'`, `wal_level=logical`.
+
+Checked against the PG 19 GUC set: **none of these is removed or renamed in PG 19**, and all keep their
+current value domains (`wal_level` still accepts `logical`; `track_functions` still `all`). The two with
+any historical volatility are `shared_preload_libraries` (fails hard at startup if the library is
+missing) and `wal_level`. Practical reading during the probe:
+
+- cluster fails to start **with a FATAL about `pg_stat_statements`** → the `postgresql-19` package did not
+  ship contrib in the pgdg-testing build; a **packaging** problem, not a GUC one.
+- cluster fails to start with `unrecognized configuration parameter` → a genuine GUC drift; fix in the
+  script, this is the "not a probe failure" branch the spec calls out at `{feature_base}.md:165`.
+- fixtures fail to load → `plperlu` semantics; also the `{feature_base}.md:165` branch. The canary test
+  is `internal/query/pgcenter_schema_test.go` (B.1 row 10).
+
+**Unmentioned risk worth adding to the probe checklist:** `pg_createcluster` and `pg_lsclusters` come
+from `postgresql-common`, not from `postgresql-19`. Creating a version-19 cluster needs a
+`postgresql-common` new enough to know the 19 layout. It is pulled from the pgdg **main** repo, not from
+`pgdg-testing` — so a stale `postgresql-common` is a distinct, third failure mode of the probe, curable
+by letting the beta repo supply `postgresql-common` too. Check `pg_lsclusters` output before blaming GUCs.
+
+### D.3 `testing/e2e.sh` — two loops, and a hard-ordering trap
+
+```bash
+testing/e2e.sh:15:  for port in 21914 21915 21916 21917 21918; do   # pgcenter record
+testing/e2e.sh:22:  for port in 21914 21915 21916 21917 21918; do   # pgcenter report
+```
+
+Both gain ` 21919`. The inner arg list at `:23` (`-A -R -D -T -I -S -F -Xm -Xg -Xi -Xt -Xl -Xw -Pv -Pc
+-Pi -Pa -Pb -Pz`) already covers all six progress screens, so PG 19 gets a free record→report smoke over
+the new columns.
+
+**The trap:** `e2e.sh:7` is `set -euxo pipefail`. `pgcenter record` against a port with nothing listening
+exits non-zero → the script aborts → **CI turns red**, it does not skip. See §G.
+
+---
+
+## E. REPACK / `pg_stat_progress_cluster` — no change required, verified column by column
+
+`internal/query/progress_cluster.go:5-12` is a single const, no selector, `MinRequiredVersion:
+query.PostgresV12` (`internal/view/view.go`), not in the `Configure()` switch. It reads exactly nine
+columns from the view (aliased `p`):
+
+`p.datname`, `p.relid`, `p.cluster_index_relid`, `p.phase`, `p.heap_blks_total`, `p.heap_blks_scanned`,
+`p.heap_tuples_scanned`, `p.heap_tuples_written` — plus `p.pid` implicitly via the join predicate
+(`progress_cluster.go:11`); everything else (`a.pid`, `xact_start`, `a.state`, `a.wait_event_*`,
+`a.query`) comes from `pg_stat_activity`.
+
+The PG 19 `pg_stat_progress_cluster` column list, re-fetched this pass, is:
+`pid, datid, datname, relid, command, phase, cluster_index_relid, heap_tuples_scanned,
+heap_tuples_written, heap_blks_total, heap_blks_scanned, index_rebuild_count`.
+
+**All nine referenced columns are present.** Nothing removed, nothing renamed. `command` and
+`index_rebuild_count` exist but pgcenter never selected them, so their presence is irrelevant.
+**Conclusion: `progress_cluster.go` needs zero change on PG 19, and `progress_cluster_test.go:11` needs
+only the mechanical `190000` append (B.1 row 14). No selector, no second const, no `Configure` case.**
+
+PG 19 docs, verbatim: *"Whenever REPACK, CLUSTER or VACUUM FULL is running, the backwards-compatibility
+`pg_stat_progress_cluster` view will contain a row for each backend that is currently running either
+command… Because this view exists for backwards-compatibility purposes only, it will translate any
+REPACK command into one of these other two."*
+
+### What the manual verification step (`{feature_base}.md:218`, criterion `:145`) must look at
+
+Because pgcenter does **not** select `command`, the translation is invisible on the screen. The thing to
+verify is that a row appears at all and that its cells are populated:
+
+1. Create a table big enough that `REPACK` takes >2s, open `pgcenter top` → `p` → cycle to the cluster
+   progress screen.
+2. Run `REPACK <table>;` in a second session.
+3. Expect a row where: `relation` = the table, `phase` = one of the cluster phases
+   (`seq scanning heap` / `index scanning heap` / `sorting tuples` / `writing new heap` / `swapping
+   relation files` / `rebuilding index` / `performing final cleanup`), `size_total,KiB` non-zero, and
+   `tuples_scanned` / `tuples_written` climbing between ticks.
+4. `query` will show the literal `REPACK …` text (it comes from `pg_stat_activity.query`, untouched by
+   the compat translation) — that is the visible proof the row is a REPACK, and the one thing to
+   screenshot for the QA report.
+5. Cross-check with `psql`: `SELECT command, phase FROM pg_stat_progress_cluster;` should report
+   `command` as `CLUSTER` or `VACUUM FULL` (the translation) while `pg_stat_activity.query` says
+   `REPACK`. That mismatch is expected, not a bug — note it in the QA report so it is not re-litigated.
+
+Note also that `pg_stat_progress_repack` (the new native view) is explicitly out of scope
+(`{feature_base}.md:170`) — it is a screen, not a column.
+
+---
+
+## F. The report replay test to add
+
+Model: `report/report_record_bgwriter_test.go:31` `Test_app_doReport_Bgwriter` — a table of per-version
+subcases, each building a synthetic in-memory tar and comparing against a per-version golden. No live
+PostgreSQL. Companion example with a two-version table: `report/report_record_statio_test.go`.
+
+### F.1 Anatomy of the harness (with the lines that matter)
+
+| element | where | what to reproduce |
+|---|---|---|
+| testcase fields | `:32-43` | `name`, `versionNum`, `versionStr`, `cols []string`, `prevVals`, `currVals`, `wantFile` |
+| meta record | `:141-151` | `stat.PGresult{Valid:true, Ncols:7, Nrows:1, Cols:[…7 SelectCommonProperties names…]}`; **only index 1 (`version_num`) is consumed** by `readMeta` (`report/report.go:394-405`) and it is what drives `views.Configure` at `report/report.go:250-262` |
+| two ticks | `:166-180` | identical `Cols`, cumulative `Values`; tick 1 is swallowed by the `!prevStat.Valid` branch (`report.go:249-267`), tick 2 produces the printed row |
+| tar layout | `:188-202` | six entries: `meta.<ts>.json`, `<reportType>.<ts>.json`, `sysinfo.<ts>.json` — twice, timestamps **exactly 1 s apart** so `itv == 1` and each diffed cell is a bare `curr - prev` |
+| timestamp format | `:196-201` | `20060102T150405.000`, e.g. `progress_vacuum.20260519T100000.000.json` — **the entry basename must equal `config.ReportType`** |
+| config | `:204-209` | `Config{ReportType: …, TruncLimit: 32, TsStart/TsEnd}` bracketing the tick timestamps |
+| drive | `:211-216` | `app := newApp(config)`; `app.writer = &buf`; `app.doReport(tar.NewReader(&tarBuf))`. `newApp` (`report/report.go:82-91`) seeds `app.view` from the **static** `view.New()[ReportType]`; `processData` then overwrites it via `Configure(d.meta.version)` |
+| sentinel asserts | `:220-228` | a `\d{4}/\d{2}/\d{2}` regexp for the header line + one `Contains` on a stable cell and one on a known delta — localises "row missing" vs "header only" before the golden diff |
+| golden update | `:230-237` | `if *update { os.WriteFile(tc.wantFile, …); return }`; the flag is `var update = flag.Bool("update", …)` at **`report/report_test.go:22`** (package-level, shared) — regenerate with `go test ./report/ -run Test_app_doReport_ProgressVacuum -update` |
+
+### F.2 What `Test_app_doReport_ProgressVacuum` needs concretely
+
+Two subcases, `ReportType: "progress_vacuum"`, tar entry prefix `progress_vacuum.`:
+
+**`pg18` — `versionNum: "180000"`, `versionStr: "18.0"`, 13 cols, DiffIntvl `{10,11}`**
+```
+cols: pid, xact_age, datname, relation, state, waiting, phase,
+      "size_total,KiB", "scanned_total,%", "vacuumed_total,%",
+      "scanned,KiB", "vacuumed,KiB", query
+```
+Absolute/text: 0-9 and 12 copied from `curr`. Diffed: 10, 11.
+
+**`pg19` — `versionNum: "190000"`, `versionStr: "19.0"`, 15 cols, DiffIntvl `{12,13}`**
+```
+cols: pid, xact_age, datname, relation, started_by, mode, state, waiting, phase,
+      "size_total,KiB", "scanned_total,%", "vacuumed_total,%",
+      "scanned,KiB", "vacuumed,KiB", query
+```
+Absolute/text: 0-11 and 14. Diffed: 12, 13. `started_by: "autovacuum"`, `mode: "aggressive"` are good
+fixture values (`{feature_base}.md:107-108`); pick the **same** `scanned,KiB` delta in both subcases
+(e.g. prev `1000` → curr `1500`, delta `500`) so a single `assert.Contains(out, "500")` works as the
+cross-version delta sentinel exactly as `:228` does for bgwriter.
+
+`UniqueKey` defaults to 0 = `pid`, so keep `pid` identical between the two ticks or the rows will not
+pair and both diffed cells come out as raw `curr` — this is the single most likely way to write a
+green-but-meaningless test. Use one row with a fixed `pid`.
+
+**The point of the `pg19` subcase** is precisely §5.3's hazard: without the version-aware selector,
+`Configure(190000)` leaves `DiffIntvl` at `{10,11}`, which on the PG 19 layout points at
+`scanned_total,%` / `vacuumed_total,%`. Those are `text` percentages — the diff would either print
+nonsense or abort the sample. So write the test to **fail red first** against the un-selectored code.
+
+### F.3 Golden files
+
+Location: `report/testdata/` (flat, no subdirectories; 41 files today). Naming precedent is
+`report_record_<screen>_<version>.golden`:
+`report_record_bgwriter_pg14.golden`, `…_pg17.golden`, `…_pg18.golden`, `report_record_stat_io_v16.golden`,
+`report_record_stat_io_v18.golden`, `report_record_replslots.golden`.
+
+Use `report/testdata/report_record_progress_vacuum_pg18.golden` and `…_pg19.golden` (the `pgNN` form,
+matching the bgwriter trio and the three-file majority). Goldens contain ANSI SGR escapes in the header
+line (see `report/testdata/report_progress_vacuum.golden:1`) — always generate them with `-update`,
+never hand-write.
+
+### F.4 What must NOT change
+
+`report/testdata/pgcenter.stat.golden.tar` — verified this pass: its `meta.20210614T115633.123.json`
+carries `"version_num": "140000"` (and `version` `"14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)"`), 220 tar
+entries. So the twenty-odd golden-tar cases in `report/report_test.go:35-160` — including
+`progress_vacuum` (`:107-110`), `progress_analyze` (`:124-127`) and `progress_basebackup` (`:129-132`)
+— replay through the **pre-19** branch of the new selectors and must produce byte-identical output.
+`report/testdata/report_progress_vacuum.golden` still shows the 13-column header. **A diff in any of
+these three goldens after implementation is a bug, not expected churn** (`{feature_base}.md:150`).
+
+---
+
+## G. Ordering / decoupling — the [005] precedent does **not** fully transfer
+
+ADR `docs/decisions-log.md:333-347` ([005], accepted 2026-06-21) rejected hard ordering between the
+manual image push and the code merge, because a *defensive `t.Skipf`* made the new capability
+(`wal_level=logical`) optional at test time. Whether that transfers here depends on **which file** you
+look at, and the answer differs per file.
+
+### G.1 Where the tag actually lives
+
+| file:line | content | pull-time effect |
+|---|---|---|
+| `.github/workflows/default.yml:9` | `container: lesovsky/pgcenter-testing:0.0.10` | **yes** — every push |
+| `.github/workflows/release.yml:11` | `container: lesovsky/pgcenter-testing:0.0.10` | **yes** — push to `release` |
+| `testing/Dockerfile:6` | `LABEL version="0.0.10"` | build-time metadata only |
+| `testing/Dockerfile:38` | `CMD ["echo", "pgcenter-testing 0.0.10: PostgreSQL 14-18 on Ubuntu 22.04"]` | cosmetic |
+| `testing/Dockerfile:2` | header comment `PostgreSQL 14-18` | cosmetic |
+| `.claude/skills/project-knowledge/deployment.md:14,31,35` | prose | docs |
+| `doc/development.md:5-6` | `lesovsky/pgcenter-testing:latest` + a `-p` list stopping at 21914 | docs, already stale |
+
+Only the two `container:` lines can turn CI red on a missing image. Bumping them before the push fails
+the job at "Initialize containers", **before any checkout or test**, i.e. a total red with no signal.
+
+### G.2 The asymmetry CI's own step definitions create
+
+`.github/workflows/default.yml:59-60`:
+```yaml
+      - name: Prepare test environment
+        run: prepare-test-environment.sh          # ← bare name: resolved via PATH, i.e. /usr/local/bin
+```
+`.github/workflows/default.yml:80-81`:
+```yaml
+      - name: Run E2E tests
+        run: ./testing/e2e.sh                     # ← path: resolved from the CHECKOUT
+```
+
+`testing/Dockerfile:35` bakes `prepare-test-environment.sh` into `/usr/local/bin/`. **So the repo copy of
+`prepare-test-environment.sh` is inert in CI** — editing it has literally no effect until the image is
+rebuilt from it and the tag is bumped. `e2e.sh` is the opposite: it is read from the working tree and
+takes effect on the very next push.
+
+### G.3 What happens under each merge shape
+
+Scenario **"code merges, tag still `:0.0.10`"** (the [005]-style decoupling):
+
+| change | behaviour on the old image | verdict |
+|---|---|---|
+| `PostgresV19` const, three selectors, `Configure` cases, `describe.go` rows | pure Go, no PG needed | green |
+| `190000: 21919` in the port map | nothing listens on 21919 → `Connect` errors | fine — the map entry only *enables* the error |
+| `190000` appended to the 29 connection loops | per-version `t.Run` sites: that subtest skips, others still assert. The 5 loop-level-skip sites (§A.3: `common_test.go` ×4 subtests, `overview_test.go` ×4 tests, `stat/postgres_test.go`) report the whole test as skipped after running 14-18 | **green, skips clean** |
+| the hardened unmapped-version error | 190000 **is** mapped, so it returns a connection error exactly as before | green |
+| the 8 assertion-table `190000` rows + 3 new selector tables + view/record rows | no PG | green |
+| the new `Test_app_doReport_ProgressVacuum` | synthetic tar, no PG | green |
+| `testing/prepare-test-environment.sh` `for v in … 19` | **inert** — CI runs the image's copy | green (and no PG 19 cluster) |
+| **`testing/e2e.sh` ports gaining `21919`** | `set -euxo pipefail` + `pgcenter record -p 21919` against nothing → non-zero → **script aborts** | **RED** |
+
+So the ADR-[005] decoupling holds for **everything except `e2e.sh`**. `e2e.sh` is the one file with a
+hard ordering dependency, and the reason is structural, not incidental: e2e has no skip mechanism.
+
+Scenario **"tag bumps before the image is pushed"**: both workflows fail at container init. Total red.
+
+Scenario **"image pushed, nothing merged"**: harmless — the new cluster idles on 21919; PG 14-18 tests
+are unaffected. This is exactly the *"прогон пересобранного образа на неизменённом `develop`"* step the
+spec mandates (`{feature_base}.md:73`, `:167`, verification step 2 at `:212`).
+
+### G.4 Safe merge order
+
+1. **Probe + build the image locally** from the edited `testing/Dockerfile` + `testing/prepare-test-environment.sh` (the script edits are needed *for the build*, even though they are inert in CI until the tag moves).
+2. **Push `lesovsky/pgcenter-testing:0.0.11`.**
+3. **Run the new image against unmodified `develop`** (spec `:73`) — proves the rebuild carried no regression into PG 14-18.
+4. **Merge the code**: `PostgresV19`, the three selectors + consts, the three `Configure` cases, `describe.go`, the port-map entry, the hardened error, all test edits, `testing/Dockerfile`, `testing/prepare-test-environment.sh`, **and the two `container:` tag bumps and `e2e.sh` in the same commit/PR.**
+
+Step 4 can be a single merge precisely because step 2 already happened. **Do not split `e2e.sh` or the
+tag bumps into an earlier commit** — either one alone turns CI red, and unlike the [005] case there is
+no defensive skip that would rescue it.
+
+If the team prefers the [005] two-phase shape anyway (code first, infra second), the only file that has
+to move to phase 2 is `testing/e2e.sh`; everything else in the list skips cleanly on the old image. That
+is the decision to record in the tech-spec — this ADR-[005] question has a different answer here than it
+did for feature 005, and the difference deserves its own ADR line rather than a silent reuse.
+
+### G.5 Secondary note
+
+`doc/development.md:5-6` pulls `:latest`. If the maintainer also tags `0.0.11` as `latest`, developers
+get PG 19 automatically but the documented `docker run -p …` list (which stops at 21914) stays wrong.
+Cosmetic and pre-existing; mention it in the docs task or leave it.
