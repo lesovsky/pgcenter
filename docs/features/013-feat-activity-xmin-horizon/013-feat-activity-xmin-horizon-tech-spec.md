@@ -1,6 +1,6 @@
 ---
 created: 2026-07-25
-status: draft
+status: approved
 branch: feature/activity-xmin-horizon
 size: M
 ---
@@ -192,8 +192,11 @@ a **product choice about presentation**, not a correctness fix as it is for the 
 Recorded so that a future reader does not mistake one for the other.
 
 **Coverage gap, stated:** no golden covers a string-column sort on activity, so this half of the
-change lands without regression cover. The targeted tests specified in Testing Strategy cover the
-rule itself; the screen-level effect is checked by hand in Task 6.
+change lands without regression cover. The targeted unit tests in Testing Strategy cover the rule
+itself, and Task 6 carries an explicit acceptance step — sorting activity by a string column that
+is blank for many rows — so the screen-level effect is checked by someone rather than assumed. An
+earlier draft claimed that coverage without putting it in any task; it is named in Task 6 and in
+the Acceptance Criteria now precisely so it cannot evaporate.
 
 **Blast radius — enumerated, not gestured at.** This changes sort behaviour on every screen with a
 sparse column. The known cases:
@@ -417,7 +420,7 @@ cells render blank rather than `0`, and whether the parallel-query group visuall
 | 3 | bash | `go test ./report/...` — two-version archive replays with correct widths and header, no panic |
 | 4 | bash | `go test ./report/...` — describe order test green; `pgcenter report -d -A` shows all four caveats and the PG 13+ note |
 | 5 | bash | register entries present in `docs/tech-debt.md` |
-| 6 | bash + user | full QA per the user-spec "Как проверить" section |
+| 6 | bash + user | full QA per the user-spec "Как проверить" section, plus the string-column sort, the `replslots` default sort, and a few-hundred-session run |
 
 ### Tools required
 
@@ -469,7 +472,10 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - [ ] Existing golden replay tests pass **with the sort fix applied**
 - [ ] A two-version synthetic archive replays with recomputed widths, an immediately redrawn
       header, a re-resolved sort column, and no panic
-- [ ] The report truncation path carries a zero-width guard, matching its twin in `top`
+- [ ] The report truncation path carries a zero-width guard, matching its twin in `top` — an error
+      that stops the cell being printed, not a silently empty cell
+- [ ] Sorting the activity screen by a string column that is blank for many rows behaves as
+      specified, verified by hand — this half of the sort change has no automated cover
 - [ ] `leader`, `backend_xid` and `horizon_xacts` carry the semantics the user stories rely on:
       the group identifier collapses a parallel query, a blank `backend_xid` means the transaction
       has not written, and `horizon_xacts` ranks sessions by how far back they hold the horizon
@@ -565,10 +571,11 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 #### Task 6: Pre-deploy QA
 - **Description:** Acceptance testing against the user-spec "Как проверить" section and this
   spec's Acceptance Criteria. Automated suite plus a manual walk on the fixture clusters, which
-  must additionally cover two things the user-spec's own checklist does not: the `replslots`
-  default sort, which is the screen most visibly affected by the shared sort change, and the
-  widened activity screen under a few hundred sessions, so the "do not make an incident worse"
-  rule is checked rather than argued.
+  must additionally cover three things the user-spec's own checklist does not: sorting the activity
+  screen by a **string** column that is blank for many rows, which is the half of the sort change
+  no automated test covers; the `replslots` default sort, the screen most visibly affected by that
+  change; and the widened activity screen under a few hundred sessions, so the "do not make an
+  incident worse" rule is checked rather than argued.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
 - **Verify:** bash + user — full QA per the user-spec "Как проверить" section
