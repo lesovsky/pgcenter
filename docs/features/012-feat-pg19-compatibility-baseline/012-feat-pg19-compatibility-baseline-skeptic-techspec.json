@@ -1,0 +1,81 @@
+{
+  "status": "approved",
+  "summary": "Checked 62 claims against the codebase, found 6 mirages (0 critical, 1 major, 5 minor). Every file path, function name, column count, DiffIntvl value, ADR reference and CI-execution claim in the tech-spec is confirmed. The one substantive error is the '41 NewTestConnectVersion call sites' count (actual: 37 direct + 1 internal); the conclusion it supports — no caller changes behaviour — is independently confirmed correct.",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "name_mismatch",
+      "claim": "tech-spec says: 'All 41 call sites pass written-out literals whose union is a subset of the map, so no caller changes behaviour' (Decision 5), repeated as '41 NewTestConnectVersion call sites verified' (Backward Compatibility / Consumer impact)",
+      "reality": "grep -ro 'NewTestConnectVersion' finds 40 textual occurrences: 3 in internal/postgres/testing.go (doc comment line 13, func declaration line 16, and one real call at line 10 inside NewTestConnect) and 37 in _test.go files spread over 23 files. Actual direct call sites = 37 (in 23 files), or 38 counting NewTestConnect's internal call — not 41 in 20 files. The source of the number, 012-...-code-research.md:719 ('41 call sites in 20 files'), contradicts its own enumeration on the next line, which sums to 37 across 23 files: activity 1, bgwriter 1, common 4, databases 2, functions 1, indexes 1, io 2, overview 4, pgcenter_schema 1, procpidstat 1, progress_analyze 1, progress_basebackup 1, progress_cluster 1, progress_copy 1, progress_create_index 1, progress_vacuum 1, replication 1, replication_slots 3, sizes 1, statements 5, tables 1, wal 1, stat/postgres 1.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Decision 5 (Rationale) and Backward Compatibility (Consumer impact); inherited from code-research.md:719",
+      "fix": "Replace '41 call sites' with '37 call sites in 23 test files (plus NewTestConnect's own call)' in both places. The substantive claim is verified independently and unchanged: the union of version values reaching the map is {90500, 90600, 100000..180000}, all present in the ports map (which also has an unused 90400), so removing the ports[140000] fallback changes the behaviour of zero existing callers."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec says: 'All 41 call sites pass written-out literals'",
+      "reality": "Every one of the 37 test call sites is literally `postgres.NewTestConnectVersion(version)` — a loop variable, not a written-out literal. The literals live one level up, in the `versions := []int{...}` / `overviewVersions` lists that drive the loops. The code-research states this correctly ('Each of them passes a loop variable drawn from one of the literal lists'); the tech-spec's compression loses the distinction.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Decision 5 (Rationale)",
+      "fix": "Reword to 'All call sites pass a loop variable drawn from a written-out `[]int{...}` literal list; the union of those literals is a subset of the map.' The verified property (no computed or derived version anywhere in the tests) still holds."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "tech-spec says: 'The 29 live-connection version loops gain 190000, so every existing query test executes against the PG 19 cluster' (Testing Strategy / Integration tests)",
+      "reality": "There are 37 `for _, version := range ...` loop statements that call NewTestConnectVersion, not 29. 29 is the number of distinct version-*list* edit points (code-research §B.1 table, 29 rows) — the discrepancy is that `internal/query/overview_test.go:13` (`overviewVersions`) feeds 4 loops and `internal/query/common_test.go:64` (`versions`) feeds 4 loops, so 8 loops collapse into 2 edits. 29 is the correct number of edits; it is not the number of loops.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Testing Strategy > Integration tests",
+      "fix": "Reword to 'The 29 live-connection version lists gain 190000 (covering 37 loops — overviewVersions and common_test.go's list each drive four)'. Also worth stating explicitly that `internal/query/databases_test.go:56` (`[]int{140000}`) and the three `internal/query/io_test.go` string-inspection loops at :68, :96, :179 are deliberately excluded, per code-research §B.2 — otherwise the sweep task has to re-derive that exclusion."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec says: 'the tests whose `t.Skipf` sits above the version loop (`common_test.go` x4, `overview_test.go` x4, `internal/stat/postgres_test.go`)' (Decision 7)",
+      "reality": "The set of nine tests is correct (common_test.go loops at :82, :99, :111, :125; overview_test.go at :18, :68, :128, :155; stat/postgres_test.go at :92), but in all nine the `t.Skipf` sits INSIDE the loop, immediately after `NewTestConnectVersion` — e.g. internal/stat/postgres_test.go:92-96 and internal/query/common_test.go:82-86. What actually distinguishes them from the well-formed tests is that the loop body is not wrapped in a per-version `t.Run(...)`, so `t.Skipf` fires on the parent `t` and aborts the whole test. Contrast internal/query/progress_vacuum_test.go:13-24, where the identical skip is inside `t.Run(fmt.Sprintf(...))` and skips one subtest only. The consequence the decision states is correct; the code-layout description is not.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Decision 7 (Decision + Rationale); inherited from code-research.md:835 ('skip is above the loop')",
+      "fix": "Reword to 'the tests whose `t.Skipf` fires on the parent `t` because the loop body is not wrapped in a per-version `t.Run`'. This also makes the tech-debt entry actionable — the fix is to add the subtest wrapper, not to move the skip."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "acceptance criterion says: '`PostgresV19 = 190000` present; no other production file needs a new version branch'",
+      "reality": "Contradicted by the tech-spec's own Solution item 2 and Task 3, which add a `>= PostgresV19` branch to internal/query/progress_vacuum.go, progress_analyze.go and progress_basebackup.go, plus three new `case` blocks in internal/view/view.go:367-405. The Architecture bullet's phrasing ('The single seam; every version branch in the tree is an inequality with >= on the newest arm') is the accurate one and is fully confirmed: all existing production version comparisons are inequalities (bgwriter.go:42,46; wal.go:26; io.go:88; statements.go:335-337,348,357-359; activity.go:48-50; databases.go:47; replication.go:58; query.go:71; common.go:134-158; view.go:422; profile/profile.go:356; top/signal.go:86; internal/stat/log.go:109), and there is no equality comparison or switch on a version literal anywhere in production code.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Acceptance Criteria, item 1",
+      "fix": "Reword AC 1 to 'PostgresV19 = 190000 present; no EXISTING production version branch needs editing — every one is an inequality with >= on the newest arm, so 190000 lands on the newest arm by construction. The only new branches are the three progress selectors.'"
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Task 5 says: 'Describe the new columns in the three progress report descriptions' (position unspecified); Decision 1 fixes column placement to 'immediately before a.state — after relation on vacuum and analyze, after duration on basebackup'",
+      "reality": "report/describe.go's rows mirror the SELECT order one-for-one (pgStatProgressVacuumDescription at :202-220 lists pid, xact_age, datname, relation, state, waiting, phase, ... exactly matching the 13 query columns). The only place that names a describe.go insertion point is code-research.md:392 — 'Insert started_by / mode rows between datname (:207) and ...' — which is the superseded mid-interview placement Decision 1 explicitly retires. Task 5 neither restates Decision 1's placement nor lists the user-spec among its 'Files to read', so the row order in describe.go could end up not matching the query column order.",
+      "source": "012-feat-pg19-compatibility-baseline-tech-spec.md, Task 5 (Description / Files to read); conflicting guidance at code-research.md:392-396",
+      "fix": "Add to Task 5: 'describe.go row order must mirror the query SELECT order per Decision 1 — started_by/mode after the relation row, backup_type after the duration row. Ignore code-research.md:392-396, which carries the superseded datname/pid placement.'"
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 62,
+    "confirmed": 56,
+    "mirages_found": 6,
+    "verified_claims": [
+      "internal/query/query.go has PostgresV10..PostgresV18; PostgresV19 absent (to be added)",
+      "internal/postgres/testing.go:34-37 has the ports[140000] fallback; doc comment (lines 13-15) already promises an error",
+      "ports map naming 219{NN} -> 21919 is free and consistent for 190000",
+      "progress_vacuum 13 cols / view.go Ncols 13, DiffIntvl {10,11}; PG19 arithmetic 15 / {12,13} correct",
+      "progress_analyze 12 cols / Ncols 12, DiffIntvl {0,0}; PG19 13 / {0,0} correct",
+      "progress_basebackup 11 cols / Ncols 11, DiffIntvl {9,9}; PG19 12 / {10,10} correct",
+      "OrderKey 0 and UniqueKey 0 (default) on all three progress views",
+      "SelectStatBgwriterQuery/SelectStatIOQuery return (string, int, [2]int); SelectStatActivityQuery 2-tuple; SelectStatStatementsJITQuery 4-tuple",
+      "ADR [004] per-version column sets, ADR [005] image bump decoupled by t.Skipf, ADR [007] 4-tuple only when UniqueKey moves — all present in docs/decisions-log.md",
+      "view.Ncols is never read in report/ — report reads stat.PGresult.Ncols (:360, :395), res.Cols (:543, :564) and v.DiffIntvl/OrderKey/UniqueKey (:453)",
+      "report/report.go:258-259 configures views from the archive meta version_num, not the live server",
+      "all production version comparisons are inequalities; no == / switch on a version literal anywhere",
+      "exactly 8 per-version assertion tables carry 170000/180000 rows (bgwriter x1, io x2, statements x3, replication_slots x1, wal x1)",
+      "the three progress execution tests use the bare pre-19 constant (PgStatProgress{Vacuum,Analyze,Basebackup}Default)",
+      "TestViews_Configure (view_test.go:99, max 140000), TestView_VersionOK (view_test.go:224, max 160000/27 of 27 views), record/Test_filterViews (record_test.go:109) all exist",
+      "report_record_bgwriter_test.go harness matches the description: in-memory tar, entry basename == report type, ticks exactly 1s apart, meta version_num drives Configure; golden naming report_record_<type>_pg<NN>.golden",
+      "report/testdata/pgcenter.stat.golden.tar meta carries version_num = 140000; three existing progress goldens present",
+      "describe.go Note: precedent confirmed — bgwriter (:439) and IO (:490) carry trailing notes and do NOT list the version-varying columns as rows",
+      "prepare-test-environment.sh has exactly 6 `for v in 14 15 16 17 18` loops; e2e.sh has exactly 2 port loops (21914-21918), set -euxo pipefail, and -Pv -Pa -Pb args",
+      "CI runs ./testing/e2e.sh from the checkout but bare `prepare-test-environment.sh` from the image (Dockerfile COPY to /usr/local/bin/); exactly 2 `container: lesovsky/pgcenter-testing:0.0.10` refs -> next tag 0.0.11"
+    ]
+  }
+}

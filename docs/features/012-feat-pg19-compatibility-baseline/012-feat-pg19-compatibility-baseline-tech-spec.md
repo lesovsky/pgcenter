@@ -146,14 +146,15 @@ translation is invisible on screen: the screen shows `REPACK …` in `a.query` w
 **Alternatives considered:** Adding `pg_stat_progress_repack` — out of scope by the user-spec; it is a new
 screen, recorded in the roadmap backlog.
 
-### Decision 7: The nine tests that skip above their version loop are left alone
-**Decision:** Do not restructure the tests whose `t.Skipf` sits above the version loop
+### Decision 7: The nine tests that skip the whole test on one missing version are left alone
+**Decision:** Do not restructure the nine tests that lack a per-version subtest wrapper
 (`common_test.go` ×4, `overview_test.go` ×4, `internal/stat/postgres_test.go`). Record the finding as tech
 debt at feature finalization.
-**Rationale:** In those tests one unavailable version skips the entire test rather than one subtest, so
-`common_test.go`'s full-range list already dead-skips in CI today at `90500` — a pre-existing coverage hole,
-not one this feature opens. Fixing it means restructuring nine tests in files this feature otherwise only
-appends a literal to, which is a refactor with its own review surface.
+**Rationale:** Their `t.Skipf` is inside the version loop, but with no `t.Run` wrapper it fires on the
+parent test — so one unavailable version skips every remaining version too. `common_test.go`'s full-range
+list therefore already dead-skips in CI today at `90500`: a pre-existing coverage hole, not one this feature
+opens. The fix is adding the subtest wrapper, not moving the skip, which makes it a restructuring of nine
+tests in files this feature otherwise only appends a literal to — its own review surface.
 **Alternatives considered:** Fixing it here — rejected as scope creep into unrelated tests; deliberately
 omitting `190000` from those lists — rejected: it would hide PG 19 from tests that are supposed to cover it
 once the hole is fixed.
@@ -228,8 +229,9 @@ None.
   their PG 19 templates with `Ncols` 15/13/12.
 
 ### Integration tests
-- The 29 live-connection version loops gain `190000`, so every existing query test executes against the
-  PG 19 cluster. The three `progress_*_test.go` execution tests must be switched from the bare pre-19
+- Every live-connection version list gains `190000`, so the existing query tests execute against the PG 19
+  cluster. Note that edit points and loops are not one-to-one — two package-level lists feed several loops
+  each, so a single edit changes several tests. The three `progress_*_test.go` execution tests must be switched from the bare pre-19
   constant to the selector — otherwise the PG 19 subtest silently runs the PG 18 query.
 - Eight per-version assertion tables gain a `190000` row.
 - `TestView_VersionOK` and `record/Test_filterViews` gain a `190000` row. The `Test_filterViews` expectation
@@ -311,7 +313,8 @@ mapped literals, none changes behaviour.
 
 ## Acceptance Criteria
 
-- [ ] `PostgresV19 = 190000` present; no other production file needs a new version branch.
+- [ ] `PostgresV19 = 190000` present; outside the three progress selectors and their wiring, no production
+      file needs a new version branch.
 - [ ] `NewTestConnectVersion` returns an error for an unmapped version; covered by a test; all existing
       callers still compile and behave identically.
 - [ ] Three selectors return the documented `(query, Ncols, DiffIntvl)` triples on both branches; unit
@@ -402,12 +405,14 @@ mapped literals, none changes behaviour.
 
 #### Task 5: Report describe texts for the new columns
 - **Description:** Describe the new columns in the three progress report descriptions, each with a trailing
-  note naming the PostgreSQL version they appeared in, per Decision 3.
+  note naming the PostgreSQL version they appeared in, per Decision 3. Row order must match the emitted
+  column order from Decision 1 — not the placement in the superseded first research pass.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; `pgcenter report -d -P v|a|b` lists the new columns
 - **Files to modify:** `report/describe.go`
-- **Files to read:** `report/report.go`, `report/report_test.go`
+- **Files to read:** `report/report.go`, `report/report_test.go`,
+  `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
 #### Task 6: Report replay coverage for the new layout
 - **Description:** Add a replay test for the vacuum progress report on both a pre-19 and a PG 19 recording,
