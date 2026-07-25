@@ -1,0 +1,94 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["02", "04", "05"],
+  "round": 2,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "04",
+      "issue": "Таск по-прежнему утверждает, что user-spec говорит про ТРИ оговорки, и требует это исправить. Факт: user-spec уже синхронизирован (файл правился 26.07 00:48, после round-1). Строка 214: «четыре оговорки: `leader` — это `pid` лидера, …»; строка 375: «… и все четыре оговорки». Никакого «трёх» в документе не осталось (grep -n 'оговор' даёт только 214, 266, 375). Затронуты три места таска: Description («В списке критериев приёмки user-spec'а названы три оговорки … список из трёх в user-spec — устаревшая более ранняя редакция»), Context Files («Учесть, что его список критериев приёмки говорит про *три* оговорки — это устаревший счёт») и Post-completion («в нём в двух местах написано «три оговорки» — `:213` и `:374` — … исправить счёт и дописать четвёртую оговорку в оба места»). Последний пункт — прямая инструкция выполнить уже выполненную правку: исполнитель либо потратит время на несуществующее расхождение, либо задублирует четвёртую оговорку в user-spec.",
+      "fix": "Убрать из Description и Context Files тезис про устаревший счёт в user-spec; в Post-completion заменить пункт синхронизации на констатацию «user-spec уже говорит про четыре оговорки (`:214`, `:375`) — сверить и ничего не менять». Аргумент «почему четыре» можно оставить, но опереть его на tech-spec (Acceptance Criteria `:508-513` и строку Risks про привилегии) и на Риск 2 user-spec'а, а не на противоречие внутри user-spec."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "04",
+      "issue": "Правка user-spec сдвинула нумерацию: ссылки Context Files отстают на строку. Факт: `## Ограничения` — 231, буллет «только по бэкендам» — 233-235 (в таске `:232-235`); «Риск 2» — 264-268 (в таске `:263-267`); буллет про производный `leader` — 297-300 (в таске `:296-299`); критерий приёмки про оговорки — 214 (в таске `:213`); строка 9 таблицы «Как проверить» — 375 (в таске `:374`). Ссылки `:102-119` (таблица колонок, фактически 101-119) и `:132-141` («Ключевые компоненты», 132-140) попадают.",
+      "fix": "Сдвинуть четыре ссылки на +1 либо убрать номера строк для user-spec и ссылаться по заголовкам разделов — документ ещё будет правиться."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Атрибуция паники в Verification Steps описывает только вторую половину картины. Прогон подтверждён вживую (`go test ./internal/stat/ -run Test_readCpuStat`): ПЕРВАЯ паника — в теле теста, `internal/stat/cpu_test.go:15` (`conn.Local = true` по nil `*postgres.DB` после неудачного `NewTestConnect`), и уже при разворачивании стека отложенный `conn.Close()` (defer на `cpu_test.go:12`) паникует повторно в `postgres.(*DB).Close` — `internal/postgres/postgres.go:135`, `[recovered, repanicked]`. Формулировка таска «Причина — nil-pointer в postgres.(*DB).Close … на defer conn.Close() … (первым срабатывает cpu_test.go:15)» читается так, будто `Close` и есть корень, тогда как `cpu_test.go:15` — это не «первый тест», а точка исходной паники. Всё остальное в пункте верно и проверено: это класс уже закрытых [005]/[008] («panicked instead of skipping»), а не [019] (`### [019] Nine tests skip every version when one cluster is unavailable`, tech-debt.md:41), и обход `go test ./internal/stat/ -run 'Test_sort'` работает (ok).",
+      "fix": "Переформулировать: «тест дереференсит nil `*DB` сразу после неудачного connect (`cpu_test.go:15`), а отложенный `Close` добивает процесс повторной паникой в `internal/postgres/postgres.go:135»`. Суть — предсуществующее поведение пакета без живых кластеров — оставить как есть."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "02",
+      "issue": "Преамбула TDD Anchor обещает: «Для каждого теста ниже указано, что именно он показывает на старом коде». Фактически указано только у двух из семи (`Test_sort_sparse_numeric_firstEmpty`, `Test_sort_sparse_numeric_emptyLast`) плюс явное исключение у `Test_sort_fully_empty_column`. Не указано у `Test_sort_empty_not_zero`, `Test_sort_sparse_duration`, `Test_sort_sparse_string`, `Test_sort_null_and_empty_together`. Проверено по коду `sort` (postgres.go:663-701): `Test_sort_sparse_string` («\"\", \"beta\", \"\", \"alpha\"») краснеет ТОЛЬКО при asc — при desc старый строковый компаратор и так уводит пустые в хвост; `Test_sort_null_and_empty_together` при непустой первой ячейке краснеет тоже только при asc; `Test_sort_empty_not_zero` краснеет при asc, но при числовом режиме — лишь если пустая ячейка стоит во входе ВЫШЕ настоящего «0» (пустая парсится в 0, компаратор считает их равными, `SliceStable` сохраняет вход). `Test_sort_sparse_duration` краснеет при desc честно (старый код уходит в строковый режим, «96:58:35» > «791:04:45»). Для replay-кейса эти предусловия теперь расписаны детально, для юнит-тестов — нет.",
+      "fix": "Дописать по одной фразе к четырём тестам: у `Test_sort_sparse_string` и `Test_sort_null_and_empty_together` различающее направление — asc; у `Test_sort_empty_not_zero` — те же два предусловия, что у варианта A replay-кейса (первая ячейка непустая числовая, пустая выше настоящего «0»); у `Test_sort_sparse_duration` — красный при desc. Либо смягчить преамбулу до «где направление или порядок входа имеют значение — это указано»."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Внутреннее противоречие между Acceptance Criteria и Post-completion. AC: «Ни один файл вне `report/describe.go` и `report/report_test.go` не изменён», а Verification Steps требуют `git status --short` ровно с этими двумя файлами; Post-completion при этом требует записать отчёт в `-decisions.md` и (по действующей редакции) править user-spec. Тот же узор в таске 05: AC «Изменены ровно два файла» против Post-completion с `-decisions.md`. Исполнитель, читающий AC буквально, получит красный гейт на собственном журнале решений.",
+      "fix": "Уточнить в AC и в Verification Steps: «вне артефактов фичи (`docs/features/013-*`) изменены только …». Для таска 04 после снятия пункта синхронизации user-spec (см. первую находку) остаётся только `-decisions.md`."
+    }
+  ],
+  "verified_claims": {
+    "task_02": [
+      "internal/stat/postgres.go:663 `func (r *PGresult) sort(key int, desc bool)`; ранний выход на `Nrows == 0`; `sample := r.Values[0][key].String`; три ветки ParseFloat → parseDuration → строковый fallback, все на `sort.SliceStable` — описание в таске совпадает с кодом",
+      "parseDuration — postgres.go:707; единственный вызов `sort` — `delta.sort(skey, desc)` в calculateDelta, ровно строка 599",
+      "diff() (postgres.go:604) идёт по curr.Values и сохраняет порядок curr → предусловия варианта A («первая строка curr несёт непустой числовой retained,KiB», «пустая выше настоящего 0») управляемы, как и заявлено",
+      "diff() в ветке внутри interval безусловно ставит `Valid = true` — обоснование Decision 5 в implementation hints верно",
+      "колонки 6..13 включительно диффятся (условие `l < interval[0] || l > interval[1]`) → предупреждение «пустой делать только retained,KiB (колонка 4, passthrough)» точно",
+      "ловушка описана верно: `Test_app_doReport_ReplSlots` (report_record_replslots_test.go:58) использует именно 2048/1024 (строки 97-100), для которых лексикографический и численный порядок совпадают",
+      "вариант B корректен: \"512\" > \"1024\" лексикографически при 512 < 1024 численно; \"9\" > \"1000000\" при 9 < 1000000",
+      "existing `Test_sort` (postgres_test.go:704) и `Test_sort_duration` (:782) работают на плотных данных — пустых ячеек нет ни в `newTestPGresult` (:18), ни в duration-фикстуре → «останутся зелёными без правок» подтверждено",
+      "internal/view/view.go:153 `replslots`: OrderKey 4, OrderDesc true, DiffIntvl {6,13}, Ncols 15 — совпадает",
+      "internal/query/replication_slots.go — колонка 4 `retained,KiB`, запрос с `ORDER BY \"retained,KiB\" DESC NULLS LAST`",
+      "техдолг [019] действительно про другое («Nine tests skip every version when one cluster is unavailable», tech-debt.md:41); [005] и [008] — «panicked instead of skipping», обе в Resolved Debt",
+      "обход `go test ./internal/stat/ -run 'Test_sort'` проверен — ok",
+      "tech-spec Testing Strategy (:365-407) действительно содержит требование «Any test written here must be shown to fail against the unfixed comparator», разбор двух нерасходящихся конструкций и оба предусловия — ссылка таска на этот раздел не висячая",
+      "Decisions 4 (:167) и 5 (:226) существуют в tech-spec под заявленными названиями",
+      "риск регрессии goldens проверен точечно: единственные тесты с ненастроенным OrderColName (replslots, stat_io) сортируются по колонкам, где пустых значений нет по построению (stat_io колонка 4 попадает в DiffIntvl {4,14}, пустая строка там уронила бы diffPair)"
+    ],
+    "task_04": [
+      "внимание round-1 снято: `internal/stat/help.go` протух ИМЕННО в replication-блоке — help.go:59 `- xact_age*\\tbackend_xmin\\t\\tNumber of transactions have to be replayed on this standby server` против report/describe.go:75 `- horizon_xacts\\tbackend_xmin\\t\\t…`; в activity-блоке help.go:158 `- xact_age*\\txact_start\\t\\tCurrent transaction's duration if active` — законная длительность транзакции. Формулировка «Граница задачи» это теперь описывает верно",
+      "top/ описания колонок не читает: grep по top/ не находит ни одного обращения к `PgStat*Description`; репозиторный grep даёт ноль потребителей констант help.go вне самого файла",
+      "`pgStatActivityDescription` — describe.go:180, блок :180-199, ровно 14 колонок (pid…query), шапка `  column\\torigin\\t\\t\\tdescription` (cat -A)",
+      "единственные потребители константы: report/report.go:610 (мапа describeReport, сама функция на :606) и report/report_test.go:1179 — как и сказано",
+      "tab-сетка пережила переписывание и верна: `- pid` (5) — два таба до 16, `- backend_type` (14) и `- wait_etype`/`- wait_event` (12) — один; origin `pid` (3) — три таба до 40, `client_addr` (11) — два, `application_name` (16) — один. Новые `- leader` (8), `- backend_xid` (13), `- horizon_xacts` (15) приходят в 16 одним табом; origin'ы `leader_pid,pid` (14), `backend_xid` (11), `backend_xmin` (12) — двумя табами до 40; порог «origin ≤15 символов» точен",
+      "house style Note: описанные строки на месте — describe.go:221, :287, :309, :450; запятая-форма origin — `wait_event_type,wait_event` на :212, `lockers_total,lockers_done` на :260",
+      "report/report_test.go:1172 Test_describeReport и :1216 Test_describeProgressColumnOrder существуют; имена Test_describeActivityColumnOrder / Test_describeActivityCaveats свободны",
+      "internal/query/replication.go:28 и :50 — формула `(pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint as horizon_xacts` в обеих ветках",
+      "порядок 17 колонок в What to do совпадает с таблицей user-spec (:103-119) и с Data Models tech-spec: leader на позиции 1, backend_xid — 11, horizon_xacts — 12",
+      "tech-spec действительно называет ЧЕТЫРЕ оговорки — Acceptance Criteria (:508-513) и строка Risks про привилегии; Decision 8 (:319) существует"
+    ],
+    "task_05": [
+      "п.1 переписан верно: расхождение имён отнесено к replication-блоку (help.go:59-60 `xact_age*` / `time_age*` против describe.go:75-76 `horizon_xacts` / `horizon_age`), помечено как предшествующее фиче, и явно сказано, что activity-блок help.go не протух — совпадает с кодом посимвольно",
+      "п.3 переписан верно: PG 10–13 → 21910–21913, PG 9.4–9.6 → 21994–21996 (internal/postgres/testing.go:28-34), «единого диапазона тут нет» — точно; та же пара групп продублирована без ошибок в Context Files и в таблице фактов `[024]`",
+      "комментарий в коде процитирован верно: «EOL versions kept for reference; connection will fail if not running»",
+      "образ содержит PG 14–19 (testing/Dockerfile:30-39), PG 12/13 отсутствуют",
+      "обе висячие перекрёстные ссылки теперь покрыты: [020] заканчивается «Belongs with [021].», [021] — «Same family as [020].» (tech-debt.md, разделы Active) — What to do п.4 и п.5, AC и edge case говорят про обе",
+      "нумерация: максимальный занятый номер — [021]; [022]/[023]/[024] свободны; порядок записей в обоих разделах описан в Details верно",
+      "все существующие записи реестра действительно Severity: Low (21 из 21) — edge case про severity точен",
+      "`PGresult.validate` — postgres.go:558; проверяет только длину строки против len(r.Cols) и Nrows",
+      ".claude/skills/project-knowledge/architecture.md:61 — дословно «`SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10»; соседние строки инвентаря годятся как образец стиля",
+      "docs/roadmap-0.12.0.md:357 — пункт «**Full \"who holds the xmin horizon\" aggregate** across all four sources» на месте",
+      "константы help.go не имеют потребителей во всём репозитории (repo-wide grep) — «мёртвый код» подтверждён повторно",
+      "все относительные ссылки таска резолвятся; зависимости 01/03 в wave 1, сам таск в wave 2 — волны непротиворечивы"
+    ]
+  },
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 47,
+    "issues_found": 5
+  }
+}

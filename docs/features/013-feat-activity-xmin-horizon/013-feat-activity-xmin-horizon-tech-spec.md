@@ -541,7 +541,8 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/stat/... ./report/...` (needs live fixture clusters:
-  without them `./internal/stat/...` panics rather than failing, an instance of active debt [019])
+  without them `./internal/stat/...` panics rather than failing — a nil-pointer in
+  `postgres.DB.Close` after a failed connect, the family of the resolved [005]/[008], not [019])
 - **Files to modify:** `internal/stat/postgres.go`, `internal/stat/postgres_test.go`,
   `report/report_record_replslots_test.go`
 - **Files to read:** `internal/query/replication_slots.go`, `internal/view/view.go`,

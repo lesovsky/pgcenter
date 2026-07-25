@@ -3,7 +3,7 @@ status: planned
 depends_on: ["01", "03"]
 wave: 2
 skills: [documentation-writing]
-verify: bash — grep -n "help.go" docs/tech-debt.md; grep -n "\[021\]" docs/tech-debt.md показывает запись в Resolved Debt; фраза про SelectStatActivityQuery в architecture.md больше не говорит "branches at PG 9.6, PG 10"
+verify: 'bash — grep -n "help.go" docs/tech-debt.md; grep -n "\[021\]" docs/tech-debt.md показывает запись в Resolved Debt; фраза про SelectStatActivityQuery в architecture.md больше не говорит "branches at PG 9.6, PG 10"'
 reviewers: [dev-code-reviewer]
 teammate_name:
 ---

@@ -1,0 +1,144 @@
+{
+  "validator": "dev-task-validator",
+  "iteration": 2,
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["01", "02", "03", "04", "05", "06"],
+  "status": "approved",
+  "round1_fixes_verified": [
+    {
+      "task": "05",
+      "round1_severity": "critical",
+      "issue": "help.go staleness attributed to the activity block",
+      "verdict": "fixed",
+      "evidence": "Description item 1, AC bullet 2 and the Details fact table all place the divergence in the replication block (help.go:59-60 xact_age*/time_age* vs describe.go:75-76 horizon_xacts/horizon_age) and state explicitly that the activity block is NOT stale. Verified against the actual files: help.go:59-60 and describe.go:75-76 match the claim exactly."
+    },
+    {
+      "task": "04",
+      "round1_severity": "major",
+      "issue": "false claim that `pgcenter top` reads the column descriptions",
+      "verdict": "fixed",
+      "evidence": "Description now states the constant's only consumer is describeReport (report/report.go:606) plus Test_describeReport, and that the top screen does not read column descriptions at all. describeReport confirmed at report/report.go:606."
+    },
+    {
+      "task": "02",
+      "round1_severity": "critical",
+      "issue": "replay coverage case used values whose lexicographic and numeric order coincide",
+      "verdict": "fixed",
+      "evidence": "Details -> Coverage now names the trap explicitly (2048/1024 sort identically both ways, and those are the numbers in the existing Test_app_doReport_ReplSlots -- verified at report/report_record_replslots_test.go:97-100), and supplies two constructions that do diverge: variant A (a genuine \"0\" beside the blank, with both preconditions spelled out) and variant B (blank first, values that break lexicographic order, e.g. 512 vs 1024). AC and TDD Anchor both require the case to fail against the unfixed comparator."
+    },
+    {
+      "task": "06",
+      "round1_severity": "major",
+      "issue": "impossible 'no --- SKIP' acceptance criterion",
+      "verdict": "fixed",
+      "evidence": "Step 5 and the matching AC now require --- PASS on the six PG 14-19 subtests and declare --- SKIP on PG 9.5-13 the expected result on this image. Verified against internal/query/activity_test.go: Test_StatActivityQueries wraps each of its 12 versions in t.Run(\"pg_stat_activity/%d\"), so the per-subtest PASS/SKIP picture the task describes is actually observable."
+    },
+    {
+      "task": "03",
+      "round1_severity": "major",
+      "issue": "implementation order (zero-width guard before the three resets)",
+      "verdict": "fixed",
+      "evidence": "What to do opens with a bold ordering mandate, step 1 is the guard, step 2 the resets; the TDD Anchor preamble repeats that Test_printStatSample_zeroWidthGuard is written first; an AC bullet and a Verification Step both pin the order, with the panic signature to watch for."
+    },
+    {
+      "task": "01,02,03,05,06",
+      "round1_severity": "minor",
+      "issue": "template comments left in frontmatter",
+      "verdict": "fixed in 5 of 6 tasks",
+      "evidence": "Task 04 still carries them -- see finding TV2-01."
+    },
+    {
+      "task": "all",
+      "round1_severity": "minor",
+      "issue": "root-relative markdown links",
+      "verdict": "fixed",
+      "evidence": "No `](/`, `](docs/`, `](internal/` etc. remains. Every relative link target was resolved from the feature directory; the only non-existent target is {feature_base}-decisions.md, an accepted deviation (created during execution)."
+    },
+    {
+      "task": "all",
+      "round1_severity": "minor",
+      "issue": "verify strings lost in YAML comments",
+      "verdict": "fixed",
+      "evidence": "All six frontmatter blocks parse under yaml.safe_load and every verify value comes back as a complete non-truncated string. Residual fragility in task 05 -- see finding TV2-04."
+    },
+    {
+      "task": "01,02",
+      "round1_severity": "minor",
+      "issue": "debt [019] misattribution",
+      "verdict": "fixed",
+      "evidence": "Both tasks now attribute the internal/stat panic without live clusters to the [005]/[008] family (nil-pointer in postgres.(*DB).Close) and explicitly say it is NOT [019]. Confirmed against docs/tech-debt.md:41 -- [019] is about t.Skipf inside a version loop with no t.Run wrapper, a different defect."
+    },
+    {
+      "task": "01",
+      "round1_severity": "minor",
+      "issue": "`lll` linter reference",
+      "verdict": "fixed",
+      "evidence": "Verification Steps now state that lll is not enabled and that .golangci.yml adds only gocritic and revive on top of the v2 defaults. Confirmed against .golangci.yml."
+    }
+  ],
+  "findings": [
+    {
+      "id": "TV2-01",
+      "severity": "major",
+      "category": "content",
+      "task": "04",
+      "section": "Description / Context Files / Post-completion",
+      "issue": "The task asserts in three places that the user-spec says 'три оговорки' and must be synced to four. That is false: the user-spec already says «четыре оговорки» in its acceptance criteria (013-feat-activity-xmin-horizon.md:213-214, all four enumerated including the privileges one) and «все четыре оговорки» in the «Как проверить» table, row 9 (:375). Both cited line numbers are also off by one (:213 -> :214, :374 -> :375; :374 is in fact the sorting row). The Post-completion item therefore sends the executor to 'fix' an approved document that is already correct, and the Description's «Почему четыре, а не три» rationale rests on a premise that no longer holds. This is the same class of defect as the round-1 finding about `pgcenter top` reading descriptions -- a confident claim about a source of truth that does not survive checking.",
+      "fix": "Drop the Post-completion user-spec sync item entirely. In Description, replace the «Почему четыре, а не три» paragraph with a plain statement that the user-spec (:213-217), the tech-spec Acceptance Criteria and the Risks table all require four caveats and agree with each other. In Context Files, remove the note «его список критериев приёмки говорит про *три* оговорки — это устаревший счёт»; the user-spec is a valid source for the caveat count."
+    },
+    {
+      "id": "TV2-02",
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "Template inline comments were never stripped: lines 2-8 still carry `# planned -> in_progress -> done`, `# ID задач-зависимостей (строки: [\"01\", \"02\"])`, `# волна параллельного выполнения`, `# МАССИВ скиллов для загрузки`, `# явно указать. Пусто = fallback на defaults`, `# имя агента-исполнителя (опционально; ...)`. Round 1 dispatched this fix and it landed in tasks 01, 02, 03, 05 and 06 but not here. The YAML still parses correctly, so this is cosmetic, but it leaves task 04 as the one file that visibly reads as an unfinished copy of the template.",
+      "fix": "Strip the trailing `#` comments from all seven frontmatter lines of task 04, matching the other five task files."
+    },
+    {
+      "id": "TV2-03",
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "Acceptance Criteria",
+      "issue": "AC «Ни один файл вне `report/describe.go` и `report/report_test.go` не изменён» contradicts the Post-completion checklist, which requires writing the decisions log and (per TV2-01) editing the user-spec. An executor reading the AC literally cannot satisfy both.",
+      "fix": "Scope the criterion to the implementation diff: «Изменения в коде ограничены `report/describe.go` и `report/report_test.go`; артефакты Post-completion (decisions log) не в счёт». Resolving TV2-01 removes the user-spec half of the conflict."
+    },
+    {
+      "id": "TV2-04",
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "05",
+      "section": "frontmatter",
+      "issue": "`verify` is the only one of the six left as an unquoted YAML plain scalar, and its value contains double quotes, brackets and semicolons. It parses correctly today (verified with yaml.safe_load), but a later edit inserting a `#` or a `: ` would silently truncate it -- precisely the failure mode round 1 fixed in the other tasks. The value is also the longest and most edit-prone in the set.",
+      "fix": "Wrap the value in single quotes, as tasks 01-04 and 06 do: `verify: 'bash — grep -n ...'`."
+    },
+    {
+      "id": "TV2-05",
+      "severity": "minor",
+      "category": "consistency",
+      "task": "all",
+      "section": "tech-spec Implementation Tasks / Task 2",
+      "issue": "Cross-artifact residue from the round-1 fix, not a task defect. The tech-spec's Task 2 entry still says the `./internal/stat/...` panic without live fixture clusters is «an instance of active debt [019]» (tech-spec:543-544). Tasks 01 and 02 were corrected in round 1 to attribute it to the [005]/[008] family instead, and the register confirms the tasks are right: [019] (docs/tech-debt.md:41) is about t.Skipf firing on a parent test with no per-version t.Run wrapper, a different defect entirely. The tasks now contradict their own source of truth on this point.",
+      "fix": "Apply the same one-line correction to the tech-spec's Task 2 verify note: the panic is the nil-pointer-in-Close family ([005]/[008]), not [019]. No task file needs to change."
+    }
+  ],
+  "checks_passed": {
+    "frontmatter": "All six parse as valid YAML. status=planned everywhere (allowed on re-validation), depends_on/skills/reviewers are arrays, wave >= 1, verify is a string, no fields beyond the template set (status, depends_on, wave, skills, verify, reviewers, teammate_name).",
+    "structure": "All eleven template sections present in template order in every task. TDD Anchor correctly present in tasks 01-04 and correctly absent in 05 (documentation-writing) and 06 (pre-deploy-qa). No template placeholders, no TODO/FIXME/TBD/PLACEHOLDER markers anywhere.",
+    "context_files": "Every task links user-spec, tech-spec and decisions log plus overview.md (this project's project.md) and architecture.md. All links are `[name](path)` with both halves filled; every target resolves except the decisions log, which does not exist yet by design.",
+    "consistency": "frontmatter.skills matches Required Skills and frontmatter.reviewers matches the Reviewers section in all six. code-writing -> dev-code-reviewer + dev-security-auditor + dev-test-reviewer holds for tasks 01-04; the single reviewer on 05 and the empty set on 06 are the accepted deviations from the tech-spec.",
+    "decomposition": "Files to modify match the tech-spec's Implementation Tasks entries exactly for all six. Waves 1/1/1/2/2/3 with depends_on [] / [] / [] / [01] / [01,03] / [01..05] -- every dependency points at an existing task in a strictly earlier wave, no cycles. Six tasks for six tech-spec entries, no merge or split candidates: each touches 2-4 files with a single outcome.",
+    "carry_forward": "All 16 tech-spec Acceptance Criteria map onto task-level criteria with no drops. Every Testing Strategy item is carried by a TDD Anchor entry: the boundary table test and TestViews_Configure (01), the four sort rules plus the sparse-default-key replay case (02), the three version-change tests plus the zero-width guard (03), the describe-order test (04). Tasks extend but never reduce the tech-spec set.",
+    "factual_spot_checks": "Every code reference cited in the round-1 fixes was verified in the tree: query.go:16 PostgresV13; top/stat.go:1000-1006 printDataCell and its 'zero or negative width, skip' error; postgres.go:558/580/663/707; report.go:233/476/508/528/606; report_test.go:239/1012/1105/1172/1216; view.go:39/153/367/375; view_test.go:203/210; config_view_test.go:13/45; postgres_test.go:18/704/782; report_record_replslots_test.go:30-35/58/97-100; help.go:59-60; describe.go:75-76/180/221/287/450; architecture.md:61 (verbatim 'branches at PG 9.6, PG 10'); testing.go port map (21910-21913, 21994-21996); testing/Dockerfile PG 14-19; workflow container tag 0.0.11; roadmap-0.12.0.md:357; logs/working/qa-report.json git-tracked and holding feature 003's procpidstat report. All accurate."
+  },
+  "stats": {
+    "tasks_checked": 6,
+    "issues_found": 5,
+    "critical": 0,
+    "major": 1,
+    "minor": 4,
+    "round1_issues_confirmed_fixed": 10,
+    "round1_issues_not_applied": 1
+  }
+}
