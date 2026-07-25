@@ -1,5 +1,7 @@
 package postgres
 
+import "fmt"
+
 // NewTestConfig returns test config used for testing purposes.
 func NewTestConfig() (Config, error) {
 	return NewConfig("127.0.0.1", 21917, "postgres", "pgcenter_fixtures")
@@ -16,6 +18,7 @@ func NewTestConnect() (*DB, error) {
 func NewTestConnectVersion(version int) (*DB, error) {
 	ports := map[int]int{
 		// active versions (available in pgcenter-testing:0.0.9+)
+		190000: 21919,
 		180000: 21918,
 		170000: 21917,
 		160000: 21916,
@@ -33,7 +36,7 @@ func NewTestConnectVersion(version int) (*DB, error) {
 
 	port, ok := ports[version]
 	if !ok {
-		port = ports[140000]
+		return nil, fmt.Errorf("postgres version %d has no test cluster port mapping", version)
 	}
 
 	config, err := NewConfig("127.0.0.1", port, "postgres", "pgcenter_fixtures")
