@@ -1,0 +1,3 @@
+[37;1mpid       [0m[37;1mxact_age  [0m[37;1mdatname            [0m[37;1mrelation                 [0m[37;1mstarted_by  [0m[37;1mmode        [0m[37;1mstate     [0m[37;1mwaiting   [0m[37;1mphase          [0m[37;1msize_total,KiB  [0m[37;1mscanned_total,%  [0m[37;1mvacuumed_total,%  [0m[37;1mscanned,KiB  [0m[37;1mvacuumed,KiB  [0m[37;1mquery                             [0m
+2026/05/19 10:00:01, rate: 1s
+12345     00:05:01  pgcenter_fixtures  public.pgbench_accounts  autovacuum  aggressive  active    f         scanning heap  8192            50.00            25.00             700          900           autovacuum: VACUUM public.pgben~
