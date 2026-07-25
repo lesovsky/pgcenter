@@ -30,12 +30,14 @@ constraint on this screen.
 
 ### What we're building/modifying
 
-- **`internal/query/activity.go`** — new `PgStatActivity13` constant; `SelectStatActivityQuery`
-  gains a `version < 130000` branch. Signature stays `(string, int)`.
+- **`internal/query/activity.go`** — the PG-13+ query becomes `PgStatActivityDefault`, the existing
+  text is renamed `PgStatActivityPG10`, and `SelectStatActivityQuery` gains a branch at PG 13
+  (see Decision 3). Signature stays `(string, int)`.
 - **`internal/stat/postgres.go`** — `PGresult.sort` gains non-empty sample selection and
   empty-last ordering across all three comparator modes.
-- **`report/report.go`** — reset the alignment flag and the header-repeat counter when a replayed
-  sample's PG version changes.
+- **`report/report.go`** — reset the alignment flag, the header-repeat counter and the resolved
+  sort-column index when a replayed sample's PG version changes; restore the zero-width guard in
+  the truncation path.
 - **`report/describe.go`** — three new column descriptions plus three caveats in the activity block.
 - **`docs/tech-debt.md`** — three new register entries.
 
@@ -60,12 +62,23 @@ The three columns are produced entirely in SQL:
 NULL reaches the renderer as an empty string because no `coalesce` is applied to the xid columns;
 this is what satisfies the "blank, never 0" requirement.
 
-Sorting is where the new columns interact with shared machinery. `PGresult.sort` currently reads
-`r.Values[0][key]` to choose between numeric, duration and string comparators. On a sparse column
-that first cell is usually empty, so the choice is effectively random, and inside the numeric
-comparator `strconv.ParseFloat("")` fails silently and yields `0`. Both halves are fixed: the
-sample is taken from the first non-empty cell, and empty cells are ordered last independently of
-the comparator and of the sort direction.
+Sorting is where the new columns interact with shared machinery. `PGresult.sort` reads
+`r.Values[0][key]` to choose between numeric, duration and string comparators, and on a sparse
+column that produces one of two wrong outcomes, deterministically but unpredictably from the
+operator's side, since which row lands first is a property of the data:
+
+- **First cell empty** — both `ParseFloat("")` and `parseDuration("")` fail, so the column falls to
+  the **string** comparator and numbers order lexicographically, where `"9"` outranks `"1000000"`.
+- **First cell non-empty and numeric** — the numeric comparator is chosen, but
+  `strconv.ParseFloat("")` on the blank cells fails silently and yields `0`, so blanks become
+  indistinguishable from a genuine zero and lead the screen on ascending sort.
+
+Both halves are fixed: the sample is taken from the first non-empty cell, and empty cells are
+ordered last independently of the comparator and of the sort direction.
+
+`report/` needs no changes for the new columns: it derives widths, column names and sort keys from
+the archive. It reads `stat.PGresult.Ncols` in two places — the procpidstat availability check and
+`readMeta` — but never `view.Ncols`, which is the field the new branch changes.
 
 ## Decisions
 
@@ -109,18 +122,38 @@ PG 13 on the new one.
 fixture set); adding a PG 13 cluster to the test image (rejected — disproportionate, and PG 13 is
 past EOL).
 
-### Decision 3: Leave the `view.New()` seed at 14 columns
+### Decision 3: Constant naming — `Default` stays the newest branch; the seed keeps 14 columns
 
-**Decision:** the `activity` entry in `view.New()` keeps `QueryTmpl: query.PgStatActivityDefault`
-and `Ncols: 14`.
+**Decision:** rename the existing constant to `PgStatActivityPG10` (the PG 10–12 branch) and give
+the new PG-13+ query the name `PgStatActivityDefault`. The `activity` seed in `view.New()` points
+at `PgStatActivityPG10` with `Ncols: 14`.
 
-**Rationale:** `Configure` overwrites both at connect time, so the seed is a placeholder, not a
-fact. Measured: leaving it alone keeps `internal/view`, `internal/query`, `report`, `top`,
-`record` and `internal/align` green; raising it to 17 breaks exactly two assertions in
-`top/config_view_test.go`. Feature 012 made the same choice for the same reason.
+**Rationale:** the project's convention across `wal.go`, `bgwriter.go`, `io.go` and the progress
+selectors is `Default` = newest branch, `PG{N}` = the branch starting at version N; bare-digit
+names (`PgStatActivity95/96`) exist only for the 9.x legacy constants. Keeping the old text as
+`Default` while adding `PgStatActivityPG13` would invert that, and — worse — `Default` would no
+longer name the selector's `default:` case, which is exactly what it names today. That is a trap
+for the next reader, and it costs nothing to avoid now.
 
-**Alternatives considered:** raising the seed to 17 for cosmetic consistency (rejected — it
-changes nothing at runtime and breaks tests that legitimately assert the pre-connect state).
+The rename is mechanical: every non-test use is a placeholder that `Configure` overwrites
+immediately, so no behaviour changes.
+
+The seed keeps `Ncols: 14`, and pointing it at the PG 10–12 query keeps the placeholder internally
+consistent — before connecting, the version is unknown, so the narrowest layout is the honest
+default. Measured: raising it to 17 breaks exactly two assertions in `top/config_view_test.go`,
+which derive the last-column index from the seed, while `internal/view`, `internal/query`,
+`report` and `internal/align` stay unaffected either way. Feature 012 made the same choice for the
+same reason.
+
+Caveat on that measurement: `top` and `record` have failing tests without live clusters
+independently of this feature (`Test_getQueryReport`, `Test_app_setup`, `Test_tarRecorder`), so
+"unaffected" there means relative to the same baseline, not green in absolute terms.
+
+**Alternatives considered:** adding `PgStatActivityPG13` and leaving `Default` on the old text
+(rejected — inverts the convention and misnames the `default:` case); raising the seed to 17
+(rejected — changes nothing at runtime and breaks tests that legitimately assert the pre-connect
+state); pointing the seed at the new `Default` while keeping `Ncols: 14` (rejected — a 17-column
+template beside a 14-column count reads as a bug).
 
 ### Decision 4: Empty values sort last in every comparator mode, including strings
 
@@ -141,12 +174,36 @@ last" — which is what a future reader has to hold in their head. On the activi
 directly improves the common case: sorting by `wait_event` ascending currently leads with the
 backends that are waiting on nothing.
 
-**Blast radius, stated deliberately:** this changes sort behaviour on every screen with a sparse
-column. The most visible case is `replslots`, whose default sort key `OrderKey: 4` is
-`retained,KiB` — sparse and numeric. That screen's SQL already declares `ORDER BY "retained,KiB"
-DESC NULLS LAST` (`internal/query/replication_slots.go:31`), so the change brings the Go
-comparator into agreement with what the query already asks for. That is the honest framing: a
-correction, not a behaviour change invented here.
+**The string case deserves its own examination**, because there an empty value can be legitimate
+rather than absent. `application_name` is the sharpest example: a client that sets none produces an
+empty string, not NULL, so `''` is genuinely that backend's application name. Sorting it last is
+still the right call — the operator scanning that column is looking for named applications, and a
+block of nameless backends at the top is noise either way — but the honest framing is that this is
+a **product choice about presentation**, not a correctness fix as it is for the numeric case.
+Recorded so that a future reader does not mistake one for the other.
+
+**Coverage gap, stated:** no golden covers a string-column sort on activity, so this half of the
+change lands without regression cover. The targeted tests specified in Testing Strategy cover the
+rule itself; the screen-level effect is checked by hand in Task 6.
+
+**Blast radius — enumerated, not gestured at.** This changes sort behaviour on every screen with a
+sparse column. The known cases:
+
+- **`replslots`, default sort key.** `OrderKey: 4` is `retained,KiB` — sparse and numeric, and it
+  is the only default sort key in the repository with that property. The screen's SQL already
+  declares `ORDER BY "retained,KiB" DESC NULLS LAST`
+  (`internal/query/replication_slots.go:31`), so the change brings the Go comparator into
+  agreement with what the query already asks for. This is the honest framing for the whole
+  change: a correction, not a behaviour change invented here.
+- **`activity.cl_port`.** Holds a real `-1` for unix-socket connections and blank for backends
+  with no client. Today blanks parse to `0` and therefore sort *above* a genuine `-1`; after the
+  change they move below it. Ordering changes on descending sort, and the new order is the correct
+  one.
+- **`procpidstat`.** Its IO and iodelay columns render blank when the availability probes fail, so
+  its sort behaviour changes too. Note this carefully: the user-spec says the procpidstat screen
+  is "not affected", and its *code* is not — but its sorting is, through this shared function.
+  The statement in the user-spec is about columns and queries, and remains true in that sense.
+- Any other screen whose column is blank for some rows — the rule is uniform by construction.
 
 **Alternatives considered:** fixing only the sample selection (rejected — leaves blanks colliding
 with genuine zeros, so the primary user story stays broken on ascending sort); restricting
@@ -164,44 +221,73 @@ false.
 archive round-trip because `sql.NullString` has no custom marshaller. So keying on `Valid` is
 available and looks more precise.
 
-It would nonetheless be wrong here. Every render path prints `.String` alone, so a SQL NULL and a
-genuine empty string are **indistinguishable on screen**. Sorting on `Valid` would order two cells
-that look identical differently — the user would see blanks split between the top and the bottom
-of the screen with no way to tell why. Sorting must key on what the operator can actually see.
+It would nonetheless be wrong here, for two independent reasons.
 
-The distinction is not hypothetical: `application_name` is an empty string rather than NULL when a
-client sets none, while `backend_xid` is NULL. Both render blank.
+**It would produce ordering nobody can explain.** Every render path prints `.String` alone, so a
+SQL NULL and a genuine empty string are indistinguishable on screen. Sorting on `Valid` would order
+two cells that look identical differently — blanks split between the top and the bottom with no
+visible cause. The distinction is not hypothetical: `application_name` is an empty string rather
+than NULL when a client sets none, while `backend_xid` is NULL. Both render blank.
+
+**And `Valid` is not trustworthy across screens.** Inside the `DiffIntvl` range `diff()` sets
+`Valid = true` unconditionally on the computed cell; outside the range it copies the source value
+faithfully. So on any diffed screen `Valid` says "has a value" regardless of what the server
+returned. It happens not to matter for `activity`, which never diffs — but the sort function is
+shared, so a rule keyed on `Valid` would behave differently depending on whether the screen it runs
+on diffs its columns. That is precisely the kind of invisible coupling the rule should avoid.
 
 **Alternatives considered:** keying on `Valid` (rejected — produces visually unexplainable
 ordering); rendering NULL and empty differently so `Valid` becomes visible (rejected — a screen-wide
 display change nobody asked for, and it would collide with the user-spec's "blank, never 0" rule).
 
-### Decision 6: Tech debt [021] needs two lines, and its test bypasses the goroutine
+### Decision 6: A replayed version change must reset three states, and the render guard is restored
 
-**Decision:** on a replayed version change, reset both the alignment flag and the header-repeat
-counter. Test the formatting function directly rather than through the replay pipeline.
+**Decision:** on a replayed version change reset the alignment flag, the header-repeat counter,
+**and** the resolved sort-column index. Additionally restore the zero-width guard in the report
+truncation path, mirroring `top/printDataCell`. Test the formatting function directly rather than
+through the replay pipeline.
 
-**Rationale:** resetting alignment alone recomputes the widths but leaves the previous header on
-screen for another 20 rows, because the header is redrawn on a counter. Both resets are needed for
-the output to be correct.
+**Rationale:** three states survive the boundary today, not one.
 
-The test detail is load-bearing: the panic (`slice bounds out of range [:-1]`, from a zero width
-reaching a `[:width-1]` slice) happens inside a goroutine, so a failing case takes down the whole
-`go test` process instead of reddening one test. Driving the formatting function directly keeps
-the red step an ordinary test failure.
+1. **Alignment.** `Configure` does not clear it, so widths from the earlier layout are reused —
+   this is tech debt [021] as registered.
+2. **Header counter.** Resetting alignment alone recomputes widths but leaves the previous header
+   on screen for another 20 rows, because the header is redrawn on a counter.
+3. **Sort column.** `orderConfigured` is latched on the first sample and resolves
+   `OrderColName` to an index against that sample's column list; the version-change branch never
+   revisits it. If the later layout is narrower, that stale index can exceed the row width and
+   `PGresult.sort` indexes past the end. This feature creates exactly the kind of boundary where
+   the column count changes, so leaving it latched would be knowingly stepping past a live defect.
 
-**Alternatives considered:** adding a zero-width guard mirroring `top/printDataCell` (rejected —
-treats the symptom; the widths should not be stale in the first place, and the guard would hide
-the next instance); leaving [021] in the register (rejected — this feature adds a second boundary
-to the affected path, and the failure mode is a crash).
+On the guard: an earlier draft of this spec rejected it as "treating the symptom". That was wrong,
+and the reason is parity rather than defence in depth. `view.ColsWidth` is a `map[int]int`, so a
+missing key yields `0` silently instead of failing — which is how a zero width becomes `[:-1]`
+rather than an error. The twin of this code in `top/stat.go` already carries the guard, added after
+a real crash (issue #99). Leaving `report/` as the only unguarded truncation point means keeping
+two copies of the same code where one has learned the lesson and the other has not. The guard does
+not replace the root fix; both land.
+
+The test detail is load-bearing: the panic happens inside a goroutine, so a failing case takes down
+the whole `go test` process instead of reddening one test. Driving the formatting function directly
+keeps the red step an ordinary test failure — and note the consequence, that the pipeline route
+itself stays uncovered, which is a further reason to keep the guard.
+
+**Alternatives considered:** fixing only alignment as the register describes (rejected — leaves a
+stale header and a stale sort index); guard only, no root fix (rejected — hides stale widths rather
+than preventing them); leaving [021] in the register (rejected — this feature adds a boundary to
+the affected path, and the failure mode is a crash).
 
 ### Decision 7: Cast only `backend_xid`
 
 **Decision:** `backend_xid::text`; no cast on `age(backend_xmin)`.
 
 **Rationale:** measured against a live server — `age(xid)` returns `integer`, which scans cleanly;
-`xid` does not, hence the cast, matching `replication.go:28`. A cast on the `age()` result would be
-noise a reader would have to evaluate.
+`xid` does not, hence the cast. A cast on the `age()` result would be noise a reader would have to
+evaluate.
+
+`replication.go` is a partial precedent only: it casts `backend_xmin::text::bigint`, but to do
+arithmetic on the value rather than to make it scannable. The technique is established in the
+codebase; the motivation here is different and worth stating so the two are not conflated.
 
 ### Decision 8: Documentation goes only to `report/describe.go`
 
@@ -250,13 +336,23 @@ None.
 - `SelectStatActivityQuery` table test extended to pin the branch boundary from both sides:
   PG 12 → old query / 14 columns, PG 13 → new query / 17 columns. This is the only guard on the
   boundary, since no live PG 12 or 13 cluster exists.
+- `TestViews_Configure` gains activity assertions on both sides of the boundary. The table test
+  above proves the *selector* returns the right constant; it does not prove `Configure` carries it
+  into the view. Feature 012 pinned its new boundary this way, and the file already has the
+  `case 120000:` / `case 130000:` blocks — they currently speak only about `replication`.
 - `PGresult.sort` on a sparse numeric column: correct numeric ordering regardless of which row is
   first; empty cells last in both directions; an empty cell never orders together with a genuine
   `0`.
 - `PGresult.sort` on a sparse duration column and a sparse string column — the rule is uniform.
 - `PGresult.sort` on a fully empty column — no-op, input order preserved.
-- Report formatting across a version change: widths recomputed, header redrawn immediately, no
-  panic. Driven against the formatting function directly, not the replay goroutine.
+- Report formatting across a version change: widths recomputed, header redrawn immediately, sort
+  column re-resolved against the new column list, no panic. Driven against the formatting function
+  directly, not the replay goroutine.
+- The zero-width guard in the truncation path: a width of zero renders an empty cell instead of
+  panicking.
+- A replay case where a blank value meets a sparse **default** sort key — the empty
+  `retained,KiB` path — since this is the only place the changed sort behaviour meets real
+  recorded data.
 - Describe block ordering for the activity screen, following the existing progress-screen
   precedent.
 
@@ -269,8 +365,11 @@ None.
 - Replay of a synthetic two-version archive: at least two samples after the version change, since
   the replay path consumes the first sample of a new version and a shorter archive would leave the
   test green on an empty report.
-- Existing golden replay tests must pass unchanged — but they have to be re-run **with** the sort
-  fix present, since the earlier measurement predates it.
+- Existing golden replay tests must pass unchanged — but passing them is a **regression check, not
+  coverage of the sort change**. The corpus sorts activity by `pid`, which is never blank, and its
+  one sparse key is sorted in the only direction where old and new behaviour coincide. Coverage of
+  the change therefore comes from a replay case where a blank value meets a sparse *default* sort
+  key: the empty `retained,KiB` path in the replslots replay test.
 
 ### E2E tests
 
@@ -310,7 +409,9 @@ assertions, and a terminal for the acceptance walk. No MCP tooling.
 **Migration strategy:** none needed. The recorded archive format is untouched; `report/` derives
 widths, column names and sort keys from the archive itself and never reads `view.Ncols`, so
 archives written before 0.12 replay exactly as before. This was verified empirically by running the
-report suite against the PG 14 golden archive with the widened query in place.
+report suite against the PG 14 golden archive with the widened query in place — **with the caveat
+that the measurement predates the sort change**, which must therefore be re-measured with the fix
+applied (Testing Strategy explains why an unchanged golden is weak evidence here).
 
 **DB migration compatibility:** N/A — pgcenter reads statistics views and owns no schema.
 
@@ -323,11 +424,13 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 | Risk | Mitigation |
 |------|-----------|
 | Branch written as `< 140000` instead of `< 130000` — every live check would still pass | Table test pins the boundary from both sides; called out in Decision 2 |
-| Sort fix silently changes ordering on unrelated screens | Blast radius enumerated in Decision 4; goldens re-run with the fix present; `replslots` framed against its own SQL, which already declares NULLS LAST |
+| Sort fix silently changes ordering on unrelated screens | Blast radius enumerated case by case in Decision 4. **The existing goldens do not cover this** — see the row below — so coverage comes from a targeted test on a sparse default sort key, plus the manual `replslots` check in Task 6 |
+| Passing goldens are mistaken for evidence that the sort change is safe | Every `report_activity*` golden sorts by `pid`, which is never blank, and the one sparse key in the corpus (`datname`) is sorted descending — the single direction where old and new behaviour agree. Unchanged goldens therefore prove the corpus never exercises the change, not that the change is harmless. The replay case with an empty `retained,KiB` is the one place where the new behaviour meets a default sort key, and it is what must be asserted |
 | Column order in the SQL drifts from the specified layout | Asserted against a live server on PG 14–19; residual exposure only on PG 12/13, where the spec text is the sole source |
 | Two-version archive test passes on an empty report | Archive must carry ≥2 samples after the version change; the replay path consumes the first |
 | `[021]` fix appears to work but leaves a stale header | Both resets required — alignment flag *and* header-repeat counter (Decision 6) |
-| Blank cells read as "holds no horizon" when the real cause is missing privileges | Documented caveat in `describe.go`; `pg_stat_activity` returns NULL rather than an error, so there is nothing to trap |
+| Blank cells read as "holds no horizon" when the real cause is missing privileges | An explicit fourth caveat in `describe.go`, named in both the Acceptance Criteria and Task 4 so it cannot be dropped as an unlisted extra. `pg_stat_activity` returns NULL rather than an error, so there is nothing to trap in code. The stake is real: this screen is where a DBA decides whether to terminate a backend |
+| Stale sort index survives a replayed version change and indexes past the end of a narrower row | Third reset in Decision 6, alongside alignment and the header counter |
 
 ## Acceptance Criteria
 
@@ -343,8 +446,16 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
       never split between the top and the bottom of the screen
 - [ ] Existing golden replay tests pass **with the sort fix applied**
 - [ ] A two-version synthetic archive replays with recomputed widths, an immediately redrawn
-      header, and no panic
-- [ ] `report -d -A` lists the three columns and carries the three caveats
+      header, a re-resolved sort column, and no panic
+- [ ] The report truncation path carries a zero-width guard, matching its twin in `top`
+- [ ] `leader`, `backend_xid` and `horizon_xacts` carry the semantics the user stories rely on:
+      the group identifier collapses a parallel query, a blank `backend_xid` means the transaction
+      has not written, and `horizon_xacts` ranks sessions by how far back they hold the horizon
+- [ ] `report -d -A` lists the three columns, notes that they require PG 13+, and carries four
+      caveats: `leader` is derived rather than the raw `leader_pid`; the horizon covers backend
+      sources only; `horizon_xacts` is computed differently here than on the `replication` screen;
+      and a blank cell may mean the viewer lacks the privileges to see another session's state,
+      not that the session holds nothing
 - [ ] Three entries added to `docs/tech-debt.md`
 - [ ] `make test`, `make lint`, `make vuln` green
 
@@ -353,36 +464,37 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 ### Wave 1 (независимые)
 
 #### Task 1: PG 13+ activity query branch
-- **Description:** Add the PG-13+ query constant carrying `leader`, `backend_xid` and
-  `horizon_xacts` at the positions fixed in this spec, and branch the selector at 130000 so
-  PG 10–12 keeps today's query. Pin the boundary from both sides in the table test, and upgrade the
-  live query test so it asserts column names and their order instead of merely checking the query
-  runs.
+- **Description:** Give the `activity` screen its three new columns on modern PostgreSQL by adding
+  a version branch to the query selector, in the layout and under the names fixed in Data Models
+  and Decisions 1–3. Extend the query tests so the branch boundary and the resulting column list
+  are both actually asserted rather than assumed.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/query/... ./internal/view/...`
-- **Files to modify:** `internal/query/activity.go`, `internal/query/activity_test.go`
-- **Files to read:** `internal/query/replication.go`, `internal/query/bgwriter.go`,
-  `internal/query/progress_vacuum_test.go`, `internal/view/view.go`
+- **Verify:** bash — `go test ./internal/query/... ./internal/view/... ./internal/stat/...`
+- **Files to modify:** `internal/query/activity.go`, `internal/query/activity_test.go`,
+  `internal/view/view.go`, `internal/view/view_test.go`, `internal/stat/stat_test.go`,
+  `internal/query/procpidstat.go`
+- **Files to read:** `internal/query/replication.go`, `internal/query/wal.go`,
+  `internal/query/progress_vacuum_test.go`, `internal/query/bgwriter_test.go`
 
 #### Task 2: Sort empty-last and non-empty mode selection
-- **Description:** Fix `PGresult.sort` to choose its comparator from the first non-empty cell and
-  to order empty cells after all non-empty ones in every mode and both directions, so a blank never
-  collides with a genuine zero. This is a shared-engine change: re-run the report goldens with it
-  in place, since the earlier compatibility measurement was taken without it.
+- **Description:** Make sorting of sparse columns correct per Decisions 4 and 5, so that a blank
+  cell never collides with a genuine zero and the feature's primary user story — ranking sessions
+  by how far back they hold the horizon — actually works. This touches machinery shared by every
+  screen, so the change has to be shown not to disturb existing replay output.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/stat/... ./report/...`
+- **Verify:** bash — `go test ./internal/stat/... ./report/...` (needs live fixture clusters:
+  without them `./internal/stat/...` panics rather than failing, an instance of active debt [019])
 - **Files to modify:** `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
 - **Files to read:** `internal/query/replication_slots.go`, `internal/view/view.go`,
   `.claude/skills/project-knowledge/patterns.md`
 
 #### Task 3: Recompute report layout on a mid-archive version change
-- **Description:** Close tech debt [021] — when a replayed sample's PG version changes, reset both
-  the alignment flag and the header-repeat counter so widths are recomputed and the header is
-  redrawn immediately instead of 20 rows later. Cover it with a synthetic two-version archive
-  carrying at least two samples after the change, driving the formatting function directly so the
-  failure is a test failure rather than a panic inside a goroutine.
+- **Description:** Close tech debt [021] so an archive spanning a major-version upgrade replays
+  with a correct layout instead of crashing, per Decision 6. Cover it with a synthetic
+  two-version archive, observing the constraints that decision records about archive length and
+  about where the test drives the code from.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`
@@ -392,13 +504,14 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 ### Wave 2 (зависит от Wave 1)
 
 #### Task 4: Describe the new columns and their caveats
-- **Description:** Add the three columns to the activity describe block with the three caveats the
-  user-spec requires: `leader` is derived rather than the raw `leader_pid`, the horizon covers only
-  backend sources, and `horizon_xacts` is computed differently here than on the replication screen.
-  Pin the ordering of the description lines with a test following the existing progress-screen
+- **Description:** Document the three new columns where `report -d -A` will show them, including
+  the four caveats listed in Acceptance Criteria and a note that the columns require PG 13+, as the
+  house style of that file does for every version-dependent column. An operator must be able to
+  tell what each column means, and what a blank one does *not* prove, without reading the query.
+  Pin the ordering of the description lines with a test, following the existing progress-screen
   precedent.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...` and `pgcenter report -d -A`
 - **Files to modify:** `report/describe.go`, `report/report_test.go`
 - **Files to read:** `internal/query/activity.go`, `internal/query/replication.go`
@@ -407,10 +520,13 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - **Description:** Record the debt this feature surfaced but deliberately did not fix: the dead and
   stale `internal/stat/help.go`, the divergent formulas behind the same `horizon_xacts` name on two
   screens, and the gap between the test port map and the versions actually present in the test
-  image. Mark [021] resolved.
+  image. Mark [021] resolved, and correct the "why deferred" text of [020], which currently rests
+  on a reason this feature has shown to be incomplete — archive width consistency is not in fact
+  guaranteed by the version-change path alone.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
-- **Verify:** bash — entries present in `docs/tech-debt.md`
+- **Verify:** bash — `grep -c "help.go\|horizon_xacts\|port map" docs/tech-debt.md` returns the
+  three new entries, and `[021]` appears under Resolved Debt
 - **Files to modify:** `docs/tech-debt.md`
 - **Files to read:** `internal/stat/help.go`, `internal/postgres/testing.go`,
   `internal/query/replication.go`
@@ -418,12 +534,12 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 ### Final Wave
 
 #### Task 6: Pre-deploy QA
-- **Description:** Acceptance testing against the user-spec and this tech-spec. Automated: full
-  suite, lint, vulnerability check. Manual on the fixture clusters: the widened activity screen on
-  PG 14–19, blank-versus-zero rendering, a parallel query collapsing into one `leader` group, an
-  idle-in-transaction session holding the horizon with and without a write, sorting behaviour on
-  the sparse columns in both directions, and the `replslots` default sort after the shared sort
-  change.
+- **Description:** Acceptance testing against the user-spec "Как проверить" section and this
+  spec's Acceptance Criteria. Automated suite plus a manual walk on the fixture clusters, which
+  must additionally cover two things the user-spec's own checklist does not: the `replslots`
+  default sort, which is the screen most visibly affected by the shared sort change, and the
+  widened activity screen under a few hundred sessions, so the "do not make an incident worse"
+  rule is checked rather than argued.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
 - **Verify:** bash + user — full QA per the user-spec "Как проверить" section

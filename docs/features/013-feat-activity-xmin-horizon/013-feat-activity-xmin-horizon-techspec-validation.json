@@ -1,0 +1,54 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 2 (Sort empty-last): описание дублирует Decision 4 и содержит HOW-уровень — «choose its comparator from the first non-empty cell», «in every mode and both directions». Маркер решения: «since the earlier compatibility measurement was taken without it».",
+      "fix": "Сократить до WHAT+WHY: «Исправить сортировку разреженных колонок в PGresult.sort по правилу из Decision 4, чтобы пустая ячейка не совпадала с настоящим нулём.» Механику (выбор образца, порядок пустых, оба направления) оставить в Decisions и перенести в task-файл при декомпозиции."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 3 (Recompute report layout): описание целиком повторяет Decision 5, включая и решение, и его обоснование — «reset both the alignment flag and the header-repeat counter», «instead of 20 rows later», «driving the formatting function directly so the failure is a test failure rather than a panic inside a goroutine». Маркеры: «instead of», «rather than».",
+      "fix": "Оставить в описании только область: «Закрыть техдолг [021] — пересчитывать раскладку отчёта при смене версии PG внутри архива (детали в Decision 5).» Оба сброса и способ тестирования — в Decisions / task-файл."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 1 (PG 13+ activity query branch): конкретное значение границы `130000` присутствует и в Decision 2, и в описании задачи — дублирование конфигурационного значения. Также маркер решения «instead of merely checking the query runs».",
+      "fix": "Ссылаться на Decision 2 вместо повторения числа: «Добавить ветку запроса activity для PG 13+ с колонками leader/backend_xid/horizon_xacts на позициях из Data Models; граница ветвления — по Decision 2.»"
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 4 (Describe the new columns): описание перечисляет содержимое всех трёх caveat'ов — это контент task-файла, а не область задачи. Формулировка «leader is derived rather than the raw leader_pid» также содержит маркер решения.",
+      "fix": "Свести к «Добавить три новые колонки в describe-блок activity вместе с caveat'ами, которых требует user-spec, и зафиксировать порядок строк тестом». Тексты caveat'ов — в task-файл."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task 4 использует скилл `code-writing`, но в Reviewers отсутствует `dev-security-auditor`, входящий в дефолтный набор для этого скилла по каталогу skills-and-reviewers.md.",
+      "fix": "Либо добавить `dev-security-auditor`, либо явно обосновать сокращение набора (задача правит только текстовые описания в `report/describe.go`)."
+    },
+    {
+      "severity": "minor",
+      "category": "standards",
+      "issue": "Имя новой константы `PgStatActivity13` расходится с преобладающей в проекте конвенцией `PgStat{View}PG{version}` (`PgStatWALPG14`, `PgStatBgwriterPG17`, `PgStatIOPG16`, `PgStatProgressVacuumPG19`, `PgStatStatementsTimingPG13`). Голые цифры без `PG` используются только в легаси-константах (`PgStatActivity96`, `PgStatReplication96`).",
+      "fix": "Переименовать в `PgStatActivityPG13` либо явно зафиксировать в Decisions, что для activity.go сохраняется локальная нумерация без префикса PG."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Verify у Task 5 — «entries present in `docs/tech-debt.md`» — помечен как bash, но исполняемой команды не содержит; проверка сформулирована абстрактно.",
+      "fix": "Указать конкретную команду, например `grep -n '\\[021\\]' docs/tech-debt.md` и grep по новым идентификаторам записей."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Описание Task 6 (Pre-deploy QA) разворачивает полный ручной чек-лист, дублируя раздел «Как проверить» user-spec.",
+      "fix": "Оставить ссылку на раздел user-spec «Как проверить» вместо перечисления пунктов — так чек-лист не разъедется с источником."
+    }
+  ],
+  "summary": "Шаблон соблюдён полностью: frontmatter корректен (created 2026-07-25, status draft, branch feature/activity-xmin-horizon, size M), все секции присутствуют и заполнены, Final Wave содержит только Pre-deploy QA (Deploy/Post-deploy обоснованно отсутствуют), 6 задач при лимите 15, все скиллы и ревьюеры — из каталога и существуют в ~/.claude/agents/. Конфликтов волн нет: внутри Wave 1 и Wave 2 пересечений по «Files to modify» не найдено, порядок волн соответствует зависимостям, циклов нет. Оценок времени в документе нет. Критических находок нет — статус approved. Основная претензия (3 major) — технические решения из Decisions 2, 4 и 5 продублированы внутри описаний задач 1–3 на уровне HOW, что при декомпозиции даст расхождение источников правды."
+}

@@ -1,0 +1,73 @@
+{
+  "status": "approved",
+  "summary": "Проверено 54 утверждения tech-spec 013 против кода; миражей (несуществующих файлов/функций/паттернов) не найдено. 5 находок уровня minor — неточности в описании механики дефекта сортировки, в трактовке прецедента replication.go:28 и в утверждениях о «зелёности» пакетов без живых PG-фикстур.",
+  "findings": [
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec (Architecture, Decision 4): «На разреженной колонке первая ячейка обычно пустая, поэтому выбор компаратора фактически случаен» (\"the choice is effectively random\")",
+      "reality": "Выбор не случаен, а детерминирован. internal/stat/postgres.go:668 берёт sample = r.Values[0][key].String; при sample == \"\" strconv.ParseFloat(\"\") возвращает ошибку (строка 670), затем parseDuration(\"\") тоже возвращает ошибку (strings.SplitN(\"\", \":\", 3) даёт len(parts)==1 != 3, postgres.go:724) — то есть пустая нулевая ячейка ВСЕГДА приводит к строковому компаратору (ветка else, postgres.go:693). Сам дефект реален, и вторая половина утверждения («strconv.ParseFloat(\"\") молча даёт 0» — postgres.go:674-675, ошибка отброшена в `l, _ :=`) подтверждается полностью, но она срабатывает только когда строка 0 непустая и числовая.",
+      "source": "013-feat-activity-xmin-horizon-tech-spec.md, разделы Architecture (абзац про PGresult.sort) и Decision 4 (Rationale)",
+      "fix": "Переформулировать: «при пустой ячейке в строке 0 выбирается строковый компаратор независимо от реального типа колонки; при непустой числовой строке 0 выбирается числовой, и тогда пустые ячейки парсятся в 0». Предписанное исправление (выборка образца из первой непустой ячейки + empty-last) устраняет оба случая и менять его не нужно."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec (Architecture, Decision 6): «backend_xid::text — явный каст, повторяющий прецедент replication.go» / «xid не сканируется чисто, отсюда каст, matching replication.go:28»",
+      "reality": "internal/query/replication.go:28 действительно содержит каст xid-колонки к тексту, но это `backend_xmin::text::bigint` внутри арифметического выражения `(pg_last_committed_xact()).xid::text::bigint - backend_xmin::text::bigint`. Каст там нужен, чтобы получить bigint для вычитания, а не чтобы значение сканировалось в Go. Голого `::text` в replication.go нет. Прецедент «каст xid к тексту» существует, мотивация — другая.",
+      "source": "013-feat-activity-xmin-horizon-tech-spec.md, Architecture (список из трёх SQL-выражений) и Decision 6 (Rationale)",
+      "fix": "Уточнить формулировку: «xid-колонки кастуются явно (ср. replication.go:28, где backend_xmin приводится через ::text для арифметики); здесь нужен `backend_xid::text`, потому что тип xid не сканируется в строку драйвером»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec (Implementation Tasks, Task 2, Verify): «bash — go test ./internal/stat/... ./report/...»; Agent Verification Plan: живая фикстура нужна только «for the live assertions»",
+      "reality": "Пакет ./internal/stat/... на машине без поднятых фикстур не просто краснеет, а ПАНИКУЕТ: Test_readCpuStat (internal/stat/cpu_test.go:11) вызывает postgres.NewTestConnect() (порт 21917), получает ошибку соединения, и следом падает с nil pointer dereference в (*DB).Close (internal/postgres/postgres.go:135), обрушивая весь тестовый бинарь пакета. Измерено на текущем HEAD без изменений. ./report/... при этом зелёный. То же семейство, что активный техдолг [019].",
+      "source": "013-feat-activity-xmin-horizon-tech-spec.md, Task 2 (Verify) и раздел Agent Verification Plan / Tools required",
+      "fix": "В Task 2 и в Tools required указать, что ./internal/stat/... требует поднятого fixture-кластера на 21917, иначе пакет паникует ещё до новых тестов; либо запускать точечно `go test ./internal/stat/ -run 'Test_PGresult|Test_sort'`."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec (Decision 3): «Measured: оставить seed как есть — internal/view, internal/query, report, top, record и internal/align остаются зелёными; поднятие до 17 ломает ровно две ассерции в top/config_view_test.go»",
+      "reality": "Вторая половина подтверждена экспериментально: при Ncols: 17 падают ровно две ассерции — config_view_test.go:33 (Test_orderKeyLeft/0_, expected 13 / actual 16) и config_view_test.go:65 (Test_orderKeyRight/0_, expected 0 / actual 14); report и internal/view при этом остаются ok. Первая половина («зелёные») верна только при поднятых фикстурах: на baseline без живых PG пакет top падает на Test_getQueryReport, а record — на Test_app_setup / Test_tarRecorder (паника). Это не следствие seed, а состояние окружения, но слово «green» без оговорки вводит в заблуждение.",
+      "source": "013-feat-activity-xmin-horizon-tech-spec.md, Decision 3 (Rationale)",
+      "fix": "Добавить оговорку «зелёные при поднятом fixture-образе»; измеренный факт про ровно две ассерции в top/config_view_test.go оставить как есть — он подтверждён."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "tech-spec (Solution, Backward Compatibility): «report/ никогда не читает view.Ncols»",
+      "reality": "Утверждение в такой формулировке ВЕРНО: оба чтения .Ncols в report/report.go — это stat.PGresult.Ncols, а не view.Ncols (строка 360: `res.Ncols <= stat.ColIODelayTotalS` в emitProcPidStatAvailabilityWarnings; строка 395: `res.Nrows != 1 || res.Ncols < 2` в readMeta). Замечание: более узкая формулировка, которая ходит рядом по артефактам фичи («единственные чтения Ncols — procpidstat-related»), НЕВЕРНА — readMeta на строке 395 к procpidstat отношения не имеет. Также report/ вызывает views.Configure (report.go:257-266), который view.Ncols записывает, просто никогда не читает.",
+      "source": "013-feat-activity-xmin-horizon-tech-spec.md, разделы Solution и Backward Compatibility",
+      "fix": "Оставить формулировку tech-spec как есть, но не сокращать её при переносе в task-файлы до «единственные чтения Ncols — procpidstat»: чтений два, второе — readMeta."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 54,
+    "confirmed": 49,
+    "mirages_found": 0,
+    "verified_claims": [
+      "SelectStatActivityQuery(version int) (string, int) — сигнатура 2-tuple, ветки <90600 / <100000 / default (internal/query/activity.go:46-55)",
+      "PgStatActivityDefault действительно 14 колонок: pid, cl_addr, cl_port, datname, usename, appname, backend_type, wait_etype, wait_event, state, xact_age, query_age, change_age, query — и query стоит последней",
+      "view.Configure уже вызывает селектор активности: internal/view/view.go:375 `view.QueryTmpl, view.Ncols = query.SelectStatActivityQuery(opts.Version)`",
+      "seed view.New() для activity: QueryTmpl=PgStatActivityDefault, DiffIntvl {0,0}, Ncols 14, OrderKey 0 (internal/view/view.go:40-50)",
+      "Поднятие seed до 17 ломает ровно 2 ассерции: top/config_view_test.go:33 и :65 (проверено запуском; report/ и internal/view остаются ok)",
+      "Фича 012 сделала тот же выбор: seed progress_vacuum остался Ncols 13 (view.go:282) при PG19-раскладке 15",
+      "calculateDelta берёт pass-through ветку при interval == [2]int{0,0} (`delta = curr`, internal/stat/postgres.go:590-597) и diff() не вызывает; sort при этом всё равно применяется",
+      "PGresult.sort берёт образец только из строки 0: `sample := r.Values[0][key].String` (internal/stat/postgres.go:668); используется sort.SliceStable во всех трёх режимах",
+      "Ошибка strconv.ParseFloat игнорируется в числовом компараторе (`l, _ :=`, postgres.go:674-675) — пустое становится 0",
+      "internal/query/replication_slots.go:31 — `ORDER BY \"retained,KiB\" DESC NULLS LAST`; колонка 4 = retained,KiB по комментарию раскладки (строки 12-13)",
+      "view replslots: OrderKey 4, Ncols 15, DiffIntvl {6,13} (internal/view/view.go:153-164)",
+      "report/report.go:573 — `res.Values[rownum][colnum].String[:width-1] + \"~\"`, паника при width==0; вызывается из printStatSample ← processData, запущенного в goroutine (report.go:126-132)",
+      "Флаг выравнивания view.Aligned ставится в formatStatSample (report.go:477-485) и не сбрасывается при смене версии; счётчик повтора заголовка — linesPrinted vs repeatHeaderAfter = 20 (report.go:37, :237, :509)",
+      "processData при смене версии делает `continue` — первый сэмпл новой версии съедается (report.go:249-267)",
+      "Техдолг [021] «Column widths not recomputed after a mid-archive version change» активен (docs/tech-debt.md:73)",
+      "internal/stat/help.go не имеет потребителей — ни одна из констант PgStat*Description не упоминается вне самого файла; и он устарел: блок репликации зовёт колонки xact_age*/time_age*, тогда как SQL отдаёт horizon_xacts/horizon_age (report/describe.go:75-76 — актуальные имена)",
+      "Прецеденты существуют: ADR [012-feat-pg19-compatibility-baseline] «Progress screens: new columns mid-layout» (docs/decisions-log.md:801); ADR [008-feat-record-report-0-11-views] «Replay tests: synthetic in-memory tar + golden files» (decisions-log.md:462, реализация — tar.NewWriter в report/*_test.go); Test_describeProgressColumnOrder (report/report_test.go:1215)",
+      "internal/postgres/testing.go: NewTestConnectVersion существует, порт-мапа содержит 190000..90400, при этом testing/Dockerfile ставит только postgresql-14..19 и testing/e2e.sh ходит по портам 21914-21919 — разрыв реален; для 130000/120000 мапа есть, кластера нет",
+      "Все пути из Implementation Tasks существуют: internal/query/activity.go, activity_test.go, replication.go, bgwriter.go, progress_vacuum_test.go, internal/view/view.go, internal/stat/postgres.go, postgres_test.go, internal/query/replication_slots.go, .claude/skills/project-knowledge/patterns.md, report/report.go, report_test.go, describe.go, internal/align/align.go, top/stat.go, docs/tech-debt.md, internal/stat/help.go, internal/postgres/testing.go, user-spec и tech-spec фичи 013",
+      "Прочее подтверждено: сегодняшний живой тест активности только проверяет отсутствие ошибки (`conn.Exec(q)` + NoError, activity_test.go); progress_vacuum_test.go:31 — прецедент проверки через rows.FieldDescriptions(); флаги `report -d` и `-A` существуют (cmd/report/report.go:63-64); top/printDataCell имеет guard на нулевую ширину (top/stat.go:1005-1007); 3-tuple селекторы есть в wal.go:25, bgwriter.go:41, io.go:87; NULL приходит как sql.NullString с пустым .String; golden-файлы report_activity*.golden присутствуют в report/testdata"
+    ]
+  }
+}
