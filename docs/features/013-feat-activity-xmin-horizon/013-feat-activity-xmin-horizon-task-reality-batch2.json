@@ -1,0 +1,108 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "hallucination",
+      "task": "05",
+      "issue": "Description п.1 и таблица фактов для [022] утверждают: «активити-блок [internal/stat/help.go] называет колонку xact_age*, тогда как в report/describe.go та же величина после этой фичи называется horizon_xacts». Это неверно. В активити-блоке help.go (строки 145-166) `- xact_age*` имеет origin `xact_start` и описание «Current transaction's duration if active» — это ровно та же колонка, что и `xact_age` в report/describe.go:194. Никакого расхождения с `horizon_xacts` в активити-блоке нет. Реальное расхождение имён — в блоке replication файла help.go: строка 59 `- xact_age*  backend_xmin  Number of transactions have to be replayed on this standby server` и строка 60 `- time_age*` против report/describe.go:75-76, где те же две строки называются `horizon_xacts` и `horizon_age`. Причём это расхождение пред-существующее и к новой активити-колонке отношения не имеет. Acceptance Criteria требует внести «расхождение имени колонки с report/describe.go» в реестр — по тексту таска в реестр попадёт ложный факт.",
+      "fix": "Переформулировать п.1 Description и строку [022] таблицы: расхождение имён находится в replication-блоке help.go (`xact_age*`/`time_age*` при origin `backend_xmin` — строки 59-60) против `horizon_xacts`/`horizon_age` в report/describe.go:75-76, и оно пред-существующее, а не порождённое этой фичей. Убрать привязку к активити-блоку и к новой колонке."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "05",
+      "issue": "Description п.3: «Карта перечисляет версии PG 9.4–13 (порты 21994–21913)». Диапазон записан как непрерывный и по убыванию, чего в коде нет. Фактическая карта в internal/postgres/testing.go:28-34: 130000→21913, 120000→21912, 110000→21911, 100000→21910, 90600→21996, 90500→21995, 90400→21994. То есть 9.4-9.6 сидят на 2199x, а 10-13 — на 2191x.",
+      "fix": "Заменить на «PG 10–13 → 21910–21913, PG 9.4–9.6 → 21994–21996» либо просто убрать номера портов из текста таска (шаг 2 и так требует сверять их по коду)."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Edge case «Перекрёстная ссылка» покрывает только висячую ссылку из [020] на [021]. Обратная ссылка тоже есть: [021] заканчивается фразой «Same family as [020].» (docs/tech-debt.md:84). После переезда [021] в Resolved эта фраза остаётся в перенесённом блоке и указывает на всё ещё активную запись — её осмысленность тоже нужно проверить.",
+      "fix": "Добавить в edge case упоминание обратной ссылки «Same family as [020]» в теле [021]."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "Шаг 5 требует «check for `--- PASS` lines on the per-version subtests of the activity query, with no `--- SKIP`». Буквально это недостижимо: internal/query/activity_test.go::Test_StatActivityQueries итерирует versions = {90500, 90600, 100000, 110000, 120000, 130000, 140000...190000}, а кластеров для 9.5-13 в образе нет — эти подтесты всегда будут SKIP (t.Skipf на строке 40). Исполнитель, читающий буквально, зафиксирует ложный fail на acceptance-гейте.",
+      "fix": "Переформулировать: «no `--- SKIP` среди подтестов PG 14–19; SKIP на 9.5–13 ожидаем и подтверждает, что кластеров этих версий в образе нет»."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "06",
+      "issue": "Environment specifics: «The EOL entries 21910–21913 are in the map for reference only and will not connect». Карта содержит ещё три EOL-записи, не попавшие в этот диапазон: 90600→21996, 90500→21995, 90400→21994 (internal/postgres/testing.go:32-34).",
+      "fix": "Указать «21910–21913 и 21994–21996» либо «все EOL-записи карты (PG 9.4–13)»."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "04",
+      "issue": "Scope boundary: «[internal/stat/help.go] is already stale (it still calls `horizon_xacts` by an old name)». Утверждение верно по сути, но указывает не туда, где искать: старое имя (`xact_age*` при origin `backend_xmin`) лежит в replication-блоке help.go:59, а не в активити-блоке, о котором идёт речь во всём остальном таске. В активити-блоке help.go `xact_age*` — это обычный `xact_start`. Это же смешение воспроизведено в таске 05 как отдельная находка.",
+      "fix": "Уточнить: «его replication-блок до сих пор называет horizon_xacts старым именем xact_age*» — или снять уточнение вовсе, файл всё равно read-only."
+    }
+  ],
+  "verified_claims": {
+    "task_04": [
+      "report/describe.go:180 — pgStatActivityDescription; блок занимает :180-199, как заявлено",
+      "текущий активити-блок документирует ровно 14 колонок (pid…query), три новые отсутствуют",
+      "заголовок блока — `  column\\torigin\\t\\t\\tdescription` (проверено cat -A), как заявлено",
+      "tab-сетка подтверждена: origin на колонке 16, description на 40; `- pid` (5 симв.) — два таба, `- backend_type` (14) и `- wait_event` (12) — один таб; `pid` (3) — три таба, `client_addr` (11) — два, `application_name` (16) — один",
+      "арифметика для новых строк верна: `- leader` (8), `- backend_xid` (13), `- horizon_xacts` (15) все укладываются в колонку 16 одним табом; origin ≤15 символов даёт два таба до 40 — предложенные `leader_pid,pid` (14), `backend_xid` (11), `backend_xmin` (12) проходят",
+      "Note-строки в house style: describe.go:221 («started_by and mode are available since PG19»), :287, :309, :450 — все существуют",
+      "запятая-форма origin: `wait_event_type,wait_event` на :212, `lockers_total,lockers_done` на :260 — точные попадания",
+      "replication-строка `- horizon_xacts\\tbackend_xmin\\t\\tNumber of transactions have to be replayed on this standby server` на describe.go:75 — совпадает символ в символ",
+      "report/report_test.go:1172 Test_describeReport — существует, сравнивает describeReport(w, \"activity\") с pgStatActivityDescription по идентичности (строка 1179)",
+      "report/report_test.go:1216 Test_describeProgressColumnOrder — существует, использует маркеры вида \"\\n- name\" и содержит require.NotEqual(t, -1, pos, ...) с комментарием про присутствие-до-порядка (строки 1244-1249)",
+      "импорты strings, testing, assert, require уже присутствуют в report_test.go — новых не требуется",
+      "имена Test_describeActivityColumnOrder / Test_describeActivityCaveats свободны — коллизий нет",
+      "порядок колонок в таске совпадает с таблицей user-spec :102-119 (leader на позиции 1, backend_xid на 11, horizon_xacts на 12, 0-based)",
+      "ссылки на user-spec :232-235 (ограничение «только по бэкендам»), :263-267 (Риск 2, три причины пустоты), :296-299 (почему leader производный) — все попадают точно",
+      "расхождение «три оговорки в user-spec vs четыре в tech-spec» реально: user-spec:213 и :374 говорят «три», tech-spec:44/:321/:496/:554 — «четыре»; таск корректно объявляет user-spec устаревшим",
+      "ни один golden в report/testdata/ не содержит текста describe-блока — AC «no golden file changed» самосогласовано",
+      "internal/query/replication.go:28 и :50 — формула (pg_last_committed_xact()).xid - backend_xmin, как заявлено"
+    ],
+    "task_05": [
+      "docs/tech-debt.md: максимальный занятый номер — [021], по обоим разделам (Active: 017,018,019,020,021,016,010,006,003; Resolved: 012,011,009,013,015,014,008,005,007,004,002,001) — [022]/[023]/[024] свободны",
+      "порядок записей в обоих разделах совпадает с описанным в Details символ в символ",
+      "формат Active-записи: `### [NNN] …`, `**Added:**`, `**Severity:**`, `**Area:**`, `**What:**`, `**Why deferred:**`, `---` — подтверждён",
+      "[020] «Why deferred» действительно опирается на «the replay loop drops the previous snapshot and skips the sample whenever the archive's recorded version changes» и заканчивается «Belongs with [021].» — ссылка повиснет после переезда",
+      "[021] Area — `report/report.go` (`formatStatSample`), What про несбрасываемый флаг выравнивания — соответствует описанию таска",
+      ".claude/skills/project-knowledge/architecture.md:61 — дословно «- `SelectStatActivityQuery(version)` — branches at PG 9.6, PG 10»; соседние строки (SelectStatStatementsTimingQuery, progress-селекторы) действительно служат образцом стиля",
+      "internal/stat/help.go экспортирует 15 констант *Description; ни одна не используется нигде за пределами самого файла (проверено пофамильным grep по всем .go) — «мёртвый код» подтверждён",
+      "internal/stat/postgres.go:558 func (r *PGresult) validate() — проверяет ровно len(row) != len(r.Cols) и r.Nrows != len(r.Values); ни Ncols против Cols, ни согласованность ширины между сэмплами не проверяются — формулировка таска точна",
+      "testing/Dockerfile:30-39 ставит postgresql-14…18 из pgdg main и postgresql-19 из jammy-pgdg-testing; PG 12 и 13 в образе отсутствуют",
+      "docs/roadmap-0.12.0.md:357 — «Full \"who holds the xmin horizon\" aggregate across all four sources» — пункт существует",
+      "три сбрасываемых состояния существуют в report/report.go: view.Aligned (:477/:485), счётчик повтора заголовка repeatHeaderAfter/linesPrinted (:37/:237/:509), разрешённый индекс сортировки v.OrderKey = idx (:298)",
+      "все относительные ссылки резолвятся: ../../tech-debt.md, ../../roadmap-0.12.0.md, ../../../.claude/skills/project-knowledge/architecture.md",
+      "волны непротиворечивы: 05 (wave 2) зависит от 01 и 03 — обе wave 1"
+    ],
+    "task_06": [
+      "порты фикстур: internal/postgres/testing.go:21-26 — 190000→21919, 180000→21918, 170000→21917, 160000→21916, 150000→21915, 140000→21914 — заявленный диапазон 21914–21919 точен",
+      ".github/workflows/default.yml:9 — `container: lesovsky/pgcenter-testing:0.0.11`; тег действительно живёт в `container:`, значение 0.0.11 актуально",
+      "база фикстур pgcenter_fixtures — internal/postgres/testing.go:7 и testing/prepare-test-environment.sh:69",
+      "хоткеи в top/help.go подтверждены полностью: 'a' activity / 'o' replication slots (:13), Left/Right смена колонки сортировки, '<' desc/asc, '/' фильтр (:21), Up/Down ширина колонки (:22), '[' / ']' горизонтальный скролл (:23), 'I' idle toggle (:36), 'A' age threshold (:37)",
+      "порог возраста по умолчанию — internal/query/query.go:48 `QueryAgeThresh: \"00:00:00.0\"` с комментарием «Don't filter queries by age» — совпадает дословно",
+      "logs/working/qa-report.json трекается git'ом (git ls-files) и содержит отчёт фичи 003: последний коммит по файлу — 83f95cd «feat: procpidstat record/report support…», содержимое ссылается на procpidstat и local-режим",
+      "Makefile: test = go test -race -p 1 -timeout 300s (+ -coverprofile), lint = golangci-lint + gosec, vuln = govulncheck, install → /usr/bin через install -pm 755 — всё как описано",
+      "образ: tmux в apt-списке Dockerfile:12-15 отсутствует, `rm -rf /var/lib/apt/lists/*` на :43 — поэтому apt-get update действительно понадобится",
+      "workflow ставит тулчейн в рантайме: Go в /opt/go + симлинки в /usr/local/bin (:19-31), golangci-lint v2 / gosec / govulncheck через go install + симлинки (:52-57) — описание точное",
+      "testing/prepare-test-environment.sh: shared_preload_libraries = 'pg_stat_statements' (:30), wal_level = logical (:32), trust pg_hba включая replication-строки (:36-43), fixtures.sql (:63) — все заявления верны, логические слоты для шага 15 действительно работают",
+      "internal/view/view.go: activity DiffIntvl {0,0} (:43) — обоснование «diff() на activity не вызывается» верно; replslots OrderKey: 4 (:159)",
+      "internal/query/replication_slots.go: колонка 4 = \"retained,KiB\" (:18), колонка 5 = \"safe,KiB\" (:19), запрос заканчивается `ORDER BY \"retained,KiB\" DESC NULLS LAST` (:31) — все три опоры шага 15 на месте",
+      "шаг 6 выполним: task-01 обещает перевод Test_StatActivityQueries на conn.Query + rows.FieldDescriptions() со сверкой имён и порядка, и табличный кейс 120000/130000 с обеих сторон границы",
+      "project-knowledge: overview.md, architecture.md, patterns.md, deployment.md — все четыре файла существуют",
+      "волны непротиворечивы: 06 (wave 3) зависит от 01-05, все они в волнах 1-2"
+    ]
+  },
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 58,
+    "issues_found": 6
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["06"],
+  "iteration": 1,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "06",
+      "section": "Details",
+      "issue": "В начале секции остался служебный комментарий из шаблона: `<!-- All details for task execution — technical, organizational, any other. -->`. Это шаблонный скаффолдинг, а не содержание задачи.",
+      "fix": "Удалить строку комментария — содержание секции уже заполнено."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "Acceptance Criteria",
+      "issue": "Критерий про сортировку по строковой колонке сформулирован через отсылку: «behaves as specified in both directions». Конкретное ожидание (пустые строки уходят вниз при обоих направлениях, именованные значения сохраняют порядок между собой) описано только в шаге 14 «What to do», а сам критерий проверяемым его не делает — это единственная половина правки сортировки без автотестов, поэтому формулировка критерия здесь несёт вес.",
+      "fix": "Вписать ожидание прямо в критерий: «пустые ячейки последние при DESC и при ASC; непустые значения `wait_event`/`wait_etype` упорядочены лексикографически между собой; читаемость экрана оценена человеком и оценка записана»."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "Acceptance Criteria",
+      "issue": "Критерий про несколько сотен сессий не задаёт объективный порог: «renders, scrolls and re-sorts without perceptible degradation, with the observation stated concretely». Требование «сформулировать конкретно» переложено на исполнителя, а критерия прохождения/провала нет — при разногласии судить будет нечем.",
+      "fix": "Задать измеримый порог, например: интервал обновления экрана остаётся в пределах настроенного (1 с) при N сессиях, время реакции на `[`/`]` и на смену колонки сортировки — не более одного интервала обновления; зафиксировать N и замеры в отчёте."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "06",
+      "section": "Acceptance Criteria",
+      "issue": "Критерий приёмки user-spec «В реестре техдолга заведены записи про: мёртвый internal/stat/help.go; расхождение формул horizon_xacts на двух экранах; расхождение порт-карты и состава образа» (и его расширение в tech-spec: [021] перенесён в Resolved Debt, исправлен текст [020], обновлена фраза в architecture.md) не превращён ни в шаг «What to do», ни в собственный критерий. Он упомянут только в Details → Dependencies → Task 5 («confirm they exist»). Это артефакт документации, который не проверяется ни `make test`, ни ручным проходом, поэтому шанс, что он выпадет из отчёта, выше, чем у тестируемых критериев.",
+      "fix": "Добавить в раздел B или E явный шаг (grep по `docs/tech-debt.md` на три новые записи, `[021]` в Resolved Debt, исправленный текст `[020]`, обновлённая фраза про `SelectStatActivityQuery` в `architecture.md`) и соответствующий пункт Acceptance Criteria."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "06",
+      "section": "Acceptance Criteria",
+      "issue": "Два критерия приёмки фичи покрыты только неявно, через общий прогон `go test ./report/...` (шаг 4) и упоминание в Details: (а) «Архив, охватывающий смену версии в середине записи, пересчитывает ширины колонок — нет ни устаревшей раскладки, ни падения на нулевой ширине» (Task 3); (б) «Порядок строк описания новых колонок в `report -d -A` зафиксирован тестом» (Task 4). В списке Acceptance Criteria задачи 06 их нет — есть только замыкающий пункт «Every user-spec and tech-spec acceptance criterion has a verdict».",
+      "fix": "Либо добавить два пункта в Acceptance Criteria с указанием конкретных тестов, дающих вердикт (тест форматирования на двухверсионном архиве; тест порядка описаний), либо явно оговорить в шаге 4, что именно эти тесты закрывают эти два критерия и должны быть поимённо названы в QA-отчёте."
+    }
+  ],
+  "verified_ok": [
+    "Frontmatter: status=planned; depends_on — массив строк [\"01\"..\"05\"], все ID существуют; wave=3 > волн зависимостей (01–03 = wave 1, 04–05 = wave 2), циклов нет; skills=[pre-deploy-qa] — массив; reviewers=[] — корректно для QA-задачи по каталогу skills-and-reviewers.md; verify — строка, совпадает с tech-spec («bash + user»); лишних полей нет (teammate_name есть в шаблоне).",
+    "Структура: все обязательные секции присутствуют и в порядке шаблона; TDD Anchor отсутствует — верно для non-code QA-задачи; плейсхолдеров шаблона и маркеров TODO/FIXME/TBD нет.",
+    "Required Skills совпадает с frontmatter.skills; секция Reviewers («None — this task is itself the review gate») согласована с reviewers: [].",
+    "Context Files: все ссылки оформлены как markdown-линки с именем и путём; относительные пути `../../../` от каталога фичи разрешаются в корень репозитория; все перечисленные файлы существуют (internal/query/activity.go, internal/stat/postgres.go, internal/view/view.go, internal/query/replication_slots.go, report/describe.go, top/help.go, internal/postgres/testing.go, testing/prepare-test-environment.sh, .github/workflows/default.yml, Makefile). Project knowledge указан по фактическому составу (overview/architecture/patterns/deployment) — отсутствие project.md оговорено в самом файле.",
+    "Details: подсекции Files / Dependencies / Edge cases / Implementation hints присутствуют; фактура сверена с репозиторием и верна — тег образа 0.0.11 в .github/workflows/default.yml, CMD образа выходит сразу, apt lists удалены в build-слое, Go и lint-инструменты ставятся в рантайме, порт-карта 21914–21919 (21910–21913 не поднимутся), replslots OrderKey: 4 = retained,KiB и ORDER BY \"retained,KiB\" DESC NULLS LAST, safe,KiB из safe_wal_size, хоткеи a/o/[/]/</Left/Right/Up/Down/I/A совпадают с top/keybindings.go, `pgcenter report -d -A` не требует архива (describeReport вызывается до открытия файла), logs/working/qa-report.json действительно git-tracked и содержит прежний отчёт.",
+    "Покрытие QA-скоупа: все 9 строк таблицы user-spec «Как проверить» отражены в шагах 3, 4, 7, 8, 9, 10, 12, 13; пользовательская проверка («общее впечатление от раскладки») вынесена в Verification Steps как User confirmation. Три добавления tech-spec присутствуют отдельными шагами и критериями: сортировка по строковой колонке (шаг 14), дефолтная сортировка replslots (шаг 15), прогон под несколькими сотнями сессий (шаг 16).",
+    "Атомарность: одна ответственность (приёмочный гейт), файлов не меняет, результат — QA-отчёт; логическая связность шагов сохранена."
+  ],
+  "stats": {
+    "tasks_checked": 1,
+    "issues_found": 5,
+    "critical": 0,
+    "major": 0,
+    "minor": 5
+  }
+}

@@ -1,0 +1,150 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 1,
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "05",
+      "section": "Description / Acceptance Criteria / Details",
+      "issue": "Неверный факт о `internal/stat/help.go`, попадающий в постоянный реестр техдолга. Task 05 утверждает: «активити-блок называет колонку `xact_age*`, тогда как в `report/describe.go` та же величина после этой фичи называется `horizon_xacts`». По коду: устаревшее имя `xact_age*` для величины `backend_xmin` находится в блоке **replication** (`internal/stat/help.go:59` — 'Number of transactions have to be replayed on this standby server', парная строка живого `report/describe.go:75` = `horizon_xacts`). В активити-блоке `help.go` (строки 145+) `- xact_age*\txact_start\tCurrent transaction's duration if active` — это легитимная колонка длительности транзакции, а не горизонт; колонки горизонта в активити-блоке help.go нет вообще. Tech-spec Decision 8 говорит корректно («it still calls `horizon_xacts` by its old name») без привязки к активити-блоку. Ошибка закреплена в AC #1 и в таблице фактов для `[022]`, поэтому исполнитель, честно сверяющий факты с кодом (шаг 2 What to do), окажется в противоречии между AC и реальностью, а при буквальном следовании AC запишет ложный факт в `docs/tech-debt.md` навсегда.",
+      "fix": "Переформулировать находку в Description, AC #1 и строке `[022]` таблицы Details: расхождение имени — в **replication**-блоке `internal/stat/help.go` (`xact_age*` против живого `horizon_xacts` в `report/describe.go:75`), а не в активити-блоке. Отдельно (если это тоже часть долга) указать, что активити-блок `help.go` не знает о трёх новых колонках PG 13+."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "04",
+      "section": "Description",
+      "issue": "Ложное утверждение, противоречащее Decision 8 tech-spec'а: «`pgcenter report -d -A` (and `pgcenter top` context help, which reads the same constants) prints `pgStatActivityDescription` from `report/describe.go`». Константа `pgStatActivityDescription` неэкспортируемая и лежит в пакете `report`; её единственные потребители — `describeReport` (`report/report.go:606-610`) и `Test_describeReport`. В `top/` нет ни одного обращения к описаниям колонок. Decision 8 прямо говорит, что дублирующий `internal/stat/help.go` не имеет потребителей нигде в репозитории. Утверждение вводит в заблуждение и исполнителя (можно решить, что правка задевает `top`), и ревьюеров.",
+      "fix": "Убрать упоминание `pgcenter top` context help из Description; оставить единственного потребителя — `pgcenter report -d -A` через `describeReport`."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "02",
+      "section": "frontmatter",
+      "issue": "В frontmatter остались служебные комментарии шаблона: `# planned -> in_progress -> done`, `# ID задач-зависимостей (строки: [\"01\", \"02\"])`, `# МАССИВ скиллов для загрузки`. Задачи 01 и 05 очищены — батч неконсистентен.",
+      "fix": "Удалить шаблонные комментарии из frontmatter, как это сделано в задачах 01 и 05."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "03",
+      "section": "frontmatter",
+      "issue": "В frontmatter остались служебные комментарии шаблона, включая незаполненный плейсхолдер-комментарий у `verify`: `verify: bash  # инструмент верификации (опционально: curl, bash, user)`, а также комментарии у `status`, `depends_on`, `wave`, `skills`, `reviewers`, `teammate_name`.",
+      "fix": "Удалить шаблонные комментарии из frontmatter."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "04",
+      "section": "frontmatter",
+      "issue": "В frontmatter остались служебные комментарии шаблона у `status`, `depends_on`, `wave`, `skills`, `reviewers`, `teammate_name`.",
+      "fix": "Удалить шаблонные комментарии из frontmatter."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files / Post-completion",
+      "issue": "Markdown-ссылки заданы путями от корня репозитория (`[internal/stat/postgres.go](internal/stat/postgres.go)`, `[013-...-tech-spec.md](docs/features/013-feat-activity-xmin-horizon/013-...-tech-spec.md)`), а файл лежит в `docs/features/013-feat-activity-xmin-horizon/` — все ссылки не резолвятся из места файла. В задачах 01, 04, 05 использована корректная относительная форма (`../../../internal/...`, `013-....md`).",
+      "fix": "Привести ссылки к относительной форме от каталога фичи: артефакты фичи — просто имя файла, код и PK — `../../../<path>`."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Context Files / Post-completion",
+      "issue": "Та же проблема, что в задаче 02: ссылки на код (`[report/report.go](report/report.go)`, `[top/stat.go](top/stat.go)`, `[docs/tech-debt.md](docs/tech-debt.md)`), PK и артефакты фичи заданы от корня репозитория и не резолвятся из каталога файла задачи.",
+      "fix": "Привести ссылки к относительной форме от каталога фичи (`../../../report/report.go`, `../../tech-debt.md`, `013-....md`)."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "02",
+      "section": "frontmatter",
+      "issue": "`verify: bash` — конкретная команда вынесена в YAML-комментарий и потеряна как значение поля. Tech-spec (Per-task verification) задаёт `bash — go test ./internal/stat/... ./report/...`. Задачи 01, 04, 05 несут полную строку в самом значении.",
+      "fix": "Записать `verify: \"bash — go test ./internal/stat/... ./report/...\"`."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "frontmatter",
+      "issue": "`verify: bash` без команды; tech-spec задаёт `bash — go test ./report/...`.",
+      "fix": "Записать `verify: \"bash — go test ./report/...\"`."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "01",
+      "section": "Verification Steps / Acceptance Criteria",
+      "issue": "Пункт Acceptance Criteria tech-spec'а «`view.New()` seed untouched; `internal/view`, `top`, `record` suites green» перенесён частично: задача проверяет только `go test ./internal/query/... ./internal/view/...`. Между тем именно `top/config_view_test.go` — то, что измерялось в Decision 3 (два утверждения ломаются при подъёме seed до 17), то есть это и есть страж решения «seed не трогаем».",
+      "fix": "Добавить в Verification Steps прогон `go test ./top/... ./record/...` относительно известного baseline (с оговоркой про долг [019]) и соответствующий пункт в AC."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "Acceptance Criteria",
+      "issue": "AC требует «`make test`, `make lint`, `make vuln` — зелёные» без оговорок, тогда как задачи 01 и 02 явным образом документируют, что `top`/`record`/`internal/stat` падают или паникуют без живых fixture-кластеров независимо от изменений (техдолг [019]). В таком виде критерий недостижим и провоцирует либо ложный отчёт «зелено», либо попытку «починить» чужой долг.",
+      "fix": "Уточнить критерий: `make test` зелёный при поднятых кластерах PG 14–19; без них — относительно baseline долга [019]."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "What to do",
+      "issue": "Пункт «Закоммитить задачу отдельным коммитом» отсутствует в tech-spec и расходится с процессом исполнения (коммит на волну, feature-execution). В остальных задачах батча такого шага нет.",
+      "fix": "Убрать пункт про коммит — решение о коммитах принимает оркестратор."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Post-completion / What to do",
+      "issue": "Задача предписывает отдельной строкой отчёта зафиксировать, что «tech-spec в этом месте устарел» относительно `PostgresV13`. Это неточно: раздел Architecture tech-spec'а прямо говорит «No new version constant is needed: `PostgresV13` already exists in `query.go`». Несогласован только список «Files to modify» у Task 1, где `internal/query/query.go` указан лишний раз.",
+      "fix": "Переформулировать: не «tech-spec устарел», а «список Files to modify у Task 1 не согласован с разделом Architecture — `internal/query/query.go` менять не требуется»."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "04",
+      "section": "Description / Post-completion",
+      "issue": "Задача корректно (по tech-spec) требует четыре оговорки и объявляет трёхпунктный список user-spec'а устаревшим, но сам user-spec не правится: строка 213 («содержит три оговорки») и таблица проверки на строке 374 («все три оговорки») остаются стале. При этом Риск 2 user-spec'а (строки 263–267) сам требует четвёртую оговорку как митигацию — то есть user-spec внутренне противоречив.",
+      "fix": "Добавить в Post-completion явный пункт: привести AC user-spec'а (строки 213 и 374) к четырём оговоркам, сославшись на его же Риск 2."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "весь файл",
+      "issue": "Задача написана по-английски, тогда как задачи 01, 02, 03, 05 — по-русски; внутри самой задачи 04 секция Post-completion при этом на русском. Батч неоднороден по языку.",
+      "fix": "Привести задачу 04 к языку остальных задач батча (или как минимум согласовать язык Post-completion с остальным телом файла)."
+    }
+  ],
+  "checks_passed": [
+    "Frontmatter: у всех пяти задач присутствуют status=planned, depends_on (массив строк), wave (число ≥ 1), skills (массив), reviewers (массив), verify (строка); лишних полей нет (teammate_name есть в шаблоне)",
+    "Структура: все обязательные секции присутствуют и идут в порядке шаблона; плейсхолдеров вида [Task Name] / {PK path} / TODO / TBD нет",
+    "TDD Anchor: у задач 01–04 формат `path::test_name` — описание выдержан, тесты называют конкретные функции и проверяют поведение; у задачи 05 (documentation-writing) секция корректно отсутствует",
+    "Зависимости: depends_on ссылается на существующие ID; 04 → [01] (wave 2 > 1), 05 → [01, 03] (wave 2 > 1); циклов нет",
+    "Файлы: наборы Files to modify / Files to read совпадают с Implementation Tasks tech-spec'а по всем пяти задачам, без потерь и без незаявленных добавлений",
+    "Carry-forward Testing Strategy: все девять unit-пунктов и три integration-пункта tech-spec'а разложены по задачам 01–04 без потерь",
+    "Carry-forward Acceptance Criteria: пункты 1–3, 5–10, 13–14 tech-spec'а покрыты задачами 01–05; пункты 11 (ручная сортировка по строковой колонке) и 15 отнесены к Task 6, что соответствует spec'у",
+    "Соответствие Decisions: Decision 1 (раскладка), 2 (граница PG 13 и её непроверяемость), 3 (ранний возврат, ничего не переименовано, seed не тронут), 4 (empty-last во всех трёх режимах, blast radius), 5 (пустота по String, не по Valid), 6 (три сброса + zero-width guard, тест мимо горутины), 7 (каст только backend_xid), 8 (только describe.go) — перенесены в задачи корректно, противоречащих спеку решений не внесено",
+    "Data Models: таблица раскладки в задаче 01 (Details) и в задаче 03 (раскладки для теста) дословно совпадает с Data Models tech-spec'а; задача 04 повторяет тот же порядок",
+    "Фактическая сверка с кодом: PostgresV13=130000 (query.go:16), SelectStatActivityQuery со switch из трёх веток (activity.go:46-53), case 120000/130000 (view_test.go:203/210), PGresult.sort (postgres.go:663), validate (:558), parseDuration (:707), Test_sort (704) / Test_sort_duration (782), processData (report.go:233) с linesPrinted/orderConfigured (237/238) и веткой version-change (250), усечение (566-571), printDataCell + текст ошибки (top/stat.go:1000/1006), pgStatActivityDescription (describe.go:180), Note-стиль (:221/:287/:309/:450), replication horizon_xacts (:75), запятая в origin (:212/:260), Test_describeReport (report_test.go:1172) и Test_describeProgressColumnOrder (:1216), tech-debt [019]/[020]/[021] (41/57/73), replslots OrderKey 4 / DiffIntvl [6,13] (view.go:153-160), architecture.md:61 — все ссылки и номера строк подтверждены",
+    "Skills ↔ reviewers: code-writing → dev-code-reviewer + dev-security-auditor + dev-test-reviewer (задачи 01–04); documentation-writing → dev-code-reviewer (задача 05, по tech-spec); frontmatter и секция Reviewers совпадают во всех пяти задачах",
+    "Атомарность: 2–4 файла на задачу, каждая — один логический результат; кандидатов на слияние или расщепление нет; 6 задач на 3 пользовательские истории — не переразбиение"
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 15,
+    "critical": 1,
+    "major": 1,
+    "minor": 13
+  }
+}

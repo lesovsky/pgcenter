@@ -322,8 +322,11 @@ relying on the driver (rejected — measured, `xid` does not scan into the strin
 `report/describe.go`. `internal/stat/help.go` is left untouched and recorded as tech debt.
 
 **Rationale:** `internal/stat/help.go` has no consumers anywhere in the repository and is already
-stale — it still calls `horizon_xacts` by its old name. Editing it would spread the new columns
-into dead code and imply it is live.
+stale: in its **replication** block (`help.go:59`) it still calls the horizon column `xact_age*`,
+where the live `report/describe.go:75` calls it `horizon_xacts`. Note precisely where that
+staleness lives — `xact_age*` also appears in help.go's *activity* block, but there it legitimately
+means the transaction's duration and has nothing to do with the horizon. Editing this file would
+spread the new columns into dead code and imply it is live.
 
 **Alternatives considered:** documenting in both files (rejected — doubles the surface and makes
 dead code look maintained); deleting `internal/stat/help.go` in this feature (rejected — its
