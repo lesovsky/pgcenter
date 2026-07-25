@@ -11,7 +11,7 @@
 
 Triggered by push to `release` branch. Two jobs:
 
-**test** — runs full test suite in `lesovsky/pgcenter-testing:0.0.10` container:
+**test** — runs full test suite in `lesovsky/pgcenter-testing:0.0.11` container:
 - Go 1.25.10 (cached), module cache, lint tools cache
 - `make lint` + `govulncheck ./...` + `make test` + `make build` + e2e tests
 
@@ -28,14 +28,14 @@ Docker image pushed to `lesovsky/pgcenter:vX.Y.Z` and `:latest`.
 ## CI (default.yml)
 
 Triggered on every push. Same container and tooling as release test job.
-Container: `lesovsky/pgcenter-testing:0.0.10`
+Container: `lesovsky/pgcenter-testing:0.0.11`
 
 ## Test Container (lesovsky/pgcenter-testing)
 
-Source: `testing/Dockerfile`. Current version: `0.0.10`.
-Contains: Ubuntu 22.04, PostgreSQL 14–18 with `plperlu` + CPAN modules.
+Source: `testing/Dockerfile`. Current version: `0.0.11`.
+Contains: Ubuntu 22.04, PostgreSQL 14–19 with `plperlu` + CPAN modules. PG 19 is a beta installed from the `pgdg-testing` channel, which must be declared with the major-version component (`jammy-pgdg-testing 19`, not `main`) and installed with an explicit `-t`; remove that source at the GA rebuild.
 Clusters created via `pg_createcluster` (Ubuntu 22.04 Docker doesn't auto-init).
-Ports: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918.
+Ports: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918, PG19=21919.
 
 To rebuild and push:
 ```

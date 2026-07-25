@@ -64,8 +64,9 @@ Version-specific query selectors in `internal/query/`:
 - `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17
 - `SelectStatWALQuery(version)` — branches at PG 18 (columns removed)
 - `SelectStatBgwriterQuery(version)` — branches at PG 17 (`pg_stat_checkpointer` split off `pg_stat_bgwriter`) and PG 18 (`slru_written` added). Returns `(query, Ncols, DiffIntvl)` — DiffIntvl also differs per version.
-- `SelectStatReplicationSlotsQuery(_ int)` — version-independent on PG 14–18 (chosen column subset is stable), returns `(query, 15, [2]int{6,13})`; the `version` param is kept for selector-signature symmetry. Single hybrid `pg_replication_slots LEFT JOIN pg_stat_replication_slots` query.
-- `SelectStatIOQuery(version)` — branches at PG 18 (`op_bytes` removed → native `read_bytes`/`write_bytes`/`extend_bytes`; `object='wal'` rows added), returns `(query, 16, [2]int{4,14})`. `SelectStatIOTimeQuery(_ int)` is version-independent (timing columns are identical PG 16–18), returns `(query, 10, [2]int{4,8})`. `internal/query/query.go` gained `PostgresV15/16/17/18` constants for these.
+- `SelectStatReplicationSlotsQuery(_ int)` — version-independent on PG 14–19 (chosen column subset is stable), returns `(query, 15, [2]int{6,13})`; the `version` param is kept for selector-signature symmetry. Single hybrid `pg_replication_slots LEFT JOIN pg_stat_replication_slots` query.
+- `SelectStatProgressVacuumQuery(version)` / `SelectStatProgressAnalyzeQuery(version)` / `SelectStatProgressBasebackupQuery(version)` — branch at PG 19, which adds `started_by`+`mode` to the vacuum screen, `started_by` to analyze and `backup_type` to basebackup. All three return `(query, Ncols, DiffIntvl)`: the columns are inserted before `state`, so the diffed pairs shift (vacuum 13/`{10,11}` → 15/`{12,13}`; analyze 12 → 13, `DiffIntvl` stays `{0,0}`; basebackup 11/`{9,9}` → 12/`{10,10}`). `UniqueKey` stays 0 — `pid` remains column 0 in every layout, so the [007] 4-tuple is not needed.
+- `SelectStatIOQuery(version)` — branches at PG 18 (`op_bytes` removed → native `read_bytes`/`write_bytes`/`extend_bytes`; `object='wal'` rows added), returns `(query, 16, [2]int{4,14})`. `SelectStatIOTimeQuery(_ int)` is version-independent (timing columns are identical PG 16–19), returns `(query, 10, [2]int{4,8})`. `internal/query/query.go` gained `PostgresV15/16/17/18` constants for these.
 
 The `bgwriter` view (hotkey `b`, `internal/query/bgwriter.go`) is a single-row version-aware screen modeled on `pg_stat_wal`. Introduced as TUI-only in 0.11.0, it is now recordable: feature 008-feat-record-report-0-11-views cleared its `NotRecordable` flag and added `report -B` (replayed version-aware by the recording's PG version).
 
@@ -151,9 +152,9 @@ When pgcenter runs against a remote PG, system stats (CPU, disk, network) are re
 Integration tests require a running PostgreSQL instance.
 Test helpers in `internal/postgres/testing.go`:
 - `NewTestConnect()` — connects to PG 17 (port 21917, default)
-- `NewTestConnectVersion(version)` — connects to specific version; returns error for unavailable versions (callers use `t.Skipf`)
+- `NewTestConnectVersion(version)` — connects to specific version; returns an error for a version with no port mapping (it used to fall back to the oldest cluster, which made a forgotten entry invisible) and for unavailable versions (callers use `t.Skipf`)
 
-Port map: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918.
+Port map: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918, PG19=21919.
 EOL entries (PG 9.5–13) kept in map but connections will fail gracefully.
 
 Run with: `make test` (race detector, timeout 300s).
