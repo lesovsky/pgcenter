@@ -3,14 +3,14 @@
 set -e
 
 # Create clusters for versions that don't have one yet
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   if ! pg_lsclusters | grep -q "^$v "; then
     pg_createcluster "$v" main
   fi
 done
 
 # Configure each cluster
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   port="219${v}"
   datadir="/var/lib/postgresql/${v}/main"
 
@@ -36,16 +36,21 @@ EOF
   cat > "/etc/postgresql/${v}/main/pg_hba.conf" << EOF
 local all all              trust
 host all all 0.0.0.0/0 trust
+# pg_basebackup opens a physical replication connection, which the `all` database
+# keyword above does not match; without these lines the basebackup progress screen
+# cannot be exercised at all.
+local replication all              trust
+host replication all 0.0.0.0/0 trust
 EOF
 done
 
 # Start all instances
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   pg_ctlcluster "$v" main start
 done
 
 # Wait for all instances to be ready
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   port="219${v}"
   until pg_isready -h 127.0.0.1 -p "$port" -U postgres -t 5 -q; do
     echo "Waiting for PostgreSQL $v on port $port..."
@@ -53,13 +58,13 @@ for v in 14 15 16 17 18; do
 done
 
 # Install pgcenter schema
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   port="219${v}"
   su - postgres -c "psql -h 127.0.0.1 -p $port -f /usr/local/testing/fixtures.sql"
 done
 
 # Final availability check
-for v in 14 15 16 17 18; do
+for v in 14 15 16 17 18 19; do
   port="219${v}"
   pg_isready -t 10 -h 127.0.0.1 -p "$port" -U postgres -d pgcenter_fixtures
 done
