@@ -101,18 +101,26 @@ into the image, so editing it in the repo is inert until the image ships.
 moment the `e2e.sh` edit merged. Guarding the e2e loop with a port probe — rejected as machinery for a
 one-time ordering problem.
 
-### Decision 5a: The beta apt channel is pinned, not merely added
+### Decision 5a: The beta apt channel is scoped by component, and installed from explicitly
 **Decision:** The beta channel goes into its own `.list` file with `signed-by=/usr/share/keyrings/pgdg.gpg`
-(the key already in the image, same host), carries `Pin-Priority: 100` in an apt preferences file, and the
-PG 19 packages are installed with an explicit `-t` target release.
-**Rationale:** apt resolves a package by the highest available version across all enabled sources, not by
-source priority. Without a pin, enabling the beta channel can silently replace `postgresql-14..18` and
-`postgresql-common` itself with beta builds — which would also invalidate the claim that `pg_createcluster`
-comes from the stable channel. The pin keeps the beta channel reachable only for the packages explicitly
-requested from it. Reusing the existing signing key is correct — same publisher, same host — and
-`[trusted=yes]` must not be used.
-**Alternatives considered:** Adding the channel unpinned — rejected: it silently changes five existing
-clusters. A separate keyring — rejected: same publisher, no security gain.
+(the key already in the image, same host) and is declared with **only the major-version component** —
+`… jammy-pgdg-testing 19`, not `main`. PG 19 is then installed with an explicit `-t` target release.
+**Rationale — corrected after the probe, which contradicted the original reasoning.** Two facts settle it:
+the repository publishes each major version in its own component, so without `19` in the source line the
+packages are invisible (`apt-cache policy` reports candidate `(none)`, which reads exactly like "they do not
+exist"); and the beta suite already ships `NotAutomatic`, so apt gives it priority 100 unprompted. An
+apt-preferences pin at 100 would therefore only restate the default. The real guarantee comes from the
+component restriction — the beta channel can offer nothing but PG 19 packages — and the real need is the
+opposite of a pin: without `-t`, installation fails because the stable channel outranks the beta one for the
+shared `libpq5`. Verified live: with this recipe PG 18 stays at its stable version and `postgresql-common`
+stays on the stable channel.
+`[trusted=yes]` must not be used; the existing signing key is correct (same publisher, same host).
+**Consequence that must not be misread:** `libpq5` does move to the beta version, because the client library
+is shared across clusters and PG 19's client requires it. Expected and backward compatible — the
+package-origin acceptance criterion exempts it.
+**Alternatives considered:** an apt-preferences pin at priority 100 — rejected as a no-op restating
+`NotAutomatic`; declaring the channel with `main 19` — rejected: it widens what the beta channel may supply
+for no benefit; a separate keyring — rejected: same publisher, no security gain.
 
 ### Decision 5b: The mixed-width diff finding is recorded, not fixed here
 **Decision:** Do not add a width guard to the shared diff loop. Record the finding as a deferred item.
@@ -357,9 +365,10 @@ implementation rather than trusted from this document.
 - [ ] `report -d -P v|a|b` describes the new columns with the version note.
 - [ ] The new query constants contain no template placeholders — they stay static SQL, like the constants
       they sit beside.
-- [ ] The beta channel pin holds: every PostgreSQL package except the PG 19 ones resolves from the stable
-      channel, checked by package origin and priority rather than by version equality (a routine stable-channel
-      minor release legitimately changes versions and must not be mistaken for a broken pin).
+- [ ] Every PostgreSQL package except the PG 19 ones and `libpq5` resolves from the stable channel, checked
+      by package origin rather than by version equality (a routine stable-channel minor release legitimately
+      changes versions). `libpq5` moving to the beta version is expected — the client library is shared and
+      PG 19's client requires it.
 - [ ] `make test`, `make lint`, `make vuln` clean; `testing/e2e.sh` passes including port 21919.
 - [ ] All user-spec acceptance criteria satisfied (verified in the Final Wave QA task).
 

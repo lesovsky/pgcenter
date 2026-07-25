@@ -69,12 +69,11 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [012] PostgreSQL 19 compatibility baseline
 
-- **Status:** planned, **BLOCKED as of 2026-07-25** — the probe found no `postgresql-19` package in any
-  PGDG apt channel (`*-pgdg`, `*-pgdg-testing`, `*-pgdg-snapshot`) on either jammy or noble; the package
-  lists end at 18. PostgreSQL 19 itself is on schedule (beta 2 shipped 2026-07-16) — only the apt packaging
-  is missing, so this is not the base-image failure mode the plan anticipated and a distro bump cannot fix
-  it. Planning is complete (user-spec, tech-spec, ten tasks); execution resumes when the packages appear.
-  See the feature's decisions log for the one-minute re-probe.
+- **Status:** planned — **do this first**. Probe passed 2026-07-25 on the existing `ubuntu:22.04` base:
+  PG 19 beta2 installs, the cluster starts on 21919, `plperlu` loads, and the three new columns are present
+  in the live catalog. No base-image migration needed. The one non-obvious detail: the beta suite must be
+  declared with the major-version **component** (`jammy-pgdg-testing 19`) — without it the packages are
+  invisible — and installed with an explicit target release. See the feature's decisions log.
 - **Value:** the release's central promise. Honest framing: **pgcenter does not break on PG 19.**
   Verified against the code — version selectors are written as
   `if version >= PostgresV18 { newest } else { older }` (`internal/query/wal.go:26`,
