@@ -110,7 +110,8 @@ teammate_name:
    `.claude/skills/project-knowledge/architecture.md`: точки ветвления по факту кода после Task 1 и
    упоминание того, что даёт новая ветка. Стиль — как у соседних строк инвентаря (одна строка на
    селектор). Ни новых разделов, ни блоков кода.
-7. Прогнать проверки из Verification Steps и убедиться, что изменены ровно два файла.
+7. Прогнать проверки из Verification Steps и убедиться, что в диффе кода и документации проекта
+   изменены ровно два файла (артефакты самой фичи — decisions log — под это не подпадают).
 
 ## Acceptance Criteria
 
@@ -138,7 +139,7 @@ teammate_name:
       [021]» в `[020]`, ни «Same family as [020]» в `[021]` не оставлены как есть
 - [ ] Строка про `SelectStatActivityQuery` в `.claude/skills/project-knowledge/architecture.md` больше
       не говорит «branches at PG 9.6, PG 10» и описывает фактические точки ветвления после Task 1
-- [ ] Изменены ровно два файла: `docs/tech-debt.md` и
+- [ ] Вне артефактов фичи изменены ровно два файла: `docs/tech-debt.md` и
       `.claude/skills/project-knowledge/architecture.md`
 - [ ] Все утверждения сверены с кодом; в документации нет блоков кода с реализацией и нет дублирования
       того, что уже сказано в соседнем файле (принципы documentation-writing)
@@ -196,7 +197,7 @@ teammate_name:
   docs/tech-debt.md` — две другие записи на месте.
 - `grep -n "SelectStatActivityQuery" .claude/skills/project-knowledge/architecture.md` — строка больше
   не содержит «branches at PG 9.6, PG 10».
-- `git diff --name-only` — ровно два файла: `docs/tech-debt.md` и
+- `git diff --name-only` — вне каталога фичи ровно два файла: `docs/tech-debt.md` и
   `.claude/skills/project-knowledge/architecture.md`.
 - Сверка фактов: каждое утверждение новых записей проверить по коду — имена констант в `help.go`, номера
   портов в `internal/postgres/testing.go`, состав образа в `testing/Dockerfile`, обе формулы в
