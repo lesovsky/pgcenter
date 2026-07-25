@@ -1,6 +1,6 @@
 ---
 created: 2026-07-25
-status: draft
+status: approved
 branch: feature/pg19-compatibility-baseline
 size: M
 ---
@@ -189,6 +189,9 @@ Carried from the user-spec so `/done` files them rather than losing them:
 - **The unguarded previous-snapshot indexing in the shared diff loop** (Decision 5b) — surfaced by the
   security audit, not reachable today and not made reachable by this feature; belongs with the other
   mid-archive width work the user-spec defers.
+- **Stale column widths after a mid-archive version change** — the alignment flag is set on the first
+  printed sample and never recomputed, so a `record -a` archive spanning a major upgrade renders the later
+  samples with the earlier layout's widths. Pre-existing, same family as the item above.
 - **Handoff to [014]:** `mode` as a column name is already used on the replication screen, and [014]'s
   colorization rules key off column names, so a rule named `mode` would hit both screens.
 
@@ -290,7 +293,11 @@ bash, docker, tmux, psql. No MCP tooling.
   `(query, Ncols, DiffIntvl)`.
 - **Replay of pre-0.12 archives:** unchanged. `report` configures the view from the archive's recorded
   version, `view.Ncols` is never read in the report package, and printing/alignment/diffing all walk the
-  recorded result's own column count.
+  recorded result's own column count. This holds for a single-version archive, which is what `record`
+  produces in one run. An archive that changes version mid-stream (`record -a` across a major upgrade) is a
+  separate pre-existing matter: the diff is safe — the replay loop drops the previous snapshot and skips the
+  sample on any version change — but the render is not, because column widths are computed once on the first
+  printed sample and never recomputed. Not introduced here, not fixed here; recorded as a deferred item.
 - **`report -d` describe texts:** the only user-visible change on old versions — the texts now describe the
   superset of columns, following the existing bgwriter/IO precedent.
 - **Forward direction is not compatible and cannot be:** an archive recorded on PG 19 and replayed by a

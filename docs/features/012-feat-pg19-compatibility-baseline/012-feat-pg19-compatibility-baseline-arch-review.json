@@ -1,26 +1,40 @@
 {
-  "status": "approved",
+  "status": "needs_revision",
   "checks": {
-    "architectural_fit": "pass",
+    "architectural_fit": "fail",
     "scalability": "pass",
     "database": "n/a",
     "coupling": "pass",
     "api_contracts": "n/a",
-    "backward_compat": "pass"
+    "backward_compat": "fail"
   },
   "findings": [
     {
+      "check": "architectural_fit",
+      "severity": "major",
+      "issue": "Decision 5b's rationale (\"the diff loop indexes the previous snapshot by the current snapshot's column count... a panic in `pgcenter report -f` on an archive spanning a major upgrade\") misstates reachability. report/report.go:250 already guards this exact case: `if !prevStat.Valid || prevMeta.version != d.meta.version { prevStat = d.res; ...; continue }` discards `prevStat` and skips the diff on *every* meta.version change before `countDiff`/`diff()` is ever called. Since `d.meta.version` and `d.res`'s width are written together by the recorder, this invariant holds for any archive genuinely produced by pgcenter's own `record`/`record -a`, including one that legitimately spans a PG18->PG19 upgrade — `diff()` can never see mismatched curr/prev widths from such an archive. The only way to reach the out-of-range dereference is a hand-crafted/corrupted archive where meta.version stays constant across two ticks while the underlying row width differs (which is what the originating security-audit finding actually described: \"a hand-crafted or concatenated archive with snapshots of differing widths and a matching pid in both ticks\" — a narrower, adversarial-input threat, not \"an archive spanning a major upgrade\"). This matters for Task 6's test plan: a replay harness built the natural way for Decision 1 (two meta blocks, two real versions, i.e. a genuine version-spanning archive) will never exercise the new guard's skip branch, because report.go:250 already dead-ends that path upstream — the acceptance criterion \"covered by a test\" could pass while the new code is never hit.",
+      "location": "Decision 5b; Task 6 description and Verify column",
+      "fix": "Correct Decision 5b's rationale to name the actual trigger: an archive whose meta.version is held constant across ticks while the recorded row width changes (malformed/adversarial input to `report -f`), not a legitimate version-spanning `record -a` archive. Adjust Task 6's test case accordingly: construct the synthetic tar with two ticks sharing one meta.version but differing Ncols/row-width (bypassing the normal meta-driven version transition), so the guard's skip path is actually exercised — a same-version, real-version-transition two-block archive will not do it. The placement inside `diff()` itself is fine as defense-in-depth against untrusted archive content; only the stated reachability and the test construction need correcting."
+    },
+    {
       "check": "backward_compat",
+      "severity": "major",
+      "issue": "Decision 5b's alternatives-considered says rewriting mid-archive width handling is out of scope, calling it \"the Aligned-flag issue noted in Backward Compatibility\" — but the tech-spec's Backward Compatibility section contains no such note. Instead it asserts a blanket claim (\"printing/alignment/diffing all walk the recorded result's own column count\") that is not accurate for this exact scenario: `formatStatSample` (report/report.go:476-486) latches `view.Aligned = true` on first print and returns early on every later tick without recomputing `ColsWidth`/`Cols`; `Views.Configure()` (internal/view/view.go:367-410) only patches `QueryTmpl`/`Ncols`/`DiffIntvl` on a version change and never resets `Aligned`. So a `report -f` replay over an archive that genuinely spans a version transition (already possible today for bgwriter/stat_io per ADR [004]/[006], and now for the three progress screens too) prints post-transition rows using the pre-transition column widths/headers — stale, garbled output, not the byte-identical-behavior the Backward Compatibility section claims. The code-research doc (7.6) already identified this as a pre-existing, out-of-scope latent bug, correctly recommending \"do not fix in this feature\" — but that finding never made it into the shipped tech-spec's Backward Compatibility, Risks, or Deferred-items sections, so /done at feature finalization has nothing to file it under despite Decision 5b implying it is already recorded.",
+      "location": "Backward Compatibility section; Decision 5b alternatives-considered",
+      "fix": "Add the Aligned-flag rendering-staleness issue to the Backward Compatibility section as an explicit known limitation (it predates this feature and is not required to be fixed here), and add it to the \"Deferred items to record at feature finalization\" list alongside the other Decision-7 tech-debt item, so /done actually files it. Then Decision 5b's cross-reference becomes accurate instead of pointing at text that doesn't exist."
+    },
+    {
+      "check": "coupling",
       "severity": "minor",
-      "issue": "The spec states '41 NewTestConnectVersion call sites verified: all pass mapped literals, none changes behaviour' (Decision 5, Backward Compatibility section). A repo-wide grep finds 39 occurrences of `NewTestConnectVersion(` total (including its own definition and the `NewTestConnect()` wrapper), i.e. ~38 actual call sites, not 41. The underlying architectural claim (all callers pass a `version` loop variable drawn from literal `versions := []int{...}` slices that are already subsets of the port map, so removing the silent fallback changes nothing for them) holds and was independently spot-checked against internal/query/*_test.go, internal/stat/postgres_test.go — the count is just off.",
-      "location": "Decision 5 / Backward Compatibility / Consumer impact",
-      "fix": "Re-run the grep during Task 2 implementation and correct the number, or drop the exact count and state the qualitative guarantee only ('every call site's `versions` literal is a subset of the port map')."
+      "issue": "Task 6 (Wave 4) bundles a production-code change to `internal/stat/postgres.go`'s `diff()` — the shared row-diffing primitive used by every view in the application, not just the three progress screens — into a wave otherwise scoped by Decision 9 as \"the test-suite sweep... owns every `_test.go` file the selector task does not\" plus describe-text/docs work. The other three Wave 4 tasks (4, 5, 7) touch only test files or docs; Task 6 alone reaches into shared core logic. There is no file collision with siblings and the reviewer set (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) is adequate, so this is not blocking, but it widens Task 6's actual blast radius beyond what its Wave 4 framing (\"replay test coverage\") suggests, and beyond what the file-ownership rationale in Decision 9 was designed to bound.",
+      "location": "Task 6: Files to modify; Decision 9",
+      "fix": "No structural change required given the wave already isolates the file from siblings; optionally note in Task 6's description that it carries a small production-code change (not just tests) so reviewers weight the diff-loop edit accordingly."
     }
   ],
   "risk_assessment": {
     "performance": "low",
-    "complexity": "low",
-    "tech_debt": "low"
+    "complexity": "medium",
+    "tech_debt": "medium"
   },
-  "summary": "The spec is a near-textbook application of the project's existing version-selector idiom (io.go/bgwriter.go: (query, Ncols, DiffIntvl) selectors wired into view.Configure()) and every column-position/Ncols/DiffIntvl claim in the Data Models table was verified byte-for-byte against the current progress_vacuum.go/progress_analyze.go/progress_basebackup.go SQL. ADR references [004] (per-version constants, no NULL-padding), [007] (4-tuple only when UniqueKey moves — correctly not triggered here since pid stays col 0), and [008] (report-time Configure keyed on archive version, not live server) are all confirmed accurate against report/report.go and internal/stat/postgres.go. Decision 4's image-push ordering analysis (e2e.sh runs from checkout with `set -euxo pipefail` and no skip path, vs prepare-test-environment.sh which CI runs from the baked-in image copy) matches the actual .github/workflows/default.yml and testing/ scripts exactly. Wave/task file ownership has no collisions (Task 3 owns view.go + the three progress *.go/*_test.go; Task 4 owns every other version-list *_test.go, explicitly excluding the three progress test files). One minor factual imprecision (a stale call-site count) does not affect the architecture and is easily corrected during implementation."
+  "summary": "Wave/file-ownership check: W1-W6+Final map cleanly to Tasks 1-10, and the four Wave 4 tasks (4/5/6/7) have fully disjoint file sets with no collisions; Wave 4 correctly depends on Wave 3's selectors. Decision 5a's apt pin (own .list, Pin-Priority 100, explicit -t install, reused signing key) is sound and fits the existing single-RUN-layer Dockerfile pattern. Decision 5b is the substantive problem: its stated panic scenario (\"archive spanning a major upgrade\") is already prevented by the pre-existing report.go:250 version-transition guard, so the real trigger is a corrupted/adversarial archive (matching the original security-audit's actual wording, not Decision 5b's restatement of it) — and Task 6's planned two-version replay test, built the natural way, will not exercise the new guard's skip branch at all. Decision 5b also cites a Backward Compatibility note on the Aligned-flag rendering bug that does not exist in that section, leaving a real (pre-existing, out-of-scope) rendering-staleness bug undocumented and unfiled for finalization. Both are fixable by correcting the rationale text and the Task 6 test construction before implementation, not a redesign; nothing here blocks the wave plan or introduces a regression."
 }
