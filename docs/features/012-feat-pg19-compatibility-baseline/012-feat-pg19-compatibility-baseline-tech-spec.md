@@ -98,12 +98,40 @@ into the image, so editing it in the repo is inert until the image ships.
 moment the `e2e.sh` edit merged. Guarding the e2e loop with a port probe — rejected as machinery for a
 one-time ordering problem.
 
+### Decision 5a: The beta apt channel is pinned, not merely added
+**Decision:** The beta channel goes into its own `.list` file with `signed-by=/usr/share/keyrings/pgdg.gpg`
+(the key already in the image, same host), carries `Pin-Priority: 100` in an apt preferences file, and the
+PG 19 packages are installed with an explicit `-t` target release.
+**Rationale:** apt resolves a package by the highest available version across all enabled sources, not by
+source priority. Without a pin, enabling the beta channel can silently replace `postgresql-14..18` and
+`postgresql-common` itself with beta builds — which would also invalidate the claim that `pg_createcluster`
+comes from the stable channel. The pin keeps the beta channel reachable only for the packages explicitly
+requested from it. Reusing the existing signing key is correct — same publisher, same host — and
+`[trusted=yes]` must not be used.
+**Alternatives considered:** Adding the channel unpinned — rejected: it silently changes five existing
+clusters. A separate keyring — rejected: same publisher, no security gain.
+
+### Decision 5b: Guard the diff against mixed-width snapshots
+**Decision:** Before diffing a matched row pair, skip the pair when the previous snapshot's row is narrower
+than the current snapshot's column count. Covered by a test in the same task that builds the two-version
+replay harness.
+**Rationale:** The diff loop indexes the previous snapshot by the *current* snapshot's column count. That
+was unreachable while every view had one fixed width; making the width version-dependent makes a
+mixed-width archive representable, and with a matching row key it dereferences past the end of the previous
+row — a panic in `pgcenter report -f` on an archive spanning a major upgrade. The feature creates the
+reachability, so the feature carries the guard.
+**Alternatives considered:** Leaving it — rejected: the crash is introduced by this change, not inherited.
+Rewriting the mid-archive width handling properly (the `Aligned`-flag issue noted in Backward
+Compatibility) — rejected as a separate concern; the guard prevents the crash without touching the layout
+logic.
+
 ### Decision 5: `NewTestConnectVersion` returns an error for an unmapped version
 **Decision:** Replace the `ports[140000]` fallback with
 `fmt.Errorf("postgres version %d has no test cluster port mapping", version)`, no sentinel error type.
 **Rationale:** The function's doc comment already documents the error behaviour — the code contradicts its
-own contract. All 41 call sites pass written-out literals whose union is a subset of the map, so no caller
-changes behaviour. Without this, a forgotten map entry makes every "PG 19" subtest pass while exercising
+own contract. Every call site lives in a test file and passes a written-out literal; the union of the values
+passed is a subset of the port map, so no caller changes behaviour (the exact count is to be re-derived
+during implementation rather than trusted from this document). Without this, a forgotten map entry makes every "PG 19" subtest pass while exercising
 PG 14.
 **Alternatives considered:** Keeping the fallback and covering it with an acceptance check — rejected by the
 user: fix the cause rather than guard it.
@@ -142,6 +170,18 @@ task does not.
 **Rationale:** Autopilot default branch strategy. The three screens share `internal/view/view.go`, so
 parallel tasks would collide in the same file; file ownership is stated per task so waves can run
 concurrently without conflicts.
+
+### Deferred items to record at feature finalization
+
+Carried from the user-spec so `/done` files them rather than losing them:
+
+- **Remove the beta apt channel** from the test image at the PG 19 GA rebuild — while it is present, PG 19
+  keeps arriving from the beta channel on every rebuild, including the one meant to verify GA.
+- **`delay_time`** on the vacuum and analyze progress views — deliberately out of scope (a PG 18 column,
+  zero without `track_cost_delay_timing`); revisit separately.
+- **The nine tests that skip above their version loop** (Decision 7) — a pre-existing coverage hole.
+- **Handoff to [014]:** `mode` as a column name is already used on the replication screen, and [014]'s
+  colorization rules key off column names, so a rule named `mode` would hit both screens.
 
 ## Data Models
 
@@ -267,6 +307,7 @@ mapped literals, none changes behaviour.
 | Stale `DiffIntvl` silently corrupts PG 19 report replay | Version-aware selectors plus the two-version replay test |
 | Beta catalog drift before GA | Column names re-checked against the live catalog during implementation; GA re-verification is a release finalization item, closed by patch releases |
 | The three progress execution tests keep using the bare pre-19 constant | Called out explicitly in the sweep task — otherwise the PG 19 subtest proves nothing |
+| The verification pass finds a real breakage on PG 19 | Fixed inside this feature, except where the area is re-entered by a later feature of the same release ([016]/[017]/[018]) — then it is named in this feature's QA report with the executing feature, re-verified at release finalization, and returns here if that feature drops out of 0.12.0 |
 
 ## Acceptance Criteria
 
@@ -281,37 +322,43 @@ mapped literals, none changes behaviour.
 - [ ] `TestView_VersionOK` and `Test_filterViews` have derived (not copied) `190000` rows.
 - [ ] New replay test green on both `180000` and `190000`; the three existing progress goldens are byte-identical.
 - [ ] `report -d -P v|a|b` describes the new columns with the version note.
-- [ ] `make test`, `make lint`, `make vuln` clean; `testing/e2e.sh` passes including 21919.
+- [ ] The new query constants contain no template placeholders — they stay static SQL, like the constants
+      they sit beside.
+- [ ] Installing PG 19 leaves the PG 14–18 package versions in the image unchanged (the beta channel pin
+      works).
+- [ ] `make test`, `make lint`, `make vuln` clean; `testing/e2e.sh` passes including port 21919.
 - [ ] All user-spec acceptance criteria satisfied (verified in the Final Wave QA task).
 
 ## Implementation Tasks
 
-### Wave 1 (независимые)
+### Wave 1 (проба — до любого Go-кода)
 
 #### Task 1: PG 19 probe and test-image environment
 - **Description:** Add a PG 19 cluster to the testing image: the beta apt channel in its own source file,
-  the `postgresql-19` packages, and PG 19 in the six version loops of the environment preparation script.
-  This is the feature's day-one risk retirement — build the image locally and confirm the cluster starts on
-  21919 and the fixtures load before any Go code is written. Does not touch `e2e.sh` or the workflows
-  (see Decision 4).
+  pinned per Decision 5a so it cannot displace the existing clusters' packages, the PG 19 packages
+  installed from it explicitly, and PG 19 in the six version loops of the environment preparation script. Build the
+  image locally and confirm the cluster starts and the fixtures load. This is the feature's first task and
+  runs before any Go code, because its outcome decides whether the feature proceeds, absorbs a base-image
+  migration, or pauses. Does not touch the e2e script or the workflows (Decision 4).
 - **Skill:** infrastructure-setup
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-infrastructure-reviewer
-- **Verify:** bash — build the image, start the cluster, load fixtures
+- **Verify:** bash — build the image, start the PG 19 cluster, load fixtures
 - **Files to modify:** `testing/Dockerfile`, `testing/prepare-test-environment.sh`
 - **Files to read:** `testing/fixtures.sql`, `.claude/skills/project-knowledge/deployment.md`
 
+### Wave 2 (зависит от Wave 1)
+
 #### Task 2: Version constant, port mapping, and test-connection hardening
-- **Description:** Add the PG 19 version constant and its test cluster port, and make the test-connection
-  helper return an error for a version it has no port for instead of quietly connecting to the oldest
-  cluster. The helper's doc comment already promises the error; the code contradicts it, and that gap is
-  what would let a forgotten port entry produce green tests that never touch PG 19.
+- **Description:** Add the PG 19 version constant and its test cluster port. Make the test-connection helper
+  return an error for a version it has no port mapping for, instead of falling back to the oldest cluster
+  (Decision 5).
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/postgres/...`
 - **Files to modify:** `internal/query/query.go`, `internal/postgres/testing.go`
 - **Files to read:** `internal/postgres/postgres.go`, `internal/query/io.go`
 
-### Wave 2 (зависит от Wave 1)
+### Wave 3 (зависит от Wave 2)
 
 #### Task 3: Version-aware selectors for the three progress screens
 - **Description:** Give each of the vacuum, analyze and basebackup progress screens a PG 19 query constant
@@ -321,7 +368,7 @@ mapped literals, none changes behaviour.
   selector.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/query/...`
+- **Verify:** bash — `go test ./internal/query/... ./internal/view/...`
 - **Files to modify:** `internal/query/progress_vacuum.go`, `internal/query/progress_analyze.go`,
   `internal/query/progress_basebackup.go`, `internal/query/progress_vacuum_test.go`,
   `internal/query/progress_analyze_test.go`, `internal/query/progress_basebackup_test.go`,
@@ -329,41 +376,49 @@ mapped literals, none changes behaviour.
 - **Files to read:** `internal/query/io.go`, `internal/query/bgwriter.go`, `internal/query/bgwriter_test.go`,
   `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
-### Wave 3 (зависит от Wave 2)
+### Wave 4 (зависит от Wave 3)
 
 #### Task 4: Thread PG 19 through the rest of the test suite
 - **Description:** Add the PG 19 version to every live-connection version loop and every per-version
-  assertion table outside the progress files, and add derived PG 19 rows to the two count-based tests that
-  run without a database. The count-based expectations must be derived from the actual per-view version
-  gates rather than copied from a lower row.
+  assertion table outside the three progress test files, and add PG 19 rows to the two count-based tests
+  that run without a database, deriving their expectations from the actual per-view version gates rather
+  than copying a lower row.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `make test`
-- **Files to modify:** all `_test.go` files carrying version lists except the three progress ones —
-  `internal/query/*_test.go`, `internal/stat/postgres_test.go`, `internal/view/view_test.go`,
-  `record/record_test.go`
+- **Files to modify:** `internal/query/activity_test.go`, `internal/query/bgwriter_test.go`,
+  `internal/query/common_test.go`, `internal/query/databases_test.go`, `internal/query/functions_test.go`,
+  `internal/query/indexes_test.go`, `internal/query/io_test.go`, `internal/query/overview_test.go`,
+  `internal/query/pgcenter_schema_test.go`, `internal/query/procpidstat_test.go`,
+  `internal/query/progress_cluster_test.go`, `internal/query/progress_copy_test.go`,
+  `internal/query/progress_create_index_test.go`, `internal/query/replication_slots_test.go`,
+  `internal/query/replication_test.go`, `internal/query/sizes_test.go`,
+  `internal/query/statements_test.go`, `internal/query/tables_test.go`, `internal/query/wal_test.go`,
+  `internal/view/view_test.go`, `record/record_test.go`
+  <!-- internal/stat/postgres_test.go is deliberately excluded — owned by Task 6, which also adds its PG 19 row -->
+
 - **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-code-research.md`,
   `.claude/skills/project-knowledge/patterns.md`
 
 #### Task 5: Report describe texts for the new columns
-- **Description:** Describe the new columns in the three progress report descriptions, with a trailing note
-  naming the version they appeared in, so `report -d` documents the superset the way the bgwriter and IO
-  descriptions already do.
+- **Description:** Describe the new columns in the three progress report descriptions, each with a trailing
+  note naming the PostgreSQL version they appeared in, per Decision 3.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** bash — `go test ./report/...`
+- **Verify:** bash — `go test ./report/...`; `pgcenter report -d -P v|a|b` lists the new columns
 - **Files to modify:** `report/describe.go`
 - **Files to read:** `report/report.go`, `report/report_test.go`
 
 #### Task 6: Report replay coverage for the new layout
-- **Description:** Add a replay test for the vacuum progress report on both an old and a PG 19 recording,
-  proving the layout is chosen by the version stored in the archive. This is the guard for the one field
-  that fails silently rather than loudly: a wrong diff interval prints plausible nonsense instead of an
-  error.
+- **Description:** Add a replay test for the vacuum progress report on both a pre-19 and a PG 19 recording,
+  proving the layout is chosen by the version stored in the archive. Also add the mixed-width diff guard
+  from Decision 5b with its own case on the same harness, since this feature is what makes a mixed-width
+  archive representable. Owns the stats-package test file, so it also adds that file's PG 19 version entry.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** bash — `go test ./report/...`, existing progress goldens unchanged
-- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new), `report/testdata/` (new goldens)
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Verify:** bash — `go test ./report/... ./internal/stat/...`; the three existing progress goldens unchanged
+- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new), `report/testdata/` (new goldens),
+  `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
 - **Files to read:** `report/report_record_bgwriter_test.go`, `report/report.go`
 
 #### Task 7: Documentation update
@@ -376,23 +431,23 @@ mapped literals, none changes behaviour.
   `.claude/skills/project-knowledge/deployment.md`, `.claude/skills/project-knowledge/architecture.md`
 - **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
-### Wave 4 (зависит от Wave 3 — жёсткий порядок)
+### Wave 5 (зависит от Wave 4 — действие пользователя)
 
 #### Task 8: Publish the test image (user action)
 - **Description:** Build and push the new testing image tag to DockerHub, then run it against unmodified
   `develop` to confirm the rebuild did not break PG 14–18 on its own. Requires the maintainer's registry
-  credentials, so it cannot be automated. Everything in Wave 5 depends on the image being published.
+  credentials, so it cannot be automated. Task 9 and the Final Wave depend on it.
 - **Skill:** none — user instruction
 - **Reviewers:** none
 - **Verify:** user — image available in the registry; CI green on unmodified `develop`
 - **Files to modify:** none
 - **Files to read:** `.claude/skills/project-knowledge/deployment.md`, `testing/Dockerfile`
 
+### Wave 6 (зависит от Wave 5)
+
 #### Task 9: Switch CI to the new image and extend the e2e script
 - **Description:** Point both workflows at the new image tag and add the PG 19 port to the end-to-end
-  script. These two land together and only after the image is published: the e2e script runs from the
-  checkout rather than from the image and aborts on the first failing command, so it has no way to skip a
-  missing cluster.
+  script. Both land together and only after the image is published, per Decision 4.
 - **Skill:** deploy-pipeline
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-deploy-reviewer
 - **Verify:** bash — `./testing/e2e.sh` passes including the PG 19 port
@@ -402,9 +457,13 @@ mapped literals, none changes behaviour.
 ### Final Wave
 
 #### Task 10: Pre-deploy QA
-- **Description:** Acceptance testing against the user-spec and this tech-spec: full automated suite, lint
-  and vulnerability checks, the scripted TUI walk over every registered screen on live PG 19 under
-  generated load, the REPACK backwards-compatibility check, the lock-counter check, and the
-  version-reachability check.
+- **Description:** Acceptance testing against the user-spec and this tech-spec. Automated: full suite, lint,
+  vulnerability check, end-to-end script. Manual on live PG 19: a scripted walk over all 27 registered
+  screens (including both `pg_stat_io` sub-screens, all seven `pg_stat_statements` sub-screens and all six
+  progress screens, with the per-process screen checked over a local connection) under generated load, the
+  new columns cross-checked against psql, the REPACK backwards-compatibility check, the lock-counter check
+  and the version-reachability check. Any breakage found is routed per the Risks table rather than silently
+  accepted.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
+- **Verify:** bash + user — full QA per the user-spec "Как проверить" section

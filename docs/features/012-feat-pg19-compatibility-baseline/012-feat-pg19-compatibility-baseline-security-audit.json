@@ -1,0 +1,71 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 6,
+    "critical": 0,
+    "major": 1,
+    "minor": 5
+  },
+  "findings": [
+    {
+      "severity": "major",
+      "category": "A08: Software and Data Integrity Failures",
+      "title": "New pgdg-testing apt channel is unpinned — beta builds can silently replace PG 14-18 and postgresql-common",
+      "description": "Task 1 adds 'the beta apt channel in its own source file' to testing/Dockerfile, but the spec states no apt pin and no signing-key decision. apt resolves packages by highest available version across ALL enabled sources, not by source precedence. Once 'jammy-pgdg-testing main' is enabled in the same RUN layer that installs postgresql-14..18, any package in the testing channel with a higher version wins — including postgresql-14/15/16/17/18, postgresql-plperl-*, libpq5 and postgresql-common itself. The Dependencies section asserts 'pg_createcluster comes from postgresql-common in the main pgdg channel', which is not what apt will actually do once the testing source is active. The Risks table entry 'Image rebuild breaks PG 14-18 for unrelated reasons' detects this after the fact (run rebuilt image against unmodified develop) but nothing prevents it. The spec is also silent on how the new source file is trusted: the existing pgdg.list uses signed-by=/usr/share/keyrings/pgdg.gpg (key ACCC4CF8 fetched over https from postgresql.org). pgdg-testing is served from the same host and the same key, so reuse is correct — but it must be stated, because the failure mode of an unstated trust decision is an implementer writing '[trusted=yes]' or a bare deb line to get the beta packages installed.",
+      "location": "Section: Architecture / Task 1: PG 19 probe and test-image environment (testing/Dockerfile)",
+      "impact": "The whole CI test matrix could quietly start running against beta builds of PG 14-18 and a beta postgresql-common, so 'green on PG 17' would no longer mean what it says — a correctness and trust regression across every version pgcenter claims to support, not just PG 19. If the trust decision is resolved with [trusted=yes] or an unsigned source, apt stops verifying signatures for that channel entirely, turning any MITM or mirror compromise on apt.postgresql.org into arbitrary root-level code execution inside the image that every CI job then runs.",
+      "recommendation": "State three things explicitly in Task 1 so the implementer cannot get them wrong:\n1. Reuse the existing keyring, never a new trust exemption:\n   echo \"deb [signed-by=/usr/share/keyrings/pgdg.gpg] https://apt.postgresql.org/pub/repos/apt jammy-pgdg-testing main\" > /etc/apt/sources.list.d/pgdg-testing.list\n2. Pin the channel down so only PG 19 comes from it:\n   printf 'Package: *\\nPin: release n=jammy-pgdg-testing\\nPin-Priority: 100\\n' > /etc/apt/preferences.d/pgdg-testing\n   then install with an explicit target release:\n   apt-get install -y -t jammy-pgdg-testing postgresql-19 postgresql-plperl-19\n3. Add an acceptance check that the pin held — after the build, assert the PG 14-18 packages still come from jammy-pgdg (e.g. `apt-cache policy postgresql-17 | grep jammy-pgdg` / `dpkg -l postgresql-common`), rather than relying only on 'CI green against unmodified develop' to notice.",
+      "cwe": "CWE-494"
+    },
+    {
+      "severity": "minor",
+      "category": "A08: Software and Data Integrity Failures",
+      "title": "CI container referenced by mutable tag rather than digest, in a job where GITHUB_TOKEN is present",
+      "description": "Task 9 bumps `container: lesovsky/pgcenter-testing:0.0.10` to `:0.0.11` in both .github/workflows/default.yml and release.yml. The reference stays a mutable tag: a re-push of 0.0.11 to DockerHub changes what every CI run executes, with no signal in the repository. This is a pre-existing pattern, not something the feature introduces, but Task 9 is the moment both lines are edited. The test job runs actions/checkout@v4, which places GITHUB_TOKEN into the container's workspace, so image content is inside the trust boundary of that token. Note the release job (docker/login-action with DOCKER_USERNAME/DOCKER_PASSWORD, goreleaser with GITHUB_TOKEN) runs on a clean runner with no container:, so registry credentials are correctly out of reach of the test image — the feature touches no secret and adds no new one.",
+      "location": ".github/workflows/default.yml:7 and .github/workflows/release.yml:9 (Task 9)",
+      "impact": "A compromised DockerHub account or an accidental tag overwrite yields code execution in every CI run of the repository, with read access to the checked-out tree and to whatever GITHUB_TOKEN is scoped to under the repo's default workflow permissions.",
+      "recommendation": "Pin by digest alongside the human-readable tag while both lines are already being edited:\n  container: lesovsky/pgcenter-testing:0.0.11@sha256:<digest>\nCapture the digest in Task 8 (the manual push) — `docker buildx imagetools inspect lesovsky/pgcenter-testing:0.0.11` — and hand it to Task 9, which already depends on Task 8 by Decision 4's merge order. No extra ordering constraint is created.",
+      "cwe": "CWE-494"
+    },
+    {
+      "severity": "minor",
+      "category": "A05: Security Misconfiguration",
+      "title": "Workflows declare no explicit `permissions:` block",
+      "description": "Neither workflow sets a `permissions:` key at job or workflow level, so both jobs inherit the repository's default GITHUB_TOKEN scope. On repositories still on the legacy default this is read/write across contents, packages, issues and pull requests for a job whose only need is `contents: read` (checkout). Pre-existing and orthogonal to PG 19, but Task 9 already edits both files, making it a near-zero-cost hardening.",
+      "location": ".github/workflows/default.yml:5, .github/workflows/release.yml:5 (Task 9)",
+      "impact": "Any code executing in the test job — third-party actions, the `go install ...@latest` lint tools, or the testing image itself — can use an over-scoped GITHUB_TOKEN to write to the repository.",
+      "recommendation": "Add `permissions: contents: read` at workflow level in default.yml, and in release.yml at workflow level with the release job overriding to exactly what GoReleaser needs (`contents: write`, plus `packages: write` if publishing there). Verify the release job still passes before merging, since GoReleaser needs write to create the GitHub release.",
+      "cwe": "CWE-732"
+    },
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "No acceptance criterion pins the new PG 19 query constants as placeholder-free",
+      "description": "The three new query constants are rendered through query.Format(), which uses text/template — no escaping, by design, because these are SQL templates. Verified in the current tree: all three progress constants contain zero `{{ }}` placeholders (grep count 0 in progress_vacuum.go / progress_analyze.go / progress_basebackup.go), and the queries are static Go consts with pid/relation filters, so today they carry no interpolation surface at all. The one Options field that does originate from user keyboard input, QueryAgeThresh (set in top/config_view.go:362 from the interactive age prompt), is gated by an anchored regex in parseHumanTimeString (`^([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2})(\\.[0-9]{1,6})?$`) before it reaches the template, so the existing interpolation pattern is safe. The gap is not a present vulnerability but a missing guardrail: the Acceptance Criteria list constrains the (query, Ncols, DiffIntvl) triples and does not say the new constants must stay static, so a future implementer copying a placeholder-bearing template (e.g. the `{{.ViewType}}` / `{{.PgSSQueryLenFn}}` idiom from other files) would not trip any check.",
+      "location": "Section: Acceptance Criteria; internal/query/progress_{vacuum,analyze,basebackup}.go (Task 3)",
+      "impact": "Low today. If a later edit introduces a placeholder fed by an Options field that is not validated the way QueryAgeThresh is, raw text lands inside a SQL string with no escaping layer between it and the server.",
+      "recommendation": "Add one acceptance criterion to Task 3: 'The three PG 19 constants contain no template placeholders; any placeholder added later must be sourced from a validated or code-controlled Options field, never from raw user input.' Enforce it cheaply in the selector unit tables with `assert.NotContains(t, gotQuery, \"{{\")`, which costs one line per case in tests already being written.",
+      "cwe": "CWE-89"
+    },
+    {
+      "severity": "minor",
+      "category": "A08: Software and Data Integrity Failures",
+      "title": "Version-dependent column count widens an unguarded index in the report replay path",
+      "description": "`pgcenter report -f <file>.tar` parses a tar the operator did not necessarily produce, and the layout used to diff it is selected from the version string inside the archive's own meta entry (report/report.go:399, strconv.ParseInt on res.Values[0][1]). The tar handling itself is clean — read-only, no file extraction, so no zip-slip, and snapshots go through encoding/json. But internal/stat/postgres.go:632-638 iterates `for l := 0; l < curr.Ncols; l++` and dereferences `prev.Values[j][l]` with no check that the previous snapshot has as many columns as the current one. Until now every snapshot of a given view inside one archive had the same fixed column count, so the mismatch was not representable. This feature makes progress_vacuum 13-or-15, progress_analyze 12-or-13 and progress_basebackup 11-or-12 columns depending on the recorded version — so a hand-crafted or concatenated archive with snapshots of differing widths and a matching pid in both ticks now reaches that dereference. The spec's Backward Compatibility claim that 'printing/alignment/diffing all walk the recorded result's own column count' holds for DiffIntvl (line 633 only compares `l` against the interval bounds, never indexes with it) — the exposure is the prev-row width, not the interval.",
+      "location": "internal/stat/postgres.go:638 (reached via report/report.go:453); Task 6",
+      "impact": "Index-out-of-range panic — a local denial of service on a CLI reading a file the operator chose to open. Go's bounds checking means there is no memory-safety consequence; the practical cost is a crash instead of a 'malformed archive' error. No privilege boundary is crossed.",
+      "recommendation": "In `diff()`, skip or error on a width mismatch before the inner loop:\n  if len(pv) != curr.Ncols { continue }\nTask 6 already builds a synthetic in-memory tar harness for two versions, so add one case there feeding a 15-column tick and a 13-column tick with the same pid, and assert an error rather than a panic. Cheapest place to close it; no separate task needed.",
+      "cwe": "CWE-129"
+    },
+    {
+      "severity": "minor",
+      "category": "A05: Security Misconfiguration",
+      "title": "Trust-auth-on-all-interfaces test config extended to a sixth cluster in a publicly published image",
+      "description": "testing/prepare-test-environment.sh writes `listen_addresses = '*'` plus a pg_hba.conf of `host all all 0.0.0.0/0 trust` for every cluster, and Task 1 extends the six version loops to include PG 19 on port 21919. The image is published publicly as lesovsky/pgcenter-testing. This is a deliberate, pre-existing test-environment choice — the clusters hold only fixtures.sql — and the feature merely propagates it to one more port; it is not a new decision and not a defect in this design. Flagged because Task 1 touches exactly these loops and the spec records no note about it.",
+      "location": "testing/prepare-test-environment.sh (Task 1); testing/e2e.sh port 21919 (Task 9)",
+      "impact": "Anyone who runs the published image with `-p` port publishing, or on a host with a permissive firewall, exposes six superuser-accessible PostgreSQL instances requiring no password. Contents are throwaway fixtures, so the primary risk is the instances being used as a foothold or resource, not data disclosure.",
+      "recommendation": "No code change required for this feature. Either (a) narrow to `listen_addresses = 'localhost'` and `host all all 127.0.0.1/32 trust`, which is sufficient for CI and for e2e.sh (all connections are to 127.0.0.1), or (b) if any consumer needs the container-network-wide binding, record the intent as a one-line comment in the script next to the pg_hba heredoc and a note in deployment.md that the image must never be run with published ports on an untrusted network.",
+      "cwe": "CWE-1188"
+    }
+  ]
+}

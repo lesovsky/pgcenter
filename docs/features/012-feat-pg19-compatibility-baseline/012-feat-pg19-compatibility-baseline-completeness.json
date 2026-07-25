@@ -1,0 +1,50 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 26,
+  "requirements_covered": 22,
+  "requirements_partial": 4,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-17: Проба пакетов PG 19 ставится до написания любого кода (трёхступенчатая развилка)",
+      "detail": "Task 1 (probe) and Task 2 (Go code: PostgresV19 constant + NewTestConnectVersion hardening) are both in Wave 1, which by the project's wave semantics runs concurrently. This contradicts the user-spec constraint 'проба ставится до написания любого кода' and Task 1's own wording 'before any Go code is written'. On ladder rung 3 (feature paused) Go code would already be merged. Fix: move Task 2 to Wave 2, or state explicitly that Task 2 is probe-outcome-independent.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-6: Проверочный проход по всем экранам на живом PG 19 (правило обработки найденной поломки)",
+      "detail": "The user-spec defines a mandatory policy for the case where the verification pass finds a real PG 19 breakage: fix inside this feature, except when the broken area is reopened by [016]/[017]/[018] of the same release — then fix there, name the defect and the executing feature in this feature's QA report, and re-verify at release finalization; if the executing feature drops out of 0.12.0, the fix returns here. The tech-spec Risks table has no row for this risk at all, and Task 10 (pre-deploy QA) carries no instruction on how to record or route such a finding. As written, QA has no defined outcome other than pass/fail.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-6: Все 27 зарегистрированных экранов; per-process экран проверяется по локальному подключению",
+      "detail": "The Agent Verification Plan and Task 10 say 'every registered screen' but do not carry the concrete checks from the user-spec: the count of 27 registered views, both pg_stat_io subgroups, all seven pg_stat_statements subscreens, all six progress screens, and the requirement that the per-process statistics screen be verified over a local connection (it is unavailable remotely by design). A scripted tmux walk driven by hotkeys can silently miss subscreens and the local-connection case.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-25: Отложенные пункты, заносимые при финализации фичи",
+      "detail": "The user-spec designates three carry-forward items: (a) column delay_time deferred for separate analysis, (b) removal of the temporary pgdg-testing repo line at the GA image rebuild, (c) the `mode` column-name collision with the replication screen, recorded so feature [014] (row highlighting by column name) does not rediscover it. The tech-spec records only one finalization item (Decision 7, the nine tests that skip above their version loop). Task 1 places the beta channel 'in its own source file', which supports (b), but no task or decision states the removal obligation, and (a) and (c) are absent entirely.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-6/Как проверить: «Пользователь проверяет» — ширина колонки started_by на привычном терминале",
+      "detail": "The user-spec's single user-side check (eyeballing whether the started_by column width is comfortable on a normal terminal) is not represented in the Agent Verification Plan; Task 10 additionally has no Verify and no Files fields, while verification table row 10 declares 'bash + user'.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "22/26 requirements fully covered, 4 partial, 0 missing. No critical findings — status pass. Scope creep check clean: the NewTestConnectVersion fallback hardening is explicitly in the user-spec (Decision 5 traces to it), the conditional ubuntu:24.04 migration correctly appears only as a Risks-table ladder rung and NOT as a task, and pg_stat_progress_repack / pg_stat_progress_data_checksums / WAL / slot / stats_reset columns are all explicitly kept out (Decision 6, Solution). No overengineering found: Decision 2's uniform 3-tuple and Decision 7's refusal to refactor nine unrelated tests both argue against added surface. Solution and Architecture carry real technical substance (selector idiom, Configure() seam, DiffIntvl silent-failure argument), not paraphrase. Two major partials: probe-before-any-code sequencing is broken by putting Task 2 in Wave 1 next to the probe, and the user-spec's policy for a real breakage found during the verification pass is missing from the Risks table and from Task 10."
+}

@@ -1,0 +1,26 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "The spec states '41 NewTestConnectVersion call sites verified: all pass mapped literals, none changes behaviour' (Decision 5, Backward Compatibility section). A repo-wide grep finds 39 occurrences of `NewTestConnectVersion(` total (including its own definition and the `NewTestConnect()` wrapper), i.e. ~38 actual call sites, not 41. The underlying architectural claim (all callers pass a `version` loop variable drawn from literal `versions := []int{...}` slices that are already subsets of the port map, so removing the silent fallback changes nothing for them) holds and was independently spot-checked against internal/query/*_test.go, internal/stat/postgres_test.go — the count is just off.",
+      "location": "Decision 5 / Backward Compatibility / Consumer impact",
+      "fix": "Re-run the grep during Task 2 implementation and correct the number, or drop the exact count and state the qualitative guarantee only ('every call site's `versions` literal is a subset of the port map')."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "The spec is a near-textbook application of the project's existing version-selector idiom (io.go/bgwriter.go: (query, Ncols, DiffIntvl) selectors wired into view.Configure()) and every column-position/Ncols/DiffIntvl claim in the Data Models table was verified byte-for-byte against the current progress_vacuum.go/progress_analyze.go/progress_basebackup.go SQL. ADR references [004] (per-version constants, no NULL-padding), [007] (4-tuple only when UniqueKey moves — correctly not triggered here since pid stays col 0), and [008] (report-time Configure keyed on archive version, not live server) are all confirmed accurate against report/report.go and internal/stat/postgres.go. Decision 4's image-push ordering analysis (e2e.sh runs from checkout with `set -euxo pipefail` and no skip path, vs prepare-test-environment.sh which CI runs from the baked-in image copy) matches the actual .github/workflows/default.yml and testing/ scripts exactly. Wave/task file ownership has no collisions (Task 3 owns view.go + the three progress *.go/*_test.go; Task 4 owns every other version-list *_test.go, explicitly excluding the three progress test files). One minor factual imprecision (a stale call-site count) does not affect the architecture and is easily corrected during implementation."
+}

@@ -1,0 +1,66 @@
+{
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Wave 4 holds Task 8 (publish the test image, user action) and Task 9 (switch CI to the new image + extend e2e.sh), but Task 9 explicitly depends on Task 8: its description states the two 'land together and only after the image is published', and Decision 4 makes that ordering mandatory (e2e.sh has no skip path and turns CI red if it merges first). Tasks in the same wave execute in parallel, so this dependency is unenforced. Task 8's own description confirms the intent was a later wave — it says 'Everything in Wave 5 depends on the image being published', and no Wave 5 exists in the document.",
+      "fix": "Move Task 9 into its own Wave 5 (зависит от Wave 4), leaving Task 8 alone in Wave 4, and renumber the Final Wave dependency accordingly. Then fix Task 8's description so it refers to the wave that actually exists."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Task 4 'Files to modify' is a prose description with a wildcard instead of concrete paths: 'all `_test.go` files carrying version lists except the three progress ones — internal/query/*_test.go, internal/stat/postgres_test.go, internal/view/view_test.go, record/record_test.go'. `internal/query/*_test.go` expands to ~17 files in the repo; the exclusion of the three progress test files (owned by Task 3) exists only as prose. Wave-conflict detection and task decomposition cannot mechanically check file ownership against a glob.",
+      "fix": "Enumerate the concrete `_test.go` files Task 4 owns (the version-list files under internal/query minus progress_vacuum_test.go, progress_analyze_test.go, progress_basebackup_test.go, plus internal/stat/postgres_test.go, internal/view/view_test.go, record/record_test.go)."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 9 description reproduces Decision 4's rationale verbatim in substance: 'the e2e script runs from the checkout rather than from the image and aborts on the first failing command, so it has no way to skip a missing cluster'. This is decision content (markers: 'rather than', 'so'), already fully stated in Decision 4.",
+      "fix": "Reduce the task description to scope ('Point both workflows at the new image tag and add the PG 19 port to the end-to-end script; must land after the image is published — see Decision 4') and keep the justification only in the Decisions section."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 6 description embeds rationale: 'This is the guard for the one field that fails silently rather than loudly: a wrong diff interval prints plausible nonsense instead of an error.' Markers 'rather than' / 'instead of'; the same reasoning already appears in Architecture → How it works and in the Risks table.",
+      "fix": "Trim to the scope sentence and reference the Risks row / Architecture note instead of restating the reasoning inside the task."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 2 description embeds Decision 5's rationale: 'The helper's doc comment already promises the error; the code contradicts it, and that gap is what would let a forgotten port entry produce green tests that never touch PG 19' (marker 'instead of' also present in the first sentence). Decision 5 already states exactly this.",
+      "fix": "Keep only what and why-at-scope-level ('make the test-connection helper return an error for an unmapped version — see Decision 5'), and leave the justification in Decisions."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Task 8 references a wave that does not exist in the document ('Everything in Wave 5 depends on the image being published'). The document defines Wave 1-4 plus a Final Wave.",
+      "fix": "After introducing the Wave 5 split (see the critical finding), correct the reference; otherwise reword to name the actual dependent tasks."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Task 10 (Pre-deploy QA) has no `Verify:` field, although the Agent Verification Plan's per-task table assigns it 'bash + user' with a concrete scope (suite, TUI walk, REPACK, lock counter, reachability). Task 10 is the one task whose output is most explicitly observable.",
+      "fix": "Add `**Verify:** bash + user — full QA per user-spec` to Task 10 so the task body and the verification table agree."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Task 5 description carries Decision 3's justification ('so `report -d` documents the superset the way the bgwriter and IO descriptions already do'), duplicating the Decisions section.",
+      "fix": "State the scope only and let Decision 3 carry the precedent argument."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "The configuration value 21919 appears both in the Decisions section (Decision 4: `pgcenter record -p 21919`) and in Task 1's description ('confirm the cluster starts on 21919'), and the same port is repeated in the verification table and Testing Strategy. Duplicated literals drift when one copy is edited.",
+      "fix": "Keep the port literal authoritative in Architecture/Data Models (or Decision 4) and refer to it as 'the PG 19 test port' in task descriptions."
+    },
+    {
+      "severity": "minor",
+      "category": "time_estimates",
+      "issue": "Task 1 uses the phrase 'the feature's day-one risk retirement'. No hours/days/sprints estimates exist anywhere in the document, but 'day-one' reads as a calendar reference rather than a dependency statement.",
+      "fix": "Reword to ordering language, e.g. 'this is the feature's first task and retires its top risk before any Go code is written'."
+    }
+  ],
+  "summary": "Template compliance is strong: frontmatter is complete and valid (created 2026-07-25, status draft, branch feature/pg19-compatibility-baseline, size M), every required section is present and substantive (Solution, Architecture with both subsections, 9 Decisions each with Decision/Rationale/Alternatives, Data Models, Dependencies, Testing Strategy with feature size M, Agent Verification Plan with all three subsections, Backward Compatibility, a 9-row Risks table with real non-generic mitigations, Acceptance Criteria, Implementation Tasks in waves). All 10 tasks use skills from the catalog (infrastructure-setup, code-writing, documentation-writing, deploy-pipeline, pre-deploy-qa, plus one skill-less user task) with the catalog's default reviewer sets; every named reviewer agent exists in ~/.claude/agents/. Proposed file paths and the selector/naming idiom match architecture.md and patterns.md. No AC blocks, TDD anchors, line-number references or step-by-step recipes inside tasks; task count (10) is under the split threshold. One critical issue blocks approval: Task 9 depends on Task 8 but sits in the same wave (Wave 4), and Task 8's own text refers to a Wave 5 that was never written — the hard image-publish ordering from Decision 4 is therefore unenforced. Beyond that, Task 4's file list is a glob rather than concrete paths, and four tasks carry rationale that belongs in the Decisions section."
+}
