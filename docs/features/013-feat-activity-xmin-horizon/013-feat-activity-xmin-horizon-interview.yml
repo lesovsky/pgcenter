@@ -15,8 +15,8 @@ interview_metadata:
   feature_base: "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon"
   work_type: "feature"
   started: "2026-07-25 14:58:26"
-  last_updated: "2026-07-25 16:30:00"
-  status: "in_progress"
+  last_updated: "2026-07-25 22:01:44"
+  status: "completed"
   can_resume: true
   current_question_num: 5
   feature_size: "M"
@@ -808,8 +808,8 @@ phase3_integration:
 # Phase 4: Completion
 # ============================================================================
 phase4_completion:
-  userspec_file: ""
-  status: "pending"
+  userspec_file: "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon.md"
+  status: "approved"
 
 # ============================================================================
 # Decision Rules
@@ -835,9 +835,9 @@ decision_rules:
 # ============================================================================
 progress:
   current_phase: "phase4_completion"
-  questions_asked: 5
-  last_question: "Финализация приёмочных критериев и стенда"
-  completion_estimate: "95%"
+  questions_asked: 8
+  last_question: "Утверждение user-spec"
+  completion_estimate: "100%"
 
 # ============================================================================
 # Notes
