@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Both round-1 majors are genuinely closed — verified by re-running the mutations myself in an isolated copy of the repo, not by trusting the summary. (1) Test_processData_versionChange_reresolvesOrderColumn now discriminates all three candidate orders: with pids 3003/4004 swapped so the low pid carries the winning state, dropping `orderConfigured = false` while KEEPING the seed restore now produces a real failure ('900' is not less than '710') where in round 1 the whole suite stayed green. (2) The fourth subtest 'empty value at zero width is not an error' now pins the guard's placement inside `if valuelen > width`: hoisting the guard above the truncation branch fails that subtest with 'Received unexpected error: zero or negative width, skip', where in round 1 the hoist survived. All four remaining minors were applied as agreed (require.NoError on all three processData returns, the pre-boundary bracketing assertion, beforeBoundaryRows/afterBoundaryRows renaming, the unused v.Aligned = true lines dropped). I re-ran the full 7-mutation matrix independently — all 7 detected, matching the reported results exactly — and added three mutations of my own. Two of mine survived, but they turn out to be dead assignments in the implementation rather than a test gap (see the single minor below); the third (removing the `linesPrinted := repeatHeaderAfter` seed) is caught by 17 existing golden tests. Suite is deterministic: zeroWidthGuard passes 300x standalone, the full report package passes 12x with -count=1 and 3x under -race; go vet clean; report/testdata untouched. Zero critical, zero major.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "report/report.go:287-288 (v.ColsWidth = map[int]int{} and v.Cols = nil inside the versionChanged block)",
+      "issue": "Mutation testing of the new suite shows these two assignments are not pinned by any test — and cannot be, because they have no observable effect. Verified: deleting either line individually leaves the entire ./report/... suite green (both mutations SURVIVED). The reason is structural, not a coverage hole: formatStatSample (report.go:513-523) unconditionally overwrites both view.ColsWidth and view.Cols whenever Aligned is false, and it is the first thing that runs on the next sample after the version-change branch does `continue`. Nothing reads v.ColsWidth or v.Cols between the reset and that overwrite — printStatHeader and printStatSample are both downstream of formatStatSample, and v is a by-value local, so no external observer exists. The `v.Aligned = false` line alone carries the whole behaviour (dropping it fails all three version-change tests). The code comment claims the pair is cleared 'so the gap until the next sample carries no known-wrong layout', but there is no gap in which anything can read it.",
+      "recommendation": "No test change. This is an implementation observation for the code reviewer: either drop the two assignments and keep `v.Aligned = false` alone (the minimal change that produces the behaviour the three tests pin), or, if they are deliberately kept as defence against a future reader of the layout being added between the reset and formatStatSample, adjust the comment to say so explicitly — 'defensive; currently unobservable because formatStatSample rewrites both on the next sample' — so a later reader does not mistake them for load-bearing code and a later mutation-testing pass does not re-flag them. Do not add a white-box test asserting the intermediate map is empty: it would pin a private intermediate state, not behaviour.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 7,
+      "passed": 7,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 4,
+      "integration": 3,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

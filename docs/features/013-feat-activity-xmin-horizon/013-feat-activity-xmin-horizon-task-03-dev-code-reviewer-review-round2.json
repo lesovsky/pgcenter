@@ -1,0 +1,83 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "previousReport": "docs/features/013-feat-activity-xmin-horizon/013-feat-activity-xmin-horizon-task-03-dev-code-reviewer-review.json",
+  "status": "approved_with_suggestions",
+  "summary": "The round-1 critical is genuinely closed: I re-ran the discriminating mutation myself and Test_processData_versionChange_reresolvesOrderColumn now FAILS when `orderConfigured = false` is removed while the seed restore is kept — the surviving mutant of round 1 is dead. I independently re-ran the full mutation matrix (8 mutants) against the current working tree: all 7 load-bearing resets and the guard are detected, only the acknowledged-benign ColsWidth/Cols pair survives, exactly as reported. No regression: production code in report/report.go is byte-identical to round 1 apart from nothing (the fix was test-only), the four new test edits are all additive or neutral, go test ./report/... green, make test green at 70.1%, golangci-lint 0 issues, gosec clean, go vet clean, gofmt clean, testdata goldens and docs/tech-debt.md untouched. The single remaining major (processData at 152 lines) is deferred with a justification I accept.",
+  "criticalIssues": [],
+  "resolvedFromRound1": [
+    {
+      "finding": "CRITICAL — Test_processData_versionChange_reresolvesOrderColumn did not discriminate a re-resolved -o index from the restored seed key",
+      "resolution": "Fixed as proposed. In newRows pid 3003 now carries state=idle / wait_event=AAAsync and pid 4004 carries state=active / wait_event=ClientRead; the assertion is index(\"3003\") < index(\"4004\").",
+      "verifiedBy": "I confirmed the three candidate orders are now pairwise distinct against the real code, not just the comment: (a) -o state re-resolved against activityColsPG13 index 10, desc -> 'idle' > 'active' -> 3003 first; (b) stale index 9 = wait_event, desc -> 'ClientRead' > 'AAAsync' -> 4004 first; (c) screen default = internal/view/view.go:45-46 activity OrderKey 0 (pid), OrderDesc true -> 4004 first. Mutation run: deleting report/report.go:299 `orderConfigured = false` while keeping the seed restore now yields `--- FAIL: Test_processData_versionChange_reresolvesOrderColumn` with '\"900\" is not less than \"710\"'. The task's own Verification Step now holds.",
+      "status": "closed"
+    },
+    {
+      "finding": "minor — drain goroutine depends on readTar's defer ordering",
+      "resolution": "Comment added in runProcessDataOnTar naming the dependency ('Terminating on doneCh is safe because readTar sends it from a defer, i.e. only after its last send on dataCh has been consumed').",
+      "status": "closed"
+    },
+    {
+      "finding": "minor — ColsWidth/Cols reset not mutation-observable",
+      "resolution": "Code kept as-is per Decision 6 / the task's implementation hints; wording to be corrected in the decisions log. I re-confirmed the mutant still survives (removing both while keeping Aligned = false leaves ./report/... green) — accepted, the pair is genuine belt-and-braces and the inline comment says so.",
+      "status": "accepted-as-is",
+      "note": "The decisions log currently has no Task 03 entry at all (only 'Task 02: Sort empty-last and non-empty mode selection'), so the promised correction applies to an entry not yet written. Whoever writes it should scope the 'each reset is load-bearing' claim to Aligned, linesPrinted, orderConfigured and the seed restore."
+    },
+    {
+      "finding": "major — processData is now 152 lines",
+      "resolution": "Not applied; deferred to tech debt owned by Task 5.",
+      "status": "deferred",
+      "note": "Justification accepted. The finding was already flagged optional in round 1 for precisely this reason: the threshold was breached before this task, and both CLAUDE.md files forbid refactoring adjacent working code. Confirmed unchanged: processData spans report/report.go:233-384."
+    },
+    {
+      "finding": "minor — buildActivityTar duplicates the replslots tar harness",
+      "resolution": "Not applied; extracting the shared harness would mean editing report/report_record_replslots_test.go, which sibling Task 02 is concurrently modifying. Recorded as tech-debt candidate.",
+      "status": "deferred",
+      "note": "Correct call. git status confirms report_record_replslots_test.go carries Task 02 edits; touching it from this task would create a merge conflict for zero functional gain."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "report/report_test.go",
+      "line": 1544,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The new bracketing assertion in Test_processData_versionChange_recomputesLayout, `assert.Less(t, strings.Index(normalized, \"olddb\"), hdrPos, ...)`, passes vacuously if \"olddb\" is absent, since strings.Index returns -1 and -1 < hdrPos. It is not a real hole — the earlier `assert.Contains(t, normalized, \"olddb\")` catches that case — but the failure output would then show the Contains failure plus a silently-passing ordering check. Promoting that Contains to require.Contains, or capturing `oldPos := strings.Index(...)` with a `require.NotEqual(t, -1, oldPos)` alongside the existing hdrPos/rowPos guards, makes the bracket self-sufficient and matches the pattern the same test already uses two lines above.",
+      "benefit": "The new assertion carries its own precondition rather than borrowing one from an assert further up, consistent with how hdrPos and rowPos are already guarded.",
+      "optional": true
+    },
+    {
+      "file": "report/report.go",
+      "line": 233,
+      "severity": "major",
+      "category": "maintainability",
+      "suggestion": "Carried forward unchanged from round 1 and accepted as deferred: processData spans 233-384 (152 lines) and the version-change branch holds three distinct concerns. Extracting the reset block (282-302) into a helper is the eventual fix; it belongs in the tech-debt register, not in this task's diff.",
+      "benefit": "Recorded so the deferral is traceable. No action required in Task 03.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  },
+  "verifiedByReviewer": {
+    "diffFidelity": "git diff of report/report.go + report/report_test.go is byte-identical to the supplied task03-round2.diff, both before and after my mutation runs (verified by diff against the scratchpad copy).",
+    "productionCodeDelta": "report/report.go is unchanged between round 1 and round 2 — every fix landed in report_test.go. The zero-width guard remains inside `if valuelen > view.ColsWidth[i]` at report.go:604-611, byte-faithful to top/printDataCell; printStatSample does not read view.Aligned, so dropping the unused v.Aligned assignments from the guard subtests is a genuine no-op.",
+    "mutationsRerunByReviewer": [
+      "orderConfigured = false removed, seed restore KEPT -> reresolvesOrderColumn FAILS (round-1 surviving mutant is now DEAD)",
+      "guard hoisted out of the `valuelen > width` branch -> zeroWidthGuard/empty_value_at_zero_width_is_not_an_error FAILS (the new fourth subtest is load-bearing)",
+      "linesPrinted reset removed -> recomputesLayout FAILS",
+      "whole order reset removed (compilable variant, seeds blank-assigned) -> reresolvesOrderColumn AND orderColumnMissing FAIL",
+      "seed restore removed, latch re-armed (compilable variant) -> orderColumnMissing FAILS",
+      "v.Aligned = false removed -> all three version-change tests FAIL",
+      "guard removed entirely -> zeroWidthGuard panics 'slice bounds out of range [:-1]'",
+      "ColsWidth/Cols reset removed, Aligned kept -> package green (surviving, benign, acknowledged)"
+    ],
+    "orderDiscriminationProof": "activityColsPG13 puts state at index 10 and wait_event at index 9; internal/view/view.go:40-50 seeds activity with OrderKey 0 / OrderDesc true. With OrderColName='state', OrderDesc=true the three reachable outcomes map to 3003-first, 4004-first, 4004-first respectively — so the assertion index(3003) < index(4004) is satisfiable only by the re-resolved index.",
+    "gates": "go test ./report/... ok; make test green, total coverage 70.1% (report 83.8%); golangci-lint run --timeout 5m -> 0 issues (binary lives in $(go env GOPATH)/bin, not on the default PATH — `make lint` fails with 'Нет такого файла' unless GOPATH/bin is exported); gosec ./report/... clean; go vet ./report/... clean; gofmt -l reports nothing.",
+    "scopeRespected": "report/testdata goldens unchanged, docs/tech-debt.md unchanged, sibling Task 01/02 files (internal/query/*, internal/stat/*, internal/view/view_test.go, report/report_record_replslots_test.go) not touched by this task's diff. Working tree restored byte-identical after all eight mutation runs."
+  }
+}

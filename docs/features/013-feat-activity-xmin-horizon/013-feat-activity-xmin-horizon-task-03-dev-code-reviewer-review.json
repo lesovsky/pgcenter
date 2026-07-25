@@ -1,0 +1,76 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "changes_required",
+  "summary": "The production change in report/report.go is correct, minimal and unusually well commented: the zero-width guard is a byte-faithful mirror of top/printDataCell (same placement inside `valuelen > width`, same message), and the three version-change resets land on the same `v` the loop continues with, before `continue`. One test defect blocks approval: Test_processData_versionChange_reresolvesOrderColumn does not actually discriminate a re-resolved -o index from the restored seed key — I removed `orderConfigured = false` and the whole package still passed, so the task's own Verification Step ('temporarily remove the orderConfigured reset — the test must fail') does not hold and AC 'after the boundary -o is re-resolved against the new column list' has no discriminating cover. A two-value swap in the test fixture fixes it; I validated the fix end to end.",
+  "criticalIssues": [
+    {
+      "file": "report/report_test.go",
+      "line": 1546,
+      "severity": "critical",
+      "category": "testing",
+      "issue": "Test_processData_versionChange_reresolvesOrderColumn passes whether or not the sort latch is re-armed. Its fixture makes 'sorted by state descending' and 'sorted by the restored seed key (pid, descending)' produce the SAME row order, so the assertion `posIdle(4004) < posActive(3003)` cannot tell the two apart. Verified by mutation: deleting `orderConfigured = false` from report/report.go:299 leaves `go test ./report/...` fully green. The doc comment at report_test.go:1538 claims 'the two orders are distinguishable', but it only separates state from wait_event — not state from the seed fallback, which is the other reachable outcome after the reset.",
+      "impact": "The acceptance criterion 'после границы версий -o переразрешается против нового списка колонок' has no test that pins it: only the seed-fallback half (Test_processData_versionChange_orderColumnMissing) is genuinely covered. A future edit that drops the latch re-arm — leaving reports silently sorted by the screen default instead of the operator's -o column, the exact quiet-failure class Decision 6 exists to prevent — passes CI unnoticed. It also makes the reported verification 'mutation checks confirm each reset is load-bearing' inaccurate for this reset, and contradicts the task's Verification Steps.",
+      "recommendation": "Make the state order disagree with the pid order in newRows: give pid 3003 state 'idle' + wait_event 'AAAsync', and pid 4004 state 'active' + wait_event 'ClientRead', then swap the assertion to posIdle = index of \"3003\", posActive = index of \"4004\". Then 'state desc' uniquely yields 3003 first, while both 'wait_event desc' (stale index 9) and 'pid desc' (seed) yield 4004 first — all three outcomes separated. I applied exactly this and re-ran: green on the unmutated code, FAIL with `orderConfigured = false` removed, and Test_processData_versionChange_orderColumnMissing still FAILs with the seed restore removed. Update the doc comment at line 1538 to say the fixture separates three orders, not two."
+    }
+  ],
+  "suggestions": [
+    {
+      "file": "report/report.go",
+      "line": 233,
+      "severity": "major",
+      "category": "maintainability",
+      "suggestion": "processData is now 152 lines (233-384), up from ~115. The version-change branch has grown into three distinct concerns (prev-snapshot rotation, query reconfiguration, render-state reset) inside one `case` arm of a `select` inside a `for`. Extracting the reset block (lines 282-302) into a small helper — e.g. `resetLayoutState(v *view.View, linesPrinted *int, orderConfigured *bool, seedOrderKey int, seedOrderDesc bool)` or a tiny value-returning `resetForVersionChange(v view.View, seedKey int, seedDesc bool) view.View` plus two assignments at the call site — would restore one nesting level and let the comments live on the helper.",
+      "benefit": "Keeps the function under the 100-line threshold and gives the three resets a named, individually testable home. Noting explicitly: the function already exceeded the threshold before this change, and the project constitution forbids refactoring adjacent code that is not broken — so this is a genuine optional, not a demand. Deferring it to a follow-up (or to the tech-debt register) is a legitimate answer.",
+      "optional": true
+    },
+    {
+      "file": "report/report.go",
+      "line": 287,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "`v.ColsWidth = map[int]int{}` and `v.Cols = nil` are not observable by any test: mutation-removing both (while keeping `v.Aligned = false`) leaves the whole package green, because formatStatSample overwrites both fields before any reader touches them, and printStatHeader early-returns while `!v.Aligned`. The pair is pure belt-and-braces — which is what the task asked for and the inline comment says as much, so no code change is needed. What should change is the claim carried into the decisions log: 'mutation checks confirm each reset is load-bearing' is true for `Aligned`, `linesPrinted`, `orderConfigured` and the seed restore, but not for this pair.",
+      "benefit": "An accurate verification record. Overstated mutation claims are how a real coverage hole (see the critical finding above) slips past the next reader.",
+      "optional": true
+    },
+    {
+      "file": "report/report_test.go",
+      "line": 1365,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "buildActivityTar re-implements the in-memory tar harness that already exists in report_record_replslots_test.go (writeEntry closure over tar.NewWriter, recorder-format 20060102T150405.000 names, one-second ticks, meta./stat./sysinfo. triplets). The genuinely new capability here is per-tick `version`; the rest is a copy. A shared helper in the package taking (entries per tick, version per tick) would keep the two in sync when the recorder layout next changes.",
+      "benefit": "One place to fix when the recorder's on-disk layout or filename format changes, instead of two that drift silently.",
+      "optional": true
+    },
+    {
+      "file": "report/report_test.go",
+      "line": 1435,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "In runProcessDataOnTar the error-path drain goroutine selects on dataCh and doneCh and returns on doneCh. It is correct today only because readTar's `defer func() { doneCh <- struct{}{} }()` always fires after its last dataCh send. Worth a one-line comment naming that dependency, since a future readTar that signalled doneCh early would turn this into a goroutine that outlives the test while readTar blocks forever.",
+      "benefit": "Makes the harness's ordering assumption explicit rather than implicit in readTar's defer placement.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 1,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  },
+  "verifiedByReviewer": {
+    "crossFileConsistency": "printStatSample, processData and readTar signatures match every new call site; the guard message and its placement inside `if valuelen > view.ColsWidth[i]` are identical to top/stat.go:1004-1010; view.Views.Configure (internal/view/view.go:367) re-derives QueryTmpl/Ncols/DiffIntvl/UniqueKey from opts.Version on every call, so a second Configure at the boundary is sound for all screens, not just activity; report/ never reads v.Ncols, so the task's claim of independence from Task 01 holds.",
+    "mutationsRun": [
+      "linesPrinted reset removed -> Test_processData_versionChange_recomputesLayout FAILs (load-bearing)",
+      "v.Aligned = false removed -> all three version-change tests FAIL (load-bearing)",
+      "entire layout reset removed -> recomputesLayout FAILs showing the pre-fix symptom exactly: 14-column header over 17-column rows, 'very_lo~' truncation, and the new guard firing mid-row",
+      "orderConfigured + seed restore both removed -> reresolvesOrderColumn and orderColumnMissing FAIL",
+      "seed restore removed, latch re-armed -> orderColumnMissing FAILs (load-bearing)",
+      "orderConfigured = false removed, seed restore kept -> ALL TESTS PASS (surviving mutation; see critical finding)",
+      "ColsWidth/Cols clearing removed, Aligned reset kept -> ALL TESTS PASS (surviving mutation; benign, see minor finding)",
+      "zero-width guard removed -> Test_printStatSample_zeroWidthGuard panics with 'slice bounds out of range [:-1]', confirming the guard is the thing under test"
+    ],
+    "workingTreeRestored": "Both scope files were restored byte-identical after the mutation runs (git diff of report/report.go + report/report_test.go matches the supplied task03.diff exactly); go test ./report/... green; go vet clean. Sibling Tasks 01/02 files were not touched.",
+    "outOfScopeNotTouched": "docs/tech-debt.md is not in the diff, as the task requires."
+  }
+}

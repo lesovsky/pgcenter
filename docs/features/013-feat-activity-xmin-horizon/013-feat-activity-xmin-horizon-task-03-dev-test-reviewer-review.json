@@ -1,0 +1,70 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Four well-built tests that mostly do real discriminating work: the zero-width guard subtests pin error-return semantics and truncation behaviour, recomputesLayout positively proves both the header reset and the width recompute, and orderColumnMissing is the strongest of the set — its fixture distinguishes the restored seed key AND the restored seed direction from a surviving stale index. The fixtures satisfy every stated constraint (2 samples on each side of the boundary, 2 rows per sample, direct processData/printStatSample calls, no goldens touched). Two real holes remain, both verified by running mutations rather than reasoned about. (1) Test_processData_versionChange_reresolvesOrderColumn passes by coincidence: its post-boundary expected order under '-o state desc' is identical to the order under the restored screen default (pid desc), so dropping `orderConfigured = false` while keeping the seed restore leaves the whole suite green — no test in the set actually proves that -o is re-resolved against the new column list, which is a stated acceptance criterion. (2) The guard's placement inside `if valuelen > width` — an explicitly stated edge case ('empty value at zero width must not error', mirror the twin exactly) — is unpinned: hoisting the guard above the truncation branch also leaves the suite green.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "report/report_test.go:1541-1571 (Test_processData_versionChange_reresolvesOrderColumn, newRows at 1546-1549, assertion at 1566-1570)",
+      "issue": "The test claims to prove that -o is re-resolved against the new column list after the version boundary, but its fixture cannot distinguish that from the screen default. Post-boundary the expected winner is pid 4004 ('idle', state desc). The restored seed for the activity screen is OrderKey=0/OrderDesc=true (pid desc), and pid desc also puts 4004 first. Verified empirically: removing `orderConfigured = false` from report.go:299 while keeping the `v.OrderKey = seedOrderKey` / `v.OrderDesc = seedOrderDesc` restore leaves this test, orderColumnMissing, recomputesLayout and the entire ./report/... suite green. The fixture only separates 'state' from 'wait_event' (the stale-index case the mutation matrix covered); it never separates 'state' from 'default'. Consequence: the acceptance criterion 'после границы версий -o переразрешается против нового списка колонок' has no discriminating test — an implementation that always falls back to the screen default and never re-resolves passes.",
+      "recommendation": "Make the three candidate orders mutually distinguishable by swapping the pids in newRows (report_test.go:1546-1549) so the low-pid row carries the winning state: row A = pid 3003, wait_event 'AAAsync', state 'idle'; row B = pid 4004, wait_event 'ClientRead', state 'active'. Then assert `strings.Index(normalized, \"3003\") < strings.Index(normalized, \"4004\")` (rename posIdle/posActive accordingly). Under the correct implementation state-desc puts 3003 first (passes); under a surviving stale index 9 wait_event-desc puts 4004 first (fails); under a seed-only fallback pid-desc puts 4004 first (fails). Verified: with this fixture change the `orderConfigured = false` drop produces `FAIL ... \"900\" is not less than \"710\" ... after the boundary rows must be ordered by state, not by wait_event`, while the unmutated implementation stays green. Optionally also assert the pre-boundary half is ordered by state on the old layout (1002 before 1001) so the test pins that -o worked at all before the boundary.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "report/report_test.go:1268-1334 (Test_printStatSample_zeroWidthGuard); implementation report/report.go:604-611",
+      "issue": "The task states the guard semantics must match top/printDataCell exactly and calls out the empty-value case explicitly ('в top/printDataCell guard стоит внутри if valuelen > width, поэтому пустое значение при width == 0 ошибку не даёт. Повторить ровно так же'). No subtest pins that placement. Verified empirically: hoisting the guard above the truncation branch (`if view.ColsWidth[i] <= 0 { return 0, fmt.Errorf(...) }` before `if valuelen > view.ColsWidth[i]`) keeps the whole ./report/... suite green. All three existing subtests use a non-empty value at the missing-width index, so they exercise only the path where both placements behave identically. A future refactor that drifts from the twin would go unnoticed, and the divergence is behavioural: a row carrying an empty cell in a column the alignment never saw would start erroring out instead of printing.",
+      "recommendation": "Add a fourth subtest 'empty value at missing width does not error' to Test_printStatSample_zeroWidthGuard: build a result whose value at the index with no ColsWidth key is the empty string but which is not the last column, e.g. Cols {\"col_a\", \"col_zero\", \"col_b\"} with values {\"aaa\", \"\", \"bbb\"} and ColsWidth map[int]int{0: 8, 2: 8}. Assertions: assert.NoError(err); assert.Equal(1, n); assert.Contains(stripANSI(buf.String()), \"aaa\"); assert.Contains(stripANSI(buf.String()), \"bbb\") — i.e. the row is printed in full. This kills the hoisted-guard mutation while pinning the twin's exact semantics. No mock changes needed; printStatSample is already called directly.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_test.go:1508, 1563, 1607 (assert.NoError on the processData return in all three tar tests)",
+      "issue": "processData's error return is checked with assert.NoError, not require.NoError. On the error path (e.g. a regressed Aligned reset, which produces 'zero or negative width, skip') the report buffer is truncated or empty, so the test continues into the Contains/Index assertions and reports a cascade of secondary failures instead of the one real cause. runProcessDataOnTar already goes to the trouble of draining the channels so a failure does not hang — the caller should stop at the first meaningful failure too.",
+      "recommendation": "Change to require.NoError(t, err) at report_test.go:1508, 1563 and 1607. Everything after those lines is meaningless once processData failed.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "report/report_test.go:1509-1512 (Test_processData_versionChange_recomputesLayout, pre-boundary assertions)",
+      "issue": "The pre-boundary half of the report is pinned only by assert.Contains(normalized, \"olddb\") — a data value. Nothing asserts that the OLD header was printed at all, or that it was the old layout. A regression in which the pre-boundary header never prints (or already prints the new columns) leaves the test green, and the test's central claim ('the header of the new layout appears at the boundary, not before it') rests on that contrast.",
+      "recommendation": "Add two assertions after line 1512: capture oldHdrPos := strings.Index(normalized, \"change_age\") and require it is not -1 and is less than strings.Index(normalized, \"olddb\"); and assert that the substring of normalized before the boundary (normalized[:hdrPos]) does not contain \"leader\" — the old header must not carry the new columns. This turns 'the new header appeared' into 'the header changed at the boundary'.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_test.go:1586-1594 (Test_processData_versionChange_orderColumnMissing, oldRows/newRows)",
+      "issue": "This archive deliberately runs 13 -> 12, but the fixture variables keep the names used by the two 12 -> 13 tests: oldRows holds the 17-column PG 13 layout and newRows the 14-column PG 12 one. The doc comment explains the direction, yet the variable names say the opposite, which is exactly the kind of magic-value/naming trap that makes a later edit silently mismatch a layout against its column list. buildActivityTar's per-row length check would catch a mismatch, but only at runtime.",
+      "recommendation": "Rename to preRows/postRows (or pg13Rows/pg12Rows) in this test, and to preRows/postRows in the other two for symmetry. Purely a readability fix — no assertion changes.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "report/report_test.go:1288, 1305, 1323 (v.Aligned = true in all three zero-width subtests)",
+      "issue": "printStatSample never reads view.Aligned — only formatStatSample and printStatHeader do. Setting it in a direct printStatSample test suggests the flag is part of the contract under test and invites a reader to believe the guard depends on alignment state.",
+      "recommendation": "Drop the three v.Aligned = true lines, or replace them with a one-line comment stating that printStatSample ignores Aligned and the widths are supplied directly.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 5,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 3,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

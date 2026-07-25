@@ -239,6 +239,12 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 	warningChecked := false           // one-shot guard for procpidstat IO/iodelay availability warnings
 	anyDataPrinted := false           // tracks whether at least one data row was printed; used to emit no-data INFO for procpidstat
 
+	// Screen's default sort key, taken while the view still carries the seed from
+	// view.New(). Restored on a version change: if the requested -o column is
+	// absent from the new layout, getColumnIndex fails and re-arming the latch
+	// alone would leave OrderKey pointing at an index resolved against the old one.
+	seedOrderKey, seedOrderDesc := v.OrderKey, v.OrderDesc
+
 	// waiting for stats, or message about reader is done
 	for {
 		select {
@@ -247,7 +253,13 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 			// Usually this occurs when reading first stat sample at startup.
 
 			// Also checking version of stats in metadata, if it's different also discard previous.
-			if !prevStat.Valid || prevMeta.version != d.meta.version {
+			//
+			// The two cases are distinguished: the first sample merely has nothing to
+			// diff against, while a version change means the samples that follow may
+			// carry a different layout, and every piece of state derived from the
+			// previous layout has to be dropped.
+			versionChanged := prevStat.Valid && prevMeta.version != d.meta.version
+			if !prevStat.Valid || versionChanged {
 				prevMeta = d.meta
 				prevStat = d.res
 				prevTs = d.ts
@@ -263,6 +275,33 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 				}
 
 				v = views[config.ReportType]
+
+				// Configure rewrites the query, not the rendering state, so the
+				// layout of the version just left behind would otherwise survive
+				// into the samples of the new one.
+				if versionChanged {
+					// Lowering Aligned is what forces the recompute: formatStatSample
+					// then rewrites ColsWidth and Cols unconditionally. The stale pair is
+					// cleared alongside it so nothing reading v between here and the next
+					// sample can pick up the previous layout — hygiene, not a dependency
+					// of any current caller.
+					v.Aligned = false
+					v.ColsWidth = map[int]int{}
+					v.Cols = nil
+
+					// repeatHeaderAfter, not zero: the counter means "lines printed
+					// since the last header", so the seed value asks for the header
+					// immediately (see its initialisation above).
+					linesPrinted = repeatHeaderAfter
+
+					// Re-resolve -o against the new column list on the next sample, and
+					// meanwhile fall back to the screen's default key: the requested
+					// column may be absent from the new layout, in which case the latch
+					// stays down and nothing else would displace the stale index.
+					orderConfigured = false
+					v.OrderKey = seedOrderKey
+					v.OrderDesc = seedOrderDesc
+				}
 
 				continue
 			}
@@ -566,6 +605,13 @@ func printStatSample(w io.Writer, res *stat.PGresult, view view.View, c Config, 
 				valuelen := len(res.Values[rownum][colnum].String)
 				if valuelen > view.ColsWidth[i] {
 					width := view.ColsWidth[i]
+					// ColsWidth is a map, so a column the alignment never saw reads as 0
+					// instead of failing. Mirror top/printDataCell: report the error and
+					// leave the cell unprinted rather than slicing value[:-1].
+					if width <= 0 {
+						return 0, fmt.Errorf("zero or negative width, skip")
+					}
+
 					// truncate value up to column width and replace last character with '~' symbol
 					res.Values[rownum][colnum].String = res.Values[rownum][colnum].String[:width-1] + "~"
 				}

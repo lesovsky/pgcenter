@@ -207,6 +207,10 @@ func TestViews_Configure(t *testing.T) {
 			} else {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
+			// leader/backend_xid/horizon_xacts appear at PG 13; the selector's own table test pins the
+			// boundary, this pins that Configure actually carries it into the view.
+			assert.Equal(t, query.PgStatActivityPG13, views["activity"].QueryTmpl)
+			assert.Equal(t, 17, views["activity"].Ncols)
 		case 120000:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplicationExtended, views["replication"].QueryTmpl)
@@ -215,6 +219,8 @@ func TestViews_Configure(t *testing.T) {
 				assert.Equal(t, query.PgStatReplicationDefault, views["replication"].QueryTmpl)
 			}
 			assert.Equal(t, query.PgStatStatementsTimingPG12, views["statements_timings"].QueryTmpl)
+			assert.Equal(t, query.PgStatActivityDefault, views["activity"].QueryTmpl)
+			assert.Equal(t, 14, views["activity"].Ncols)
 		case 110000:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplicationExtended, views["replication"].QueryTmpl)

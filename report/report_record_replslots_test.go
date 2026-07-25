@@ -189,6 +189,150 @@ func Test_app_doReport_ReplSlots(t *testing.T) {
 	assert.Equal(t, string(want), out)
 }
 
+// Test_app_doReport_ReplSlots_EmptyRetained is the one place in the corpus where
+// the empty-last sort rule (Decision 4) meets real recorded data under a sparse
+// DEFAULT sort key: replslots sorts by retained,KiB (OrderKey 4) DESC, and that
+// column is genuinely NULL for a slot that reserves no WAL.
+//
+// The case is built as variant A of the tech-spec's Coverage note — a genuine "0"
+// standing next to a blank — because the two obvious constructions do NOT diverge
+// from the old behaviour: a lone blank under DESC lands last either way, and
+// putting the blank first only changes the outcome if the remaining values order
+// differently lexicographically than numerically (2048 vs 1024, the pair in
+// Test_app_doReport_ReplSlots above, does not).
+//
+// Both preconditions variant A needs are set explicitly in the curr tick, whose
+// row order is what the sort sees:
+//  1. the FIRST row (slot_full) carries a non-empty numeric retained,KiB, so the
+//     old code picks the numeric comparator rather than falling into string mode;
+//  2. the blank row (slot_blank) sits ABOVE the genuine "0" row (slot_zero), so
+//     under the old code — where "" parses to 0 and compares equal to "0" —
+//     SliceStable keeps the blank first.
+//
+// Old behaviour: slot_full, slot_blank, slot_zero (blank indistinguishable from a
+// genuine zero). New behaviour: slot_full, slot_zero, slot_blank — the slot with
+// no value goes last, which is also what the screen's own SQL already asks for
+// with ORDER BY "retained,KiB" DESC NULLS LAST.
+//
+// Only retained,KiB (col 4, passthrough) is blank: an empty cell in the diffed
+// block (cols 6..13) would abort the sample in diffPair -> ParseInt(""). No golden
+// is written; the assertions below are value-level and normalized.
+func Test_app_doReport_ReplSlots_EmptyRetained(t *testing.T) {
+	const ncols = 15
+
+	metaRes := stat.PGresult{
+		Valid: true, Ncols: 7, Nrows: 1,
+		Cols: []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "recovery", "start_time_unix"},
+		Values: [][]sql.NullString{
+			{
+				{String: "14.9", Valid: true}, {String: "140009", Valid: true},
+				{String: "off", Valid: true}, {String: "100", Valid: true}, {String: "3", Valid: true},
+				{String: "false", Valid: true}, {String: "1622828486655396e-6", Valid: true},
+			},
+		},
+	}
+	metaBytes, err := json.Marshal(metaRes)
+	assert.NoError(t, err)
+
+	mkRow := func(vals []string) []sql.NullString {
+		row := make([]sql.NullString, ncols)
+		for i, v := range vals {
+			row[i] = sql.NullString{String: v, Valid: true}
+		}
+		return row
+	}
+
+	// slot_blank's retained,KiB is "" — a NULL pg_replication_slots row for a slot
+	// that reserves nothing. slot_zero's is a genuine "0": it reserves WAL, just
+	// none right now. These two states must not collide.
+	fullPrev := []string{"slot_full", "logical", "true", "reserved", "1024", "0", "10", "20", "30", "40", "50", "60", "70", "80", "01:00:00"}
+	fullCurr := []string{"slot_full", "logical", "true", "reserved", "1024", "0", "15", "28", "45", "52", "70", "90", "100", "130", "02:00:00"}
+	blankPrev := []string{"slot_blank", "logical", "true", "reserved", "", "0", "1", "1", "1", "1", "1", "1", "1", "1", "01:00:00"}
+	blankCurr := []string{"slot_blank", "logical", "true", "reserved", "", "0", "2", "2", "2", "2", "2", "2", "2", "2", "02:00:00"}
+	zeroPrev := []string{"slot_zero", "physical", "true", "reserved", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "01:00:00"}
+	zeroCurr := []string{"slot_zero", "physical", "true", "reserved", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "02:00:00"}
+
+	statPrev := stat.PGresult{
+		Valid: true, Ncols: ncols, Nrows: 3, Cols: replslotsCols,
+		Values: [][]sql.NullString{mkRow(fullPrev), mkRow(blankPrev), mkRow(zeroPrev)},
+	}
+	prevBytes, err := json.Marshal(statPrev)
+	assert.NoError(t, err)
+
+	// curr row order IS the sort input order (diff() walks curr rows), so the two
+	// preconditions above are set here: non-empty numeric first, blank above zero.
+	statCurr := stat.PGresult{
+		Valid: true, Ncols: ncols, Nrows: 3, Cols: replslotsCols,
+		Values: [][]sql.NullString{mkRow(fullCurr), mkRow(blankCurr), mkRow(zeroCurr)},
+	}
+	currBytes, err := json.Marshal(statCurr)
+	assert.NoError(t, err)
+
+	sysinfoBytes := []byte(`{"ticks":100,"cpu_count":4}`)
+
+	var tarBuf bytes.Buffer
+	tw := tar.NewWriter(&tarBuf)
+	writeEntry := func(name string, payload []byte) {
+		hdr := &tar.Header{Name: name, Size: int64(len(payload)), Mode: 0644}
+		assert.NoError(t, tw.WriteHeader(hdr))
+		_, err := tw.Write(payload)
+		assert.NoError(t, err)
+	}
+	writeEntry("meta.20260519T100000.000.json", metaBytes)
+	writeEntry("replslots.20260519T100000.000.json", prevBytes)
+	writeEntry("sysinfo.20260519T100000.000.json", sysinfoBytes)
+	writeEntry("meta.20260519T100001.000.json", metaBytes)
+	writeEntry("replslots.20260519T100001.000.json", currBytes)
+	writeEntry("sysinfo.20260519T100001.000.json", sysinfoBytes)
+	assert.NoError(t, tw.Close())
+
+	// OrderColName deliberately unset: the view's default OrderKey=4 / DESC governs.
+	config := Config{
+		ReportType: "replslots",
+		TruncLimit: 32,
+		TsStart:    time.Date(2026, 5, 19, 0, 0, 0, 0, time.Now().Location()),
+		TsEnd:      time.Date(2026, 5, 19, 23, 59, 59, 0, time.Now().Location()),
+	}
+
+	app := newApp(config)
+	var buf bytes.Buffer
+	app.writer = &buf
+
+	tr := tar.NewReader(&tarBuf)
+	assert.NoError(t, app.doReport(tr))
+
+	out := stripANSI(buf.String())
+	assert.NotEmpty(t, out)
+	assert.Contains(t, out, "slot_full")
+	assert.Contains(t, out, "slot_zero")
+	assert.Contains(t, out, "slot_blank")
+
+	// The rule under test: 1024 first, then the genuine "0", then the slot with no
+	// value at all. Before the fix slot_blank and slot_zero compared equal and
+	// stability kept slot_blank second.
+	assert.Less(t, strings.Index(out, "slot_full"), strings.Index(out, "slot_zero"),
+		"retained,KiB DESC: 1024 must print above the genuine 0")
+	assert.Less(t, strings.Index(out, "slot_zero"), strings.Index(out, "slot_blank"),
+		"a blank retained,KiB must print BELOW a genuine 0, not collide with it")
+
+	// The blank cell renders blank rather than 0: its row carries one field fewer
+	// than an otherwise identically shaped row.
+	fieldsOf := func(name string) []string {
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, name) {
+				return strings.Fields(line)
+			}
+		}
+		return nil
+	}
+	assert.Equal(t, len(fieldsOf("slot_zero"))-1, len(fieldsOf("slot_blank")),
+		"blank retained,KiB must render empty, not as 0")
+
+	// Diff math is unaffected by the sort change: slot_full's cols 6..13 deltas.
+	normalized := strings.Join(strings.Fields(out), " ")
+	assert.Contains(t, normalized, "slot_full logical true reserved 1024 0 5 8 15 12 20 30 30 50")
+}
+
 // Test_app_doReport_ReplSlots_empty verifies that a tar carrying two replslots
 // ticks with zero rows (an empty replication-slots set — a normal state, see
 // Decision 5) prints only the timestamp/column header: no data rows and no

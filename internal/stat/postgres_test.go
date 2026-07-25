@@ -814,6 +814,166 @@ func Test_sort_duration(t *testing.T) {
 	assert.Equal(t, wantAsc, gotAsc)
 }
 
+// newSparsePGresult builds a two-column PGresult where column 0 is the sort key
+// (possibly sparse) and column 1 is a per-row tag used to assert row identity.
+// Each test below owns its data — the shared newTestPGresult() is deliberately
+// not reused, because Test_sort mutates it across subtests.
+func newSparsePGresult(keys []sql.NullString) PGresult {
+	values := make([][]sql.NullString, len(keys))
+	for i, k := range keys {
+		values[i] = []sql.NullString{k, {String: fmt.Sprintf("tag%d", i), Valid: true}}
+	}
+	return PGresult{
+		Valid: true, Ncols: 2, Nrows: len(keys),
+		Cols:   []string{"key", "tag"},
+		Values: values,
+	}
+}
+
+// sortedKeys returns column 0 of every row, in output order.
+func sortedKeys(r PGresult) []string {
+	got := make([]string, len(r.Values))
+	for i, row := range r.Values {
+		got[i] = row[0].String
+	}
+	return got
+}
+
+// sortedTags returns column 1 of every row, in output order. Used where the sort
+// keys are indistinguishable (all empty) and only row identity can prove order.
+func sortedTags(r PGresult) []string {
+	got := make([]string, len(r.Values))
+	for i, row := range r.Values {
+		got[i] = row[1].String
+	}
+	return got
+}
+
+func nstr(s string) sql.NullString { return sql.NullString{String: s, Valid: true} }
+
+// Test_sort_sparse_numeric_firstEmpty pins the mode-selection half of the fix:
+// the comparator is chosen from the first NON-EMPTY cell, so a column whose first
+// cell is blank still sorts numerically. Before the fix the blank sample failed
+// both ParseFloat and parseDuration, the column fell into the string comparator
+// and "9" outranked "1000000" on desc.
+func Test_sort_sparse_numeric_firstEmpty(t *testing.T) {
+	res := newSparsePGresult([]sql.NullString{nstr(""), nstr("9"), nstr("1000000"), nstr(""), nstr("100")})
+
+	res.sort(0, true)
+	assert.Equal(t, []string{"1000000", "100", "9", "", ""}, sortedKeys(res))
+}
+
+// Test_sort_sparse_numeric_emptyLast pins the ordering half: blank cells go last
+// in BOTH directions. Before the fix ascending sort led with the blanks.
+func Test_sort_sparse_numeric_emptyLast(t *testing.T) {
+	keys := []sql.NullString{nstr(""), nstr("9"), nstr("1000000"), nstr(""), nstr("100")}
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"9", "100", "1000000", "", ""}, sortedKeys(asc))
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"1000000", "100", "9", "", ""}, sortedKeys(desc))
+}
+
+// Test_sort_empty_not_zero is the direct test of the horizon_xacts user story: a
+// blank cell must never collide with a genuine "0". The fixture satisfies the two
+// preconditions that make old and new behaviour actually diverge — the first row
+// carries a non-empty numeric value (so the old code picks numeric mode, not
+// string mode), and the blank sits ABOVE the "0" in the input (so under the old
+// code, where both parse to 0 and compare equal, SliceStable keeps the blank
+// first).
+func Test_sort_empty_not_zero(t *testing.T) {
+	keys := []sql.NullString{nstr("5"), nstr(""), nstr("0"), nstr("3")}
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"0", "3", "5", ""}, sortedKeys(asc))
+	// The genuine zero leads; the blank is not adjacent to it as an equal.
+	assert.Equal(t, "", sortedKeys(asc)[len(keys)-1])
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"5", "3", "0", ""}, sortedKeys(desc))
+}
+
+// Test_sort_sparse_duration applies the same two rules to the duration mode: the
+// sample is taken from a non-empty cell (so "791:04:45" outranks "96:58:35"
+// instead of losing to it lexicographically) and blanks land last both ways.
+func Test_sort_sparse_duration(t *testing.T) {
+	keys := []sql.NullString{nstr(""), nstr("00:05:23"), nstr("791:04:45"), nstr("96:58:35"), nstr("")}
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"791:04:45", "96:58:35", "00:05:23", "", ""}, sortedKeys(desc))
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"00:05:23", "96:58:35", "791:04:45", "", ""}, sortedKeys(asc))
+}
+
+// Test_sort_sparse_string pins that the rule has no carve-out for strings
+// (Decision 4). Descending already put blanks last before the fix — "" is less
+// than any non-empty string — so ascending is where old and new diverge.
+func Test_sort_sparse_string(t *testing.T) {
+	keys := []sql.NullString{nstr(""), nstr("beta"), nstr(""), nstr("alpha")}
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"alpha", "beta", "", ""}, sortedKeys(asc))
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"beta", "alpha", "", ""}, sortedKeys(desc))
+}
+
+// Test_sort_null_and_empty_together pins Decision 5: emptiness is decided by the
+// rendered String, so a SQL NULL ({"", false}) and a genuine empty string
+// ({"", true}) — which are indistinguishable on screen — always sort together,
+// never split between the two ends of the output.
+func Test_sort_null_and_empty_together(t *testing.T) {
+	keys := []sql.NullString{
+		nstr("gamma"),
+		{String: "", Valid: false}, // SQL NULL
+		nstr("delta"),
+		{String: "", Valid: true}, // genuine empty string
+	}
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"delta", "gamma", "", ""}, sortedKeys(asc))
+	// Both blanks are in the tail, in input order — the NULL row (tag1) before
+	// the empty-string row (tag3).
+	assert.Equal(t, []string{"tag2", "tag0", "tag1", "tag3"}, sortedTags(asc))
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"gamma", "delta", "", ""}, sortedKeys(desc))
+	assert.Equal(t, []string{"tag0", "tag2", "tag1", "tag3"}, sortedTags(desc))
+}
+
+// Test_sort_fully_empty_column is a regression pin, not a proof of the fix: a
+// column with no non-empty cell is a no-op and keeps the input row order. This
+// already held before the change (an empty sample selected the string comparator,
+// all cells compared equal and SliceStable preserved the input); the pin exists so
+// the early return added for the "no non-empty cell" case cannot break it.
+func Test_sort_fully_empty_column(t *testing.T) {
+	keys := []sql.NullString{
+		{String: "", Valid: true},
+		{String: "", Valid: false},
+		{String: "", Valid: true},
+	}
+
+	asc := newSparsePGresult(keys)
+	asc.sort(0, false)
+	assert.Equal(t, []string{"tag0", "tag1", "tag2"}, sortedTags(asc))
+
+	desc := newSparsePGresult(keys)
+	desc.sort(0, true)
+	assert.Equal(t, []string{"tag0", "tag1", "tag2"}, sortedTags(desc))
+}
+
 func Test_parseDuration(t *testing.T) {
 	testcases := []struct {
 		input string

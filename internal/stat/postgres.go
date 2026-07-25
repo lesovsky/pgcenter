@@ -660,44 +660,81 @@ func diff(curr PGresult, prev PGresult, itv int, interval [2]int, ukey int) (PGr
 }
 
 // sort performs sorting of PGresult using order key and order.
+//
+// An empty cell means the row has no value, and rows without a value always go last —
+// in every comparator mode and in both sort directions, with no exception for strings.
+// For numeric columns that is a correctness fix ("" used to parse as 0 and become
+// indistinguishable from a genuine zero); for string columns it is a presentation
+// choice, since an empty string can be a legitimate value.
+//
+// Emptiness is decided by the rendered string, not by sql.NullString.Valid: every render
+// path prints .String alone, so a SQL NULL and a genuine empty string look identical on
+// screen and must not be split between the two ends of the output. Valid is also unreliable
+// here — diff() sets it unconditionally on computed cells, so it says "has a value" on any
+// diffed screen regardless of what the server returned.
+//
+// The comparator mode is chosen from the first non-empty cell of the column, because an
+// empty first row would otherwise drop a numeric column into the string comparator.
 func (r *PGresult) sort(key int, desc bool) {
 	if r.Nrows == 0 {
 		return /* nothing to sort */
 	}
 
-	sample := r.Values[0][key].String
+	var sample string
+	for i := range r.Values {
+		if v := r.Values[i][key].String; v != "" {
+			sample = v
+			break
+		}
+	}
+
+	if sample == "" {
+		return /* whole column is empty: nothing to order by, keep input order */
+	}
+
+	var less func(a, b string) bool
 
 	if _, err := strconv.ParseFloat(sample, 64); err == nil {
 		// numeric sort
-		sort.SliceStable(r.Values, func(i, j int) bool {
+		less = func(a, b string) bool {
 			// TODO: handle errors
-			l, _ := strconv.ParseFloat(r.Values[i][key].String, 64)
-			m, _ := strconv.ParseFloat(r.Values[j][key].String, 64)
+			l, _ := strconv.ParseFloat(a, 64)
+			m, _ := strconv.ParseFloat(b, 64)
 			if desc {
 				return l > m /* desc order: 10 -> 0 */
 			}
 			return l < m /* asc order: 0 -> 10 */
-		})
+		}
 	} else if _, err := parseDuration(sample); err == nil {
 		// duration sort: handles "HH:MM:SS" and "N days HH:MM:SS" so that values
 		// with 3+ digit hours (e.g. "791:04:45") sort correctly instead of as strings.
-		sort.SliceStable(r.Values, func(i, j int) bool {
-			li, _ := parseDuration(r.Values[i][key].String)
-			lj, _ := parseDuration(r.Values[j][key].String)
+		less = func(a, b string) bool {
+			li, _ := parseDuration(a)
+			lj, _ := parseDuration(b)
 			if desc {
 				return li > lj
 			}
 			return li < lj
-		})
+		}
 	} else {
 		// string sort (fallback)
-		sort.SliceStable(r.Values, func(i, j int) bool {
+		less = func(a, b string) bool {
 			if desc {
-				return r.Values[i][key].String > r.Values[j][key].String /* desc order: 'z' -> 'a' */
+				return a > b /* desc order: 'z' -> 'a' */
 			}
-			return r.Values[i][key].String < r.Values[j][key].String /* asc order: 'a' -> 'z' */
-		})
+			return a < b /* asc order: 'a' -> 'z' */
+		}
 	}
+
+	sort.SliceStable(r.Values, func(i, j int) bool {
+		a, b := r.Values[i][key].String, r.Values[j][key].String
+		if a == "" || b == "" {
+			// Empty goes after non-empty; two empties are equal and their mutual
+			// order is left to the stability of the sort.
+			return a != ""
+		}
+		return less(a, b)
+	})
 }
 
 // parseDuration parses a PostgreSQL interval string into total seconds.
