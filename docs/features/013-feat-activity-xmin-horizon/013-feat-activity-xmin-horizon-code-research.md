@@ -683,3 +683,799 @@ Assumes **Option A** (`New()` map untouched — §1).
    (§8) — accept + document, or reconcile.
 4. **`internal/stat/help.go`** — update, leave, or delete.
 5. Whether to spend the one-liner on tech debt [021] inside this feature.
+
+---
+
+# Updated: 2026-07-25 — Implementation Level
+
+Research pass 2, run against the **approved** user-spec. Everything below is either a
+file:line citation or a **[measured]** fact. Measurements were taken by patching the working
+tree, running, and reverting — `git status` is clean (only the harness-owned `*-metrics.json`
+is modified).
+
+Two live PostgreSQL 16 servers were available in this environment (a project container on
+:5433 and a throwaway `postgres:16` spun up and destroyed for the parallel-worker probe), so
+several claims that pass 1 had to leave as "not verified live" are now measured.
+
+## 0. What pass 1 says that the approved spec overrides
+
+Pass 1 was written against a 4-column, 18-column-total draft with the new columns placed after
+`state`. The approved spec fixes **3 columns / 17 total** in a different order. Superseded:
+
+| Pass-1 statement | Status |
+|---|---|
+| 4 new columns incl. raw `backend_xmin`; `Ncols = 18` | **superseded** — 3 columns, `Ncols = 17` |
+| "place them after `state`, before `xact_age`" (§5, §10.1) | **superseded** — spec puts `leader` after `pid`, and `backend_xid`/`horizon_xacts` between `state` and `xact_age` |
+| §10 "Open Decisions the Spec Still Owes" (all 5) | **closed by the spec** — placement fixed; Option A confirmed; formula divergence → document; `help.go` → leave + debt entry; [021] → fix in-feature |
+| `PgStatActivityPG13` name, `(string, int)` arity, `DiffIntvl {0,0}`, no `coalesce` for NULL-rendering, replay path never reads `view.Ncols`, `Test_app_doReport` as the standing golden guard | **still valid**, re-verified below |
+
+Pass-1 §4's note that `internal/stat/stat_test.go:442` asserts `NotEqual(t, 19, Ncols)` becomes
+*less* pressing: at 17 columns activity is two away from procpidstat's 19, not one.
+
+## 1. The new query branch
+
+### 1.1 Current shape — `internal/query/activity.go` (55 lines, whole file in scope)
+
+- `PgStatActivityDefault` — :6–16, 14 cols, PG 10+ today.
+- `PgStatActivity96` — :20–29, 13 cols.
+- `PgStatActivity95` — :33–42, 12 cols.
+- `SelectStatActivityQuery(version int) (string, int)` — :46–55, ascending
+  `switch { case version < 90600; case version < 100000; default }`.
+
+Note the file uses **raw version literals** (`90600`, `100000`), not the `PostgresV*`
+constants at `internal/query/query.go:9–23`. `replication.go:58` does the same.
+`progress_vacuum.go:33` uses `PostgresV19`. Both idioms exist; matching the file means a raw
+`130000`.
+
+### 1.2 Target selector
+
+```go
+func SelectStatActivityQuery(version int) (string, int) {
+	switch {
+	case version < 90600:
+		return PgStatActivity95, 12
+	case version < 100000:
+		return PgStatActivity96, 13
+	case version < 130000:
+		return PgStatActivityDefault, 14
+	default:
+		return PgStatActivityPG13, 17
+	}
+}
+```
+
+Arity stays `(string, int)`. Confirmed against the arity ladder in `patterns.md:30–42` and
+ADR [007]: `+[2]int` only when `DiffIntvl` moves, `+int` only when `UniqueKey` moves.
+Activity's view literal (`internal/view/view.go:40–50`) sets `DiffIntvl: [2]int{0,0}`,
+`OrderKey: 0`, and no `UniqueKey` (zero value). **None of the three changes** — only `Ncols`
+moves. Widening the signature would be gratuitous.
+
+### 1.3 The new constant — live-verified on PG 16 **[measured]**
+
+Place it directly after `PgStatActivityDefault`, with a doc comment naming the placement
+rationale and the index shift — the shape `progress_vacuum.go:15–18` established.
+
+```go
+	// PgStatActivityPG13 queries activity stats from pg_stat_activity for PG 13 and newer.
+	// PG 13 adds leader_pid; leader is derived as coalesce(leader_pid, pid) so a leader and its
+	// workers share one value and sort as a group (raw leader_pid is NULL on the leader itself).
+	// leader sits next to pid as a second identity attribute; backend_xid and horizon_xacts sit
+	// between state and xact_age so they read as "did it write -> how far back it holds the
+	// horizon -> how long it has been open". query stays last (widest column, partially-visible
+	// tail of the horizontal scroll). Ncols 14 -> 17; DiffIntvl stays {0,0}.
+	// - regexp_replace() removes extra spaces, tabs and newlines from queries.
+	PgStatActivityPG13 = "SELECT pid, coalesce(leader_pid, pid) AS leader, " +
+		"host(client_addr) AS cl_addr, client_port AS cl_port, " +
+		"datname, usename, application_name AS appname, backend_type, " +
+		"wait_event_type AS wait_etype, wait_event, state, " +
+		"backend_xid::text AS backend_xid, age(backend_xmin) AS horizon_xacts, " +
+		"date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age, " +
+		"date_trunc('seconds', clock_timestamp() - query_start)::text AS query_age, " +
+		"date_trunc('seconds', clock_timestamp() - state_change)::text AS change_age, " +
+		`regexp_replace(query, E'\\s+', ' ', 'g') AS query ` +
+		"FROM pg_stat_activity " +
+		"WHERE ((clock_timestamp() - xact_start) > '{{.QueryAgeThresh}}'::interval " +
+		"OR (clock_timestamp() - query_start) > '{{.QueryAgeThresh}}'::interval) " +
+		"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"
+```
+
+Both template placeholders (`{{.QueryAgeThresh}}`, `{{ if .ShowNoIdle }}`) must be carried
+verbatim — they are the `A` and `I` hotkeys (`top/config_view.go:359–365`, `:410–430`).
+Dropping either silently disables a documented keybinding.
+
+**Executed against a live PG 16.** Column names, order and types come back exactly as the spec
+fixes them:
+
+```
+attnum |    attname    | format_type      attnum |    attname    | format_type
+     1 | pid           | integer               10 | wait_event    | text
+     2 | leader        | integer               11 | state         | text
+     3 | cl_addr       | text                  12 | backend_xid   | text
+     4 | cl_port       | integer               13 | horizon_xacts | integer
+     5 | datname       | name                  14 | xact_age      | text
+     6 | usename       | name                  15 | query_age     | text
+     7 | appname       | text                  16 | change_age    | text
+     8 | backend_type  | text                  17 | query         | text
+     9 | wait_etype    | text
+```
+
+### 1.4 Correction to the brief: only `backend_xid` needs `::text` **[measured]**
+
+The brief says "both xid columns need explicit `::text`". Measured: `age(backend_xmin)`
+returns **`integer`**, not `xid` — `age(xid)` is a plain catalog function. No cast is needed
+and none should be added; `cl_port` is already an `integer` scanned into `sql.NullString`
+today, so the codec path is proven. `backend_xid` **is** type `xid` and does need `::text`
+(the `replication.go:28` precedent), which also removes the dependency on pgx's
+`Uint32Codec` → `DecodeDatabaseSQLValue` fallback documented in pass 1 §8.
+
+`NULL::text` is still NULL, so the blank-not-zero rendering is preserved by the cast.
+
+### 1.5 Column semantics — measured on a live PG 16 parallel query
+
+A 4-worker parallel scan inside a writing transaction, sampled from a second session:
+
+```
+ pid | leader | raw_leader_pid |  backend_type   | backend_xid | horizon_xacts | state  | xact_age
+ 117 |    117 |                | client backend  | 733         |             1 | active | 00:00:01
+ 119 |    117 |            117 | parallel worker |             |             1 | active | 00:00:01
+ 120 |    117 |            117 | parallel worker |             |             1 | active | 00:00:01
+ 121 |    117 |            117 | parallel worker |             |             1 | active | 00:00:01
+ 122 |    117 |            117 | parallel worker |             |             1 | active | 00:00:01
+ 136 |    136 |                | client backend  |             |             1 | active | 00:00:00
+```
+
+Every column AC is now a measured fact rather than a claim:
+
+- `leader` = own pid for the leader (117) and for an unrelated backend (136); = the leader's
+  pid for all four workers. Sorting by `leader` groups them. **AC 3 satisfied.**
+- `raw_leader_pid` is **NULL on the leader** — the empirical basis for the spec's decision to
+  expose the derived column rather than the raw one.
+- `backend_xid` = `733` on the leader only. **Worth documenting:** workers of a *writing*
+  transaction still show an empty `backend_xid`, because the xid belongs to the leader's
+  transaction. A DBA sorting by `backend_xid` sees the leader, not the group.
+- `horizon_xacts` = `1` identically on leader and all workers — the spec's "workers inherit
+  the leader's snapshot" edge case, measured.
+- Idle sessions in the same sample showed `backend_xid`, `horizon_xacts` **and** `xact_age`
+  all blank; a session with an open snapshot but no writes showed `horizon_xacts = 0` with
+  `backend_xid` blank — i.e. the "0 is not the same as blank" distinction the spec's UX rule
+  rests on occurs in practice, not just in theory.
+
+### 1.6 `coalesce` here does not violate ADR [005]
+
+ADR [005] (decisions-log.md:285) scopes `coalesce(...,0)` to columns **inside** `DiffIntvl`,
+for `diffPair` NULL-safety. `coalesce(leader_pid, pid)` is a *semantic derivation*, not
+NULL-padding for the diff engine, and it is the spec's explicit decision. `backend_xid` and
+`horizon_xacts` are deliberately **not** coalesced — that is what makes them render blank
+(pass 1 §2, still valid: activity's `DiffIntvl {0,0}` sends `calculateDelta` down the
+`delta = curr` branch at `internal/stat/postgres.go:596`, so values are copied verbatim).
+
+### 1.7 `view.New()` seed stays at `PgStatActivityDefault` / 14 — confirmed
+
+`internal/view/view.go:40–50`. `Configure()` already wires activity at **view.go:374–376**;
+the case needs **no edit** — `SelectStatActivityQuery` keeps its signature.
+
+Raising the seed to 17 breaks exactly two assertions, both in `top/config_view_test.go`:
+
+- `:18` — `{orderKey: 0, want: 13}` with the (already stale) comment
+  `// why 13? because of views["activity"].Ncols == 13`; it means `Ncols - 1`, and `New()`
+  currently sets 14. Would become `want: 16`.
+- `:48` — `{orderKey: 13, want: 0}` `// 13 is the index of last column`. Would become
+  `{orderKey: 16, want: 0}`.
+
+Those two lines are the only consumers of activity's `Ncols` in the repo
+(`top/config_view.go:26` `orderKeyLeft`, `:38` `orderKeyRight`). `report/` never reads
+`view.Ncols`. Leaving the seed alone matches the convention 012 locked and keeps the code
+diff to `internal/query/activity.go` alone.
+
+The stale comment at `config_view_test.go:18` should be corrected regardless (`Ncols - 1`).
+
+## 2. The sort fix
+
+### 2.1 Current code — `internal/stat/postgres.go:663–701`
+
+```go
+sample := r.Values[0][key].String            // :668 — row 0 only
+if _, err := strconv.ParseFloat(sample, 64); err == nil { /* numeric   :670 */ }
+else if _, err := parseDuration(sample); err == nil     { /* duration  :681 */ }
+else                                                     { /* string    :692 */ }
+```
+
+Single caller: `calculateDelta` at :599, reached from `stat.Compare` (:575, used by
+`report/report.go:453`) and directly from `internal/stat/stat.go:440` (the `top` path).
+
+**[measured]** `strconv.ParseFloat("")` and `parseDuration("")` both error, so a column whose
+first row is empty falls through to the string comparator — where `"9" > "1000000"`.
+
+### 2.2 Target shape — prototyped, compiled, and run **[measured]**
+
+```go
+func (r *PGresult) sort(key int, desc bool) {
+	if r.Nrows == 0 {
+		return /* nothing to sort */
+	}
+
+	// Pick the comparator from the first non-empty cell, not from row 0: a column that is
+	// empty in the first row (backend_xid, horizon_xacts are empty for most rows) would
+	// otherwise fall back to the string comparator, where "9" sorts above "1000000".
+	var sample string
+	for i := range r.Values {
+		if r.Values[i][key].String != "" {
+			sample = r.Values[i][key].String
+			break
+		}
+	}
+
+	// An empty cell is not a zero: "holds no horizon" and "holds the horizon at distance 0"
+	// are different states. Empties go last in both directions so they never mix with a
+	// genuine 0.
+	withEmptyLast := func(cmp func(a, b string) bool) func(i, j int) bool {
+		return func(i, j int) bool {
+			a, b := r.Values[i][key].String, r.Values[j][key].String
+			if a == "" || b == "" {
+				return a != "" && b == ""
+			}
+			return cmp(a, b)
+		}
+	}
+
+	switch {
+	case isParsableFloat(sample):
+		sort.SliceStable(r.Values, withEmptyLast(func(a, b string) bool {
+			l, _ := strconv.ParseFloat(a, 64)
+			m, _ := strconv.ParseFloat(b, 64)
+			if desc { return l > m }
+			return l < m
+		}))
+	case isParsableDuration(sample):
+		sort.SliceStable(r.Values, withEmptyLast(func(a, b string) bool {
+			l, _ := parseDuration(a)
+			m, _ := parseDuration(b)
+			if desc { return l > m }
+			return l < m
+		}))
+	default:
+		sort.SliceStable(r.Values, withEmptyLast(func(a, b string) bool {
+			if desc { return a > b }
+			return a < b
+		}))
+	}
+}
+```
+
+Notes on the shape:
+
+- The `if/else if/else` chain has to become a `switch` (or two named predicates) because the
+  comparator is now built by a wrapper — `isParsableFloat` / `isParsableDuration` are
+  two-line helpers next to `parseDuration` (`postgres.go:707`).
+- `sort.SliceStable` is preserved in all three arms (determinism requirement, `patterns.md`).
+- The empty-vs-empty case returns `false` (`a != ""` is false), so equal-empty rows keep their
+  incoming order under `SliceStable`.
+- Sampling walks `r.Values` **before** the sort, so the sample is order-independent — this is
+  what makes the mode deterministic regardless of which row arrived first.
+- All-empty column: `sample == ""` → string arm → the comparator returns `false` for every
+  pair → `SliceStable` is a no-op. No panic, no reordering.
+
+**[measured]** behaviour of the prototype on a sparse numeric column
+`["", "9", "1000000", "", "0", "250"]`:
+
+```
+desc: ["1000000" "250" "9" "0" "" ""]
+asc : ["0" "9" "250" "1000000" "" ""]
+```
+
+`0` stays adjacent to the real numbers and never mixes with the blanks — exactly the AC.
+On a sparse duration column `["", "791:04:45", "79:18:40", ""]`:
+
+```
+dur desc: ["791:04:45" "79:18:40" "" ""]
+dur asc : ["79:18:40" "791:04:45" "" ""]
+```
+
+### 2.3 Existing tests — none break **[measured]**
+
+| Test | Location | What it covers | Under the fix |
+|---|---|---|---|
+| `Test_sort` | `internal/stat/postgres_test.go:704–777` | 4 subtests (numeric/string × asc/desc) on `newTestPGresult()`; plus an empty-`PGresult` no-op case at :773–776 | **passes** — no empty cells in the fixture |
+| `Test_sort_duration` | `postgres_test.go:782–814` | issue #50 regression: `"791:04:45"` must outrank `"79:18:40"` | **passes** |
+| `Test_calculateDelta` | `postgres_test.go:443–510` | exercises `sort` via `calculateDelta` at :494/:499/:504 | **passes** |
+| `Test_Compare` | `postgres_test.go:627` | `Compare(... skey 0 ...)` | **passes** |
+| `Test_diff*`, `Test_diffPair`, `Test_parseDuration` | `postgres_test.go` | adjacent | **pass** |
+| all `report/` goldens (~30, incl. 5 activity) | `report/testdata/*.golden` | replay output | **pass, byte-identical** |
+
+Verified by running the prototype: `go test ./internal/stat/ -run 'Test_sort|Test_calculateDelta|Test_Compare|Test_diff|Test_parseDuration'` → PASS; `go test ./report/... ./internal/align/...` → ok; `go test ./top/ -run 'Test_orderKey|Test_visibleColumns|...'` → ok.
+(`internal/stat.Test_readCpuStat` fails in this environment **before and after** the patch — a
+`/proc` parsing baseline failure, not related.)
+
+The activity goldens are insensitive because every one of them sorts on `pid`
+(`view.New()` `OrderKey: 0`; the two order-variant goldens are
+`report_activity_order_pid_asc/desc.golden`), and `pid` is never empty.
+
+### 2.4 New test to add
+
+`internal/stat/postgres_test.go`, next to `Test_sort_duration` — `Test_sort_sparse`:
+a sparse numeric column asserting (a) numeric order regardless of which row is first
+(run the same fixture twice with the empty row moved to position 0 and to the middle),
+(b) blanks last in **both** directions, (c) a real `"0"` above the blanks. Add a sparse
+duration case and an all-empty column case in the same test.
+
+### 2.5 Blast radius — which screens change behaviour
+
+Two independent behaviour changes ship together. Both need to be in the tech-spec's
+blast-radius section, because **the second one is larger than the spec's Risk 5 describes.**
+
+**(a) Mode change** — a sparse ★ column whose *first row* happens to be empty flips from the
+accidental string comparator to numeric/duration. Non-deterministic today (depends on which
+row the server returned first).
+
+**(b) Placement change — the bigger one.** In a ★ column whose first row is *non*-empty, the
+mode is already numeric/duration today, and `l, _ := strconv.ParseFloat("")` swallows the
+error, so **an empty cell is currently ordered as `0`**. Consequences:
+
+- **ASC: empty cells are currently FIRST in every ★ column** on every screen. All of them
+  move to last. This is the change users will actually notice.
+- **DESC: empties land last only if every real value is ≥ 0.** `activity.cl_port` legitimately
+  holds `-1` (unix-socket connections), so today an empty `cl_port` sorts *above* `-1`.
+  That row moves.
+
+The spec's Risk 5 names only the mode change ("возраст транзакции… начнёт сортироваться как
+длительность, а не как строка"). Change (b) applies to columns that already sort numerically
+and is what makes this a general-engine change.
+
+#### The sparse-and-numeric/duration set (columns whose ordering changes)
+
+| View | idx | Column | SQL source | New mode |
+|---|---|---|---|---|
+| activity | 2 | `cl_port` | `client_port` NULL for background procs (`activity.go:6`) | numeric |
+| activity | 10,11,12 | `xact_age`, `query_age`, `change_age` | `clock_timestamp() - xact_start` etc. NULL when the timestamp is NULL (`activity.go:9–11`) | duration |
+| activity (new) | 11,12 | `backend_xid`, `horizon_xacts` | the feature's own columns | numeric |
+| replication | 7–11 | `pending/write/flush/replay/total,KiB` | `sent_lsn`/`write_lsn`/… NULL while a standby is in `startup`/`backup` (`replication.go:7–11`), outside `DiffIntvl {6,6}` | numeric |
+| replication (ext) | 15,16 | `horizon_xacts`, `horizon_age` | NULL without `hot_standby_feedback` (`replication.go:28–29`) | numeric / duration |
+| databases_general | 18 | `stats_age` | `stats_reset` NULL for never-reset DBs (`databases.go:15`), outside `DiffIntvl {2,17}` | duration |
+| **replslots** | **4** | **`retained,KiB`** | `restart_lsn` NULL for a slot that reserved no WAL (`replication_slots.go:18`) | numeric |
+| replslots | 5 | `safe,KiB` | `safe_wal_size` NULL whenever `max_slot_wal_keep_size = -1` — **the Postgres default**, so 100 % empty on a stock cluster (`replication_slots.go:19`) | numeric |
+| replslots | 14 | `stats_age` | LEFT JOIN → NULL for every *physical* slot (`replication_slots.go:27–28`) | duration |
+| progress_vacuum | 1,7,8,9 | `xact_age`, `size_total,KiB`, `scanned_total,%`, `vacuumed_total,%` | `RIGHT JOIN pg_stat_activity` (`progress_vacuum.go:12`) → all `v.*` NULL for a VACUUM with no progress row yet | duration / numeric |
+| progress_copy | 1,8,11 | `xact_age`, `size_total,KiB`, `processed,%` | explicit `nullif(p.bytes_total, 0)` → NULL for every `COPY FROM STDIN` (`progress_copy.go:10`) | duration / numeric |
+| progress_basebackup | 7 | `size_total,KiB` | `backup_total` NULL while `initializing` (`progress_basebackup.go:10`) | numeric |
+| progress_cluster / _index / _analyze | 1 | `xact_age` | NULL `xact_start` | duration |
+| wal, bgwriter, stat_io, stat_io_time | last | `stats_age` | `stats_reset` NULL (`wal.go:10,20`; `bgwriter.go:12,24,35`; `io.go:33,56,77`) | duration |
+| procpidstat | 9,10,11,15,16,17 | IO / iodelay totals and rates | **not SQL** — the enrichment stage writes a `""` sentinel per row when `/proc/<pid>/io` is unreadable or the pid vanished (`internal/stat/procpidstat.go:350,351,360,386,387,404,411`); `validPID` is evaluated per row, so `""` and numbers genuinely mix in one snapshot | numeric / duration |
+
+Screens with **no** sparse columns at all: tables, indexes, sizes, functions, and every
+`statements_*` (all counters `coalesce(...,0)` or NOT NULL in the catalog).
+
+#### Highest-risk single screen: `replslots`
+
+`internal/view/view.go:159` sets `OrderKey: 4` → `retained,KiB`, which is **the only default
+sort key in the repo that is both sparse and numeric**. Every other view's default `OrderKey`
+points at a never-empty column (`pid`, `relation`, `io_key`, …) or at a sparse *text* column
+(`databases_general`/`databases_sessions` `datname`, col 0 — the `pg_stat_database`
+shared-objects row has `datname IS NULL`; mode is unchanged, and under the default DESC the
+empty is already last).
+
+Supporting argument for the tech-spec: the replslots SQL **already declares the intended
+semantics** — `ORDER BY "retained,KiB" DESC NULLS LAST` (`replication_slots.go:31`). Today
+`sort()` re-sorts in Go and, under ASC, hoists the NULL slots to the top, contradicting the
+query's own `NULLS LAST`. The new rule makes Go agree with the SQL. This is the cleanest
+framing of "исправление, а не регрессия".
+
+#### Correction to a pass-1 / common assumption
+
+Being **inside** `DiffIntvl` does *not* guarantee a non-empty cell:
+
+- `internal/stat/postgres.go:582–584` — `if !prev.Valid { return curr, nil }`: on the first
+  sample and after every view switch `diff()` is skipped entirely and raw SQL output is sorted.
+- `internal/stat/postgres.go:650–655` — the `if !found` branch copies a row that exists in
+  `curr` but not in `prev` (a new backend / new slot / new relation) **verbatim, including its
+  in-interval columns**.
+
+So "diffed ⇒ numeric string" holds only for rows matched by `UniqueKey` on a second-or-later
+sample.
+
+#### Edge case the tech-spec must specify explicitly
+
+When a column is empty in **every** row, the "first non-empty cell" scan finds nothing and
+`sample` stays `""` → the string arm → the comparator is a no-op. This is not hypothetical:
+`replslots.safe,KiB` is NULL for all rows on a default cluster, and `activity.cl_addr` is
+empty for all rows on a purely local cluster. Behaviour is correct (nothing to order) but it
+must be a stated decision, not an accident.
+
+#### Open decision: does empty-last apply to the string arm too?
+
+The prototype applies `withEmptyLast` uniformly, including the string comparator. That changes
+a common operation: sorting `activity` ascending by `wait_event` puts blanks last instead of
+first. The spec's UX rule is written in the context of the sparse **numeric** column
+("Сортировка по разреженной числовой колонке…"), so the string arm is not explicitly
+mandated. Options: (a) uniform, one rule, blanks are never a value — recommended, and it is
+what makes `databases_general --order datname` ASC behave sanely; (b) restrict `withEmptyLast`
+to the numeric and duration arms, minimising the diff. **No golden is affected either way**
+(measured, §2.3), so this is a product call, not a test-cost call.
+
+## 3. Tech debt [021] — measured, not inferred
+
+### 3.1 The panic is real **[measured]**
+
+`report/report.go:564–571`:
+
+```go
+for i := range res.Cols {                       // recorded column count (17)
+    valuelen := len(res.Values[rownum][colnum].String)
+    if valuelen > view.ColsWidth[i] {           // missing key -> 0, so true for any non-empty value
+        width := view.ColsWidth[i]              // 0
+        res.Values[rownum][colnum].String = ...[:width-1] + "~"   // [:-1]
+```
+
+`top/printDataCell` (`top/stat.go:1000–1011`) **does** guard this — `if width <= 0 { return
+fmt.Errorf("zero or negative width, skip") }` at `:1005–1007`. `report` has no such guard.
+The asymmetry is confirmed.
+
+Built a synthetic two-version archive (PG 12 → PG 13, 14 → 17 columns) and ran it through the
+current, unpatched code:
+
+```
+panic: runtime error: slice bounds out of range [:-1]
+	report.printStatSample  report/report.go:570
+	report.processData      report/report.go:320
+	report.(*app).doReport.func2  report/report.go:128
+```
+
+Two things the tech-spec must know:
+
+1. It is a **panic, not an error return** — `doReport` cannot report it.
+2. It happens on a **goroutine spawned at `report/report.go:127`**, so a test cannot recover
+   it. The TDD red step is a hard process crash that takes the whole `go test` binary down,
+   not a failed assertion.
+
+### 3.2 The fix — two lines, and the second one is not optional
+
+`Views` is `map[string]View` (`internal/view/view.go:35`) — a **value** map — and `Configure`
+(`view.go:367–427`) never touches `Aligned`. So the round-trip at `report/report.go:255–265`
+preserves `Aligned = true` from the previous layout. The fix goes right after
+`v = views[config.ReportType]` (`report.go:265`), inside the branch that already `continue`s:
+
+```go
+				v = views[config.ReportType]
+				v.Aligned = false
+				linesPrinted = repeatHeaderAfter
+
+				continue
+```
+
+`v.Aligned = false` alone fixes the widths but **leaves a stale header**: `printStatHeader`
+(`report.go:508–511`) only prints when `printedNum >= repeatHeaderAfter`, and `linesPrinted`
+is well under 20 mid-report, so the 17-column rows would print under the 14-column header for
+up to 20 more lines. The AC says "нет ни устаревшей раскладки" — a header naming the wrong
+columns is a stale layout. Resetting `linesPrinted` forces the header to reprint on the first
+sample of the new layout.
+
+**[measured]** with both lines, the same synthetic archive produces a clean report:
+
+```
+pid  cl_addr  cl_port  datname … xact_age  query_age  change_age  query      <- 14-col header
+2026/05/19 10:00:01, rate: 1s
+12345  127.0.0.1  5432  db  postgres  psql  client backend … 00:00:10 …
+pid  leader  cl_addr  cl_port … state  backend_xid  horizon_xacts  xact_age …   <- 17-col header
+2026/05/19 10:00:03, rate: 1s
+12345  12345  127.0.0.1  5432  db  postgres  psql  client backend … 748291  2300000 …
+```
+
+**[measured]** `go test -count=1 ./report/...` → `ok` with the patch applied: **no golden
+churn** across all ~30 goldens. (Both patches were reverted; the tree is clean.)
+
+### 3.3 "The replay path skips the first sample of a new version" — confirmed
+
+`report/report.go:250–268`. The condition is `if !prevStat.Valid || prevMeta.version !=
+d.meta.version`; the body reassigns `prevStat`/`prevTs`, reconfigures the view, and
+**`continue`s at :267** — the sample is never printed.
+
+**[measured]**: the 4-tick archive above (2 ticks at PG 12, 2 at PG 13) printed exactly **2**
+data rows — tick 0 consumed as the initial sample, tick 1 printed, tick 2 consumed by the
+version change, tick 3 printed. A test archive therefore needs **≥ 2 samples after the version
+change**, exactly as the spec's AC warns; with one, the report is empty and the test is
+vacuously green.
+
+### 3.4 Cost of the two-version synthetic archive — the AC's conditional is satisfied
+
+The spec makes this AC conditional on the archive being cheap to build. **It is.** The probe
+above is a working implementation: **~85 lines**, one file, no golden needed if sentinel
+assertions are used (or one golden if the 012 style is followed). It is the
+`report_record_progress_vacuum_test.go` harness (173 lines, 2 cases) with the diff machinery
+removed and one extra tick-pair added:
+
+- two `meta.*` payloads differing only in `version_num` (`120020` / `130016`);
+- two `PGresult` payloads, 14 cols and 17 cols;
+- 4 ticks × 3 entries (`meta.` / `activity.` / `sysinfo.`) = 12 tar entries, ticks exactly
+  1 s apart;
+- `newApp(config)` → `app.writer = &buf` → `app.doReport(tar.NewReader(&tarBuf))`.
+
+Two hard constraints carried over from the original harness: the stat entry's basename **must**
+equal `config.ReportType` (`isFilenameOK`, `report.go:408–424`, otherwise entries are skipped
+silently and the test passes on an empty report), and ticks exactly 1 s apart so `itv == 1`.
+A third, specific to this test: assert **two** timestamp lines / that the 17-column header
+appears, so a one-sample-after-switch mistake cannot pass.
+
+**Recommendation: keep the AC unconditional.** The cost is ~85 lines and the red step is a
+reproducible panic.
+
+## 4. Test work — exact patterns to copy
+
+### 4.1 `internal/query/activity_test.go:10–26` — extend the table
+
+Current table covers `90500 / 90600 / 100000` only. It **passes unchanged** (100000 still maps
+to `PgStatActivityDefault`/14) and must be *extended*, not repaired. The spec's "граница
+фиксируется с обеих сторон" needs both rows:
+
+```go
+		{version: 120000, wantQ: PgStatActivityDefault, wantN: 14},
+		{version: 130000, wantQ: PgStatActivityPG13, wantN: 17},
+```
+
+Add `140000` / `190000` too if the 012 style is followed (`progress_vacuum_test.go:46–48`
+pins one version on each side plus the newest).
+
+### 4.2 `internal/query/activity_test.go:28–50` — upgrade to column-name+order verification
+
+Today (`:33`) the returned Ncols is discarded (`tmpl, _ := …`) and (`:44`) the query is run via
+`conn.Exec(q)`, which throws the result away — the test proves only "does not error".
+
+The house pattern for asserting **count** is `bgwriter_test.go:53–61` and
+`progress_vacuum_test.go:26–32`:
+
+```go
+		rows, err := conn.Query(q)
+		assert.NoError(t, err)
+		assert.Len(t, rows.FieldDescriptions(), wantNcols)
+		rows.Close()
+```
+
+The spec asks for more than the count — **names and order**. There is no existing precedent for
+that; it is a new (cheap) step on top:
+
+```go
+			tmpl, wantNcols := SelectStatActivityQuery(version)
+			…
+			rows, err := conn.Query(q)
+			assert.NoError(t, err)
+
+			fds := rows.FieldDescriptions()
+			assert.Len(t, fds, wantNcols)
+			got := make([]string, len(fds))
+			for i, fd := range fds {
+				got[i] = string(fd.Name)
+			}
+			assert.Equal(t, wantCols, got)   // per-version expected slice, in emitted order
+			rows.Close()
+			assert.NoError(t, rows.Err())
+```
+
+`wantCols` becomes a per-version field on the test-case struct; the existing loop already wraps
+each version in `t.Run` (`activity_test.go:32`) and skips inside the subtest (`:40`), which is
+the shape debt [019] wants — no change needed there.
+
+`fd.Name` is `[]byte` on pgx v5 in some versions and `string` in others; `string(fd.Name)` is
+safe either way.
+
+**Availability caveat, load-bearing for the spec's honesty:** `internal/postgres/testing.go:19–35`
+maps 130000→21913 and 120000→21912, but the `pgcenter-testing` image ships **PG 14–19 only**
+(the map's own comment marks 90400–130000 as "EOL versions kept for reference"). So the live
+name/order check runs on **PG 14–19**; on PG 12/13 `NewTestConnectVersion` returns an error and
+the subtest **skips** — green, but proving nothing. That gap is exactly the third tech-debt
+entry the spec's AC asks to register.
+
+### 4.3 `report/report_test.go:1216–1255` — `Test_describeProgressColumnOrder`
+
+Its shape (quoted, `:1242–1254`):
+
+```go
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			prev := -1
+			for _, m := range tc.markers {
+				pos := strings.Index(tc.text, m)
+				// Presence first: strings.Index returns -1 for a missing marker, and -1 is less than
+				// anything, so an ordering-only assertion would pass on a row that is not there at all.
+				require.NotEqual(t, -1, pos, "description must contain a row for %q", strings.TrimPrefix(m, "\n- "))
+				assert.Greater(t, pos, prev, "row %q is out of order", strings.TrimPrefix(m, "\n- "))
+				prev = pos
+			}
+		})
+	}
+```
+
+Cases are `{name, text, markers []string}` (`:1220–1240`). The activity analogue is one more
+case — either appended to this table (the name would then be inaccurate) or in a sibling
+`Test_describeActivityColumnOrder` with the identical body:
+
+```go
+	{
+		name:    "activity",
+		text:    pgStatActivityDescription,
+		markers: []string{"\n- pid", "\n- leader", "\n- state", "\n- backend_xid", "\n- horizon_xacts", "\n- xact_age", "\n- query"},
+	},
+```
+
+The `require.NotEqual(t, -1, pos)` presence check before the ordering compare is the
+load-bearing part — without it a missing row reads as correctly ordered. `strings` and
+`require` are already imported in the file.
+
+Note why this test exists at all: `Test_describeReport` (`report_test.go:~1180–1214`) compares
+each block **against the constant itself** (`assert.Equal(t, tc.want, buf.String())` at `:1211`,
+where `tc.want` *is* `pgStatActivityDescription`), so it is structurally blind to a row in the
+wrong slot and cannot break when the constant is edited.
+
+### 4.4 Sort tests
+
+- **New** `Test_sort_sparse` in `internal/stat/postgres_test.go`, next to `Test_sort_duration`
+  (`:782`). Must cover: numeric order independent of which row is first (same data, empty row
+  at index 0 and in the middle); blanks last in **both** directions; a genuine `"0"` ranked
+  with the numbers, above the blanks; a sparse duration column; an all-empty column.
+  ⚠️ `Test_sort` (`:704`) shares one `res := newTestPGresult()` across subtests and mutates it
+  in place (`:705`, `:768`) — a new test must build its own fixture per case.
+- **Recommended golden** in `report/report_record_replslots_test.go` (`:49`, `:146` already pin
+  `retained,KiB` DESC via the view's own `OrderKey: 4`): add a slot row with empty
+  `retained,KiB` (a slot that reserved no WAL) and an empty `stats_age` on the physical slot,
+  in both directions. This is the only place where the changed behaviour meets a default sort
+  key, and the existing golden corpus has **zero** coverage of it.
+
+### 4.5 Existing golden corpus — no regeneration, and no coverage either
+
+**[measured]** every `report/` golden passes unchanged under both patches. The reason is that
+the only sparse sort key in the corpus is `databases_general`/`databases_sessions` `datname`
+(the `pg_stat_database` shared-objects row, empty in 9 rows of each golden) sorted **DESC** —
+the one direction where old and new agree. All four `report_activity*.golden` files order by
+`pid`, never empty, even though they do contain empty `cl_addr`, `wait_etype`, `wait_event`,
+`datname` and `xact_age` cells.
+
+Corollary for the spec: "goldens unchanged" is **not** evidence that the sort change is safe —
+it is evidence that the corpus never exercised it. New tests are required, not fixups.
+
+### 4.6 A latent flaw in an existing test, worth not building on
+
+`internal/stat/postgres_test.go:504–506`: `calculateDelta(curr, prev, 1, [2]int{0,0}, 1, true, 0)`
+takes the `delta = curr` branch (`postgres.go:596`), which **aliases** `curr.Values`;
+`delta.sort()` then reorders `curr` in place, so `assert.Equal(t, curr, got)` at `:506` is
+vacuously true. Not caused by this feature and not in scope to fix, but no new assertion should
+lean on it.
+
+## 5. Documentation surfaces
+
+### 5.1 `report/describe.go:179–199` — `pgStatActivityDescription`
+
+Structure: a title line (`:180`), a blank line, a `  column\torigin\t\t\tdescription` header
+(`:182`), 14 rows in **emitted column order** (`:183–196`), a blank line, then
+`Details: https://…` (`:198`).
+
+Insertion points, in emitted order:
+
+- `- leader` immediately **after** `- pid` (`:183`), before `- cl_addr` (`:184`);
+- `- backend_xid` and `- horizon_xacts` immediately **after** `- state` (`:192`), before
+  `- xact_age` (`:193`).
+
+Tab layout (tab stops of 8; origin column starts at 16, description at 40):
+
+```
+- leader<TAB>leader_pid,pid<TAB><TAB>...
+- backend_xid<TAB>backend_xid<TAB><TAB>...
+- horizon_xacts<TAB>backend_xmin<TAB><TAB>...
+```
+
+(`- leader` is 8 chars → one tab reaches 16; `- backend_xid` 13 and `- horizon_xacts` 15 →
+one tab each. Origins `leader_pid,pid` 14, `backend_xid` 11, `backend_xmin` 12 → two tabs each
+to reach 40. Compare the existing `- appname\tapplication_name\t` — a 16-char origin needs only
+one tab.)
+
+The **three caveats** required by the AC go after the table and before `Details:`, in the slot
+where 012 put `Note: started_by and mode are available since PG19.` (`describe.go:221`). Four
+notes in total — the version note plus the three caveats:
+
+1. availability — the three columns exist since PG 13;
+2. `leader` is `coalesce(leader_pid, pid)`, i.e. the leader's own pid rather than the raw
+   `leader_pid` (which is empty on the leader itself);
+3. the horizon is shown for backends only — replication slots, prepared transactions and
+   standby feedback also hold it and are not in `pg_stat_activity`;
+4. this `horizon_xacts` is `age(backend_xmin)`, computed differently from the identically
+   named column on the `replication` screen (`describe.go:75`, backed by
+   `replication.go:28` = `(pg_last_committed_xact()).xid - backend_xmin`). The two differ by
+   the number of assigned-but-uncommitted transactions; the replication one can go negative,
+   `age()` cannot.
+
+Caveat 4 is also the content of the tech-debt entry the AC asks for. Consider a matching
+one-liner in the `replication` block (`describe.go:75`) so the divergence is discoverable from
+either screen.
+
+`Test_describeReport` (`report_test.go:1211`) compares the block against the constant itself,
+so editing the constant **cannot** break it — which is precisely why §4.3's order test is
+required.
+
+### 5.2 `internal/stat/help.go` is dead — re-confirmed, correctly excluded
+
+`grep -rn "PgStatActivityDescription"` over the whole repo returns **one** hit: the declaration
+at `internal/stat/help.go:145`. No consumer exists for it or for any other `PgStat*Description`
+in that file; `top/help.go` renders its own keybinding cheat-sheet and does not import them.
+
+The file has already drifted: `internal/stat/help.go:59–60` still calls the replication horizon
+columns `xact_age*` / `time_age*`, while the live query (`internal/query/replication.go:28–29`)
+and `report/describe.go:75–76` both say `horizon_xacts` / `horizon_age`.
+
+→ Pass 1's correction stands: the brief that cited `internal/stat/help.go:59` as the precedent
+for the name `horizon_xacts` cited the wrong line — that line says `xact_age*`. The real
+precedents are `internal/query/replication.go:28` and `report/describe.go:75`. The spec's
+decision on the *name* is unaffected.
+
+The spec's choice — leave the file alone, register it as tech debt — is correct and needs no
+code change.
+
+### 5.3 `top/help.go`
+
+No change. No new hotkey; the `I` / `A` filter keys are documented at `:32–37` and their
+behaviour is unchanged (the new query carries both template placeholders verbatim).
+
+## 6. Things that contradict, or are not covered by, the spec
+
+Flagged rather than worked around.
+
+1. **The brief's "both xid columns need explicit `::text`" is wrong for `horizon_xacts`.**
+   `age(backend_xmin)` returns `integer`, measured (§1.4). Only `backend_xid` is of type `xid`
+   and needs the cast. Not a spec statement — the spec does not mention casts — so nothing in
+   the approved document changes.
+
+2. **The spec's "три новые колонки добавляют 32 символа" undercounts.** 8 + 11 + 13 = 32 is the
+   sum of the column *widths*; every column is printed with a two-character gap
+   (`report.go:575` `%-*s` with `ColsWidth[i]+2`; `top/stat.go:1014` likewise), so the actual
+   shift of `query` is **38** characters. This does not change any decision — the spec's
+   conclusion ("no separate mitigation needed, horizontal scroll covers it") holds — but the
+   number in the rationale is off by six.
+
+3. **The [021] fix needs a second line the spec does not anticipate.** `v.Aligned = false`
+   alone leaves the previous layout's *header* on screen for up to 20 lines (§3.2). Meeting
+   the AC's "нет устаревшей раскладки" requires `linesPrinted = repeatHeaderAfter` as well.
+   This is an addition to the debt register's one-line description, not a contradiction of the
+   spec.
+
+4. **Risk 5 understates the sort blast radius.** It describes only the mode flip
+   (string → duration). The larger change is placement: empty cells are ordered *as zero*
+   today in every ★ column whose first row is non-empty, so **ASC sorting moves blanks from
+   first to last on every screen in the ★ table**, and DESC moves them past any negative value
+   (`activity.cl_port = -1`). Still "исправление, а не регрессия" — `replication_slots.go:31`
+   already writes `ORDER BY "retained,KiB" DESC NULLS LAST`, so the fix makes Go agree with the
+   SQL — but the tech-spec's blast-radius section should say so in these terms.
+
+5. **Undecided: does empty-last apply to the string comparator?** (§2.5). The spec's UX rule is
+   phrased about the sparse *numeric* column. Uniform application changes ordinary text sorts
+   (`wait_event` ASC). No test or golden distinguishes the two options, so it must be decided
+   deliberately.
+
+6. **Undecided: the all-empty column.** No non-empty sample exists → string arm → no-op.
+   Correct, but it should be a stated decision; it is the normal state of `replslots.safe,KiB`
+   on a default cluster and of `activity.cl_addr` on a local-only cluster.
+
+7. **Not a contradiction, but worth recording in the describe block:** parallel workers of a
+   *writing* transaction show an **empty `backend_xid`** — the xid belongs to the leader
+   (§1.5, measured). A DBA sorting by `backend_xid` to find writers sees leaders only. The
+   spec's Scenario 3 is unaffected (it starts from the horizon holder), but the "пусто =
+   ничего не писала" reading is imprecise for a worker row.
+
+8. **The live name/order check cannot cover the new branch boundary.** The port map has entries
+   for PG 12 (21912) and PG 13 (21913), but `pgcenter-testing` ships PG 14–19, so those
+   subtests skip. The spec already states this as a known limitation and asks for a tech-debt
+   entry; §4.2 confirms it from the code.
+
+## 7. Files to change — revised checklist
+
+| File | Change | Required |
+|---|---|---|
+| `internal/query/activity.go` | add `PgStatActivityPG13` (17 cols, doc comment per §1.3); insert `case version < 130000: return PgStatActivityDefault, 14`; new const becomes `default`. Arity unchanged | **yes** |
+| `internal/query/activity_test.go:10–26` | extend table with `120000`→Default/14 and `130000`→PG13/17 | **yes** |
+| `internal/query/activity_test.go:28–50` | `Exec` → `Query` + assert `FieldDescriptions()` names **and** order per version (§4.2) | **yes** |
+| `internal/stat/postgres.go:663–701` | rewrite `sort` per §2.2; add `isParsableFloat` / `isParsableDuration` helpers | **yes** |
+| `internal/stat/postgres_test.go` | new `Test_sort_sparse` (§4.4) | **yes** |
+| `report/report.go:265` | `v.Aligned = false` + `linesPrinted = repeatHeaderAfter` (§3.2) | **yes** |
+| `report/report_record_activity_version_switch_test.go` | **new** — two-version synthetic archive, 4 ticks (§3.4), ~85 lines | **yes** |
+| `report/describe.go:179–199` | 3 rows in emitted order + 4 notes (§5.1) | **yes** |
+| `report/report_test.go:1216+` | activity case in the column-order test (§4.3) | **yes** |
+| `report/report_record_replslots_test.go` | empty `retained,KiB` / `stats_age` rows, both directions (§4.4) | recommended |
+| `internal/view/view.go` | **none** — `Configure` at `:374–376` already wires it; `New()` seed stays 14 (§1.7) | no |
+| `internal/view/view_test.go` | add `case 130000:` / `case 120000:` to `TestViews_Configure`, mirroring the 012 block at `view_test.go:186–202` | **yes** |
+| `top/config_view_test.go:18` | correct the stale `Ncols == 13` comment (means `Ncols - 1`) | cosmetic |
+| `docs/tech-debt.md` | 3 new entries (dead `internal/stat/help.go`; `horizon_xacts` formula divergence across two screens; port map vs. test-image coverage below PG 14); update [021] to "resolved" | **yes** |
+| `docs/decisions-log.md`, features catalog, PK `patterns.md` | per `/done` | **yes** |
