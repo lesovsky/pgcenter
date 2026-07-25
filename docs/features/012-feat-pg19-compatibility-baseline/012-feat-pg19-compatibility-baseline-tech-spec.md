@@ -167,6 +167,15 @@ once the hole is fixed.
 **Alternatives considered:** One unified query with `NULL AS started_by` for pre-19 — rejected by ADR [004]:
 it shows a permanently blank column to users of a version that simply does not have the data.
 
+### Decision 8a: Reviewer set for the two test-only tasks
+**Decision:** The test-suite sweep and the describe-text task run with the code and test reviewers but
+without the security reviewer, unlike the default set for their skill.
+**Rationale:** Neither touches production behaviour — one appends version literals to test tables, the other
+edits static help strings. The security reviewer's checklist has no surface to work on there, and every task
+that does touch production code keeps the full set.
+**Alternatives considered:** Keeping the default set everywhere — rejected: a review pass with nothing to
+review trains the habit of skimming reviews.
+
 ### Decision 9: Autopilot assumption — branch and task granularity
 **Decision:** Work happens on `feature/pg19-compatibility-baseline`. The three progress screens are one task
 rather than three, and the test-suite sweep is a separate task that owns every `_test.go` file the selector
@@ -236,6 +245,9 @@ None.
 - Three new per-version selector tables (`Test_SelectStatBgwriterQuery` model): for each screen assert the
   query constant, `Ncols` and `DiffIntvl` at the 180000/190000 boundary, plus one older version.
 - `NewTestConnectVersion` with a version absent from the map returns an error and a nil connection.
+- A row-order assertion over the three progress describe texts: each new column's row sits between the rows
+  it must follow and precede. The existing describe test compares returned values by identity, so nothing
+  else in the suite can catch a misplaced row.
 - `internal/view` `TestViews_Configure` gains a 190000 block asserting the three progress views resolve to
   their PG 19 templates with `Ncols` 15/13/12.
 
@@ -362,6 +374,10 @@ implementation rather than trusted from this document.
   Build the image locally and confirm the cluster starts and the fixtures load; leave it running, because
   every later task verifies against that local cluster. Runs before any Go code — see the probe ladder in
   Risks. Does not touch the e2e script or the workflows (Decision 4).
+  Also fixes the generated host-based access rules, whose database keyword does not match physical
+  replication connections — so `pg_basebackup` cannot run today and the `backup_type` column would be
+  unverifiable. An environment fix for every version in the image, not PG 19 work, and it must land here
+  because the file is baked into the image.
 - **Skill:** infrastructure-setup
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-infrastructure-reviewer
 - **Verify:** bash — build the image, start the PG 19 cluster, load fixtures
@@ -430,8 +446,9 @@ implementation rather than trusted from this document.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; `pgcenter report -d -P v|a|b` lists the new columns
-- **Files to modify:** `report/describe.go`
-- **Files to read:** `report/report.go`, `report/report_test.go`,
+- **Files to modify:** `report/describe.go`, `report/report_test.go` (a row-order assertion — the existing
+  describe test compares by identity and is blind to it)
+- **Files to read:** `report/report.go`,
   `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline.md`
 
 #### Task 6: Report replay coverage for the new layout
@@ -448,7 +465,9 @@ implementation rather than trusted from this document.
 
 #### Task 7: Documentation update
 - **Description:** Record PG 19 support in the project knowledge base: supported versions, the test image
-  contents and port list, and the query selector inventory gaining the three progress selectors.
+  contents, port list and image tag, and the query selector inventory gaining the three progress selectors.
+  Owns the image tag references in the deployment document — no other task touches documentation. One new
+  bullet in the supported-statistics list is expected, since that list has no progress-screen entry today.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
 - **Verify:** bash — no stale "14–18" version ranges remain in the three files
@@ -472,7 +491,9 @@ implementation rather than trusted from this document.
 
 #### Task 9: Switch CI to the new image and extend the e2e script
 - **Description:** Point both workflows at the new image tag and add the PG 19 port to the end-to-end
-  script. Both land together and only after the image is published, per Decision 4. This is also the first
+  script. Both land together and only after the image is published, per Decision 4. If the published tag
+  turns out to differ from what the documentation task recorded, this task resyncs the deployment document
+  too — it is the only task running after publication. This is also the first
   point where the whole Go suite runs against the published image rather than a locally built one.
 - **Skill:** deploy-pipeline
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-deploy-reviewer

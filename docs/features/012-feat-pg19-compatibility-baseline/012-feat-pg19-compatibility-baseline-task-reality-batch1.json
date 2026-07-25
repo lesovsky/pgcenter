@@ -1,99 +1,94 @@
 {
   "validator": "dev-reality-checker",
   "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
-  "tasks_checked": ["01", "02", "03"],
+  "tasks_checked": ["01", "04", "10"],
+  "round": 2,
   "status": "approved",
   "findings": [
     {
       "severity": "major",
       "category": "feasibility",
       "task": "01",
-      "issue": "AC \"Версии postgresql-14..18, postgresql-plperl-14..18 и postgresql-common в собранном образе идентичны версиям в lesovsky/pgcenter-testing:0.0.10 (пин отработал)\" is not a valid test of the pin and may be impossible to satisfy. testing/Dockerfile pins no package versions (plain `apt-get install -y postgresql-14 ... postgresql-18`), so any rebuild picks up whatever minor releases the *stable* jammy-pgdg suite currently carries. Image 0.0.10 was built around May 2026, the rebuild happens in July 2026, and pgdg ships minor releases quarterly — a version bump from the main channel is expected behaviour, not pin failure. The Details edge case (\"Пин не сработал. Симптом: в логе сборки postgresql-14..18 или postgresql-common идут на апгрейд. Это нарушение AC, а не «ну и ладно» — чинить пин\") and the Verification Step (\"dpkg -l 'postgresql-*' в новом образе и в 0.0.10 — строки по 14–18 и postgresql-common совпадают\") will then send the executor chasing a nonexistent pin bug or block the probe task on an unachievable criterion.",
-      "fix": "Re-state the AC as an origin check, not a version-equality check: `apt-cache policy postgresql-14 ... postgresql-18 postgresql-common` must show the installed/candidate version coming from the main `jammy-pgdg` suite at priority 500, and the beta suite entry must show priority 100. Keep the dpkg diff as informational evidence only, and add: a minor-version bump of 14–18 sourced from the main channel is acceptable; a version string carrying a beta/testing suffix or attributed to the beta suite is the actual AC violation."
-    },
-    {
-      "severity": "minor",
-      "category": "feasibility",
-      "task": "01",
-      "issue": "Task 01 twice defers the update of `testing/README.md` to Task 7 (\"Обновление документации (deployment.md, testing/README.md) — задача 7\", repeated in Implementation hints). Task 7's file list (both in the tech-spec and in task-07) covers only `.claude/skills/project-knowledge/{overview,deployment,architecture}.md` — `testing/README.md` is owned by nobody. In fact `testing/README.md` contains no version numbers, port list or image tag (it only describes what each file in the directory is for), so it genuinely needs no change.",
-      "fix": "Drop `testing/README.md` from the deferral sentence, or replace it with an explicit \"testing/README.md contains no version-specific content and needs no update\" so the executor does not re-open the question and Task 7 is not blamed for an edit it does not own."
-    },
-    {
-      "severity": "minor",
-      "category": "security",
-      "task": "01",
-      "issue": "The task requires leaving the container running with ports 21914–21919 reachable from the host (\"либо проброс портов, либо host-сеть\"). `prepare-test-environment.sh` writes `listen_addresses = '*'` and a pg_hba of `host all all 0.0.0.0/0 trust`, so a plain `-p 21919:21919` or `--network host` exposes a trust-auth superuser cluster on every interface of the developer machine. This is pre-existing for PG 14–18, not introduced here, but the task is the one instructing the long-lived exposure.",
-      "fix": "In the Implementation hints, state the loopback form explicitly: `-p 127.0.0.1:21914-21919:21914-21919` (host networking only if the machine is not on an untrusted network). No change to pg_hba.conf or the script."
-    },
-    {
-      "severity": "minor",
-      "category": "hallucination",
-      "task": "02",
-      "issue": "Details/Edge cases claims \"All 37 NewTestConnectVersion call sites pass a loop variable rather than a literal\". Verified: there are 38 invocations. 37 live in `_test.go` files and do pass a loop variable, but the 38th is `NewTestConnect` in the non-test file `internal/postgres/testing.go:10`, which passes the literal `170000`. (The tech-spec's \"41 call sites verified: all pass mapped literals\" and Decision 5's \"Every call site lives in a test file\" are both wrong in the other direction.) Behaviour is unaffected — 170000 is mapped — but the sentence is what step 5 asks the executor to re-derive, so a correct grep will contradict the task text. Same paragraph: the version union is stated exactly right — verified as {90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000} across all `versions := []int{...}` lists, the package-level `overviewVersions` in overview_test.go, and the four inline `range []int{...}` loops in io_test.go/statements_test.go/databases_test.go; 90400 is in the port map but used by no caller. Also cosmetic: the file is 44 lines, not 45.",
-      "fix": "Reword to \"37 call sites in _test.go files pass a loop variable; the 38th is NewTestConnect in testing.go itself, which passes the literal 170000 (mapped, unaffected)\". Correct the same claim in the tech-spec's Consumer impact and Decision 5 when the task report is written back."
-    },
-    {
-      "severity": "minor",
-      "category": "tdd",
-      "task": "02",
-      "issue": "The stated motivation — \"a forgotten map entry would make every PG 19 subtest connect to PG 14, pass, and report green coverage for a server that was never exercised\" — is only half closed by the change. Every one of the 37 call sites wraps the error in `t.Skipf(\"postgres %d not available in test environment\", version)`, so after the hardening a missing map entry produces a silently *skipped* PG 19 subtest, which still reports green in CI. The task does not say this; the only place the gap is caught is Task 03's verification step (\"A SKIP here means the cluster is down and the task is not verified\"), which covers three tests, not the sweep in Task 04.",
-      "fix": "Add one line to Task 02's Details (or its Post-completion report) making the residual failure mode explicit: after this change an unmapped or unreachable version degrades to SKIP, not FAIL, so the PG 19 subtests must be confirmed to actually execute (`go test -run ... -v` and read the output) rather than trusted to be green — and carry that instruction into Task 04's verification, which currently only runs `make test`."
-    },
-    {
-      "severity": "minor",
-      "category": "hallucination",
-      "task": "03",
-      "issue": "Description claims the three progress screens \"are the last version-static ones among the recordable views\". False: `Configure()` (internal/view/view.go:367-404) has selector cases for exactly 10 views (activity, replication, databases_general, statements_timings, statements_jit, wal, bgwriter, replslots, stat_io, stat_io_time). The other recordable views — `progress_cluster`, `progress_copy`, `progress_index`, `tables`, `indexes`, `sizes`, `functions`, `statements_general/io/local/temp`, `databases_sessions`, `procpidstat` — are all still version-static too. No implementation impact, but it overstates what the task closes.",
-      "fix": "Reword to \"the three progress screens PG 19 touches have no selector today\" and drop the \"last version-static\" claim, or move the accurate statement (Decision 6: cluster/copy/index are unchanged in PG 19, so they stay static) into its place."
+      "issue": "The replaced pin criterion is not checkable as written inside the built image. AC and Verification Steps rely on `apt-cache policy` run \"в контейнере\" to show origin and priorities (beta suite at 100, jammy-pgdg at 500, installed versions traced to jammy-pgdg). But testing/Dockerfile:32 ends the RUN layer with `rm -rf /var/lib/apt/lists/*`, and the task explicitly mandates keeping that as the last step (What to do §1, Implementation hints). With no package indices, `apt-cache policy <pkg>` prints only Installed/Candidate plus a single `100 /var/lib/dpkg/status` line — no repo, no suite, no priority — and bare `apt-cache policy` prints no source list at all. The executor would see empty output and either re-run apt-get update unprompted or mark the criterion passed on no evidence, which is exactly the silent failure the criterion was rewritten to prevent. Secondary: the AC writes the check as `apt-cache policy postgresql-14..18 postgresql-plperl-14..18 postgresql-common`, which is not an executable form; only the Verification Steps spell the list out.",
+      "fix": "Name where the evidence is captured: either add a build-time step inside the same RUN before the cleanup (e.g. `apt-cache policy postgresql-14 ... postgresql-19 postgresql-common > /var/log/apt-policy-build.txt`, inspected after build), or state in the AC that the check requires `apt-get update` first in the running container. Also expand the `14..18` shorthand in the AC into the full package list."
     },
     {
       "severity": "minor",
       "category": "hints",
-      "task": "03",
-      "issue": "Step 3 says \"Branch on `version >= query.PostgresV19` (the constant Task 2 added)\". The selectors being written live in package `query` itself (internal/query/progress_{vacuum,analyze,basebackup}.go), where the `query.` qualifier does not compile. The two reference implementations the task points at use the unqualified forms: `SelectStatIOQuery` (io.go:88) writes `version >= PostgresV18`, `SelectStatBgwriterQuery` (bgwriter.go:42-46) writes bare literals `version >= 180000`.",
-      "fix": "Write `version >= PostgresV19` in step 3, and name `io.go:88` as the form to copy (constant, not bare literal) so the three new selectors are consistent with each other."
+      "task": "01",
+      "issue": "The pin rationale in Implementation hints is mechanically wrong: \"100 = «ниже, чем уже установленное», поэтому апгрейд существующих пакетов из этого источника не произойдёт\". Installed versions get priority exactly 100 (from /var/lib/dpkg/status), not more; per apt_preferences(5) a version at 100 <= P < 500 IS installed when the installed version is older. What actually protects postgresql-14..18 / postgresql-common is that the stable jammy-pgdg source supplies those same packages at priority 500, which outranks the pinned beta suite. The conclusion holds for this image, but the stated mechanism would mislead diagnosis if the pin is ever misapplied (e.g. for a package present only in the beta suite).",
+      "fix": "Reword the hint: Pin-Priority 100 keeps the beta suite below the stable pgdg source (500), so every package also present in jammy-pgdg resolves from stable; postgresql-19 installs because it exists only in the beta suite. Explicit `-t <beta-suite>` stays correct and harmless."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "04",
+      "issue": "Verification step 3's `-run` regex ('Test_Stat|Test_Common|Test_Overview|Test_collectOverviewStat|Test_SelectStatDatabaseGeneralQuery') does not cover two tests the task itself requires observing. `Test_QueryPgcenterSchema` (internal/query/pgcenter_schema_test.go:10) — the plperlu canary the TDD Anchor demands a PASS from, subtest `query-pgcenter-schema/190000` — matches none of the alternatives. `Test_ArchivingBacklogQuery_Degrades` (internal/query/overview_test.go:123, loop at :128) is one of the four consumers of `overviewVersions` that Group 1 site #10 names, and `Test_Overview` does not match it either. Everything else in the regex resolves correctly (Test_StatBgwriterQueries, Test_StatIOQueries, Test_StatIOTimeQueries, Test_StatWALQueries, Test_StatReplicationSlotsQueries*, Test_CommonQueries, Test_OverviewQueries*, Test_OverviewBgwriterColumns, Test_collectOverviewStat).",
+      "fix": "Add the two names to the regex (e.g. `Test_Stat|Test_Common|Test_Overview|Test_Archiving|Test_QueryPgcenterSchema|Test_collectOverviewStat|Test_SelectStatDatabaseGeneralQuery`), or drop `-run` and run the packages verbose, filtering the output on `190000`."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step 9's tmux install fails as written. The task says `apt-get install -y tmux` inside the running container works because \"the image already has the apt sources it needs\" — that conflates sources.list entries (which do survive) with the package indices, which do not: testing/Dockerfile:32 removes /var/lib/apt/lists/* in the same RUN layer, so the published image carries no indices and the command aborts with `E: Unable to locate package tmux`. tmux is the driving mechanism for the whole 27-screen walk, so this blocks the manual half until the executor works it out.",
+      "fix": "Write the command as `apt-get update && apt-get install -y tmux` and drop the \"already has the apt sources it needs\" justification, or restate it as: the sources.list entries are present, the package indices are not."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "Step 1's \"`docker exec` the cluster bootstrap: `prepare-test-environment.sh`. Nothing exists before this step\" overstates the starting state. The Debian/pgdg postgresql-N packages create the `N/main` clusters during image build (postgresql-common postinst), which is exactly why the script guards creation with `if ! pg_lsclusters | grep -q \"^$v \"` (testing/prepare-test-environment.sh:6-10). What the script actually supplies is the postgresql.auto.conf overlay (ports 21914-21919, ssl, wal_level, shared_preload_libraries), the pg_hba rewrite, cluster start, fixtures load and the readiness check. An executor who reads \"nothing exists\" and then sees six clusters in `pg_lsclusters` before running anything may suspect a broken image.",
+      "fix": "Reword to: the image ships unstarted, unconfigured `N/main` clusters from package install; the script configures ports and pg_hba, starts them and loads fixtures — nothing is reachable on 21914-21919 until it runs."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "10",
+      "issue": "Step 6's description of the Decision 7 collateral — \"с 21919 down they skip wholesale, for every version, not just for PG 19\" — is imprecise about what executed. `190000` is appended at the tail of each list (Task 4 Group 1), so the `t.Skipf` fires only when the loop reaches the unreachable version and the PG 14-18 iterations have already run their assertions; only the reported status becomes SKIP (a genuine PG 14-18 failure would still surface as FAIL). Task 4's own edge-case note states this correctly (\"will report SKIP as a whole ... *after* having asserted PG 14-18\"). As written, step 6 can be read as \"PG 14-18 coverage disappears\", which is not what happens.",
+      "fix": "Match Task 4's wording: with 21919 down these nine tests report SKIP as a whole after having already asserted PG 14-18; what is lost is the reported verdict, not the earlier iterations."
     }
   ],
-  "verified_claims": {
-    "task_01": [
-      "testing/prepare-test-environment.sh has exactly six `for v in 14 15 16 17 18` loops (create, configure, start, wait-ready, fixtures, final check) — lines 6, 13, 43, 48, 56, 62",
-      "port convention `port=\"219${v}\"` is derived from the major version (lines 14, 49, 57, 63) → 19 yields 21919 with no port-logic edit; datadir and log_filename likewise derive from $v",
-      "testing/Dockerfile: line 2 header comment `PostgreSQL 14-18 on Ubuntu 22.04`, `LABEL version=\"0.0.10\"` (line 6), `CMD [\"echo\", \"pgcenter-testing 0.0.10: ...\"]` (line 38) — all three edit points exist as described",
-      "Dockerfile single RUN layer matches the description: base packages → locale-gen → ACCC4CF8.asc into /usr/share/keyrings/pgdg.gpg → pgdg.list with `jammy-pgdg main` and `signed-by=` → apt-get update → five postgresql-N/postgresql-plperl-N pairs → cpanm Module::Build + Linux::Ethtool::Settings → mkdir /usr/local/testing/ → rm -rf /var/lib/apt/lists/* (last step of the layer)",
-      "testing/fixtures.sql matches: creates pgcenter_fixtures and pgcenter_fixtures_config, CREATE EXTENSION pg_stat_statements + plperlu, four LANGUAGE plperlu functions, one of them `use Linux::Ethtool::Settings`",
-      "out-of-scope files confirmed untouched-by-design and real: testing/e2e.sh has two port loops `for port in 21914 21915 21916 21917 21918` (lines 15, 22); both workflows pin `container: lesovsky/pgcenter-testing:0.0.10`"
+  "verified_clean": {
+    "task_01_pg_hba_and_pin": [
+      "prepare-test-environment.sh:36-39 writes exactly the two lines the task quotes (`local all all trust`, `host all all 0.0.0.0/0 trust`) — no replication entry exists today",
+      "`all` in the database field genuinely does not match physical replication connections (documented PostgreSQL behaviour; the stock Debian pg_hba.conf carries separate `local/host replication` lines alongside `local all all`), so the diagnosed pg_basebackup failure is real",
+      "prescribed edit point is correct: the heredoc `cat > /etc/postgresql/${v}/main/pg_hba.conf` sits in the configuration loop (:13-40), which runs before the start loop (:43-45) — no reload needed, as the task states",
+      "path layout matches the image: Debian-style /etc/postgresql/<v>/main, not the datadir; datadir and port are both derived from $v (:14-15)",
+      "pg_basebackup smoke check is viable: wal_level=logical (:32) satisfies physical replication, max_wal_senders / max_replication_slots keep their defaults (10) and are not overridden, `-X none` needs no slot and exits 0, superuser postgres implicitly has REPLICATION, and Debian pg_wrapper resolves the client binary by port",
+      "six version loops confirmed at lines 6, 13, 43, 48, 56, 62; port 219${v} -> 21919 needs no port-logic change",
+      "Dockerfile facts: keyring /usr/share/keyrings/pgdg.gpg (:19), pgdg.list with jammy-pgdg main (:20-21), `0.0.10` in exactly two places (LABEL :6, CMD :38), header comment :2 carries only the PostgreSQL version range",
+      "Pin-Priority 100 does work for this layout (stable pgdg supplies the same packages at 500), and `-t <beta-suite>` installs postgresql-19 because it is the only candidate",
+      "testing/README.md contains neither a version list nor a port map — the 'nobody touches it' claim is accurate",
+      "doc/development.md:6 does show the outdated docker run line (no loopback bind, ports 21995/21996/21910-21914) the task tells the executor to ignore"
     ],
-    "task_02": [
-      "internal/postgres/testing.go has no import block at all (44 lines, package clause then three funcs) — the `fmt` import must indeed be added",
-      "NewTestConnectVersion falls back to the oldest cluster for unmapped versions: `port, ok := ports[version]; if !ok { port = ports[140000] }` (lines 34-37)",
-      "the doc comment already promises the opposite (\"Returns an error if the requested version is not available in the test environment\", line 14) — code contradicts contract, as claimed",
-      "ports map has exactly twelve entries split by comment into active 180000..140000 and \"EOL versions kept for reference\" 130000..90400; 21919 is free, no collision",
-      "every version actually passed to NewTestConnectVersion is a subset of the port map: union = {90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000} across 22 `versions := []int{...}` lists, `overviewVersions` (overview_test.go:13), and inline loops in io_test.go (68, 96, 179), statements_test.go (110, 129), databases_test.go (56); plus literal 170000 from NewTestConnect",
-      "internal/query/query.go const block runs PostgresV94..PostgresV18 = 180000 (lines 9-22), one constant per major version, numeric values",
-      "internal/query/io.go:88 is literally `if version >= PostgresV18 {` — the cited line reference is exact",
-      "internal/postgres/postgres.go:90 carries the `fmt.Errorf(\"failed connection establishing: %w\", err)` style the task says to match",
-      "internal/postgres has postgres_test.go and connopts_test.go, both `package postgres` (internal tests) and no test file for testing.go — a new testing_test.go in package postgres is consistent",
-      "patterns.md \"Adding a New PostgreSQL Version\" step 1 is the port map entry, step 2 the versions lists, step 3 the t.Skipf handling — as cited"
+    "task_04_counts": [
+      "Group 1 = exactly 27 live-connection lists across 20 files: the 42 `180000` hits minus 8 Group 3 table rows, 3 Group 2 string loops, 3 Task-3-owned progress files and 2 report/* fixtures = 26, plus databases_test.go:56 (`[]int{140000}`, no 180000) = 27",
+      "20 files = 19 in internal/query + internal/stat/postgres_test.go; +record/record_test.go = the stated 21 files; 27 + 8 + 1 = the stated 36 new `190000` occurrences",
+      "databases_test.go:56 verified as Group 1: `for _, version := range []int{140000}` wrapping a t.Run that formats PgStatDatabaseSessionsDefault, calls NewTestConnectVersion (:64) and Exec()s it; it is the only execution site of that query (other refs are the constant itself and view.go:76)",
+      "eight assertion tables confirmed at the cited ranges: bgwriter_test.go:16-22, wal_test.go:16-20, replication_slots_test.go:16-20, io_test.go:18-24 and :42-46, statements_test.go:15-25, :42-46, :154-164 — 8 tables in 5 files",
+      "both 'branch-free' selectors really take an ignored parameter: SelectStatReplicationSlotsQuery(_ int) (replication_slots.go:39) and SelectStatIOTimeQuery(_ int) (io.go:99) — no version condition in either",
+      "all eight Group 3 cross-check values match the selectors evaluated at 190000: bgwriter (14,{6,12}) via >=180000; wal (7,{2,5}) via >=180000; replslots (15,{6,13}); io (16,{4,14}) via >=PostgresV18; io-time (10,{4,8}); statements timing/report -> *Default via >=170000; JIT (15,{7,12}, key 13) via >=PostgresV17 — the 'six branch, newest branch >= V18 or lower' claim holds",
+      "Group 2 exclusions confirmed: io_test.go:68/96/179 are all `[]int{160000,180000}` string-inspection loops that open no connection",
+      "Group 4 anchors exact: filterViews at record/record.go:200-233, VersionOK at internal/view/view.go:421 (lower bound only), Test_filterViews table at record_test.go:109-145 with the highest row `{140000,\"public\",3,24}` at :133; registry is 27 views (view_test.go:11) with no NotRecordable=true, so the derivation 'nothing dropped, everything kept' (0/27) is right",
+      "out-of-scope tables stop where the task says: databases_test.go:17-22 at 130000, activity_test.go:16-18 at 100000",
+      "subtest names used in the TDD Anchor and verification steps all exist: pg_stat_bgwriter/%d, pg_stat_io/%d, pg_stat_database/sessions/%d, query-pgcenter-schema/%d, version/%d; the io_test.go `version >= PostgresV18` object='wal' assertion is at :138 as stated",
+      "the two claimed code-research errors are real: §B.2 is headed '(4 sites)' and lists databases_test.go:56 with the 're-runs an identical query' rationale (repeated at line 259)"
     ],
-    "task_03": [
-      "progress_vacuum pre-19 layout confirmed by counting the SELECT list: 13 cols, pid(0) xact_age(1) datname(2) relation(3) state(4) waiting(5) phase(6) size_total,KiB(7) scanned_total,%(8) vacuumed_total,%(9) scanned,KiB(10) vacuumed,KiB(11) query(12); DiffIntvl {10,11} covers exactly the two KiB columns",
-      "progress_analyze pre-19: 12 cols, relation(3) then state(4); DiffIntvl {0,0}",
-      "progress_basebackup pre-19: 11 cols, pid(0) started_from(1) started_at(2) duration(3) state(4) waiting(5) phase(6) size_total,KiB(7) streamed,%(8) streamed,KiB(9) tablespaces(10); DiffIntvl {9,9} points at streamed,KiB",
-      "insert-before-state arithmetic checks out: vacuum 13→15 with {10,11}→{12,13}, analyze 12→13 with {0,0}, basebackup 11→12 with {9,9}→{10,10}; the full 15-row vacuum index table in Details is correct row for row",
-      "internal/view/view.go New() holds the three progress entries at lines 277-348 with exactly the pre-19 values the task pins (vacuum 13/{10,11}/MinRequiredVersion PostgresV96, analyze 12/{0,0}/V13, basebackup 11/{9,9}/V13); OrderKey 0 and UniqueKey unset (0) on all three",
-      "Configure() spans lines 367-405 with the switch closing at 404 — the cited range is exact; the ten existing cases use the three-field assignment form the task says to copy",
-      "all three execution tests currently open with the bare constant and use conn.Exec: progress_vacuum_test.go:15 (versions 90600..180000), progress_analyze_test.go:15 and progress_basebackup_test.go:15 (versions 140000..180000); t.Skipf sits inside the t.Run body in all three, as the task states",
-      "bgwriter_test.go is a valid model for both shapes: Test_SelectStatBgwriterQuery (unit table over version/wantNcols/wantDiffIntvl) and Test_StatBgwriterQueries (takes tmpl+wantNcols from the selector, conn.Query, assert.Len(rows.FieldDescriptions(), wantNcols))",
-      "internal/view/view_test.go really contains TestViews_Configure (line 99, matrix of version/recovery/trackCommit/querylen in 8-row blocks, per-version switch at 177, trailing `assert.NotEqual(t, \"\", v.Query)` loop at 218) and TestView_VersionOK (line 224, version→total table: 160000→27, 140000→24, 130000→19, 120000→16, 110000→14, 100000→14)",
-      "the TestView_VersionOK hint is correct: the highest MinRequiredVersion in New() is query.PostgresV16 (view.go:167, 180), so a derived 190000 row equals the 160000 total",
-      "report/testdata/pgcenter.stat.golden.tar meta record carries version_num \"140000\" — the claim that the three existing progress goldens take the pre-19 branch and must stay byte-identical is accurate",
-      "PgStatBgwriterPG18 (bgwriter.go:30) and PgStatIOPG18 (io.go) exist with the naming and per-branch comment style the task says to imitate",
-      "`sync_state AS mode` really does appear on the replication screen (replication.go:6,19,34,44) — the [014] handoff note is factual"
+    "task_10_environment": [
+      "image default command is a bare echo (Dockerfile:38) — the task's premise is correct",
+      "prepare-test-environment.sh is indeed what configures ports/pg_hba, starts clusters and loads fixtures.sql",
+      "toolchain genuinely absent from the image: no golang, no tmux, no pgcenter binary in the Dockerfile; .github/workflows/default.yml installs Go 1.25.11 and the lint tools at run time and then runs prepare-test-environment.sh — the sequence the task reproduces",
+      "local-connection gate is exactly as described: top/config_view.go:259 `if !app.db.Local` inside switchViewToProcPidStat (bound to 'S' at keybindings.go:58), with Local set from isLocalhost(config.Config.Host) at internal/postgres/postgres.go:101; isLocalhost (:147) decides purely on the host string — '/' prefix, localhost, 127.0.0.1, ::1, or a local interface address",
+      "27 views registered in internal/view/view.go and asserted in view_test.go:11; every view name and every hotkey/menu route in the task's table matches keybindings.go and menu.go (D 1-2, X 1-7, P 1-6, J 1-2, and 'd'/'x'/'p'/'j' resolving to the first sub-view via the *NextView helpers)",
+      "make build/install produce a CGO_ENABLED=0 binary at /usr/bin/pgcenter; e2e.sh calls bare `pgcenter` and loops ports 21914-21918 twice (record, report) as the task assumes",
+      "logs/working/qa-report.json is git-tracked and holds a previous feature's report; report/testdata/ holds pgcenter.stat.golden.tar plus the goldens step 17 checks; `pgcenter report -d` is the describe flag (cmd/help.go:179) and -P v/a/b are already exercised in e2e.sh",
+      "Decision 7's nine parent-skip tests check out: common_test.go (4 subtests, skip inside the t.Run), overview_test.go (4 tests whose t.Run names carry no version), internal/stat/postgres_test.go:89 Test_collectOverviewStat",
+      "tech-spec Risks last row names exactly [016]/[017]/[018] with the routing wording the task restates"
     ]
   },
   "stats": {
     "tasks_checked": 3,
-    "claims_verified": 45,
-    "issues_found": 7
+    "claims_verified": 62,
+    "issues_found": 6
   }
 }

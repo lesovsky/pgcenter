@@ -129,8 +129,9 @@ Any breakage this task finds is **routed, not silently accepted** — see the ro
 
 9. **Prepare the walk harness.** The image ships neither `tmux` nor a `pgcenter` binary, so both have to be
    put there first:
-   - `tmux` — `apt-get install -y tmux` inside the running container (the image already has the apt sources
-     it needs).
+   - `tmux` — `apt-get update && apt-get install -y tmux` inside the running container. The update is not
+     optional: the image's build layer ends by deleting the apt lists, so the package index is empty and a
+     bare install fails with "unable to locate package".
    - the binary — build it from the checkout mounted in step 1 with the Go toolchain installed in step 1
      (`make build && make install`, giving `/usr/bin/pgcenter`). Building on the host and `docker cp`-ing the
      binary in also works — it is a static Go binary and the container is Ubuntu 22.04 — but building inside
@@ -386,7 +387,7 @@ to fixing it here.
 - Keep the load-generating sessions in separate `tmux` panes or background `psql` processes so they survive the
   whole walk.
 - For the `psql` cross-checks, query the same catalog view the screen reads (`pg_stat_progress_vacuum`,
-  `pg_stat_progress_analyze`, `pg_stat_basebackup`) within the same refresh window — progress rows move fast,
+  `pg_stat_progress_analyze`, `pg_stat_progress_basebackup`) within the same refresh window — progress rows move fast,
   and a mismatch caused by sampling at different moments is not a finding.
 - For the lock check, the simplest reliable setup is one session holding an explicit table lock in an open
   transaction and a second session attempting a conflicting statement.

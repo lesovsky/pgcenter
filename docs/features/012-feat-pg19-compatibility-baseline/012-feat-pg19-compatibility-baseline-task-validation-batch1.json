@@ -1,147 +1,97 @@
 {
   "validator": "dev-task-validator",
   "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
-  "tasks_checked": ["01", "02", "03", "04", "05"],
-  "iteration": 1,
+  "tasks_checked": ["01", "04", "05", "07", "08"],
+  "iteration": 2,
   "status": "approved",
   "findings": [
     {
       "severity": "minor",
-      "category": "structure",
-      "task": "02",
-      "section": "TDD Anchor / Details",
-      "issue": "Template scaffolding left in the body: the HTML hint `<!-- Fill if task includes writing code. For non-code tasks ... delete this section. -->` (line 81), the generic template sentence `Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.` (line 83), and `<!-- All details for task execution — technical, organizational, any other. -->` in Details (line 172). Tasks 04 and 05 dropped these; the batch is inconsistent.",
-      "fix": "Delete the two HTML hint comments and the generic TDD sentence; the section already opens with task-specific prose (\"The behaviour change in NewTestConnectVersion is the part that needs tests…\")."
-    },
-    {
-      "severity": "minor",
-      "category": "structure",
-      "task": "03",
-      "section": "TDD Anchor",
-      "issue": "Generic template sentence retained at the top of the section (lines 95-96): `Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.` It carries no task-specific information and the section's own subheadings already state the red/green expectation per group.",
-      "fix": "Remove the boilerplate line; keep the three labelled groups (selector unit tables / view-layer wiring / execution tests) with their explicit no-database and skip-cleanly qualifiers."
-    },
-    {
-      "severity": "minor",
       "category": "frontmatter",
-      "task": "01",
+      "task": "08",
       "section": "frontmatter",
-      "issue": "Template explanation comments retained on frontmatter fields (`# planned -> in_progress -> done`, `# ID задач-зависимостей (строки: [\"01\", \"02\"])`, `# волна параллельного выполнения`, `# МАССИВ скиллов для загрузки`). Tasks 02, 04 and 05 have clean frontmatter, so the batch is inconsistent. Values themselves are all valid.",
-      "fix": "Strip the template comments, keeping only the task-specific trailing comment on `verify:` if it is wanted."
-    },
-    {
-      "severity": "minor",
-      "category": "frontmatter",
-      "task": "03",
-      "section": "frontmatter",
-      "issue": "Same leftover template comments on `status`, `depends_on`, `wave` and `skills` as task 01. Values are valid; only the scaffolding is stale.",
-      "fix": "Strip the template comments so all five tasks in the batch look alike."
-    },
-    {
-      "severity": "minor",
-      "category": "consistency",
-      "task": "01",
-      "section": "Reviewers",
-      "issue": "Reviewer report paths are bare filenames (`012-feat-pg19-compatibility-baseline-task-01-dev-code-reviewer-review.json`), while tasks 02, 04 and 05 spell the full `docs/features/012-feat-pg19-compatibility-baseline/…` path. The template's `{feature_base}-task-{ID}-{name}-review.json` expands to the full path, and an agent resolving the bare name from the repo root would write the report into the wrong directory.",
-      "fix": "Prefix all three reviewer paths with `docs/features/012-feat-pg19-compatibility-baseline/`."
-    },
-    {
-      "severity": "minor",
-      "category": "consistency",
-      "task": "03",
-      "section": "Reviewers",
-      "issue": "Same as task 01 — reviewer report paths given as bare filenames instead of the full `{feature_base}-task-03-{reviewer}-review.json` path used by tasks 02, 04 and 05.",
-      "fix": "Prefix all three reviewer paths with `docs/features/012-feat-pg19-compatibility-baseline/`."
-    },
-    {
-      "severity": "minor",
-      "category": "content",
-      "task": "05",
-      "section": "Context Files",
-      "issue": "Every markdown link in Context Files (and the decisions-log link in Post-completion) is written relative to the repository root — `[012-…md](docs/features/012-feat-pg19-compatibility-baseline/012-…md)`, `[report/describe.go](report/describe.go)`, `[overview.md](.claude/skills/project-knowledge/overview.md)`. The task file itself lives three levels deep, so none of these links resolve from the file; tasks 01-04 correctly use `../../../` for code/PK files and a bare filename for same-directory feature artifacts.",
-      "fix": "Use the same convention as tasks 01-04: same-directory feature artifacts as bare filenames, code and project-knowledge files prefixed with `../../../`."
-    },
-    {
-      "severity": "minor",
-      "category": "consistency",
-      "task": "04",
-      "section": "frontmatter",
-      "issue": "`skills: [code-writing]` with `reviewers: [dev-code-reviewer, dev-test-reviewer]` — the default reviewer set for `code-writing` in `~/.claude/skills/tech-spec-planning/references/skills-and-reviewers.md` also includes `dev-security-auditor`. The task carries the tech-spec's choice faithfully (tech-spec Task 4 lists the same two), so the deviation originates upstream; it is plausible for a diff that touches only `_test.go` files, but it is undeclared.",
-      "fix": "Either add `dev-security-auditor` to the frontmatter and the Reviewers section, or record in the tech-spec/decisions log why the security review is dropped for test-only tasks."
-    },
-    {
-      "severity": "minor",
-      "category": "consistency",
-      "task": "05",
-      "section": "frontmatter",
-      "issue": "`skills: [code-writing]` with `reviewers: [dev-code-reviewer, dev-test-reviewer]` — same deviation from the `code-writing` default reviewer set (missing `dev-security-auditor`), inherited from tech-spec Task 5. Defensible for an edit confined to static help-text constants, but not stated anywhere.",
-      "fix": "Add `dev-security-auditor` in both places, or record the exemption explicitly."
-    },
-    {
-      "severity": "minor",
-      "category": "content",
-      "task": "04",
-      "section": "Details",
-      "issue": "Arithmetic mismatch in Details/Files: \"four of them additionally gain Group 3 assertion-table rows\" is followed by a list of five files (`bgwriter`, `wal`, `replication_slots`, `io`, `statements`). The Group 3 table itself has 8 rows spread over those 5 files. An executor reconciling counts (Verification step 7 asks exactly that) hits a contradiction.",
-      "fix": "Change \"four of them\" to \"five of them\" — 8 assertion-table rows across 5 files."
+      "issue": "Template explanation comments are still on every frontmatter field (`# planned -> in_progress -> done`, `# ID задач-зависимостей (строки: [\"01\", \"02\"])`, `# волна параллельного выполнения`, `# МАССИВ скиллов для загрузки`, `# явно указать. Пусто = fallback на defaults`, `# имя агента-исполнителя …`). Task 01 stripped exactly these in this round and tasks 04/05/07 never had them, so 08 is now the only file in the feature carrying template scaffolding. Values are all valid (`skills: []` / `reviewers: []` are the deliberate user-action setting, and the trailing comment on `verify: user` is task-specific and worth keeping).",
+      "fix": "Delete the six template comments; keep the task-specific `# image available in the registry; CI green on unmodified develop` on `verify`."
     },
     {
       "severity": "minor",
       "category": "content",
       "task": "04",
       "section": "TDD Anchor",
-      "issue": "The eight \"pure unit rows\" bullets are bare test paths with no per-entry description (e.g. `internal/query/wal_test.go::Test_SelectStatWALQuery/version/190000`), unlike the Group 4 and live-connection entries, which do explain what each proves. The checklist expects path + test name + what it verifies for every anchor entry.",
-      "fix": "Add a short clause per bullet naming the expectation the row pins (e.g. \"— 190000 keeps the `>= PostgresV18` answer: Ncols 7, DiffIntvl {2,5}\"), or state the expected triple inline so a wrong value is visible in the anchor itself."
+      "issue": "Round-1 finding not closed. The eight \"pure unit rows\" bullets are still bare test paths with no per-entry description (`internal/query/wal_test.go::Test_SelectStatWALQuery/version/190000`, …), while the Group 4 and live-connection entries do explain what each proves. The group preamble (\"must be green immediately — a red one means the value was guessed\") partly compensates, and the numeric triples were deliberately moved to Details → \"Group 3 cross-check\" (which is the right call — repeating them in the anchor would re-create the copy-paste shortcut the task is trying to prevent). The checklist still expects path + test name + what it verifies per entry.",
+      "fix": "Add a short non-numeric clause per bullet naming the fact the row pins — e.g. `… — 190000 must land on the `>= 180000` branch` for the six branching selectors and `… — selector ignores the version; the row is a net for a future branch` for the two `(_ int)` ones. Leave the expected triples in Details."
     },
     {
       "severity": "minor",
-      "category": "content",
+      "category": "consistency",
       "task": "04",
-      "section": "What to do",
-      "issue": "Group 3's table hands the executor the finished literal row values (`{version: 190000, wantNcols: 14, wantDiffIntvl: [2]int{6, 12}}`, …) in the same breath as the instruction to derive them from the selector branches. The task's own premise is that a copied expectation \"converts a guard test into a rubber stamp\"; putting the answers in the step being performed makes copy-paste the path of least resistance.",
-      "fix": "Keep the derivation instruction in \"What to do\" and move the researched values into Details as a post-hoc cross-check (\"if your derivation disagrees with the researched value below, stop and report\")."
+      "section": "frontmatter / Reviewers",
+      "issue": "Unchanged from round 1 and still undocumented: tasks 04 and 05 both carry `skills: [code-writing]` with `reviewers: [dev-code-reviewer, dev-test-reviewer]`, while the catalog default for `code-writing` (`~/.claude/skills/tech-spec-planning/references/skills-and-reviewers.md`) is `dev-code-reviewer, dev-security-auditor, dev-test-reviewer`. Frontmatter, Reviewers section and tech-spec Tasks 4/5 all agree with each other, so the choice is upstream and internally consistent; it is defensible (04 touches only `_test.go` files, 05 only static help-text constants plus a test), but the exemption is written down nowhere — the decisions log does not exist yet, so \"record it at completion\" has not happened either.",
+      "fix": "Either add `dev-security-auditor` to both places in tasks 04 and 05 (and the tech-spec entries), or add one clause to the tech-spec Task 4/5 entries stating that the security review is dropped for test-only / static-string diffs."
     },
     {
       "severity": "minor",
       "category": "carry-forward",
-      "task": "04",
-      "section": "What to do",
-      "issue": "Tech-spec AC says \"Every live-connection version loop includes `190000`\". Group 2 excludes `internal/query/databases_test.go:56` (`[]int{140000}`) — a genuine live-connection list — and turns leaving it alone into an acceptance criterion. The three `io_test.go` exclusions are string-inspection loops with no connection and are clearly out of that AC's scope; the `databases_test.go:56` exclusion narrows it. The reasoning given (a PG14+ shape with no version branch, so a second element asserts nothing new) is sound but appears nowhere in the tech-spec or the decisions log.",
-      "fix": "Record the exclusion as a deviation in the decisions log at completion, or add `190000` to that list for uniformity with the tech-spec AC."
+      "task": "05",
+      "section": "TDD Anchor / Context Files",
+      "issue": "The new `Test_describeProgressColumnOrder` is a genuine improvement (it closes the hole this round-1 batch left open — `Test_describeReport` compares constants by identity, so nothing guarded row order), but it is not traceable to the tech-spec: Task 5's **Files to modify** lists only `report/describe.go` (`report/report_test.go` sits under Files to read), and the Testing Strategy section has no describe-ordering test item. The task now modifies two files. Verified against the repo: `report/report_test.go` does not import `strings` (the task's instruction to add it is correct), `Test_describeReport` is at `:1170`, and the describe rows really are newline-prefixed `- name\\torigin\\tdescription` triples, so the `\"\\n- \"` anchors work as designed.",
+      "fix": "Add `report/report_test.go` to tech-spec Task 5's Files to modify and one Testing Strategy bullet for the ordering test — or record the addition as a declared deviation at completion."
     },
     {
       "severity": "minor",
-      "category": "atomicity",
-      "task": "04",
-      "section": "What to do",
-      "issue": "Scope is 21 modified files and four explicitly \"not interchangeable\" groups of edit (mechanical appends, derived assertion rows, the derived `Test_filterViews` row, plus a do-not-touch list). Well beyond the 1-3 file guidance. Cohesion is real — one outcome, \"the suite exercises PG 19\" — and tech-spec Decision 9 assigns file ownership deliberately, so this is a scope flag rather than a defect. The likeliest split line is Group 4 (`record/record_test.go`, the only edit requiring arithmetic and the only one outside `internal/`).",
-      "fix": "Confirm the grouping is intentional. If it is split, Group 4 is the natural separate task; Groups 1-3 stay together since they share the same version-list sweep."
+      "category": "carry-forward",
+      "task": "01",
+      "section": "Description / What to do (step 3)",
+      "issue": "The `pg_hba.conf` replication fix routed here from Task 10's reality check appears nowhere in the tech-spec — `grep -n pg_hba` over the tech-spec returns nothing, and the tech-spec's Task 1 entry, Decision 5a and Acceptance Criteria all describe only the PG 19 cluster work. The file itself (`testing/prepare-test-environment.sh`) is in Task 1's Files to modify, so nothing is out of bounds, and the task handles it well (own step, own AC, own Post-completion line calling it out as a 14–19 environment fix rather than PG 19 work; Task 10 line 295 carries the matching blocked-by note). Verified factually: the heredoc at `prepare-test-environment.sh:36-39` writes exactly the two `all`-database lines the task quotes, and it runs in the configure loop before the start loop, so the task's \"no reload needed\" claim holds.",
+      "fix": "Add one line to the tech-spec's Task 1 entry (or its deferred/risks list) naming the pg_hba replication fix and why it lands in Wave 1, so the QA task's `backup_type` criterion has a documented enabler."
     },
     {
       "severity": "minor",
-      "category": "atomicity",
-      "task": "03",
-      "section": "What to do",
-      "issue": "Scope is 8 modified files (three query files, three query test files, `view.go`, `view_test.go`) and seven numbered steps. Above the 1-3 file guidance, but the steps are one indivisible outcome — a selector is useless without its `Configure()` case and its unit table — and tech-spec Decision 9 rejects the per-screen split explicitly because all three screens collide in `internal/view/view.go`. Flagged for visibility only.",
-      "fix": "No change expected; keep as one task per Decision 9."
+      "category": "carry-forward",
+      "task": "07",
+      "section": "Description / What to do (steps 3-4)",
+      "issue": "Two additions this round are correct but untraceable to the tech-spec. (a) The deployment.md image-tag bump: the tech-spec's Task 7 description covers \"supported versions, the test image contents and port list, and the query selector inventory\" and its Verify line is \"no stale '14–18' version ranges remain\" — the tag is not mentioned, though the task's own frontmatter `verify` was extended to cover it. The ownership argument is sound and verified: Task 8 modifies no repository file, and task 09 (line 166) explicitly defers `deployment.md` to Task 07 to avoid an edit conflict, so without this change the tag would have had no owner. Verified in the repo: `0.0.10` appears in deployment.md exactly three times (lines 14, 31, 35) at the three places the task names. (b) The single new `pg_stat_progress_*` bullet in overview.md — the file today has zero `progress` mentions (grep confirms), so the task is right that no existing line can carry it, but the tech-spec does not authorise a new list item.",
+      "fix": "Extend the tech-spec Task 7 description and Verify line with the image tag, and note the one permitted new overview.md bullet — or record both as declared deviations at completion."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "Details → Edge cases (\"Тег в документации разошёлся с реальностью\")",
+      "issue": "Sequencing gap in the tag-divergence handling across three tasks. Task 07 runs in wave 4 and writes the Dockerfile literal into deployment.md; the actual publish happens in Task 08 (wave 5). Task 07's edge case tells *its own executor* to \"обнаружив расхождение, остановиться и эскалировать\" — but at wave 4 there is nothing to compare against, the divergence can only surface during Task 08. Task 08's Post-completion says \"Если тег отличается от 0.0.11 — синхронизировать Task 9 и deployment.md (Task 7)\", while task 09's Details say deployment.md is Task 07's file and must not be edited there. Net effect: if the published tag differs, the re-edit of deployment.md has no unambiguous owner and lands on an already-closed task.",
+      "fix": "Name the owner explicitly: state in task 08's Post-completion that the deployment.md re-edit is performed as part of task 08's own follow-up (task 07 being closed by then), and reword task 07's edge case to \"if a later task finds the published tag differs, deployment.md is re-edited there\" rather than instructing task 07's executor to detect it."
     }
+  ],
+  "closed_since_round_1": [
+    "Task 01 — frontmatter template comments stripped; all three reviewer report paths now carry the full `docs/features/012-feat-pg19-compatibility-baseline/` prefix.",
+    "Task 01 — the invalid version-equality acceptance criterion (reality-check major) is replaced by an origin/priority pin check that matches the tech-spec AC wording (\"checked by package origin and priority rather than by version equality\"); the wrong `testing/README.md` deferral is gone (the task now states no one touches it); loopback port publishing (`-p 127.0.0.1:219NN:219NN`) added in What to do step 7, AC and hints.",
+    "Task 01 — image-version literal count corrected: `0.0.10` appears exactly twice in testing/Dockerfile (LABEL at :6, CMD at :38), with the header comment carrying the PostgreSQL range, exactly as the task now states. The six version loops in prepare-test-environment.sh are confirmed at lines 6, 13, 43, 48, 56, 62.",
+    "Task 04 — `databases_test.go:56` moved from do-not-touch into Group 1 (site #5); verified in the repo that this loop calls `postgres.NewTestConnectVersion` and `conn.Exec`, so the reclassification is factually right. The tech-spec AC now reads \"including the single-version sessions loop, which is the only place that query is executed at all\", so the round-1 carry-forward gap is closed at the source.",
+    "Task 04 — the Group 3 expected values moved out of the \"What to do\" derivation step into Details → \"Group 3 cross-check\" with an explicit stop-and-report instruction; the two version-independent selectors are now described honestly.",
+    "Task 04 — file/occurrence arithmetic recomputed and consistent: 27 Group 1 sites (table rows 1-15, 16-18, 19-27), 8 Group 3 tables across **five** files, 1 Group 4 row = 36 occurrences over 21 files (19 internal/query + internal/stat/postgres_test.go + record/record_test.go).",
+    "Task 05 — every Context Files link (and the Post-completion decisions link) now uses the same convention as its siblings: bare filenames for same-directory feature artifacts, `../../../` for code and project-knowledge files.",
+    "Task 05 — TDD Anchor added, with the two traps that make such a test worthless called out explicitly (`strings.Index` returning -1, and matching a bare column name that also occurs in the trailing note).",
+    "Task 07 — reviewer report path now carries the full `docs/features/…` prefix.",
+    "Task 08 — step 2 now mirrors `.github/workflows/default.yml` exactly, in order: Go install → lint tools via `go install` + PATH symlinks → `prepare-test-environment.sh` → `git safe.directory` → lint → govulncheck → test → build → **install** → e2e. Verified line by line against the workflow; the previously missing `make install` is there, and its justification is correct (`testing/e2e.sh` invokes bare `pgcenter` under `set -euxo pipefail`, and `make install` exists in the Makefile at :42).",
+    "Task 08 — image-version literal count corrected to two places in the Dockerfile, with the header PostgreSQL range called out as a separate edit rather than a third tag site."
+  ],
+  "notes": [
+    "Factual spot-checks all pass. Task 04's Details \"Group 3 cross-check\" table was verified against the selectors: bgwriter `>=180000` → (PG18, 14, {6,12}); wal `>=180000` → (Default, 7, {2,5}); replication_slots `(_ int)` → (15, {6,13}); io `>=PostgresV18` → (PG18, 16, {4,14}); io_time `(_ int)` → (10, {4,8}); statements timing/report `>=170000` → Default; statements JIT `>=PostgresV17` → (Default, 15, {7,12}, key 13). All eight rows match the code exactly.",
+    "Task 04's Group 4 premise checks out: `record/record_test.go:133` is `{140000, \"public\", wantN: 3, wantV: 24}` (3+24 = 27 registered views), and no view carries a `MinRequiredVersion` above 190000 — so a correct PG 19 derivation is indeed \"nothing dropped, everything kept\", i.e. not the PG 14 row's numbers.",
+    "Task 07's documentation facts verified verbatim: overview.md:34 \"Active support: PG 14, 15, 16, 17, 18\", overview.md:21-22 \"PG 14–18\" on bgwriter and replication slots, zero `progress` mentions in overview.md, deployment.md:36 \"PostgreSQL 14–18\", architecture.md:67 \"version-independent on PG 14–18\". The pre-19 layout numbers in its architecture.md table (13/{10,11}, 12/{0,0}, 11/{9,9}) match `internal/view/view.go` lines 277-345 exactly, and the post-19 values match the tech-spec Data Models table (15/{12,13}, 13/{0,0}, 12/{10,10}).",
+    "Structure and frontmatter are clean in all five: section set and order match the template, no placeholders and no TODO/FIXME/TBD, `status: planned` everywhere, `depends_on` arrays of ID strings, `wave` >= 1, `skills`/`reviewers` arrays, `verify` a string, no fields beyond the template.",
+    "Expected deviations honoured and not reported: tasks 01, 07 and 08 have no TDD Anchor (infrastructure / documentation / user action); task 08 has empty `skills` and `reviewers` with matching prose in both sections; `overview.md` stands in for the template's `project.md` and all five tasks link the real project-knowledge paths (tasks 04 and 08 annotate the substitution). Task 08's guardrail blockquote above `## Required Skills` is extra content, not a structural deviation.",
+    "Skills ↔ reviewers: task 01 (`infrastructure-setup`) matches the catalog default set exactly; task 07 (`documentation-writing` → `dev-code-reviewer`) matches; task 08 (no skill, no reviewers) matches the user-action convention. Only 04/05 deviate — see the finding.",
+    "Dependency graph is acyclic and wave-consistent for this batch: 01 (w1, []) → 04/05/07 (w4, [\"03\"], with 03 in w3) and 01 → 08 (w5, [\"01\"]). Task 07's extra reliance on Task 1 for the tag literal is transitively covered (01 → 02 → 03 → 07) and stated in prose, so no undeclared dependency.",
+    "Task 04's 21-file scope was flagged in round 1 as a visibility-only atomicity note and is unchanged; tech-spec Decision 9 and its Task 4 file list assign the grouping deliberately, so it is not re-raised.",
+    "No write-write collision introduced by task 05's new second file: task 06 (same wave) reads `report/report_test.go` for the package-level `update` flag but modifies only its new test file and two goldens; task 09 does not touch `report/`. Task 05's Details claim about wave-4 concurrency remains accurate, though it now speaks only of `describe.go`.",
+    "Task 08 hardcodes `0.0.11` in its Description and AC while task 07 insists the literal be read from `testing/Dockerfile`. Not contradictory — task 08's Post-completion carries the \"if the tag differs, resync\" clause — but the two tasks state the tag with different degrees of confidence; see the sequencing finding."
   ],
   "stats": {
     "tasks_checked": 5,
-    "issues_found": 15,
+    "issues_found": 7,
     "critical": 0,
     "major": 0,
-    "minor": 15
-  },
-  "notes": [
-    "Expected deviations were honoured and are not reported: tasks 01 and 05 delete the TDD Anchor section; `overview.md` stands in for the template's `project.md` and all five tasks link the real project-knowledge paths.",
-    "Section presence and order match the template in all five tasks. No template placeholders, TODO/FIXME/TBD markers found.",
-    "Frontmatter is well-formed everywhere: `status: planned`, `depends_on` arrays of ID strings, `wave` >= 1, `skills`/`reviewers` arrays, `verify` a string, no fields outside the template (`teammate_name` included).",
-    "Dependency graph is acyclic and wave-consistent: 01 (w1, []) -> 02 (w2, [01]) -> 03 (w3, [02]) -> 04 and 05 (w4, [03]). Every referenced ID exists.",
-    "frontmatter.skills and frontmatter.reviewers match the Required Skills and Reviewers sections in all five tasks.",
-    "Traceability to tech-spec Implementation Tasks is exact: task 01 -> Dockerfile + prepare-test-environment.sh; task 02 -> query.go + testing.go (plus the new testing_test.go the tech-spec's Testing Strategy calls for); task 03 -> the 8 listed files; task 04 -> the 21 listed files with view_test.go and the three progress test files correctly excluded; task 05 -> report/describe.go. No tech-spec file dropped.",
-    "Carry-forward is complete for this batch: the tech-spec's Testing Strategy items land in the right tasks (selector tables and the TestViews_Configure/TestView_VersionOK 190000 blocks in 03, the eight assertion tables and Test_filterViews in 04, the NewTestConnectVersion error test in 02), and the layout numbers (15/{12,13}, 13/{0,0}, 12/{10,10}) agree with the tech-spec Data Models table in tasks 03 and 05.",
-    "Spot-checked against the codebase: view.go New() progress_vacuum entry is Ncols 13 / DiffIntvl {10,11} at line 277 and Configure() starts at line 367 as task 03 states; internal/postgres/testing.go has the ports[140000] fallback at line 36 as task 02 states; the three describe constants sit at 202/266/286 as task 05 states. Task 02's \"37 NewTestConnectVersion call sites\" is the accurate figure (grep confirms 37 in _test.go); the tech-spec's \"41\" is the stale number, and the task correctly instructs re-derivation. No task edit needed.",
-    "Over-decomposition check: 10 tasks against 5 user stories, including a user-action task, a docs task and a QA task — within norms."
-  ]
+    "minor": 7
+  }
 }

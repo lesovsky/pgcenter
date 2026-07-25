@@ -1,82 +1,116 @@
 {
   "validator": "dev-task-validator",
   "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
-  "tasks_checked": ["06", "07", "08", "09", "10"],
-  "iteration": 1,
+  "tasks_checked": ["02", "03", "06", "09", "10"],
+  "iteration": 2,
   "status": "approved",
   "findings": [
     {
       "severity": "minor",
-      "category": "consistency",
-      "task": "06",
-      "section": "frontmatter / Reviewers",
-      "issue": "Task carries `skills: [code-writing]` but only `[dev-code-reviewer, dev-test-reviewer]` as reviewers; the skills-and-reviewers catalog default set for `code-writing` also includes `dev-security-auditor`. Frontmatter and the Reviewers section agree with each other and with the tech-spec's Task 6 entry, so this is a deliberate deviation, not a mismatch — flagged only so it is a conscious choice. Defensible here: the task adds test-only files under `report/` and explicitly forbids touching production code. Same pattern in sibling tasks 04 and 05.",
-      "fix": "Either accept as-is (test-only task, no production surface) or add `dev-security-auditor` to both the frontmatter array and the Reviewers section to match the catalog default."
-    },
-    {
-      "severity": "minor",
-      "category": "structure",
-      "task": "07",
-      "section": "Reviewers",
-      "issue": "Report path is written as a bare filename (`012-feat-pg19-compatibility-baseline-task-07-dev-code-reviewer-review.json`) rather than the template's `{feature_base}-task-{ID}-{name}-review.json`, where `feature_base` is a path prefix including `docs/features/.../`. The batch is inconsistent: tasks 02, 04, 05, 06 use the full path; tasks 01, 03, 07, 09 use bare filenames.",
-      "fix": "Normalise across the whole feature — prefix the report path with `docs/features/012-feat-pg19-compatibility-baseline/` as tasks 02/04/05/06 do."
-    },
-    {
-      "severity": "minor",
-      "category": "structure",
+      "category": "content",
       "task": "09",
-      "section": "Reviewers",
-      "issue": "Same as task 07: the three reviewer report paths are bare filenames rather than `{feature_base}`-prefixed paths, inconsistent with tasks 02/04/05/06 in the same feature.",
-      "fix": "Prefix all three paths with `docs/features/012-feat-pg19-compatibility-baseline/`."
+      "section": "Details / Files",
+      "issue": "REGRESSION introduced by the round-1 fix. The task now says `.github/workflows/default.yml` — «строка 8» and `.github/workflows/release.yml` — «строка 10». The actual `container:` keys are at `default.yml:9` and `release.yml:11` (verified with `grep -n 'container:' .github/workflows/*.yml` against the current working tree, which is clean). The pre-fix values (9 and 11) were correct; the round-1 validation finding that demanded 8 and 10 was itself wrong, and the fix propagated the error. The `testing/e2e.sh` line-count correction («26 строк») is right, as are the Dockerfile references (`LABEL version` line 6, `CMD` line 38) and the two e2e loop positions (lines 15 and 22).",
+      "fix": "Restore `default.yml:9` and `release.yml:11`, or drop the line numbers entirely — `container:` is unique in each file, which is why this never blocked execution."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "10",
+      "section": "What to do / D.9 (walk harness)",
+      "issue": "The bootstrap step says `apt-get install -y tmux` «the image already has the apt sources it needs». The source lists are present (`/etc/apt/sources.list.d/pgdg.list`), but `testing/Dockerfile:32` ends its build layer with `rm -rf /var/lib/apt/lists/*`, so the package index is empty in the published image and a bare `apt-get install` fails with «Unable to locate package tmux». Since this task was rewritten specifically to be executable end-to-end, the missing `apt-get update` is the one remaining non-executable line in the sequence.",
+      "fix": "Change to `apt-get update && apt-get install -y tmux`, and note that the image ships the apt *sources* but not the *index*."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "10",
+      "section": "Details / Implementation hints",
+      "issue": "The psql cross-check hint names three catalog views: `pg_stat_progress_vacuum`, `pg_stat_progress_analyze`, `pg_stat_basebackup`. The third does not exist — the view the basebackup screen reads is `pg_stat_progress_basebackup` (correctly named everywhere else in the task, including steps 12 and 15 and the Description). An executor copying the hint verbatim gets `relation \"pg_stat_basebackup\" does not exist` and could misread it as a PG 19 catalog change, which is exactly the class of false finding this task's routing rule is meant to prevent.",
+      "fix": "Rename to `pg_stat_progress_basebackup`."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "02",
+      "section": "TDD Anchor / Details",
+      "issue": "Carried over from round 1, not fixed: the template hint comment `<!-- Fill if task includes writing code. For non-code tasks ... delete this section. -->` (line 81), the generic template sentence `Тесты, которые нужно написать ДО реализации. Пишем → запускаем → ...` (line 83), and `<!-- All details for task execution — technical, organizational, any other. -->` (line 172) are still in the body. Tasks 04, 05, 06, 07 in this feature dropped them, so the feature remains internally inconsistent. Cosmetic — every section below the scaffolding is fully written out.",
+      "fix": "Delete the two HTML comments and the generic TDD sentence; the section already opens with task-specific prose."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "frontmatter / TDD Anchor",
+      "issue": "Carried over from round 1, not fixed: template explanation comments remain on `status`, `depends_on`, `wave` and `skills` in the frontmatter (lines 2-5), and the generic sentence `Тесты, которые нужно написать ДО реализации...` remains at the top of TDD Anchor (lines 95-96). Frontmatter values themselves are all valid; only the scaffolding is stale. Tasks 02, 04, 05 have clean frontmatter.",
+      "fix": "Strip the four frontmatter comments and the boilerplate TDD line; the three labelled anchor groups already carry the red/green expectation."
     },
     {
       "severity": "minor",
       "category": "structure",
       "task": "09",
       "section": "Verification Steps / Details",
-      "issue": "Template guidance comments were left in the generated file: `<!-- How to verify task is complete. For code — run tests... -->` under `## Verification Steps` and `<!-- All details for task execution — technical, organizational, any other. -->` under `## Details`. Tasks 06, 07 and 08 removed them, so the batch is inconsistent.",
-      "fix": "Delete both HTML comments — the sections below them are fully written out."
+      "issue": "Carried over from round 1, not fixed: the template guidance comments `<!-- How to verify task is complete... -->` (line 109) and `<!-- All details for task execution... -->` (line 127) are still present.",
+      "fix": "Delete both HTML comments."
     },
     {
       "severity": "minor",
       "category": "structure",
       "task": "10",
       "section": "Details",
-      "issue": "Template guidance comment `<!-- All details for task execution — technical, organizational, any other. -->` left in place under `## Details`, same as task 09.",
+      "issue": "Carried over from round 1, not fixed: `<!-- All details for task execution — technical, organizational, any other. -->` (line 278) remains under `## Details`, even though the section was substantially rewritten in fix mode.",
       "fix": "Delete the HTML comment."
     },
     {
       "severity": "minor",
       "category": "content",
-      "task": "09",
-      "section": "Details",
-      "issue": "Three line/size references in the **Files** subsection are off against the current repo: `.github/workflows/default.yml` has `container:` on line 8 (task says line 9); `.github/workflows/release.yml` has it on line 10 (task says line 11); `testing/e2e.sh` is 26 lines, not 27. The Dockerfile references (`LABEL version` line 6, `CMD` line 38) and the two e2e loop positions (~15, ~22) are correct, and both `container:` lines are unambiguous, so this misleads only slightly.",
-      "fix": "Correct to `default.yml:8`, `release.yml:10`, and drop or fix the `27 строк` figure — or drop the exact line numbers entirely, since the `container:` key is unique in each file."
+      "task": "02",
+      "section": "Details / Files",
+      "issue": "`internal/postgres/testing.go` is described as «45 строк»; `wc -l` reports 44. Everything else in the same description is exact: no imports at all, three functions, `NewTestConfig` pinning 21917, `NewTestConnect` delegating to `NewTestConnectVersion(170000)`, twelve `ports` entries split into active 180000..140000 and EOL 130000..90400, and the `port = ports[140000]` fallback at line 36.",
+      "fix": "Change to 44, or drop the line count — it carries no instruction."
     },
     {
       "severity": "minor",
-      "category": "decomposition",
-      "task": "10",
-      "section": "frontmatter / Details",
-      "issue": "`depends_on: [\"09\"]` names only the CI task, but the acceptance criteria verify deliverables owned by other tasks that are not on the 09 → 08 → 01 dependency chain: `pgcenter report -d -P v|a|b` describes the new columns (Task 05), the two new report goldens plus the untouched existing ones (Task 06), and `overview.md` / `deployment.md` / `architecture.md` listing PG 19 (Task 07). The Details section states this in prose (\"Everything else in the feature is merged by the time this runs\") but the declaration does not carry it. Wave ordering (7 > 4) makes the execution order safe in practice, so this is a declaration-completeness issue, not a scheduling bug.",
-      "fix": "Extend to `depends_on: [\"05\", \"06\", \"07\", \"09\"]` (wave stays 7), or add one line to Details stating explicitly that waves 4–6 are relied on transitively rather than declared."
+      "category": "content",
+      "task": "03",
+      "section": "Details / Files",
+      "issue": "«`New()` lines 277–348 hold the three progress entries (leave their values alone)» — that line range actually holds all **six** progress entries: `progress_vacuum` 277, `progress_cluster` 289, `progress_copy` 301, `progress_index` 313, `progress_analyze` 325, `progress_basebackup` 337. The instruction (leave them alone) is unaffected and the three in scope are correctly named elsewhere, so this only misdescribes the span. The companion reference «`Configure()` lines 367–405» is exact: `Configure` starts at 367 and the switch closes at 404.",
+      "fix": "Say «lines 277–348 hold the six progress entries, three of which this task re-points via Configure()», or cite the three individual start lines (277, 325, 337)."
     }
   ],
+  "round_1_fixes_verified": [
+    "Task 02 — call-site count: the task now states 37 loop-variable call sites plus one internal literal call, flags the tech-spec's 41 as stale, and instructs re-derivation by grep rather than trust. Verified: `grep -rn 'NewTestConnectVersion(' --include='*_test.go'` returns 37; total 39 including the declaration and `NewTestConnect`'s call. The claimed union of version literals `{90500, 90600, 100000, 110000, 120000, 130000, 140000, 150000, 160000, 170000, 180000}` is exactly what the test files contain and is a strict subset of the port map, so no existing caller changes behaviour.",
+    "Task 02 — hardening honesty note: the Edge cases subsection now states that a forgotten map entry makes affected subtests **skip** rather than silently exercise the oldest cluster, and that skipping is still green in CI, so the one-off stopped-cluster check in Task 10 remains the thing that proves PG 19 is reached. This matches Task 10 step 6, which owns that check.",
+    "Task 03 — unqualified constant reference: step 3 now says «Branch on `version >= PostgresV19` — unqualified, since the selectors live in the same package as the constant, so a package-qualified reference would not compile». Correct: `PostgresV19` will live in `internal/query/query.go` (package `query`), same package as the three selectors.",
+    "Task 03 — version-static claim: the Description now says the three screens have exactly one query constant each, referenced directly from the static registry in `view.go: New()`, with no selector at all. Verified against the repo: `New()` pins `PgStatProgressVacuumDefault` / `…AnalyzeDefault` / `…BasebackupDefault` with 13/{10,11}, 12/{0,0}, 11/{9,9}, and `Configure()`'s switch has no progress cases.",
+    "Task 03 — reviewer report paths are now full `docs/features/012-feat-pg19-compatibility-baseline/…` paths, matching tasks 02/04/05/06.",
+    "Task 06 — fixture values: the substring hazard is now called out explicitly and `1000 → 1700` replaces `1000 → 1500`. Verified this is a real hazard in the model file: `report_record_bgwriter_test.go:227-228` asserts `Contains(out, \"500\")` for a 1000→1500 delta, and `500` is a substring of the raw `1500`, so that sentinel would pass on a wrong delta. Task 06's guidance fixes the flaw it inherited from its model.",
+    "Task 09 — reviewer report paths are now full paths for all three reviewers.",
+    "Task 09 — `testing/e2e.sh` is now correctly described as 26 lines with the two port loops at ~15 and ~22; `set -euxo pipefail` at line 7 and the `-Pv -Pa -Pb` arguments in the report loop are both as described.",
+    "Task 10 — `depends_on` expanded to `[\"05\", \"06\", \"07\", \"09\"]` with a Dependencies paragraph explaining that these are precisely the tasks whose artifacts the acceptance criteria check. Wave stays 7.",
+    "Task 10 — bootstrap sequence is now executable in outline: read the tag from `.github/workflows/default.yml` rather than assuming 0.0.11, start the container detached (the image's `CMD` is a bare `echo` — verified at `testing/Dockerfile:38`), publish 21914–21919 on loopback, `docker exec prepare-test-environment.sh`, install the Go toolchain the way the workflow does (verified: `default.yml` downloads go1.25.11 to /opt at run time). Only the `apt-get update` omission remains (finding above).",
+    "Task 10 — TUI walk mechanism is now concrete: detached `tmux` session, `tmux send-keys`, `tmux capture-pane -p` per screen, with the in-container requirement justified by `top/config_view.go:259` (`if !app.db.Local`) and `internal/postgres/postgres.go:147` (`isLocalhost` decides on the host string alone). Both references verified.",
+    "Task 10 — verbose invocation for proving subtests executed: `go test -v -p 1 … | grep -E '190000'` with a requirement for `--- PASS` and no `--- SKIP` on 190000. Sound: `make test` is not verbose and version subtests are named `<subject>/<version>`.",
+    "Task 10 — `pg_basebackup` blocker routed to Task 01 as a blocked dependency, not a PG 19 regression. Verified the premise: `testing/prepare-test-environment.sh` writes a `pg_hba.conf` containing only `local all all trust` and `host all all 0.0.0.0/0 trust`; the `all` database keyword does not match physical replication connections, so a `replication` entry is genuinely missing and it is Task 01's file.",
+    "Task 10 — `pre-deploy-qa` phase mapping is accurate: the repo has no docker-compose file and the Makefile's `build` target builds the Go binary, so the skill's Phase 1 rebuild has nothing to drive; the deviation is narrowed to «do not rebuild from testing/Dockerfile» with the beta-package-drift rationale. Phases 2-4 are described as applying, Phase 4 in verifying rather than deriving form."
+  ],
   "notes_reviewed_and_dismissed": [
-    "Tasks 07, 08, 09, 10 have no `## TDD Anchor` section — correct per the template instruction to delete it for non-code tasks (documentation, user action, deploy config, QA). Task 06 is the only code task in the batch and has a well-formed anchor with `path::test_name — description` entries plus an explicit red/green loop including a sabotage step.",
-    "Task 08 carries `skills: []` and `reviewers: []` with matching prose in the Required Skills and Reviewers sections — consistent, and correct for a maintainer-credentials user action. The blockquote guardrail between the title and `## Required Skills` is extra content, not a structural deviation; it is a useful instruction to the executing agent not to attempt an automated registry push.",
-    "Project knowledge links point at `overview.md` in place of the template's `project.md`; all five tasks link the real paths and tasks 08 and 10 annotate the substitution explicitly. `architecture.md` is present in all five.",
-    "Dependency graph 01←02←03←{04,05,06,07} and 01←08←09←10 is acyclic; every `depends_on` value references an existing task and every task's wave is strictly greater than its dependencies' waves.",
-    "Carry-forward from the tech-spec is complete for all five: files-to-modify sets match the Implementation Tasks entries exactly (06: the new test file plus two goldens; 07: the three PK docs; 08 and 10: none; 09: e2e.sh plus both workflows), and no tech-spec acceptance-criterion or Testing-Strategy item was dropped. Task 06 carries every constraint from the tech-spec's replay-test paragraph (basename = report type, one-second ticks, shared pid, golden names, existing goldens byte-identical). Task 10 covers all 13 user-spec acceptance criteria plus a catch-all requiring a verdict with evidence for every user-spec and tech-spec criterion.",
-    "No merge or split candidates: the five tasks touch disjoint file sets, and the three-file tasks (07 docs, 09 CI+e2e) are single-outcome — task 09's grouping is mandated by tech-spec Decision 4. Ten tasks against five user stories is not over-decomposition.",
-    "No template placeholders (`[Task Name]`, `{PK path}`, `{reviewer-name}`, …) and no TODO/FIXME/TBD markers in any of the five files. Section order matches the template in all five.",
-    "Factual spot-checks against the repo pass: `report/report_test.go:22` declares the `update` flag, `Test_app_doReport_Bgwriter` is at `report_record_bgwriter_test.go:31`, `internal/stat/postgres.go:611` is `diff.Ncols = len(curr.Cols)`, `internal/view/view_test.go:11` asserts 27 views, `testing/Dockerfile:6` and `:38` carry the `0.0.10` literals, both workflows pin `lesovsky/pgcenter-testing:0.0.10`, `e2e.sh` has the two port loops without 21919, and task 07's quoted current-state strings in `overview.md` / `deployment.md` / `architecture.md` all match the files verbatim. `logs/working/qa-report.json` in task 10 matches the pre-deploy-qa skill's documented output path."
+    "Dependency graph re-checked after Task 10's `depends_on` grew, over all ten tasks: 01 (w1, []) → 02 (w2, [01]) → 03 (w3, [02]) → {04, 05, 06, 07} (w4, [03]); 01 → 08 (w5, [01]) → 09 (w6, [08]); 10 (w7, [05, 06, 07, 09]). Every referenced ID exists, every task's wave is strictly greater than every dependency's wave (10's deps sit at waves 4, 4, 4 and 6), and the graph is a DAG — no cycles. Task 10's four dependencies converge from both branches of the fork at task 01, which is the correct shape for a final acceptance gate.",
+    "Accepted deviations honoured as instructed and not reported as findings: tasks 09 and 10 have no `## TDD Anchor` (deploy config and QA, per the template's delete-for-non-code-tasks instruction); task 10 has `reviewers: []` with a matching «None — this task is itself the review gate» Reviewers section, which is also the catalog default for `pre-deploy-qa`; all five tasks link `overview.md` where the template example expects `project.md`, and tasks 02, 03 and 10 annotate the substitution in-line.",
+    "Task 06 keeps `skills: [code-writing]` with only `[dev-code-reviewer, dev-test-reviewer]` — one short of the catalog default set for `code-writing`, which also includes `dev-security-auditor`. Unchanged from round 1, where it was flagged as a conscious choice: frontmatter, the Reviewers section and the tech-spec's Task 6 entry all agree, and the task adds test-only files under `report/` while explicitly forbidding edits to production code. Not re-raised as a finding.",
+    "Frontmatter is otherwise well-formed in all five: `status: planned` everywhere (correct even on re-validation), `depends_on` arrays of ID strings, `wave` ≥ 1, `skills` and `reviewers` arrays, `verify` a string, no fields outside the template (`teammate_name` included).",
+    "frontmatter.skills matches the Required Skills section and frontmatter.reviewers matches the Reviewers section in all five tasks. Skill↔reviewer mapping is valid against `~/.claude/skills/tech-spec-planning/references/skills-and-reviewers.md`: 02 and 03 carry the full code-writing trio, 09 carries the deploy-pipeline trio including `dev-deploy-reviewer`, 10 carries none for `pre-deploy-qa`.",
+    "Section presence and order match the template in all five tasks. No template placeholders (`[Task Name]`, `{PK path}`, `{reviewer-name}`, `{round}`) and no TODO / FIXME / PLACEHOLDER / TBD markers anywhere in the batch.",
+    "Traceability to the tech-spec's Implementation Tasks is exact — no file dropped, no unexplained addition. 02: `internal/query/query.go` + `internal/postgres/testing.go`, plus the new `internal/postgres/testing_test.go` the Testing Strategy calls for. 03: all eight listed files. 06: the new test file plus the two goldens. 09: `testing/e2e.sh` + both workflows. 10: no files modified, `logs/working/qa-report.json` and screen captures as output. Task 03 correctly claims `internal/view/view_test.go`, which the tech-spec deliberately excludes from Task 4.",
+    "Carry-forward of acceptance criteria and TDD anchors from the tech-spec is complete. The layout numbers in tasks 03 and 06 agree with the tech-spec Data Models table and the repo's current values (13/{10,11} → 15/{12,13}; 12/{0,0} → 13/{0,0}; 11/{9,9} → 12/{10,10}), and the pre-19 halves of those pairs match `internal/view/view.go` verbatim. Task 10 covers all user-spec acceptance criteria plus a catch-all requiring a verdict with evidence for every user-spec and tech-spec criterion.",
+    "No merge or split candidates in this batch: the five tasks touch disjoint file sets. Task 03's eight files and task 09's three are single-outcome groupings mandated by tech-spec Decisions 9 and 4 respectively; task 02 is three edited lines plus one new test file; task 06 is one new test file plus two generated goldens; task 10 modifies nothing. Ten tasks against five user stories, including a user-action task, a docs task and a QA task, is not over-decomposition.",
+    "Factual spot-checks against the current tree all pass: `internal/query/io.go:88` is `if version >= PostgresV18`; the `query.go` const block runs `PostgresV94`…`PostgresV18 = 180000`; `internal/postgres/testing.go:36` is the `ports[140000]` fallback; `internal/view/view.go` `Configure()` starts at 367 with the switch closing at 404; `internal/view/view_test.go:11` asserts 27 views and `TestViews_Configure` uses eight-row per-version blocks as task 03 describes; the highest `MinRequiredVersion` in the registry is `PostgresV16`, so task 03's derived-total instruction for `TestView_VersionOK` is sound; `report/report_test.go:22` declares the `update` flag; `Test_app_doReport_Bgwriter` is at `report_record_bgwriter_test.go:31` with sentinel asserts at 220-228; `internal/stat/postgres.go:611` is `diff.Ncols = len(curr.Cols)` and 650-656 is the copy-verbatim branch; `report/report.go` has `newApp` at 83, the version-change/`Configure` block at 249-267 and `readMeta` at 394; the `report_record_bgwriter_pg{14,17,18}.golden` trio exists and `report_progress_vacuum.golden` carries ANSI SGR escapes in its header; the progress execution tests loop `90600…180000` (vacuum) and `140000…180000` (analyze, basebackup) with a bare `tmpl := PgStatProgressXxxDefault`; both workflows pin `lesovsky/pgcenter-testing:0.0.10`; `testing/prepare-test-environment.sh` has exactly six version loops emitting `219${v}` ports; `doc/development.md` does carry the stale `:latest` tag and 2191x port list task 09 declares out of scope; `logs/working/qa-report.json` is git-tracked and holds a previous feature's report as task 10 states; and task 10's 27-screen hotkey table matches `top/keybindings.go` and `top/menu.go` item-for-item, including `p`/`j`/`x`/`d` being cyclers whose first press from an unrelated view lands on the view the table names."
   ],
   "stats": {
     "tasks_checked": 5,
-    "issues_found": 7,
+    "issues_found": 9,
     "critical": 0,
     "major": 0,
-    "minor": 7
+    "minor": 9
   }
 }

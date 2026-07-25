@@ -332,7 +332,10 @@ guessed, not derived):**
 2. **Unit rows, no database:** `go test -run 'TestSelect|Test_Select' ./internal/query/` — all eight new
    table rows green on the first run. A failure here means a value was guessed.
 3. **Live rows, cluster up:** with the Task 1 image running,
-   `go test -v -run 'Test_Stat|Test_Common|Test_Overview|Test_collectOverviewStat|Test_SelectStatDatabaseGeneralQuery' ./internal/query/ ./internal/stat/`
+   `go test -v -run 'Test_Stat|Test_Common|Test_Overview|Test_collectOverviewStat|Test_SelectStatDatabaseGeneralQuery|Test_QueryPgcenterSchema|Test_ArchivingBacklogQuery_Degrades' ./internal/query/ ./internal/stat/`
+   — the last two matter: the schema test is the plperlu canary this task's own anchor calls for, and the
+   archiving-backlog degradation test is otherwise missed by the pattern. Simply running the whole package
+   verbosely is also acceptable; the point is that neither is silently skipped from the filter.
    and read the output: each `…/190000` subtest reports `--- PASS`, not `--- SKIP` — including
    `pg_stat_database/sessions/190000`, which is the site most likely to be silently missing because it is
    the one that was previously (wrongly) listed as do-not-touch. A green package summary alone is not

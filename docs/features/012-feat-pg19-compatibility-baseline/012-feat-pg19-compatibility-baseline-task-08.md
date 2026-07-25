@@ -1,11 +1,11 @@
 ---
-status: planned                    # planned -> in_progress -> done
-depends_on: ["01"]                 # ID задач-зависимостей (строки: ["01", "02"])
-wave: 5                            # волна параллельного выполнения
-skills: []                         # МАССИВ скиллов для загрузки
-verify: user                       # image available in the registry; CI green on unmodified develop
-reviewers: []                      # явно указать. Пусто = fallback на defaults
-teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
+status: planned
+depends_on: ["01"]
+wave: 5
+skills: []
+verify: user
+reviewers: []
+teammate_name:
 ---
 
 # Task 08: Publish the test image (user action)
