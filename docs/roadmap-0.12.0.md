@@ -339,6 +339,16 @@ PG 19 view in [017], [018] and [019].
   `autovacuum_scores`, `recovery`, `contention`, `subscription`. An explicitly planned 0.13.0
   feature, the [008] pattern applied once with the column designs settled. Contention has the real
   forensic value.
+- **`pg_stat_progress_repack`** (new in PG 19) — the new `REPACK` command replaces `VACUUM FULL` and
+  `CLUSTER`, and gets its own progress view. Surfaced during the [012] user-spec work; this roadmap was
+  written before the view reached the catalog. **Nothing breaks without it:** `pg_stat_progress_cluster`
+  is kept in PG 19 for backwards compatibility and translates a `REPACK` into one of the two older
+  commands, so pgcenter's existing `progress_cluster` screen keeps working — verified in [012]'s
+  verification pass. A dedicated screen is its own feature (hotkey, menu entry, record/report policy, the
+  view-count test ripple), not a column addition. Candidate for 0.13.0.
+- **`pg_stat_progress_data_checksums`** (new in PG 19) — progress of online checksum enabling. Same
+  origin and same reasoning as above, but a weaker fit: this is cluster maintenance rather than
+  statistics monitoring, so its place in pgcenter deserves its own discussion. Candidate for 0.13.0.
 - **Recursive lock-wait chain (tree) rendering** — [019] ships `blocker_pids` as a list.
 - **Full "who holds the xmin horizon" aggregate** across all four sources (backends, replication
   slots, prepared transactions, standby feedback). [013] covers the backend source only — the one on

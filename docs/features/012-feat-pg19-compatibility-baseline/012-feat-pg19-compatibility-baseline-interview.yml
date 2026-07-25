@@ -237,6 +237,37 @@ conversation_history:
         REJECTED OUTRIGHT: take in the PG 19 branch only — would hide from PG 18 users a column their server
                 reports, contradicting "show what the server says".
 
+  - question_num: 7
+    timestamp: "2026-07-25 13:05:00"
+    topic: "probe_ladder_step3"
+    agent_question: |
+      dev-customer's critical finding: the probe-failure decision has no plan for "noble fails too". Proposed
+      third step: (1) trim [012] to code without a live cluster and without the verification pass, or
+      (2) pause the whole feature and ship the release with [013]-[015], returning when GA packages exist.
+      Recommendation: (2) — half a feature without the verification pass is exactly the dishonest promise
+      the roadmap rules out.
+    user_answer: |
+      Вариант 2, паузим фичу целиком, ждем когда появятся пакеты.
+    summary: Third step of the probe ladder = pause the whole feature; no trimmed variant.
+
+  - question_num: 8
+    timestamp: "2026-07-25 13:30:00"
+    topic: "test_connection_fallback, beta_to_ga_drift"
+    agent_question: |
+      Adequacy validator, major: the spec spends a risk, an acceptance criterion and a QA step defending the
+      silent PG 14 fallback in the test connection helper, which a three-line change removes permanently.
+      Verified the claim against the code — every version the tests iterate is in the port map, EOL entries
+      are in the map too and fail at connect, so no unmapped key remains. Fix it inside this feature, or
+      keep defending it with the stop-the-cluster criterion?
+      Also for the record: 0.12.0 does not wait for PG 19 GA, so the three new column names are read from a
+      beta catalog — a rename at GA would empty the vacuum progress screen for PG 19 users until a patch.
+    user_answer: |
+      Чиним фолбэк в этой фиче. По поводу изменений beta -> ga, это чинится отдельными патч-релизами.
+    summary: |
+      The silent test-connection fallback becomes an error inside this feature (scope addition accepted) —
+      the risk is removed at the root instead of being covered by checks. Beta-to-GA catalog drift is
+      accepted as a patch-release matter.
+
 # ============================================================================
 # Phase 1: High-Level Feature Understanding
 # ============================================================================
@@ -457,7 +488,7 @@ phase2_user_experience:
       No new screens, no new hotkeys, no menu changes. Three existing progress screens gain columns; layouts
       accepted verbatim by the user (batch 3, Q2):
 
-      - progress_vacuum (V hotkey group): pid, xact_age, datname, relation, **started_by**, **mode**, state,
+      - progress_vacuum (`p` cycle / `P` menu — top/keybindings.go:40): pid, xact_age, datname, relation, **started_by**, **mode**, state,
         waiting, phase, size_total,KiB, scanned_total,%, vacuumed_total,%, scanned,KiB, vacuumed,KiB, query
         -> Ncols 13 -> 15 on PG 19, DiffIntvl {10,11} -> {12,13}
       - progress_analyze: pid, xact_age, datname, relation, **started_by**, state, waiting, phase,
