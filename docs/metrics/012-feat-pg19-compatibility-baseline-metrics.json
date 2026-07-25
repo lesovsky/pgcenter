@@ -8,7 +8,7 @@
     "feature_size": "M",
     "model": "Opus 5 (1M context)",
     "date_started": "2026-07-25T05:46:58Z",
-    "date_completed": ""
+    "date_completed": "2026-07-25T09:35:55Z"
   },
   "phases": {
     "user_spec": {
@@ -35,8 +35,22 @@
       "human_wait_time_min": 0,
       "steps": {}
     },
-    "feature_execution": null,
-    "done": null
+    "feature_execution": {
+      "start_time": "2026-07-25T08:26:00Z",
+      "end_time": "2026-07-25T09:40:00Z",
+      "duration_min": 74,
+      "touch_time_min": 68,
+      "human_wait_time_min": 6,
+      "steps": {}
+    },
+    "done": {
+      "start_time": "2026-07-25T09:35:55Z",
+      "end_time": "2026-07-25T09:35:55Z",
+      "duration_min": 8,
+      "touch_time_min": 8,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
   },
   "quality": {
     "validation_rounds": {
@@ -45,9 +59,9 @@
       "task_decomposition": 2
     },
     "validation_findings": {
-      "critical": 0,
-      "major": 0,
-      "minor": 0
+      "critical": 3,
+      "major": 23,
+      "minor": 59
     },
     "review_rounds": {},
     "review_findings": {
@@ -62,6 +76,12 @@
     "tasks_count": 10,
     "waves_count": 7,
     "agents_spawned": 25,
-    "commits_count": 0
+    "commits_count": 7
+  },
+  "totals": {
+    "total_lead_time_min": 237,
+    "total_touch_time_min": 209,
+    "total_human_wait_time_min": 28,
+    "flow_efficiency_pct": 88
   }
 }

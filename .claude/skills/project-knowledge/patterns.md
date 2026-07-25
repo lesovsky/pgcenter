@@ -2,12 +2,28 @@
 
 ## Adding a New PostgreSQL Version
 
+**Beta versions come from a separate apt channel with a per-major component.** `apt.postgresql.org`
+publishes each major version in its own component, so the source line must name it —
+`jammy-pgdg-testing 19`, not `jammy-pgdg-testing main`. With `main` the package is simply invisible and
+`apt-cache policy` reports candidate `(none)`, which reads exactly like "the packages do not exist" (this
+cost a false "feature blocked" conclusion in 012). Install with an explicit `-t <suite>`: the stable
+channel outranks the beta one for the shared `libpq5`, so without it the install fails on a dependency.
+Listing only the version component — not `main` — is what keeps the beta channel from offering anything
+else; an apt-preferences pin adds nothing, because the beta suite already ships `NotAutomatic` (priority
+100). `libpq5` does move to the beta version and that is expected: one client library serves all clusters.
+
 1. Add port to `internal/postgres/testing.go` ports map
 2. Add version to all `versions := []int{...}` lists in `internal/query/*_test.go`
 3. Run tests — `t.Skipf` handles unavailable versions gracefully
 4. If a stats view changed: add a new query constant and selector function in `internal/query/`
 5. Wire selector into `internal/view/view.go: Configure()` if Ncols also changes
 6. Update pgcenter-testing Docker image (see deployment.md)
+
+`NewTestConnectVersion` returns an error for a version with no port mapping — it used to fall back to the
+oldest cluster, which made a forgotten entry invisible: subtests named after the new version passed while
+exercising a completely different server. Note what the error does and does not buy: a missing entry now
+makes those subtests **skip**, which is honest but still green in CI, so proving a new version is actually
+reached still needs a deliberate check (stop the cluster, confirm skip rather than pass).
 
 ## Version-Specific Query Pattern
 

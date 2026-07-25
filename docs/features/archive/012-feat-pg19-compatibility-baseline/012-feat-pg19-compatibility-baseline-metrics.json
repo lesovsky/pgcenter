@@ -1,0 +1,87 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "012-feat-pg19-compatibility-baseline",
+    "feature_name": "pg19-compatibility-baseline",
+    "feature_base": "docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline",
+    "project": "pgcenter",
+    "feature_size": "M",
+    "model": "Opus 5 (1M context)",
+    "date_started": "2026-07-25T05:46:58Z",
+    "date_completed": "2026-07-25T09:35:55Z"
+  },
+  "phases": {
+    "user_spec": {
+      "start_time": "2026-07-25T05:46:58Z",
+      "end_time": "2026-07-25T07:20:55Z",
+      "duration_min": 93,
+      "touch_time_min": 71,
+      "human_wait_time_min": 22,
+      "steps": {}
+    },
+    "tech_spec": {
+      "start_time": "2026-07-25T07:22:11Z",
+      "end_time": "2026-07-25T07:51:10Z",
+      "duration_min": 28,
+      "touch_time_min": 28,
+      "human_wait_time_min": 0,
+      "steps": {}
+    },
+    "task_decomposition": {
+      "start_time": "2026-07-25T07:51:35Z",
+      "end_time": "2026-07-25T08:25:39Z",
+      "duration_min": 34,
+      "touch_time_min": 34,
+      "human_wait_time_min": 0,
+      "steps": {}
+    },
+    "feature_execution": {
+      "start_time": "2026-07-25T08:26:00Z",
+      "end_time": "2026-07-25T09:40:00Z",
+      "duration_min": 74,
+      "touch_time_min": 68,
+      "human_wait_time_min": 6,
+      "steps": {}
+    },
+    "done": {
+      "start_time": "2026-07-25T09:35:55Z",
+      "end_time": "2026-07-25T09:35:55Z",
+      "duration_min": 8,
+      "touch_time_min": 8,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
+  },
+  "quality": {
+    "validation_rounds": {
+      "user_spec": 3,
+      "tech_spec": 3,
+      "task_decomposition": 2
+    },
+    "validation_findings": {
+      "critical": 3,
+      "major": 23,
+      "minor": 59
+    },
+    "review_rounds": {},
+    "review_findings": {
+      "critical": 0,
+      "major": 0,
+      "minor": 0
+    },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 21,
+    "tasks_count": 10,
+    "waves_count": 7,
+    "agents_spawned": 25,
+    "commits_count": 7
+  },
+  "totals": {
+    "total_lead_time_min": 237,
+    "total_touch_time_min": 209,
+    "total_human_wait_time_min": 28,
+    "flow_efficiency_pct": 88
+  }
+}

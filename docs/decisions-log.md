@@ -744,3 +744,103 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 **Rationale:** Width 8 covers the widest realistic Size string (`1023.9M` = 7 chars) with one column of margin; beyond it the field widens deterministically rather than breaking. One reserve is simpler than per-field budgets. The fix is purely additive padding — digits/units are unchanged (`Size` itself untouched). A value-vs-`n/a` byte-offset test (RED before, GREEN after) is the regression lock.
 
 **Alternatives considered:** Per-field width budgets (rejected — more complex, no benefit); making `Size` itself fixed-width (rejected — `Size` has other variable-width callers).
+
+---
+
+## [012-feat-pg19-compatibility-baseline] Beta apt channel: scope by component, install by target release
+
+**Date:** 2026-07-25
+**Feature:** 012-feat-pg19-compatibility-baseline
+**Status:** Accepted
+
+**Context:** the PG 19 test cluster needs beta packages, which live in the `-pgdg-testing` channel. The
+original plan was to add that channel and hold it back with an apt-preferences pin at priority 100, so it
+could not displace the installed PG 14–18 packages.
+
+**Decision:** declare the beta channel with the major-version component only (`jammy-pgdg-testing 19`) and
+install from it with an explicit `-t`. No apt-preferences pin.
+
+**Rationale:** the probe contradicted the original reasoning twice. First, the repository publishes each
+major in its own component: with `main` the package is invisible and `apt-cache policy` reports candidate
+`(none)` — indistinguishable from "not packaged", which produced a false "feature is blocked" conclusion
+before the source line was corrected. Second, the beta suite already ships `NotAutomatic`, so apt gives it
+priority 100 unprompted and the planned pin merely restated the default. The real guarantee is the
+component restriction; the real need is the opposite of a pin, because without `-t` the install fails on
+the shared `libpq5`, which the stable channel outranks. `libpq5` does move to the beta version — one
+client library serves every cluster, and it is backward compatible.
+
+**Alternatives considered:** apt-preferences pin at 100 (rejected — a no-op); declaring the channel as
+`main 19` (rejected — widens what the beta channel may supply for no benefit); building PostgreSQL from
+source in the image (rejected earlier — the cluster would not match what users actually install).
+
+---
+
+## [012-feat-pg19-compatibility-baseline] Test connection refuses unmapped versions instead of falling back
+
+**Date:** 2026-07-25
+**Feature:** 012-feat-pg19-compatibility-baseline
+**Status:** Accepted
+
+**Context:** `NewTestConnectVersion` returned the oldest active cluster's port for any version absent from
+its map, while its own doc comment promised an error.
+
+**Decision:** return an error naming the version. Every call site passes a mapped literal, so no caller
+changes behaviour.
+
+**Rationale:** the fallback made a forgotten map entry invisible — subtests named after a new version
+passed while exercising a different server, which is precisely how a "verified on PG N" suite can prove
+nothing. The red step of the new test demonstrated it: a request for version 200000 connected
+successfully. Note the limit of the fix: a missing entry now causes a skip, which is honest but still
+green, so proving a version is reached still needs a deliberate stopped-cluster check.
+
+**Alternatives considered:** keeping the fallback and covering it with an acceptance criterion — rejected
+by the user in favour of fixing the cause.
+
+---
+
+## [012-feat-pg19-compatibility-baseline] Progress screens: new columns mid-layout, version-aware DiffIntvl
+
+**Date:** 2026-07-25
+**Feature:** 012-feat-pg19-compatibility-baseline
+**Status:** Accepted
+
+**Context:** PG 19 adds `started_by`/`mode` to the vacuum progress view, `started_by` to analyze and
+`backup_type` to basebackup. Appending them at the tail would keep the diffed column indices stable.
+
+**Decision:** insert them before the `state` column — after `relation` on vacuum and analyze, after
+`duration` on basebackup — and let each selector carry the layout as a 3-tuple: vacuum 13/`{10,11}` →
+15/`{12,13}`, analyze 12 → 13 with `{0,0}` unchanged, basebackup 11/`{9,9}` → 12/`{10,10}`. `UniqueKey`
+stays 0, so the [007] 4-tuple is not needed.
+
+**Rationale:** the columns read as attributes of the row, not as metrics, and the tail is where `query`
+lives — the column horizontal scroll can push out of view. The cost is a version-dependent `DiffIntvl`,
+which the `io.go`/`bgwriter.go` idiom already handles. That field is also the reason the selectors are
+mandatory rather than cosmetic: a stale interval on the PG 19 layout lands on the percentage columns,
+whose values parse as numbers, so the wrong diff succeeds silently and prints plausible nonsense. A replay
+test pins both branches, and sabotaging the interval reddens only the PG 19 case.
+
+**Alternatives considered:** appending at the tail (rejected — readability was the point); a 2-tuple for
+analyze, whose interval never changes (rejected — sibling selectors differing for a reason invisible at the
+call site).
+
+---
+
+## [012-feat-pg19-compatibility-baseline] Replication entries in the test image pg_hba
+
+**Date:** 2026-07-25
+**Feature:** 012-feat-pg19-compatibility-baseline
+**Status:** Accepted
+
+**Context:** the environment script generates a `pg_hba.conf` with two `trust` lines using the `all`
+database keyword.
+
+**Decision:** add explicit `replication` entries for every cluster, 14 through 19.
+
+**Rationale:** `all` does not match physical replication connections, so `pg_basebackup` failed with "no
+pg_hba.conf entry for replication connection" — meaning the basebackup progress screen, and therefore the
+new `backup_type` column, could not be exercised at all. This is an environment fix benefiting every
+version, not PG 19 work, and it had to land before the image was built and pushed, since the script is
+baked in.
+
+**Alternatives considered:** none — the screen is unverifiable otherwise.
+

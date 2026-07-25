@@ -7,6 +7,83 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [017] Beta apt channel left in the test image after PG 19 GA
+
+**Added:** 2026-07-25 (feature: 012-feat-pg19-compatibility-baseline)
+**Severity:** Low
+**Area:** `testing/Dockerfile`
+
+**What:** PG 19 is installed from the `jammy-pgdg-testing 19` channel because it is a beta. Package names
+are explicit, so no foreign major version can arrive on its own — but while that source file is present,
+PG 19 keeps coming from the beta channel on every rebuild, including the rebuild meant to verify GA.
+
+**Why deferred:** the removal only makes sense once GA packages exist in the stable channel. Action at
+that point: delete the source file and let PG 19 install from `jammy-pgdg main` alongside 14–18.
+
+---
+
+### [018] delay_time not exposed on the vacuum and analyze progress screens
+
+**Added:** 2026-07-25 (feature: 012-feat-pg19-compatibility-baseline)
+**Severity:** Low
+**Area:** `internal/query/progress_vacuum.go`, `internal/query/progress_analyze.go`
+
+**What:** both views carry `delay_time` — total time the operation slept due to cost-based delay. It is not
+shown.
+
+**Why deferred:** it arrived in PG 18, not PG 19, so it is not part of the PG 19 catch-up; showing it
+honestly needs a third version branch in two selectors; and it reads zero unless `track_cost_delay_timing`
+is on, which is off by default — a column of zeros on a typical installation. Worth its own decision about
+whether the signal justifies the column.
+
+---
+
+### [019] Nine tests skip every version when one cluster is unavailable
+
+**Added:** 2026-07-25 (surfaced during feature: 012-feat-pg19-compatibility-baseline)
+**Severity:** Low
+**Area:** `internal/query/common_test.go`, `internal/query/overview_test.go`, `internal/stat/postgres_test.go`
+
+**What:** nine tests call `t.Skipf` inside their version loop but have no per-version `t.Run` wrapper, so
+the skip fires on the parent test and every remaining version is skipped too. `common_test.go`'s
+full-range list therefore already dead-skips in CI at `90500` — these tests provide no coverage today.
+
+**Why deferred:** pre-existing, not opened by this feature, and the fix is adding the subtest wrapper to
+nine tests in files this feature otherwise only appends a literal to — a refactor with its own review
+surface.
+
+---
+
+### [020] Diff loop indexes the previous snapshot by the current snapshot's width
+
+**Added:** 2026-07-25 (surfaced during feature: 012-feat-pg19-compatibility-baseline, security audit)
+**Severity:** Low
+**Area:** `internal/stat/postgres.go` (`diff`), `report/report.go`
+
+**What:** the diff loop walks `curr.Ncols` and indexes `prev.Values[j][l]` without checking the previous
+row's width. A mixed-width pair would dereference past the end.
+
+**Why deferred:** not reachable today and not made reachable by this feature — the replay loop drops the
+previous snapshot and skips the sample whenever the archive's recorded version changes, and neither `top`
+nor `record` reconfigures a view mid-session. Adding a guard to the shared diff engine on a false premise
+was considered and rejected. Belongs with [021].
+
+---
+
+### [021] Column widths not recomputed after a mid-archive version change
+
+**Added:** 2026-07-25 (surfaced during feature: 012-feat-pg19-compatibility-baseline, architecture review)
+**Severity:** Low
+**Area:** `report/report.go` (`formatStatSample`)
+
+**What:** the alignment flag is set on the first printed sample and never reset, and `Configure` does not
+clear it on a version change. An archive spanning a major upgrade (`record -a` across the upgrade) renders
+its later samples with the earlier layout's widths.
+
+**Why deferred:** pre-existing, requires an archive recorded across a major-version upgrade to trigger, and
+the user-spec explicitly deferred this case. Same family as [020].
+
+---
 ### [016] Collector/parsers swallow errors silently — no logging facility
 
 **Added:** 2026-06-25 (surfaced during debt audit; pre-existing since original pgcenter)

@@ -263,3 +263,33 @@ pure-render-function precedent (`topBandLayout`).
 **Limitations:** No new screens or commands; displayed numbers and units are unchanged (padding only). The `wal size` field is intentionally left variable-width (first field on its row). The internal rate-formatter consolidation is invisible to users.
 
 **Touches:** Hardens the `record`/`report` replay path ([003]/[008]); refines the verbose overview panel introduced by [010-feat-overview-dashboard] (reuses its `naReserve` reserved-width contract).
+
+### [012-feat-pg19-compatibility-baseline] PostgreSQL 19 Support
+
+**What it does:** pgcenter works on PostgreSQL 19 — verified, not assumed: every screen is exercised
+against a live PG 19 cluster in CI. On PG 19 the vacuum progress screen also answers "is this vacuum mine
+or autovacuum's, and is it aggressive?" without leaving for psql.
+
+**Key scenarios:**
+- A DBA who upgraded to PG 19 runs `pgcenter top` and finds every screen working.
+- Watching a long vacuum, the DBA reads `mode` (`normal` / `aggressive` / `failsafe`) and `started_by`
+  (`manual` / `autovacuum` / `autovacuum_wraparound`) on the left of the screen instead of parsing the
+  query text on the right.
+- On the analyze progress screen, `started_by` distinguishes a manual analyze from autovacuum's.
+- On the basebackup progress screen, `backup_type` distinguishes a full backup from an incremental one.
+- Everything above is also recorded by `pgcenter record` and replayed by `report -P v|a|b`.
+
+**Limitations:**
+- Values are shown exactly as the server reports them — no abbreviations, and NULL renders blank.
+- Archives recorded on PG 19 need pgcenter 0.12.0 or newer; older binaries do not know the new layout and
+  would print nonsense rather than an error.
+- PG 14–18 are untouched: same columns, same numbers, same layout as before.
+- Support is verified against PG 19 beta; a catalog change before GA would be fixed by a patch release.
+- The two progress views new in PG 19 (`pg_stat_progress_repack`, `pg_stat_progress_data_checksums`) are
+  not shown — they are separate features in the roadmap backlog. Nothing breaks without them: the
+  compatibility view `pg_stat_progress_cluster` still reports REPACK operations.
+
+**Touches:** [009-feat-horizontal-scroll] (wider progress layouts are acceptable because the table
+scrolls), [008-feat-record-report-0-11-views] (report replay picks the layout from the archive's recorded
+version, which is what keeps old archives correct).
+
