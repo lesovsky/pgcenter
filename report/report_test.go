@@ -11,9 +11,11 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -1209,4 +1211,45 @@ func Test_describeReport(t *testing.T) {
 		assert.Equal(t, tc.want, buf.String())
 	}
 
+}
+
+func Test_describeProgressColumnOrder(t *testing.T) {
+	// The describe test above compares descriptions by identity, so it cannot notice a row that
+	// landed in the wrong slot. Row order has to match the order the queries emit, otherwise
+	// `report -d` documents a layout that does not exist.
+	testcases := []struct {
+		name    string
+		text    string
+		markers []string
+	}{
+		{
+			name:    "vacuum",
+			text:    pgStatProgressVacuumDescription,
+			markers: []string{"\n- relation", "\n- started_by", "\n- mode", "\n- state"},
+		},
+		{
+			name:    "analyze",
+			text:    pgStatProgressAnalyzeDescription,
+			markers: []string{"\n- relation", "\n- started_by", "\n- state"},
+		},
+		{
+			name:    "basebackup",
+			text:    pgStatProgressBasebackupDescription,
+			markers: []string{"\n- duration", "\n- backup_type", "\n- state"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			prev := -1
+			for _, m := range tc.markers {
+				pos := strings.Index(tc.text, m)
+				// Presence first: strings.Index returns -1 for a missing marker, and -1 is less than
+				// anything, so an ordering-only assertion would pass on a row that is not there at all.
+				require.NotEqual(t, -1, pos, "description must contain a row for %q", strings.TrimPrefix(m, "\n- "))
+				assert.Greater(t, pos, prev, "row %q is out of order", strings.TrimPrefix(m, "\n- "))
+				prev = pos
+			}
+		})
+	}
 }
