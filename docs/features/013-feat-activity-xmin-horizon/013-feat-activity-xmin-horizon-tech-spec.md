@@ -40,7 +40,7 @@ constraint on this screen.
 - **`docs/tech-debt.md`** — three new register entries.
 
 Not modified: `internal/view/view.go` (the `Configure` wiring already exists and the seed must
-stay at 14 — see Decision 3), `internal/stat/help.go` (dead code — see Decision 7),
+stay at 14 — see Decision 3), `internal/stat/help.go` (dead code — see Decision 8),
 `internal/align/`, the `procpidstat` screen, the `replication` screen.
 
 ### How it works
@@ -154,7 +154,29 @@ empty-last to numeric and duration modes (rejected — more code, and an excepti
 have to re-justify); teaching the columns to emit a sentinel instead of blank (rejected — violates
 the user-spec's "blank, never 0" rule at its source).
 
-### Decision 5: Tech debt [021] needs two lines, and its test bypasses the goroutine
+### Decision 5: Emptiness is decided by the rendered string, not by `sql.NullString.Valid`
+
+**Decision:** the sort treats a cell as empty when its `String` is empty, not when `Valid` is
+false.
+
+**Rationale:** the codebase does carry nullness explicitly — `PGresult.Values` is
+`[][]sql.NullString`, a NULL scans as `{String: "", Valid: false}`, and both fields survive the
+archive round-trip because `sql.NullString` has no custom marshaller. So keying on `Valid` is
+available and looks more precise.
+
+It would nonetheless be wrong here. Every render path prints `.String` alone, so a SQL NULL and a
+genuine empty string are **indistinguishable on screen**. Sorting on `Valid` would order two cells
+that look identical differently — the user would see blanks split between the top and the bottom
+of the screen with no way to tell why. Sorting must key on what the operator can actually see.
+
+The distinction is not hypothetical: `application_name` is an empty string rather than NULL when a
+client sets none, while `backend_xid` is NULL. Both render blank.
+
+**Alternatives considered:** keying on `Valid` (rejected — produces visually unexplainable
+ordering); rendering NULL and empty differently so `Valid` becomes visible (rejected — a screen-wide
+display change nobody asked for, and it would collide with the user-spec's "blank, never 0" rule).
+
+### Decision 6: Tech debt [021] needs two lines, and its test bypasses the goroutine
 
 **Decision:** on a replayed version change, reset both the alignment flag and the header-repeat
 counter. Test the formatting function directly rather than through the replay pipeline.
@@ -173,7 +195,7 @@ treats the symptom; the widths should not be stale in the first place, and the g
 the next instance); leaving [021] in the register (rejected — this feature adds a second boundary
 to the affected path, and the failure mode is a crash).
 
-### Decision 6: Cast only `backend_xid`
+### Decision 7: Cast only `backend_xid`
 
 **Decision:** `backend_xid::text`; no cast on `age(backend_xmin)`.
 
@@ -181,7 +203,7 @@ to the affected path, and the failure mode is a crash).
 `xid` does not, hence the cast, matching `replication.go:28`. A cast on the `age()` result would be
 noise a reader would have to evaluate.
 
-### Decision 7: Documentation goes only to `report/describe.go`
+### Decision 8: Documentation goes only to `report/describe.go`
 
 **Decision:** the three new column descriptions and the three caveats are added to
 `report/describe.go`. `internal/stat/help.go` is left untouched and recorded as tech debt.
@@ -304,7 +326,7 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 | Sort fix silently changes ordering on unrelated screens | Blast radius enumerated in Decision 4; goldens re-run with the fix present; `replslots` framed against its own SQL, which already declares NULLS LAST |
 | Column order in the SQL drifts from the specified layout | Asserted against a live server on PG 14–19; residual exposure only on PG 12/13, where the spec text is the sole source |
 | Two-version archive test passes on an empty report | Archive must carry ≥2 samples after the version change; the replay path consumes the first |
-| `[021]` fix appears to work but leaves a stale header | Both resets required — alignment flag *and* header-repeat counter (Decision 5) |
+| `[021]` fix appears to work but leaves a stale header | Both resets required — alignment flag *and* header-repeat counter (Decision 6) |
 | Blank cells read as "holds no horizon" when the real cause is missing privileges | Documented caveat in `describe.go`; `pg_stat_activity` returns NULL rather than an error, so there is nothing to trap |
 
 ## Acceptance Criteria
@@ -317,6 +339,8 @@ visibly `replslots` sorted by its default key. No API or exported signature chan
 - [ ] Sorting a sparse column is numeric regardless of the first row; empty cells last in both
       directions; empty never collides with a genuine `0`
 - [ ] Sorting a fully empty column is a no-op preserving input order
+- [ ] A SQL NULL and a genuine empty string sort together — cells that render identically are
+      never split between the top and the bottom of the screen
 - [ ] Existing golden replay tests pass **with the sort fix applied**
 - [ ] A two-version synthetic archive replays with recomputed widths, an immediately redrawn
       header, and no panic
