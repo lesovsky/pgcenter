@@ -111,19 +111,18 @@ requested from it. Reusing the existing signing key is correct — same publishe
 **Alternatives considered:** Adding the channel unpinned — rejected: it silently changes five existing
 clusters. A separate keyring — rejected: same publisher, no security gain.
 
-### Decision 5b: Guard the diff against mixed-width snapshots
-**Decision:** Before diffing a matched row pair, skip the pair when the previous snapshot's row is narrower
-than the current snapshot's column count. Covered by a test in the same task that builds the two-version
-replay harness.
-**Rationale:** The diff loop indexes the previous snapshot by the *current* snapshot's column count. That
-was unreachable while every view had one fixed width; making the width version-dependent makes a
-mixed-width archive representable, and with a matching row key it dereferences past the end of the previous
-row — a panic in `pgcenter report -f` on an archive spanning a major upgrade. The feature creates the
-reachability, so the feature carries the guard.
-**Alternatives considered:** Leaving it — rejected: the crash is introduced by this change, not inherited.
-Rewriting the mid-archive width handling properly (the `Aligned`-flag issue noted in Backward
-Compatibility) — rejected as a separate concern; the guard prevents the crash without touching the layout
-logic.
+### Decision 5b: The mixed-width diff finding is recorded, not fixed here
+**Decision:** Do not add a width guard to the shared diff loop. Record the finding as a deferred item.
+**Rationale:** The security audit flagged that the diff loop indexes the previous snapshot by the *current*
+snapshot's column count, and proposed a guard on the premise that version-dependent widths make it
+reachable. That premise does not hold: the replay loop replaces the previous snapshot and skips the sample
+whenever the archive's recorded version changes, so no diff pair ever spans a width change; `bgwriter` and
+`pg_stat_io` have had version-dependent column counts since PG 14/17/18, so mixed-width archives predate
+this feature; and neither `top` nor `record` reconfigures a view mid-session. What is left is a
+pre-existing defect that the user-spec explicitly defers, in the diff engine shared by every view —
+declining it is also what Decision 7 does with the analogous test-coverage hole.
+**Alternatives considered:** Adding the guard anyway — rejected: it would edit the shared diff engine on a
+false premise and contradict both the user-spec's deferral and Decision 7.
 
 ### Decision 5: `NewTestConnectVersion` returns an error for an unmapped version
 **Decision:** Replace the `ports[140000]` fallback with
@@ -180,7 +179,10 @@ Carried from the user-spec so `/done` files them rather than losing them:
   keeps arriving from the beta channel on every rebuild, including the one meant to verify GA.
 - **`delay_time`** on the vacuum and analyze progress views — deliberately out of scope (a PG 18 column,
   zero without `track_cost_delay_timing`); revisit separately.
-- **The nine tests that skip above their version loop** (Decision 7) — a pre-existing coverage hole.
+- **The nine tests without a per-version subtest wrapper** (Decision 7) — a pre-existing coverage hole.
+- **The unguarded previous-snapshot indexing in the shared diff loop** (Decision 5b) — surfaced by the
+  security audit, not reachable today and not made reachable by this feature; belongs with the other
+  mid-archive width work the user-spec defers.
 - **Handoff to [014]:** `mode` as a column name is already used on the replication screen, and [014]'s
   colorization rules key off column names, so a rule named `mode` would hit both screens.
 
@@ -397,9 +399,7 @@ mapped literals, none changes behaviour.
   `internal/query/progress_create_index_test.go`, `internal/query/replication_slots_test.go`,
   `internal/query/replication_test.go`, `internal/query/sizes_test.go`,
   `internal/query/statements_test.go`, `internal/query/tables_test.go`, `internal/query/wal_test.go`,
-  `internal/view/view_test.go`, `record/record_test.go`
-  <!-- internal/stat/postgres_test.go is deliberately excluded — owned by Task 6, which also adds its PG 19 row -->
-
+  `internal/stat/postgres_test.go`, `internal/view/view_test.go`, `record/record_test.go`
 - **Files to read:** `docs/features/012-feat-pg19-compatibility-baseline/012-feat-pg19-compatibility-baseline-code-research.md`,
   `.claude/skills/project-knowledge/patterns.md`
 
@@ -416,14 +416,12 @@ mapped literals, none changes behaviour.
 
 #### Task 6: Report replay coverage for the new layout
 - **Description:** Add a replay test for the vacuum progress report on both a pre-19 and a PG 19 recording,
-  proving the layout is chosen by the version stored in the archive. Also add the mixed-width diff guard
-  from Decision 5b with its own case on the same harness, since this feature is what makes a mixed-width
-  archive representable. Owns the stats-package test file, so it also adds that file's PG 19 version entry.
+  proving the layout is chosen by the version stored in the archive. Guards the silent-failure risk in the
+  Risks table.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./report/... ./internal/stat/...`; the three existing progress goldens unchanged
-- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new), `report/testdata/` (new goldens),
-  `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
+- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Verify:** bash — `go test ./report/...`; the three existing progress goldens unchanged
+- **Files to modify:** `report/report_record_progress_vacuum_test.go` (new), `report/testdata/` (new goldens)
 - **Files to read:** `report/report_record_bgwriter_test.go`, `report/report.go`
 
 #### Task 7: Documentation update

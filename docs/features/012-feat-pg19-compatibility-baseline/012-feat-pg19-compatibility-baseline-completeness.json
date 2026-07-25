@@ -1,50 +1,29 @@
 {
-  "status": "pass",
+  "status": "fail",
   "sources": {
     "user_spec": true,
     "tech_spec": true,
     "tasks": false
   },
-  "requirements_total": 26,
-  "requirements_covered": 22,
-  "requirements_partial": 4,
+  "requirements_total": 28,
+  "requirements_covered": 27,
+  "requirements_partial": 1,
   "requirements_missing": 0,
   "findings": [
     {
-      "type": "partial",
-      "source": "user-spec",
-      "requirement": "US-17: Проба пакетов PG 19 ставится до написания любого кода (трёхступенчатая развилка)",
-      "detail": "Task 1 (probe) and Task 2 (Go code: PostgresV19 constant + NewTestConnectVersion hardening) are both in Wave 1, which by the project's wave semantics runs concurrently. This contradicts the user-spec constraint 'проба ставится до написания любого кода' and Task 1's own wording 'before any Go code is written'. On ladder rung 3 (feature paused) Go code would already be merged. Fix: move Task 2 to Wave 2, or state explicitly that Task 2 is probe-outcome-independent.",
-      "severity": "major"
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "US-29: «Архив, охватывающий обновление мажорной версии: смена числа колонок в середине архива — известный дефект, существующий и сегодня; в этой фиче не исправляется и не усугубляется»",
+      "detail": "Decision 5b adds a mixed-width diff guard to internal/stat/postgres.go — the shared diff engine used by top, record and report — for exactly the edge case the user-spec lists under «Граничные случаи» and explicitly excludes from this feature. Its rationale is that the feature creates the reachability ('That was unreachable while every view had one fixed width'), which does not hold on three independent counts. (1) report/report.go:250: `if !prevStat.Valid || prevMeta.version != d.meta.version { ...; continue }` — when the archive's metadata version changes, the previous snapshot is discarded and the view is re-Configured, so a diff pair never spans a version boundary in replay; the major-upgrade archive scenario cannot reach the indexing. (2) internal/query/bgwriter.go:41 SelectStatBgwriterQuery already returns 12/13/14 columns for PG14/17/18, and io.go:87 does the same — version-dependent Ncols has existed since [004]/[006], so mixed-width archives were representable long before this feature; the user-spec is right that the defect exists today. (3) top/top.go:63 is the only non-test Configure() call — neither top nor record reconfigures mid-session, so no live path produces a width change between consecutive snapshots either. What remains is a fix for a pre-existing defect the user explicitly deferred, in a production file the Architecture section does not list, with blast radius across every view rather than the three progress screens. This is also inconsistent with the tech-spec's own Decision 7, which declines to fix a pre-existing coverage hole precisely because it would be scope creep. Secondary defect: Decision 5b's Alternatives cite 'the `Aligned`-flag issue noted in Backward Compatibility', but the Backward Compatibility section contains no such note — a dangling cross-reference. Fix: drop Decision 5b and the guard from Task 6, or take the scope change back to the user for explicit approval with the corrected premise.",
+      "severity": "critical"
     },
     {
       "type": "partial",
-      "source": "user-spec",
-      "requirement": "US-6: Проверочный проход по всем экранам на живом PG 19 (правило обработки найденной поломки)",
-      "detail": "The user-spec defines a mandatory policy for the case where the verification pass finds a real PG 19 breakage: fix inside this feature, except when the broken area is reopened by [016]/[017]/[018] of the same release — then fix there, name the defect and the executing feature in this feature's QA report, and re-verify at release finalization; if the executing feature drops out of 0.12.0, the fix returns here. The tech-spec Risks table has no row for this risk at all, and Task 10 (pre-deploy QA) carries no instruction on how to record or route such a finding. As written, QA has no defined outcome other than pass/fail.",
-      "severity": "major"
-    },
-    {
-      "type": "partial",
-      "source": "user-spec",
-      "requirement": "US-6: Все 27 зарегистрированных экранов; per-process экран проверяется по локальному подключению",
-      "detail": "The Agent Verification Plan and Task 10 say 'every registered screen' but do not carry the concrete checks from the user-spec: the count of 27 registered views, both pg_stat_io subgroups, all seven pg_stat_statements subscreens, all six progress screens, and the requirement that the per-process statistics screen be verified over a local connection (it is unavailable remotely by design). A scripted tmux walk driven by hotkeys can silently miss subscreens and the local-connection case.",
-      "severity": "minor"
-    },
-    {
-      "type": "partial",
-      "source": "user-spec",
-      "requirement": "US-25: Отложенные пункты, заносимые при финализации фичи",
-      "detail": "The user-spec designates three carry-forward items: (a) column delay_time deferred for separate analysis, (b) removal of the temporary pgdg-testing repo line at the GA image rebuild, (c) the `mode` column-name collision with the replication screen, recorded so feature [014] (row highlighting by column name) does not rediscover it. The tech-spec records only one finalization item (Decision 7, the nine tests that skip above their version loop). Task 1 places the beta channel 'in its own source file', which supports (b), but no task or decision states the removal obligation, and (a) and (c) are absent entirely.",
-      "severity": "minor"
-    },
-    {
-      "type": "partial",
-      "source": "user-spec",
-      "requirement": "US-6/Как проверить: «Пользователь проверяет» — ширина колонки started_by на привычном терминале",
-      "detail": "The user-spec's single user-side check (eyeballing whether the started_by column width is comfortable on a normal terminal) is not represented in the Agent Verification Plan; Task 10 additionally has no Verify and no Files fields, while verification table row 10 declares 'bash + user'.",
+      "source": "tech-spec",
+      "requirement": "Architecture → «What we're building/modifying» must enumerate the production files the feature touches",
+      "detail": "Task 6 lists `internal/stat/postgres.go` under Files to modify (the Decision 5b guard), but the Architecture file inventory does not mention it — it stops at query.go, postgres/testing.go, the three progress query files, view/view.go, report/describe.go and the CI/image files. A reader of the Architecture section would conclude the diff engine is untouched. This stands independently of how the Decision 5b question is resolved: if the guard stays, the file belongs in the inventory; if it goes, Task 6's Files to modify must lose it.",
       "severity": "minor"
     }
   ],
-  "summary": "22/26 requirements fully covered, 4 partial, 0 missing. No critical findings — status pass. Scope creep check clean: the NewTestConnectVersion fallback hardening is explicitly in the user-spec (Decision 5 traces to it), the conditional ubuntu:24.04 migration correctly appears only as a Risks-table ladder rung and NOT as a task, and pg_stat_progress_repack / pg_stat_progress_data_checksums / WAL / slot / stats_reset columns are all explicitly kept out (Decision 6, Solution). No overengineering found: Decision 2's uniform 3-tuple and Decision 7's refusal to refactor nine unrelated tests both argue against added surface. Solution and Architecture carry real technical substance (selector idiom, Configure() seam, DiffIntvl silent-failure argument), not paraphrase. Two major partials: probe-before-any-code sequencing is broken by putting Task 2 in Wave 1 next to the probe, and the user-spec's policy for a real breakage found during the verification pass is missing from the Risks table and from Task 10."
+  "summary": "27/28 requirements covered, 1 partial (US-29, addressed contrary to instruction), 0 missing. Round-1 findings are all confirmed closed: probe sequencing (Wave 1 now holds Task 1 alone, Task 2 moved to Wave 2), breakage routing (Risks table carries the user-spec policy verbatim — fix here, except where a later feature of the same release re-enters the area, named in the QA report, returns here if that feature drops out — and Task 10 routes findings through it), the 27-screen walk (Task 10 now names both pg_stat_io sub-screens, all seven pg_stat_statements sub-screens, all six progress screens and the local-connection requirement for per-process, with Verify 'bash + user — full QA per the user-spec Как проверить section', which reaches the «Пользователь проверяет» width check), and the deferred items (new subsection carries delay_time, the beta apt channel removal at GA, the nine-test coverage hole and the [014] `mode` name-collision handoff). Of the two security-audit decisions, 5a (beta apt channel pinning) is NOT scope creep: it directly serves the user-spec requirement to install PG 19 from pgdg-testing without disturbing PG 14–18 and mitigates the user-spec risk 'пересборка образа ломает PG 14–18 по причинам, не связанным с фичей'. 5b (mixed-width diff guard) IS scope creep — critical: the user-spec names this exact edge case as a known pre-existing defect explicitly not fixed here, and the tech-spec's counter-claim that the feature makes it reachable is contradicted by report.go:250 (prev snapshot discarded on version change), by bgwriter.go/io.go already having version-dependent Ncols, and by top/record configuring the view exactly once. Remaining scope discipline is clean (repack/data_checksums screens, WAL/slot/stats_reset columns, standby stand, delay_time and README all correctly excluded; the ubuntu:24.04 migration correctly appears only as a Risks ladder rung, not as a task). Solution and Architecture carry real substance (selector idiom, Configure() seam, the DiffIntvl silent-corruption argument); no overengineering in the task set — tasks are scope descriptions without pseudocode."
 }
