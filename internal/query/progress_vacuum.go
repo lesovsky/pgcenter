@@ -11,4 +11,28 @@ const (
 		`coalesce(v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024), 0) AS "vacuumed,KiB", a.query ` +
 		"FROM pg_stat_progress_vacuum v RIGHT JOIN pg_stat_activity a ON v.pid = a.pid " +
 		"WHERE (a.query ~* '^autovacuum:' OR a.query ~* '^vacuum') AND a.pid <> pg_backend_pid() ORDER BY a.pid DESC"
+
+	// PgStatProgressVacuumPG19 defines query for getting stats from pg_stat_progress_vacuum on PG 19 and newer.
+	// PG 19 adds started_by (manual/autovacuum/autovacuum_wraparound) and mode (normal/aggressive/failsafe).
+	// They are placed right after relation, where they read as attributes of the row rather than metrics;
+	// this shifts the diffed scanned/vacuumed pair from {10,11} to {12,13}.
+	PgStatProgressVacuumPG19 = "SELECT a.pid, date_trunc('seconds', clock_timestamp() - xact_start)::text AS xact_age, " +
+		"v.datname, v.relid::regclass AS relation, v.started_by, v.mode, a.state, " +
+		"coalesce((a.wait_event_type ||'.'|| a.wait_event), 'f') AS waiting, " +
+		`v.phase, v.heap_blks_total * (SELECT current_setting('block_size')::int / 1024) AS "size_total,KiB", ` +
+		`round(100 * v.heap_blks_scanned / v.heap_blks_total, 2)::text AS "scanned_total,%", ` +
+		`round(100 * v.heap_blks_vacuumed / v.heap_blks_total, 2)::text AS "vacuumed_total,%", ` +
+		`coalesce(v.heap_blks_scanned * (SELECT current_setting('block_size')::int / 1024), 0) AS "scanned,KiB", ` +
+		`coalesce(v.heap_blks_vacuumed * (SELECT current_setting('block_size')::int / 1024), 0) AS "vacuumed,KiB", a.query ` +
+		"FROM pg_stat_progress_vacuum v RIGHT JOIN pg_stat_activity a ON v.pid = a.pid " +
+		"WHERE (a.query ~* '^autovacuum:' OR a.query ~* '^vacuum') AND a.pid <> pg_backend_pid() ORDER BY a.pid DESC"
 )
+
+// SelectStatProgressVacuumQuery returns the query, number of columns and diff interval for the
+// vacuum progress screen, depending on Postgres version.
+func SelectStatProgressVacuumQuery(version int) (string, int, [2]int) {
+	if version >= PostgresV19 {
+		return PgStatProgressVacuumPG19, 15, [2]int{12, 13}
+	}
+	return PgStatProgressVacuumDefault, 13, [2]int{10, 11}
+}

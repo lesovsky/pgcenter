@@ -401,6 +401,15 @@ func (v Views) Configure(opts query.Options) error {
 		case "stat_io_time":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatIOTimeQuery(opts.Version)
 			v[k] = view
+		case "progress_vacuum":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatProgressVacuumQuery(opts.Version)
+			v[k] = view
+		case "progress_analyze":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatProgressAnalyzeQuery(opts.Version)
+			v[k] = view
+		case "progress_basebackup":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatProgressBasebackupQuery(opts.Version)
+			v[k] = view
 		}
 	}
 

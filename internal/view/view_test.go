@@ -103,6 +103,11 @@ func TestViews_Configure(t *testing.T) {
 		trackCommit string
 		querylen    int
 	}{
+		// v19 matrix
+		{version: 190000, recovery: "f", trackCommit: "on", querylen: 256},
+		{version: 190000, recovery: "f", trackCommit: "off", querylen: 0},
+		{version: 190000, recovery: "t", trackCommit: "on", querylen: 256},
+		{version: 190000, recovery: "t", trackCommit: "off", querylen: 0},
 		// v14 matrix
 		{version: 140000, recovery: "f", trackCommit: "on", querylen: 256},
 		{version: 140000, recovery: "f", trackCommit: "on", querylen: 0},
@@ -175,6 +180,26 @@ func TestViews_Configure(t *testing.T) {
 		assert.NoError(t, err)
 
 		switch tc.version {
+		case 190000:
+			// The three progress screens gain columns on PG 19; the diffed pairs shift with them.
+			assert.Equal(t, query.PgStatProgressVacuumPG19, views["progress_vacuum"].QueryTmpl)
+			assert.Equal(t, 15, views["progress_vacuum"].Ncols)
+			assert.Equal(t, [2]int{12, 13}, views["progress_vacuum"].DiffIntvl)
+			assert.Equal(t, query.PgStatProgressAnalyzePG19, views["progress_analyze"].QueryTmpl)
+			assert.Equal(t, 13, views["progress_analyze"].Ncols)
+			assert.Equal(t, query.PgStatProgressBasebackupPG19, views["progress_basebackup"].QueryTmpl)
+			assert.Equal(t, 12, views["progress_basebackup"].Ncols)
+			assert.Equal(t, [2]int{10, 10}, views["progress_basebackup"].DiffIntvl)
+		case 140000:
+			// Everything below PG 19 keeps today's progress layouts, byte for byte.
+			assert.Equal(t, query.PgStatProgressVacuumDefault, views["progress_vacuum"].QueryTmpl)
+			assert.Equal(t, 13, views["progress_vacuum"].Ncols)
+			assert.Equal(t, [2]int{10, 11}, views["progress_vacuum"].DiffIntvl)
+			assert.Equal(t, query.PgStatProgressAnalyzeDefault, views["progress_analyze"].QueryTmpl)
+			assert.Equal(t, 12, views["progress_analyze"].Ncols)
+			assert.Equal(t, query.PgStatProgressBasebackupDefault, views["progress_basebackup"].QueryTmpl)
+			assert.Equal(t, 11, views["progress_basebackup"].Ncols)
+			assert.Equal(t, [2]int{9, 9}, views["progress_basebackup"].DiffIntvl)
 		case 130000:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplicationExtended, views["replication"].QueryTmpl)
@@ -226,6 +251,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
+		{version: 190000, total: 27},
 		{version: 160000, total: 27},
 		{version: 140000, total: 24},
 		{version: 130000, total: 19},
