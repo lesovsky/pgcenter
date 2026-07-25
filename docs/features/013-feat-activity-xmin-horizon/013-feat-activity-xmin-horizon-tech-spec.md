@@ -390,10 +390,20 @@ None.
   the cell from being printed, exactly as its twin in `top` does — not a silently empty cell.
 - A replay case where a blank value meets a sparse **default** sort key — the empty
   `retained,KiB` path — since this is the only place the changed sort behaviour meets real
-  recorded data. **The case must be constructed to actually diverge:** a lone blank under
-  descending sort lands last under both the old and the new behaviour, so such a test would pass
-  either way and prove nothing. It must either place a genuine `"0"` beside the blank, or put the
-  blank in the first row so the old code falls into string mode.
+  recorded data. **The case must be constructed to actually diverge**, and this is easy to get
+  wrong — two obvious constructions do not:
+  - A lone blank under descending sort lands last under both old and new behaviour.
+  - Putting the blank first so the old code falls into string mode only diverges if the remaining
+    values *also* order differently lexicographically than numerically. `2048` before `1024` sorts
+    the same either way; `512` vs `1024`, or `9` vs `1000000`, do not.
+
+  So the case needs values that break lexicographic order, and if it relies on a genuine `"0"`
+  sitting beside the blank, two further preconditions must hold: the first row must carry a
+  non-empty numeric value (otherwise the old code picks string mode and the comparison changes
+  shape), and the blank must sit above the `"0"` in the input.
+
+  Any test written here must be shown to fail against the unfixed comparator, not merely to pass
+  against the fixed one.
 - Describe block ordering for the activity screen, following the existing progress-screen
   precedent.
 
