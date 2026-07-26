@@ -125,11 +125,26 @@ func (app *app) doReport(r *tar.Reader) error {
 
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+
 		err := processData(app, v, c, dataCh, doneCh)
-		if err != nil {
-			fmt.Println(err)
+		if err == nil {
+			return
 		}
-		wg.Done()
+		fmt.Println(err)
+
+		// processData gave up before completing the handshake with readTar, which is still
+		// sending on dataCh and will send on doneCh from its defer. Both channels are
+		// unbuffered, so with no receiver left readTar blocks forever and wg.Wait() never
+		// returns — the command would hang silently instead of exiting. Drain until readTar
+		// is finished. This covers every error path out of processData, not only the newest.
+		for {
+			select {
+			case <-dataCh:
+			case <-doneCh:
+				return
+			}
+		}
 	}()
 
 	wg.Wait()
@@ -286,9 +301,7 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 					// sample can pick up the previous layout — hygiene, not a dependency
 					// of any current caller.
 					v.Aligned = false
-					v.ColsWidth = map[int]int{}
-					v.Cols = nil
-
+		
 					// repeatHeaderAfter, not zero: the counter means "lines printed
 					// since the last header", so the seed value asks for the header
 					// immediately (see its initialisation above).

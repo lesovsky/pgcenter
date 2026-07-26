@@ -61,6 +61,29 @@ func Test_StatActivityQueries(t *testing.T) {
 				gotNames = append(gotNames, d.Name)
 			}
 			assert.Equal(t, wantNames, gotNames)
+
+			// Names and order alone would let the semantics of the three new columns drift
+			// unnoticed: replacing coalesce(leader_pid, pid) with a raw leader_pid, or wrapping
+			// backend_xid in a coalesce(..., '0'), keeps the layout identical while breaking the
+			// two rules the feature exists for. Read the values back and pin them.
+			if version >= PostgresV13 {
+				var rowsSeen int
+				for rows.Next() {
+					values, err := rows.Values()
+					assert.NoError(t, err)
+					rowsSeen++
+
+					// leader is derived, never the raw leader_pid: the connection running this
+					// test is nobody's parallel worker, so a raw leader_pid would be NULL here.
+					assert.NotNil(t, values[1], "leader must never be NULL — raw leader_pid is NULL for a non-worker")
+
+					// backend_xid stays blank until the transaction writes. This query does not,
+					// so a non-nil value here means a coalesce crept in and "blank, never 0" is gone.
+					assert.Nil(t, values[11], "backend_xid must be NULL for a transaction that has not written")
+				}
+				assert.NotZero(t, rowsSeen, "query returned no rows, so the value assertions proved nothing")
+			}
+
 			rows.Close()
 			assert.NoError(t, rows.Err())
 		})

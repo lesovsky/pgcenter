@@ -1123,3 +1123,27 @@ func Test_isSchemaExists(t *testing.T) {
 	conn.Close()
 	assert.False(t, isSchemaExists(conn, "public"))
 }
+
+// Test_sort_keyOutOfRange pins the bounds guard on the sort key. The key is an index
+// into a layout that may not be the one in hand: report restores the view's seed key
+// when a replayed archive changes version, and an archive can declare any shape at all.
+// Ordering by a column the result does not have must keep the input order rather than
+// panic. Without the guard both subtests panic with index out of range.
+func Test_sort_keyOutOfRange(t *testing.T) {
+	testcases := []struct {
+		name string
+		key  int
+	}{
+		{name: "key past the last column", key: 4},
+		{name: "negative key", key: -1},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			res := newSparsePGresult([]sql.NullString{nstr("9"), nstr("1000000"), nstr("100")})
+
+			assert.NotPanics(t, func() { res.sort(tc.key, true) })
+			assert.Equal(t, []string{"9", "1000000", "100"}, sortedKeys(res))
+		})
+	}
+}

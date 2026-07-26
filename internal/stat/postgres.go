@@ -680,6 +680,14 @@ func (r *PGresult) sort(key int, desc bool) {
 		return /* nothing to sort */
 	}
 
+	// The key is an index into a layout that may no longer be the one in hand: a report replaying
+	// an archive across a version change restores the view's seed key, and an archive can declare
+	// any shape at all. Ordering by a column this result does not have is not an error worth
+	// aborting for, but indexing by it would panic, so keep the input order instead.
+	if key < 0 || key >= len(r.Values[0]) {
+		return /* order key does not belong to this layout */
+	}
+
 	var sample string
 	for i := range r.Values {
 		if v := r.Values[i][key].String; v != "" {

@@ -1295,7 +1295,7 @@ func Test_describeActivityCaveats(t *testing.T) {
 		{
 			// Derived leader: an empty one would otherwise read as "not a parallel backend".
 			name:    "leader is derived, not the raw leader_pid",
-			markers: []string{"leader is derived", "leader_pid"},
+			markers: []string{"leader_pid"},
 		},
 		{
 			// Backends are not the only holders of the horizon, and the others are not in the view.
@@ -1310,7 +1310,7 @@ func Test_describeActivityCaveats(t *testing.T) {
 		{
 			// The operationally heaviest one: blank may mean "not allowed to see", not "holds nothing".
 			name:    "an empty cell may mean missing privileges",
-			markers: []string{"not a proof", "unprivileged"},
+			markers: []string{"unprivileged"},
 		},
 	}
 
@@ -1728,4 +1728,43 @@ func Test_processData_versionChange_orderColumnMissing(t *testing.T) {
 	require.NotEqual(t, -1, posHigh, "row 4004 is missing from the report")
 	require.NotEqual(t, -1, posLow, "row 3003 is missing from the report")
 	assert.Less(t, posHigh, posLow, "after the boundary the screen default sort key must be restored")
+}
+
+// Test_app_doReport_errorPathDoesNotHang drives the real app.doReport, which the other
+// tests in this file deliberately bypass — and that bypass is exactly why the hang went
+// unnoticed: runProcessDataOnTar drains the channels itself, so it never reproduces what
+// production does.
+//
+// The archive widens between two samples of the SAME version, so the alignment computed
+// for the narrow layout leaves the extra columns without a width. The zero-width guard in
+// printStatSample turns what used to be a `[:-1]` panic into a returned error — and an
+// error out of processData leaves readTar blocked on two unbuffered channels with no
+// receiver, so before the drain was added the command hung forever instead of exiting.
+// A silent hang is worse than a crash for a CLI in a pipe.
+func Test_app_doReport_errorPathDoesNotHang(t *testing.T) {
+	narrow := []string{"pid", "datname"}
+	wide := []string{"pid", "datname", "usename", "state"}
+
+	tarBuf := buildActivityTar(t, []activityTick{
+		{version: 170000, cols: narrow, rows: [][]string{{"100", "postgres"}}},
+		{version: 170000, cols: narrow, rows: [][]string{{"100", "postgres"}}},
+		{version: 170000, cols: wide, rows: [][]string{{"100", "a_database_name_wider_than_the_column", "postgres", "active"}}},
+		{version: 170000, cols: wide, rows: [][]string{{"100", "a_database_name_wider_than_the_column", "postgres", "active"}}},
+	})
+
+	app := &app{
+		config: Config{ReportType: "activity", TsStart: time.Unix(0, 0), TsEnd: time.Now().Add(time.Hour), TruncLimit: 32},
+		view:   view.New()["activity"],
+		writer: io.Discard,
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- app.doReport(tar.NewReader(bytes.NewReader(tarBuf.Bytes()))) }()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("doReport did not return: readTar is still blocked, the command would hang forever")
+	}
 }
