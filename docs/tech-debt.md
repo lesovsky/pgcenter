@@ -77,52 +77,7 @@ instead of skip.
 
 ---
 
-### [025] `PGresult.sort` does not bounds-check its sort key
 
-**Added:** 2026-07-25 (surfaced during feature: 013-feat-activity-xmin-horizon, security audit)
-**Severity:** Low
-**Area:** `internal/stat/postgres.go` (`sort`, `validate`), `report/report.go`
-
-**What:** `sort` indexes `r.Values[i][key]` without checking `key` against the row width, and the key
-never comes from the data being sorted — it is either the screen's seed `OrderKey` from `view.New()`
-(0 for most screens, 2 for `progress_index`, 4 for the `statements_*` ones) or an index resolved
-against an earlier sample. `validate` does not close the gap: it compares each row's width to
-`len(Cols)`, so a recorded result whose `Cols` is empty and whose rows are zero-width is accepted and
-then panics on the first sort. Verified end to end during the task-03 security review — a crafted
-archive aborts `pgcenter report` with `index out of range`, on any report type, with or without `-o`,
-and with no version change involved.
-
-**Why deferred:** reachable at HEAD independently of this feature. The seed-`OrderKey` restore added by
-task 03 re-enters the same unguarded path but adds no new class of failure, and the security reviewer
-recommended explicitly against widening that task to cover it. Action at that point: guard inside the
-stat layer — reject a negative key and keep the input order when the key falls outside a row — rather
-than at the one call site, since `top` reaches the same function. Same missing-bounds-check family as
-[020].
-
----
-
-### [026] Report error paths leave the reader blocked, so the command hangs instead of exiting
-
-**Added:** 2026-07-25 (surfaced during feature: 013-feat-activity-xmin-horizon, security audit)
-**Severity:** Low
-**Area:** `report/report.go` (`doReport`, `readTar`, `processData`)
-
-**What:** every `return err` in `processData` abandons the pipeline while `readTar` is still running.
-The data channel is unbuffered and no one drains it, so the reader blocks on its next send, `doReport`
-waits on the WaitGroup forever, and the command neither prints the error nor exits. This stopped being
-theoretical here: the zero-width guard restored in task 03 ([021]) turns a slice-bounds panic into a
-returned error, so a same-version archive whose samples widen — [020]'s territory — now hangs where it
-used to crash. For a CLI that is arguably the worse of the two: a crash at least says that something
-happened.
-
-**Why deferred:** the shape is shared by every error return in the function, so fixing it for the new
-guard alone would leave the rest, and the fix is one decision about how the reader gets unblocked
-(drain the channel on exit, or give `readTar` a quit channel to select on) applied to all of them at
-once — a change to the report pipeline's error protocol, not a line in a feature that adds columns to
-one screen. Action at that point: the drain goroutine in the task-03 test helper `runProcessDataOnTar`
-is the shape of the eventual fix.
-
----
 
 ### [017] Beta apt channel left in the test image after PG 19 GA
 
@@ -192,7 +147,10 @@ demonstrated panic rather than an inferred one. Severity stays Low for consisten
 covered a comparable malformed-archive class; what changed is that the reachability is now measured.
 It stays deferred rather than closed because the screen this feature touches cannot be the trigger:
 `activity` runs with `DiffIntvl {0,0}`, so `diff()` is never called there at all. Closing it means
-validating archive-declared shapes generally, alongside [025]. Its sibling [021] is now resolved.
+validating archive-declared shapes generally — in `validate()`, which is the one place that
+sees a result before any consumer does. Its siblings [021], [025] and [026] are now resolved; this is
+the last of the family still open, and the code review of feature 013 noted that `align.SetAlign` is a
+third unsafe consumer alongside `diff`, so fixing `diff` alone would not close the class.
 
 ---
 ### [016] Collector/parsers swallow errors silently — no logging facility
@@ -244,6 +202,52 @@ validating archive-declared shapes generally, alongside [025]. Its sibling [021]
 ---
 
 ## Resolved Debt
+
+### [025] `PGresult.sort` does not bounds-check its sort key
+
+**Added:** 2026-07-25 (surfaced during feature: 013-feat-activity-xmin-horizon, security audit)
+**Resolved:** 2026-07-26 (feature: 013-feat-activity-xmin-horizon, code review)
+**Severity:** Low
+**Area:** `internal/stat/postgres.go` (`sort`, `validate`), `report/report.go`
+
+**What:** `sort` indexes `r.Values[i][key]` without checking `key` against the row width, and the key
+never comes from the data being sorted — it is either the screen's seed `OrderKey` from `view.New()`
+(0 for most screens, 2 for `progress_index`, 4 for the `statements_*` ones) or an index resolved
+against an earlier sample. `validate` does not close the gap: it compares each row's width to
+`len(Cols)`, so a recorded result whose `Cols` is empty and whose rows are zero-width is accepted and
+then panics on the first sort. Verified end to end during the task-03 security review — a crafted
+archive aborts `pgcenter report` with `index out of range`, on any report type, with or without `-o`,
+and with no version change involved.
+
+**Resolution:** the guard landed in the stat layer rather than at the call site, exactly as this entry
+proposed: `sort` now returns early when the key is negative or outside the row, keeping the input
+order. One place covers the seed-`OrderKey` route this feature added, the pre-existing routes, and the
+`top` caller. Code review reproduced the new route against `develop` before the fix — an archive whose
+`-o` column is absent from a later layout panicked with `index out of range [4] with length 3` — and
+`Test_sort_keyOutOfRange` was shown red on the unguarded code first.
+---
+
+### [026] Report error paths leave the reader blocked, so the command hangs instead of exiting
+
+**Added:** 2026-07-25 (surfaced during feature: 013-feat-activity-xmin-horizon, security audit)
+**Resolved:** 2026-07-26 (feature: 013-feat-activity-xmin-horizon, code review)
+**Severity:** Low
+**Area:** `report/report.go` (`doReport`, `readTar`, `processData`)
+
+**What:** every `return err` in `processData` abandons the pipeline while `readTar` is still running.
+The data channel is unbuffered and no one drains it, so the reader blocks on its next send, `doReport`
+waits on the WaitGroup forever, and the command neither prints the error nor exits. This stopped being
+theoretical here: the zero-width guard restored in task 03 ([021]) turns a slice-bounds panic into a
+returned error, so a same-version archive whose samples widen — [020]'s territory — now hangs where it
+used to crash. For a CLI that is arguably the worse of the two: a crash at least says that something
+happened.
+
+**Resolution:** fixed for every error path at once rather than for the newest one, as this entry
+required. `doReport` now drains `dataCh` until `readTar` signals completion, so an error out of
+`processData` lets the command print and exit instead of blocking on two unbuffered channels. Covered
+by `Test_app_doReport_errorPathDoesNotHang`, which drives the real `doReport` — the other tests in that
+file deliberately bypass it, which is why the hang went unnoticed until code review reproduced it.
+---
 
 ### [021] Column widths not recomputed after a mid-archive version change
 
