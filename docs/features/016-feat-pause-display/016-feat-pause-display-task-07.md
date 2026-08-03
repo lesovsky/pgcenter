@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["05"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 4                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race`  # targeted: the full ./top/... run needs a live PG fixture cluster
+verify: bash — `go test ./top/ -run 'Test_resizeDetector' -race`  # targeted: the full ./top/... run needs a live PG fixture cluster
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -94,11 +94,12 @@ Write these first, watch them fail, then add the detector and the wiring.
   - **not** paused, `(190, 52)` → `(60, 52)` → `false` — no repaint is requested in live mode;
   - not paused `(190, 52)` → `(60, 52)`, then paused with the same `(60, 52)` → `false`: the size
     was recorded while live, so resuming the pause alone does not manufacture a repaint.
-- `top/ui_test.go::Test_repaintFailureLatch` — the Decision 5 latch shipped by Task 3: a first
-  failure reports (one message), a second consecutive failure does not, a success clears the latch,
-  and a failure after that success reports again. Exactly one message per off→on transition,
-  mirroring `verboseTooShortShown` (`top/ui.go:211-218`). Drive the latch's own state unit as Task 3
-  published it; do not try to reach it through `printCmdline`, which needs a real `gocui.View`.
+**The failure latch is NOT tested here.** Task 3 both ships the latch and owns its test
+(`top/pause_test.go::Test_repaintFailureLatch_reportsOncePerTransition`, same fail/fail/fail/success/
+fail sequence). Duplicating it in this task would be worse than redundant: a `-run` pattern matching
+`Test_repaintFailureLatch` also matches Task 3's test by prefix, so this task's verification would go
+green without a line being written. Rely on Task 3's coverage and keep this task's tests on the
+resize seam only.
 
 Not testable in this package and deliberately out of the anchor: `layout` itself. It calls
 `app.ui.Size()`, and a `*gocui.Gui` cannot be constructed in a unit test — which is precisely why
@@ -124,7 +125,7 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 - [ ] `layout` still returns `nil` on the success path; the detector adds no new error return.
 - [ ] The repaint failure latch of Task 3 is covered by a test proving exactly one cmdline message
       per failure transition. No latch state is declared in `top/ui.go`.
-- [ ] The targeted run `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race`
+- [ ] The targeted run `go test ./top/ -run 'Test_resizeDetector' -race`
       passes, as does a targeted re-run of the pre-existing `top/ui_test.go` tests, all unmodified;
       `make lint` is clean.
 
@@ -179,7 +180,7 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 ## Verification Steps
 
 - Run the targeted suite, with the race detector, since the two new tests are the deliverable:
-  `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race` — both pass, no races
+  `go test ./top/ -run 'Test_resizeDetector' -race` — both pass, no races
   (the detector is closure-local and touches no shared state beyond the `atomic.Bool` load).
 - Re-run the pre-existing `top/ui_test.go` tests to prove nothing regressed:
   `go test ./top/ -run 'Test_composeCmdline|Test_cmdlineTokens|Test_filterToken|Test_setCmdlineConfig|Test_printCmdlineNilGui'`
@@ -235,11 +236,10 @@ message on the failure transition, latched, exactly like `verboseTooShortShown`.
 
 **The latch is not yours to build.** The failure is observable only *inside* the repaint closure,
 which lives in `repaintStored` (`top/pause.go`), and Decision 6 assigns that closure, its error
-policy and the latch to Task 3 — which ships the latch as a separately callable unit of state
-precisely so this task can test it. Your job here is exactly two things: wire the resize trigger
-into the existing repaint path (the `repaintStored(app)` call), and add `Test_repaintFailureLatch`
-to `top/ui_test.go` driving Task 3's latch unit. A test file may exercise a function declared in
-another file of the same package, so this needs no edit to `top/pause.go`.
+policy and the latch to Task 3 — which also owns its test. Your job here is exactly one thing: wire
+the resize trigger into the existing repaint path (the `repaintStored(app)` call). Do not add a latch
+test of your own: Task 3's `Test_repaintFailureLatch_reportsOncePerTransition` already covers it, and
+a same-prefix test here would make this task's `-run` pattern pass without any work being done.
 
 **If Task 3 did not ship the latch as a callable unit — stop and report.** Do not edit
 `top/pause.go`, and do not implement a latch of your own in `top/ui.go`: a latch declared here would

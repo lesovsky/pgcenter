@@ -74,7 +74,7 @@ core (`renderFrame`) — the seam exists already; do not redesign it, fill it.
   in `top/stat.go`/`top/pause.go` — **do not touch `top/extra.go`**, which Task 5 owns.
 - **Put the drop OUTSIDE the extra-panel block — this is the easy thing to get wrong.** The entire
   extra render section, `switch` included, is wrapped in
-  `if app.config.view.ShowExtra > stat.CollectNone {` (`top/stat.go:200`). The single most important
+  `if app.config.view.ShowExtra > stat.CollectNone {` (`top/stat.go:201`). The single most important
   case for the drop is `ShowExtra == stat.CollectNone` — the panel is **closed** — and in that case
   control never enters the block at all. A drop written inside the block, or inside the `switch`'s
   `default:`, silently never runs for a closed panel, and a repaint after closing the panel would
@@ -133,7 +133,7 @@ splitting capture and drop into two entry points is what lets the two predicates
   once per `ShowExtra` value — `stat.CollectNone`, `CollectDiskstats`, `CollectNetdev`,
   `CollectFsstats` — and assert both stored fields are nil/empty every time. `CollectNone` is the
   row that matters and the row a careless implementation misses, because the live render's whole
-  extra section is wrapped in `if app.config.view.ShowExtra > stat.CollectNone` (`top/stat.go:200`)
+  extra section is wrapped in `if app.config.view.ShowExtra > stat.CollectNone` (`top/stat.go:201`)
   and a drop written inside that block never executes for a closed panel. Table this over the four
   values explicitly rather than testing one representative value.
 - `top/pause_test.go::Test_frameStore_syncLogtail_capturesOnlyForLogtail` — a non-empty buffer
@@ -150,16 +150,24 @@ splitting capture and drop into two entry points is what lets the two predicates
 - `top/stat_test.go::Test_repaintLogtail_noFileAccess` — **the adversarial test; build the adversary
   usable, not broken.** Write a real file into `t.TempDir()`, e.g.
   `adversary.log` containing `"ADVERSARY LINE — MUST NOT APPEAR\n"`, and set
-  `config.logtail = stat.Logfile{Path: <that path>, Size: 4242}` with `Open()` called on it, so the
+  `config.logtail = stat.Logfile{Path: <that path>, Size: 1}` with `Open()` called on it, so the
   descriptor is live and the sentinel `Size` differs from the file's real size (making
-  `readLogfileRecent`'s "unchanged file" early return *not* fire). Seed the store with a different
+  `readLogfileRecent`'s "unchanged file" early return *not* fire).
+
+  **The sentinel must be SMALLER than the file, not larger.** With a larger sentinel the live branch
+  takes the rotation path instead (`size < logtail.Size` at `top/stat.go:233` is true), calls
+  `Reopen` on a nil database handle and panics before ever reaching `logtail.Size = size` — so a
+  file-touching implementation would die for the wrong reason and assertion 4 below would hold for
+  both implementations, which is precisely the weakness this rewrite exists to remove. With
+  `Size: 1` the early return does not fire, rotation is skipped, the read succeeds, and every
+  assertion discriminates. Seed the store with a different
   pair: `("/var/log/postgresql/A.log", []byte("line1\nline2\n"))`. Render the repaint's logtail
   source into a `*bytes.Buffer` and assert **all four**:
   1. the output is byte-exactly the stored pair — header `\033[30;47m/var/log/postgresql/A.log:\033[0m\n`
      plus `line1\nline2\n`, nothing more;
   2. the output contains neither `"ADVERSARY"` nor the temp path;
   3. no error is returned and nothing panics;
-  4. `config.logtail.Size` is still `4242` — a real read reaches `logtail.Size = size` and would
+  4. `config.logtail.Size` is still `1` — a real read reaches `logtail.Size = size` and would
      overwrite it with the file's actual size.
 
   Every assertion now does work: because the file is readable and the descriptor is open, an
@@ -177,7 +185,7 @@ splitting capture and drop into two entry points is what lets the two predicates
       file's header.
 - [ ] The stored logtail pair is dropped on the live path when the panel is not showing the log —
       **including `ShowExtra == stat.CollectNone`**, i.e. the decision is made outside the
-      `if app.config.view.ShowExtra > stat.CollectNone` block at `top/stat.go:200`, not inside it.
+      `if app.config.view.ShowExtra > stat.CollectNone` block at `top/stat.go:201`, not inside it.
 - [ ] The capture/drop decision has exactly one call site on the live path, reached for every
       `ShowExtra` value, and its full truth table is covered by store-level tests.
 - [ ] The store is written on the live path only; a repaint performs no store write (Decision 2).
@@ -269,11 +277,19 @@ splitting capture and drop into two entry points is what lets the two predicates
     `printLogtail(v, logtail.Path, buf)`. Change: keep all of it; the case body additionally assigns
     the shown `buf` and `logtail.Path` into two locals declared before the extra-panel block.
   - *Placement of the sync call — the trap.* The extra section, `switch` and all, is inside
-    `if app.config.view.ShowExtra > stat.CollectNone {` at `:200`. `stat.CollectNone` is `iota == 0`
+    `if app.config.view.ShowExtra > stat.CollectNone {` at `:201`. `stat.CollectNone` is `iota == 0`
     (`internal/stat/stat.go:26`), so a **closed panel skips the entire block** — and a closed panel
-    is precisely the case the drop exists for. The single `store.syncLogtail(app.config.view.ShowExtra, logPath, logBuf)`
-    call therefore goes at the closure's tail, after the block's closing brace, where it runs for
-    every `ShowExtra` value. Structurally:
+    is precisely the case the drop exists for. The single `syncLogtail(app.config.view.ShowExtra,
+    logPath, logBuf)` call therefore goes after the block's closing brace, where it runs for every
+    `ShowExtra` value.
+
+    **Second trap, and it is the one that compiles and passes every test in this task:** by the time
+    this wave runs, that tail belongs to the **shared** `renderFrame` (task 03), not to the live
+    closure — so an unconditional call there would also write the store on the *repaint* path,
+    contradicting this task's own first rule and task 03's Decision 2. The call must go **inside
+    task 03's live-only publish step**, which task 03 places at the tail of `renderFrame` behind a
+    named helper taking a params value precisely so this wave can extend it. Do not add a second
+    call site, and do not change the core's signature. Structurally:
 
     ```go
     var logPath string
@@ -283,9 +299,15 @@ splitting capture and drop into two entry points is what lets the two predicates
         // … switch …; the CollectLogtail case sets logPath/logBuf
     }
 
-    app.frame.syncLogtail(app.config.view.ShowExtra, logPath, logBuf)
+    // task 03's helper; publishes only when the params say "live"
+    publishFrame(app, params, logPath, logBuf)
     return nil
     ```
+
+    The store-level tests in this task pin the method's behaviour, not the call site, so neither they
+    nor a bracket-counting review would catch a call placed on the shared path. The placement
+    verification step below is what covers it — read the call site, and confirm it is reached only
+    when the params describe the live path.
 
     Capture and drop in one function keeps "the shown lines" and "the frame" agreeing with no lock
     (code-research §17.2) and makes the non-empty predicate a single named, unit-testable place.

@@ -1,0 +1,196 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "iteration": 2,
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "status": "approved",
+  "round1_fixes_verified": [
+    {
+      "task": "07",
+      "fix": "Протокол expected/gap для failure latch убран; latch отдан Task 3",
+      "landed": true,
+      "evidence": "Details -> 'The latch is not yours to build' (стр. 236-242) ссылается на tech-spec Decision 6, стр. 229: '**The failure latch of Decision 5 belongs to Task 3** ... Task 7 only wires the resize trigger into it.' Task 03 действительно везёт latch: 'What to do' стр. 104-119 и AC стр. 256. Остался только страховочный вариант 'если Task 3 не привезла — остановиться и доложить' (стр. 244-249), без ветки 'реализовать самому' — это допустимая форма.",
+      "residual": "Дубль теста, см. finding TASK07-DUP"
+    },
+    {
+      "task": "07",
+      "fix": "Двухслойный шов sizeChanged + resizeDetector.observe слит в один, height-only сохранён, счётчик тестов исправлен на 9",
+      "landed": true,
+      "evidence": "'What to do' -> 'One layer, not two' (стр. 55-60); AC стр. 113 'grep -n \"func sizeChanged\" top/ui.go finds nothing'; TDD Anchor содержит строку 'paused, **height only** changed (190,52) -> (190,24) -> true. Do not omit this row' (стр. 90-91); '365 lines, 9 top-level tests' в 'What to do' стр. 75 и в Context Files стр. 166 — проверено по репозиторию: wc -l top/ui_test.go = 365, grep -c '^func Test' = 9."
+    },
+    {
+      "task": "08",
+      "fix": "Каждый тест, идущий по filter-пути, строит реальный view.View",
+      "landed": true,
+      "evidence": "Требование продублировано в трёх местах: 'What to do' стр. 65-70, блок 'Fixture precondition for the two filter-path tests below' в TDD Anchor стр. 77-87 (с готовым фикстур-снипетом), Details -> 'Config fixture — required in every test that reaches setFilter, not just the geometry ones' стр. 221-236. Оба filter-теста повторяют требование индивидуально (стр. 93-94, 97-100). Факт проверен по коду: newConfig() (top/config.go:44-51) заполняет только views и viewCh, config.view — нулевой view.View, поле Filters nil."
+    },
+    {
+      "task": "09",
+      "fix": "Сброс при закрытии панели вынесен за пределы блока if ShowExtra > CollectNone",
+      "landed": true,
+      "evidence": "'What to do' -> 'Put the drop OUTSIDE the extra-panel block — this is the easy thing to get wrong' (стр. 75-85); AC стр. 172-174; TDD Anchor Test_frameStore_syncLogtail_dropsForEveryNonLogtailShowExtra с явной таблицей по CollectNone/Diskstats/Netdev/Fsstats (стр. 125-132); Details -> 'Placement of the sync call — the trap' со структурным эскизом (стр. 265-282); Verification Steps -> 'Read the drop's placement, do not infer it' (стр. 244-248). Четыре независимых упоминания — пропустить трудно."
+    },
+    {
+      "task": "09",
+      "fix": "Adversarial no-file-access тест перестроен на реальный читаемый файл в t.TempDir()",
+      "landed": true,
+      "evidence": "TDD Anchor Test_repaintLogtail_noFileAccess (стр. 144-162): реальный adversary.log в t.TempDir(), Open() на дескрипторе, sentinel Size: 4242 отличается от реального размера (чтобы не сработал ранний возврат readLogfileRecent), четыре обязательных ассерта, и явное объяснение, почему прежняя версия (несуществующий путь) ничего не доказывала. Продублировано в AC стр. 182-183."
+    },
+    {
+      "task": "09",
+      "fix": "Writer-шов принимает bytes.Buffer",
+      "landed": true,
+      "evidence": "'What to do' стр. 92-99: renderLogtail(w io.Writer, path string, buf []byte) error, 'by typing its sink as io.Writer, so a test can hand it a *bytes.Buffer', плюс запрет на nil *gocui.View с объяснением про non-nil интерфейс. AC стр. 180-181; Details стр. 301-304."
+    },
+    {
+      "task": "09",
+      "fix": "top/pause_test.go остаётся зафиксированным отклонением, сброс при закрытии — уже НЕ отклонение",
+      "landed": true,
+      "evidence": "Details -> Files, стр. 305-307: 'This file is not in the tech-spec's file list for Task 9 ... Note the deviation in the decisions-log entry'. Post-completion стр. 376-379: 'Известное отклонение ровно одно: тесты в top/pause_test.go ... Сброс сохранённого буфера при закрытии панели **отклонением не является** — правило поднято в tech-spec, Decision 7'. Проверено: tech-spec Decision 7 (стр. 235-240) действительно содержит 'The stored pair is **dropped on the live path when the panel is not showing the log**', а строка Task 9 в таблице Implementation Tasks (стр. 648) по-прежнему перечисляет только top/stat.go, top/pause.go, top/stat_test.go — то есть pause_test.go остаётся законным отклонением."
+    },
+    {
+      "task": "10",
+      "fix": "Исключение для S/L требует cmdline-сообщения как доказательства",
+      "landed": true,
+      "evidence": "AC стр. 117-118: 'Every step-7 key that did **not** lift the pause is backed by the cmdline message proving its early return. A non-lift with no such message is recorded as FAIL, not as an exemption.' Edge case стр. 231-249 приводит точные сообщения и их места в коде (top/config_view.go:340, top/extra.go:37,50,53,57) и объясняет, почему на стенде Local == true и обе клавиши обязаны снимать паузу."
+    },
+    {
+      "task": "10",
+      "fix": "Недоступный logtail -> критерий 10 помечается NOT VERIFIABLE",
+      "landed": true,
+      "evidence": "AC стр. 119-120 и edge case 'The logtail panel could not be opened' стр. 250-255 с прямым запретом засчитывать unit-тесты Task 9 вместо стенда."
+    },
+    {
+      "task": "10",
+      "fix": "Добавлен стендовый шаг для пути 'меню E -> редактор'",
+      "landed": true,
+      "evidence": "'What to do' -> шаг '7e — the editor round-trip' (стр. 74-80), включая учёт remote-гварда editPgConfig (top/pgconfig.go:71-74); AC стр. 114-116; edge case 'Menu E is deliberately excluded from the lifting set — and the exclusion is verified, not inferred' стр. 259-265."
+    },
+    {
+      "task": "10",
+      "fix": "Критериям 11, 14 и 18 назначены именованные источники доказательств",
+      "landed": true,
+      "evidence": "Implementation hints стр. 292-301: критерий 14 -> capture стендового шага 2 через интервал; критерий 11 -> unit-тест Task 6 + capture шага 7f; критерий 18 -> unit-тест Task 8 + capture шага 6a. Нумерация критериев сверена с user-spec: 6 = снимающие действия, 7 = меню/исключение E, 10 = панель логов, 11 = строка про Space в справке, 12 = выход из пейджера/редактора, 14 = повторный Space, 16 = восстановление маркера, 18 = укороченная подсказка — все совпадают."
+    },
+    {
+      "task": "07,08,09",
+      "fix": "verify-строки исполнимы без живого PostgreSQL",
+      "landed": "partial",
+      "evidence": "07: -run 'Test_resizeDetector|Test_repaintFailureLatch' -race; 08: -run 'Test_applyFilter|Test_dialog'; 09: -run 'Logtail|logtail'. Все три паттерна покрывают ровно имена из TDD Anchor соответствующих задач и не требуют кластера; в Verification Steps каждой явно сказано не выдавать частичный прогон за полный. Task 06 не тронута (mtime 18:42 против 19:04-19:05 у остальных) и сохранила verify: bash — go test ./top/... — см. finding TASK06-VERIFY."
+    }
+  ],
+  "targeted_checks": [
+    {
+      "check": "1. Раздел волны 4 не поехал: 07 владеет top/ui.go, 08 владеет top/dialog.go, ни одна не правит top/pause.go",
+      "result": "OK",
+      "detail": "Task 07: AC стр. 122-123 ('top/pause.go is not modified by this task; git diff --stat shows only top/ui.go and top/ui_test.go'), Details -> Dependencies стр. 227-229 ('Task 8 owns top/dialog.go this wave. top/pause.go is owned by **nobody** in Wave 4 — read it, call into it, do not edit it. If you conclude an edit there is unavoidable, stop and report rather than edit'), Context Files помечает top/pause.go как 'read only, do not modify'. Task 08: AC стр. 128-129, Verification Steps стр. 189-191 ('Any hit on top/ui.go, top/pause.go or top/config_view.go is a wave-partition violation (Task 7 owns top/ui.go this wave)'), Details -> Wave partition стр. 242-244. Совпадает с tech-spec стр. 652-653."
+    },
+    {
+      "check": "2. top/pause_test.go у Task 09 — по-прежнему отклонение; правило сброса при закрытии — уже нет",
+      "result": "OK",
+      "detail": "См. round1_fixes_verified. Обе половины сформулированы ровно так, как требовалось, и обе сверены с tech-spec (таблица файлов Task 9 и Decision 7)."
+    },
+    {
+      "check": "3. Task 10 остаётся QA-задачей: нет TDD Anchor, reviewers пуст, skill pre-deploy-qa",
+      "result": "OK",
+      "detail": "frontmatter: skills: [pre-deploy-qa], reviewers: [], verify: bash. Секции: Title, Required Skills, Description, What to do, Acceptance Criteria, Context Files, Verification Steps, Details, Reviewers, Post-completion — TDD Anchor отсутствует, как и положено non-code задаче. Секция Reviewers присутствует и согласована с пустым frontmatter ('None — a QA task carries no reviewers by the catalogue'). Единственный требуемый скилл продублирован в Required Skills."
+    },
+    {
+      "check": "4. Ни один критерий приёмки не ссылается на удалённый тест или на убранную ветку протокола",
+      "result": "OK с одной оговоркой",
+      "detail": "Task 07: AC ссылаются только на Test_resizeDetector и Test_repaintFailureLatch — оба есть в TDD Anchor; AC про sizeChanged сформулирован как отрицание ('grep finds nothing'), то есть ссылки на удалённый юнит нет. Task 08: пять AC-относимых тестов совпадают с TDD Anchor и с verify-паттерном. Task 09: verify -run 'Logtail|logtail' покрывает все семь якорей. Task 06: три якоря = три AC. Оговорка одна — AC Task 07 про latch (finding TASK07-DUP): он не ссылается на удалённый тест, но и не является достижением этой задачи, поскольку тест уже везёт Task 03."
+    }
+  ],
+  "findings": [
+    {
+      "id": "TASK06-VERIFY",
+      "severity": "major",
+      "category": "frontmatter",
+      "task": "06",
+      "section": "frontmatter -> verify",
+      "issue": "Инструкция раунда 2 «verify-строки должны быть исполнимы без живого PostgreSQL» применена к задачам 07, 08, 09, но не к 06: там осталось verify: \"bash — go test ./top/...\". Это полный прогон пакета, который сама же задача в Verification Steps (стр. 144-148) описывает как падающий/паникующий без fixture-кластеров: «часть тестов пакета top ходит в живые fixture-кластеры ... и без них пакет падает/паникует независимо от этой правки». Итог: объявленный шлюз задачи заведомо не зелёный в среде без кластера, тогда как у соседей по батчу он точечный. Файл не редактировался в раунде 2 (mtime 18:42 против 19:04-19:05 у 07-10).",
+      "fix": "Заменить на точечный прогон, совпадающий с TDD Anchor и с первым шагом Verification Steps: verify: bash — `go test ./top/ -run Test_helpTemplate`. Полный ./top/... оставить в Verification Steps с уже написанной там оговоркой про предусловие."
+    },
+    {
+      "id": "TASK07-DUP",
+      "severity": "major",
+      "category": "decomposition",
+      "task": "07",
+      "section": "TDD Anchor / Acceptance Criteria",
+      "issue": "Раунд 1 снял с задачи 07 реализацию failure latch, но оставил ей тест — а этот тест уже полностью принадлежит Task 03. Task 03 везёт top/pause_test.go::Test_repaintFailureLatch_reportsOncePerTransition (TDD Anchor стр. 218-226) ровно с той же последовательностью fail -> fail -> fail -> success -> fail и с тем же утверждением «ровно одно сообщение на переход», и закрывает его собственным AC (стр. 256). Task 07 добавляет top/ui_test.go::Test_repaintFailureLatch с идентичным содержанием (стр. 97-101) и AC стр. 125-126. Два следствия: (а) дублирующее покрытие одного юнита в двух файлах одного пакета — dev-test-reviewer это отдельно отметит; (б) AC «The repaint failure latch of Task 3 is covered by a test proving exactly one cmdline message per failure transition» истинен ещё до старта Task 07, то есть не проверяет её работу. Тот же дефект попал в verify: паттерн -run 'Test_repaintFailureLatch' по префиксу матчит тест Task 03, поэтому verify задачи 07 пройдёт зелёным, даже если она не напишет ни строки теста. Побочно: в Details остаётся страховочная ветка «если Task 3 не привезла latch — остановиться и доложить» (стр. 244-249) — сама по себе она нормальна, но при безусловном AC создаёт вторую, невыполнимую траекторию задачи.",
+      "fix": "Убрать Test_repaintFailureLatch из TDD Anchor задачи 07, соответствующий AC (стр. 125-126) и упоминание в verify-паттерне — оставить verify: bash — `go test ./top/ -run Test_resizeDetector -race`. Вместо AC про покрытие поставить проверяемое здесь: «В top/ui.go не объявлено latch-состояние (grep -n 'latch' top/ui.go пусто), latch и его тест принадлежат Task 3». Страховочную ветку в Details сохранить как «stop and report», но привязать её к отсутствию юнита, а не к отсутствию теста."
+    },
+    {
+      "id": "TASK07-SPEC-SIZECHANGED",
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "07",
+      "section": "Acceptance Criteria",
+      "issue": "Слияние двух слоёв в один выполнено в задаче, но tech-spec остался рассинхронизирован: Testing Strategy -> Unit tests, стр. 533, по-прежнему называет `sizeChanged(lastX, lastY, x, y)` — «a pure helper, table-tested», а таблица Agent Verification Plan для задачи 7 — «size-change helper table». Задача теперь прямо это запрещает (AC стр. 113: grep 'func sizeChanged' ничего не находит) и объясняет замену в 'What to do' стр. 55-60, поручая записать отклонение в decisions log. Формально пункт tech-spec не потерян (его покрывает табличный тест слитого юнита), но противоречие текстов остаётся до постфактум-отчёта, и ревьюер, читающий tech-spec, увидит несоответствие.",
+      "fix": "Поправить tech-spec: стр. 533 переписать на «resizeDetector.observe(paused, x, y) — a stateful unit, table-tested (the size comparison is one expression and needs no separate helper)», и в таблице Agent Verification Plan строку задачи 7 — на «detector observe table». Тогда отклонение исчезнет и Task 07 менять не потребуется."
+    },
+    {
+      "id": "TASK09-NAMING",
+      "severity": "minor",
+      "category": "consistency",
+      "task": "09",
+      "section": "TDD Anchor",
+      "issue": "Расхождение имён внутри одной задачи: 'What to do' (стр. 82-85), Details (стр. 268-285) и AC (стр. 175-176) прописывают ОДИН вход — syncLogtail(show, path, buf) — и требуют «exactly one call site», а два первых якоря названы Test_frameStore_storeLogtail_emptyReadKeepsBuffer и Test_frameStore_storeLogtail_commitsPathAndBufferTogether, то есть по методу storeLogtail, которого в задаче нигде больше нет. При этом правило «тихий лог не затирает буфер» уже покрыто четвёртым якорем (Test_frameStore_syncLogtail_capturesOnlyForLogtail). Исполнитель может либо завести второй метод (против AC про единственную точку), либо написать два теста об одном и том же.",
+      "fix": "Переименовать первые два якоря в Test_frameStore_syncLogtail_* и явно сказать, что все четыре store-теста гоняют один и тот же вход syncLogtail, различаясь только строкой таблицы истинности; либо, если storeLogtail задуман как внутренняя половина, назвать её в 'What to do' и в Details, чтобы имя не появлялось впервые в якорях."
+    },
+    {
+      "id": "TASK09-LINEREFS",
+      "severity": "minor",
+      "category": "content",
+      "task": "09",
+      "section": "What to do / Details / Verification Steps",
+      "issue": "Ключевой ориентир «блок if app.config.view.ShowExtra > stat.CollectNone» указан как top/stat.go:200 в четырёх местах (стр. 78, 130, 174, 245) — в рабочем дереве это строка 201. Аналогично: живая logtail-ветка названа `:226-249` (фактически case на 225, тело до 249), детектор ротации `:233-240` (фактически 232-240). Смещение на единицу, к моменту волны 5 номера всё равно уедут после задач 1-8 — но именно эти ссылки задача велит проверять глазами («Read the drop's placement, do not infer it»), и мимо неточного номера исполнитель пройдёт лишний круг.",
+      "fix": "Заменить точные номера на якоря по тексту: «блок, открывающийся строкой `if app.config.view.ShowExtra > stat.CollectNone {` (~top/stat.go:201, номер уедет после задач 1-8)». Остальные ссылки на stat.go в этой задаче — тем же способом."
+    },
+    {
+      "id": "TASK06-PROJECTMD",
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "Context Files",
+      "issue": "Повтор находки раунда 1, не исправлен. В блоке Project knowledge нет project.md (файла действительно нет: в .claude/skills/project-knowledge/ лежат architecture.md, deployment.md, overview.md, patterns.md), и, в отличие от задач 07-10, нет ремарки «there is no project.md in this repo; overview.md is its equivalent». Исполнитель Task 06 — единственный, кто может решить, что документ забыли.",
+      "fix": "Добавить ту же ремарку к строке overview.md, что стоит в задачах 07, 08, 09 и 10."
+    },
+    {
+      "id": "TASK06-LANG",
+      "severity": "minor",
+      "category": "consistency",
+      "task": "06",
+      "section": "весь файл",
+      "issue": "Повтор находки раунда 1, не исправлен. Task 06 написана целиком по-русски, задачи 07-10 — по-английски (русскими там остались только Required Skills и Post-completion). Глобальное правило проекта относит технические документы к английскому.",
+      "fix": "Перевести описательные секции Task 06 на английский либо зафиксировать смешанный режим как осознанный в decisions log. Само содержание задачи качественное — правка чисто языковая."
+    },
+    {
+      "id": "BATCH-VERIFY-FORMAT",
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "07",
+      "section": "frontmatter -> verify",
+      "issue": "Повтор находки раунда 1, не исправлен (относится к 07, 08, 09; в 06 — та же форма, но ещё и в кавычках). По шаблону verify — инструмент верификации (bash, curl, user), а в значение вынесена целая команда: verify: bash — `go test ./top/ ...`. Task 10 и Task 02 оформлены по шаблону: verify: bash, команда в комментарии. Сами команды при этом теперь корректные — замечание чисто о поле.",
+      "fix": "Оставить в значении verify: bash, команду перенести в YAML-комментарий той же строки (как в Task 10) — она всё равно продублирована в Verification Steps."
+    },
+    {
+      "id": "BATCH-DETAILS-CODE",
+      "severity": "minor",
+      "category": "content",
+      "task": "08",
+      "section": "Details -> Files / Implementation hints",
+      "issue": "Повтор находки раунда 1, не исправлен. В Details приведена готовая строка места вызова: `message = applyFilter(answer, app.config, func() { repaintStored(app) })` (стр. 211). То же по духу в Task 07 (пошаговое ветвление observe, стр. 210-212) и в Task 09 (структурный Go-эскиз, стр. 272-282). Шаблон требует в Implementation hints подсказки, а не псевдокод. Смягчающее: все три задачи сопровождают код оговорками «adapt if you find something cleaner» / «or an equivalent shape», а фикстур-снипеты в Task 08 и 09 (построение view.View, t.TempDir) относятся к тестовым данным и уместны.",
+      "fix": "Оставить сигнатуру и свойства (записывать размер до ответа; repaint передаётся как bare func(), чтобы store был недостижим; sync вызывается за пределами блока), убрать готовые строки места вызова. Либо зафиксировать текущий уровень детализации как осознанный — задачи одинаково подробны во всём батче."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 9,
+    "critical": 0,
+    "major": 2,
+    "minor": 7,
+    "round1_fixes_landed": 11,
+    "round1_fixes_partial": 1
+  }
+}

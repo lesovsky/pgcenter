@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash                       # go test ./top/...
+verify: bash — `go test ./top/ -run '[Pp]ause|[Cc]mdline'`   # targeted: -run is CASE-SENSITIVE; the full ./top/... run needs live fixture clusters
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]
 teammate_name:
 ---
@@ -102,7 +102,7 @@ Extending `top/ui_test.go` (the file exists — extend it, never overwrite):
 - [ ] `composeCmdline` and `renderCmdlineTokens` are unchanged.
 - [ ] `top/pause.go` and `top/pause_test.go` are created; `top/ui_test.go` is extended and all its
       existing tests still pass unmodified in substance.
-- [ ] `go test ./top/ -run 'Pause|Cmdline'` passes; `make lint` clean (in particular `go vet`
+- [ ] `go test ./top/ -run '[Pp]ause|[Cc]mdline'` passes; `make lint` clean (in particular `go vet`
       copylocks — see Edge cases). The full `./top/...` run additionally needs the fixture clusters
       on ports 21914-21919 — without them `top/report_test.go` panics on a nil connection, which is
       an environment condition rather than a failure of this task.
@@ -136,8 +136,8 @@ Extending `top/ui_test.go` (the file exists — extend it, never overwrite):
 
 ## Verification Steps
 
-- `go test ./top/...` — all green, including the pre-existing `Test_composeCmdline*` cases.
-- `go test ./top/... -run 'Pause|Cmdline' -v` — the new tests are actually being run (a `_test.go`
+- `go test ./top/ -run '[Pp]ause|[Cc]mdline' -v` — green, and the pre-existing `Test_composeCmdline*` cases appear in the output alongside the new ones.
+- Check the `-v` list names every test this task adds — `-run` matches function names **case-sensitively**, so a capitalised pattern matches nothing and still exits 0 with "no tests to run" (a `_test.go`
   file with a typo'd name or a wrong package silently runs nothing).
 - `go vet ./top/...` — no copylocks complaint about `config` (the new field embeds `noCopy`).
 - `make lint` — clean.

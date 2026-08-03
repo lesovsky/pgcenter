@@ -154,6 +154,13 @@ unconditional.
   source and whether publishing happens — and put the publish step behind a helper that takes that
   value. Then the invariant "the repaint path never publishes" is checkable by a test that calls those
   two constructors and the helper, instead of resting on a reviewer's reading of the closure.
+- **Where the publish helper is called, and why it is load-bearing for wave 5.** Call it at the
+  **tail** of `renderFrame`, after the panel/table rendering and after the extra-panel block — not
+  before the rendering. Task 9 (wave 5) has to attach the logtail capture to the live side of exactly
+  this step, and it is forbidden from changing the core's signature; if the publish step sits
+  anywhere else, or is inlined instead of being a named helper, task 9 cannot land its capture on the
+  live path without reopening this seam. State in the code comment that the params value is the
+  extension point for later waves, so the next author does not "simplify" it away.
 
 **5. Guard the bare send (`top/stat.go:130`).** Wrap `statCh <- stat.Stat{Error: err}` in a `select`
 with `ctx.Done()`, mirroring the guarded send at `top/stat.go:72-79` (on cancel: close the channel and

@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/...` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'printDataCell|printStatData'`   # targeted: -run is CASE-SENSITIVE; the full ./top/... run needs live fixture clusters
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -86,7 +86,7 @@ Write these first, watch the first one fail against the current implementation, 
 - [ ] The zero/negative-width branch still returns an error and prints nothing.
 - [ ] New test proves the source value is unchanged after a render that truncates it.
 - [ ] New test proves a second render at a larger column width shows the full original value.
-- [ ] `go test ./top/ -run 'PrintDataCell|PrintStatData'` passes; `make lint` is clean.
+- [ ] `go test ./top/ -run 'printDataCell|printStatData'` passes; `make lint` is clean.
       (The full `./top/...` run additionally needs the fixture clusters on ports 21914-21919 —
       without them `top/report_test.go` panics on a nil connection. That is an environment
       condition, not a failure of this task.)
@@ -118,8 +118,12 @@ Write these first, watch the first one fail against the current implementation, 
 
 ## Verification Steps
 
-- Run `go test ./top/...` — all tests pass, including `Test_printStatData_truncation` in its
-  original form and the two new tests.
+- Run `go test ./top/ -run 'printDataCell|printStatData' -v` — the two new tests and
+  `Test_printStatData_truncation` all appear in the output and pass. Note `-run` matches function
+  names **case-sensitively**: a capitalised pattern such as `PrintDataCell` matches nothing and still
+  exits 0 with "no tests to run", so a green run proves nothing unless the test names appear.
+- The full `go test ./top/...` run additionally needs the fixture clusters on ports 21914-21919;
+  without them `top/report_test.go` panics on a nil connection, which is an environment condition.
 - Run `git diff top/stat_test.go` — the diff only **adds** tests; no existing assertion was relaxed
   or deleted.
 - Run `grep -rn "s.Result.Values\[" top/*.go` (non-test files) — every hit is a read; no assignment

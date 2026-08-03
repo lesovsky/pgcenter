@@ -3,7 +3,7 @@ status: planned
 depends_on: ["03"]
 wave: 3
 skills: [code-writing]
-verify: "bash — go test ./top/..."
+verify: "bash — go test ./top/ -run Test_helpTemplate"   # targeted: the full ./top/... run needs the live fixture clusters
 reviewers: [dev-code-reviewer, dev-test-reviewer]
 teammate_name:
 ---

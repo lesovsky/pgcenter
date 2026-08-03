@@ -566,6 +566,12 @@ repository.
 
 ### Per-task verification
 
+**Run tests targeted, not package-wide.** `go test ./top/...` needs the fixture clusters on ports
+21914-21919 — without them `top/report_test.go` panics on a nil connection, which reads as a broken
+build. Each task therefore carries a `-run` pattern for its own tests. Note `-run` matches function
+names **case-sensitively**: a capitalised pattern that matches nothing still exits 0 with "no tests
+to run", so a green targeted run only counts if the expected test names appear in `-v` output.
+
 | Task | verify: | What to check |
 |------|---------|--------------|
 | 1 | bash | `go test ./top/...` — truncation output unchanged, source value unmutated |
