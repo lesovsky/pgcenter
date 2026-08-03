@@ -13,7 +13,7 @@
   "phases": {
     "user_spec": {
       "started": "2026-08-03 12:26:38",
-      "ended": null,
+      "ended": "2026-08-03 17:37:00",
       "human_wait_time_min": 0
     },
     "tech_spec": null,
@@ -22,8 +22,8 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "validation_rounds": { "user_spec": 3 },
+    "validation_findings": { "critical": 4, "major": 17, "minor": 34 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null

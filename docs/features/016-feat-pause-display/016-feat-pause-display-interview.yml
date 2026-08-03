@@ -9,8 +9,8 @@ interview_metadata:
   work_type: "feature"
   started: "2026-08-03 12:26:38"
   last_updated: "2026-08-03 12:35:00"
-  status: "in_progress"
-  can_resume: true
+  status: "completed"
+  can_resume: false
   current_question_num: 24
   feature_size: "M"
 
@@ -724,7 +724,7 @@ phase3_integration:
 
 phase4_completion:
   userspec_file: "docs/features/016-feat-pause-display/016-feat-pause-display.md"
-  status: "created"
+  status: "approved"
 
 decision_rules:
 
