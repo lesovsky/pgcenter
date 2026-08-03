@@ -23,7 +23,7 @@
     },
     "task_decomposition": {
       "started": "2026-08-03 21:10:00",
-      "ended": null,
+      "ended": "2026-08-03 23:55:00",
       "human_wait_time_min": 0
     },
     "feature_execution": null,
@@ -32,7 +32,8 @@
   "quality": {
     "validation_rounds": {
       "user_spec": 3,
-      "tech_spec": 3
+      "tech_spec": 3,
+      "task_decomposition": 2
     },
     "validation_findings": {
       "critical": 12,
@@ -51,7 +52,7 @@
     "interview_questions": 24,
     "tasks_count": 10,
     "waves_count": 6,
-    "agents_spawned": 10,
-    "commits_count": 0
+    "agents_spawned": 23,
+    "commits_count": 13
   }
 }
