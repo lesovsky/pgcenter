@@ -436,8 +436,13 @@ phase1_feature_overview:
       LIFTS: sort (arrows ←→, `<`); `,` sys tables; `I` idle conns; `A` age; every screen switch
       (letter keys, menus, `S` procpidstat); `v` verbose; `B`/`N`/`F`/`L` side panels.
       KEEPS: `/` filter and `\` clear filters (render-time — top/stat.go:743); `[`/`]` scroll and
-      ↑↓ width; terminal resize; pager/editor return (`l`, `C`, `~`); DB actions (`-`, `_`, `k`,
-      `K`, `R`, `G`, `n`); `z` refresh interval; `Q` reset stats; `h` help; `m` mask.
+      ↑↓ width; terminal resize; UI-rebuild paths — pager `l`, config view `C`, psql `~`, query
+      report `G`, config editor `E` (menu selection); DB actions (`-`, `_`, `k`, `K`, `R`); the
+      mask dialog `n` and its display `m`; `z` refresh interval; `Q` reset stats; `h` help.
+      Refined in validation: opening a menu or dialog and leaving it with `Esc` never lifts the
+      pause — only an applied value or a menu selection does. Handlers that exit early without
+      doing anything (`x` without pg_stat_statements, `S` on a remote connection, `L` with an
+      unreadable log file) do not lift it either.
       REQUIREMENT that follows: the lifting set must be documented on the help screen, not only in
       the spec — an unexplained lift reads as a defect and invites a bug report.
       Error frames are NOT exempt: the gate is unconditional.
@@ -516,6 +521,11 @@ phase2_user_experience:
       DECIDED — filter (`/`, `\`) applies to the stored frame without lifting the pause, because
       filtering is a render-time operation (top/stat.go:743).
       DECIDED — `Space` before the first frame engages the pause; no "no frame yet" special case.
+      CORRECTED in validation round 3: the screen is simply EMPTY in that state, not showing
+      `collecting...` — that hint exists only in verbose mode (top/stat.go:150, flag set only inside
+      the verbose branch, internal/stat/stat.go:290). Consequence recorded in the spec: `[PAUSED]`
+      must be restored by its own cmdline write after a UI rebuild, independent of any frame
+      repaint, because there may be no stored frame at all.
       FOUND BY CODE RESEARCH, decided: `[`, `]`, `↑`, `↓`, `\` force their redraw today by pushing
       on viewCh (config_view.go:57-58), a frame the gate swallows — so each needs an explicit
       repaint-from-store, otherwise the key silently does nothing while paused.
@@ -573,6 +583,11 @@ phase2_user_experience:
         7. Space immediately after start, before the first frame: [PAUSED] appears, `collecting...`
            stays;
         8. widening a column while paused: the value is not permanently truncated to `...~`.
+      Extended during validation (the spec's table is authoritative): step 3a — the stored frame is
+      not replaced by later ones; 7a — opening a menu or dialog and leaving with `Esc` keeps the
+      pause; 7b — an error while paused surfaces only after resume; 7c — help and a space typed
+      into a dialog; 7d — the logtail panel neither grows while paused nor comes back empty after a
+      pager round-trip; 11 — a sweep over the whole key map proving no keypress hangs the UI.
       User: confirms on the stand that a paused screen holds under real load and that the marker is
       unmistakable.
     gaps: ""
