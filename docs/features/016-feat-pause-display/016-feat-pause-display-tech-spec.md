@@ -1,6 +1,6 @@
 ---
 created: 2026-08-03
-status: draft
+status: approved
 branch: feature/016-feat-pause-display
 size: M
 ---
@@ -323,18 +323,24 @@ do, immediately afterwards), and `changeQueryAge` returns a string that `dialogF
   - **Panel-closing path** (`top/extra.go:22`, pressing the same key again): the **refreshing**
     variant, immediately before the `return`. Nothing on this path writes the cmdline — not
     `closeExtraView`, not `layout`, not `printStat` — so a silent lift would strand the marker.
-  - **Panel-opening path:** the silent variant placed **after the `switch` and before the `viewCh`
-    push** (between `top/extra.go:62` and `:75`). It must not go inside the `case
-    stat.CollectLogtail` branch: the `B`/`N`/`F` cases never reach that code, so they would never
-    lift; and it must not go before the branch's early returns (`:51`, `:54`, `:58`), because those
-    are the "unreadable log" no-ops that the user-spec requires to leave the freeze intact.
+  - **Panel-opening path:** the silent variant placed after the `switch` **and after the
+    `openExtraView` error return** — the window is `top/extra.go:68-74`, not `:62-75`: the call at
+    `:65-67` returns early when the panel cannot be opened, and lifting above it would lift on a
+    path where nothing appeared. It must also not go inside the `case stat.CollectLogtail` branch
+    (`B`/`N`/`F` never reach that code and would never lift), nor before that branch's early returns
+    (`:51`, `:54`, `:58`), which are the "unreadable log" no-ops the user-spec requires to leave the
+    freeze intact.
 
   **Fix the cause rather than working around it:** `config.logtail.Path`/`Size` are written at
   `top/extra.go:45-46`, *before* those early returns, so a failed `L` mutates that state and the
-  branch is not a true no-op. Task 5 assigns the path and the zeroed size into locals and commits
-  them to `config` only after `os.Stat` and `Open()` both succeed. Then the three early returns
-  really do change nothing, the placement rule needs no exception, and Decision 7's promise — an
-  action that changed nothing leaves the freeze intact — is literally true rather than nearly true.
+  branch is not a true no-op. The fix is a **local `stat.Logfile` value**, not two local fields:
+  `Logfile.Open` reads `Path` from its own receiver and writes `File` back into it
+  (`internal/stat/log.go:23-27`), so the path, the zero size and the opened descriptor have to be
+  committed together. `config.logtail` is a value field (`top/config.go:22`), so the branch builds a
+  local `stat.Logfile{Path: …}`, runs `os.Stat` and `Open` against it, and assigns it to
+  `config.logtail` only on success. Then the three early returns really do change nothing, the
+  placement rule needs no exception, and Decision 7's promise is literally true rather than nearly
+  true. A commit-then-rollback variant reintroduces exactly the mutation this removes.
 
 `menuConf` (`top/menu.go:204-222`) is excluded by construction: it calls `editPgConfig` directly
 rather than going through `viewSwitchHandler`, which is exactly the behaviour required — it opens an

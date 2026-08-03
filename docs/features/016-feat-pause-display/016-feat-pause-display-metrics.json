@@ -18,7 +18,7 @@
     },
     "tech_spec": {
       "started": "2026-08-03 17:40:00",
-      "ended": null,
+      "ended": "2026-08-03 21:05:00",
       "human_wait_time_min": 0
     },
     "task_decomposition": null,
@@ -26,8 +26,8 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": { "user_spec": 3 },
-    "validation_findings": { "critical": 4, "major": 17, "minor": 34 },
+    "validation_rounds": { "user_spec": 3, "tech_spec": 3 },
+    "validation_findings": { "critical": 12, "major": 47, "minor": 63 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null

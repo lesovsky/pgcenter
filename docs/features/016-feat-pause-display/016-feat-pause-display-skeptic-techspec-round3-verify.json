@@ -1,0 +1,81 @@
+{
+  "status": "approved",
+  "summary": "Targeted round-3 verification: 5 items, 24 claims checked, 22 confirmed, 2 mirages (both major, no critical). Items 1a, 2 partially refuted; items 1b, 3, 4, 5 fully confirmed.",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 9: panel-opening lift goes 'after the switch and before the viewCh push (between top/extra.go:62 and :75)'; Decision 9 placement rule 1 requires the lift to sit after every early return of the path.",
+      "reality": "The region :62-:75 is NOT free of early returns. top/extra.go:65-67 contains `if err := openExtraView(g, v); err != nil { return err }` — an early return that lies inside the stated range. A lift placed at :63-:64 (legal per the stated range) would clear the pause on a path where the panel was never opened, violating placement rule 1. Only the sub-range :68-:74 satisfies the rule. Reachability itself is CONFIRMED: all four cases (B/N/F/L, keybindings.go:53-56) fall through the switch to :64; B/N/F have no early returns at all, L's three early returns (:51,:54,:58) and its two error returns (:38,:43) all sit inside the switch.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9, showExtra bullet, panel-opening path",
+      "fix": "Narrow the stated range to 'between top/extra.go:67 and :75' (i.e. after the openExtraView error check, before the views loop / viewCh push), or explicitly note that openExtraView's error return must precede the lift."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 9, cause-fix: 'Task 5 assigns the path and the zeroed size into locals and commits them to config only after os.Stat and Open() both succeed' — implying nothing between top/extra.go:44-60 reads config.logtail.Path expecting it to be committed.",
+      "reality": "Two of three reads are trivially substitutable (os.Stat at :49, the error message at :57), but the third is not: `app.config.logtail.Open()` at :56 is a METHOD whose body reads `l.Path` off its own receiver (internal/stat/log.go:22-30: `f, err := os.Open(l.Path)`), and on success WRITES `l.File = f` back into the same struct. So Path cannot stay in a bare local across the Open() call, and the commit is not 'path and size' — it is path, size AND the opened *os.File. The fix is achievable, but only via a local `stat.Logfile` VALUE (config.logtail is a value field, top/config.go:22), e.g. `lf := stat.Logfile{Path: logfile}; ... if err := lf.Open(); err != nil { printCmdline(...); return nil }; app.config.logtail = lf` — Size is 0 by zero-value, so no explicit zeroing is needed.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9, 'Fix the cause rather than working around it'",
+      "fix": "Reword to: 'Task 5 builds a local stat.Logfile{Path: logfile}, runs os.Stat and Open() against it, and assigns the whole value into app.config.logtail only after both succeed.' Otherwise the implementer meets the receiver dependency at :56 and is likely to fall back to commit-then-rollback, which reintroduces the mutation the fix removes."
+    }
+  ],
+  "items": [
+    {
+      "item": 1,
+      "verdict": "PARTIALLY CONFIRMED",
+      "detail": "(a) REFUTED in detail, CONFIRMED in substance — see finding 1. (b) CONFIRMED: the closing path is `if app.config.view.ShowExtra == extra` (:14) -> optional logtail.Close() with its own error return (:16-20) -> `return closeExtraView(g, v, app.config)` (:22). closeExtraView (extra.go:98-107) only resets ShowExtra on every view, pushes viewCh and calls g.DeleteView — no printCmdline. The frame that the viewCh push produces goes through printStat, whose only cmdline writes are the first-tick hint (stat.go:166) and the logtail failure messages (stat.go:229,237) — the latter now unreachable since ShowExtra is CollectNone. layout's writes (ui.go:189 uiError, ui.go:213 verbose-too-short latch) do not fire on this path. So the refreshing variant is genuinely required, and placing it immediately before the :22 return correctly sits after the Close() error return at :18."
+    },
+    {
+      "item": 2,
+      "verdict": "PARTIALLY CONFIRMED",
+      "detail": "See finding 2. Supporting line refs all check out: Path/Size written at extra.go:45-46; the three early returns of the branch at :51, :54, :58 exactly as stated; config.logtail.Size's second write site at stat.go:243 exactly as stated in Decision 7."
+    },
+    {
+      "item": 3,
+      "verdict": "CONFIRMED",
+      "detail": "gocui@v0.5.0 gui.go:311-313 — `func (g *Gui) Update(f func(*Gui) error) { go func() { g.userEvents <- userEvent{f: f} }() }`: the closure is only enqueued, never run inline. writeCmdline (top/ui.go:435-456) calls `composeCmdline(cmdlineTokens(cmdlineCfg), msg, width)` INSIDE the g.Update closure, so the token prefix — and therefore the pause flag — is read when MainLoop drains userEvents. Keybinding handlers execute on the MainLoop goroutine, so a queued userEvent cannot be processed until the handler returns. Conclusion in the spec (the lift may sit before or after the handler's own write) is CORRECT. The same holds for the 2s timer re-render at ui.go:489, which re-reads cmdlineTokens(cmdlineCfg) as well."
+    },
+    {
+      "item": 4,
+      "verdict": "CONFIRMED",
+      "detail": "internal/view/view.go: `Cols []string` (:16) has no initialiser in any literal and is populated only at top/stat.go:675 (`config.view.Cols = cols`) — the render path. decreaseWidth (top/config_view.go:105) evaluates `len(config.view.Cols[idx])`, an index into a nil slice -> panic. increaseWidth (top/config_view.go:92) touches only ColsWidth. `ColsWidth map[int]int` (:21) is initialised as `map[int]int{}` in exactly 27 of 27 view literals in New() — counts match (27 view keys, 27 ColsWidth initialisers), so the map write in increaseWidth cannot hit a nil map. Claim holds as stated."
+    },
+    {
+      "item": 5,
+      "verdict": "CONFIRMED",
+      "detail": "top/verbose_test.go exists (1791 bytes, 1 Test function) — matches 'one test'. top/dialog_test.go exists (14535 bytes, 9 Test functions) — matches 'nine tests'. top/pause.go, top/pause_test.go and top/help_test.go do NOT exist (full listing of top/ checked; top/help.go exists but has no test file)."
+    }
+  ],
+  "verdict_ru": "Правки безопасны для реализации — с двумя формулировочными оговорками, обе некритичные. Пункты 1b, 3, 4, 5 подтверждены полностью. Пункт 1a: диапазон :62-:75 указан слишком широко — внутри него на :65-67 есть ранний return из openExtraView, поэтому корректная зона — :68-:74. Пункт 2: причинный фикс реализуем, но не буквально так, как написано — Open() читает Path со своего же ресивера (log.go:23) и пишет туда File, поэтому нужен локальный stat.Logfile-значение, а не голые локальные path/size. Если обе формулировки уточнить перед Task 5, реализация проходит без сюрпризов.",
+  "stats": {
+    "total_claims_checked": 24,
+    "confirmed": 22,
+    "mirages_found": 2,
+    "verified_claims": [
+      "top/extra.go:11 showExtra",
+      "top/extra.go:22 return closeExtraView (closing path)",
+      "top/extra.go:45-46 logtail.Path/Size assignment",
+      "top/extra.go:51,:54,:58 three early returns of the logtail branch",
+      "top/extra.go:62 end of switch",
+      "top/extra.go:75 config.viewCh <- config.view",
+      "top/extra.go:77 printCmdline(g, \"%s\", msg)",
+      "top/extra.go:98-107 closeExtraView writes no cmdline",
+      "top/keybindings.go:53-56 B/N/F/L -> showExtra",
+      "internal/stat/log.go:22-30 Logfile.Open reads l.Path, sets l.File",
+      "top/config.go:22 logtail stat.Logfile (value field)",
+      "top/stat.go:243 app.config.logtail.Size = size",
+      "top/stat.go:166,229,237 the only printCmdline calls in printStat",
+      "top/stat.go:1228-1232 printLogtail prints nothing on empty buf",
+      "top/ui.go:421 printCmdline -> writeCmdline",
+      "top/ui.go:435-456 writeCmdline: cmdlineTokens read inside g.Update closure",
+      "top/ui.go:22,40 cmdlineCfg package-level *config",
+      "gocui@v0.5.0 gui.go:311-313 Update enqueues via goroutine",
+      "internal/view/view.go:16 Cols []string, no literal initialiser",
+      "internal/view/view.go:21 ColsWidth map[int]int, 27/27 literals initialised",
+      "top/stat.go:675 config.view.Cols = cols (only population site)",
+      "top/config_view.go:92 increaseWidth (ColsWidth only)",
+      "top/config_view.go:105 decreaseWidth indexes Cols[idx]",
+      "top/verbose_test.go exists (1 test); top/dialog_test.go exists (9 tests); top/pause.go, top/pause_test.go, top/help_test.go absent"
+    ]
+  }
+}
