@@ -719,3 +719,785 @@ source:
    discarded frame as a repaint trigger for the *stored* frame (simpler: after discarding, if a
    repaint was requested, re-render the store).
 6. **Testability refactor of `doWork`** — extract the select loop so the drain can be proven (§8.4).
+
+---
+
+## Implementation-level research (tech-spec phase)
+
+**Updated: 2026-08-03.** Answers to the nine implementation questions raised while drafting the
+tech-spec. Everything above stays valid, including the correction block. Where this section
+contradicts §13 (open questions), this section settles it.
+**Sources re-read for this pass:** `top/ui.go`, `top/stat.go`, `top/config.go`, `top/config_view.go`,
+`top/dialog.go`, `top/keybindings.go`, `top/help.go`, `top/top.go`, `top/stat_test.go`,
+`top/ui_test.go`, `top/dialog_test.go`, `top/config_view_test.go`, `internal/stat/stat.go`,
+`internal/stat/log.go`, `internal/stat/postgres.go`, `gocui@v0.5.0/gui.go`.
+
+---
+
+### 14. Frame store discipline — settled: publish inside the render closure (option b)
+
+#### 14.1 The deciding fact
+
+The logtail buffer is born on the **gocui goroutine** and the frame arrives on the **worker
+goroutine**:
+
+- `readLogfileRecent` / `printLogtail` are called at `top/stat.go:227` and `top/stat.go:245`, both
+  inside `printStat`'s `g.Update` closure (`top/stat.go:169-252`) → gocui goroutine.
+- `stat.Stat` is received at `top/ui.go:128` in `doWork`'s select → worker goroutine.
+
+So the two pieces of state that the spec requires to be stored **together** ("Показанные строки лога
+хранятся вместе с замороженным кадром") are produced on two different goroutines.
+
+- **Option (a), mutex on `top.config`:** the frame is written in the gate (worker goroutine, under
+  the mutex), the logtail buffer is written in the render closure (gocui goroutine, also under the
+  mutex). Two writers, two goroutines, one lock — the state is one object but it is genuinely shared,
+  and `top/` gains its first mutex.
+- **Option (b), publish inside the `g.Update` closure:** *both* writes happen at the bottom of the
+  same closure, on the gocui goroutine. The store is never touched by any other goroutine, so it
+  needs no primitive at all. **This is the only discipline that puts both halves in one place
+  without a lock.**
+
+Option (b) also makes the spec's own rule structural rather than asserted: §"Как должно работать"
+step 3 says *"пока пауза выключена, сохранённым становится каждый отрисованный кадр"*. Under (b) the
+store is written **by the renderer, at the moment it renders** — the stored frame is by construction
+the frame that was on screen. Under (a) the store is written by the gate *before* rendering, so a
+render that fails halfway (e.g. `g.View("dbstat")` error, `top/stat.go:191`) leaves the store
+claiming something the screen never showed.
+
+#### 14.2 Concrete shape
+
+```go
+// top/pause.go — owned by the gocui goroutine ONLY. Same discipline as cmdlineCfg (ui.go:18-21)
+// and app.uiError (written/read in layout(), ui.go:188-191).
+type frameStore struct {
+    valid   bool
+    s       stat.Stat
+    at      time.Time   // frozen clock, see §20
+    ltBuf   []byte      // last NON-EMPTY logtail buffer, see §17
+    ltPath  string
+}
+```
+
+Placement: `app.frame frameStore` next to `app.uiError` (`top/top.go:38-44`) — `app` survives the UI
+rebuild (`mainLoop` replaces only `app.ui`, `top/ui.go:59`), which §2.3 requires. The pause **flag**
+goes on `config` instead (`top/config.go:17-41`), because `cmdlineTokens(config *config)`
+(`top/ui.go:406`) must read it. Splitting them is deliberate: the flag is cross-goroutine
+(`atomic.Bool`), the store is gocui-only — they have different disciplines and should not share a
+home or a comment.
+
+The gate (`top/ui.go:128-129`) becomes discard-only:
+
+```go
+case s := <-statCh:
+    if app.config.paused.Load() {
+        repaintStored(app)   // §16, option B; the frame s is dropped, never stored
+        continue
+    }
+    printStat(app, s, app.postgresProps)
+```
+
+The render closure publishes what it just rendered (`top/stat.go:169-252`, at the end, before
+`return nil`):
+
+```go
+app.ui.Update(func(g *gocui.Gui) error {
+    now := ...            // live: time.Now(); repaint: app.frame.at
+    ... existing sysstat/pgstat/dbstat/extra rendering ...
+    // publish: unconditional, because a repaint re-publishes the identical values
+    app.frame.s, app.frame.at, app.frame.valid = s, now, true
+    if len(buf) > 0 {     // mirrors printLogtail's own predicate, stat.go:1230
+        app.frame.ltBuf, app.frame.ltPath = buf, app.config.logtail.Path
+    }
+    return nil
+})
+```
+
+Note the publish is **unconditional** and needs no `if !paused` guard: while paused the only frames
+that reach this closure are repaints of the stored frame itself, so the write is an identity. That
+removes the failure mode the correction block §1 names (a discarded frame overwriting the store) by
+construction rather than by a check.
+
+#### 14.3 The happens-before edge that makes it race-free under `-race`
+
+Two edges, both from the standard Go memory model, both already relied on by the existing code:
+
+1. **Collector → worker:** `statCh <- stats` (`top/stat.go:73`) happens-before the corresponding
+   receive `s := <-statCh` (`top/ui.go:128`). Everything the collector wrote into
+   `Pgstat.Result.Values` is visible to the worker.
+2. **Worker → gocui:** `g.Update(f)` (`gocui@v0.5.0/gui.go:311-313`) does
+   `go func() { g.userEvents <- userEvent{f: f} }()`. The `go` statement happens-before the new
+   goroutine's first instruction, and `g.userEvents <-` happens-before MainLoop's receive at
+   `gui.go:376` (or `gui.go:398` in `consumeevents`), which then calls `ev.f(g)`. So every write the
+   worker made before calling `Update` — including the capture of `s` — is visible inside the closure
+   body running on the gocui goroutine.
+
+Consequence: `app.frame` is written and read **exclusively** by the gocui goroutine (render closure,
+`layout()`, key handlers) and never appears in any other goroutine's instruction stream. `-race`
+sees no shared access to report. `writeCmdline` already documents exactly this pattern —
+"Format the message in the caller's goroutine … No config field may be touched here; everything
+below runs in the gocui MainLoop goroutine instead" (`top/ui.go:441-443`).
+
+The **only** remaining cross-goroutine object is the pause flag: written by the `Space` handler
+(gocui) and read by the gate (worker), hence `atomic.Bool`. Confirmed safe to embed in `config`:
+`grep` finds no place in `top/` where a `config` is copied by value (all uses are `*config`;
+`newConfig` returns a pointer, `top/config.go:44`; tests use `&config{...}` composite literals,
+`top/stat_test.go:822, 830, 839, 851, 1102`), so `go vet`'s `copylocks` has nothing to flag.
+
+**What the gate does in each discipline, side by side:**
+
+| | Option (a) mutex | Option (b) publish-in-closure (**chosen**) |
+|---|---|---|
+| Gate body | `if paused { continue }` — and the *unpaused* branch must additionally take the lock to store the frame before calling `printStat` | `if paused { repaintStored(app); continue }` — nothing else, no store write at all |
+| Frame written by | worker goroutine, under mutex | gocui goroutine, inside the render closure |
+| Logtail written by | gocui goroutine, under the same mutex | gocui goroutine, same closure, same statement group |
+| Primitives added | `sync.Mutex` + `atomic.Bool` | `atomic.Bool` only |
+| "Stored == what was on screen" | asserted by convention | structural |
+
+---
+
+### 15. Resize detector — design
+
+#### 15.1 gocui really does swallow the resize event
+
+`handleEvent` (`gocui@v0.5.0/gui.go:410-419`) dispatches only `EventKey`/`EventMouse` to `onKey` and
+`EventError` to the caller; `termbox.EventResize` falls into `default: return nil`. No keybinding,
+no manager call, nothing reaches the application. The new size becomes visible **only** through
+`flush()` (`gui.go:422-432`), which reads `termbox.Size()`, marks every view tainted when it differs,
+assigns `g.maxX, g.maxY`, and *then* calls the managers' `Layout` (`gui.go:434-438`). Since
+`Gui.Size()` returns `g.maxX, g.maxY` (`gui.go:100-102`), the `maxX, maxY := app.ui.Size()` already
+present at `top/ui.go:144` is guaranteed to be the **new** size. `layout()` is therefore the only
+possible detector site, exactly as Risk 6 of the user-spec states.
+
+#### 15.2 Where it goes and what it stores
+
+Inside the closure returned by `layout(app)` (`top/ui.go:143-238`), **at the end, after the "extra"
+block, immediately before `return nil` (`top/ui.go:237`)**. Two reasons for the position:
+
+- All four/five views (`sysstat` `:157`, `pgstat` `:171`, `cmdline` `:182`, `dbstat` `:198`, `extra`
+  `:222`) have been created by then, so a repaint queued from here cannot hit `ErrUnknownView`.
+- The degenerate-geometry guard at `top/ui.go:148-150` (`maxX == 0 || maxY == 0` → return an error)
+  sits *before* it, so a post-pager zero size is never recorded as "seen" and never triggers a
+  repaint into an invalid geometry.
+
+State: two closure-local ints, in the same register as the existing `verboseTooShortShown`
+(`top/ui.go:141`) — that variable is the precedent for per-Gui closure state, including the fact that
+`layout(app)` is re-invoked on every rebuild (`top/ui.go:62`) and therefore starts fresh.
+
+```go
+return func(_ *gocui.Gui) error {
+    maxX, maxY := app.ui.Size()
+    if maxX == 0 || maxY == 0 { return fmt.Errorf("") }
+    ... existing SetView plumbing, unchanged ...
+
+    // Resize detector. gocui delivers no resize event (gui.go:410-419); the new size is visible
+    // only here. lastX/lastY start at 0 on every new Gui, so the first layout of a rebuilt UI also
+    // fires — which is what repaints the frozen frame after a pager/editor return.
+    if maxX != lastX || maxY != lastY {
+        lastX, lastY = maxX, maxY          // recorded BEFORE the request: see 15.4
+        if app.config.paused.Load() {
+            repaintStored(app)
+        }
+    }
+    return nil
+}
+```
+
+#### 15.3 Requesting the repaint without recursing into flush — `g.Update` from inside `Layout` is safe
+
+**Verified in the v0.5.0 source, not assumed.** `Gui.Update` (`gui.go:311-313`) is three lines:
+
+```go
+func (g *Gui) Update(f func(*Gui) error) {
+    go func() { g.userEvents <- userEvent{f: f} }()
+}
+```
+
+It touches no `Gui` field, takes no lock (v0.5.0's `Gui` has no mutex at all), and hands the send to
+a **new goroutine**. `g.userEvents` is buffered with capacity 20 (`gui.go:83`). The `Layout` callback
+runs inside `flush()` on the MainLoop goroutine (`gui.go:435`, reached from `gui.go:367` or
+`gui.go:384`). Therefore:
+
+- No reentrancy: `Update` never calls `Layout`, `flush`, or `draw`.
+- No deadlock even if `userEvents` is full — the *spawned* goroutine parks on the send, not the
+  MainLoop goroutine, and MainLoop drains it at `gui.go:376`/`gui.go:398` on its very next iteration.
+- The closure runs one event-loop iteration later, so the repaint lands in the *next* `flush()`.
+
+(The alternative — rendering synchronously at the end of `Layout`, which `flush` would draw in the
+same pass since managers run at `gui.go:434-438` before the view draw at `gui.go:439-465` — is
+rejected: an error returned from `Layout` aborts `flush`, propagates out of `MainLoop`, and rebuilds
+the UI. Deferring through `Update` does not remove that hazard but it does keep the render out of the
+layout contract; see 15.4 for the rule that actually removes it.)
+
+#### 15.4 Why it cannot produce an infinite rebuild loop
+
+Three independent arguments, all needed:
+
+1. **The repaint chain terminates after exactly one extra iteration.** `lastX/lastY` are assigned
+   *before* the repaint is requested, and a repaint does not change the terminal size. The `flush()`
+   that draws the repaint calls `Layout` again (`gui.go:435`), which now compares equal and requests
+   nothing. One resize → one repaint → done. Note the *first* `flush()` of a new Gui always fires the
+   detector (`lastX/lastY` are 0), which is the desired post-rebuild repaint, and it too fires exactly
+   once.
+2. **The repaint closure must never return a non-nil error.** This is the load-bearing rule. An error
+   returned from a `g.Update` closure propagates out of `MainLoop` (`gui.go:377-379`) → `mainLoop`
+   stores `app.uiError` and rebuilds the Gui (`top/ui.go:80-103`, `:48-50`) → `layout(app)` is
+   re-created with `lastX/lastY == 0` → the detector fires again → if the repaint errors again, the
+   cycle repeats. It is not literally infinite — `errorRate.check(1s, 5)` (`top/ui.go:92-95`) aborts
+   the program after 5 errors in a second — but "pgcenter exits with *too many UI errors*" is not an
+   acceptable outcome. **The repaint closure must swallow its render errors and `return nil`**,
+   exactly as the cmdline clear timer already does for a missing view (`top/ui.go:482-485`:
+   *"A missing view means the line is no longer relevant — there is nobody to report the error to, so
+   return quietly"*). This is also the mitigation the user-spec's Risk 3 asks the tech-spec to record.
+3. **The two error sources named in Risk 3 are removed at the source, not caught.** (i) Missing view:
+   the detector sits after all `SetView` calls (15.2), and the `extra` branch of the repaint is gated
+   on the same `ShowExtra > CollectNone` condition (`top/stat.go:201`) that creates the view
+   (`top/ui.go:221`), so they cannot disagree. (ii) Logfile read: the paused repaint does not open,
+   stat or read the file at all (§17), so `readLogfileRecent`'s error return
+   (`top/stat.go:1208-1211, 1219-1222`) is unreachable while paused.
+
+**Interaction with the verbose height-guard hint.** If `config.verbose && !expanded`
+(`top/ui.go:211`) in the same `Layout` pass, `printCmdline` is called there too. Two `g.Update`
+closures in one pass have unspecified relative order (`gui.go:308-310` documents this) — the
+[028] failure mode. It is harmless for the marker: both closures compose the prefix through
+`cmdlineTokens(cmdlineCfg)` (`top/ui.go:453`), so `[PAUSED]` is rendered whichever one wins; only
+the *message* is at stake, and that is pre-existing debt, not something this feature adds.
+
+---
+
+### 16. Repaint mechanism — option B works, with one addition and one caveat
+
+#### 16.1 Does a `viewCh` push actually produce a frame promptly? — Yes. Trace
+
+`collectStat`'s post-send select is `top/stat.go:84-140`. On `case v = <-viewCh` (`:85`) every path
+ends in a fresh collection:
+
+| Branch | Line | What happens |
+|---|---|---|
+| refresh changed | `:93-96` | `continue` → loop top → `c.Update` (`:66`) → `statCh <- stats` (`:73`) |
+| ShowExtra changed | `:99-103` | `ToggleCollectExtra`, `continue` → same |
+| Verbose-only toggle | `:109-112` | `continue` → same |
+| CollectExtra changed | `:119-122` | `c.Reset()`, falls through ↓ |
+| **fall-through (all five render-only keys)** | `:124-133` | `ticker.Stop()`; `c.Reset()`; `c.Update(...)` **whose result is discarded** (only `err` is used, `:128-131`); `continue` → loop top → `c.Update` (`:66`) → `statCh <- stats` (`:73`) |
+
+So **yes: every `viewCh` push causes an immediate collect-and-send, not a wait for the ticker.**
+`[`, `]`, `↑`, `↓`, `\` (`top/config_view.go:63, 81, 94, 107, 200`) all take the fall-through row —
+two collections and one send per keypress. Latency is one-to-two SQL round trips, independent of the
+refresh interval. Option B is therefore mechanically sound: while paused, that emitted frame reaches
+the gate (`top/ui.go:128`), is discarded, and the discard is what repaints the store.
+
+Nor can the push block the UI while paused: the gate keeps receiving, so the collector is never
+parked on `statCh <- stats` for longer than one cycle, and the handler's unbuffered `viewCh` send
+completes within one collection — exactly as today.
+
+#### 16.2 Option B vs option A
+
+**Recommended: option B for the five keys + one explicit repaint for the filter dialog.**
+
+- Option B costs **one rule in the gate** and leaves `scrollLeft`/`scrollRight`/`increaseWidth`/
+  `decreaseWidth`/`clearFilters` (`top/config_view.go:59, 73, 87, 100, 193`) **completely
+  unchanged** — five handlers not touched, which matters because `top/config_view_test.go` pins each
+  of them (`:79, :113, :308, :341, :486, :519, :563`) through the fake-consumer idiom.
+- Option A means editing all five handlers plus the dialog branch, and every edit must be careful not
+  to double-write the cmdline ([027]).
+
+**But `setFilter` must NOT be converted into a `viewCh` push.** `setFilter` (`top/config_view.go:124-145`)
+is called from `dialogFinish` (`top/dialog.go:217`) and pushes nothing today — deliberately, because
+filtering is render-time (`top/stat.go:743, 1051-1061`). Adding a push would send it down the
+fall-through row above, which calls `c.Reset()` (`top/stat.go:127`). After a reset the next frame's
+delta is computed by `calculateDelta` against a snapshot taken milliseconds earlier while the divisor
+is the configured interval — `itv := int(refresh / time.Second)` (`internal/stat/stat.go:294`) is
+derived arithmetically, **never measured** — so the frame shows near-zero rates for one tick. That is
+a visible one-frame **dip** imported into the live filter path, i.e. a regression outside the
+feature. (The same dip already happens on `[`/`]`/`↑`/`↓`/`\` today; that is pre-existing behaviour
+worth recording as debt, not worth spreading.)
+
+So the filter path gets an explicit repaint instead — one call, on the gocui goroutine, in
+`dialogFinish`'s `dialogFilter` branch (`top/dialog.go:216-217`) or right after the switch, guarded
+by `paused && app.frame.valid`. It reads the store on the goroutine that owns it (§14.3), so it needs
+no synchronisation, and it adds no `printCmdline` call — `dialogFinish` already emits its message at
+`top/dialog.go:242`.
+
+#### 16.3 What option B implies that is worth stating
+
+- **While paused, the store is repainted once per refresh interval** (every discarded tick), not only
+  on demand. Idempotent — the render is a pure function of the store after §19 makes `printDataCell`
+  non-mutating — but it means a resize *is* corrected within one refresh interval even without the
+  §15 detector. The detector still earns its place because `z` allows intervals up to 300 s
+  (`top/config_view.go:528`), where "within one interval" means five minutes.
+- **The repaint must skip two things `printStat` does today:** the first-tick hint
+  (`top/stat.go:165-167`, which would emit a second cmdline write) and the logfile-reading branch
+  (`top/stat.go:226-249`). This is the correction block's point 3, and it is why the repaint is a
+  *variant* of the render closure rather than `printStat` verbatim. Cleanest shape: extract the
+  closure body into `renderFrame(g *gocui.Gui, app *app, f frameStore, live bool) error`, with
+  `printStat` calling it with `live=true` and `repaintStored` with `live=false`.
+
+---
+
+### 17. Logtail buffer storage
+
+#### 17.1 Where the state is today: nowhere in the application
+
+This is the finding that shapes everything else. `readLogfileRecent` (`top/stat.go:1202-1226`)
+returns `(info.Size(), nil, nil)` when the file has not changed or is empty (`:1213-1216`).
+`printLogtail` (`top/stat.go:1229-1245`) wraps its entire body in `if len(string(buf)) > 0` — so on
+a nil buffer it prints nothing **and does not even call `v.Clear()`** (the `Clear` is *inside* the
+guard, `:1231-1232`).
+
+Therefore the lines the user sees on a quiet log are held by **the gocui view's own line buffer**,
+nothing else. There is no application-side copy of the displayed logtail today. Two consequences:
+
+- The correction block's point 4 is confirmed: storing "the buffer of the frame on which `Space` was
+  pressed" yields `nil` on a quiet log, and the panel would repaint empty.
+- It also explains the pre-existing behaviour that the panel goes blank after any UI rebuild until
+  the log next changes — the view buffer is destroyed and only a *changed* file refills it.
+
+The only related application state is `app.config.logtail` — `stat.Logfile{Path string; File *os.File;
+Size int64}` (`internal/stat/log.go:15-19`), read and written at `top/stat.go:227, 233, 235, 243, 245`,
+all inside the render closure (gocui goroutine).
+
+#### 17.2 What must be captured
+
+The two values `printLogtail` consumes, and only those:
+
+- `ltBuf []byte` — the exact `buf` returned by `readLogfileRecent` (`top/stat.go:227`), captured
+  **only when non-empty**, using the same predicate `printLogtail` itself uses (`len(...) > 0`,
+  `top/stat.go:1230`), so store and screen can never disagree about what "shown" means.
+- `ltPath string` — `app.config.logtail.Path` at that moment, because it is printed as the panel's
+  header line (`top/stat.go:1234`) and `Reopen` can change it (`internal/stat/log.go:48`).
+
+`Size` is **not** captured: it is change-detection bookkeeping, never rendered.
+
+Capture point: `top/stat.go:245`, right at the `printLogtail` call, inside the render closure — the
+same statement group as the frame publish (§14.2), which is precisely what puts "the shown log lines"
+and "the frame" in one place with no lock.
+
+#### 17.3 How the repaint renders it without touching the file
+
+The repaint's `case stat.CollectLogtail:` replaces the whole of `top/stat.go:227-248` with a single
+call:
+
+```go
+case stat.CollectLogtail:
+    // Frozen: no os.Stat, no Logfile.Read, no Reopen, no logtail.Size write. This is what removes
+    // the second infinite-rebuild source named in the user-spec's Risk 3.
+    if err := printLogtail(v, app.frame.ltPath, app.frame.ltBuf); err != nil { ... }
+```
+
+Note the repaint deliberately does **not** call `v.Clear()` itself: `printLogtail` clears only when
+it has content (`top/stat.go:1231-1232`), so an empty store leaves whatever is on the view. After a
+rebuild that is an empty view — the spec's "показывать нечего" case — and after an overlay close it
+is the intact previous content. Both correct.
+
+One cosmetic limitation to record: `readLogfileRecent` sizes its read from `v.Size()`
+(`top/stat.go:1204-1206`), so the stored buffer was cut for the geometry in force when it was read.
+Repainting it into a *taller* terminal shows fewer lines than would fit. Not a defect; the file is
+re-read on resume.
+
+#### 17.4 `config.logtail.Size` while paused, and rotation on resume
+
+`logtail.Size` is written at exactly one place, `top/stat.go:243`, inside the branch the paused
+repaint skips. So **it freezes at the value of the last live frame** and is never advanced during the
+pause. Behaviour on resume, per case:
+
+| Case at resume | `info.Size()` vs frozen `logtail.Size` | Result |
+|---|---|---|
+| Log grew during the pause | `>` | Normal read (`top/stat.go:1219`); the panel catches up in one frame with everything written during the pause. Correct. |
+| Log rotated, new file still smaller than the frozen size | `<` | The existing rotation detector fires (`top/stat.go:233-240`): `v.Clear()` + `logtail.Reopen(app.db, VersionNum)` re-resolves the path via `GetPostgresCurrentLogfile` (`internal/stat/log.go:38-51`) and reopens. **Correct, and it works precisely because the frozen size is the pre-rotation one.** |
+| Log rotated, new file already grown past the frozen size | `>=` | No `Reopen`. `logfile.Read` keeps reading the **old descriptor** (`l.File` still points at the rotated-away inode, `internal/stat/log.go:61`), so the panel shows stale lines until the next rotation. |
+
+The third row is the miss window the correction block flags. It **exists today** — it is one refresh
+interval wide — and a long pause widens it to the length of the pause. The correct behaviour on
+resume is "let the existing size-based detector run against the frozen size", which is what happens
+with zero extra code. Closing the widened window properly needs an identity check (inode via
+`os.SameFile`, or mtime) rather than a size comparison; that is a separate change and, on the
+evidence here, out of this feature's scope. It should be named in the tech-spec as an accepted
+consequence, not silently inherited.
+
+---
+
+### 18. `[PAUSED]` restoration after a UI rebuild
+
+#### 18.1 The exact insertion point
+
+`top/ui.go:182-192`. The `cmdline` branch's `if err != nil` block is entered **only when `SetView`
+returned `ErrUnknownView`**, i.e. only when the view was just *created* — once per Gui
+(`gocui@v0.5.0/gui.go:138-151`: an existing view returns `nil`). That makes it the natural
+"the cmdline is blank, put the marker back" hook, and it is already used for exactly that purpose
+by the saved-UI-error write (`top/ui.go:188-191`).
+
+```go
+v, err = app.ui.SetView("cmdline", -1, cmdlineY0, maxX, cmdlineY1)
+if err != nil {
+    if err != gocui.ErrUnknownView {
+        return fmt.Errorf("set cmdline view on layout failed: %w", err)
+    }
+    // show saved error to user if any
+    if app.uiError != nil {
+        printCmdline(app.ui, "%s", app.uiError)
+        app.uiError = nil
+    } else if app.config.paused.Load() {
+        // Prefix-only line: composeCmdline renders the tokens and nothing else. Independent of the
+        // frame store on purpose — the marker must survive a rebuild even when Space was pressed
+        // before the first frame and there is nothing to repaint (user-spec, Ключевые компоненты).
+        printCmdline(app.ui, "")
+    }
+}
+```
+
+#### 18.2 Why it satisfies "even when there is NO stored frame"
+
+The trigger is the *view's creation*, not the store's contents. It fires on every rebuild path —
+pager `l` (`top/pglog.go:33`), config viewer `C` (`top/pgconfig.go:55`), editor `E`
+(`top/pgconfig.go:98`), `psql` `~` (`top/psql.go:21`), query report `G` (`top/report.go:148`) and the
+UI-error restart — regardless of `app.frame.valid`. This is the failure the correction block's point 5
+names ("хранилище пусто → выходим" loses the marker) and it is structurally avoided.
+
+#### 18.3 Interaction with the [015] one-write-per-path rule
+
+- The two writes are in an `if/else if`, so this code path still emits **exactly one** `printCmdline`.
+  No new violation of the patterns.md rule or debt [027].
+- When `app.uiError != nil` the marker still appears anyway: `writeCmdline` composes
+  `composeCmdline(cmdlineTokens(cmdlineCfg), msg, width)` (`top/ui.go:453`), so the token prefix
+  precedes any message. The `else` branch exists only for the *no-error* rebuild, which is the common
+  case (pager return).
+- The concurrent verbose height-guard hint (`top/ui.go:211-215`) can still fire in the same pass; as
+  argued in §15.4 that costs at most the message, never the marker.
+
+#### 18.4 Interaction with the generation-gated clear timer (`top/ui.go:465-475`)
+
+- **This write arms no timer.** `writeCmdline` arms only when `arm && msg != ""` (`top/ui.go:461`),
+  and here `msg == ""`. There is no new timer to gate.
+- **A stale timer cannot clobber it.** Timers armed against the previous Gui captured the old
+  `uiGeneration` (`top/ui.go:465`); `mainLoop` bumps the counter at `top/ui.go:57`, *before*
+  `SetManagerFunc` (`:62`) and long before the new Gui's first `Layout` runs — so any pre-rebuild
+  timer that fires later returns at `top/ui.go:473-475` without writing. Ordering is load-bearing and
+  holds.
+- **A timer armed after the restoration is harmless and in fact helpful:** when it fires it re-renders
+  the prefix-only line (`top/ui.go:489`), i.e. `[PAUSED]` again — §6.3's conclusion, unchanged.
+
+Precedent that `printCmdline(g, "")` is a supported call: `top/dialog.go:205` uses it, and
+`top/ui_test.go:365` asserts it does not panic.
+
+---
+
+### 19. Non-mutating `printDataCell`
+
+#### 19.1 Current code — `top/stat.go:1103-1119`, verbatim
+
+```go
+func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	// truncate values that are longer than column width
+	valuelen := len(s.Result.Values[rownum][i].String)
+	if valuelen > config.view.ColsWidth[i] {
+		width := config.view.ColsWidth[i]
+		if width <= 0 {
+			return fmt.Errorf("zero or negative width, skip")
+		}
+
+		// truncate value up to column width and replace last character with '~' symbol
+		s.Result.Values[rownum][i].String = s.Result.Values[rownum][i].String[:width-1] + "~"
+	}
+
+	// print value
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][i].String)
+	return err
+}
+```
+
+#### 19.2 Minimal non-mutating rewrite
+
+```go
+func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	// Read once into a local: the value is FORMATTED here, never edited in place. Editing the
+	// snapshot would make a frozen frame lose its original text on the first render (a widened
+	// column could then never show it again) and, for DiffIntvl==[0,0] views, would write into the
+	// array the collector still holds as prevPgStat.
+	value := s.Result.Values[rownum][i].String
+
+	// truncate values that are longer than column width
+	if len(value) > config.view.ColsWidth[i] {
+		width := config.view.ColsWidth[i]
+		if width <= 0 {
+			return fmt.Errorf("zero or negative width, skip")
+		}
+
+		// truncate value up to column width and replace last character with '~' symbol
+		value = value[:width-1] + "~"
+	}
+
+	// print value
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, value)
+	return err
+}
+```
+
+Deliberately byte-based, exactly as today (`len`, byte slicing). Converting to runes would change the
+output for multi-byte values and belongs to a different change; the [029] sanitisation debt likewise
+stays untouched.
+
+#### 19.3 Which tests pin this, and do any need updating
+
+- **`Test_printStatData_truncation`** — `top/stat_test.go:1269-1284` (doc comment `:1265-1268`). It
+  seeds a 10-char value into a width-5 column (`:1273`), renders through `printStatData` (`:1277`),
+  and asserts on the **buffer**: `Contains "abcd~"` (`:1282`), `NotContains "abcde"` (`:1283`). Both
+  are statements about the writer output, not about the struct. **Passes unchanged; no update
+  needed.**
+- No other test asserts on `s.Result.Values` after a render. The tests that render the same `s` more
+  than once — the alignment invariant test (`top/stat_test.go:1247-1262`, `makeRenderResult(7, 3)`
+  with width 10) and the windowed tests (`:1141, :1169, :1183, :1226`) — use `rR-cC` values 5 bytes
+  long against widths of 10, so truncation never triggers and the mutation was invisible there.
+- **New test to add:** render at width 5, then render the *same* `stat.Stat` at width 10 and assert
+  the full value reappears (this is the user-spec AC "Расширение колонки во время паузы не приводит к
+  навсегда обрезанному значению"), or simply assert `s.Result.Values[0][0].String` is unchanged after
+  a render.
+
+#### 19.4 Does the change alone remove the aliasing write?
+
+**Yes.** `grep` over `top/` (excluding tests) for any assignment into the result values finds exactly
+one hit: `top/stat.go:1113` — the line being removed. Nothing else in `top/` writes into
+`s.Result.Values`, `.Cols` or the `sql.NullString` cells. (`alignViewToResult`, `top/stat.go:670-678`,
+*replaces* `config.view.Cols`/`ColsWidth`; it does not write through the result's slices.
+`printDbstat` sets `s.Error = nil` at `top/stat.go:687`, but `s` is a by-value parameter and `Error`
+is a scalar, so that write is confined to the callee's copy.)
+
+So after this one-line change the render path performs **zero writes** into the collector-owned
+backing array, which is what §2.2 identified as the hazard for `DiffIntvl == [0,0]` views
+(`internal/view/view.go:43, 305, 317, 329, 352` — including `activity`, the default screen). Chain
+re-verified: `calculateDelta` returns `delta = curr` for `[0,0]` (`internal/stat/postgres.go:596`),
+`delta.sort` sorts it in place (`:599`), and `c.currPgStat` becomes `c.prevPgStat` on the next tick
+(`internal/stat/stat.go:435-436`) — so the sent frame's `Values` array is the collector's `prev`
+array. The collector reads only `prevPgStat.Activity.Calls` from it afterwards
+(`internal/stat/stat.go:308`), never the `Values`, which is why no race is observable today; removing
+the write means the aliasing is now merely a shared read, and **no deep copy of the frame is needed**
+at store time. That settles §13.3 in favour of the non-mutating rewrite (smaller, and it removes the
+cause instead of copying around it — matching the project's structural-fix preference).
+
+---
+
+### 20. Frozen clock
+
+#### 20.1 Is there a collection time in `stat.Stat`? — No, one must be introduced
+
+`Stat` / `System` / `Pgstat` (`internal/stat/stat.go:35-54`) carry no `time.Time`. The only
+`time.Time` in the package is `verboseCollectState.dbSizeLastRun` (`internal/stat/stat.go:99`),
+which is the verbose latency-guard clock and unrelated. `Collector.Update` never needs one: the delta
+interval is arithmetic, `itv := int(refresh / time.Second)` (`internal/stat/stat.go:294`).
+
+Two options, and the spec picks one for us:
+
+- **(a) Add a field to `stat.Stat`.** Safe format-wise — `stat.Stat` is referenced only from `top/`
+  (`grep` for `stat.Stat` outside tests hits only `top/stat.go` and `top/ui.go:108`; `record`/`report`
+  do not serialise it). But the user-spec's Ограничения say *"Все изменения — внутри пакета `top/`"*,
+  so a cross-package field is gratuitous.
+- **(b) Stamp it in `top/` at render time. Recommended.** `now := time.Now()` once at the top of
+  `printStat` (`top/stat.go:157`), passed down to the sysstat renderer and stored in `app.frame.at`
+  in the same closure (§14.2). The divergence from true collection time is one render latency
+  (sub-millisecond), far inside the spec's stated tolerance of one refresh interval — and because the
+  same value is both rendered and stored, the frozen clock shows **exactly** the time that was on
+  screen when `Space` was pressed.
+
+#### 20.2 Exact signature change
+
+```go
+// top/stat.go:258 — thin wrapper
+func printSysstat(v *gocui.View, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration, now time.Time) error
+
+// top/stat.go:269 — writer-based core
+func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration, now time.Time) error
+```
+
+Body change, `top/stat.go:276-278`:
+
+```go
+_, err = fmt.Fprintf(w, "pgcenter: %s, refresh: %ds, load average: %.2f, %.2f, %.2f\n",
+    now.Format("2006-01-02 15:04:05"), int(refresh/time.Second),   // was: time.Now().Format(...)
+    s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
+```
+
+`renderSysstatVerbose` (`top/stat.go:343`) prints no time and is unchanged.
+
+#### 20.3 Production call sites
+
+Two, both trivially threaded:
+
+- `top/stat.go:259` — `printSysstat` → `renderSysstat`: forward `now`.
+- `top/stat.go:175` — inside `printStat`'s render closure: pass the frame's timestamp
+  (`time.Now()` for a live frame, `app.frame.at` for a repaint). If the render closure is extracted
+  as `renderFrame(g, app, f frameStore, live bool)` (§16.3), the timestamp travels inside `f` and
+  this call site reads `f.at`.
+
+An alternative worth naming in the tech-spec: rather than a seventh parameter, pass the whole
+`frameStore` (frame + timestamp) into the renderers. That is a larger refactor touching every render
+signature; the extra parameter is the minimal change and matches how `refresh` was threaded in a
+previous feature.
+
+#### 20.4 Test call sites that need the new argument — five, not four
+
+| File:line | Context |
+|---|---|
+| `top/stat_test.go:60` | `Test_renderSysstat_compact` (`:44`) |
+| `top/stat_test.go:97` | `Test_renderSysstat_refreshFormat` (`:85`), inside the table loop |
+| `top/stat_test.go:192` | helper `verboseSysstatLines` (`:190-195`) — **one edit covers eight tests**: `:199, :223, :247, :292, :316, :352, :392, :413` |
+| `top/stat_test.go:440` | `Test_renderSysstat_compactUnchanged` (`:431`), compact buffer |
+| `top/stat_test.go:441` | same test, verbose buffer |
+
+Only one of them looks at the timestamp at all: `Test_renderSysstat_compact` matches line 1 with a
+regexp (`top/stat_test.go:66-69`, `^pgcenter: \d{4}-\d{2}-\d{2} …$`), so it stays green with any
+valid time — and it is the natural place to add the new deterministic assertion the user-spec asks
+for ("отрисовка с сохранённой отметкой времени"): pass a fixed `time.Date(...)` and assert the exact
+literal, which is impossible today.
+
+---
+
+### 21. Testability of the gate
+
+#### 21.1 Concrete signature
+
+`doWork` (`top/ui.go:106-135`) cannot be driven as-is: it creates `statCh` internally (`:108`),
+spawns the real `collectStat` (`:111-114`) and seeds `viewCh` (`:117-118`). Extract only the select
+loop, leaving the wiring in `doWork`:
+
+```go
+// statLoopExit tells doWork WHY the loop returned. The distinction is load-bearing: see 21.4.
+type statLoopExit int
+
+const (
+    exitUI statLoopExit = iota // app.uiExit — pager/editor path
+    exitCtx                    // ctx.Done()
+)
+
+// statLoop is doWork's select loop, with the channels and the render step injected so it can be
+// driven without a terminal or a Postgres connection.
+func statLoop(
+    ctx context.Context,
+    uiExit <-chan int,
+    statCh <-chan stat.Stat,
+    paused *atomic.Bool,
+    render func(stat.Stat),   // real: printStat(app, s, app.postgresProps)
+    repaint func(),           // real: repaintStored(app)
+) statLoopExit {
+    for {
+        select {
+        case <-uiExit:
+            return exitUI
+        case s := <-statCh:
+            if paused.Load() {
+                repaint()     // the frame is DROPPED, never stored (correction block §1)
+                continue
+            }
+            render(s)
+        case <-ctx.Done():
+            return exitCtx
+        }
+    }
+}
+```
+
+and `doWork` becomes:
+
+```go
+func doWork(ctx context.Context, app *app) {
+    var wg sync.WaitGroup
+    statCh := make(chan stat.Stat)
+    wg.Add(1)
+    go func() { collectStat(ctx, app.db, statCh, app.config.viewCh); wg.Done() }()
+
+    app.config.view.Refresh = defaultRefresh
+    app.config.viewCh <- app.config.view
+    app.config.view.Refresh = 0
+
+    if statLoop(ctx, app.uiExit, statCh, &app.config.paused,
+        func(s stat.Stat) { printStat(app, s, app.postgresProps) },
+        func() { repaintStored(app) },
+    ) == exitCtx {
+        wg.Wait()
+    }
+}
+```
+
+#### 21.2 What the test drives
+
+No `*gocui.Gui` anywhere: `statCh` is a plain channel and `render`/`repaint` are function values, so
+`app.ui.Update` is never reached. (This seam is mandatory, not stylistic: `writeCmdline` tolerates a
+nil Gui (`top/ui.go:437-439`) but `printStat` does not — `app.ui.Update` on a nil `*gocui.Gui` panics
+at `gui.go:312`.) The test supplies:
+
+- an **unbuffered** `chan stat.Stat` — the buffering matters, see 21.3;
+- a fake collector goroutine shaped like the real one (`top/stat.go:72-79`): send, and only *after*
+  the send returns, record the completion;
+- `paused` pre-set to `true`;
+- `render`/`repaint` closures that count calls (guarded by a mutex or by counting on the loop
+  goroutine and reading after it returns, so the test itself is `-race` clean);
+- a `ctx` and a `uiExit` it controls.
+
+The fake-consumer/producer idiom already exists in the package: `top/config_view_test.go:33-40`
+(goroutine reads `config.viewCh`, asserts, then closes), reused at `:500`, `:549` and throughout.
+
+#### 21.3 How it proves drain-and-discard
+
+The user-spec's AC is *"сборщик успешно завершает не менее пяти отправок подряд, пока активна пауза"*.
+On an **unbuffered** channel a completed send is proof that a receive happened — that is the whole
+argument, and it is exactly the property §7.1 says the naive implementation destroys.
+
+```
+sent := 0
+go func() {
+    for i := 0; i < 5; i++ {
+        statCh <- stat.Stat{}   // blocks until statLoop receives
+        sent++                  // only reachable if the send completed
+    }
+    close(done)
+}()
+// ... run statLoop in another goroutine ...
+<-done                          // fails by timeout if the gate ever stopped receiving
+assert.Equal(t, 5, sent)
+assert.Equal(t, 0, renderCalls) // discarded, not rendered
+assert.Equal(t, 5, repaintCalls)// option B: each discard repaints the store
+```
+
+Then flip `paused` to `false`, send one more frame, and assert `renderCalls == 1` — the resume half.
+
+#### 21.4 The trap the extraction must not introduce
+
+Today `wg.Wait()` is called **only** on the `ctx.Done()` branch (`top/ui.go:130-132`) and **not** on
+the `uiExit` branch (`top/ui.go:125-127`). That asymmetry is deliberate: on the pager path ctx is not
+cancelled, so `collectStat` stays parked on `statCh <- stats` (`top/stat.go:73`) with nobody
+receiving — an unconditional `wg.Wait()` after the extraction would hang the pager path forever.
+Hence `statLoop` returns a reason and `doWork` waits only for `exitCtx`. A second cheap test pins
+this: send `uiExit` while a producer send is still pending and assert `statLoop` returns.
+
+Worth carrying into the tech-spec as a note: `top/stat.go:130` (`statCh <- stat.Stat{Error: err}`) is
+an **unguarded** send on the view-switch re-init path — the one send in `collectStat` not wrapped in a
+`select` with `ctx.Done()`. The gate keeps receiving, so this feature does not make it worse, but any
+future "optimisation" that stops receiving turns it into a second deadlock site (§7.2).
+
+---
+
+### 22. Test inventory this change touches
+
+| # | Test / helper | File:line | Effect of this feature |
+|---|---|---|---|
+| 1 | `Test_renderSysstat_compact` | `top/stat_test.go:44`, call `:60` | **Needs the new `now` arg.** Its line-1 regexp (`:66-69`) still passes; best place to add the deterministic frozen-clock assertion |
+| 2 | `Test_renderSysstat_refreshFormat` | `top/stat_test.go:85`, call `:97` | **Needs the new arg.** No timestamp assertion |
+| 3 | helper `verboseSysstatLines` | `top/stat_test.go:190-195`, call `:192` | **Needs the new arg — one edit.** Covers `:199, :223, :247, :292, :316, :352, :392, :413` |
+| 4 | `Test_renderSysstat_compactUnchanged` | `top/stat_test.go:431`, calls `:440, :441` | **Needs the new arg** on both calls |
+| 5 | `Test_printStatData_truncation` | `top/stat_test.go:1269-1284` | **Passes unchanged** — asserts on the writer output (`:1282-1283`), not on the struct. Add a companion non-mutation case |
+| 6 | Windowed/alignment render tests | `top/stat_test.go:1141, 1169, 1183, 1226, 1247` | **Unaffected** — 5-byte values against width-10 columns never hit the truncation branch |
+| 7 | `alignViewToResult` tests (`&config{...}` literals) | `top/stat_test.go:822, 830, 839, 851` | **Compile-safe** with an `atomic.Bool` field on `config` (composite literals, no value copies) |
+| 8 | `makeRenderConfig` / `makeRenderResult` | `top/stat_test.go:1095, 1114` | **Unchanged**, and directly reusable to build stored frames for the new pause tests |
+| 9 | `Test_cmdlineTokens` | `top/ui_test.go:308`; "bare config" `:314`; "with filters" `:319-329` | **Stays green** (a bare config is not paused) but is now under-specified — **add a paused subtest** and a paused+filter ordering subtest |
+| 10 | `Test_setCmdlineConfig` | `top/ui_test.go:334`, `assert.Len(..., 1)` at `:350` | **Stays green** — the config it builds is not paused. Would break only if the pause token were emitted unconditionally |
+| 11 | `Test_composeCmdline` | `top/ui_test.go:25`; pause token at `:29`; two-token cases `:92-99` | **Passes unchanged** — already written against a literal `[PAUSED]` |
+| 12 | `Test_composeCmdlineTwoTokens` | `top/ui_test.go:134-153` | **Passes unchanged.** Should be upgraded to build the token via the real producer instead of the literal at `:135` |
+| 13 | `Test_printCmdlineNilGui` | `top/ui_test.go:359-368`, incl. `printCmdline(nil, "")` at `:365` | **Unaffected**, and it is the precedent that the empty-message write used in §18 is supported |
+| 14 | Dialog geometry tests | `top/dialog_test.go:45, 90, 105, 118, 152, 179, 213, 231, 263`; prefixes built via `tokenOf` `:30-39`, maps at `:119, :196, :293` | **All unaffected** — they build token slices literally and never read `cmdlineCfg`. **Add one case** with a `[PAUSED]`+filter prefix at 80 columns (the ~8-column shortening the user-spec accepts) |
+| 15 | `viewCh`-pushing handler tests | `top/config_view_test.go:79 (scrollLeft), :113 (scrollRight), :308 (increaseWidth), :341 (decreaseWidth), :486/:519/:563 (clearFilters), :15/:47 (orderKey*), :375 (switchSortOrder)` | **All unaffected under option B** — those handlers are not edited. They would all need review under option A |
+| 16 | `Test_setFilter` | `top/config_view_test.go:410-437` | **Unaffected** — `setFilter` itself is not edited; the repaint is added in `dialogFinish` (`top/dialog.go:216-217`) |
+| 17 | Other `newConfig()` users | `top/verbose_test.go:20`, `top/config_test.go:9`, `top/top_test.go:13, 22`, `top/signal_test.go:63, 146, 180`, `top/config_view_test.go` (24 sites) | **Compile-safe**; nothing asserts on the config's field set |
+| 18 | Keybinding table | `top/keybindings.go:17-92` | **No test exists at all** (`grep` for `keybindings` in `*_test.go` → nothing). Adding the `Space` row breaks nothing — and nothing will catch a wrong key constant except the stand run. §5's `gocui.KeySpace`-not-`' '` finding therefore has no automated guard |
+| 19 | `doWork` / `collectStat` / `mainLoop` / `printStat` | — | **No test touches any of them** (`grep -rn "printStat(\|doWork\|collectStat\|mainLoop" --include=*_test.go top/` → one comment at `top/dialog_test.go:89`). The `statLoop` extraction of §21 creates the first |
+| 20 | `top/help.go:10-48` (`helpTemplate`) | — | **No test.** The new `Space` line and the lifting-set line are verified by reading, not by assertion |
+
+**Net breakage: five mechanical call-site edits (rows 1-4) and nothing else.** Everything else is
+either unaffected or an addition. That is the smallest possible blast radius for the frozen clock,
+and it is the argument for threading a timestamp rather than storing a pre-rendered sysstat string.

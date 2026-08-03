@@ -16,7 +16,11 @@
       "ended": "2026-08-03 17:37:00",
       "human_wait_time_min": 0
     },
-    "tech_spec": null,
+    "tech_spec": {
+      "started": "2026-08-03 17:40:00",
+      "ended": null,
+      "human_wait_time_min": 0
+    },
     "task_decomposition": null,
     "feature_execution": null,
     "done": null
