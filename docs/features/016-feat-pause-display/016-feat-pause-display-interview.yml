@@ -11,7 +11,7 @@ interview_metadata:
   last_updated: "2026-08-03 12:35:00"
   status: "in_progress"
   can_resume: true
-  current_question_num: 18
+  current_question_num: 24
   feature_size: "M"
 
 conversation_history:
@@ -346,6 +346,23 @@ conversation_history:
       reaching outside the feature's own perimeter (the shared layout code); the mechanism is an
       explicit tech-spec decision, not something to improvise during implementation.
 
+  - question_num: 24
+    timestamp: "2026-08-03 16:20:00"
+    topic: "edge_cases / logtail panel after a UI rebuild — introduced by the round-1 fix"
+    agent_question: |
+      Freezing the logtail panel (Q22) left it with no data source across a UI rebuild: on the
+      pager path the `extra` view is recreated with an empty buffer, and the only code that fills
+      it is the log-file read that the pause now skips. Log lines live nowhere else — `stat.Stat`
+      does not carry them. So scenario 3 (pager round-trip) with `L` open would show an empty
+      bottom third. Options: (a) store the shown log lines alongside the frame, so the repaint
+      restores the panel; (b) accept an empty panel until the pause is lifted and reword the spec.
+      Recommended (a) — under (b) the operator goes to read the log and comes back to an empty log
+      panel.
+    user_answer: "Option A."
+    summary: |
+      DECIDED: the displayed log lines are stored together with the frame and restored on repaint,
+      including after a UI rebuild. Closes the defect the Q22 fix introduced.
+
 phase1_feature_overview:
 
   feature_description:
@@ -675,6 +692,9 @@ phase3_integration:
       shares slice headers; with a non-mutating printDataCell the render path no longer writes into
       the frame, so a deep copy is not required. Diskstats/Netdevs/Fsstats are read-only on the
       render path and their toggles lift the pause anyway.
+      Plus the log lines currently shown by the logtail side panel (Q24): they exist nowhere in
+      `stat.Stat`, and the only code that fills that panel is the file read the pause disables, so
+      without storing them a UI rebuild would leave the panel empty.
     gaps: ""
     required: false
 
@@ -709,8 +729,8 @@ decision_rules:
 
 progress:
   current_phase: "phase3_integration"
-  questions_asked: 21
-  last_question: "Release ordering, scope and token degradation — after the devil's advocate pass"
+  questions_asked: 24
+  last_question: "Logtail panel restoration after a UI rebuild — validation round 2"
   completion_estimate: "100%"
 
 notes: |
