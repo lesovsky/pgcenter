@@ -21,22 +21,37 @@
       "ended": "2026-08-03 21:05:00",
       "human_wait_time_min": 0
     },
-    "task_decomposition": null,
+    "task_decomposition": {
+      "started": "2026-08-03 21:10:00",
+      "ended": null,
+      "human_wait_time_min": 0
+    },
     "feature_execution": null,
     "done": null
   },
   "quality": {
-    "validation_rounds": { "user_spec": 3, "tech_spec": 3 },
-    "validation_findings": { "critical": 12, "major": 47, "minor": 63 },
+    "validation_rounds": {
+      "user_spec": 3,
+      "tech_spec": 3
+    },
+    "validation_findings": {
+      "critical": 12,
+      "major": 47,
+      "minor": 63
+    },
     "review_rounds": {},
-    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_findings": {
+      "critical": 0,
+      "major": 0,
+      "minor": 0
+    },
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 18,
-    "tasks_count": 0,
-    "waves_count": 0,
-    "agents_spawned": 0,
+    "interview_questions": 24,
+    "tasks_count": 10,
+    "waves_count": 6,
+    "agents_spawned": 10,
     "commits_count": 0
   }
 }

@@ -629,7 +629,7 @@ partition below is checked against that rule.
 |------|------|-----------------|
 | 1 | 1 | `top/stat.go`, `top/stat_test.go` |
 | 1 | 2 | `top/config.go`, `top/keybindings.go`, `top/pause.go`, `top/pause_test.go`, `top/ui.go`, `top/ui_test.go` |
-| 2 | 3 | `top/ui.go`, `top/stat.go`, `top/pause.go`, `top/ui_test.go`, `top/pause_test.go` |
+| 2 | 3 | `top/ui.go`, `top/stat.go`, `top/pause.go`, `top/top.go`, `top/ui_test.go`, `top/pause_test.go` |
 | 3 | 4 | `top/stat.go`, `top/stat_test.go` |
 | 3 | 5 | `top/config_view.go`, `top/extra.go`, `top/verbose.go`, `top/pause.go`, `top/config_view_test.go`, `top/verbose_test.go`, `top/pause_test.go` |
 | 3 | 6 | `top/help.go`, `top/help_test.go` |
@@ -681,7 +681,7 @@ list them.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./top/... -race`
-- **Files to modify:** `top/ui.go`, `top/stat.go`, `top/pause.go`, `top/ui_test.go`,
+- **Files to modify:** `top/ui.go`, `top/stat.go`, `top/pause.go`, `top/top.go`, `top/ui_test.go`,
   `top/pause_test.go`
 - **Files to read:** `internal/stat/stat.go`,
   `docs/features/016-feat-pause-display/016-feat-pause-display-code-research.md`
