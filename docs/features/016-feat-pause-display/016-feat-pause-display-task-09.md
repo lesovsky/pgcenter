@@ -117,10 +117,16 @@ core (`renderFrame`) — the seam exists already; do not redesign it, fill it.
 
 Write these first, watch them fail, then implement.
 
-- `top/pause_test.go::Test_frameStore_storeLogtail_emptyReadKeepsBuffer` — store a non-empty buffer
-  with path A, then call the capture with a nil (and separately, an empty) buffer: the stored buffer
-  and path are unchanged. This is the Q24 defect expressed at the store level.
-- `top/pause_test.go::Test_frameStore_storeLogtail_commitsPathAndBufferTogether` — a non-empty
+All four store-level tests below drive the **same single entry point** — the `frameStore` method the
+live path calls unconditionally (`syncLogtail(show int, path string, buf []byte)` in this task's
+shape). Adjust the names if the method lands under another name, but keep them describing one seam:
+splitting capture and drop into two entry points is what lets the two predicates drift apart.
+
+- `top/pause_test.go::Test_frameStore_syncLogtail_emptyReadKeepsBuffer` — store a non-empty buffer
+  with path A, then call the seam with `stat.CollectLogtail` and a nil (and separately, an empty)
+  buffer: the stored buffer and path are unchanged. This is the Q24 defect expressed at the store
+  level.
+- `top/pause_test.go::Test_frameStore_syncLogtail_commitsPathAndBufferTogether` — a non-empty
   capture with path B replaces **both** fields; the store never holds buffer A with path B.
 - `top/pause_test.go::Test_frameStore_syncLogtail_dropsForEveryNonLogtailShowExtra` — **the
   placement test.** Seed the store with a non-empty pair, then drive the single sync entry point
@@ -130,11 +136,11 @@ Write these first, watch them fail, then implement.
   extra section is wrapped in `if app.config.view.ShowExtra > stat.CollectNone` (`top/stat.go:200`)
   and a drop written inside that block never executes for a closed panel. Table this over the four
   values explicitly rather than testing one representative value.
-- `top/pause_test.go::Test_frameStore_syncLogtail_capturesOnlyForLogtail` — the same entry point with
-  `ShowExtra == stat.CollectLogtail` and a non-empty buffer captures the pair; with
-  `stat.CollectLogtail` and an empty/nil buffer it leaves the previous pair intact (the quiet-log
-  rule, at the same seam). Together with the test above this pins the whole truth table of the one
-  call, so the only thing left for review by inspection is *where* the call sits.
+- `top/pause_test.go::Test_frameStore_syncLogtail_capturesOnlyForLogtail` — a non-empty buffer
+  arriving with a **non**-logtail `ShowExtra` is not captured: the drop wins over the buffer, so a
+  stale `logBuf` local left over from an earlier frame can never be committed under the wrong panel.
+  With the three tests above this pins the whole truth table of the one call, leaving only *where*
+  the call sits for review by inspection.
 - `top/stat_test.go::Test_renderLogtail_outputUnchanged` — for a non-empty buffer the output is
   byte-identical to today's format: the header line `\033[30;47m<path>:\033[0m\n` followed by the raw
   buffer, nothing else.
@@ -260,9 +266,29 @@ Write these first, watch them fail, then implement.
 - `top/stat.go`
   - *Live logtail branch* (`:226-249`, as Task 3 restructured it). Today: `readLogfileRecent` →
     rotation check (`size < logtail.Size` → `v.Clear()` + `Reopen`) → `logtail.Size = size` →
-    `printLogtail(v, logtail.Path, buf)`. Change: keep all of it, and add the capture right at the
-    `printLogtail` call — the same statement group as the frame publish, which is what puts "the
-    shown lines" and "the frame" in one place with no lock (code-research §17.2).
+    `printLogtail(v, logtail.Path, buf)`. Change: keep all of it; the case body additionally assigns
+    the shown `buf` and `logtail.Path` into two locals declared before the extra-panel block.
+  - *Placement of the sync call — the trap.* The extra section, `switch` and all, is inside
+    `if app.config.view.ShowExtra > stat.CollectNone {` at `:200`. `stat.CollectNone` is `iota == 0`
+    (`internal/stat/stat.go:26`), so a **closed panel skips the entire block** — and a closed panel
+    is precisely the case the drop exists for. The single `store.syncLogtail(app.config.view.ShowExtra, logPath, logBuf)`
+    call therefore goes at the closure's tail, after the block's closing brace, where it runs for
+    every `ShowExtra` value. Structurally:
+
+    ```go
+    var logPath string
+    var logBuf []byte
+
+    if app.config.view.ShowExtra > stat.CollectNone {
+        // … switch …; the CollectLogtail case sets logPath/logBuf
+    }
+
+    app.frame.syncLogtail(app.config.view.ShowExtra, logPath, logBuf)
+    return nil
+    ```
+
+    Capture and drop in one function keeps "the shown lines" and "the frame" agreeing with no lock
+    (code-research §17.2) and makes the non-empty predicate a single named, unit-testable place.
   - *Repaint logtail branch.* Renders `renderLogtail`/`printLogtail` from the stored pair only. Note
     the repaint deliberately does **not** call `v.Clear()` itself: `printLogtail` clears only when it
     has content, so an empty store leaves the view as it is — empty after a rebuild, intact previous
@@ -273,11 +299,15 @@ Write these first, watch them fail, then implement.
     requirement — the escape sequences and the trailing newline behaviour must not shift.
   - *Do not touch* `readLogfileRecent` — its signature, its `v.Size()`-derived limits and its
     "unchanged file → nil buffer" contract all stay exactly as they are.
-- `top/pause.go` — add the capture and drop operations as methods on `frameStore` (they are the only
-  things that write `logBuf`/`logPath`), so the non-empty predicate is one named, unit-testable
-  place rather than an `if` buried in the render closure. Keep Decision 1 intact: no getter that
-  hands the store to another goroutine, nothing read out before entering `g.Update`.
-- `top/stat_test.go` — the `renderLogtail` tests and the no-file-access test.
+- `top/pause.go` — add the capture-and-drop operation as a method on `frameStore` (it is the only
+  thing that writes `logBuf`/`logPath`), so both the non-empty predicate and the "is the panel
+  showing the log" predicate live in one named, unit-testable place rather than as two `if`s buried
+  in the render closure at different nesting depths. Keep Decision 1 intact: no getter that hands the
+  store to another goroutine, nothing read out before entering `g.Update`.
+- `top/stat_test.go` — the `renderLogtail` tests and the no-file-access test. Both write into a
+  `*bytes.Buffer`. Never construct a `*gocui.View` and never pass a nil one as the `io.Writer`: a nil
+  `*gocui.View` in an interface is non-nil at the interface level and panics on the first `Write`
+  rather than being skipped, so such a test would report a panic instead of a freeze violation.
 - `top/pause_test.go` — the store-behaviour tests. **This file is not in the tech-spec's file list
   for Task 9**; adding tests to it is safe because Task 9 is alone in Wave 5, and store behaviour
   belongs next to the store. Note the deviation in the decisions-log entry.
@@ -302,7 +332,8 @@ Write these first, watch them fail, then implement.
   is not a failure.
 - *Panel closed, or switched to `B`/`N`/`F`, while the pause is on.* Those paths lift the pause
   (Task 5), so live frames resume and the live path drops the stored pair. Verify the drop happens on
-  the live path, not the repaint path.
+  the live path, not the repaint path — and that it is reachable when `ShowExtra` has fallen back to
+  `stat.CollectNone`, which is the branch the `if ShowExtra > stat.CollectNone` wrapper hides.
 - *Panel reopened on a different file.* `L` lifts the pause; on a quiet new log the freshly opened
   panel is blank until the log changes (pre-existing behaviour). The drop rule is what stops a
   subsequent repaint from filling that blank panel with the *previous* file's lines under the
@@ -348,5 +379,8 @@ Write these first, watch them fail, then implement.
 ## Post-completion
 
 - [ ] Записать краткий отчёт в [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
-- [ ] Если отклонились от спека — описать отклонение и причину (как минимум: тесты в `top/pause_test.go`, которого нет в списке файлов задачи; сброс сохранённого буфера при закрытии панели)
+- [ ] Если отклонились от спека — описать отклонение и причину. Известное отклонение ровно одно:
+      тесты в `top/pause_test.go`, которого нет в списке файлов задачи. Сброс сохранённого буфера
+      при закрытии панели **отклонением не является** — правило поднято в tech-spec, Decision 7; в
+      отчёте его достаточно упомянуть как выполненное требование
 - [ ] Обновить user-spec/tech-spec если что-то изменилось
