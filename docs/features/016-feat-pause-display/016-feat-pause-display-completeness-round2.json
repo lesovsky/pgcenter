@@ -1,0 +1,158 @@
+{
+  "status": "pass",
+  "round": 2,
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 21,
+  "requirements_covered": 19,
+  "requirements_partial": 1,
+  "requirements_missing": 1,
+  "round1_resolutions": [
+    {
+      "round1_finding": "CRITICAL US-6 — ни одна задача не снимает паузу",
+      "verdict": "resolved",
+      "evidence": "Decision 9 + Task 5. Список call sites сверен с кодом и полон относительно US-6: viewSwitchHandler (top/config_view.go:315), switchViewToProcPidStat (:329), orderKeyLeft/orderKeyRight (:22,:40), switchSortOrder (:113), toggleSysTables (:386), toggleIdleConns (:491), changeQueryAge (:426), toggleVerbose (top/verbose.go:14), showExtra (top/extra.go:11). Файлы Task 5 (config_view.go, extra.go, verbose.go) покрывают все перечисленные функции."
+    },
+    {
+      "round1_finding": "CRITICAL US-7 — меню D/X/P/J снимают, menuConf (E) нет",
+      "verdict": "resolved",
+      "evidence": "Проверено в коде: menuSelect (top/menu.go:140) для menuDatabases/menuPgss/menuProgress/menuStatIO вызывает viewSwitchHandler (:149-202), а ветка menuConf (:204-219) вызывает editPgConfig напрямую и viewSwitchHandler не трогает. Значит подъём флага внутри viewSwitchHandler даёт исключение для E структурно, а не случайно — и Decision 9 это фиксирует явным текстом, а не оставляет выводить читателю. Открытие меню и Esc (menuOpen/menuClose) не тронуты — не снимают."
+    },
+    {
+      "round1_finding": "CRITICAL US-22 — правило «действие, которое ничего не изменило, паузу не снимает»",
+      "verdict": "resolved",
+      "evidence": "Decision 9 задаёт правило «после ранних выходов» и называет конкретные точки. Сверено: x без pg_stat_statements закрывается тем, что ранний выход стоит в switchViewTo (:212-215), а подъём — внутри viewSwitchHandler, до которого исполнение не доходит; S закрывается размещением после !app.db.Local (:341-344); L закрывается размещением после четырёх ранних выходов showExtra (:37-58). Дополнительно правило автоматически закрывает два ранних выхода, которых user-spec не называл: toggleSysTables (не tables/indexes/sizes) и toggleIdleConns (не activity/procpidstat)."
+    },
+    {
+      "round1_finding": "CRITICAL — маркер [PAUSED] зависает после снятия паузы не через Space",
+      "verdict": "partially resolved",
+      "evidence": "Decision 9 обязывает liftPause делать ровно одну перерисовку cmdline, и в таблицу Risks добавлена строка. Для обработчиков, которые в cmdline не пишут (orderKeyLeft/Right), дыра закрыта. Но исключение «handlers that already write the cmdline themselves must not call the refreshing variant» открывает ту же дыру с другой стороны: у switchSortOrder, toggleSysTables, toggleIdleConns, switchViewToProcPidStat, toggleVerbose, showExtra собственный printCmdline стоит в конце тела, и правило «после ранних выходов» ставит liftPause туда же, без указания «до» или «после». См. finding lift-order."
+    },
+    {
+      "round1_finding": "MAJOR — возврат из пейджера доставляется побочным эффектом детектора размера",
+      "verdict": "mostly resolved",
+      "evidence": "Механизм теперь назван дважды в Architecture («After a UI rebuild its state is zero, so the first layout of the new Gui counts as a change — which is also what repaints the frame on return from the pager»; «Pager / editor return»). Предпосылка проверена в коде и верна: app.ui.SetManagerFunc(layout(app)) стоит ВНУТРИ цикла пересборки mainLoop (top/ui.go:62), поэтому замыкание layout пересоздаётся на каждой пересборке с нулевыми lastX/lastY. Остаток: механизм не поднят в текст Decision 5, не назван в описании Task 7 и не имеет своего кейса в Testing Strategy. См. finding us12-ownership."
+    },
+    {
+      "round1_finding": "MAJOR — гарантия проглатывания ошибок покрывала только внешнее замыкание (Риск 3 user-spec)",
+      "verdict": "resolved",
+      "evidence": "Decision 6 вводит renderFrame как общее ядро с двумя политиками ошибок: живой путь сохраняет проброс, путь перерисовки возвращает nil и питает latch из Decision 5. Противоречие первой редакции («reuse printStat verbatim» + «skip two side effects») названо в самом решении и снято. Цепочка layout → repaint → renderFrame → error → teardown → rebuild разорвана на уровне решения, а не на уровне надежды. Строка в таблице Risks обновлена соответственно."
+    },
+    {
+      "round1_finding": "MINOR — поведение ошибок сбора на паузе не имеет теста",
+      "verdict": "resolved",
+      "evidence": "Testing Strategy: «Errors while paused: a frame carrying an error is discarded like any other and surfaces on the first frame after resume»."
+    },
+    {
+      "round1_finding": "MINOR US-18 — сужение подсказки диалога без владельца",
+      "verdict": "not resolved, and regressed",
+      "evidence": "Tech-spec по-прежнему ни разу не упоминает dialogPromptFit/dialogInputX0 (top/dialog.go:70-89,162-165), нет ни теста, ни шага проверки. Сверх того Decision 14 делает заявленное в AC число неверным для четырёх диалогов. См. finding us18."
+    },
+    {
+      "round1_finding": "MINOR — Task 6 склеивал детектор размера и репейнт фильтра",
+      "verdict": "acknowledged, not addressed",
+      "evidence": "Задача переехала в Task 7 и стала ШИРЕ: теперь три изменения в трёх файлах (детектор размера в ui.go, ветка dialogFilter в dialog.go, возраст кадра в kill-диалогах). Само по себе не дефект покрытия — но Task 7 остаётся самой разнородной задачей набора, и третья её часть — scope creep (Decision 14)."
+    }
+  ],
+  "criteria_map": [
+    { "id": "US-1", "criterion": "Space немедленно замораживает кадр целиком (таблица, обе панели, часы) + [PAUSED] в тот же момент", "owner": "Task 2 (флаг, биндинг Space, токен), Task 3 (гейт и стор), Task 4 (замороженные часы)", "status": "covered" },
+    { "id": "US-2", "criterion": "Заморозка бесконечна, сбор не блокируется; тест ≥5 отправок подряд", "owner": "Task 3 (statLoop + drain-тест), Decision 12", "status": "covered" },
+    { "id": "US-3", "criterion": "На паузе показан именно тот кадр, что был при нажатии Space", "owner": "Task 3 (Decision 2 — стор не перезаписывается), Task 1 (неразрушающий вывод ячейки)", "status": "covered" },
+    { "id": "US-4", "criterion": "Ни одно нажатие на паузе не вешает интерфейс (прогон по всей раскладке)", "owner": "Task 3 (Decision 12 — guarded send), Task 9 (стенд, шаг 11)", "status": "covered" },
+    { "id": "US-5", "criterion": "Видимый эффект на кадре: / , \\ , [ ] , ↑ ↓", "owner": "Task 3 (Decision 3 — пять клавиш едут на существующем viewCh-пуше), Task 7 (Decision 4 — репейнт из ветки dialogFilter)", "status": "covered" },
+    { "id": "US-6", "criterion": "Каждое снимающее действие возвращает живое обновление, первый кадр обычный", "owner": "Task 5 (Decision 9)", "status": "covered", "caveats": ["lift-order", "showextra-close"] },
+    { "id": "US-7", "criterion": "Открытие меню и Esc не снимают; выбор пункта снимает, кроме E", "owner": "Task 5 (Decision 9, подъём внутри viewSwitchHandler; menuConf исключён структурно)", "status": "covered" },
+    { "id": "US-8", "criterion": "Ошибка сбора/потеря соединения на паузе не меняют изображение, видны после снятия", "owner": "Task 3 (гейт отбрасывает кадр вместе с его Error) + тест в Testing Strategy", "status": "covered" },
+    { "id": "US-9", "criterion": "Справка h открывается и закрывается на паузе, не снимая её", "owner": "по построению — showHelp/closeHelp не входят в список Decision 9; проверка Task 9 (стенд, шаг 7c)", "status": "covered" },
+    { "id": "US-10", "criterion": "Панель логов не пополняется на паузе и восстанавливается после пейджера", "owner": "Task 8 (Decision 7)", "status": "covered" },
+    { "id": "US-11", "criterion": "Справка содержит строку про Space с перечнем снимающих действий", "owner": "Task 6", "status": "covered" },
+    { "id": "US-12", "criterion": "Выход из пейджера/редактора показывает тот же кадр, [PAUSED] на месте", "owner": "Task 7 (детектор размера с нулевым состоянием после пересборки) + Task 3 (стор переживает пересборку)", "status": "partial", "caveats": ["us12-ownership"] },
+    { "id": "US-13", "criterion": "Resize на паузе перерисовывает кадр под новую ширину, стрелки ‹ › соответствуют", "owner": "Task 7 (Decision 5); окно колонок — существующий visibleColumns из [009], пересчитывается репейнтом", "status": "covered" },
+    { "id": "US-14", "criterion": "Повторный Space возвращает живое обновление, первый кадр обычный", "owner": "Task 2 (togglePause), Task 3 (гейт)", "status": "covered" },
+    { "id": "US-15", "criterion": "Space до первого кадра: [PAUSED] есть, экран пуст, после снятия приходит обычный первый кадр", "owner": "Task 3 (frameStore.valid), Task 2 (маркер), Task 9 (стенд, шаг 8)", "status": "covered", "caveats": ["repaint-edge-cases"] },
+    { "id": "US-16", "criterion": "Маркер восстанавливается после пересборки интерфейса, в том числе когда кадра нет", "owner": "Decision 8 — кода не требуется; тест назван в Testing Strategy", "status": "covered", "caveats": ["d8-test-unassigned"] },
+    { "id": "US-17", "criterion": "Расширение колонки на паузе не даёт навсегда обрезанного значения", "owner": "Task 1 (Decision 10 — printDataCell не мутирует s.Result.Values)", "status": "covered" },
+    { "id": "US-18", "criterion": "Во время паузы подсказка в диалогах короче примерно на 8 символов — ожидаемое поведение, не дефект", "owner": "НЕТ ВЛАДЕЛЬЦА", "status": "missing", "caveats": ["us18"] },
+    { "id": "US-19", "criterion": "На узком терминале с фильтром [PAUSED] виден, индикатор фильтра уступает первым", "owner": "Task 2 (single-variant токен левее фильтра, не деградирует) + Task 9 (стенд, шаг 6)", "status": "covered" },
+    { "id": "US-20", "criterion": "Пробел в диалоге паузу не включает", "owner": "Task 2 (Decision 13 — биндинг скоуплен на контекст \"sysstat\")", "status": "covered" },
+    { "id": "US-21", "criterion": "make test / lint / vuln проходят, гонок при -race нет", "owner": "Task 9", "status": "covered" }
+  ],
+  "findings": [
+    {
+      "id": "lift-order",
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "US-6 / Сценарий 4 / Риск 5 user-spec: при снятии паузы действием маркер [PAUSED] должен исчезнуть",
+      "detail": "Decision 9 закрывает дыру только наполовину. Правило размещения задано ОДНОЙ осью — «после ранних выходов». Второй оси, обязательной для корректности, нет: liftPause должен вызываться ДО собственного printCmdline обработчика. Проверено по коду: switchSortOrder пишет cmdline на :118 и только потом пушит viewCh (:120); toggleSysTables пишет в конце тела; toggleIdleConns тоже; switchViewToProcPidStat пишет в switch в самом конце (:370-379); toggleVerbose пишет в конце (top/verbose.go:29-33); showExtra пишет msg в конце. Все шесть подпадают под исключение Decision 9 «handlers that already write the cmdline themselves must not call the refreshing variant», то есть их собственная запись и есть единственная перерисовка cmdline на этом пути. Если liftPause (нерефрешащий) поставить в конец тела — а именно туда его ставит единственное сформулированное правило, — запись в cmdline произойдёт при ещё поднятом флаге, композер [015] нарисует префикс с [PAUSED], и маркер зависнет над живыми данными. Это ровно тот дефект, который был CRITICAL в первом раунде, вернувшийся через дверь исключения. Затрагивает клавиши <, ,, I, S, v, B/N/F/L. Пути смены экрана НЕ затронуты: подъём внутри viewSwitchHandler стоит до printCmdline у обоих вызывающих (switchViewTo:232, menuSelect:155/175/193/203) — то есть правильный порядок там получается сам, что и маскирует проблему при беглом чтении. Починка — одно предложение в Decision 9: «liftPause вызывается до собственной записи обработчика в cmdline».",
+      "severity": "major"
+    },
+    {
+      "id": "showextra-close",
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-6 + «Нажатие L во время паузы, как и остальных панелей, паузу снимает» (раздел UX-поведение)",
+      "detail": "Decision 9 задаёт для showExtra ровно одну точку: «after the four logtail early returns (:37-58)», то есть примерно строка 60 — после switch, перед openExtraView. Но у showExtra есть ветка ЗАКРЫТИЯ панели, которая возвращается сильно раньше: if app.config.view.ShowExtra == extra { ... return closeExtraView(g, v, app.config) } (top/extra.go:14-24). Она до указанной точки не доходит вообще. Следствие ровно в сценарии, который user-spec описывает явным текстом: панель логов открыта ДО постановки паузы, оператор жмёт L — это закрытие, пауза не снимется, хотя спека требует обратного. То же для второго нажатия B/N/F. Закрытие панели — не no-op: оно меняет ShowExtra во всех views, пушит viewCh и удаляет gocui-view «extra», так что под правило «действие, которое ничего не изменило» оно не подпадает. Требуется либо вторая точка вызова в ветке закрытия, либо переформулировка Decision 9 в терминах «обе ветки showExtra, кроме четырёх ранних выходов logtail».",
+      "severity": "major"
+    },
+    {
+      "id": "scope-d14",
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "Decision 14: возраст замороженного кадра в диалогах -, _, k, K",
+      "detail": "Вердикт: это creep, и его следует убрать из фичи. Три аргумента. (1) Решение противоречит прямому предложению user-spec, а не просто «не запрошено»: «Своих форм и полей ввода фича не добавляет. Единственное касание существующих диалогов — маркер [PAUSED] занимает часть ширины строки». Decision 14 добавляет второе, намеренное касание тех же диалогов — то есть меняет утверждённую границу фичи, а не достраивает её. (2) Заявленный риск уже закрыт средствами, которые user-spec выбрал осознанно: часы в шапке заморожены специально ради того, чтобы оператор видел момент кадра (отдельное «Мы решили» в Технических решениях), а [PAUSED] по Риску 5 виден всегда и не деградирует. Decision 14 добавляет третий индикатор того же факта в самом узком месте экрана. (3) Есть цена, которую решение не учло: dialogPromptFit (top/dialog.go:70-89) режет подсказку под бюджет maxX - minDialogInputWidth - 1 - len(префикса). Промпт «PID to cancel: » — 15 символов, с возрастом — около 36; групповые k/K уже сейчас 48 символов, с возрастом под 68. На узком терминале усечение съест как раз хвост строки, то есть сам возраст: страховка исчезает ровно в том режиме, где её ценность максимальна, и делает это молча. Побочно: dialogPrompts сегодня чистая функция от dialogType и вызывается дважды — на открытии (:120) и в dialogFinish (:208, TrimPrefix). Сейчас второй вызов безвреден (подсказка печатается в cmdline через printCmdlinePersist, а не в буфер диалога), но Decision 14 делает эту функцию зависящей от времени, и вестигиальный TrimPrefix превращается в скрытую мину для любого будущего изменения. Если владелец всё же хочет эту страховку — она заслуживает строки в user-spec и своей задачи, потому что она меняет пользовательскую строку диалога и делает AC US-18 неверным.",
+      "severity": "major"
+    },
+    {
+      "id": "us18",
+      "type": "gap",
+      "source": "user-spec",
+      "requirement": "US-18: во время паузы подсказка в диалогах короче примерно на 8 символов — ожидаемое поведение, не дефект",
+      "detail": "Владельца по-прежнему нет, и с первого раунда стало хуже. Tech-spec ни разу не называет dialogPromptFit/dialogInputX0 — единственный третий потребитель cmdlineTokens, через который эффект и возникает; ни одна задача его не упоминает, ни один тест не проверяет, ни один шаг стендового прогона его не снимает (шаг 6 проверяет только выживание [PAUSED] на -x 60, шаг 7a — что открытие диалога не снимает паузу). Отдельно: заявленное в критерии число «примерно 8» после Decision 14 перестаёт быть верным для четырёх диалогов из десяти — для -, _ подсказка становится длиннее ещё примерно на 21 символ, для k, K — на столько же поверх уже 48-символьной строки. То есть критерий приёмки нельзя ни подтвердить, ни опровергнуть: он и без владельца, и с неверным числом. Минимальная починка — один тест на dialogPromptFit с токеном паузы и без него плюс явная фиксация числа; при снятии Decision 14 число остаётся тем, что записано в user-spec.",
+      "severity": "major"
+    },
+    {
+      "id": "us12-ownership",
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-12 / пользовательская история №3 / Сценарий 3: выход из пейджера показывает тот же замороженный кадр",
+      "detail": "Улучшение относительно первого раунда реальное: механизм назван в Architecture дважды и с причинной цепочкой («After a UI rebuild its state is zero, so the first layout of the new Gui counts as a change — which is also what repaints the frame on return from the pager»), и предпосылка проверяема — app.ui.SetManagerFunc(layout(app)) стоит внутри цикла пересборки (top/ui.go:62), так что замыкание с lastX/lastY действительно пересоздаётся нулевым. Но механизм остался в прозе Architecture: (а) в текст Decision 5 он не поднят — заголовок и Rationale решения говорят только про resize, альтернативы разобраны только для resize; (б) описание Task 7 говорит «Detect terminal size changes in the layout callback so a paused frame is re-laid out for the new width» — исполнитель не узнает, что тот же код отвечает за возврат из пейджера; (в) в Testing Strategy есть табличный тест sizeChanged(lastX, lastY, x, y), но кейс (0,0)→(190,52) как «первая раскладка после пересборки» не назван, поэтому он может в таблицу и не попасть. Требование доставляется корректно, но по-прежнему не владеется тем, кто его будет писать. Починка дешёвая: абзац в Decision 5 и одно предложение в описании Task 7.",
+      "severity": "minor"
+    },
+    {
+      "id": "task5-files",
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Task 5 / Decision 9: сигнатура liftPause против сигнатуры viewSwitchHandler",
+      "detail": "Decision 9 объявляет helper как liftPause(g, config), но viewSwitchHandler(config *config, c string) (top/config_view.go:315) никакого *gocui.Gui не принимает — как и orderKeyLeft/orderKeyRight/scrollLeft/scrollRight/increaseWidth/decreaseWidth, у которых g в замыкании отброшен подчёркиванием. Из решения следует, что вариантов liftPause на самом деле два (рефрешащий и нет), но второй нигде не назван и не описан, поэтому и его сигнатура не задана. Практическое следствие для декомпозиции: если для viewSwitchHandler выбрать рефрешащий вариант, придётся менять сигнатуру viewSwitchHandler, а вместе с ней десять вызовов в top/menu.go — файл, которого нет в «Files to modify» Task 5 (он только в «Files to read»). Правильный выбор здесь — нерефрешащий вариант (оба вызывающих печатают cmdline сразу после), и это стоит записать, а не оставлять исполнителю выводить. Заодно снимается вопрос по changeQueryAge: он сам в cmdline не пишет, пишет его вызывающий dialogFinish (top/dialog.go:242), поэтому формулировка исключения «handlers that already write the cmdline themselves» его буквально не покрывает, хотя рефрешащий вариант там даст двойную запись — дефект-класс [027].",
+      "severity": "minor"
+    },
+    {
+      "id": "repaint-edge-cases",
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-15 (Space до первого кадра) + «его перерисовка не должна показывать подсказку сбора данных вместо самих данных» (раздел Ключевые компоненты)",
+      "detail": "Два краевых поведения пути перерисовки объявлены, но не описаны и не покрыты тестом. (а) frameStore.valid объявлен в Data Models с комментарием «false until the first frame is rendered», но нигде не сказано, что делает repaintStored при valid == false (обязан быть no-op, оставив экран пустым и маркер на месте) — ни в Architecture, ни в Decision 6, ни в Testing Strategy; проверяется только стендовым шагом 8. (б) Decision 6 говорит, что путь перерисовки пропускает first-tick hint, и это верно по конструкции — firstTickHint печатается в printStat ВНЕ замыкания g.Update (top/stat.go:166-168), так что вынос renderFrame его естественно отсекает. Но требование user-spec сформулировано как пользовательское («перерисовка не должна показывать подсказку сбора данных вместо самих данных»), а теста на него нет ни в одном пункте Testing Strategy.",
+      "severity": "minor"
+    },
+    {
+      "id": "d8-test-unassigned",
+      "type": "structural_gap",
+      "source": "tech-spec",
+      "requirement": "US-16 / Decision 8: тест, закрепляющий восстановление маркера после пересборки интерфейса",
+      "detail": "Decision 8 держится целиком на тесте — кода решение не поставляет, его единственная защита от регресса это «Add a test that pins the behaviour instead». В Testing Strategy тест есть («Marker after a UI rebuild: a uiError-shaped cmdline write reproduces the prefix with the marker»), но ни в одной строке таблицы Per-task verification он не назван: строка Task 2 проверяет «token present/absent, position, no degradation», строка Task 7 — resize/filter/kill-age. Тест без задачи-владельца — это тест, который не будет написан, и тогда Decision 8 остаётся утверждением про чужой код (uiError всегда non-nil на пути пересборки) без единой страховки. Достаточно дописать его в строку Task 2.",
+      "severity": "minor"
+    },
+    {
+      "id": "task9-debt",
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "Task 9: «Also records the two new persistence consequences into tech debt [029]»",
+      "detail": "Не в области QA-задачи. Task 9 работает по скиллу pre-deploy-qa, чей предмет — прогон тестов и проверка критериев приёмки; правка docs/tech-debt.md к этому не относится. В проекте есть штатный владелец этого действия — команда /done, в описании которой прямым текстом стоит «update global ADR log and tech debt register» при финализации фичи. Плюс у Task 9 «Reviewers: none», то есть запись в реестр техдолга уедет без ревью, а сам текст [029] (docs/tech-debt.md:41-52) — осмысленный документ с обоснованной асимметрией, к которому дописываются два новых следствия. Рекомендация: убрать пункт из Task 9, оставив соответствующий AC tech-spec как задание для /done. Само по себе требование записать следствия верное — вопрос только во владельце.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "19/21 критерия приёмки покрыто, 1 частично (US-12), 1 без владельца (US-18). Статус изменился с fail на pass: все четыре CRITICAL первого раунда закрыты по существу, а не формально. Механизм снятия паузы теперь реален — Decision 9 плюс отдельная Task 5, список call sites сверен с кодом и полон, исключение menuConf подтверждено структурой menuSelect (ветка E действительно не проходит через viewSwitchHandler), правило «после ранних выходов» закрывает все три no-op пути user-spec и ещё два, которых спека не называла. Риск 3 закрыт по-настоящему: Decision 6 разделяет renderFrame на два пути с разными политиками ошибок и явно снимает противоречие первой редакции. Возврат из пейджера перестал быть чистым побочным эффектом — предпосылка про нулевое состояние детектора проверена в коде и верна. Остаются два major по механике снятия: (1) правило размещения liftPause задано только относительно ранних выходов, но не относительно собственной записи обработчика в cmdline — для шести обработчиков это возвращает зависший маркер, тот же дефект первого раунда через дверь исключения; (2) ветка ЗАКРЫТИЯ панели в showExtra возвращается до указанной точки вызова, поэтому нажатие L при открытой панели логов паузу не снимет — ровно сценарий, который user-spec описывает явно. Обе починки — по одному предложению в Decision 9. По Decision 14 вердикт: это creep, убрать. Оно противоречит прямому предложению user-spec о том, что единственное касание диалогов — ширина маркера; закрывает риск, уже закрытый замороженными часами и всегда видимым [PAUSED]; и молча ломает AC US-18, потому что усечение dialogPromptFit на узком терминале съест именно возраст. Пункт про техдолг [029] из Task 9 стоит перенести в /done — у QA-скилла этого предмета нет, а reviewers у задачи none."
+}

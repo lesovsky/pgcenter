@@ -114,23 +114,31 @@ read (`Nrows` from one frame, `Values` from another) is a slice-bounds panic ins
 closure, which gocui does not recover. `-race` would not catch it either, because `statLoop` is
 tested with stub render/repaint functions.
 
+**Made structural, not merely disciplinary.** The rule is enforced by the shape of the API rather
+than by a comment: `frameStore` has unexported fields and no getters, and the only way to draw it is
+its own method, which enters `g.Update` itself. The gate therefore receives a `repaint func()` with
+no parameters (Decision 12) — from the worker goroutine there is simply nothing to pass, so the racy
+form cannot be written by accident. A unit test drives the real closure rather than a stub, so the
+invariant has at least one mechanical check; `-race` alone would not catch a violation, because the
+`statLoop` tests use stub render/repaint functions.
+
 **Alternatives considered:** a `sync.Mutex` on `top.config` (rejected — the package's first lock, and
 it still would not answer where the logtail buffer is captured); the store on `view.View` (rejected
 by ADR [009]/[010]: it would ride `viewCh` and disturb `collectStat`'s load-bearing change-detection
 ladder, `top/stat.go:86-122`).
 
-### Decision 2: The gate discards and asks for a repaint; publication stays unconditional
+### Decision 2: The gate discards and asks for a repaint; only the live path publishes
 
 **Decision:** `case s := <-statCh: if paused { repaintStored(app); continue }; printStat(...)`. The
-publication inside the render closure is not guarded by `if !paused`.
+store is written **only on the live path** — `renderFrame` publishes when it is rendering a frame
+that came from the collector, and never when it is repainting the store.
 
-**Rationale:** while paused, the only thing reaching the render closure is a repaint of the stored
-frame, so the publication is an identity write **performed on the same goroutine that owns the
-store** — which is what makes it safe, not the fact that the value is equal. A guard would add a
-second place where "is it paused" must be answered consistently.
-
-**Alternatives considered:** publishing from the gate (rejected — a write on the worker goroutine,
-see Decision 1); conditional publication (rejected as above).
+**Rationale:** the first draft called the publication unconditional on the grounds that a repaint
+would be an "identity write". It would not be: the timestamp is captured at render time
+(Decision 11), so a repaint would stamp the stored frame with the current clock and the frozen header
+clock would tick — defeating Task 4 — and the logtail buffer would be re-stored from itself. Writing
+only on the live path is also simpler to reason about: while paused the store is immutable by
+construction, which is exactly what "the frozen frame is the frame that was on screen" means.
 
 ### Decision 3: Render-only keys ride their existing `viewCh` push
 
@@ -198,12 +206,18 @@ closure that returns `nil` and drives the Decision 5 latch. The repaint path als
 read (Decision 7) and the first-tick hint.
 
 **Rationale:** the first draft said "reuse `printStat` verbatim" and separately "skip the two side
-effects", which is a contradiction; worse, `printStat`'s closure returns errors at seven points
-(`top/stat.go:172-204`), so a repaint through it re-opens the infinite-rebuild loop that Decision 5
-closes at the outer level. One core with two error policies removes both problems.
+effects", which is a contradiction; worse, `printStat`'s closure returns errors at **thirteen**
+points (`top/stat.go:172-247` — seven in the panel section, six more in the extra/logtail branch), so
+a repaint through it re-opens the infinite-rebuild loop that Decision 5 closes at the outer level.
+One core with two error policies removes both problems.
 
-**Alternatives considered:** a boolean parameter on `printStat` (rejected — the two paths differ in
-error policy, which a flag inside one function expresses badly).
+**The two paths differ in three dimensions, not one** — error policy, the source of the logtail
+content (file versus stored buffer), and whether the first-tick hint runs. Task 3 must therefore
+design the core's signature to *already* accept the logtail source, even though Task 8 is what fills
+it in; otherwise Wave 5 re-opens the seam Wave 2 just cut.
+
+**Alternatives considered:** a boolean parameter on `printStat` (rejected — the paths differ in error
+policy, which a flag inside one function expresses badly).
 
 ### Decision 7: The stored logtail buffer is the last NON-EMPTY read, and the file is not touched while paused
 
@@ -219,9 +233,13 @@ during a pause with a broken connection would leave a closed handle and a stale 
 resulting error, raised on every interval, would tear down `MainLoop` below the `errorRate`
 threshold. Skipping the branch entirely avoids that class.
 
-**Bookkeeping note (corrected):** `config.logtail.Size` is written in two places — `top/stat.go:243`
-(the skipped branch) and `top/extra.go:46` (`= 0` when the panel is opened with `L`). Only the first
-is affected by the pause; the second cannot run while paused because `L` lifts it.
+**Bookkeeping note (corrected twice):** `config.logtail.Size` is written in two places —
+`top/stat.go:243` (the skipped branch) and `top/extra.go:46` (`= 0` when the panel is opened with
+`L`). The earlier claim that the second "cannot run while paused because `L` lifts" is **wrong**:
+`Path`/`Size` are written before three of that handler's early returns (`top/extra.go:51,54,58`), so
+they execute with the flag still raised. Decision 9 therefore places the lift in that handler
+**before** the first mutation of `logtail`, not after all its early returns — the logtail branch is
+where "changed nothing" stops being true partway through.
 
 **Residual, pre-existing and merely widened:** the descriptor is held for the duration of the pause,
 so a rotated-away file keeps its inode pinned, and if the new file outgrows the frozen size before
@@ -246,30 +264,54 @@ the token prefix, marker included, even though the message itself is empty.
 
 ### Decision 9: Lifting is explicit, placed after early returns, and refreshes the cmdline
 
-**Decision:** a `liftPause(g, config)` helper clears the flag and performs exactly one cmdline
-re-render; it is called by every handler that needs fresh data, **after** that handler's early
-returns. Call sites, from the code-research classification:
+**Decision:** two helpers, because the handlers split into two kinds:
 
-- `viewSwitchHandler` (`top/config_view.go:315`) — covers every screen switch, whether reached by a
-  letter key or by the `D`/`X`/`P`/`J` menus.
-- `switchViewToProcPidStat` (`:329`) — after its remote-connection early return (`:341`).
-- `orderKeyLeft`/`orderKeyRight`/`switchSortOrder`, `toggleSysTables`, `toggleIdleConns`,
-  `changeQueryAge`.
-- `toggleVerbose` (`top/verbose.go:14`), `showExtra` (`top/extra.go:11`) — after the four logtail
-  early returns (`:37-58`).
+- `liftPause(config)` — clears the flag and nothing else. No `*gocui.Gui` parameter, so it can be
+  called from functions that do not have one.
+- `liftPauseRefresh(g, config)` — clears the flag and performs exactly one cmdline re-render.
 
-Handlers that already write the cmdline themselves must not call the refreshing variant — the
-"exactly one write per path" rule (`patterns.md`, defect class [027]) applies. Task decomposition
-produces the precise map of which call site writes and which does not.
+**Placement rule, in this order of precedence:**
 
-**Rationale:** three requirements meet here. Lifting must happen where the *decision to need fresh
-data* is made, not in a wrapper, because `menuConf` (`E`) must be excluded — it opens the editor, a
-UI-rebuild path where the pause survives, and it is the one menu branch that does not go through
-`viewSwitchHandler` (`top/menu.go:204-209`). Lifting must be after early returns, because the
-user-spec requires that an action which changed nothing (no `pg_stat_statements`, remote `S`,
-unreadable log) does not lift the pause. And it must refresh the cmdline, because most of these
-handlers write nothing there, so `[PAUSED]` would otherwise stay on screen over live data — Risk 5 of
-the user-spec, realised.
+1. After the handler's early returns — an action that changed nothing does not lift the pause.
+   Exception: in the logtail branch of `showExtra`, before the first mutation of `config.logtail`
+   (`top/extra.go:45-46`), because three of its early returns come *after* that mutation and so are
+   no longer no-ops.
+2. **Before** the handler's own cmdline write, when it has one. This is what keeps the marker from
+   stranding: the composer renders the token prefix from the flag's value *at write time*, so a lift
+   placed after the write would produce a line still carrying `[PAUSED]`, with no later write to
+   correct it.
+3. Handlers with no cmdline write of their own use `liftPauseRefresh`; handlers that write use
+   `liftPause` plus their existing write.
+
+**Call sites** (verified against the code; 8 of the 10 write the cmdline themselves — only
+`orderKeyLeft`/`orderKeyRight` do not):
+
+- `viewSwitchHandler` (`top/config_view.go:315`) — the silent variant. It has no `*gocui.Gui` and is
+  called from 22 places including `top/menu.go`; putting the lift inside it covers every screen
+  switch reached by a letter key or by the `D`/`X`/`P`/`J` menus without touching a single call site.
+  Its callers write the cmdline afterwards, which redraws the prefix.
+- `switchViewToProcPidStat` (`top/config_view.go:329`) — after the remote early return (`:341`); it
+  deliberately bypasses `viewSwitchHandler` (`:325-328`), so it needs its own call.
+- `orderKeyLeft`/`orderKeyRight` — the refreshing variant (no cmdline write of their own).
+- `switchSortOrder`, `toggleSysTables`, `toggleIdleConns`, `changeQueryAge` — silent variant, placed
+  before their existing writes.
+- `toggleVerbose` (`top/verbose.go:14`) — silent variant, before its `Verbose mode: …` write.
+- `showExtra` (`top/extra.go:11`) — silent variant, at **two** points: before `return
+  closeExtraView(...)` (`:22`, the panel-closing path, which the user-spec explicitly expects `L` to
+  lift) and, for the opening path, before the `logtail` mutation as described above.
+
+`menuConf` (`top/menu.go:204-222`) is excluded by construction: it calls `editPgConfig` directly
+rather than going through `viewSwitchHandler`, which is exactly the behaviour required — it opens an
+editor, a UI-rebuild path where the pause survives.
+
+**Rationale:** lifting must happen where the *decision to need fresh data* is made, not in a wrapper
+around the `viewCh` send, because the five render-only keys push there too and must **not** lift. It
+must respect early returns, because the user-spec requires that an action which changed nothing (no
+`pg_stat_statements`, remote `S`, unreadable log) leaves the freeze intact. And the marker must be
+redrawn on every lifting path — otherwise `[PAUSED]` stays on screen over live data, which is Risk 5
+of the user-spec realised. The two-helper split exists because a single refreshing helper would
+produce a second cmdline write on the eight paths that already write one, which is defect class
+[027]; and because `viewSwitchHandler` has no `*gocui.Gui` to give it.
 
 **Alternatives considered:** lifting inside the `viewCh` send (rejected — the five render-only keys
 push there too and must *not* lift); lifting in `statLoop` when a frame is rendered (rejected — the
@@ -297,7 +339,8 @@ a parameter instead of calling `time.Now()` itself (`top/stat.go:277`).
 **Rationale:** `stat.Stat` carries no collection time and the user-spec confines the change to
 `top/`. The gap between "collected" and "rendered" is bounded by one refresh interval and is
 invisible on screen. Five test call sites need the new argument (`top/stat_test.go:60, 97, 192, 440,
-441`; `:192` is a shared helper covering eight tests).
+441`; `:192` is a shared helper covering eight tests). The stamp is taken **only on the live path**
+(Decision 2) — a repaint reuses the stored one, which is what actually freezes the clock.
 
 **Alternatives considered:** adding a timestamp to `stat.Stat` in `internal/stat` (rejected — it
 widens the change beyond `top/` for a value only the renderer needs).
@@ -309,14 +352,17 @@ render, repaint)`, returning its exit reason. In the same task, guard the curren
 `top/stat.go:130` with a `select` on `ctx.Done()`. Do **not** add `wg.Wait()` to the `uiExit` branch.
 
 **Rationale:** the loop is the only concurrency-sensitive code in the feature and is untestable
-inside `doWork`. The bare send is a pre-existing hang: `wg.Wait()` on the `ctx.Done()` branch
-(`top/ui.go:130-132`) waits for a collector that may be parked on that send forever, and this path
-runs on **every** return from the pager (`mainLoop` cancels, then waits). The pause raises its
-reachability, because the five render-only keys make the collector's re-initialisation branch a
-routine event while paused. Five lines in a file this task edits anyway.
-The `uiExit` branch needs no `wg.Wait()` — `mainLoop` already cancels and waits (`top/ui.go:99-102`).
-(The first draft justified this by claiming the wait would hang forever; that was wrong, since
-`cancel()` wakes the collector. The conclusion stands for the simpler reason that the wait is
+inside `doWork`. The bare send is a pre-existing hazard with two distinct outcomes, and the first
+draft described the wrong one. On the **pager** path `doWork` returns through the `uiExit` branch
+(`top/ui.go:125-127`), so nothing waits — the collector parked on that send simply leaks until the
+context is cancelled. On the **UI-error rebuild** path the wait in `mainLoop` (`top/ui.go:99-102`)
+does run, and a collector parked on the bare send makes it eternal. The pause raises reachability on
+both, because the five render-only keys turn the collector's re-initialisation branch into a routine
+event. Five lines in a file this task edits anyway.
+
+The `uiExit` branch inside `doWork` needs no `wg.Wait()` of its own — `mainLoop` already cancels and
+waits. (The first draft justified this by claiming such a wait would hang forever; that was wrong,
+since `cancel()` wakes the collector. The conclusion stands for the simpler reason that it is
 redundant.)
 
 **Alternatives considered:** testing `doWork` as-is (rejected — needs a live `Gui`); leaving the bare
@@ -334,37 +380,54 @@ keybinding table has **no test coverage at all**, so a wrong constant is caught 
 **Alternatives considered:** a global binding (rejected — it would make typing a space into any
 dialog impossible).
 
-### Decision 14: The kill dialogs show the frame's age while paused
+### Decision 14: Guard the column-width handlers against a frame that was never rendered
 
-**Decision:** while the pause is active, the backend-cancel and backend-terminate dialogs (`-`, `_`,
-`k`, `K`) include the age of the frozen frame in their prompt, e.g. `(frame is 4m12s old)`.
+**Decision:** `increaseWidth`/`decreaseWidth` (`top/config_view.go:87,100`) check that the column
+metadata exists before indexing it.
 
-**Rationale:** the user-spec deliberately keeps the pause across these actions, and their argument is
-a PID the operator reads **off a deliberately stale screen**; the stand scenario itself pauses for
-three minutes before acting. The frozen clock gives an absolute time but not an age, and the value is
-already stored (`frameStore.at`), so this is one string on data the feature already has. This is the
-one place where a stale read has an irreversible consequence.
+**Rationale:** `config.view.Cols` is populated only on the render path (`top/stat.go:675`);
+`view.New()` leaves it nil. `decreaseWidth` indexes `config.view.Cols[idx]`
+(`top/config_view.go:105`), so pressing `↓` before the first frame panics inside a key handler, which
+gocui does not recover — the process dies. Today that window is the one to three seconds before the
+first frame. This feature makes it **unbounded**: the user-spec allows `Space` before the first frame
+(pause engages, screen stays empty), and Decision 3 documents `↓` as a working key while paused. A
+pre-existing crash that a feature converts from a 2-second window into an indefinite one belongs to
+that feature.
 
-**Autopilot decision:** the user-spec does not ask for this. It is added under the autopilot mandate
-as a safety consequence of a decision the spec *did* make (keeping the pause for DB actions), and is
-recorded here so it is reconciled into the spec's post-implementation section rather than looking
-like scope creep.
+**Alternatives considered:** ignoring it as pre-existing (rejected on the reachability change);
+refusing `Space` before the first frame (rejected — contradicts an approved user-spec decision).
 
-**Alternatives considered:** lifting the pause for kill dialogs (rejected — contradicts an approved
-user-spec decision); showing nothing (rejected — the risk is real and the fix is one line).
+### Rejected: showing the frame's age in the backend-kill dialogs
+
+Considered and **rejected** during validation. The argument for it was real — the pause is kept for
+`-`/`_`/`k`/`K`, so the operator acts on a PID read off a deliberately stale screen, and the stand
+scenario pauses three minutes before acting. It was rejected because: the user-spec states that the
+*only* effect on dialogs is the width the marker consumes; the risk is already addressed by two
+approved decisions (the frozen header clock and the always-visible marker); and it would silently
+break the user-spec's dialog-prompt criterion, since prompts are truncated from the end under the
+[015] width budget — on a narrow terminal the age would be the first thing cut, i.e. absent exactly
+where it is most needed. `k`/`K` do not read a PID off the screen at all; they act on a mask.
 
 ## Data Models
 
 ```go
 // top/pause.go — owned by the gocui goroutine, read and written only there.
+// Unexported fields, no getters: the only way to draw it is its own method, which enters g.Update
+// itself. That is what makes Decision 1 structural rather than a convention.
 type frameStore struct {
     stats   stat.Stat  // the frozen frame, as received
-    at      time.Time  // when it was rendered — freezes the header clock, feeds the kill-dialog age
+    at      time.Time  // when it was rendered — this is what freezes the header clock
     logBuf  []byte     // last NON-EMPTY logtail read (nil when the panel was closed)
     logPath string     // the path that buffer came from
     valid   bool       // false until the first frame is rendered
 }
 ```
+
+**`valid == false` is a normal state, not an error.** It holds when the pause is engaged before the
+first frame — which the user-spec explicitly allows. A repaint then draws nothing and returns
+without touching the failure latch of Decision 5: there is no failure, there is simply nothing to
+draw. The screen stays empty under a live `[PAUSED]`, exactly as the user-spec describes, and the
+first frame after resume renders normally.
 
 `config` gains one field:
 
@@ -418,9 +481,13 @@ None. `sync/atomic` is already used in `top/` (`uiGeneration`, `top/ui.go:29`).
   `menuConf` does not.
 - `sizeChanged(lastX, lastY, x, y)` — a pure helper, table-tested, so the arithmetic is not buried in
   `layout`.
-- Kill-dialog prompt includes the frame age while paused and is unchanged when live.
+- Dialog prompt geometry holds while the marker is present: the prompt is truncated under the [015]
+  width budget and the input field is not overlaid (covers the user-spec's narrowing criterion).
 - Errors while paused: a frame carrying an error is discarded like any other and surfaces on the
   first frame after resume.
+- Column-width handlers do not panic when the column metadata has never been populated.
+- Store immutability: after pausing, a repaint driven by a later frame renders the original values
+  and the original timestamp — the check that would fail if the store were republished on repaint.
 
 ### Integration tests
 
@@ -449,14 +516,15 @@ repository.
 | Task | verify: | What to check |
 |------|---------|--------------|
 | 1 | bash | `go test ./top/...` — truncation output unchanged, source value unmutated |
-| 2 | bash | `go test ./top/...` — token present/absent, position, no degradation |
-| 3 | bash | `go test ./top/... -race` — ≥5 collector sends complete while paused; render never called while paused |
-| 4 | bash | `go test ./top/...` — clock renders the stored stamp |
-| 5 | bash | `go test ./top/...` — every classified handler lifts; no-op paths and `menuConf` do not |
+| 2 | bash | `go test ./top/...` — token present/absent, position, no degradation; a `uiError`-shaped write reproduces the marker (pins Decision 8) |
+| 3 | bash | `go test ./top/... -race` — ≥5 collector sends complete while paused; render never called while paused; the store is immutable while paused |
+| 4 | bash | `go test ./top/...` — clock renders the stored stamp, and a repaint does not advance it |
+| 5 | bash | `go test ./top/...` — every classified handler lifts; no-op paths and `menuConf` do not; `↓` before the first frame does not panic |
 | 6 | bash | `go test ./top/...` — help text contains the `Space` entry and the lifting set |
-| 7 | bash | `go test ./top/...` — resize helper table; filter repaint invoked when paused; kill prompt carries the frame age |
-| 8 | bash | `go test ./top/...` — empty read keeps the buffer; repaint touches no file |
-| 9 | bash | full stand run: all 15 user-spec steps |
+| 7 | bash | `go test ./top/...` — size-change helper table; a repaint is requested on change while paused and not otherwise |
+| 8 | bash | `go test ./top/...` — filter repaint invoked when paused; the dialog prompt still fits with the marker present |
+| 9 | bash | `go test ./top/...` — empty read keeps the buffer; repaint touches no file |
+| 10 | bash | full stand run: all 15 user-spec steps |
 
 ### Tools required
 
@@ -492,7 +560,9 @@ called only from `top/` and its tests.
 | Wrong key constant is invisible to tests | The keybinding table has no coverage; the stand run is the only guard and it is a named acceptance step |
 | The store is silently replaced, making the freeze cosmetic | Publication happens only on the render path; while paused the only render is the identity repaint, and stand step 3a checks values after ≥3 minutes |
 | A held log descriptor pins a rotated-away inode; a grown new file defeats the rotation detector | Pre-existing behaviour, widened by the pause; documented in Decision 7, not introduced here |
-| A crafted row value now persists on a frozen screen and across a pager return (debt [029]) | Out of scope by the user-spec; the persistence consequence is recorded into debt [029] as part of Task 9 |
+| A crafted row value now persists on a frozen screen and across a pager return (debt [029]) | Out of scope by the user-spec; the persistence consequence is handed to `/done` for the debt register, since the QA task neither edits documents nor carries reviewers |
+| Pressing `↓` before the first frame panics, and the pause makes that window unbounded | Decision 14 — the width handlers guard the column metadata; covered by a unit test in Task 5 |
+| While paused, a `viewCh`-pushing key blocks the UI until the collector answers; on a dead connection the frozen screen stops responding, and the error frame that would explain it is discarded by the gate | Pre-existing for those keys, but the pause removes the diagnostic. Not mitigated in code: the alternative (letting error frames through) is an approved user-spec decision. Stand step 7b exercises a stopped cluster so the behaviour is observed rather than discovered in production |
 
 ## Acceptance Criteria
 
@@ -503,8 +573,7 @@ called only from `top/` and its tests.
 - [ ] `view.View` gains no field; `record`/`report`/`profile` untouched.
 - [ ] Every existing `top/` test still passes; the five `renderSysstat` call sites updated
       mechanically, no assertion weakened.
-- [ ] Tech debt [029] is updated with the two new persistence consequences (frozen frame, logtail
-      buffer) — not fixed, recorded.
+- [ ] Pressing `↓` before the first frame does not crash the process.
 - [ ] All user-spec acceptance criteria verified: automated ones by tests, terminal ones by the stand
       run.
 
@@ -513,20 +582,26 @@ called only from `top/` and its tests.
 **Wave rule (carried over from [015]):** no two tasks in the same wave modify the same file. The
 partition below is checked against that rule.
 
-| Wave | Tasks | Files |
-|------|-------|-------|
+| Wave | Task | Files to modify |
+|------|------|-----------------|
 | 1 | 1 | `top/stat.go`, `top/stat_test.go` |
 | 1 | 2 | `top/config.go`, `top/keybindings.go`, `top/pause.go`, `top/pause_test.go`, `top/ui.go`, `top/ui_test.go` |
 | 2 | 3 | `top/ui.go`, `top/stat.go`, `top/pause.go`, `top/ui_test.go`, `top/pause_test.go` |
 | 3 | 4 | `top/stat.go`, `top/stat_test.go` |
-| 3 | 5 | `top/config_view.go`, `top/extra.go`, `top/verbose.go`, `top/config_view_test.go` |
+| 3 | 5 | `top/config_view.go`, `top/extra.go`, `top/verbose.go`, `top/pause.go`, `top/config_view_test.go`, `top/verbose_test.go`, `top/pause_test.go` |
 | 3 | 6 | `top/help.go`, `top/help_test.go` |
-| 4 | 7 | `top/ui.go`, `top/dialog.go`, `top/pause.go`, `top/ui_test.go` |
-| 5 | 8 | `top/stat.go`, `top/pause.go`, `top/stat_test.go` |
+| 4 | 7 | `top/ui.go`, `top/ui_test.go` |
+| 4 | 8 | `top/dialog.go`, `top/dialog_test.go` |
+| 5 | 9 | `top/stat.go`, `top/pause.go`, `top/stat_test.go` |
 
-Wave 1: task 1 touches `stat.go`, task 2 does not — no overlap. Wave 3: `stat.go` (4), the handler
-files (5) and `help.go` (6) are disjoint. Tasks 7 and 8 are serialised into their own waves because
-both need `pause.go` and one of `ui.go`/`stat.go`.
+Wave 1: task 1 owns `stat.go`, task 2 does not touch it. Wave 3: `stat.go` (4), the handler files
+plus `pause.go` (5) and `help.go` (6) are disjoint — note task 5 *owns* `pause.go` in this wave, so
+tasks 4 and 6 must not touch it. Wave 4: task 7 owns `ui.go`, task 8 owns `dialog.go`; both only
+*call* into `pause.go` without modifying it. Task 9 is serialised into its own wave because it needs
+`stat.go` and `pause.go` together.
+
+`top/help_test.go`, `top/verbose_test.go`, `top/dialog_test.go` and `top/pause_test.go` do not exist
+yet and are created by the tasks that list them.
 
 ### Wave 1 (независимые)
 
@@ -579,15 +654,17 @@ both need `pause.go` and one of `ui.go`/`stat.go`.
 - **Files to read:** `top/pause.go`
 
 #### Task 5: Lifting the pause in handlers that need fresh data
-- **Description:** Every action whose effect is produced by the collector must lift the pause, and it
-  must do so after its own early returns so an action that changed nothing leaves the freeze intact.
-  The config-menu path is deliberately excluded because it opens an editor, where the pause survives.
+- **Description:** Introduce the two lifting helpers and call them from every action whose effect is
+  produced by the collector, positioned so that an action which changed nothing leaves the freeze
+  intact and the marker never outlives the pause. Also guards the column-width handlers against a
+  frame that was never rendered — a crash this feature turns from a two-second window into an
+  indefinite one.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...`
-- **Files to modify:** `top/config_view.go`, `top/extra.go`, `top/verbose.go`,
-  `top/config_view_test.go`
-- **Files to read:** `top/menu.go`, `top/pause.go`,
+- **Files to modify:** `top/config_view.go`, `top/extra.go`, `top/verbose.go`, `top/pause.go`,
+  `top/config_view_test.go`, `top/verbose_test.go`, `top/pause_test.go`
+- **Files to read:** `top/menu.go`,
   `docs/features/016-feat-pause-display/016-feat-pause-display-code-research.md`
 
 #### Task 6: Help screen entry
@@ -605,20 +682,31 @@ both need `pause.go` and one of `ui.go`/`stat.go`.
 
 ### Wave 4 (зависит от Wave 3)
 
-#### Task 7: Resize repaint, filter-dialog repaint and the frame-age prompt
-- **Description:** Detect terminal size changes in the layout callback so a paused frame is re-laid
-  out for the new width, repaint the stored frame when a filter is applied through its dialog (that
-  path triggers no redraw of its own even today), and show the frozen frame's age in the
-  backend-kill prompts, where acting on stale data is irreversible.
+#### Task 7: Repaint on terminal resize
+- **Description:** Detect terminal size changes in the layout callback — the only place that sees the
+  new size, since no resize event reaches the application — so a paused frame is re-laid out for the
+  new width. The same detector is what repaints the frame after the interface is rebuilt on return
+  from a pager or editor.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...`
-- **Files to modify:** `top/ui.go`, `top/dialog.go`, `top/pause.go`, `top/ui_test.go`
-- **Files to read:** `top/config_view.go`, `top/layout.go`, `top/signal.go`
+- **Files to modify:** `top/ui.go`, `top/ui_test.go`
+- **Files to read:** `top/layout.go`, `top/pause.go`
+
+#### Task 8: Filter dialog under pause
+- **Description:** Repaint the stored frame when a filter is applied through its dialog — that path
+  triggers no redraw of its own even in live mode, so under pause the filter would appear to do
+  nothing. Also covers the dialog prompt keeping its layout while the marker occupies part of the
+  line.
+- **Skill:** code-writing
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Verify:** bash — `go test ./top/...`
+- **Files to modify:** `top/dialog.go`, `top/dialog_test.go`
+- **Files to read:** `top/config_view.go`, `top/pause.go`, `top/ui.go`
 
 ### Wave 5 (зависит от Wave 4)
 
-#### Task 8: Logtail panel freeze and restore
+#### Task 9: Logtail panel freeze and restore
 - **Description:** Stop reading the log file while paused and render the panel from the last
   non-empty buffer stored with the frame. Without storing that buffer the panel comes back empty
   after a UI rebuild, since nothing else in the application holds those lines.
@@ -631,12 +719,17 @@ both need `pause.go` and one of `ui.go`/`stat.go`.
 
 ### Final Wave
 
-#### Task 9: Pre-deploy QA
+#### Task 10: Pre-deploy QA
 - **Description:** Acceptance testing: full suite with the race detector, lint, vulnerability scan,
   and the 15-step stand run from the user-spec including the narrow-terminal pass and the comparison
-  binary built from `master`. Also records the two new persistence consequences into tech debt [029].
+  binary built from `master`.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
 - **Verify:** bash — `make test`, `make lint`, `make vuln`, plus the stand run
 - **Files to read:** `docs/features/016-feat-pause-display/016-feat-pause-display.md`,
-  `.claude/skills/project-knowledge/patterns.md`, `docs/tech-debt.md`
+  `.claude/skills/project-knowledge/patterns.md`
+
+**Note for finalization, not for this task:** tech debt [029] must gain the two new persistence
+consequences (a hostile row value now survives on a frozen screen and across a pager return; the same
+applies to the stored logtail buffer). Updating `docs/tech-debt.md` belongs to `/done`, which owns
+that register — the QA skill neither edits documents nor carries reviewers.

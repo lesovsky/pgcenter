@@ -1,0 +1,54 @@
+{
+  "status": "needs_revision",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "fail",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "coupling",
+      "severity": "major",
+      "issue": "Инвариант Decision 1 ('frameStore читается и пишется только на gocui-горутине, repaintStored ничего не извлекает из store до входа в g.Update') — это дисциплина, а не структурная гарантия. В Go пакетная приватность frameStore не защищает от кросс-горутинного доступа внутри одного пакета top: ничто на уровне компилятора не мешает будущему изменению вынести чтение `frameStore.stats` из тела repaintStored ПЕРЕД вызовом g.Update (идиоматичная и внешне безобидная привычка Go — 'захватить значение до замыкания'), что воспроизведёт ровно тот torn-read/панику, которую Decision 1 существует, чтобы исключить. Сам tech-spec честно признаёт разрыв: '-race would not catch it either, because statLoop is tested with stub render/repaint functions' (Decision 1) — то есть заявленный acceptance criterion 'make test passes with -race; no new races reported' не покрывает именно этот сценарий, поскольку statLoop тестируется с заглушками render/repaint, а не с реальными замыканиями printStat/repaintStored, вызываемыми конкурентно. Последствие нарушения — паника внутри g.Update closure, которую, по тексту той же спеки, gocui не восстанавливает (Decision 1: 'a slice-bounds panic inside a g.Update closure, which gocui does not recover') — то есть крах процесса, а не деградация.",
+      "location": "Decisions → Decision 1; Risks table (строка 'A torn read of the store panics...'); Testing Strategy → Unit tests ('statLoop drains while paused')",
+      "fix": "Добавить в Testing Strategy отдельный `-race` тест, использующий РЕАЛЬНЫЕ printStat/repaintStored (не заглушки), запущенные конкурентно через настоящий statLoop и небольшой поддельный gocui.Gui/View — чтобы автоматический прогон действительно упражнял ту гонку, от которой защищает Decision 1, а не полагался только на код-ревью и ручной прогон на стенде. Альтернативно (дешевле): explicit code-comment-контракт прямо на объявлении frameStore ('do not read/write outside a g.Update closure — see Decision 1 in 016-feat-pause-display') как минимальный барьер для будущих правок, аналогично anchor-комментарию, уже добавленному для config_view.go в этом же раунде."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "Decision 6 описывает 'один core с двумя error-policy' (renderFrame), но по коду сегодня (top/stat.go:157-235) чтение файла лога (readLogfileRecent/Reopen/Size-бухгалтерия) находится ВНУТРИ того же g.Update-тела, которое становится renderFrame, — то есть расхождение между live- и repaint-путём на самом деле трёхмерное (error policy + источник logtail-буфера, по Decision 7 + first-tick hint), а не одномерное, как формулирует Decision 6. Задача, которая делает это разделение (Task 3, Wave 2), предшествует задаче, которая переносит логтейл на 'последний непустой буфер вместо чтения файла' (Task 8, Wave 5, тоже трогает top/stat.go и top/pause.go). Если Task 3 не спроектирует сигнатуру renderFrame так, чтобы logtail-буфер/путь передавались параметром (а не читались изнутри), Task 8 будет вынуждена повторно вскрывать уже 'закрытый' в Wave 2 шов между live- и repaint-путями — это ровно тот класс проблемы ('reuse printStat verbatim' + 'skip two side effects' — противоречие), который Decision 6 заявляет закрытым.",
+      "location": "Decisions → Decision 6, Decision 7; Implementation Tasks → Wave 2 Task 3, Wave 5 Task 8",
+      "fix": "В описании Task 3 явно указать, что renderFrame должен принимать logtail buf/path как параметр (а не выполнять чтение файла самостоятельно) — заранее под форму, которую Decision 7/Task 8 придают только позже — чтобы Wave 5 не переоткрывала сигнатуру, установленную в Wave 2."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Decision 14 (возраст кадра в диалогах kill) читает `frameStore.at` из dialogOpen — обработчика клавиши, а не из 'repaint closure', названного в Decision 1 как единственное разрешённое место чтения store. Проверка по исходнику gocui (jroimartin/gocui@v0.5.0 gui.go:351-397) подтверждает, что MainLoop обслуживает и tbEvents (key handlers через onKey/execKeybindings), и userEvents (g.Update closures) из ОДНОГО и того же select-цикла на одной горутине — то есть чтение в dialogOpen фактически безопасно и соответствует духу инварианта 'gocui-goroutine-only'. Но буква Decision 1 ('written inside printStat's render closure; read inside the repaint closure') не называет этот третий сайт чтения, поэтому инвариант в документе уже, чем то, на что полагается Decision 14 — расхождение чисто документационное, но именно такого рода неполнота уже создавала путаницу в первом драфте спеки (см. Decision 8 про 'первый драфт ошибочно верил').",
+      "location": "Decisions → Decision 1, Decision 14",
+      "fix": "Переформулировать инвариант Decision 1 в общем виде: 'frameStore читается и пишется только на gocui-горутине — будь то внутри g.Update-замыкания или синхронно внутри обработчика клавиши', и явно перечислить оба текущих сайта чтения (repaint closure, dialogOpen) как частные случаи одного правила."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "Decision 9 называет единственную функцию `liftPause` в перечне 'What we're building' и говорит, что она 'performs exactly one cmdline re-render', но тут же в Rationale признаёт: 'Handlers that already write the cmdline themselves must not call the refreshing variant' — то есть подразумевается вторая, нерефрешащая разновидность лифта, нигде явно не названная и не включённая в список артефактов. Конкретный пример конфликта уже виден в существующем коде: toggleVerbose (top/verbose.go:14-31) — один из перечисленных Decision 9 call-сайтов — уже безусловно пишет в cmdline ('Verbose mode: on/off') на каждом успешном пути; если он вызовет 'рефрешащий' liftPause, получится двойная запись в cmdline на одном пути — ровно тот defect class [027], которого спека демонстративно избегает в Decision 8 ('an unconditional write in layout... a second cmdline write on that path, defect class [027]'). Текст откладывает точную карту 'кто пишет, кто нет' до task decomposition, но не даёт архитектурного решения (параметр? вторая функция?) уже на уровне tech-spec, хотя конфликт для минимум одного (toggleVerbose) из ~10 сайтов уже виден по коду сегодня.",
+      "location": "Decisions → Decision 9; Architecture → What we're building/modifying",
+      "fix": "Явно решить форму на уровне tech-spec: либо `liftPause(g, config, refresh bool)` с параметром, либо вторая именованная функция (`liftPauseSilent`/`liftPauseQuiet`), и добавить её в перечень 'What we're building'. Как минимум явно классифицировать toggleVerbose и любые другие call-сайты, которые уже пишут cmdline на успешном пути, как non-refreshing — не оставлять единственный известный конфликт полностью на усмотрение декомпозиции."
+    },
+    {
+      "check": "coupling",
+      "severity": "minor",
+      "issue": "Decision 9 распределяет вызов liftPause по ~10 сайтам в трёх файлах (config_view.go, extra.go, verbose.go) без единой точки входа. Разбор показывает, что это оправдано ограничением задачи (viewCh — общий канал с пятью render-only клавишами, которые НЕ должны лифтить; menuConf не должен лифтить, пока остальные меню-ветки должны), и что альтернативный чок-пойнт (декоратор в keybindings.go или общая 'publish' функция) не устраняет распределение, а лишь переносит его в новый протокол возврата 'did work' для каждого хендлера — более инвазивное изменение с бóльшим блэйст-радиусом, чем нынешние точечные вызовы. Тем не менее ни один из ~10 сайтов не защищён компилятором или линтером: будущий новый хендлер, добавляющий данные в коллектор, может забыть вызвать liftPause, и единственная защита — таблично-управляемый тест, который по конструкции покрывает только сегодняшний список классифицированных хендлеров, а не будущие.",
+      "location": "Decisions → Decision 9",
+      "fix": "Не блокирует реализацию — распределение архитектурно оправдано отсутствием готового chokepoint в кодовой базе. Опционально: зафиксировать правило в patterns.md ('любой хендлер, меняющий config.view/config.verbose/config.logtail и рассчитывающий на новые данные с коллектора, обязан вызвать liftPause после своих early return') рядом с уже существующим правилом [027], чтобы контракт был виден не только в этой фиче."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "medium",
+    "tech_debt": "low"
+  },
+  "summary": "Раунд 1 закрыт полностью: партиция волн 1-5 проверена по коду и не содержит конфликтов файлов внутри волны, anchor-комментарий для viewCh зафиксирован в Decision 3. Новый материал раунда 2 архитектурно обоснован (Decision 9 scattering — вынужденное следствие отсутствия готового chokepoint в кодовой базе; Decision 14 читает frameStore.at с gocui-горутины корректно, подтверждено по исходнику gocui), но Decision 1 полагается на дисциплину, а не на структурную гарантию, и сам текст спеки признаёт, что план тестирования (statLoop со stub render/repaint) не упражняет именно ту гонку, от которой Decision 1 защищает, — при цене отказа 'паника без восстановления gocui' это блокирующая (major) находка."
+}
