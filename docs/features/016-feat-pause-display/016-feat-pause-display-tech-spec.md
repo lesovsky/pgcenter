@@ -58,8 +58,7 @@ No SQL, no new views, no `view.View` field, no recorded-format change. `record`,
 - **`printDataCell` (`top/stat.go`)** — becomes non-mutating.
 - **`renderSysstat` (`top/stat.go`)** — takes the frame's timestamp instead of calling `time.Now()`.
 - **`layout` (`top/ui.go`)** — gains a size-change detector.
-- **`dialogFinish` (`top/dialog.go`)** — the filter branch repaints; the backend-kill dialogs show
-  the frame's age while paused.
+- **`dialogFinish` (`top/dialog.go`)** — the filter branch repaints the stored frame.
 - **Lifting call sites** — `top/config_view.go`, `top/extra.go`, `top/verbose.go`.
 - **`keybindings` / `helpTemplate`** — one row and one two-line entry.
 
@@ -114,13 +113,17 @@ read (`Nrows` from one frame, `Values` from another) is a slice-bounds panic ins
 closure, which gocui does not recover. `-race` would not catch it either, because `statLoop` is
 tested with stub render/repaint functions.
 
-**Made structural, not merely disciplinary.** The rule is enforced by the shape of the API rather
-than by a comment: `frameStore` has unexported fields and no getters, and the only way to draw it is
-its own method, which enters `g.Update` itself. The gate therefore receives a `repaint func()` with
-no parameters (Decision 12) — from the worker goroutine there is simply nothing to pass, so the racy
-form cannot be written by accident. A unit test drives the real closure rather than a stub, so the
+**One real structural barrier, honestly scoped.** `statLoop` receives neither `*app` nor the store,
+and its `repaint` parameter is a bare `func()` (Decision 12) — from inside the gate there is nothing
+to pass, so the racy shape cannot be written by inattention. That single signature is the guarantee.
+Unexported fields are *not* part of it: `frameStore`, `statLoop` and the closures all live in package
+`top`, where unexported means nothing. A unit test drives the real closure rather than a stub, so the
 invariant has at least one mechanical check; `-race` alone would not catch a violation, because the
 `statLoop` tests use stub render/repaint functions.
+
+**Where `valid` is checked matters.** The check belongs **inside** the repaint closure, not before
+entering `g.Update`. Testing it in the gate would read a field written by the gocui goroutine from
+the worker goroutine — reintroducing, in miniature, exactly the race this decision removes.
 
 **Alternatives considered:** a `sync.Mutex` on `top.config` (rejected — the package's first lock, and
 it still would not answer where the logtail buffer is captured); the store on `view.View` (rejected
@@ -152,6 +155,11 @@ that the pause gate now depends on it.
 next tick. Five explicit repaint calls would be five places to keep in sync with the gate. The anchor
 comment exists because this coupling is otherwise invisible to a future refactor and only the stand
 run would catch its loss.
+
+**Alternatives considered:** an explicit repaint call in each of the five handlers (rejected — five
+places to keep in sync with the gate, for behaviour the existing push already produces); making the
+handlers not push at all and repainting only (rejected — it would change their live-mode behaviour,
+which is outside this feature's perimeter).
 
 **Known property, not introduced here:** that push also runs `c.Reset()`, so the frame it produces
 carries near-zero deltas, and the send on the unbuffered `viewCh` blocks `MainLoop` until the
@@ -213,7 +221,7 @@ One core with two error policies removes both problems.
 
 **The two paths differ in three dimensions, not one** — error policy, the source of the logtail
 content (file versus stored buffer), and whether the first-tick hint runs. Task 3 must therefore
-design the core's signature to *already* accept the logtail source, even though Task 8 is what fills
+design the core's signature to *already* accept the logtail source, even though Task 9 is what fills
 it in; otherwise Wave 5 re-opens the seam Wave 2 just cut.
 
 **Alternatives considered:** a boolean parameter on `printStat` (rejected — the paths differ in error
@@ -246,6 +254,12 @@ so a rotated-away file keeps its inode pinned, and if the new file outgrows the 
 resume, the rotation detector does not fire. Recorded in the risk table; not introduced by this
 feature.
 
+**Alternatives considered:** re-reading the file on repaint (rejected — the log would run ahead of
+frozen statistics, and a read error would propagate out of the render closure); closing the file for
+the duration of the pause and reopening on resume (rejected — `Reopen` queries the database for the
+path, so it would fail exactly when the connection is the thing that broke, and it would also lose
+the rotation bookkeeping the frozen `Size` preserves).
+
 ### Decision 8: `[PAUSED]` after a UI rebuild needs no code — but it needs a test
 
 **Decision:** do not add a marker-restoration branch. Add a test that pins the behaviour instead.
@@ -273,18 +287,24 @@ the token prefix, marker included, even though the message itself is empty.
 **Placement rule, in this order of precedence:**
 
 1. After the handler's early returns — an action that changed nothing does not lift the pause.
-   Exception: in the logtail branch of `showExtra`, before the first mutation of `config.logtail`
-   (`top/extra.go:45-46`), because three of its early returns come *after* that mutation and so are
-   no longer no-ops.
-2. **Before** the handler's own cmdline write, when it has one. This is what keeps the marker from
-   stranding: the composer renders the token prefix from the flag's value *at write time*, so a lift
-   placed after the write would produce a line still carrying `[PAUSED]`, with no later write to
-   correct it.
+2. Every lifting path must end up performing **exactly one** cmdline write — its own or the one
+   `liftPauseRefresh` does. A path with none strands the marker over live data (Risk 5 of the
+   user-spec); a path with two is defect class [027].
 3. Handlers with no cmdline write of their own use `liftPauseRefresh`; handlers that write use
    `liftPause` plus their existing write.
 
-**Call sites** (verified against the code; 8 of the 10 write the cmdline themselves — only
-`orderKeyLeft`/`orderKeyRight` do not):
+*Ordering note:* the lift may sit before or after the handler's own write — it does not matter.
+`liftPause` clears the flag synchronously in the handler, while `printCmdline` only enqueues a
+closure that reads the flag when `MainLoop` runs it, which is necessarily after the handler returns.
+So any write on the path renders the prefix with the flag already cleared. (An earlier draft made
+this an ordering rule; it is not one, and stating it as such would send a reviewer looking for a
+hazard that does not exist.)
+
+**Call sites** (verified against the code). Six handlers write the cmdline themselves —
+`switchViewToProcPidStat`, `switchSortOrder`, `toggleSysTables`, `toggleIdleConns`, `toggleVerbose`,
+and `showExtra` **on its opening path only**. `viewSwitchHandler` does not write at all (its callers
+do, immediately afterwards), and `changeQueryAge` returns a string that `dialogFinish` prints
+(`top/dialog.go:242`). The rest need the refreshing variant:
 
 - `viewSwitchHandler` (`top/config_view.go:315`) — the silent variant. It has no `*gocui.Gui` and is
   called from 22 places including `top/menu.go`; putting the lift inside it covers every screen
@@ -293,12 +313,28 @@ the token prefix, marker included, even though the message itself is empty.
 - `switchViewToProcPidStat` (`top/config_view.go:329`) — after the remote early return (`:341`); it
   deliberately bypasses `viewSwitchHandler` (`:325-328`), so it needs its own call.
 - `orderKeyLeft`/`orderKeyRight` — the refreshing variant (no cmdline write of their own).
-- `switchSortOrder`, `toggleSysTables`, `toggleIdleConns`, `changeQueryAge` — silent variant, placed
-  before their existing writes.
+- `switchSortOrder`, `toggleSysTables`, `toggleIdleConns` — silent variant, placed before their
+  existing writes.
+- `changeQueryAge` — refreshing variant is **not** needed: `dialogFinish` prints its returned string
+  afterwards, so a silent lift placed before the `return` is redrawn by that write.
 - `toggleVerbose` (`top/verbose.go:14`) — silent variant, before its `Verbose mode: …` write.
-- `showExtra` (`top/extra.go:11`) — silent variant, at **two** points: before `return
-  closeExtraView(...)` (`:22`, the panel-closing path, which the user-spec explicitly expects `L` to
-  lift) and, for the opening path, before the `logtail` mutation as described above.
+- `showExtra` (`top/extra.go:11`) — **two** call sites, and their placement is the one thing in this
+  decision that is easy to get wrong:
+  - **Panel-closing path** (`top/extra.go:22`, pressing the same key again): the **refreshing**
+    variant, immediately before the `return`. Nothing on this path writes the cmdline — not
+    `closeExtraView`, not `layout`, not `printStat` — so a silent lift would strand the marker.
+  - **Panel-opening path:** the silent variant placed **after the `switch` and before the `viewCh`
+    push** (between `top/extra.go:62` and `:75`). It must not go inside the `case
+    stat.CollectLogtail` branch: the `B`/`N`/`F` cases never reach that code, so they would never
+    lift; and it must not go before the branch's early returns (`:51`, `:54`, `:58`), because those
+    are the "unreadable log" no-ops that the user-spec requires to leave the freeze intact.
+
+  **Fix the cause rather than working around it:** `config.logtail.Path`/`Size` are written at
+  `top/extra.go:45-46`, *before* those early returns, so a failed `L` mutates that state and the
+  branch is not a true no-op. Task 5 assigns the path and the zeroed size into locals and commits
+  them to `config` only after `os.Stat` and `Open()` both succeed. Then the three early returns
+  really do change nothing, the placement rule needs no exception, and Decision 7's promise — an
+  action that changed nothing leaves the freeze intact — is literally true rather than nearly true.
 
 `menuConf` (`top/menu.go:204-222`) is excluded by construction: it calls `editPgConfig` directly
 rather than going through `viewSwitchHandler`, which is exactly the behaviour required — it opens an
@@ -388,7 +424,8 @@ metadata exists before indexing it.
 **Rationale:** `config.view.Cols` is populated only on the render path (`top/stat.go:675`);
 `view.New()` leaves it nil. `decreaseWidth` indexes `config.view.Cols[idx]`
 (`top/config_view.go:105`), so pressing `↓` before the first frame panics inside a key handler, which
-gocui does not recover — the process dies. Today that window is the one to three seconds before the
+gocui does not recover — the process dies. Only `decreaseWidth` is affected: `increaseWidth` reads
+`ColsWidth`, a map initialised in every view literal. Today that window is the one to three seconds before the
 first frame. This feature makes it **unbounded**: the user-spec allows `Space` before the first frame
 (pause engages, screen stays empty), and Decision 3 documents `↓` as a working key while paused. A
 pre-existing crash that a feature converts from a 2-second window into an indefinite one belongs to
@@ -562,7 +599,7 @@ called only from `top/` and its tests.
 | A held log descriptor pins a rotated-away inode; a grown new file defeats the rotation detector | Pre-existing behaviour, widened by the pause; documented in Decision 7, not introduced here |
 | A crafted row value now persists on a frozen screen and across a pager return (debt [029]) | Out of scope by the user-spec; the persistence consequence is handed to `/done` for the debt register, since the QA task neither edits documents nor carries reviewers |
 | Pressing `↓` before the first frame panics, and the pause makes that window unbounded | Decision 14 — the width handlers guard the column metadata; covered by a unit test in Task 5 |
-| While paused, a `viewCh`-pushing key blocks the UI until the collector answers; on a dead connection the frozen screen stops responding, and the error frame that would explain it is discarded by the gate | Pre-existing for those keys, but the pause removes the diagnostic. Not mitigated in code: the alternative (letting error frames through) is an approved user-spec decision. Stand step 7b exercises a stopped cluster so the behaviour is observed rather than discovered in production |
+| While paused, a `viewCh`-pushing key blocks the UI until the collector answers; on a **silently dropped** connection the frozen screen stops responding to every key including `Space`, and the error frame that would explain it is discarded by the gate | Pre-existing for those keys; the pause removes the diagnostic. Not mitigated in code — letting error frames through is an approved user-spec decision. **Not reproduced in acceptance either:** a stopped cluster (stand step 7b) closes the socket and returns an error immediately, so the UI stays responsive; reproducing this needs a blackholed connection plus a `viewCh`-pushing key, and the only exit is killing the process. Recorded as a known, unobserved limitation rather than claimed as covered |
 
 ## Acceptance Criteria
 
@@ -600,8 +637,10 @@ tasks 4 and 6 must not touch it. Wave 4: task 7 owns `ui.go`, task 8 owns `dialo
 *call* into `pause.go` without modifying it. Task 9 is serialised into its own wave because it needs
 `stat.go` and `pause.go` together.
 
-`top/help_test.go`, `top/verbose_test.go`, `top/dialog_test.go` and `top/pause_test.go` do not exist
-yet and are created by the tasks that list them.
+**Which of these files exist today — check before writing.** `top/verbose_test.go` (one test) and
+`top/dialog_test.go` (nine tests) **already exist** and must be extended, never overwritten.
+`top/pause.go`, `top/pause_test.go` and `top/help_test.go` are new and created by the tasks that
+list them.
 
 ### Wave 1 (независимые)
 

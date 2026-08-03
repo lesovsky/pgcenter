@@ -1,0 +1,88 @@
+{
+  "status": "changes_required",
+  "summary": "Round 3: проверены только новые/изменённые в round 2 утверждения — 41 проверка, подтверждено 35, найдено 6 расхождений: 1 critical, 2 major, 3 minor. Все четыре опровергнутых в round 2 обоснования (Decision 12 pager-путь, Decision 7 «L lifts», Decision 6 семь возвратов, Decision 9 сигнатура liftPause) исправлены верно и подтверждены кодом. Но переписанный Decision 9 внёс новую ошибку: единственная названная точка лифта в showExtra на пути открытия («before the logtail mutation», top/extra.go:45-46) лежит ВНУТРИ case stat.CollectLogtail, поэтому пути B/N/F лифта не получают вовсе, а три отказных early return (:51,:54,:58 — это и есть «L при недоступном файле лога») лифт получают, что прямо противоречит user-spec. Плюс: пересчёт «8 из 10 сами пишут cmdline» неверен (сами пишут шесть), и путь закрытия панели extra.go:22 не пишет cmdline нигде — тихий лифт там оставит [PAUSED] поверх живых данных. Плюс: top/verbose_test.go и top/dialog_test.go СУЩЕСТВУЮТ, вопреки утверждению спеки, что их создают задачи. Таблица волн против «Files to modify» каждой задачи сошлась строка в строку, пересечений внутри волн нет. Decision 14 подтверждён по существу: паника decreaseWidth реальна и нигде не перехвачена.",
+  "findings": [
+    {
+      "severity": "critical",
+      "type": "missing_pattern",
+      "claim": "Decision 9, call site showExtra: «silent variant, at two points: before `return closeExtraView(...)` (:22, the panel-closing path) and, for the opening path, before the `logtail` mutation as described above»; Decision 7: «Decision 9 therefore places the lift in that handler BEFORE the first mutation of logtail, not after all its early returns».",
+      "reality": "ОПРОВЕРГНУТО с двух сторон, и обе стороны блокируют Task 5.\n(1) ПРОПУЩЕНЫ B/N/F. Мутация logtail (top/extra.go:45-46) находится внутри `case stat.CollectLogtail` (:35-61) большого switch по типу панели (:28-62). Ветки `case stat.CollectDiskstats` (:29-30), `CollectNetdev` (:31-32), `CollectFsstats` (:33-34) содержат только присваивание msg и до строки 45 не доходят никогда. Значит на путях ОТКРЫТИЯ панелей B/N/F лифта не будет ни одного — при том что user-spec (строки 148-152) прямо перечисляет «боковые панели `B`, `N`, `F`, `L`» среди действий, снимающих паузу. Это ровно тот дефект, на который указывал минорный пункт round 2 («это внутри case CollectLogtail, тогда B/N/F никогда не лифтили бы»); правка round 2 его не закрыла, а зафиксировала.\n(2) ЛИФТ НА ОТКАЗНЫХ ПУТЯХ. Размещение лифта на :45 означает, что он выполнится ДО `return nil` на :51 («Empty logfile»), :54 («Failed to stat logfile») и :58 («Failed to open»). Это дословно кейс user-spec (строки 161-164): «`L` при недоступном файле лога. В таких случаях пауза сохраняется — снимать её незачем». Тем самым спека противоречит и user-spec, и самой себе: Per-task verification задачи 5 требует «no-op paths and menuConf do not [lift]», строка Risks — «a table test covers the three known no-op paths», а Testing Strategy — «each no-op early return does not». Реализатор не может одновременно выполнить обе инструкции.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9 (Call sites, showExtra) и Decision 7 (Bookkeeping note); Implementation Tasks, Task 5; Testing Strategy; Risks",
+      "fix": "Задать в Decision 9 точку лифта для showExtra однозначно и по путям, а не одной фразой: (а) путь закрытия панели — перед `return closeExtraView(...)` (top/extra.go:22); (б) путь открытия — ПОСЛЕ switch и перед пушем viewCh (между top/extra.go:62 и :75), что покрывает B/N/F и успешный L и оставляет все четыре early return (:38,:51,:54,:58) без лифта, как требует user-spec. Проблему Size=0/Path, ради которой лифт двигали к :45, решать отдельно и явно: либо не обнулять Size до успешного Open(), либо восстанавливать Path/Size на трёх отказных возвратах, либо признать последствие безвредным (на паузе logtail-ветка printStat пропускается, Size не читается; после резюма Size=0 лишь пропускает одно срабатывание детектора ротации) и записать это как принятое, а не менять место лифта."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 9: «Call sites (verified against the code; 8 of the 10 write the cmdline themselves — only `orderKeyLeft`/`orderKeyRight` do not)»; правило 3: «Handlers with no cmdline write of their own use liftPauseRefresh; handlers that write use liftPause plus their existing write».",
+      "reality": "ОПРОВЕРГНУТО. Сами вызывают printCmdline только ШЕСТЬ обработчиков: switchViewToProcPidStat (top/config_view.go:373-379), switchSortOrder (:116), toggleSysTables (:420), toggleIdleConns (:508,:510), toggleVerbose (top/verbose.go:29,:31) и showExtra — но только на пути ОТКРЫТИЯ (:77) и на отказных ветках (:37,:50,:53,:57).\nОстальные четыре:\n- viewSwitchHandler (top/config_view.go:315-321) не пишет cmdline вообще; пишут вызывающие (top/menu.go:155,174,191,202 и top/config_view.go:231). Спека это отдельно и верно оговаривает («Its callers write the cmdline afterwards»), но всё равно засчитывает его в «восьмёрку».\n- changeQueryAge (top/config_view.go:426-454) не пишет cmdline — он ВОЗВРАЩАЕТ строку, которую печатает dialogFinish на top/dialog.go:242. Та же категория.\n- orderKeyLeft/orderKeyRight — подтверждено, не пишут (top/config_view.go:22-53).\nПрактически опасен один случай: путь ЗАКРЫТИЯ панели, `return closeExtraView(g, v, app.config)` (top/extra.go:22). closeExtraView (:98-107) делает только правку config.views, пуш viewCh и g.DeleteView — printCmdline нет ни в нём, ни в showExtra на этом пути. Путь рендера cmdline тоже не переписывает: layout печатает в cmdline только в ветке создания view (top/ui.go:182-192), printStat в cmdline не пишет. Значит тихий liftPause на :22 оставит [PAUSED] на экране поверх снова живых данных до следующего произвольного нажатия — это Risk 5 user-spec в чистом виде, тот самый, который правило 2 Decision 9 объявляет закрытым.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9 (Call sites; Placement rule 3)",
+      "fix": "Переписать перечень по фактическому признаку: «сами пишут cmdline — switchViewToProcPidStat, switchSortOrder, toggleSysTables, toggleIdleConns, toggleVerbose, showExtra на пути открытия; за viewSwitchHandler и changeQueryAge cmdline пишет вызывающий (menu.go:155/174/191/202, config_view.go:231, dialog.go:242) — им достаточно тихого liftPause; собственного письма нет у orderKeyLeft, orderKeyRight и у пути ЗАКРЫТИЯ панели extra.go:22 — этим трём нужен liftPauseRefresh». Отдельно проверить пункт «путь закрытия панели использует refreshing-вариант» в Task 5 и добавить его в табличный тест лифта."
+    },
+    {
+      "severity": "major",
+      "type": "missing_file",
+      "claim": "Implementation Tasks: «`top/help_test.go`, `top/verbose_test.go`, `top/dialog_test.go` and `top/pause_test.go` do not exist yet and are created by the tasks that list them».",
+      "reality": "ОПРОВЕРГНУТО наполовину. Реально отсутствуют только top/help_test.go, top/pause_test.go и top/pause.go. top/verbose_test.go СУЩЕСТВУЕТ (70 строк, 1 тест-функция, в ней в т.ч. вызов viewSwitchHandler на :64), top/dialog_test.go СУЩЕСТВУЕТ (319 строк, 9 тест-функций). Оба перечислены в «Files to modify» задач 5 и 8 корректно — неверна именно поясняющая фраза. Риск конкретный: агент задачи 5/8, прочитав «создаются задачами», может записать файл целиком через Write и снести 10 существующих тестов (в т.ч. покрытие dialogPromptFit/dialogInputX0, на которое ссылается Testing Strategy пунктом про геометрию промпта).",
+      "source": "016-feat-pause-display-tech-spec.md, Implementation Tasks (абзац после таблицы волн)",
+      "fix": "Заменить на: «Создаются с нуля: `top/pause.go`, `top/pause_test.go`, `top/help_test.go`. Уже существуют и только дополняются: `top/verbose_test.go` (70 строк), `top/dialog_test.go` (319 строк), `top/config_view_test.go`, `top/ui_test.go`, `top/stat_test.go`». Заодно отметить, что `top/extra_test.go` не существует, а тесты лифта для showExtra по таблице волн ложатся в `top/pause_test.go`."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 9: «viewSwitchHandler ... is called from 22 places including top/menu.go; putting the lift inside it covers every screen switch ... without touching a single call site. Its callers write the cmdline afterwards, which redraws the prefix.»",
+      "reality": "Несущая часть ПОДТВЕРЖДЕНА полностью: сигнатура `func viewSwitchHandler(config *config, c string)` (top/config_view.go:315) уже принимает config, поэтому `liftPause(config)` внутри неё не требует правки ни одного call site; все вызывающие пишут cmdline сразу после — top/menu.go:155 (menuDatabases), :174 (menuPgss), :191 (menuProgress), :202 (menuStatIO) и top/config_view.go:231 (switchViewTo). Также подтверждено, что ранний возврат switchViewTo при отсутствии pg_stat_statements (:212-215) находится ДО вызова viewSwitchHandler, то есть no-op путь `x` лифта не получит. Неточна только цифра: производственных call site 26 — 21 в top/menu.go (:149,151,153,159,161,163,165,167,169,171,173,179,181,183,185,187,189,191,197,199,201) и 5 в top/config_view.go (:220,222,224,226,228); плюс 3 в тестах (verbose_test.go:64, config_view_test.go:246,284).",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9 (Call sites, viewSwitchHandler)",
+      "fix": "Заменить «22 places» на «26 производственных call site (21 в top/menu.go, 5 в top/config_view.go) плюс 3 в тестах»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 6: «printStat's closure returns errors at THIRTEEN points (top/stat.go:172-247 — seven in the panel section, six more in the extra/logtail branch)».",
+      "reality": "Число ПОДТВЕРЖДЕНО дословно: ровно тринадцать возвратов ошибки в замыкании top/stat.go:169-249 — :172, :177, :182, :187, :192, :198, :204, :212, :218, :224, :230, :238, :247. Неверно только разбиение: :204 («set focus on extra view failed») находится уже ВНУТРИ `if app.config.view.ShowExtra > stat.CollectNone` (:202), поэтому в обязательных панелях (sysstat/pgstat/dbstat) их шесть, а в extra/logtail-ветке — семь. Вывод Decision 6 от этого не меняется.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 6",
+      "fix": "Заменить «seven in the panel section, six more in the extra/logtail branch» на «six in the mandatory panels (:172-198), seven more in the extra/logtail branch (:204-247)»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 14: «`increaseWidth`/`decreaseWidth` (top/config_view.go:87,100) check that the column metadata exists before indexing it».",
+      "reality": "Паника есть только у decreaseWidth. increaseWidth (:87-97) трогает лишь `config.view.ColsWidth[idx]` (:92), а ColsWidth — это `map[int]int`, инициализированный литералом `map[int]int{}` во всех 27 view из view.New() (internal/view/view.go:38+): чтение отсутствующего ключа даёт 0, запись в ненулевую map безопасна. Паникует именно decreaseWidth на `len(config.view.Cols[idx])` (:105), где Cols — `[]string` (internal/view/view.go:16), в New() не заполняется и остаётся nil до первого рендера. Ставить guard на оба обработчика безвредно, но обоснование относится к одному.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 14",
+      "fix": "Уточнить: «паникует decreaseWidth на config.view.Cols[idx] (:105), потому что Cols — nil-слайс; increaseWidth безопасен, так как ColsWidth — инициализированная map, и guard там ставится только ради симметрии»."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 41,
+    "confirmed": 35,
+    "mirages_found": 6,
+    "verified_claims": [
+      "Claim 1 ПОДТВЕРЖДЁН: top/extra.go:22 — это `return closeExtraView(g, v, app.config)` внутри ветки `if app.config.view.ShowExtra == extra` (:14-23), то есть путь закрытия уже открытой панели тем же нажатием",
+      "Claim 1 ПОДТВЕРЖДЁН: user-spec строка 180 «Нажатие `L` во время паузы, как и остальных панелей, паузу снимает» + строки 148-152 (B/N/F/L в списке снимающих) — лифт на пути закрытия соответствует user-spec",
+      "Claim 2 ПОДТВЕРЖДЁН: `func viewSwitchHandler(config *config, c string)` (top/config_view.go:315) — config уже параметр, тихий liftPause(config) внутри не меняет сигнатуру и не требует правки call sites",
+      "Claim 2 ПОДТВЕРЖДЁН: все вызывающие пишут cmdline сразу после — top/menu.go:155,174,191,202 (`printCmdline(app.ui, \"%s\", app.config.view.Msg)` в каждой из четырёх menu-веток) и top/config_view.go:231",
+      "Claim 2 ПОДТВЕРЖДЁН: ветка menuConf (top/menu.go:203-220) содержит только четыре вызова editPgConfig и viewSwitchHandler не вызывает — исключение по конструкции работает",
+      "Claim 2 ПОДТВЕРЖДЁН: ранний возврат switchViewTo при пустом ExtPGSSSchema (top/config_view.go:212-215) стоит ДО switch с viewSwitchHandler — no-op путь `x` лифт не получит",
+      "Claim 3 частично ПОДТВЕРЖДЁН: orderKeyLeft (top/config_view.go:22-37) и orderKeyRight (:40-53) действительно не вызывают printCmdline — refreshing-вариант для них обоснован",
+      "Claim 3 ПОДТВЕРЖДЁН: switchViewToProcPidStat пишет cmdline во всех четырёх ветках switch (:373,375,377,379) и имеет remote-guard `return nil` на :341 — размещение лифта после :341 корректно и согласуется с user-spec («S при подключении к удалённому серверу» — пауза сохраняется)",
+      "Claim 3 ПОДТВЕРЖДЁН: switchSortOrder printCmdline :116; toggleSysTables printCmdline :420 при early return :389-391; toggleIdleConns printCmdline :508/:510 при early return :493-495; toggleVerbose printCmdline top/verbose.go:29/:31",
+      "Claim 4 ПОДТВЕРЖДЁН: `config.view.Cols = cols` — единственная запись во всём репозитории (top/stat.go:675, в alignViewToResult)",
+      "Claim 4 ПОДТВЕРЖДЁН: view.New() (internal/view/view.go:38+) задаёт 27 view, поле Cols не заполняет ни в одном — остаётся nil ([]string, view.go:16)",
+      "Claim 4 ПОДТВЕРЖДЁН: decreaseWidth индексирует `config.view.Cols[idx]` на top/config_view.go:105, idx = config.view.OrderKey (для дефолтного экрана activity = 0) → index out of range на nil-слайсе",
+      "Claim 4 ПОДТВЕРЖДЁН: клавиша именно ↓ — `{\"sysstat\", gocui.KeyArrowDown, decreaseWidth(app.config)}` (top/keybindings.go:25)",
+      "Claim 4 ПОДТВЕРЖДЁН (паника реальна и не перехвачена): alignViewToResult вызывается ровно из одного места — printDbstat (top/stat.go:693), то есть только на пути рендера; никакого другого guard'а нет",
+      "Claim 4 ПОДТВЕРЖДЁН: в jroimartin/gocui v0.5.0 (go.mod:10) нет ни одного recover() — паника в key handler убивает процесс",
+      "Claim 5 ПОДТВЕРЖДЁН: таблица волн сошлась с «Files to modify» каждой задачи строка в строку (задачи 1-9), расхождений нет",
+      "Claim 5 ПОДТВЕРЖДЁН: пересечений файлов внутри волн нет — волна 1 {stat.go,stat_test.go} vs {config.go,keybindings.go,pause.go,pause_test.go,ui.go,ui_test.go}; волна 3 {stat.go,stat_test.go} vs {config_view.go,extra.go,verbose.go,pause.go,config_view_test.go,verbose_test.go,pause_test.go} vs {help.go,help_test.go}; волна 4 {ui.go,ui_test.go} vs {dialog.go,dialog_test.go}",
+      "Claim 5 ПОДТВЕРЖДЁН: top/help_test.go и top/pause_test.go (и top/pause.go) действительно отсутствуют; top/help.go существует (87 строк, helpTemplate — строковая константа с :10)",
+      "Decision 12 (исправление round 2) ПОДТВЕРЖДЕНО: ветка `case <-app.uiExit` в doWork возвращается немедленно (top/ui.go:125-127), wg.Wait() есть только в ветке ctx.Done (:130-131), mainLoop делает cancel() :99 и wg.Wait() :102 — формулировка «pager exits via uiExit и утечка запаркованного коллектора; вечное ожидание на пути перестроения по ошибке» теперь соответствует коду",
+      "Decision 7 (исправление round 2) ПОДТВЕРЖДЕНО: `app.config.logtail.Path = logfile` (top/extra.go:45) и `Size = 0` (:46) стоят ДО трёх early return :51, :54, :58 — «L lifts, поэтому не выполнится на паузе» снято верно",
+      "Decision 7 ПОДТВЕРЖДЁН: вторая запись Size — top/stat.go:243; буфер logtail рождается в замыкании рендера на top/stat.go:227 (readLogfileRecent) и потребляется на :245 (printLogtail) — ссылки «top/stat.go:227,245» точны",
+      "Decision 6 ПОДТВЕРЖДЁН по числу: ровно 13 возвратов ошибки в замыкании printStat (top/stat.go:169-249): 172,177,182,187,192,198,204,212,218,224,230,238,247",
+      "Decision 11 ПОДТВЕРЖДЁН: renderSysstat вызывает time.Now() на top/stat.go:277; пять тестовых call site — top/stat_test.go:60, 97, 192, 440, 441 (:192 — общий хелпер)",
+      "Decision 2/11 согласованы: единственная точка захвата времени в рендере — :277, поэтому правило «штамп берётся только на живом пути, repaint переиспользует store.at» реализуемо без конфликта",
+      "Decision 4 ПОДТВЕРЖДЁН: dialogFinish, ветка dialogFilter — top/dialog.go:216-217; setFilter (top/config_view.go:124-145) действительно ничего не пушит в viewCh",
+      "Decision 3 ПОДТВЕРЖДЁН: якорный комментарий «solely to trigger an immediate redraw» на месте — top/config_view.go:56-58",
+      "Decision 8 ПОДТВЕРЖДЁН: единственное письмо в cmdline из layout — в ветке создания view при непустом app.uiError (top/ui.go:182-192); ни printStat, ни любой другой путь рендера cmdline не переписывают"
+    ]
+  }
+}
