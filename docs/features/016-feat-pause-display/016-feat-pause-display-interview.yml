@@ -243,6 +243,36 @@ conversation_history:
       DECIDED: the Space handler performs exactly one silent cmdline re-render — no text message.
       The token is self-sufficient and a message would vanish after the 2s timer, causing flicker.
 
+  - question_num: 17
+    timestamp: "2026-08-03 13:40:00"
+    topic: "risks"
+    agent_question: |
+      Proposed risk table: (1) UI deadlock if the gate ever stops receiving — mitigated by
+      drain-and-discard plus a test asserting the collector completes N sends while paused, which
+      requires extracting the doWork select loop; (2) a render-only key silently doing nothing
+      because its viewCh-forced redraw is swallowed — mitigated by explicit repaint-from-store,
+      each of the five exercised on the stand; (3) infinite UI rebuild loop if a repaint errors out
+      of a g.Update closure — mitigated by repainting at the top of the new doWork, after gocui's
+      first flush, with the ordering guarantee stated in the tech-spec; (4) render regression from
+      the non-mutating printDataCell (hot path, 4 tests) — mitigated by unit tests plus a stand run
+      against a master-built binary; (5) stuck pause, the operator reading dead numbers as reality
+      — mitigated by [PAUSED] never degrading.
+    user_answer: "ok"
+    summary: "Risk list accepted as proposed, five entries with mitigations."
+
+  - question_num: 18
+    timestamp: "2026-08-03 13:40:00"
+    topic: "verification_strategy"
+    agent_question: |
+      Proposed stand scenario, 8 steps: (1) activity under load, refresh 1s — frozen >=60s,
+      [PAUSED] visible, clock frozen; (2) while paused `/`, `\`, `[`, `]`, `↑`, `↓` each produce a
+      visible effect; (3) pager round-trip while paused — same frame, not blank; (4) tmux resize
+      190 → 60 → 190 while paused; (5) narrow terminal (-x 60) with an active filter — [PAUSED]
+      stays, [F:...] drops; (6) every lifting key — pause lifts, first frame normal; (7) Space
+      before the first frame; (8) widening a column while paused does not leave `...~`.
+    user_answer: "ok"
+    summary: "Stand verification scenario accepted as proposed, 8 steps."
+
   - question_num: 19
     timestamp: "2026-08-03 14:00:00"
     topic: "scope / release ordering — devil's advocate challenge"
@@ -284,6 +314,37 @@ conversation_history:
       DECIDED, re-confirmed after challenge: `[PAUSED]` keeps exactly one variant. Rationale from
       the owner: both tokens together are ~18 columns, so the conflict only arises on an
       unreasonably narrow terminal that nobody runs pgcenter on.
+
+  - question_num: 22
+    timestamp: "2026-08-03 15:10:00"
+    topic: "edge_cases / logtail side panel — found by the adequacy validator"
+    agent_question: |
+      The `L` side panel re-reads the log file at RENDER time (top/stat.go:226-245), mutates
+      config.logtail.Size and can return an error out of the g.Update closure. A panel opened
+      BEFORE the pause would therefore keep pulling fresh log lines over frozen statistics on every
+      repaint, and would be a second, unnamed source of the infinite-rebuild risk. Options: (a)
+      freeze the panel with the frame — the file is not re-read while paused; (b) let it stay live.
+      Recommended (a).
+    user_answer: "Option A."
+    summary: |
+      DECIDED: the logtail side panel freezes with the frame — no file reads while paused. Removes
+      the second infinite-rebuild source entirely.
+
+  - question_num: 23
+    timestamp: "2026-08-03 15:10:00"
+    topic: "constraints / resize repaint mechanism — found by the adequacy validator"
+    agent_question: |
+      gocui delivers no resize event to the application: the only place that sees the new size is
+      the layout callback, invoked on every flush. Keeping the "resize repaints the frozen frame"
+      requirement therefore means putting a size-change detector into code shared by every screen —
+      the same re-entrant point where the infinite-rebuild risk lives. Options: (i) keep the
+      requirement, with the mechanism and its safety argument settled in the tech-spec;
+      (ii) lower it — the frame stays as it was and re-lays out only after the pause is lifted.
+    user_answer: "Option (i)."
+    summary: |
+      DECIDED: resize repaints the frozen frame. Accepted consequence: this is the one requirement
+      reaching outside the feature's own perimeter (the shared layout code); the mechanism is an
+      explicit tech-spec decision, not something to improvise during implementation.
 
 phase1_feature_overview:
 
@@ -648,9 +709,9 @@ decision_rules:
 
 progress:
   current_phase: "phase3_integration"
-  questions_asked: 18
-  last_question: "Risks and the stand verification scenario"
-  completion_estimate: "95%"
+  questions_asked: 21
+  last_question: "Release ordering, scope and token degradation — after the devil's advocate pass"
+  completion_estimate: "100%"
 
 notes: |
   Pre-seeded from docs/roadmap-0.12.0.md section [016] and the [015] archive. The roadmap carries
