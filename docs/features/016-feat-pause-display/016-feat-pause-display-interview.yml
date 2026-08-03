@@ -1,0 +1,674 @@
+# Interview Plan for Feature Planning — 016-feat-pause-display
+#
+# Scoring: 0-100% (how well we understand this aspect)
+# Status: pending → partial → complete
+
+interview_metadata:
+  feature_name: "016-feat-pause-display"
+  feature_base: "docs/features/016-feat-pause-display/016-feat-pause-display"
+  work_type: "feature"
+  started: "2026-08-03 12:26:38"
+  last_updated: "2026-08-03 12:35:00"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 18
+  feature_size: "M"
+
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-08-03 12:35:00"
+    topic: "user_problem / value"
+    agent_question: |
+      Is there a personal use case, or is this pure analogy? The roadmap's own counterarguments:
+      `z` allows a refresh interval up to 300s, and pgcenter usually runs inside tmux with
+      copy-mode. My counter-counterargument, proposed as the real justification: copy-mode freezes
+      the screen at the cost of losing control — you cannot column-scroll ([009] `[`/`]`), set a
+      filter or toggle verbose inside it; and `z 300` is not a pause but "rare refresh" — the frame
+      still changes at an unpredictable moment, exactly while you are reading a row. Pause gives
+      what neither workaround gives: frozen data plus live interaction with it.
+    user_answer: |
+      Yes, agreed — and the most valuable part is the guarantee against a sudden screen change and
+      losing the data you were reading.
+    summary: "Value confirmed: guarantee against sudden frame change / data loss while reading. Frozen data + live interaction is the framing."
+
+  - question_num: 2
+    timestamp: "2026-08-03 12:35:00"
+    topic: "edge_cases / pager-editor return"
+    agent_question: |
+      Returning from pager/editor while paused — the roadmap's only genuinely open question.
+      mainLoop rebuilds the Gui, old buffers destroyed. (a) pause survives the return: repaint the
+      stored frame — the flag lives on `config` which survives the rebuild, and the frame must be
+      stored anyway for resize and `v`, so the cost is one explicit repaint after rebuild.
+      (b) the return lifts the pause: simpler, but the mode silently drops — the exact defect class
+      [015] fixed with the filter indicator. I recommend (a).
+    user_answer: |
+      Yes, option A — especially since the infrastructure for it is already there.
+    summary: "DECIDED: pause survives pager/editor return; repaint from the stored frame after UI rebuild."
+
+  - question_num: 3
+    timestamp: "2026-08-03 12:35:00"
+    topic: "ui_ux_requirements / freeze scope"
+    agent_question: |
+      Does the freeze cover the whole screen or only the stats table? Roadmap says "gates the
+      render", i.e. the whole frame — the sysstat/pgstat top panels freeze too, and the header
+      clock (top/stat.go:272) then shows the freeze time rather than the current time. I read that
+      as correct (a coherent snapshot including when it was taken), but it must be named
+      explicitly or it reads as a bug. Gating only `dbstat` would let the header numbers drift
+      apart from the table. Freeze everything, and is `[PAUSED]` in the cmdline enough of a marker?
+    user_answer: |
+      Freeze everything, and the PAUSED marker is enough.
+    summary: "DECIDED: whole-frame freeze including the top panels and the header clock; [PAUSED] in cmdline is the sole marker."
+
+  - question_num: 4
+    timestamp: "2026-08-03 12:35:00"
+    topic: "testing_strategy / feature_size"
+    agent_question: |
+      Size S (4-5 files, little new logic but all of it in dangerous places: the race, draining an
+      unbuffered channel, repaint after rebuild). Tests: unit for the doWork gate on fake channels
+      (drain-and-discard proven by the collector not blocking), the [PAUSED] token through a
+      bytes.Buffer ([015] precedent), plus a tmux stand run per patterns.md. No integration/E2E —
+      the feature touches no database surface. Agreed? Is a stand available for this feature?
+    user_answer: |
+      Agreed on tests. Stand is available (address given in session; deliberately not recorded here
+      per patterns.md — stands are ephemeral, ask the author at the start of each run).
+    summary: "Size S. Unit tests + tmux stand run; no integration/E2E. Stand available for this feature."
+
+  - question_num: 5
+    timestamp: "2026-08-03 12:45:00"
+    topic: "constraints / what lifts the pause"
+    agent_question: |
+      Full classification of the hotkey table (top/keybindings.go:19-83) by the criterion "does
+      this action need fresh data from the collector?". LIFTS the pause: sort (arrows, `<`) because
+      row order is produced in the collector; `,` sys tables, `I` idle conns, `A` age because they
+      change the SQL; every screen switch (letters, menus, `S`) because the frame belongs to
+      another screen. KEEPS the pause: `/` filter and `\` clear-filters — filtering happens at
+      render time (top/stat.go:743 printStatData with isFilterRequired), so it applies to the
+      stored frame; `[`/`]` scroll and up/down width ([009], pure render); terminal resize;
+      pager/editor return; DB actions (`-`, `_`, `k`, `K`, `R`, `G`, `n`); `z` refresh interval and
+      `Q` reset stats (effect visible after resume); `h` help and `m` mask (overlays).
+    user_answer: |
+      The list is fine, but the documentation must state explicitly what lifts the pause, so it is
+      not a surprise and a reason to file a bug report.
+    summary: |
+      DECIDED: classification accepted as proposed. NEW REQUIREMENT: the set of pause-lifting
+      actions must be documented user-visibly (help screen), not only in the spec — an
+      unexplained lift reads as a defect.
+
+  - question_num: 6
+    timestamp: "2026-08-03 12:45:00"
+    topic: "edge_cases / data-dependent toggles while paused"
+    agent_question: |
+      A class the roadmap misses: `v` (verbose) and `B`/`N`/`F`/`L` (side panels) are toggles that
+      REQUIRE fresh collector data — verbose aggregates are only collected once view.Verbose has
+      ridden viewCh ([010]). Pressing `v` while paused would expand the panels filled with `n/a`,
+      because the stored frame has no such fields. Options: (a) these toggles lift the pause;
+      (b) keep the pause and show n/a until resume — looks broken; (c) keep the pause and defer the
+      toggle until resume — "pressed it, nothing happened", the worst. Recommended (a).
+    user_answer: |
+      Option A is fine.
+    summary: "DECIDED: `v` and the `B`/`N`/`F`/`L` side-panel toggles lift the pause, like the other data-dependent actions."
+
+  - question_num: 7
+    timestamp: "2026-08-03 12:45:00"
+    topic: "error_scenarios"
+    agent_question: |
+      The roadmap floated "frames carrying an error bypass the pause gate" but admits tech debt
+      [016] makes it weaker than it sounds — some collector errors are swallowed and arrive as an
+      empty frame rather than one with Error set. Proposal: no exception at all — the pause gates
+      everything, errors included. A bypass gives a false guarantee (half the errors are invisible
+      anyway), the pause is a deliberate operator action, and it is one special case fewer in the
+      gate. The alternative (bypass + auto-lift) means the pause drops by itself with no
+      explanation.
+    user_answer: |
+      Do not bypass errors — the user is examining a frozen screen and will see the error
+      immediately after unpausing. That is enough.
+    summary: "DECIDED: no error bypass. The gate is unconditional; errors surface on resume."
+
+  - question_num: 8
+    timestamp: "2026-08-03 12:45:00"
+    topic: "success_criteria"
+    agent_question: |
+      Proposed success statement: operator presses Space on a fast-refreshing screen (activity
+      under load, refresh 1s); data stops changing immediately and stays unchanged indefinitely;
+      [PAUSED] is visible in the cmdline throughout; filter, column scroll and width change work on
+      the frozen frame; a second Space restores live updates and the first post-resume frame is a
+      normal fresh frame with no delta spike; the collector is never blocked (unit-tested against
+      the unbuffered statCh).
+    user_answer: |
+      All fine.
+    summary: "Success criteria accepted as proposed."
+
+  - question_num: 9
+    timestamp: "2026-08-03 13:05:00"
+    topic: "user_stories"
+    agent_question: |
+      Three proposed stories: (1) freeze the activity screen under load to read/copy the row of a
+      long transaction that would otherwise scroll away on the next refresh; (2) apply a filter and
+      column-scroll on the frozen frame to inspect a suspicious set of rows without losing that
+      moment; (3) returning from the pager (`l`, log view) does not drop the pause, so you come
+      back to exactly the frame you went to the log for.
+    user_answer: "Accepted."
+    summary: "Three user stories accepted as proposed; no fourth scenario added."
+
+  - question_num: 10
+    timestamp: "2026-08-03 13:05:00"
+    topic: "ui_ux_requirements / token priority"
+    agent_question: |
+      The [015] composer degrades tokens right-to-left; `[PAUSED]` sits left of `[F:col]`, so on a
+      narrow terminal the FILTER indicator shrinks and drops first while `[PAUSED]` survives.
+      Option A: give `[PAUSED]` a single rendering variant — it never shrinks, expressing "must
+      always be visible" in data rather than as a special case. Cost: on a very narrow screen the
+      operator loses the filter cue (the footgun [015] was built for), leaving only the `*` on the
+      column header. Option B: give it a short `[P]` variant so both fit.
+    user_answer: "Never shrinks."
+    summary: "DECIDED: `[PAUSED]` has exactly one rendering variant and never degrades; the filter token yields first on a narrow terminal."
+
+  - question_num: 11
+    timestamp: "2026-08-03 13:05:00"
+    topic: "documentation / help screen"
+    agent_question: |
+      Proposed help.go insertion in the general-actions block, after the `[`/`]` line:
+        Space             'Space' pause/resume display; actions that need fresh data
+                          (sort, screen switch, ',', I, A, v, B, N, F, L) resume it.
+      Two lines, in the style of the existing entries. Note doc/pgcenter-top-readme.md carries no
+      hotkey list, so the built-in help is the only user-facing place to document this.
+    user_answer: "The wording is fine."
+    summary: "DECIDED: help.go gains a two-line Space entry naming the pause-lifting set. Built-in help is the only doc surface (no hotkey list in doc/)."
+
+  - question_num: 12
+    timestamp: "2026-08-03 13:05:00"
+    topic: "edge_cases / Space before the first frame"
+    agent_question: |
+      At startup the screen shows `collecting...` and no frame exists yet. (a) the pause engages,
+      `[PAUSED]` is visible, the screen keeps showing `collecting...` until resume; (b) Space is
+      ignored until the first frame arrives. Recommended (a): pause is a state, not an operation on
+      data; a "no frame yet" special case is an extra branch in the gate, and the operator sees
+      `[PAUSED]` immediately and understands why nothing appears.
+    user_answer: "Option A."
+    summary: "DECIDED: Space engages the pause even before the first frame; no special case in the gate."
+
+  - question_num: 13
+    timestamp: "2026-08-03 13:20:00"
+    topic: "ui_ux / frozen clock — after code research"
+    agent_question: |
+      Code research finding: renderSysstat prints time.Now() inline (top/stat.go:277), so a
+      repainted stored frame shows the LIVE clock over frozen stats — the incoherence Q3 rejected.
+      Price of freezing it: thread a stored timestamp into renderSysstat — one new signature plus
+      4 existing test call sites (stat_test.go:44, 85, 199, 431). Recommendation: pay it.
+    user_answer: "Confirmed."
+    summary: "DECIDED: the clock freezes with the frame; a stored timestamp is threaded into renderSysstat (4 test signatures churn)."
+
+  - question_num: 14
+    timestamp: "2026-08-03 13:20:00"
+    topic: "scope / repaint for render-only keys — after code research"
+    agent_question: |
+      Largest unnamed work item: `[`, `]`, `↑`, `↓`, `\` force their redraw today by pushing on
+      viewCh (config_view.go:57-58, "solely to trigger an immediate redraw"). The gate swallows
+      that frame, so while paused these keys would silently do nothing unless an explicit
+      repaint-from-store is wired. (i) implement the repaint — "freeze, filter, scroll" works and
+      the value from Q1 survives; (ii) declare these keys pause-lifting too — less work, but the
+      feature degenerates into a still frame you cannot interact with, at which point tmux
+      copy-mode is nearly equivalent. Recommended (i). Also: with the repaint paths, the stored
+      timestamp and the frame protection, this is no longer size S — propose M.
+    user_answer: "Implement the repaint from the store. M — agreed."
+    summary: |
+      DECIDED: explicit repaint-from-stored-frame for the render-only keys and for the post-pager
+      UI rebuild. Feature size raised S → M.
+
+  - question_num: 15
+    timestamp: "2026-08-03 13:20:00"
+    topic: "technical_decisions / protecting the stored frame"
+    agent_question: |
+      printDataCell truncates in place (top/stat.go:1113), so a stored frame is destroyed by its
+      own rendering — widen a column while paused and the original value is gone; and for
+      DiffIntvl=[0,0] views (including `activity`, the default screen) that write lands in the
+      collector's own snapshot. Options: deep-copy Values at store time, or make printDataCell
+      non-mutating (truncate into a local). The second is one line and fixes the cause — the latent
+      aliasing write disappears too — at the price of touching a hot path pinned by 4 tests.
+    user_answer: "Non-mutating printDataCell — yes."
+    summary: |
+      DECIDED: make printDataCell non-mutating rather than deep-copying the frame. Fixes the cause
+      (the aliasing write into the collector's snapshot for [0,0] views) instead of working around it.
+
+  - question_num: 16
+    timestamp: "2026-08-03 13:20:00"
+    topic: "ui_ux / making the token appear immediately"
+    agent_question: |
+      The `[PAUSED]` token only reaches the screen when something writes the cmdline, so the Space
+      handler must perform exactly ONE cmdline write (the "one call per path" rule from
+      patterns.md; two writes is defect class [027]). Should that write carry a text message
+      ("Display paused"), or silently re-render the line with the token?
+    user_answer: "Silent re-render is fine."
+    summary: |
+      DECIDED: the Space handler performs exactly one silent cmdline re-render — no text message.
+      The token is self-sufficient and a message would vanish after the 2s timer, causing flicker.
+
+  - question_num: 19
+    timestamp: "2026-08-03 14:00:00"
+    topic: "scope / release ordering — devil's advocate challenge"
+    agent_question: |
+      The dev-customer agent argued [016] should be deferred or moved last: it shares no code area
+      with [017]-[020], so deferring it costs zero extra passes (unlike [014], whose deferral the
+      roadmap calls a paid cost), while [020] is described as pgcenter's biggest functional gap for
+      incident work. Options: (a) keep it next; (b) keep it but last, after [017]-[020];
+      (c) defer out of the release like [014].
+    user_answer: |
+      [016] stays in 0.12.0, next after [015]; [017]-[020] follow it. Roadmap order unchanged.
+    summary: "DECIDED: roadmap order stands — [016] is next, then [017]-[020]. Challenge considered and rejected by the roadmap owner."
+
+  - question_num: 20
+    timestamp: "2026-08-03 14:00:00"
+    topic: "scope / cheaper variants — devil's advocate challenge"
+    agent_question: |
+      The agent showed all three unplanned work items exist only to keep the frozen frame
+      interactive, and proposed cutting back to a non-interactive pause (size S). I added a middle
+      option the agent did not name: interactive but NOT surviving the pager return, which removes
+      the riskiest path (an error out of a g.Update closure tears down MainLoop → rebuild →
+      repaint → fails again → infinite rebuild loop). Options: (i) as decided, interactive and
+      pager-surviving (M); (ii) interactive without pager survival; (iii) non-interactive (S).
+    user_answer: |
+      Interactive pause surviving the pager — option (i), as decided (M).
+    summary: "DECIDED: scope unchanged — interactive pause that survives the pager return, size M. Cheaper variants considered and rejected."
+
+  - question_num: 21
+    timestamp: "2026-08-03 14:00:00"
+    topic: "ui_ux / token degradation — devil's advocate challenge"
+    agent_question: |
+      The agent argued (and I agreed) that "[PAUSED] never shrinks" trades away the [015] filter
+      indicator — which closes a CONFIRMED misreading footgun — in favour of a marker for a feature
+      with unproven demand; a short `[P]` variant would let both fit on a narrow terminal.
+    user_answer: |
+      Never shrinks. Running pgcenter on a terminal so narrow that even the token does not fit is
+      madness.
+    summary: |
+      DECIDED, re-confirmed after challenge: `[PAUSED]` keeps exactly one variant. Rationale from
+      the owner: both tokens together are ~18 columns, so the conflict only arises on an
+      unreasonably narrow terminal that nobody runs pgcenter on.
+
+phase1_feature_overview:
+
+  feature_description:
+    score: 90
+    status: "complete"
+    value: |
+      Pause the TUI display on `Space` (roadmap 0.12.0, section [016], split off from [015] on
+      2026-08-02). The collector keeps running; only rendering is gated, and the gate covers the
+      WHOLE frame — stats table, sysstat/pgstat top panels and the header clock alike, so a paused
+      screen is a coherent snapshot of one moment including when that moment was. `[PAUSED]` shows
+      in the cmdline as a second token next to the [015] filter indicator and is the sole marker.
+      Plumbing: top/ui.go (statCh branch in doWork), top/config.go, top/keybindings.go, top/help.go.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      The guarantee against a sudden frame change losing the data you are reading. Confirmed by the
+      author as the core value. The two workarounds each fail differently: tmux copy-mode freezes
+      the screen but takes away interaction (no [009] column scroll, no filter, no verbose toggle
+      inside it), and `z 300` is not a pause but a rare refresh — the frame still changes at an
+      unpredictable moment, typically while a row is being read. Pause is the only way to get
+      frozen data AND live interaction with it.
+      Honest framing kept from the roadmap: no reported incident behind this; argued by analogy
+      plus the interaction gap above.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 70
+    status: "complete"
+    value: |
+      Practicing PostgreSQL DBA driving the TUI during an incident (release audience lens): reading
+      a row on a busy screen (activity / statements) where the refresh keeps reshuffling it.
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      The operator presses `Space` on a fast-refreshing screen (activity under load, refresh 1s);
+      data stops changing immediately and stays unchanged indefinitely; `[PAUSED]` is visible in
+      the cmdline throughout; filter, column scroll and width change still work on the frozen
+      frame; a second `Space` restores live updates and the first post-resume frame is a normal
+      fresh frame with no delta spike; the collector is never blocked (unit-tested against the
+      unbuffered statCh).
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      Settled during the [015] interview, not to be re-opened:
+      - pause gates the RENDER only, collector keeps running (otherwise prev freezes and the first
+        post-resume frame shows a whole-pause-window delta in per-interval columns);
+      - statCh is unbuffered (top/ui.go:73) → pause must DRAIN AND DISCARD frames, not just skip;
+      - the last frame must be STORED so a resize / verbose toggle while paused repaints it, and
+        (decided here) so the pause survives a pager/editor return;
+      - changing the sort column LIFTS the pause (sorting runs in the collector goroutine);
+        switching screens lifts it too;
+      - the flag is the only cross-goroutine race: atomic.Bool on `config`, not a doWork local;
+      - bind gocui.KeySpace scoped to "sysstat", never globally (a global binding breaks typing a
+        space into dialogs).
+
+      Settled here (batch 2) — the full pause-lifting set, by the criterion "does the action need
+      fresh collector data?":
+      LIFTS: sort (arrows ←→, `<`); `,` sys tables; `I` idle conns; `A` age; every screen switch
+      (letter keys, menus, `S` procpidstat); `v` verbose; `B`/`N`/`F`/`L` side panels.
+      KEEPS: `/` filter and `\` clear filters (render-time — top/stat.go:743); `[`/`]` scroll and
+      ↑↓ width; terminal resize; pager/editor return (`l`, `C`, `~`); DB actions (`-`, `_`, `k`,
+      `K`, `R`, `G`, `n`); `z` refresh interval; `Q` reset stats; `h` help; `m` mask.
+      REQUIREMENT that follows: the lifting set must be documented on the help screen, not only in
+      the spec — an unexplained lift reads as a defect and invites a bug report.
+      Error frames are NOT exempt: the gate is unconditional.
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Unit tests: the doWork pause gate driven on fake channels (drain-and-discard proven by the
+      collector not blocking on an unbuffered send), and the `[PAUSED]` cmdline token rendered
+      against a bytes.Buffer ([015] precedent, printers take io.Writer).
+      No integration tests and no E2E: the feature touches no database surface and adds no query.
+      Manual: a tmux stand run per the patterns.md regimen (fresh `make build`, explicit binary
+      path, deterministic geometry, `capture-pane -e` where attributes matter, second binary from
+      master to separate regressions from pre-existing behaviour). Stand is available for this
+      feature; its address is deliberately not recorded in the repository.
+    gaps: ""
+    required: true
+
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      1. As a DBA working an incident, I want to freeze the activity screen under load, so that I
+         can read and copy the row of a long transaction that would otherwise scroll away on the
+         next refresh.
+      2. As a DBA, I want to apply a filter and scroll columns on the frozen frame, so that I can
+         inspect a suspicious set of rows in full without losing that exact moment.
+      3. As a DBA, I want returning from the pager (`l`, log view) not to drop the pause, so that I
+         come back to precisely the frame I went to the log for.
+      Accepted as proposed; no fourth scenario added.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 85
+    status: "complete"
+    value: |
+      Derived from the settled decisions (final wording goes into the spec):
+      - `Space` on a live screen freezes the whole frame — table, top panels and the header clock —
+        and `[PAUSED]` appears in the cmdline immediately (one silent cmdline re-render).
+      - The freeze holds indefinitely; the collector is never blocked (proven by a test asserting N
+        completed sends while paused).
+      - On the frozen frame: filter (`/`), clear filters (`\`), column scroll (`[`/`]`) and column
+        width (`↑`/`↓`) all take visible effect via repaint-from-store.
+      - Pause-lifting actions (sort, `,`, `I`, `A`, screen switch, `v`, `B`/`N`/`F`/`L`) resume
+        live updates, and the help screen names that set.
+      - The pause survives a pager/editor/psql return: the stored frame is repainted after the UI
+        rebuild instead of a blank screen.
+      - Terminal resize while paused repaints the stored frame with a recomputed column window.
+      - A second `Space` resumes; the first frame after resume is a normal fresh frame with no
+        delta spike.
+      - `Space` pressed before the first frame engages the pause with no special case.
+      - Error frames are discarded like any other while paused and surface on resume.
+      - Widening a column while paused does not show permanently truncated `~` text
+        (non-mutating printDataCell).
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 90
+    status: "complete"
+    value: |
+      DECIDED — pager/editor return: the pause SURVIVES it; after the UI rebuild the stored frame
+      is repainted explicitly. Rationale: the frame store is required anyway (resize, verbose), and
+      a silently dropped mode is the defect class [015] closed with the filter indicator.
+      DECIDED — resize and any render-only action repaint from the stored frame.
+      DECIDED — `v` and `B`/`N`/`F`/`L` lift the pause rather than render `n/a` panels: they are
+      toggles that require collector data the stored frame does not carry ([010] verbose
+      aggregates ride viewCh), so keeping the pause would either look broken (n/a everywhere) or
+      swallow the keypress until resume.
+      DECIDED — filter (`/`, `\`) applies to the stored frame without lifting the pause, because
+      filtering is a render-time operation (top/stat.go:743).
+      DECIDED — `Space` before the first frame engages the pause; no "no frame yet" special case.
+      FOUND BY CODE RESEARCH, decided: `[`, `]`, `↑`, `↓`, `\` force their redraw today by pushing
+      on viewCh (config_view.go:57-58), a frame the gate swallows — so each needs an explicit
+      repaint-from-store, otherwise the key silently does nothing while paused.
+      FOUND BY CODE RESEARCH: overlays (help, menus, dialogs) need NO repaint — gocui redraws the
+      underlying views from their line buffers (gui.go:422-470). Only two paths need an explicit
+      repaint: the render-only keys and the post-pager UI rebuild.
+      FOUND BY CODE RESEARCH, decided: the header clock is re-derived at render time
+      (time.Now(), top/stat.go:277), so freezing it requires a stored timestamp threaded into
+      renderSysstat.
+      Space is scoped to "sysstat", so it cannot fire while a dialog is current
+      (gocui keybinding.go:36-41) — typing a space into a regexp filter stays safe.
+      FOUND BY THE COMPLETENESS CHECKER, verified in code: `setFilter`
+      (top/config_view.go:124-145) never pushes on viewCh at all — it only edits view.Filters and
+      returns a message. In live mode the filter becomes visible on the next collector tick; while
+      paused that tick never renders, so applying a filter would appear to do nothing. The repaint
+      list therefore includes the `dialogFilter` branch of `dialogFinish` (top/dialog.go:216), not
+      just the five render-only keys. Its dialog neighbours (`changeQueryAge`, `changeRefresh`,
+      `setProcMask`) do push viewCh, so the blind spot is the filter alone. Both the roadmap and
+      the code research missed this.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 85
+    status: "complete"
+    value: |
+      DECIDED — no error bypass. The gate is unconditional: error frames and connection loss are
+      discarded like any other frame while paused, and surface on the first frame after resume.
+      Rationale: a bypass would be a false guarantee, since tech debt [016] means some collector
+      errors are swallowed and arrive as an empty frame rather than one with `Error` set — so half
+      the errors would not bypass anything. Auto-lifting on an error frame was rejected too: the
+      pause would drop by itself with no explanation. The operator is deliberately examining a
+      frozen screen and sees reality one keypress later.
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Agent, via `make test`: the drain gate (collector completes N sends while paused), the
+      `[PAUSED]` token in composeCmdline/cmdlineTokens against a bytes.Buffer, the non-mutating
+      printDataCell, and the frozen-timestamp path through renderSysstat.
+      Agent, on the tmux stand (patterns.md regimen — fresh `make build`, explicit binary path,
+      deterministic geometry, second binary from master):
+        1. activity under load, refresh 1s: Space → data frozen >=60s, [PAUSED] visible, header
+           clock frozen too;
+        2. while paused: `/`, `\`, `[`, `]`, `↑`, `↓` each produce a visible effect;
+        3. while paused: `l` (log in pager) → return → same frame, not a blank screen, [PAUSED] intact;
+        4. while paused: tmux resize 190 → 60 → 190; the frame repaints for the new width with
+           correct edge markers;
+        5. narrow terminal (-x 60) with an active filter: [PAUSED] stays, [F:...] drops;
+        6. each lifting key (sort, `,`, `I`, `A`, screen switch, `v`, `B`): pause lifts, first frame
+           is normal with no delta spike;
+        7. Space immediately after start, before the first frame: [PAUSED] appears, `collecting...`
+           stays;
+        8. widening a column while paused: the value is not permanently truncated to `...~`.
+      User: confirms on the stand that a paused screen holds under real load and that the marker is
+      unmistakable.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      `[PAUSED]` token to the LEFT of the [015] filter token `[F:...]` in the cmdline, via the
+      cmdlineToken composer (renderings longest-to-shortest; a single-variant token never shrinks).
+      The whole frame freezes — top panels and the header clock included; `[PAUSED]` is the sole
+      marker of that state, no additional visual treatment.
+      DECIDED: `[PAUSED]` has exactly ONE rendering variant — it never degrades. On a narrow
+      terminal the filter token yields first (accepted cost: the `*` on the column header remains
+      the only filter cue there).
+      DECIDED: the Space handler performs exactly one silent cmdline re-render, no text message —
+      the token is self-sufficient, and a message would vanish with the 2s timer and flicker.
+      DECIDED: help.go gains a two-line `Space` entry naming the pause-lifting set; the built-in
+      help is the only user-facing hotkey documentation (doc/pgcenter-top-readme.md has no list).
+      KNOWN CONSEQUENCE to record in the spec (found by the completeness checker, from code
+      research §6.2): while paused the `[PAUSED]` token takes ~8 runes off the width available to
+      dialog prompts, so on a narrow terminal a prompt such as "Set state mask" is clipped earlier
+      than it is today. One acceptance line, not a design change — recorded so QA does not read it
+      as a defect.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 90
+    status: "complete"
+    value: |
+      - UI DEADLOCK if the gate ever stops receiving from statCh: the collector parks on the send,
+        and since ~17 handlers push on the unbuffered viewCh, the first keypress hangs MainLoop
+        permanently — Space itself cannot recover it. Mitigation: drain-and-discard is the only
+        shape; a test asserts the collector completes N sends while paused, which requires
+        extracting the doWork select loop into a testable function.
+      - A RENDER-ONLY KEY SILENTLY DOES NOTHING while paused, because its viewCh-forced redraw is
+        swallowed by the gate. Mitigation: explicit repaint-from-store for `[`, `]`, `↑`, `↓`, `\`;
+        all five exercised on the stand.
+      - INFINITE UI REBUILD LOOP: an error returned from a g.Update closure (e.g. referencing a
+        view that does not exist yet) tears down MainLoop, which rebuilds the UI, which repaints,
+        which fails again. Mitigation: the repaint runs at the top of the new doWork, after gocui's
+        first flush() — an ordering guarantee (gui.go:367/376) that the tech-spec must state as the
+        reason it is safe, rather than relying on luck.
+      - RENDER REGRESSION from making printDataCell non-mutating: a hot path pinned by 4 tests.
+        Mitigation: unit tests plus a stand run with a second binary built from master, so a
+        regression is separated from pre-existing behaviour.
+      - STUCK PAUSE: the operator forgets the mode and reads dead numbers as the cluster's current
+        state. Mitigation: `[PAUSED]` never degrades — it outranks every other cmdline token.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 85
+    status: "complete"
+    value: |
+      - Bind `gocui.KeySpace`, never the rune `' '`: termbox classifies bytes <= 0x20 as functional
+        keys (Ch=0, Key=KeySpace), and gocui matches on key && ch && mod, so a rune binding would
+        never fire (termbox.go:575-580, keybinding.go:31-33).
+      - The pause flag is an `atomic.Bool` on `top.config` — the first field written on the gocui
+        goroutine and read on the worker goroutine; `make test` runs with -race, so this is not
+        optional. Do NOT add `view.View.Paused`: it would ride viewCh and disturb collectStat's
+        load-bearing change-detection ladder (top/stat.go:86-122).
+      - `printDataCell` becomes non-mutating (truncate into a local) instead of deep-copying the
+        stored frame: it fixes the cause, including the latent aliasing write into the collector's
+        snapshot for DiffIntvl=[0,0] views.
+      - The frame store cannot be a `doWork` local (doWork returns on the pager path), so it is a
+        SECOND cross-goroutine object beyond the flag. Its discipline — mutex on config vs
+        publishing through g.Update — is left to the tech-spec.
+      - Do not add a second cmdline write anywhere in the pause path (defect class [027]).
+    gaps: ""
+    required: false
+
+phase3_integration:
+
+  integration_points:
+    score: 90
+    status: "complete"
+    value: |
+      Verified by code research (file:line in the research doc):
+      - top/ui.go — the doWork select and its statCh branch (ui.go:128) is where the gate goes;
+        the post-rebuild repaint runs at the top of the new doWork (safe by gocui's flush-then-loop
+        ordering, gui.go:367/376); cmdlineTokens (ui.go:406) is the single edit point for the token.
+      - top/config.go — the atomic.Bool flag next to the other display-mode fields, and possibly
+        the frame store.
+      - top/keybindings.go — one row, scoped "sysstat".
+      - top/pause.go (new) — handler + token helper, mirroring top/verbose.go in size and shape.
+      - top/help.go — the Space entry (user-visible requirement from Q5).
+      - top/stat.go — the timestamp parameter to renderSysstat (frozen clock) and the non-mutating
+        printDataCell; printStat is reused verbatim as the repaint function.
+      - top/config_view.go — the render-only key handlers gain a repaint path instead of relying on
+        their viewCh push.
+      record/report and internal/view are untouched: no view.View field, no query, no recorded
+      format change.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 80
+    status: "complete"
+    value: |
+      [015] cmdline composer (token model, ambient cmdlineCfg, generation-gated clear timer) — the
+      composer itself needs no change; the token is data. [009] horizontal scroll and the
+      autoScrollToOrderKey one-shot are the precedent for render-only state on top.config.
+      [010] verbose is an explicit counter-example: pause needs no collector home, so unlike
+      verbose it stays single-homed.
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      The stored frame is the whole `stat.Stat` (all panels need it — the freeze covers the whole
+      screen) plus the frame timestamp for the frozen clock. `stat.Stat` travels by value and
+      shares slice headers; with a non-mutating printDataCell the render path no longer writes into
+      the frame, so a deep copy is not required. Diskstats/Netdevs/Fsstats are read-only on the
+      render path and their toggles lift the pause anyway.
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 60
+    status: "complete"
+    value: |
+      None. TUI-only: no recorded format change, no new query, no version branching, no config
+      file, no CLI flag.
+    gaps: ""
+    required: false
+
+phase4_completion:
+  userspec_file: "docs/features/016-feat-pause-display/016-feat-pause-display.md"
+  status: "created"
+
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+progress:
+  current_phase: "phase3_integration"
+  questions_asked: 18
+  last_question: "Risks and the stand verification scenario"
+  completion_estimate: "95%"
+
+notes: |
+  Pre-seeded from docs/roadmap-0.12.0.md section [016] and the [015] archive. The roadmap carries
+  an unusual amount of already-settled design detail because this feature was split out of [015]
+  mid-spec; the interview confirms rather than re-derives those, and focuses on what is genuinely
+  open: the pager/editor return (settled in batch 1 — pause survives), the value argument (settled),
+  and the acceptance surface.
+
+  Stand for manual verification is available for this feature. Its address is NOT recorded here by
+  deliberate policy (patterns.md: stands are ephemeral, a saved address is stale by the next
+  session) — ask the author at the start of every run.
+
+  SCOPE CHANGE after code research (2026-08-03): size raised S → M. The roadmap named the gate, the
+  flag and the token; code research surfaced three unnamed work items that the author accepted —
+  the repaint-from-store path for the five render-only keys (their viewCh-forced redraw is
+  swallowed by the gate), the stored timestamp for the frozen clock, and making printDataCell
+  non-mutating. It also corrected two roadmap claims: statCh is declared at ui.go:108 (not :73),
+  and a non-receiving pause deadlocks the whole UI rather than showing a stale frame.
+
+  Left to the tech-spec: the frame-store discipline (mutex on config vs publishing through
+  g.Update). Both are workable; the choice is an implementation decision, not a product one.

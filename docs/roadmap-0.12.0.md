@@ -203,7 +203,7 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [015] TUI papercuts batch
 
-- **Status:** in progress — user-spec written. **Scope changed during spec work (2026-08-02):**
+- **Status:** done — archived as `docs/features/archive/015-feat-tui-papercuts`. **Scope changed during spec work (2026-08-02):**
   pause on `Space` was **split off into its own feature** (now [016]), and the batch gained four
   items not listed below. Actual scope, seven items: auto-scroll to the sort column, the filter
   indicator, a clear-all-filters hotkey (`\`), the refresh interval in the header, two verbose-mode
