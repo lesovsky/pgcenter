@@ -69,6 +69,20 @@ own review cycle. That rule held for feature 015 and is not relaxed here.
   `capture-pane -p -e` where attributes matter.
 - Walk the stand-run table in the user-spec top to bottom — steps 1–11 including the sub-steps 3a and
   7a–7d. For each: what was sent, what was captured, PASS / FAIL / NOT VERIFIABLE, and why.
+- Run three checks the user-spec table does **not** contain, because three criteria otherwise have no
+  terminal evidence at all:
+  - **7e — the editor round-trip.** Pause, press `E`, select a config file, exit the editor (`vi`
+    unless `$EDITOR` is set — `:q` gets out), capture. Both the frozen frame and `[PAUSED]` must be
+    back. This is the only stand check of user-spec criterion 7's exception, and the only place the
+    "or editor" half of criteria 12 and 16 is exercised — the pager covers the other half. Note that
+    `editPgConfig` has its own remote guard (`top/pgconfig.go:71-74`, "Edit config is not supported
+    for remote hosts"); if that message appears, the step did not run and those halves stay NOT
+    VERIFIABLE.
+  - **7f — the help screen while paused.** Open `h` on a paused screen and capture: the `Space` entry
+    with its list of lifting actions must be on the captured page (user-spec criterion 11).
+  - **6a — a dialog on the narrow pass.** On the `-x 60` session with the pause on, open a dialog
+    (`/` or `z`) and capture the prompt line: the prompt is truncated under the marker's width budget
+    and the input field is not overlaid (user-spec criterion 18).
 - Walk all 21 user-spec acceptance criteria and all 8 tech-spec acceptance criteria by name, marking
   each PASS / FAIL / NOT VERIFIABLE HERE with concrete evidence — a test name, a command exit code, a
   capture from the stand, or a line of code.
@@ -97,6 +111,13 @@ own review cycle. That rule held for feature 015 and is not relaxed here.
       paused; `↓` before the first frame does not crash the process.
 - [ ] The stand-run table walked in full — steps 1–11 with sub-steps 3a and 7a–7d — each with what
       was sent, what was captured, and a status.
+- [ ] The three added steps were run and captured: 7e (editor round-trip), 7f (help screen while
+      paused), 6a (dialog prompt on the narrow pass). User-spec criteria 7, 11 and 18 each cite a
+      capture, not only a unit test.
+- [ ] Every step-7 key that did **not** lift the pause is backed by the cmdline message proving its
+      early return. A non-lift with no such message is recorded as FAIL, not as an exemption.
+- [ ] If the logtail panel could not be opened on the stand, user-spec criterion 10 is marked NOT
+      VERIFIABLE with the reason — never PASS on the strength of task 9's unit tests.
 - [ ] The narrow pass (`-x 60`) was actually run, and the token ladder result recorded: `[PAUSED]`
       still visible, the filter indicator yielding space first.
 - [ ] A second binary built from `master` was run on the same scenario, and every difference is
@@ -210,15 +231,38 @@ own review cycle. That rule held for feature 015 and is not relaxed here.
 - **`profile.Test_profileLoop` fails.** Known flaky, tech debt [030], in a package this feature never
   touches. Re-run before filing it as a regression. Report it as "flaky, re-run green" — do not
   silently drop it and do not call the suite red because of it.
-- **Step 7 exceptions that are not defects.** `S` on a remote connection and `L` with an unreachable
-  log file return early and therefore do **not** lift the pause. This is the specified behaviour
-  (lifting is placed after the early returns, Decision 9), and on most stands both will trigger.
-  Record them as expected, not as FAIL.
+- **Step 7 exemptions must be proved, never assumed.** `S` and `L` return early — and therefore do
+  **not** lift the pause — only when the connection is remote or the log file is unusable. That is
+  the specified behaviour (lifting sits after the early returns, Decision 9), but it is *not* the
+  normal case on a stand: `db.Local` is `isLocalhost(host)` (`internal/postgres/postgres.go:101,147`)
+  and a stand runs pgcenter against its own cluster over a socket or `localhost`, so `Local == true`
+  and **neither** `switchViewToProcPidStat` (`top/config_view.go:339`) **nor** `showExtra`
+  (`top/extra.go:36`) takes its early return. On such a stand both keys **must** lift the pause.
+  An exemption may be claimed only when the capture shows the matching cmdline message:
+  - `S` → `Per-process stats available in local mode only` (`top/config_view.go:340`)
+  - `L` → `Log tail is not supported for remote hosts` (`top/extra.go:37`), or one of the log-file
+    no-ops: `Empty logfile`, `Failed to stat logfile: …`, `Failed to open …`
+    (`top/extra.go:50,53,57`)
+
+  Absent that message, a key that did not lift the pause is a **FAIL** against user-spec criterion 6
+  and belongs to task 5. This is the one exemption in the run that could excuse a real defect, so it
+  carries the burden of proof.
+- **The logtail panel could not be opened.** If `L` produces any of the messages above, stand step 7d
+  cannot run at all, and user-spec criterion 10 (the panel neither grows while paused nor comes back
+  empty after a pager round-trip) has no evidence on this stand. Mark it **NOT VERIFIABLE** with the
+  reason, exactly as `X` is handled. Task 9's unit tests (an empty read keeps the buffer, a repaint
+  touches no file) are not a substitute — they say nothing about what the panel looks like after a UI
+  rebuild. Do not let the criterion pass by silence.
 - **`X` needs `pg_stat_statements`.** If the stand's `shared_preload_libraries` lacks it, the
   statements menu is unavailable and that lifting key cannot be exercised. NOT VERIFIABLE with the
   reason recorded — never PASS by analogy with `D`/`P`/`J`.
-- **Menu `E` is deliberately excluded from the lifting set.** Selecting a config in the config menu
-  goes to the editor and the pause survives. Do not file it as a missing lift.
+- **Menu `E` is deliberately excluded from the lifting set — and the exclusion is verified, not
+  inferred.** Selecting a config in the config menu goes to the editor and the pause survives, so a
+  non-lift here is not a missing lift. But nothing in the user-spec table checks it: task 5's unit
+  test proves only that the handler never calls the lifting helper, which says nothing about what is
+  on screen after returning from the editor — a full UI-rebuild path. Added step 7e is what actually
+  verifies user-spec criterion 7's exception, and it is the only exercise of the "or editor" half of
+  criteria 12 and 16.
 - **The blackholed-connection limitation is not reproducible in acceptance.** The tech-spec Risks
   table records it explicitly: while paused, a `viewCh`-pushing key blocks until the collector
   answers, and on a silently dropped connection the frozen screen stops responding to every key
@@ -241,9 +285,20 @@ own review cycle. That rule held for feature 015 and is not relaxed here.
 
 **Implementation hints:**
 - Count criteria from the documents, not from memory: 21 checkboxes in the user-spec «Критерии
-  приёмки», 8 in the tech-spec «Acceptance Criteria». The tech-spec calls the manual run "the 15-step
-  stand run"; the table in the user-spec actually has steps 1–11 plus sub-steps 3a and 7a–7d. Walk
-  the rows of the table — do not trust either number.
+  приёмки», 8 in the tech-spec «Acceptance Criteria». The user-spec's «Как проверить» table has
+  sixteen rows — steps 1–11 plus sub-steps 3a and 7a–7d — of which row 1 is the local
+  test/lint/vuln run and the remaining fifteen are stand steps, so the tech-spec's "15-step stand
+  run" is correct. Walk the rows anyway, plus the three added steps (7e, 7f, 6a).
+- **Every criterion needs a named evidence source, including the ones that look obvious.** Three are
+  easy to leave implicit:
+  - criterion 14 (a second `Space` restores live updates, and the first frame after is an ordinary
+    one) — its evidence is stand step 2's resume plus a capture taken one refresh interval later
+    showing the header clock advancing and no value spike; it is *implied* by steps 7b and 11 but
+    named by neither, so cite the capture explicitly;
+  - criterion 11 (the `Space` entry in the help screen) — the help-text unit test from task 6 **and**
+    added step 7f's capture;
+  - criterion 18 (the narrowed dialog prompt) — the dialog-geometry unit test from task 8 **and**
+    added step 6a's capture.
 - The five `renderSysstat` call sites are in `top/stat_test.go` (`:60`, `:97`, `:192`, `:440`,
   `:441`); `top/stat.go:259` is the production caller. Verify by grep against the working tree rather
   than by trusting the spec — a count mismatch with a compiling build is a note against the spec text,

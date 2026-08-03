@@ -86,7 +86,10 @@ Write these first, watch the first one fail against the current implementation, 
 - [ ] The zero/negative-width branch still returns an error and prints nothing.
 - [ ] New test proves the source value is unchanged after a render that truncates it.
 - [ ] New test proves a second render at a larger column width shows the full original value.
-- [ ] `go test ./top/...` passes; `make lint` is clean.
+- [ ] `go test ./top/ -run 'PrintDataCell|PrintStatData'` passes; `make lint` is clean.
+      (The full `./top/...` run additionally needs the fixture clusters on ports 21914-21919 —
+      without them `top/report_test.go` panics on a nil connection. That is an environment
+      condition, not a failure of this task.)
 
 ## Context Files
 

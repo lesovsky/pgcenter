@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["05"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 4                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/...` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race`  # targeted: the full ./top/... run needs a live PG fixture cluster
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -38,22 +38,26 @@ layout of a new `Gui` counts as a change. That is what puts the frozen frame bac
 return from the pager, the editor or `psql` — a separate user-spec criterion this task satisfies for
 free, without a line of code of its own.
 
-This task adds the detector and its wiring only. The repaint itself (`repaintStored`) and the frame
-store belong to Task 3 and already exist by Wave 4; this task **calls into** `top/pause.go` and must
-not modify it (Task 8 runs in the same wave and the wave rule forbids overlapping file ownership;
-`pause.go` is owned by nobody in Wave 4).
+This task adds the detector and its wiring only. The repaint itself (`repaintStored`), the frame
+store **and the failure latch of Decision 5** belong to Task 3 and already exist by Wave 4 —
+Decision 6 assigns the latch to Task 3 explicitly and leaves this task only the resize trigger and
+its test. This task **calls into** `top/pause.go` and must not modify it (Task 8 runs in the same
+wave and the wave rule forbids overlapping file ownership; `pause.go` is owned by nobody in Wave 4).
 
 ## What to do
 
-- Add a pure comparison helper to `top/ui.go` — `sizeChanged(lastX, lastY, x, y int) bool` — so the
-  arithmetic is table-testable instead of buried in `layout`. This follows the `topBandLayout`
-  precedent from [009]/[010]: pure integer function in the file, table test next to it.
-- Add a tiny stateful detector next to it (a `resizeDetector` struct with `lastX/lastY` and an
-  `observe(paused bool, x, y int) bool` method, or an equivalent shape) that owns the "remember,
-  compare, answer" decision **without touching gocui**. It must record the new size *before*
-  answering `true`, and it must record the new size even when the pause is off. This is the seam
-  that makes "a repaint is requested on a size change while paused, and not otherwise" testable
-  without a terminal.
+- Add **one** stateful detector to `top/ui.go` — a `resizeDetector` struct holding `lastX/lastY`
+  with an `observe(paused bool, x, y int) bool` method, or an equivalent shape — that owns the
+  whole "remember, compare, answer" decision **without touching gocui**. It must record the new
+  size *before* answering `true`, and it must record the new size even when the pause is off. This
+  is the seam that makes "a repaint is requested on a size change while paused, and not otherwise"
+  testable without a terminal, in the same spirit as the `topBandLayout` precedent from [009]/[010]:
+  the decision lives in a unit that a table test can drive, not buried inside `layout`.
+- **One layer, not two.** An earlier draft of this task also asked for a separate pure
+  `sizeChanged(lastX, lastY, x, y int) bool`. Do not add it: the comparison is one expression and
+  `observe` is already fully testable, so a second named layer would be a wrapper with no caller of
+  its own. The tech-spec's Testing Strategy bullet that names `sizeChanged` is satisfied by the
+  merged unit's table test — record the naming deviation in the decisions log.
 - Hold one detector instance in `layout`'s enclosing closure, in the same register as the existing
   `verboseTooShortShown` (`top/ui.go:141`) — per-`Gui` state that is deliberately reset on rebuild.
 - Call it at the **end** of the layout closure, after the `extra` block and immediately before
@@ -62,43 +66,51 @@ not modify it (Task 8 runs in the same wave and the wave rule forbids overlappin
   reimplement the repaint, do not read the frame store from `layout`, and do not extract anything
   out of the store before entering the update closure — Decision 1 makes the store
   gocui-goroutine-only for reads as well as writes.
-- Verify that the repaint failure latch of Decision 5 (one cmdline message per failure transition)
-  exists and is covered; add the covering table test in `top/ui_test.go`. See **Details → the
-  failure latch** for what to do if Task 3 did not ship it.
-- Extend `top/ui_test.go` (it exists, 365 lines, 10 tests) — never overwrite it, never weaken an
-  existing assertion.
+- Add the covering test for the Decision 5 failure latch (one cmdline message per failure
+  transition) in `top/ui_test.go`, driving the latch unit that Task 3 shipped in `top/pause.go`. A
+  test file may exercise a function declared in another file of the same package, so this needs no
+  edit to `top/pause.go`. See **Details → the failure latch** for what to do if Task 3 did not ship
+  it as a separately callable unit.
+- Extend `top/ui_test.go` (it exists, 365 lines, 9 top-level tests) — never overwrite it, never
+  weaken an existing assertion.
 
 ## TDD Anchor
 
-Write these first, watch them fail, then add the helper, the detector and the wiring.
+Write these first, watch them fail, then add the detector and the wiring.
 
-- `top/ui_test.go::Test_sizeChanged` — table over the pure helper: identical size → `false`; width
-  only changed → `true`; height only changed → `true`; both changed → `true`; growth and shrink
-  both → `true`; the zero start state `(0, 0) → (190, 52)` → `true` (this case *is* the post-rebuild
-  repaint, so it must be asserted explicitly, not as an accident).
 - `top/ui_test.go::Test_resizeDetector_observe` — driven as a **sequence**, because the point is the
-  state machine, not one call:
-  - paused, first observation `(190, 52)` → `true`; the immediately following identical observation
-    → `false` (this is the termination argument of Decision 5: one resize → one repaint → done);
-  - paused, `(190, 52)` → `(60, 52)` → `true`, then `(60, 52)` again → `false`;
+  state machine, not one call. Because this is now the only unit under test, the table must cover
+  the plain arithmetic cases too — they no longer have a separate helper test of their own:
+  - paused, the zero start state `(0, 0) → (190, 52)` → `true`. This case *is* the post-rebuild
+    repaint, so it must be asserted explicitly, not arrive as an accident of the other rows;
+  - the immediately following identical observation → `false` (the termination argument of
+    Decision 5: one resize → one repaint → done);
+  - paused, **width only** changed `(190, 52)` → `(60, 52)` → `true`, then `(60, 52)` again →
+    `false`;
+  - paused, **height only** changed `(190, 52)` → `(190, 24)` → `true`. Do not omit this row — the
+    detector compares both dimensions and a height-only resize re-lays out the panel bands;
+  - paused, **both** changed → `true`; and both a growth `(60, 24) → (190, 52)` and a shrink
+    `(190, 52) → (60, 24)` → `true`;
   - **not** paused, `(190, 52)` → `(60, 52)` → `false` — no repaint is requested in live mode;
   - not paused `(190, 52)` → `(60, 52)`, then paused with the same `(60, 52)` → `false`: the size
     was recorded while live, so resuming the pause alone does not manufacture a repaint.
-- `top/ui_test.go::Test_repaintFailureLatch` — the Decision 5 latch: a first failure reports (one
-  message), a second consecutive failure does not, a success clears the latch, and a failure after
-  that success reports again. Exactly one message per off→on transition, mirroring
-  `verboseTooShortShown` (`top/ui.go:211-218`). Drive the latch's own state function; do not try to
-  reach it through `printCmdline`, which needs a real `gocui.View`.
+- `top/ui_test.go::Test_repaintFailureLatch` — the Decision 5 latch shipped by Task 3: a first
+  failure reports (one message), a second consecutive failure does not, a success clears the latch,
+  and a failure after that success reports again. Exactly one message per off→on transition,
+  mirroring `verboseTooShortShown` (`top/ui.go:211-218`). Drive the latch's own state unit as Task 3
+  published it; do not try to reach it through `printCmdline`, which needs a real `gocui.View`.
 
 Not testable in this package and deliberately out of the anchor: `layout` itself. It calls
 `app.ui.Size()`, and a `*gocui.Gui` cannot be constructed in a unit test — which is precisely why
-the decision is extracted into the two helpers above. The wiring inside `layout` is covered by the
+the decision is extracted into the detector above. The wiring inside `layout` is covered by the
 stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 → 60 → 190).
 
 ## Acceptance Criteria
 
-- [ ] `sizeChanged` is a pure function of four ints in `top/ui.go` — no `app`, no `gocui`, no
-      package state — and is table-tested.
+- [ ] The detector is a single unit in `top/ui.go` that touches no `app` and no `gocui` — it takes
+      the pause flag and the two ints and answers a bool — and is table-tested, including the
+      height-only change and the zero start state.
+- [ ] No second comparison layer: `grep -n "func sizeChanged" top/ui.go` finds nothing.
 - [ ] The detector's state lives in `layout`'s enclosing closure, so a UI rebuild resets it to zero
       and the first layout of a new `Gui` requests a repaint when paused.
 - [ ] The size is recorded **before** the repaint is requested, and recorded on every observed
@@ -110,9 +122,10 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 - [ ] `top/pause.go` is not modified by this task (`git diff --stat` shows only `top/ui.go` and
       `top/ui_test.go`).
 - [ ] `layout` still returns `nil` on the success path; the detector adds no new error return.
-- [ ] The repaint failure latch emits exactly one cmdline message per failure transition, and this
-      is covered by a test.
-- [ ] `go test ./top/...` passes, including every pre-existing `top/ui_test.go` test unmodified;
+- [ ] The repaint failure latch of Task 3 is covered by a test proving exactly one cmdline message
+      per failure transition. No latch state is declared in `top/ui.go`.
+- [ ] The targeted run `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race`
+      passes, as does a targeted re-run of the pre-existing `top/ui_test.go` tests, all unmodified;
       `make lint` is clean.
 
 ## Context Files
@@ -121,11 +134,13 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 - [016-feat-pause-display.md](016-feat-pause-display.md) — user-spec: Risk 6 (`:315-317`), the resize
   edge case (`:210`), the acceptance criterion (`:263`), stand step 5 (`:407`)
 - [016-feat-pause-display-tech-spec.md](016-feat-pause-display-tech-spec.md) — **Decision 5** (the
-  detector, the error-swallowing rule, the latch), Decision 1 (store ownership), Decision 3 (why the
-  five render-only keys need nothing here), Decision 6 (the repaint path's error policy),
-  Implementation Tasks → Wave 4 → Task 7
+  detector, the error-swallowing rule, the latch), **Decision 6** (the repaint path's error policy
+  and the sentence assigning the failure latch to Task 3, leaving this task only the resize
+  trigger), Decision 1 (store ownership), Decision 3 (why the five render-only keys need nothing
+  here), Implementation Tasks → Wave 4 → Task 7
 - [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) — decisions log; read
-  the Task 3 and Task 5 entries for what `top/pause.go` actually ended up exporting
+  the Task 3 and Task 5 entries for what `top/pause.go` actually ended up exporting, in particular
+  the name and shape of the failure latch unit
 - [016-feat-pause-display-code-research.md](016-feat-pause-display-code-research.md) — **§15**
   "Resize detector — design": §15.1 gocui swallows the event, §15.2 where it goes and what it
   stores, §15.3 why `Update` from inside `Layout` is safe, §15.4 why it cannot loop; §16.3 for why
@@ -148,26 +163,39 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
   the `extra` block at `:221-235`, `return nil` at `:237`. Also `mainLoop`'s
   `SetManagerFunc(layout(app))` at `:62` (why the closure is recreated per `Gui`) and the
   error-swallowing precedent in the cmdline clear timer at `:477-495`
-- [top/ui_test.go](../../../top/ui_test.go) — existing 10 tests, testify `assert`, table-driven
-  subtests via `t.Run`; add the new tests at the end, next to `Test_printCmdlineNilGui`
-- [top/layout.go](../../../top/layout.go) — `topBandLayout`: the precedent for a pure integer helper
-  extracted out of `layout`, with its table test in `top/layout_test.go`
+- [top/ui_test.go](../../../top/ui_test.go) — 365 lines, 9 existing top-level tests
+  (`Test_composeCmdline`, `Test_composeCmdlineTwoTokens`, `Test_composeCmdlineRunes`,
+  `Test_filterToken`, `Test_filterTokenDeterministicOrder`, `Test_filterTokenStripsControlRunes`,
+  `Test_cmdlineTokens`, `Test_setCmdlineConfig`, `Test_printCmdlineNilGui`), testify `assert`,
+  table-driven subtests via `t.Run`; add the new tests at the end, after `Test_printCmdlineNilGui`
+- [top/layout.go](../../../top/layout.go) — `topBandLayout`: the precedent for a decision extracted
+  out of `layout` into a unit a table test can drive, with its test in `top/layout_test.go`
 - [top/pause.go](../../../top/pause.go) — **read only, do not modify**: `frameStore`,
-  `repaintStored`, `togglePause`/`liftPause`, and whether the failure latch lives there
+  `repaintStored`, `togglePause`/`liftPause`, and the Decision 5 failure latch that Task 3 shipped
+  here
 - [top/config.go](../../../top/config.go) — `config.paused atomic.Bool` added by Task 2; read it
   with `app.config.paused.Load()`
 
 ## Verification Steps
 
-- Run `go test ./top/...` — all tests pass, including the three new ones and every pre-existing
-  `top/ui_test.go` test in its original form.
-- Run `go test ./top/... -race` — no new races (the detector is closure-local and touches no shared
-  state beyond the `atomic.Bool` load).
+- Run the targeted suite, with the race detector, since the two new tests are the deliverable:
+  `go test ./top/ -run 'Test_resizeDetector|Test_repaintFailureLatch' -race` — both pass, no races
+  (the detector is closure-local and touches no shared state beyond the `atomic.Bool` load).
+- Re-run the pre-existing `top/ui_test.go` tests to prove nothing regressed:
+  `go test ./top/ -run 'Test_composeCmdline|Test_cmdlineTokens|Test_filterToken|Test_setCmdlineConfig|Test_printCmdlineNilGui'`
+  — all pass, all unmodified.
+- **Environment-dependent, not a gate for this task:** the full `go test ./top/... -race` needs the
+  PostgreSQL fixture cluster on `127.0.0.1:21917` (`internal/postgres/testing.go`), which several
+  `top/` tests connect to. Run it if the cluster is up and report the result; if it is not
+  available, say so plainly rather than reporting a skipped run as a pass. The full suite is
+  covered by the stand run in Task 10.
 - Run `git diff --stat` — only `top/ui.go` and `top/ui_test.go` are changed.
 - Run `git diff top/ui_test.go` — the diff only **adds** tests; no existing assertion relaxed or
   deleted.
 - Run `grep -n "repaintStored" top/ui.go` — exactly one call, inside `layout`, after the `extra`
   block.
+- Run `grep -n "func sizeChanged\|Latch\|latch" top/ui.go` — no separate comparison helper, no latch
+  state declared in this file.
 - Run `make lint` — clean.
 - Read the final `layout` body and confirm by eye: the guard at `:148-150` is still the first thing
   after `Size()`, and the detector is the last thing before `return nil`.
@@ -176,12 +204,9 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 
 **Files:**
 
-- `top/ui.go` — three changes, all additive:
-  1. `sizeChanged(lastX, lastY, x, y int) bool` — pure, one comparison, with a doc comment saying
-     why it is a named function rather than an inline condition (table-testability; the
-     `topBandLayout` precedent).
-  2. The stateful detector next to it. Suggested shape, adapt if you find something cleaner that
-     keeps the same properties:
+- `top/ui.go` — two changes, both additive:
+  1. The stateful detector. Suggested shape, adapt if you find something cleaner that keeps the same
+     properties:
      - state: `lastX, lastY int`;
      - `observe(paused bool, x, y int) bool`: if the size did not change → `false`; otherwise record
        the new size **first**, then return `paused`.
@@ -189,9 +214,9 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
      no resize event so this is the only observation point; the state is per-`Gui` and its zero
      value is what repaints the frame after a rebuild; the record-before-answer order is what makes
      the repaint chain terminate.
-  3. In `layout`: one `var` next to `verboseTooShortShown` (`:141`), and one `if` before
+  2. In `layout`: one `var` next to `verboseTooShortShown` (`:141`), and one `if` before
      `return nil` (`:237`) calling `repaintStored(app)`.
-- `top/ui_test.go` — the three tests from the TDD Anchor, appended in the file's existing style:
+- `top/ui_test.go` — the two tests from the TDD Anchor, appended in the file's existing style:
   `t.Run` subtests, testify `assert`, a doc comment above each test explaining what property it
   pins (every existing test in that file has one).
 
@@ -208,18 +233,20 @@ stand run in Task 10 (step 5 of the user-spec table: `tmux resize-window` 190 �
 does **not** self-heal, because `v.Clear()` runs before the failing print. Hence: one cmdline
 message on the failure transition, latched, exactly like `verboseTooShortShown`.
 
-The failure is observable only *inside* the repaint closure, which lives in `repaintStored`
-(`top/pause.go`) — Decision 6 assigns that closure and its error policy to Task 3. So:
+**The latch is not yours to build.** The failure is observable only *inside* the repaint closure,
+which lives in `repaintStored` (`top/pause.go`), and Decision 6 assigns that closure, its error
+policy and the latch to Task 3 — which ships the latch as a separately callable unit of state
+precisely so this task can test it. Your job here is exactly two things: wire the resize trigger
+into the existing repaint path (the `repaintStored(app)` call), and add `Test_repaintFailureLatch`
+to `top/ui_test.go` driving Task 3's latch unit. A test file may exercise a function declared in
+another file of the same package, so this needs no edit to `top/pause.go`.
 
-- **Expected case** — Task 3 shipped the latch. Then this task adds no latch code. Its job is to
-  confirm the behaviour is actually covered and, if it is not, add `Test_repaintFailureLatch` to
-  `top/ui_test.go`. A test file may exercise a function declared in another file of the same
-  package, so this needs no edit to `top/pause.go`.
-- **Gap case** — Task 3 did not ship it. Do **not** edit `top/pause.go` to add it. Implement the
-  latch as a pure state helper in `top/ui.go` (e.g. `failureLatch.report(failed bool) bool`
-  returning whether to emit), cover it with `Test_repaintFailureLatch`, leave the wiring as a
-  one-line change for the owner of `pause.go`, and record the gap explicitly in the decisions log
-  and in your final report so the orchestrator can assign it. Do not silently drop the requirement.
+**If Task 3 did not ship the latch as a callable unit — stop and report.** Do not edit
+`top/pause.go`, and do not implement a latch of your own in `top/ui.go`: a latch declared here would
+have no caller, since the only code that can observe a repaint failure lives in `pause.go`. That is
+unreachable-except-from-its-own-test code, which is worse than the gap it papers over. Record the
+gap in the decisions log and in your final report so the orchestrator can assign it back to the
+owner of `pause.go`, and finish the rest of this task.
 
 **Edge cases:**
 - **Zero geometry after a pager/editor return.** `layout` returns `fmt.Errorf("")` at `:148-150`
@@ -260,8 +287,9 @@ The failure is observable only *inside* the repaint closure, which lives in `rep
   propagates out of `MainLoop` (`gui.go:377-379`) → `mainLoop` stores `app.uiError` and rebuilds the
   `Gui` → `layout(app)` is recreated with a zeroed detector → the detector fires again → repeat,
   bounded only by `errorRate.check(1s, 5)` (`top/ui.go:92-95`), which kills the process with "too
-  many UI errors". If Task 3 left an error path escaping that closure, treat it as the gap case
-  above and report it — do not paper over it in `layout`.
+  many UI errors". If Task 3 left an error path escaping that closure, stop and report it to the
+  orchestrator as a Task 3 defect — do not paper over it in `layout` and do not fix it in
+  `top/pause.go`, which this wave does not let you edit.
 - **Do not render synchronously at the end of `Layout`.** It would draw in the same pass, but an
   error returned from `Layout` aborts `flush` and rebuilds the UI — the hazard the deferred
   `Update` plus the `nil` return exists to avoid.

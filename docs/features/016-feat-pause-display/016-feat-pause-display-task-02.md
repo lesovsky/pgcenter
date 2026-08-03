@@ -102,7 +102,10 @@ Extending `top/ui_test.go` (the file exists — extend it, never overwrite):
 - [ ] `composeCmdline` and `renderCmdlineTokens` are unchanged.
 - [ ] `top/pause.go` and `top/pause_test.go` are created; `top/ui_test.go` is extended and all its
       existing tests still pass unmodified in substance.
-- [ ] `go test ./top/...` passes; `make lint` clean (in particular `go vet` copylocks — see Edge cases).
+- [ ] `go test ./top/ -run 'Pause|Cmdline'` passes; `make lint` clean (in particular `go vet`
+      copylocks — see Edge cases). The full `./top/...` run additionally needs the fixture clusters
+      on ports 21914-21919 — without them `top/report_test.go` panics on a nil connection, which is
+      an environment condition rather than a failure of this task.
 
 ## Context Files
 

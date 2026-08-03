@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["07", "08"]           # ID задач-зависимостей (строки: ["01", "02"])
 wave: 5                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/...` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'Logtail|logtail'` # точечный прогон: полный `./top/...` требует живых fixture-кластеров
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -64,13 +64,25 @@ core (`renderFrame`) — the seam exists already; do not redesign it, fill it.
   content, commit the buffer **and** `config.logtail.Path` into the frame store as a pair, using the
   same non-empty predicate `printLogtail` uses. `Size` is *not* stored — it is change-detection
   bookkeeping and is never rendered. Publication stays live-path-only per Decision 2; a repaint must
-  never write the store.
+  never write the store. Hold the branch's `buf`/`Path` in two locals declared **before** the
+  extra-panel block so the single sync call below can see them; the case body only assigns them.
 - **Keep the store coherent with what the panel is showing.** When the live render path is not
   showing the logtail panel (`config.view.ShowExtra != stat.CollectLogtail`, which covers both a
   closed panel and a switch to `B`/`N`/`F`), drop the stored buffer and path. This implements the
   data model's `logBuf []byte // nil when the panel was closed` and prevents a repaint from ever
   drawing the previous file's lines under the previous file's header. Do this inside the live path
   in `top/stat.go`/`top/pause.go` — **do not touch `top/extra.go`**, which Task 5 owns.
+- **Put the drop OUTSIDE the extra-panel block — this is the easy thing to get wrong.** The entire
+  extra render section, `switch` included, is wrapped in
+  `if app.config.view.ShowExtra > stat.CollectNone {` (`top/stat.go:200`). The single most important
+  case for the drop is `ShowExtra == stat.CollectNone` — the panel is **closed** — and in that case
+  control never enters the block at all. A drop written inside the block, or inside the `switch`'s
+  `default:`, silently never runs for a closed panel, and a repaint after closing the panel would
+  redraw the old log lines. Make the decision one **unconditional** call on the live path, placed
+  after the block (or before it), fed the current `ShowExtra` value explicitly — e.g. a
+  `frameStore` method `syncLogtail(show int, path string, buf []byte)` that captures when
+  `show == stat.CollectLogtail && len(buf) > 0` and drops otherwise. One call site, reached for every
+  `ShowExtra` value, is what makes the rule testable and keeps capture and drop from drifting apart.
 - **Fill the repaint's logtail source.** The repaint's `case stat.CollectLogtail:` renders the stored
   pair and nothing else: no `os.Stat`, no `Logfile.Read`, no `Reopen`, no `logtail.Size` assignment,
   and no `printCmdline` error write. Whatever seam Task 3 left in `renderFrame` (a source parameter,
@@ -80,12 +92,21 @@ core (`renderFrame`) — the seam exists already; do not redesign it, fill it.
   as the thin `*gocui.View` wrapper, exactly as `printSysstat`→`renderSysstat` and
   `printDbstat`→`renderDbstat` already do in this file. Rendered bytes must be identical to today's,
   including the `Clear`-only-when-there-is-content semantics. Make the repaint's logtail source
-  callable without a live `Gui` — if the seam hands it a `*gocui.View`, the stored source must ignore
-  that parameter so a test can pass `nil`.
-- **Prove the freeze, do not assert it.** The "no file access" test must be able to fail: run the
-  repaint source against a `config.logtail` that is deliberately unusable (non-existent `Path`, nil
-  `File`, a distinctive `Size`) and assert the stored content still renders, no error comes back, and
-  `Size` is untouched.
+  callable without a live `Gui` **by typing its sink as `io.Writer`, so a test can hand it a
+  `*bytes.Buffer`**. Do **not** design it so a test passes a nil `*gocui.View`: `*gocui.View`
+  implements `io.Writer`, so a nil one becomes a non-nil interface holding a nil pointer and panics
+  on the first write instead of being ignored. If Task 3's seam really does hand the source a
+  `*gocui.View`, adapt at the wrapper boundary — the stored-source core still takes `io.Writer`.
+- **Prove the freeze, do not assert it — and make the adversary READABLE, not broken.** The obvious
+  version of this test (non-existent `Path`, nil `File`) proves nothing: a real read would fail at
+  `os.Stat` before reaching `Read`, so there is no panic; and the error branch returns before
+  `logtail.Size = size`, so the `Size` assertion holds for a reading implementation too. The only
+  live assertion left would be "no error", which an implementer satisfies by reading the file every
+  interval and swallowing the error. Instead point `config.logtail` at a **real, readable, opened**
+  file in `t.TempDir()` whose content differs from the stored buffer and whose on-disk size differs
+  from the sentinel `Size`. Then a repaint that touches the file succeeds and renders visibly
+  different bytes under a different header path — and the byte-exact assertion fails, which is the
+  point.
 - **Record the residual, do not fix it.** The descriptor is held for the whole pause, so a
   rotated-away file keeps its inode pinned, and if the new file outgrows the frozen size before
   resume the size-based detector does not fire. This exists today (one refresh interval wide) and is
@@ -101,19 +122,44 @@ Write these first, watch them fail, then implement.
   and path are unchanged. This is the Q24 defect expressed at the store level.
 - `top/pause_test.go::Test_frameStore_storeLogtail_commitsPathAndBufferTogether` — a non-empty
   capture with path B replaces **both** fields; the store never holds buffer A with path B.
-- `top/pause_test.go::Test_frameStore_logtailDroppedWhenPanelNotShown` — after a live render with
-  `ShowExtra != stat.CollectLogtail`, both stored logtail fields are nil/empty.
+- `top/pause_test.go::Test_frameStore_syncLogtail_dropsForEveryNonLogtailShowExtra` — **the
+  placement test.** Seed the store with a non-empty pair, then drive the single sync entry point
+  once per `ShowExtra` value — `stat.CollectNone`, `CollectDiskstats`, `CollectNetdev`,
+  `CollectFsstats` — and assert both stored fields are nil/empty every time. `CollectNone` is the
+  row that matters and the row a careless implementation misses, because the live render's whole
+  extra section is wrapped in `if app.config.view.ShowExtra > stat.CollectNone` (`top/stat.go:200`)
+  and a drop written inside that block never executes for a closed panel. Table this over the four
+  values explicitly rather than testing one representative value.
+- `top/pause_test.go::Test_frameStore_syncLogtail_capturesOnlyForLogtail` — the same entry point with
+  `ShowExtra == stat.CollectLogtail` and a non-empty buffer captures the pair; with
+  `stat.CollectLogtail` and an empty/nil buffer it leaves the previous pair intact (the quiet-log
+  rule, at the same seam). Together with the test above this pins the whole truth table of the one
+  call, so the only thing left for review by inspection is *where* the call sits.
 - `top/stat_test.go::Test_renderLogtail_outputUnchanged` — for a non-empty buffer the output is
   byte-identical to today's format: the header line `\033[30;47m<path>:\033[0m\n` followed by the raw
   buffer, nothing else.
-- `top/stat_test.go::Test_renderLogtail_emptyBufferPrintsNothing` — nil and empty buffers produce
-  zero bytes and no error (and, in the `*gocui.View` wrapper, no `Clear`).
-- `top/stat_test.go::Test_repaintLogtail_noFileAccess` — with `config.logtail =
-  stat.Logfile{Path: "/nonexistent/pgcenter-016/postgresql.log", File: nil, Size: 4242}` and a store
-  holding `("/var/log/postgresql/A.log", []byte("line1\nline2\n"))`, the repaint source renders the
-  stored pair, returns no error, does not panic, and leaves `config.logtail.Size == 4242`. Any
-  `os.Stat`, `Read` or `Reopen` on that config would error or panic on the nil `*os.File`, so the
-  test fails if the freeze is not real.
+- `top/stat_test.go::Test_renderLogtail_emptyBufferPrintsNothing` — nil and empty buffers write zero
+  bytes into a `*bytes.Buffer` and return no error. (The wrapper's "no `Clear`" half needs a real
+  `*gocui.View` and stays a review-by-inspection item — do not fake it with a nil view.)
+- `top/stat_test.go::Test_repaintLogtail_noFileAccess` — **the adversarial test; build the adversary
+  usable, not broken.** Write a real file into `t.TempDir()`, e.g.
+  `adversary.log` containing `"ADVERSARY LINE — MUST NOT APPEAR\n"`, and set
+  `config.logtail = stat.Logfile{Path: <that path>, Size: 4242}` with `Open()` called on it, so the
+  descriptor is live and the sentinel `Size` differs from the file's real size (making
+  `readLogfileRecent`'s "unchanged file" early return *not* fire). Seed the store with a different
+  pair: `("/var/log/postgresql/A.log", []byte("line1\nline2\n"))`. Render the repaint's logtail
+  source into a `*bytes.Buffer` and assert **all four**:
+  1. the output is byte-exactly the stored pair — header `\033[30;47m/var/log/postgresql/A.log:\033[0m\n`
+     plus `line1\nline2\n`, nothing more;
+  2. the output contains neither `"ADVERSARY"` nor the temp path;
+  3. no error is returned and nothing panics;
+  4. `config.logtail.Size` is still `4242` — a real read reaches `logtail.Size = size` and would
+     overwrite it with the file's actual size.
+
+  Every assertion now does work: because the file is readable and the descriptor is open, an
+  implementation that touches the file *succeeds* and renders the adversary's bytes under the
+  adversary's path. `if err == nil { … }` around a real read no longer passes this test — which is
+  exactly what the broken-file version failed to guarantee.
 
 ## Acceptance Criteria
 
@@ -123,13 +169,23 @@ Write these first, watch them fail, then implement.
       same predicate as `printLogtail`; an empty read leaves the previous pair intact.
 - [ ] Buffer and path are committed together — the store can never pair one file's lines with another
       file's header.
-- [ ] The stored logtail pair is dropped on the live path when the panel is not showing the log.
+- [ ] The stored logtail pair is dropped on the live path when the panel is not showing the log —
+      **including `ShowExtra == stat.CollectNone`**, i.e. the decision is made outside the
+      `if app.config.view.ShowExtra > stat.CollectNone` block at `top/stat.go:200`, not inside it.
+- [ ] The capture/drop decision has exactly one call site on the live path, reached for every
+      `ShowExtra` value, and its full truth table is covered by store-level tests.
 - [ ] The store is written on the live path only; a repaint performs no store write (Decision 2).
 - [ ] A repaint with an empty/unset store prints nothing and does not `Clear` the view — the panel
       keeps whatever it had, which after a rebuild is empty (the user-spec's "показывать нечего").
-- [ ] `printLogtail`'s rendered bytes are unchanged; the writer-based core is covered by tests.
+- [ ] `printLogtail`'s rendered bytes are unchanged; the writer-based core takes an `io.Writer` and
+      is covered by tests that write into a `*bytes.Buffer`. No test passes a nil `*gocui.View`.
+- [ ] The no-file-access test uses a real, readable, opened file as the adversary, so it fails if the
+      repaint reads the file — including when the read succeeds.
 - [ ] `top/extra.go` is not modified by this task.
-- [ ] `go test ./top/...` passes; `go test ./top/... -race` is clean; `make lint` is clean.
+- [ ] `go test ./top/ -run 'Logtail|logtail'` passes; `go test ./top/ -run 'Logtail|logtail' -race`
+      is clean; `make lint` is clean. The full `go test ./top/...` is environment-dependent (see
+      Verification Steps) — if the fixture cluster is unavailable, record that rather than claiming a
+      full green run.
 
 ## Context Files
 
@@ -174,11 +230,22 @@ Write these first, watch them fail, then implement.
 
 ## Verification Steps
 
-- Run `go test ./top/...` — all tests pass, including the six new ones. Every pre-existing test in
-  `top/` still passes unmodified.
-- Run `go test ./top/... -race` — clean; the store is still touched only on the gocui goroutine.
+- Run `go test ./top/ -run 'Logtail|logtail' -v` — the new tests are present and green. This is the
+  primary `verify` command and it needs no database.
+- Run `go test ./top/ -run 'Logtail|logtail' -race` — clean; the store is still touched only on the
+  gocui goroutine.
+- **Do not treat `go test ./top/...` as the gate.** Part of the package talks to live fixture
+  clusters (`postgres.NewTestConnect`, container `lesovsky/pgcenter-testing`); without them
+  `Test_getQueryReport` fails and then *panics* on a nil connection at `top/report_test.go:14`,
+  killing the package run regardless of this task's changes. Run it only if the cluster is up;
+  otherwise stay with the targeted `-run` and say so plainly in the report.
 - Run `grep -n "readLogfileRecent\|\.Reopen(\|logtail\.Size" top/*.go` — every hit is on the live
   render path or in `top/extra.go`; none is reachable from the repaint path.
+- **Read the drop's placement, do not infer it.** Open `top/stat.go` at the extra-panel block
+  (`if app.config.view.ShowExtra > stat.CollectNone`, `:200`) and confirm the sync call sits
+  *outside* its braces. A call inside the block passes every unit test in this task and still fails
+  in production for a closed panel — the store-level table test pins the function's behaviour, not
+  its call site.
 - Run `git diff --stat top/extra.go` — empty (this task must not modify it).
 - Run `git diff top/stat_test.go top/pause_test.go` — tests are added, none relaxed or deleted.
 - Run `make lint` — clean.
@@ -187,8 +254,6 @@ Write these first, watch them fail, then implement.
   panel comes back with the same lines and the same header path.
 
 ## Details
-
-<!-- All details for task execution — technical, organizational, any other. -->
 
 **Files:**
 

@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["03"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 3                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/...` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'Sysstat'`  # инструмент верификации (опционально: curl, bash, user)
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -36,6 +36,11 @@ Where the stamp comes from is settled and must not be re-litigated here:
   package, so the stamp is taken in the **render path** and stored with the frame. Task 03 owns the
   store (`frameStore.at`, `top/pause.go`) — this task threads that value into the renderer, it does
   not invent a second home for it.
+- **The plumbing already exists when this task starts.** Tech-spec Decision 6 requires task 03 to
+  design `renderFrame`'s signature to *already* carry the render timestamp, precisely so this task
+  does not have to re-open the seam Wave 2 cut — and does not have to open it inside `top/pause.go`,
+  which task 05 owns in this very wave. So this task's job is narrow: change `renderSysstat`'s own
+  signature and pass `renderFrame`'s timestamp value down into it.
 - The gap between "collected" and "rendered" is bounded by one refresh interval and is invisible on
   screen. This is a deliberate, accepted approximation, not an oversight — do not try to close it by
   widening the change into `internal/stat`.
@@ -53,21 +58,24 @@ self-consistent to the operator.
    keeping the existing `"2006-01-02 15:04:05"` layout and the rest of the format string byte-identical.
 2. Pass the parameter through the `printSysstat` wrapper (`top/stat.go:258`) unchanged — it stays a
    thin delegation.
-3. Wire the production call site (`top/stat.go:175`, which after task 03 lives inside the shared
-   render core) so that:
-   - the **live** path captures the stamp exactly once per frame and uses that single value both for
-     the header and for the store publication task 03 introduced — one `time.Now()`, two consumers,
-     never two separate captures that can disagree;
-   - the **repaint** path passes the stored stamp through unchanged and calls `time.Now()` nowhere.
-   Read what task 03 actually landed (the render core's signature, where `frameStore` is published
-   and read) and adapt to it. Do not rename or reshape task 03's store fields.
-4. Update the five existing `renderSysstat` call sites in `top/stat_test.go` (lines 60, 97, 192, 440,
+3. Wire the sole production call site (`top/stat.go:175`, which after task 03 lives inside
+   `renderFrame`) to pass `renderFrame`'s own render-timestamp parameter into `renderSysstat`. That
+   parameter **already exists** when this task starts — tech-spec Decision 6 puts it in task 03's
+   scope — so this is one argument threaded one level down, nothing more. Read what task 03 actually
+   landed and match its parameter name and position; do not rename or reshape anything of task 03's.
+4. **If that parameter is not there, stop.** A missing timestamp on `renderFrame` is a task-03
+   defect, not this task's work item. Do **not** add it yourself, and above all do **not** edit
+   `top/pause.go` or the repaint call site to work around it — task 05 owns `top/pause.go` in this
+   same wave, and touching it breaks the wave rule. Escalate to the orchestrator and wait: the fix
+   belongs in task 03.
+5. Update the five existing `renderSysstat` call sites in `top/stat_test.go` (lines 60, 97, 192, 440,
    441 — `:192` is the shared `verboseSysstatLines` helper covering eight tests) by passing a fixed
    `time.Time`. These are mechanical edits: no assertion may be weakened, loosened or deleted to
    accommodate the new signature.
-5. Add the two tests in TDD Anchor below.
-6. Do **not** modify `top/pause.go` — task 05 owns that file in this same wave. Read it for the store
-   shape; leave it untouched. The same applies to `top/help.go` (task 06).
+6. Add the two tests in TDD Anchor below.
+7. Do **not** modify `top/pause.go` — task 05 owns that file in this same wave. Read it for the store
+   shape; leave it untouched. The same applies to `top/help.go` (task 06). This task's diff is
+   `top/stat.go` and `top/stat_test.go`, nothing else.
 
 ## TDD Anchor
 
@@ -75,18 +83,31 @@ self-consistent to the operator.
 
 - `top/stat_test.go::Test_renderSysstat_timestampFromParameter` — `renderSysstat` given a fixed
   `time.Time` far from the present (e.g. `2020-01-02 03:04:05`) prints exactly that instant on line 1
-  in the existing layout, and line 1 contains no trace of the current wall clock (assert the exact
-  expected `pgcenter: 2020-01-02 03:04:05, refresh: ...` prefix — an equality assertion, not a
-  regexp, so a reintroduced `time.Now()` cannot pass).
-- `top/stat_test.go::Test_renderSysstat_repaintClockDoesNotAdvance` — rendering the **stored** frame
-  twice, with the wall clock demonstrably having moved between the two renders, produces the same
-  line-1 timestamp both times. Drive this at the highest level reachable **without a live
-  `*gocui.Gui`**: if task 03's render core is callable against an `io.Writer`/buffer, assert through
-  it; otherwise assert through `renderSysstat` fed from a `frameStore` value constructed in the test
-  (same package, no edit to `top/pause.go`). The test must fail if the repaint path re-stamps.
+  in the existing layout. Assert the **exact** expected line — `pgcenter: 2020-01-02 03:04:05,
+  refresh: 1s, load average: …` — with `assert.Equal`. It must be an equality assertion, never a
+  regexp: a `\d{4}-\d{2}-\d{2}` pattern matches the wall clock just as happily as the parameter, so a
+  reinstated `time.Now()` would sail straight through it. Equality against a stamp far from today is
+  what makes this test able to fail.
+- `top/stat_test.go::Test_renderSysstat_timestampIsTheOnlySource` — table over two distinct fixed
+  stamps rendered from the same `stat.Stat`: each rendering's line 1 carries its own stamp, and the
+  two line-1 strings differ **only** in the timestamp field (rows 2–4 stay byte-identical). This pins
+  that the parameter is genuinely the source of line 1 rather than being accepted and ignored — a
+  failure mode the single-stamp test above cannot distinguish.
 
 Both tests live in `top/stat_test.go`, follow the existing writer-based golden style of
 `Test_renderSysstat_compact` (`bytes.Buffer` + `assert`), and need neither Postgres nor a terminal.
+
+**What these tests deliberately do *not* cover, and why.** The end-to-end invariant "a repaint does
+not advance the clock" is **not observable from this task**. `renderFrame` is extracted from a
+closure that obtains its views through `g.View(...)` (`top/stat.go:169-252`), so it writes to a live
+`*gocui.View`, not to a buffer — there is no way to call it from a test without a `*gocui.Gui`. A
+test that fell back to "call `renderSysstat` twice with the same `at`" would reduce to a tautology:
+it would stay green even with `time.Now()` put back on the repaint path, which is precisely the
+regression it claims to guard. Do not write it. That invariant is covered where it *is* observable —
+by task 03's store-immutability test (tech-spec Testing Strategy: "a repaint driven by a later frame
+renders the original values and the original timestamp"), because task 03 owns the store and its
+tests. This task's contribution to that invariant is the removal of `time.Now()` from
+`renderSysstat`, which the two tests above do pin.
 
 ## Acceptance Criteria
 
@@ -94,13 +115,14 @@ Both tests live in `top/stat_test.go`, follow the existing writer-based golden s
 - [ ] `printSysstat` forwards the parameter; its wrapper role is otherwise unchanged.
 - [ ] Line 1's rendered text is byte-identical to today's for a given stamp (same layout, same
       `refresh: %ds`, same load-average formatting).
-- [ ] The live path captures the stamp once per frame and shares that one value with the store; the
-      repaint path reuses the stored stamp and calls `time.Now()` nowhere.
-- [ ] Both TDD Anchor tests exist and pass; the repaint test fails if a `time.Now()` is put back on
-      the repaint path (verify by trying it locally before finishing).
+- [ ] `renderSysstat` receives its timestamp from `renderFrame`'s existing render-timestamp
+      parameter — no new capture, no new parameter added to `renderFrame`, no edit to `top/pause.go`.
+- [ ] Both TDD Anchor tests exist and pass, and the first one fails if `time.Now()` is put back into
+      `renderSysstat` (verify by trying it locally before finishing).
 - [ ] All five existing call sites in `top/stat_test.go` compile against the new signature with no
       assertion weakened or removed; the eight tests behind `verboseSysstatLines` still pass.
-- [ ] `go test ./top/...` is green; `make lint` reports nothing new.
+- [ ] `go test ./top/ -run 'Sysstat'` is green and the whole `top` package still compiles
+      (`go vet ./top/`); `make lint` reports nothing new.
 - [ ] `top/pause.go`, `top/help.go` and every file outside `top/stat.go` + `top/stat_test.go` are
       untouched by this task.
 
@@ -120,17 +142,25 @@ Both tests live in `top/stat_test.go`, follow the existing writer-based golden s
 **Code files:**
 - [top/stat.go](top/stat.go) — modify: `renderSysstat`, `printSysstat`, the production call site
 - [top/stat_test.go](top/stat_test.go) — modify: five existing call sites + two new tests
-- [top/pause.go](top/pause.go) — **read only** (owned by task 05 in this wave): `frameStore.at` is the stamp the repaint path reuses
+- [top/pause.go](top/pause.go) — **read only** (owned by task 05 in this wave): `frameStore.at` is the stamp the repaint path reuses. Context for understanding where the value originates; nothing in this task requires editing it, and editing it is a wave-rule violation
 
 ## Verification Steps
 
-- `go test ./top/...` — full package green, including the eight tests behind `verboseSysstatLines`.
-- `go test ./top/... -run 'Sysstat'` — the two new tests present and passing (use for the fast TDD loop).
-- `grep -n 'time.Now()' top/stat.go` — no occurrence inside `renderSysstat`; the render path has
-  exactly one capture, on the live branch.
-- Temporarily re-insert a `time.Now()` on the repaint path and confirm
-  `Test_renderSysstat_repaintClockDoesNotAdvance` goes red; revert. (A test that cannot fail is not
-  a test.)
+- `go test ./top/ -run 'Sysstat'` — green. This is the verification command for this task: it covers
+  the two new tests, both golden tests, the refresh-format table and all eight tests reached through
+  `verboseSysstatLines` (every affected test name contains `Sysstat`), and it is the fast TDD loop.
+- `go vet ./top/` — proves the whole package, tests included, still compiles after the signature
+  change even though not every test in it is run.
+- **Environment condition:** a full `go test ./top/...` requires a **live PostgreSQL** with
+  `pg_stat_statements` — `top/report_test.go:14` queries the database and panics without it. Do not
+  treat a failure there as a regression from this task, and do not use the full-package run as this
+  task's gate. Run it only if a database is available (and then it is the pre-deploy QA task's job,
+  not this one's).
+- `grep -n 'time.Now()' top/stat.go` — no occurrence inside `renderSysstat`. For every occurrence
+  that remains in the file, be able to say which path it serves.
+- Temporarily put `time.Now()` back into `renderSysstat` and confirm
+  `Test_renderSysstat_timestampFromParameter` goes red; revert. (A test that cannot fail is not a
+  test — and this is the falsifiability check for the change this task actually makes.)
 - `git status --short` — only `top/stat.go` and `top/stat_test.go` modified.
 - `make lint` — clean.
 
@@ -140,14 +170,14 @@ Both tests live in `top/stat_test.go`, follow the existing writer-based golden s
 
 - `top/stat.go:269` — `renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration) error`. Lines 276–278 build line 1 with `time.Now().Format("2006-01-02 15:04:05")`. Add the timestamp parameter and format it instead. Update the doc comment (262–268) to state that the caller supplies the frame's render time and why (a repaint must not advance the clock).
 - `top/stat.go:258` — `printSysstat`, the thin `*gocui.View` wrapper over `renderSysstat`. Add the same parameter and forward it; nothing else changes here.
-- `top/stat.go:175` — today the sole production call, inside `printStat`'s `g.Update` closure. Task 03 moves this into the shared render core with two callers (live and repaint). Supply the stamp from whatever task 03 threads through; if the core does not yet carry it, adding that parameter is part of this task.
+- `top/stat.go:175` — today the sole production call (`printSysstat(v, s, app.config.verbose, app.db.Local, props.DataDirectory, app.config.refresh)`), inside `printStat`'s `g.Update` closure. Task 03 moves this into `renderFrame`, which by then already takes the render timestamp as a parameter (Decision 6). Pass that parameter through — one argument, one level down. If it is absent, stop and escalate (see step 4 of "What to do"); `top/pause.go` and the repaint call site are out of bounds for this task.
 - `top/stat_test.go` — five call sites to update: `:60` (`Test_renderSysstat_compact`), `:97` (`Test_renderSysstat_refreshFormat`, inside a table loop), `:192` (`verboseSysstatLines`, the shared helper behind eight verbose tests), `:440` and `:441` (`Test_renderSysstat_compactUnchanged`, which compares compact vs verbose output — both calls must receive the **same** stamp or its byte-identity assertion breaks for the wrong reason).
 
-**Dependencies:** task 03 (the render core split and `frameStore`) must be merged first — this task's repaint half has nothing to attach to otherwise. No new Go packages; `time` is already imported in both files.
+**Dependencies:** task 03 (the render core split, its timestamp parameter and `frameStore`) must be merged first — there is nothing to thread the value from otherwise. No new Go packages; `time` is already imported in both files.
 
 **Edge cases:**
 
-- **Zero `time.Time`.** Do not special-case it and do not add a "zero means now" fallback: a zero value renders as `0001-01-01 00:00:01` on screen, which is a visible bug worth seeing, not something to paper over. Production callers always have a real stamp (`valid == false` means the repaint draws nothing at all — task 03's concern, not this one).
+- **Zero `time.Time`.** Do not special-case it and do not add a "zero means now" fallback: a zero value renders as `0001-01-01 00:00:00` on screen, which is a visible bug worth seeing, not something to paper over. Production callers always have a real stamp (`valid == false` means the repaint draws nothing at all — task 03's concern, not this one).
 - **Time zone.** `time.Now()` is local and `Format` does not convert. Pass the value through as-is; do not add `.UTC()` — it would silently change what operators see today.
 - **`Test_renderSysstat_compact` line 1** is asserted with a regexp (`stat_test.go:65-68`) that matches any `\d{4}-\d{2}-\d{2} ...` stamp, so a fixed time keeps it green with no edit to the pattern. Keep the regexp as it is — do not loosen it, and do not tighten it either (the exact-stamp assertion belongs in the new dedicated test).
 - **`refresh`** stays a separate parameter and keeps its whole-seconds conversion; it is unrelated to this change.
@@ -156,7 +186,7 @@ Both tests live in `top/stat_test.go`, follow the existing writer-based golden s
 **Implementation hints:**
 
 - Parameter naming and placement: match `frameStore.at` (e.g. `at time.Time`) and keep the order identical in `printSysstat` and `renderSysstat`. Placing it next to `refresh` groups the two time-typed values; either position is fine as long as both functions agree.
-- One capture per live frame is the invariant that matters. After the change, grep the render path (`top/stat.go`, `top/ui.go`) for `time.Now()` and be able to point at each remaining occurrence and say which path it serves.
+- The capture itself belongs to task 03 (one `time.Now()` on the live path, feeding both the header and the store); this task only *consumes* it. After the change, grep `top/stat.go` and `top/ui.go` for `time.Now()` and be able to point at each remaining occurrence and say which path it serves — if you find two captures on the live path, that is a task-03 finding to report, not a thing to fix here.
 - Write the tests first, watch them fail against the current signature (they will not compile — that is a legitimate red), then change the signature.
 - The verbose tests reached through `verboseSysstatLines` assert rows 5–7 and the compact prefix; a fixed stamp in the helper leaves all of them untouched.
 

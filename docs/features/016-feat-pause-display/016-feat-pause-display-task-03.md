@@ -1,9 +1,9 @@
 ---
 status: planned                    # planned -> in_progress -> done
-depends_on: ["02"]                 # ID задач-зависимостей (строки: ["01", "02"])
+depends_on: ["01", "02"]           # ID задач-зависимостей (строки: ["01", "02"])
 wave: 2                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/... -race` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'statLoop|frameStore|repaint|renderFrame|Latch' -race -count=5` # инструмент верификации (опционально: curl, bash, user)
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -48,9 +48,14 @@ design:
    errors at **thirteen** points (`top/stat.go:172-247`), and an error out of a `g.Update` closure tears
    down `MainLoop` → UI rebuild → fresh repaint → the same error, bounded only by the `errorRate` guard
    that kills the process. So the panel/table rendering is extracted into `renderFrame`, used by both
-   paths, which differ in **three** dimensions: error policy (propagate on live, swallow-and-latch on
-   repaint), the source of the logtail content (file vs stored buffer), and whether the first-tick hint
-   runs.
+   paths, which differ in **four** dimensions (Decision 6): error policy (propagate on live,
+   swallow-and-latch on repaint), the **render timestamp** (a freshly captured `time.Now()` live, the
+   stored `at` on repaint), the source of the logtail content (file vs stored buffer), and whether the
+   first-tick hint runs. Two of the four — the timestamp and the logtail source — are *consumed* only by
+   later tasks (04 threads the stamp into the header, 09 fills the stored buffer), but both must be
+   **parameters of the core from the start**: task 04 runs in wave 3 and task 09 in wave 5, and neither
+   may edit `top/pause.go`, which task 05 owns in wave 3. A seam cut for only one of them forces a later
+   wave to re-open a file it does not own.
 
 The feature's **one structural guarantee** lives in this task: `statLoop` receives neither `*app` nor
 the store, and its `repaint` parameter is a bare `func()`. From inside the gate there is physically
@@ -88,8 +93,7 @@ unconditional.
   timestamp, the last non-empty logtail buffer and its path, and `valid`. Unexported fields, no getters
   in production code — the only way to draw it is its own repaint entry point.
 - Add the store to the `app` struct (`top/top.go`, next to `uiError`): `app` survives the UI rebuild,
-  which the frozen frame must too. See the note in Details about this file being missing from the
-  tech-spec's file table.
+  which the frozen frame must too.
 - Add the publish helper used by the live render path, and `repaintStored(app)` — the repaint entry
   point. `repaintStored` **extracts nothing from the store before entering `g.Update`**; it only asks
   for a repaint.
@@ -97,26 +101,59 @@ unconditional.
   in the gate would read a gocui-owned field from the worker goroutine, reintroducing the race in
   miniature. `valid == false` is a **normal state** (pause engaged before the first frame): draw
   nothing, return `nil`, touch no failure latch.
-- Add the repaint failure latch (Decision 5, driven by this task's closure per Decision 6): a repaint
+- Add the repaint failure latch. The tech-spec assigns it to **this** task: Decision 5 specifies the
+  behaviour, Decision 6 states that "the failure latch of Decision 5 belongs to Task 3, since it lives
+  with the repaint closure's error policy" — task 7 only wires the resize trigger into it. A repaint
   error is swallowed, the closure returns `nil` unconditionally, and exactly **one** cmdline message is
   emitted on the no-failure → failure transition; a subsequent successful repaint re-arms it. The latch
   lives next to the store, gocui-goroutine-only, and is shared by every `repaintStored` caller (this
   task's gate, task 7's resize detector, task 8's filter dialog).
+- **The latch must be a separately callable unit of state, not a bare `if` buried in the closure.**
+  This is a testability requirement, not a style preference: the repaint closure can only fail at
+  `g.View(...)`, and a `*gocui.Gui` / `*gocui.View` cannot be constructed outside the gocui package —
+  the repo already records exactly this in the comment on `Test_printCmdlineNilGui`
+  (`top/ui_test.go:354-356`). So a test can never *make* the closure fail. Give the latch its own
+  entry point — a method on the store (or a small type beside it) that takes the repaint outcome and
+  returns whether a message must be emitted, updating the state as a side effect — and have the
+  closure call it and, only when it returns `true`, call `printCmdline`. Then the transition logic is
+  driven directly by a test, without a Gui, and the closure keeps just the call.
 
 **4. Split `printStat` into a shared core (`top/stat.go`).**
 
 - Extract the panel/table rendering out of `printStat`'s `g.Update` closure into `renderFrame`.
 - `printStat` keeps: the first-tick hint (`top/stat.go:165-167`), today's error propagation out of the
-  closure, the live logtail source (read the file), and the publish into the store at the end of the
-  closure.
+  closure, the live logtail source (read the file), and the publish into the store.
 - The repaint path wraps the same core in a closure with the opposite error policy and the stored
   logtail source, and it does **not** run the first-tick hint.
-- **Design the signature to already accept the logtail source**, even though task 9 is what fills the
-  stored buffer in — otherwise wave 5 re-opens the seam wave 2 just cut.
-- **Publish only on the live path** (Decision 2). A repaint must not republish: the timestamp is
-  captured at render time, so republishing would restamp the frame and the frozen clock would tick,
-  defeating task 4; the logtail buffer would be re-stored from itself. While paused the store must be
-  immutable by construction.
+- **Design the signature to already accept BOTH the render timestamp and the logtail source**
+  (Decision 6), even though task 04 is what consumes the stamp and task 09 what fills the stored
+  buffer. Cutting the seam for only one of them is what the tech-spec explicitly forbids: task 04
+  would otherwise have to add the timestamp parameter itself, and its only way to hand a *stored*
+  stamp to the core would be editing `top/pause.go` — which task 05 owns in the same wave.
+  - Live path: `renderFrame` is called with the timestamp captured for this frame and the file-backed
+    logtail source.
+  - Repaint path: `renderFrame` is called with `frameStore.at` and the stored buffer/path.
+- **Capture the stamp exactly once per live frame, and feed both consumers from that one capture.**
+  Call `time.Now()` in a single statement at the top of `printStat`'s `g.Update` closure (that is
+  "when it was rendered", which is what the store's `at` field documents), pass that value into
+  `renderFrame`, and let `renderFrame` write **that same value** into the store when it publishes.
+  One stamp, two consumers — the store and (after task 04) the header clock. Add no second
+  `time.Now()` call of your own on either path; the one already inside `renderSysstat` stays where it
+  is and is task 04's to remove.
+- **Do not change `renderSysstat`'s signature** — it keeps its own `time.Now()` at `top/stat.go:277`
+  for now. Threading the stamp into the header is task 04, which owns `top/stat_test.go` and its five
+  call sites (`top/stat_test.go:60, 97, 192, 440, 441`). This task stops at the `renderFrame`
+  boundary: the parameter exists and reaches the store, and task 04 pushes it one level further down.
+- **Publish only on the live path** (Decision 2). A repaint must not republish: republishing would
+  restamp the frame with the repaint's own clock and the frozen header clock would tick, defeating
+  task 04; the logtail buffer would be re-stored from itself. While paused the store must be immutable
+  by construction.
+- **Make the publish decision a callable unit too**, for the same reason as the latch: `renderFrame`
+  itself cannot be driven from a test (it does `g.View` lookups). Express "which path am I" as data —
+  a small params/source value built by two constructors, one per path, carrying the stamp, the logtail
+  source and whether publishing happens — and put the publish step behind a helper that takes that
+  value. Then the invariant "the repaint path never publishes" is checkable by a test that calls those
+  two constructors and the helper, instead of resting on a reviewer's reading of the closure.
 
 **5. Guard the bare send (`top/stat.go:130`).** Wrap `statCh <- stat.Stat{Error: err}` in a `select`
 with `ctx.Done()`, mirroring the guarded send at `top/stat.go:72-79` (on cancel: close the channel and
@@ -155,17 +192,37 @@ Store and repaint (`top/pause_test.go`):
 - `top/pause_test.go::Test_repaintStored_invalidStoreIsNoop` — drives the **real** repaint closure with
   `valid == false`: it returns `nil`, draws nothing, does not dereference the `*gocui.Gui` (so it is
   callable with a nil Gui in the test, which is what proves the `valid` check runs before any view
-  lookup), and leaves the failure latch untouched.
-- `top/pause_test.go::Test_frameStore_immutableWhilePaused` — publish frame A (through the real publish
-  helper, not by assigning fields by hand), then drive `statLoop` with `paused == true` and a later,
-  **different** frame B; the store still holds A's values **and A's timestamp**. This is the test that
-  fails if the store is republished on repaint or written from the gate.
-- `top/pause_test.go::Test_frameStore_repaintRendersIdenticalBytes` — the stored frame rendered through
-  the writer-based cores (`renderDbstat` / `printStatData`, and `renderSysstat` with the stored stamp)
-  into a `bytes.Buffer` produces identical bytes before and after a discarded frame passes through the
+  lookup), and leaves the failure latch untouched. This requires the closure body to be a **named
+  function** taking `*gocui.Gui`, with `repaintStored` doing nothing but handing it to `g.Update` —
+  otherwise there is no way to call it from a test at all.
+- `top/pause_test.go::Test_frameStore_publishOnlyOnLivePath` — the immutability check, aimed at the
+  step that can actually regress. Publish frame A with stamp `t1` through the real publish helper (not
+  by assigning fields by hand). Then build the **repaint path's** render params from the store and run
+  the publish step for them with a later, **different** frame B and stamp `t2` in hand: the store must
+  still hold A's values **and `t1`**. Then run the same publish step with the **live path's** params
+  for B/`t2`: the store must now hold B and `t2`. Both halves must be present — the first fails if the
+  repaint path ever republishes, the second proves the test is not asserting a helper that never
+  writes at all.
+  *Why this shape:* driving `statLoop` with `paused == true` and a stubbed repaint proves nothing here
+  — the gate cannot reach the store by construction (that is Decision 1's whole point) and the stub
+  does not run the publish step, so such a test cannot fail for the reason it claims to check.
+- `top/pause_test.go::Test_frameStore_repaintRendersIdenticalBytes` — the stored frame rendered twice
+  through the **clock-free** writer-based cores (`renderDbstat` / `printStatData`) into a
+  `bytes.Buffer` produces identical bytes, before and after a discarded frame passes through the
   paused gate.
-- `top/pause_test.go::Test_repaintStored_failureLatchReportsOnce` — a failing repaint emits exactly one
-  cmdline message on the transition and none on the repeats; the closure returns `nil` every time.
+  *Do not include `renderSysstat` in this assertion in this task.* It still calls `time.Now()` itself
+  (`top/stat.go:277`, inside `renderSysstat` declared at `:269`) and formats to second precision, so
+  two renders straddling a second boundary would differ — a flaky test asserting the opposite of what
+  the feature wants. Extending this assertion to the sysstat panel belongs to task 04, once the core
+  takes the stamp all the way down; leave a comment in the test saying so.
+- `top/pause_test.go::Test_repaintFailureLatch_reportsOncePerTransition` — drives the latch unit
+  directly (see "What to do" §3): feed it fail → fail → fail → success → fail and assert the
+  "emit a message?" answers are `true, false, false, false, true`, i.e. exactly one report per
+  no-failure → failure transition, silence on repeats, and re-arming after a success. No `*gocui.Gui`
+  is involved, which is the point: a test cannot make the real closure fail, because its only failure
+  site is `g.View(...)` and a `*gocui.Gui`/`*gocui.View` cannot be constructed outside the gocui
+  package (`top/ui_test.go:354-356` records this property). The "the closure returns `nil` every time"
+  half is not unit-testable and is verified by inspection plus the `grep` step below.
 
 Collector (`top/stat_test.go` is **not** in this task's file list — assert the guarded send through the
 loop-level tests above, or add the check to `top/pause_test.go`; do not edit `top/stat_test.go`, task 4
@@ -189,15 +246,20 @@ owns it in wave 3):
       inside the closure.
 - [ ] `valid == false` repaints as a silent no-op: no draw, no error, no latch, no cmdline write.
 - [ ] The store is published **only** on the live render path; a repaint changes neither the stored
-      frame nor its timestamp.
-- [ ] `renderFrame` is shared by both paths and already takes the logtail source as a parameter; the
-      repaint path performs no file access and does not run the first-tick hint.
-- [ ] The repaint closure returns `nil` unconditionally and reports a failure exactly once per
-      transition through the latch.
+      frame nor its timestamp, and this is proved by a test that calls the publish step for both
+      paths' params — not by a `statLoop` test with a stubbed repaint.
+- [ ] `renderFrame` is shared by both paths and already takes **both** the render timestamp and the
+      logtail source as parameters; the repaint path passes `frameStore.at` and the stored buffer,
+      performs no file access, and does not run the first-tick hint.
+- [ ] Exactly one `time.Now()` is added on the live render path, and its value reaches both the store
+      and `renderFrame`. `renderSysstat`'s signature is unchanged (task 04 owns it).
+- [ ] The repaint closure returns `nil` unconditionally; the failure latch is a separately callable
+      unit whose transition behaviour is covered by a test that needs no `*gocui.Gui`.
 - [ ] `top/stat.go:130` is guarded by a `select` on `ctx.Done()`; no bare channel send remains in
       `collectStat`.
 - [ ] At least one test drives the real repaint closure rather than a stub.
-- [ ] `go test ./top/... -race` passes with no new races; `make lint` and `make vuln` clean.
+- [ ] The task's targeted test run (see Verification Steps) passes with `-race`, no new races;
+      `make build`, `make lint` and `make vuln` clean.
 - [ ] No production code outside `top/` is modified; `view.View` gains no field.
 
 ## Context Files
@@ -206,8 +268,9 @@ owns it in wave 3):
 - [016-feat-pause-display.md](016-feat-pause-display.md) — user-spec (the "≥5 sends" acceptance
   criterion, the "pause before the first frame" case, the frozen-frame rules)
 - [016-feat-pause-display-tech-spec.md](016-feat-pause-display-tech-spec.md) — tech-spec: **Decisions
-  1, 2, 6, 12** are this task; Decision 5 for the latch this task drives; Data Models for `frameStore`;
-  Testing Strategy; Implementation Tasks → Wave 2 → Task 3
+  1, 2, 6, 12** are this task, and Decision 6 also assigns Decision 5's **failure latch** to it (task 7
+  only wires the resize trigger in); Data Models for `frameStore`; Testing Strategy; Implementation
+  Tasks → Wave 2 → Task 3
 - [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) — decisions log
 - [016-feat-pause-display-code-research.md](016-feat-pause-display-code-research.md) — §1.2 (where the
   gate goes), §1.3 (what the closure captures), §7.1 (why not receiving is a total deadlock), §7.2 (the
@@ -250,10 +313,18 @@ owns it in wave 3):
 
 ## Verification Steps
 
-- `go test ./top/... -race` — passes, no races reported. The drain test completes rather than timing
-  out, and asserts ≥5 completed sends, 0 renders, 5 repaints.
-- `go test ./top/... -run 'statLoop|frameStore|repaintStored' -race -count=5` — the concurrency tests
-  are stable under repetition, not accidentally green once.
+- `go test ./top/ -run 'statLoop|frameStore|repaint|renderFrame|Latch' -race -count=5` — the task's
+  own tests pass and are stable under repetition, not accidentally green once. The drain test
+  completes rather than timing out, and asserts ≥5 completed sends, 0 renders, 5 repaints.
+- `go vet ./top/` and `go build ./...` — the whole package still compiles, including the tests that
+  the targeted run filters out.
+- **Do not use a bare `go test ./top/...` as the pass/fail gate for this task.** The package cannot
+  run to completion without live PostgreSQL: `top/report_test.go:14` calls
+  `postgres.NewTestConnect()` and then dereferences the connection, which panics inside
+  `internal/postgres` when no fixture cluster is listening. That is an environment prerequisite (the
+  project's fixture clusters, see `patterns.md`), not a broken build — if you have the clusters, the
+  full run is a welcome extra signal; if you do not, a panic there says nothing about this task.
+  Run the targeted subset instead, and never "fix" it by editing `top/report_test.go`.
 - `git diff top/` — `top/stat_test.go`, `top/config.go`, `top/keybindings.go`, `top/config_view.go`,
   `top/dialog.go`, `top/help.go` are untouched (they belong to other tasks/waves).
 - `grep -n "statCh <-" top/stat.go` — every send is inside a `select` with `ctx.Done()`.
@@ -273,10 +344,9 @@ owns it in wave 3):
   at `:130`.
 - `top/pause.go` — add `frameStore`, the publish helper, `repaintStored`, the repaint closure and the
   failure latch. Task 02 created this file for the flag/token/handler; extend it.
-- `top/top.go` — **one line**: the store field on `app`. The tech-spec's file table omits this file;
-  that is an oversight in the table, not a design change (Decision 1 itself names `app.frame`). Wave 2
-  contains only this task and **no other task in any wave touches `top/top.go`**, so there is no wave
-  conflict. Record the deviation in the decisions log.
+- `top/top.go` — **one line**: the store field on `app`. Listed for this task in the tech-spec's
+  Implementation Tasks table; wave 2 contains only this task and no other task in any wave touches
+  `top/top.go`, so there is no wave conflict.
 - `top/ui_test.go` — add the `statLoop` tests (the file currently holds only cmdline-composer tests).
 - `top/pause_test.go` — add the store/repaint tests.
 
@@ -323,9 +393,12 @@ owns it in wave 3):
   — an explicit comment naming the owning goroutine is the project's convention for this.
 - `printCmdline` from inside a `g.Update` closure is an established pattern here — the logtail branch
   already does it (`top/stat.go:229`). The latch message may use it.
-- Timestamp: capture it on the live path and store it, but **do not change `renderSysstat`'s
-  signature** — threading it into the header is task 04, and doing it here would scoop that task and
-  break its five call sites out of turn.
+- Timestamp: `renderFrame` takes it as a parameter from the start (Decision 6) and the live path
+  captures it once and stores it — but **do not change `renderSysstat`'s signature**. `renderSysstat`
+  (`top/stat.go:269`) keeps its inline `time.Now()` at `:277` until task 04; threading the stamp into
+  the header there would scoop that task and break its five test call sites out of turn. Inside this
+  task the parameter's only consumer is the store, and that is sufficient: the seam exists, so task 04
+  changes one signature in `top/stat.go` and touches nothing in `top/pause.go`.
 - Two shapes satisfy "publish only on the live path": the publish statement inside `renderFrame` under
   its live/repaint discriminator, or `renderFrame` returning what it rendered and the live caller
   publishing. Prefer whichever leaves **no publish statement reachable from the repaint path at all** —
@@ -350,6 +423,5 @@ owns it in wave 3):
 ## Post-completion
 
 - [ ] Записать краткий отчёт в [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
-- [ ] Если отклонились от спека — описать отклонение и причину (в частности: `top/top.go` не значится
-      в таблице файлов tech-spec, но одна строка в структуре `app` необходима — зафиксировать)
+- [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

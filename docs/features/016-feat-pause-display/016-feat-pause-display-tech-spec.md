@@ -219,10 +219,15 @@ points (`top/stat.go:172-247` — seven in the panel section, six more in the ex
 a repaint through it re-opens the infinite-rebuild loop that Decision 5 closes at the outer level.
 One core with two error policies removes both problems.
 
-**The two paths differ in three dimensions, not one** — error policy, the source of the logtail
-content (file versus stored buffer), and whether the first-tick hint runs. Task 3 must therefore
-design the core's signature to *already* accept the logtail source, even though Task 9 is what fills
-it in; otherwise Wave 5 re-opens the seam Wave 2 just cut.
+**The two paths differ in four dimensions, not one** — error policy, the render timestamp (captured
+`time.Now()` live, the stored `at` on repaint), the source of the logtail content (file versus stored
+buffer), and whether the first-tick hint runs. Task 3 must therefore design the core's signature to
+*already* accept both the timestamp and the logtail source, even though Task 4 and Task 9 are what
+fill them in; otherwise Waves 3 and 5 re-open the seam Wave 2 just cut — and worse, they would have
+to re-open it inside `top/pause.go`, which another task owns in their wave.
+
+**The failure latch of Decision 5 belongs to Task 3**, since it lives with the repaint closure's
+error policy. Task 7 only wires the resize trigger into it.
 
 **Alternatives considered:** a boolean parameter on `printStat` (rejected — the paths differ in error
 policy, which a flag inside one function expresses badly).
@@ -230,7 +235,10 @@ policy, which a flag inside one function expresses badly).
 ### Decision 7: The stored logtail buffer is the last NON-EMPTY read, and the file is not touched while paused
 
 **Decision:** store `buf` and `path` whenever `printLogtail` actually has content; repaint renders
-from the stored buffer and performs no file access, no `Reopen`, no size bookkeeping.
+from the stored buffer and performs no file access, no `Reopen`, no size bookkeeping. The stored pair
+is **dropped on the live path when the panel is not showing the log**, so that closing the panel and
+opening it on another file cannot leave a repaint drawing the previous file's lines under its old
+header.
 
 **Rationale:** `readLogfileRecent` returns `nil` when the file has not changed and `printLogtail`
 then prints nothing (`top/stat.go:1230-1232`), so storing "the buffer of the frame on which `Space`
@@ -543,7 +551,9 @@ the Final Wave.
 
 ## Agent Verification Plan
 
-**Source:** user-spec "Как проверить" — 15 numbered steps, reproduced there in full.
+**Source:** the user-spec's "Как проверить" table, reproduced there in full — sixteen rows (steps
+1-11 plus the sub-steps 3a and 7a-7d), of which row 1 is the local test/lint/vuln run and the
+remaining fifteen are stand steps. Walk the rows rather than counting them.
 
 ### Verification approach
 
@@ -766,7 +776,7 @@ list them.
 
 #### Task 10: Pre-deploy QA
 - **Description:** Acceptance testing: full suite with the race detector, lint, vulnerability scan,
-  and the 15-step stand run from the user-spec including the narrow-terminal pass and the comparison
+  and the full stand run from the user-spec's verification table including the narrow-terminal pass and the comparison
   binary built from `master`.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none

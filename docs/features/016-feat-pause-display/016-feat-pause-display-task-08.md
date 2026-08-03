@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["05"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 4                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash — `go test ./top/...` # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./top/ -run 'Test_applyFilter|Test_dialog'` # точечный прогон: полный `./top/...` требует живых fixture-кластеров
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -62,21 +62,42 @@ goes red, the fix belongs in the budget, not in a special case for the marker.
   `[PAUSED]` marker into the prefix. Build that prefix through `cmdlineTokens(config)` on a paused
   config rather than hand-writing the token, so the tests exercise the real ordering and do not pin
   Task 2's literal.
+- **Every test that drives the filter path must build a real `view.View` first.** `newConfig()`
+  (`top/config.go:44-51`) fills only `views` and `viewCh`; `config.view` stays the zero `view.View`,
+  whose `Filters` map is **nil**. `setFilter`'s success branch does
+  `view.Filters[view.OrderKey] = re`, which panics with "assignment to entry in nil map" on a bare
+  `newConfig()`. Set `c.view = view.View{Cols: …, Filters: map[int]*regexp.Regexp{}, OrderKey: …}`
+  before calling the helper — in the repaint tests, not only in the geometry ones.
 
 ## TDD Anchor
 
 Write these first, run them against the current code (the helper does not exist yet — the repaint
 tests fail to compile, which is the intended red), then implement.
 
+**Fixture precondition for the two filter-path tests below.** `newConfig()` leaves `config.view` as
+the zero `view.View` with a **nil** `Filters` map, and `setFilter` writes into that map — a bare
+`newConfig()` panics before any assertion runs. Build the config as
+
+```go
+c := newConfig()
+c.view = view.View{Cols: []string{"datname", "usename"}, Filters: map[int]*regexp.Regexp{}, OrderKey: 1}
+```
+
+(the idiom of `Test_cmdlineTokens`, `top/ui_test.go:317-330`), then set the pause flag the way Task 2
+landed it. A nil-map panic here is a broken fixture, not a finding about the helper.
+
 - `top/dialog_test.go::Test_applyFilter_repaintsWhenPaused` — table over `{paused, live}`: with the
   flag set the repaint callback is invoked exactly once; with it clear it is never invoked. In both
   rows the returned message and the resulting `view.Filters` are exactly what `setFilter` alone
-  produces (a valid pattern lands in the map and returns `"Filters: ok"`).
+  produces (a valid pattern lands in the map and returns `"Filters: ok"`). Each row needs its **own**
+  freshly built `view.View` — the valid-pattern case mutates the map, so a shared fixture would let
+  one row's write decide the other row's outcome.
 - `top/dialog_test.go::Test_applyFilter_repaintsOnUnchangedFilter` — an invalid regexp
   (`"("`) and an empty answer on a column with no filter both still repaint while paused, and the
-  message is `setFilter`'s own. Pins the deliberate choice **not** to predicate the repaint on
-  "something actually changed": the repaint is an identity render, and a change-predicate here would
-  duplicate `setFilter`'s internals in its caller.
+  message is `setFilter`'s own. Same fixture requirement: the empty-answer case reads
+  `view.Filters[view.OrderKey]` and `delete`s from it — both are safe on a nil map, so this test
+  would pass with a broken fixture while its sibling panics. Build the map here too, so the two
+  tests exercise the same object.
 - `top/dialog_test.go::Test_dialogPromptFitWithPauseMarker` — sweep over every entry of
   `allDialogTypes`, over prefixes `{paused}` and `{paused + active filter}`, and over terminal
   widths: the composed line never outgrows `maxX - minDialogInputWidth - 1`, the input field's first
@@ -107,7 +128,9 @@ tests fail to compile, which is the intended red), then implement.
 - [ ] Only `top/dialog.go` and `top/dialog_test.go` are modified; `top/ui.go`, `top/pause.go` and
       `top/config_view.go` are untouched.
 - [ ] All nine pre-existing tests in `top/dialog_test.go` still pass, none weakened or deleted.
-- [ ] `go test ./top/...` passes; `make lint` is clean.
+- [ ] `go test ./top/ -run 'Test_applyFilter|Test_dialog'` passes; `make lint` is clean. The full
+      `go test ./top/...` is environment-dependent (see Verification Steps) — if the fixture cluster
+      is unavailable, record that in the report instead of claiming a full green run.
 
 ## Context Files
 
@@ -154,8 +177,15 @@ tests fail to compile, which is the intended red), then implement.
 
 ## Verification Steps
 
-- Run `go test ./top/...` — everything passes, including the nine pre-existing dialog tests in their
-  original form and the five new ones.
+- Run `go test ./top/ -run 'Test_applyFilter|Test_dialog'` — the nine pre-existing dialog tests in
+  their original form plus the five new ones, all green. This is the primary `verify` command and it
+  needs no database.
+- **Do not treat `go test ./top/...` as the gate.** Part of the package talks to live fixture
+  clusters (`postgres.NewTestConnect`, container `lesovsky/pgcenter-testing`); without them
+  `Test_getQueryReport` fails and then *panics* on a nil connection in
+  `top/report_test.go:14`, taking the whole package run down regardless of this task's changes. Run
+  it only if the cluster is up; otherwise stick to the targeted `-run` above and say so plainly in
+  the report rather than passing a partial run off as a full one.
 - Run `git diff --name-only` — exactly two files: `top/dialog.go`, `top/dialog_test.go`. Any hit on
   `top/ui.go`, `top/pause.go` or `top/config_view.go` is a wave-partition violation (Task 7 owns
   `top/ui.go` this wave).
@@ -186,9 +216,24 @@ tests fail to compile, which is the intended red), then implement.
   what keeps the store unreadable from here.
 - `top/dialog_test.go` — extend. The file's existing style is table/sweep tests over
   `allDialogTypes` and widths, built through the same two calls `dialogOpen` makes
-  (`dialogPromptFit` → `composeCmdline` → `dialogInputX0`); follow it. For the paused prefix build a
-  `*config` with `newConfig()`, set `view` with `Cols`/`Filters` (see `Test_cmdlineTokens` in
-  `top/ui_test.go:317-330` for the idiom), set the pause flag, and take `cmdlineTokens(c)`.
+  (`dialogPromptFit` → `composeCmdline` → `dialogInputX0`); follow it.
+
+  **Config fixture — required in every test that reaches `setFilter`, not just the geometry ones.**
+  `newConfig()` (`top/config.go:44-51`) returns `&config{views: …, viewCh: …}` and nothing else, so
+  `config.view` is the zero `view.View` and `view.Filters` is a **nil** map. `setFilter`'s success
+  branch does `view.Filters[view.OrderKey] = re` — writing to a nil map panics. Build the view
+  explicitly before each call:
+
+  ```go
+  c := newConfig()
+  c.view = view.View{Cols: []string{"datname", "usename"}, Filters: map[int]*regexp.Regexp{}, OrderKey: 1}
+  // then set the pause flag as Task 2 landed it
+  ```
+
+  (idiom: `Test_cmdlineTokens`, `top/ui_test.go:317-330`). A shared package-level fixture is wrong
+  here: the valid-pattern row mutates `Filters`, so give each table row its own. For the paused
+  prefix in the geometry tests, take `cmdlineTokens(c)` off the same kind of config — the `Cols` and
+  `Filters` are what make `filterToken` produce the `[F:datname]` half of the prefix.
 
 **Dependencies:**
 - Depends on Task 5, which is the last Wave-3 task to touch `top/pause.go`; `repaintStored` itself
