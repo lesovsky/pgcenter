@@ -256,10 +256,16 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [016] Pause the display on `Space`
 
-- **Status:** planned — **split off from [015] on 2026-08-02**, and placed **immediately after it**
-  by the roadmap owner; the area passes were renumbered [016]–[019] → [017]–[020] to make room. The
-  reason for this position: the cmdline composer [015] establishes is exactly what this feature
-  extends, so the two are cheapest back to back.
+- **Status:** done (2026-08-04) — archived as `docs/features/archive/016-feat-pause-display`. All 21
+  user-spec acceptance criteria pass; 15 of them were verified on a live stand, the rest by unit
+  tests. Split off from [015] on 2026-08-02 and placed immediately after it by the roadmap owner;
+  the area passes were renumbered [016]–[019] → [017]–[020] to make room. The reason for that
+  position held up: the cmdline composer [015] established took the `[PAUSED]` token with no
+  rework, exactly as predicted.
+- **Both blockers named below were resolved, not worked around.** Sorting: the pause is lifted by
+  any action that needs fresh data, so a frozen frame is never re-sorted. Pager/editor return: the
+  frame store outlives the UI rebuild and the resize detector at the end of `layout` repaints it,
+  so the screen comes back with the frame and the marker rather than blank.
 - **Value:** every top-like tool has it; pgcenter has no `Space` binding at all. Honest framing
   carried over from the [015] interview: this is argued **by analogy**, not from a reported
   incident — unlike the auto-scroll (a recorded [009] limitation) or the filter indicator (a real
