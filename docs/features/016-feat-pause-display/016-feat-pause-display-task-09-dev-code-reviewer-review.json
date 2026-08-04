@@ -1,0 +1,57 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The store's capture/drop/keep truth table (frameStore.syncLogtail) is correctly implemented and placed: verified by reading and by mutation that publishFrame only calls syncLogtail after the `!p.publish` guard (Decision 2 held), and that the drop is reached for every ShowExtra value including stat.CollectNone. The repaint path itself contains no reachable file access (confirmed by code reading of the unchanged `if !p.fromFile { ...; break }` guard in renderFrame). printLogtail's split into renderLogtail preserves rendered bytes and the Clear-only-on-content semantics exactly. All prior tasks' work in top/stat.go, top/pause.go and top/stat_test.go is intact and additive; top/extra.go is untouched; only the four expected files were modified. One major test-quality gap remains: the 'adversarial no-file-access' test never exercises the actual routing decision in renderFrame and cannot fail if that routing regresses, which I independently confirmed by mutation (this duplicates a finding already raised by dev-test-reviewer).",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat_test.go",
+      "line": 1796,
+      "severity": "major",
+      "category": "testing",
+      "suggestion": "Test_repaintLogtail_noFileAccess calls `renderLogtail(&out, p.logPath, p.logBuf)` directly. renderLogtail's signature is `(w io.Writer, path string, buf []byte)` — it has no parameter through which it could ever reach `app.config.logtail` or the adversary file, so the elaborate real-file/opened-descriptor/undersized-Size adversary setup is inert: no implementation of renderLogtail, correct or buggy, could ever read that file. I confirmed this by mutation: changing `if !p.fromFile {` to `if false {` in top/stat.go's `case stat.CollectLogtail:` (routing the repaint unconditionally into the live file-read/Reopen/Size-write branch — exactly the regression class Decision 7 and this task's AC exist to prevent) and re-running `go test ./top/ -run 'Logtail|logtail' -v` — the entire targeted suite, including this test, still passed. The mutation was reverted; `git diff --stat` over the four touched files is empty. The AC bullet 'the no-file-access test uses a real, readable, opened file as the adversary, so it fails if the repaint reads the file — including when the read succeeds' is therefore not actually satisfied: the test would only fail if renderLogtail itself grew a file-reading branch, not if renderFrame's `!p.fromFile` routing were deleted or inverted. The gap is structural, not sloppy: renderFrame (and its `case stat.CollectLogtail:` switch) requires a live `*gocui.Gui`/`*gocui.View`, which cannot be constructed outside the gocui package (confirmed: `newView` is unexported in jroimartin/gocui@v0.5.0), so the routing decision is genuinely unreachable from a unit test without further extraction — the same class of gap task 03 already accepted and documented explicitly for the `valid == true` repaint branch.",
+      "benefit": "Either extract the branch-selection into a small, gocui-free unit (e.g. a function taking `renderParams` plus a `read func() (int64, []byte, error)` thunk, called from renderFrame's case, with a test that fails the thunk with `t.Fatal` when invoked under `p.fromFile == false`) so a real regression is caught, or — if that refactor is judged out of scope for a 'surgical' task — rename/re-scope the test and its doc comment to state plainly that it pins renderLogtail's pure output only, and record the routing guarantee as a review-by-inspection item in the task's Verification Steps and decisions-log entry (the same treatment already given to the wrapper's no-Clear half in this same task). Leaving the current framing risks a future refactor trusting a red/green signal that isn't actually wired to the property it names.",
+      "optional": false
+    },
+    {
+      "file": "top/stat_test.go",
+      "line": 1796,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Once the adversary fixture is discounted, Test_repaintLogtail_noFileAccess's byte-output assertions duplicate Test_renderLogtail_outputUnchanged's coverage with different literal data; the only assertion not already covered elsewhere is assert.NotPanics, which is low-value given renderLogtail has no branch that could plausibly panic on this input.",
+      "benefit": "Reduces test surface to maintain; ties directly to the rescoping suggested above rather than being a separate cleanup.",
+      "optional": true
+    },
+    {
+      "file": "top/pause.go",
+      "line": 137,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "publishFrame grew from 3 to 6 positional parameters (f, p, s, show, logPath, logBuf) to let task 09 attach the logtail capture without reopening task 03's renderParams struct. This is consistent with existing precedent in this package (printSysstat/renderSysstat already take 7 positional parameters), so it is not a deviation from project style, but it is the widest call site touched by this task and a struct (e.g. folding show/logPath/logBuf into a small `logtailFrame` value, or into renderParams itself in a later task) would read slightly better at the call site in renderFrame.",
+      "benefit": "Marginal readability gain only; not worth reopening renderParams's shape mid-feature given task 03 explicitly owns that struct and forbade changing the core's signature.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "adequate",
+    "tech_debt": true
+  },
+  "verifiedInvariants": {
+    "livepath_only_capture": "confirmed by reading (syncLogtail called only after publishFrame's `if !p.publish { return }`) and by mutation (moving the call above the guard reddened Test_frameStore_publishOnlyOnLivePath)",
+    "drop_keep_commit_rules": "confirmed correct: syncLogtail drops for show != stat.CollectLogtail, keeps on empty buf, commits path+buf together on non-empty — all four TDD-anchor tests pass and pass under -race",
+    "sync_reached_for_every_showExtra": "confirmed: logPath/logBuf declared before the `if ShowExtra > CollectNone` block, publishFrame call sits after the block's closing brace and is unconditional on the live path",
+    "repaint_no_file_access": "confirmed correct by code reading of top/stat.go's unchanged `if !p.fromFile { printLogtail(...); break }` guard; NOT covered by an automated test that can fail on regression (see major finding)",
+    "printLogtail_split_byte_identical": "confirmed: Clear stays inside the emptiness guard on both printLogtail and renderLogtail; Test_renderLogtail_outputUnchanged and Test_renderLogtail_emptyBufferPrintsNothing pass",
+    "prior_tasks_work_preserved": "confirmed via diff inspection: all changes to top/stat.go and top/pause.go are additive (new locals, extended signatures, comments); top/extra.go has zero diff for this commit (git diff --stat 0ae64cf~1 0ae64cf -- top/extra.go is empty)",
+    "file_set_scope": "confirmed: only top/stat.go, top/pause.go, top/stat_test.go, top/pause_test.go touched (git show --stat)"
+  },
+  "deviationAssessments": {
+    "a_pause_test_go_modified": "Correct and confined. The two pre-existing publishFrame call sites (Test_frameStore_publishOnlyOnLivePath, Test_frameStore_repaintRendersIdenticalBytes) were updated only for the new arity, with no assertions weakened; the new tests added are exactly the four the task's own TDD Anchor mandates (syncLogtail's full truth table). No unrelated changes found in the diff.",
+    "b_no_repaintLogtail_function": "Correct reading of the escape clause. Task 03's actual seam is `p.fromFile bool` plus `p.logPath`/`p.logBuf` fields consumed inline inside renderFrame's switch, not a separate source function — so a `repaintLogtail(w io.Writer, p renderParams) error` would be a one-line wrapper around renderLogtail with no production caller, and would not have closed the test-coverage gap discussed above either (it would be exactly as unable to reach app.config.logtail as renderLogtail is). Naming the writer-based core renderLogtail, matching the printSysstat->renderSysstat precedent, is the right call.",
+    "c_publishFrame_six_params": "Correct call given task 03 explicitly typed publishFrame on *frameStore rather than *app to keep it unit-testable without a live app value (per Test_frameStore_publishOnlyOnLivePath, which constructs a bare `var f frameStore`), and the parameter count is consistent with existing precedent elsewhere in this file (printSysstat/renderSysstat take 7). A parameter struct would be a minor readability nicety, not a correctness or convention issue; flagged as optional above."
+  }
+}

@@ -937,3 +937,58 @@ func Test_changeRefresh(t *testing.T) {
 		}
 	})
 }
+
+// Test_decreaseWidthNoColumnMetadata covers pressing the width-down key before the first frame has
+// ever been rendered: config.view.Cols is populated only on the render path, so view.New() leaves
+// it nil and indexing it would panic inside a key handler, which gocui does not recover.
+//
+// The handler runs in a goroutine and the outcome is taken with a select over three channels: an
+// implementation that "narrowed anyway" would push on the unbuffered viewCh and hang the whole
+// package instead of failing this test.
+func Test_decreaseWidthNoColumnMetadata(t *testing.T) {
+	config := newConfig()
+	config.view = config.views["activity"]
+	config.view.OrderKey = 0
+	config.view.ColsWidth = map[int]int{0: 18}
+
+	assert.Nil(t, config.view.Cols, "precondition: a view carries no column names until it is rendered")
+
+	done := make(chan error, 1)
+	go func() { done <- decreaseWidth(config)(nil, nil) }()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-config.viewCh:
+		t.Fatal("decreaseWidth must not ask for a frame when there is nothing to narrow")
+	case <-time.After(2 * time.Second):
+		t.Fatal("decreaseWidth neither returned nor pushed on viewCh")
+	}
+
+	assert.Equal(t, 18, config.view.ColsWidth[0], "the width must be left untouched")
+}
+
+// Test_decreaseWidthStaleColumnMetadata covers the same guard with a non-empty Cols that is too
+// short - column names left over from a screen with more columns. A 'Cols != nil' check would let
+// this case through, so the guard has to be a bounds check.
+func Test_decreaseWidthStaleColumnMetadata(t *testing.T) {
+	config := newConfig()
+	config.view = config.views["activity"]
+	config.view.OrderKey = 3
+	config.view.ColsWidth = map[int]int{3: 18}
+	config.view.Cols = []string{"datname"}
+
+	done := make(chan error, 1)
+	go func() { done <- decreaseWidth(config)(nil, nil) }()
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err)
+	case <-config.viewCh:
+		t.Fatal("decreaseWidth must not ask for a frame when the column metadata is stale")
+	case <-time.After(2 * time.Second):
+		t.Fatal("decreaseWidth neither returned nor pushed on viewCh")
+	}
+
+	assert.Equal(t, 18, config.view.ColsWidth[3], "the width must be left untouched")
+}

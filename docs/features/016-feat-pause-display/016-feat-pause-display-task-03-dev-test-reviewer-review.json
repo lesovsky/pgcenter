@@ -1,0 +1,31 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "All eight required TDD-anchor tests exist and match the contract precisely: unbuffered channel + post-send completion recording in the drain test, distinguishable exit reasons, the real repaintStoredFrame closure driven with a nil *gocui.Gui, the real publishFrame/liveRender/storedRender helpers exercised for both halves of the immutability check, clock-free renderDbstat/printStatData used (renderSysstat correctly excluded), and the failure latch driven as a standalone unit with the exact fail/fail/fail/success/fail sequence. Ran `go test ./top/ -run 'statLoop|frameStore|repaint|renderFrame|Latch' -race -count=5 -v`: all pass, no races. Independently traced each of the five mutations claimed in the commit message (drop publish guard, remove valid check, remove latch repeat-suppression, render-instead-of-discard, collapse exit reasons) against the actual code and confirmed each would fail at least one test. Counters in ui_test.go are written only by the loop goroutine and read only after a channel-synchronized wait(), so the -race cleanliness is structural, not incidental. One inherent, acknowledged coverage gap noted below; no litmus-test failures, no tautological assertions, no pyramid violation (unit-only matches the tech-spec's Testing Strategy), no tech debt introduced.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/pause_test.go:76 (Test_repaintStored_invalidStoreIsNoop) / top/pause.go:145-157 (repaintStoredFrame)",
+      "issue": "The only unit test that drives the real repaintStoredFrame closure exercises exclusively the valid==false early-return branch. The valid==true branch — the actual g.View/renderFrame call, a successful recordRepaint(nil) re-arming the latch, and the printCmdline call on a failure transition — is never exercised by any unit test, because a *gocui.Gui/*gocui.View cannot be constructed outside the gocui package (as the task itself documents, citing top/ui_test.go:354-356). This is an inherent tooling limitation rather than an oversight, and the task's Verification Steps correctly push this branch to the manual stand run (make build + live behaviour check) instead of inventing a fake Gui.",
+      "recommendation": "No code change needed; this is a structural limit of gocui, already implicitly acknowledged by the task's own reasoning. Flagging only so the gap is visible in the review record: the stand run (row 2/3/4 of the Agent Verification Plan) is the only place the valid==true repaint path — including the latch's success re-arm and its printCmdline call — gets exercised end to end. Consider adding one line to the test's doc comment noting explicitly that the success/printCmdline path is stand-verified only, so a future reader does not assume unit coverage exists where it cannot.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 8,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 8,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

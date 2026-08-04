@@ -1031,3 +1031,86 @@ acceptance criterion overrode it.
 
 **Alternatives considered:** Direct backward-walk arithmetic (a second source of truth for the
 marker rule).
+
+---
+
+## [016-feat-pause-display] The frozen frame is owned by the gocui goroutine, for reads as well as writes
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** Pausing means keeping one `stat.Stat` alive and re-rendering it on demand. That frame is
+produced on the worker goroutine and drawn inside `g.Update` closures on the gocui goroutine, and it
+carries a second half — the logtail buffer — that is born inside the render closure, not with the
+sample.
+
+**Decision:** `frameStore` (`top/pause.go`) is written and read only on the gocui goroutine, with no
+mutex and no atomic. Publication happens at the tail of `renderFrame`, inside the closure. `statLoop`
+receives neither `*app` nor the store; its `repaint` parameter is a bare `func()`.
+
+**Rationale:** The happens-before chain (collector send → worker receive → `g.Update(f)` →
+`MainLoop` receive → `f(g)`) already makes the frame visible inside the closure, so a lock would add
+ceremony without adding safety. The read half is what makes it strict: a gate that called the printer
+directly would read the store on the worker goroutine, and a torn read (`Nrows` from one sample,
+`Values` from another) is a slice-bounds panic inside a `g.Update` closure — gocui does not recover
+those. Keeping `*app` out of `statLoop`'s signature means the racy shape cannot be written by
+inattention; it is the feature's one structural guarantee, and everything else is convention.
+
+**Alternatives considered:** A mutex around the store (rejected — hides the ownership rule and invites
+worker-side reads). A deep copy per frame (rejected — [016] made `printDataCell` non-mutating instead,
+so the store is a retention, not a duplication, and the render of a stored frame is idempotent).
+
+---
+
+## [016-feat-pause-display] The paused gate drains and repaints; only the live path publishes
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** Under pause the collector must not be stopped or throttled — `collectStat` reaches its
+`viewCh` receive only after a successful `statCh` send, and ~17 key handlers push on the unbuffered
+`viewCh`.
+
+**Decision:** The gate receives every frame unconditionally, discards it, and answers with a repaint
+of the store. The store is published only on the live render path; a repaint never writes to it.
+
+**Rationale:** Drain-and-discard is the only non-hanging shape: a gate that stopped receiving would
+park the collector, the first keypress would block `MainLoop` forever, and `Space` itself could not
+recover it. Publishing on repaint would restamp the frame with the repaint's own clock — the header
+would tick on a frozen screen, defeating the freeze — and would re-store the logtail buffer from
+itself. Because the discard is what triggers the repaint, the five render-only keys need no new
+plumbing: their existing `viewCh` push makes the collector emit a frame, and the gate turns it into a
+redraw.
+
+**Alternatives considered:** Pausing the collector (deadlock). Buffering `statCh` (moves the stall,
+does not remove it). Repainting only on demand rather than per tick (leaves resize and dialog paths
+without a trigger).
+
+---
+
+## [016-feat-pause-display] Decisions inside `g.Update` closures get their own callable unit
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** A `g.Update` closure cannot be entered from a unit test — its failure site is
+`g.View(...)`, and neither `*gocui.Gui` nor `*gocui.View` is constructible outside the gocui package.
+Anything decided inside such a closure is therefore unverifiable by construction.
+
+**Decision:** Every non-trivial decision on the repaint path is a separately callable unit that the
+closure merely calls: the failure latch is a method on the store returning "emit a message?"; the
+live/repaint distinction is a `renderParams` value built by one constructor per path; the logtail
+source choice is `selectLogtail(params, read)` with the live read passed as a closure.
+
+**Rationale:** Two review rounds produced the same defect twice — a test that looks like proof and
+cannot fail. Both survived reading and were caught only by mutating production code and watching the
+suite stay green. Extracting the decision is what turns "a reviewer read the closure carefully" into
+"a mutation makes a named test go red". The cost is one small function per decision; the alternative
+is an invariant defended by inspection alone.
+
+**Alternatives considered:** Documenting the invariants in comments and relying on review (this is
+what failed twice). A fake `*gocui.Gui` (not possible outside the package). Deferring everything to
+the stand run (too coarse — the stand cannot isolate a single branch).

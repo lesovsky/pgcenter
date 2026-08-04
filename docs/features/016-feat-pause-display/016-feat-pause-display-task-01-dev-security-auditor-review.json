@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Cross-goroutine aliasing of the collector snapshot is eliminated on the render side but still undocumented and unenforced at its source",
+      "description": "The change removes the only write into the result set in top/, which is the correct causal fix and is confirmed complete (see verification below). What it does NOT change is the aliasing itself: the frame delivered to the UI goroutine still shares its backing array with collector-owned state.\n\nVerified chain:\n- internal/stat/postgres.go:581-583 — calculateDelta returns `curr` unchanged when `!prev.Valid` (first tick after start AND after every context/view switch), for ANY view regardless of DiffIntvl.\n- internal/stat/postgres.go:594-596 — calculateDelta returns `delta = curr` when `interval == [2]int{0,0}`, which includes `activity`, the default startup screen.\n- internal/stat/postgres.go:598 — `delta.sort(skey, desc)` then reorders that array in place. For the aliased cases this mutates `c.currPgStat.Result.Values` directly. It happens before the send on statCh, so it is not a race today, but it is a write to state the UI will later hold.\n- internal/stat/stat.go:435-436 — `c.prevPgStat = c.currPgStat`, so the array the UI is rendering becomes the collector's `prevPgStat` on the next tick.\n\nSo the task description's framing is accurate: the write is gone, and with it the race. But the invariant that makes the code safe — \"the values array handed to the UI may be collector-owned; the UI must treat it as read-only\" — now lives only in the doc comment of printDataCell. Any future writer in top/ (a sanitisation pass, an in-place formatter, a sort applied UI-side) silently re-introduces a genuine data race, and the frozen-frame store added later in this feature increases the number of places tempted to normalise values in place.\n\nThis is an observation about durability of the fix, not a defect in it. No code change is required for this task.",
+      "location": "top/stat.go:1103-1127 (doc comment); root cause at internal/stat/postgres.go:581-598",
+      "impact": "None today. If a later change in top/ writes into Result.Values, the result is an unsynchronised write from the UI goroutine racing the collector goroutine's reads in diff() (internal/stat/postgres.go:623, 638) — a real, race-detector-reportable data race on shared string headers, with corrupted or torn values as the observable effect. Because collectors run per-tick and rendering runs concurrently, the windows genuinely overlap.",
+      "recommendation": "No change needed in this task. Optionally, when the frozen-frame store lands (task 03), state the read-only invariant once at the store's type/field rather than only inside printDataCell, so it is visible to code that never reads printDataCell. A stronger, out-of-scope alternative is making calculateDelta allocate on the `delta = curr` and `!prev.Valid` paths, which would remove the aliasing entirely — Decision 10 explicitly rejected copying in favour of the causal fix, so this is recorded, not recommended.",
+      "cwe": "CWE-362"
+    },
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "Row values still reach the terminal unsanitised, and byte-slicing can cut an escape sequence mid-way (pre-existing debt [029], unchanged by this task)",
+      "description": "printDataCell writes the server-supplied value straight into the gocui view with no SGR wrapper and no control-character filtering. Values originate from PostgreSQL catalogs and stats views (datname, usename, application_name, query text, relation names), all of which any database user can influence, so ANSI escape sequences in a crafted object name are interpreted by the operator's terminal.\n\nThis is already registered as tech debt [029] (docs/tech-debt.md:41) with severity Low, and task-01 explicitly places sanitisation out of scope. It is recorded here for completeness, plus two points specific to this code path:\n\n1. Truncation is byte-based (`value[:width-1] + \"~\"`), so a cut can land inside a multi-byte rune or inside an escape sequence, emitting a truncated CSI followed by '~'. Byte-based slicing is a deliberate in-scope decision to keep output byte-for-byte identical, and is correct for this task — noted only because it interacts with [029], not as a request to change it.\n2. The [029] entry justifies Low severity partly on \"the stats table repaints every tick amid correct sequences and self-heals\". The pause feature this task belongs to removes that mitigation: a paused screen holds a hostile value on screen indefinitely. The tech-spec already routes this to /done (016-feat-pause-display-tech-spec.md:622, :793) and task 10 owns recording it, so nothing is missing — the argument for Low simply needs to be restated on different grounds once pause ships.",
+      "location": "top/stat.go:1111-1126 (package top); tracked as docs/tech-debt.md:41 [029]",
+      "impact": "A user able to create a database object, set application_name, or run a query with attacker-chosen text can inject ANSI escape sequences into the operator's terminal: cursor manipulation, screen corruption, misleading colouring of adjacent rows, or hiding of other output. Exploitation requires database access and yields display deception rather than code execution.",
+      "recommendation": "No change in this task — sanitisation is explicitly out of scope and would break the byte-identity safety property this task is built on. Ensure task 10 / finalization updates [029] with the persistence consequence as already planned. When [029] is eventually addressed, strip C0/C1 control characters (in particular 0x1B) before the width comparison, so that filtering happens ahead of truncation and cannot leave a half-escape at the cut point.",
+      "cwe": "CWE-150"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Zero/negative-width branch aborts the whole render rather than the single cell, and the error text says \"skip\"",
+      "description": "The guard is correctly placed and correctly ordered — this is not a defect introduced by the change, and the task explicitly requires the ordering be preserved verbatim. Bounds analysis confirms it is sound:\n\n- config.view.ColsWidth is `map[int]int` (internal/view/view.go:21), so a missing key yields 0 rather than panicking; the `width <= 0` guard is exactly the handler for that case.\n- Entering the truncation branch requires `len(value) > width`; the guard then requires `width >= 1`. Therefore `0 <= width-1 <= len(value)-2 < len(value)`, so `value[:width-1]` can never be a negative or out-of-range index. No input reaches a panic.\n- The `width == 0 && len(value) == 0` case skips the branch and prints two spaces, and a negative width with any value length errors — both identical to the previous behaviour.\n- Negative widths are unreachable in practice anyway: config_view.go:105 floors width at `len(config.view.Cols[idx])`, and :92 caps it at colsWidthMax = 256.\n\nThe residual nit is behavioural, pre-existing, and out of scope: the error propagates up through printStatData (top/stat.go:1068-1082) and aborts the entire table render, while the message says \"skip\", implying the cell is merely omitted. A view whose ColsWidth map lost a key therefore renders as a blank screen rather than one blank column.",
+      "location": "top/stat.go:1114-1118",
+      "impact": "Availability of the display only, and only in a state that alignViewToResult (top/stat.go:664-676) is designed to prevent. No memory-safety consequence: no slicing path can go out of bounds. Not attacker-reachable — column widths derive from the view definition and local key presses, not from server data.",
+      "recommendation": "Leave as-is for this task; changing it would alter observable behaviour, which task 01 forbids. If it is ever revisited, either make the message match the behaviour (\"zero or negative width for column %d\") or make the behaviour match the message by returning nil after printing padding for that cell.",
+      "cwe": null
+    }
+  ]
+}

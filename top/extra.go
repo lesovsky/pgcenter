@@ -19,6 +19,13 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 				}
 			}
 
+			// The panel really is closing now - below the logtail Close() error return, which
+			// leaves the panel open and therefore changes nothing. This is the one lifting path in
+			// the feature on which NOBODY writes the cmdline: not closeExtraView, not layout, not
+			// printStat. Hence the refreshing variant - a silent lift here would strand [PAUSED]
+			// over live data.
+			liftPauseRefresh(g, app.config)
+
 			return closeExtraView(g, v, app.config)
 		}
 
@@ -42,21 +49,32 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 			if err != nil {
 				return err
 			}
-			app.config.logtail.Path = logfile
-			app.config.logtail.Size = 0
+
+			// Build the log file locally and commit it into the configuration only once it is
+			// really open. It is one local VALUE rather than separate path/size variables because
+			// Logfile.Open reads Path off its own receiver and writes File back into it
+			// (internal/stat/log.go:22-30), so the path, the zeroed size and the descriptor have to
+			// be committed together. That is what makes the three early returns below true no-ops:
+			// an 'L' that failed leaves no trace in app.config at all. Committing first and rolling
+			// back on error would reintroduce exactly the mutation this avoids.
+			logtail := stat.Logfile{Path: logfile}
 
 			// Check the logfile exists, is not empty and available for reading.
-			if info, err := os.Stat(app.config.logtail.Path); err == nil && info.Size() == 0 {
+			if info, err := os.Stat(logtail.Path); err == nil && info.Size() == 0 {
 				printCmdline(g, "Empty logfile")
 				return nil
 			} else if err != nil {
 				printCmdline(g, "Failed to stat logfile: %s", err)
 				return nil
 			}
-			if err := app.config.logtail.Open(); err != nil {
-				printCmdline(g, "Failed to open %s", app.config.logtail.Path)
+			if err := logtail.Open(); err != nil {
+				printCmdline(g, "Failed to open %s", logtail.Path)
 				return nil
 			}
+
+			// The descriptor is now owned by app.config.logtail. The local copy must NOT be closed:
+			// both values hold the same *os.File.
+			app.config.logtail = logtail
 
 			msg = "Tail Postgres log"
 		}
@@ -65,6 +83,14 @@ func showExtra(app *app, extra int) func(g *gocui.Gui, v *gocui.View) error {
 		if err := openExtraView(g, v); err != nil {
 			return err
 		}
+
+		// The panel is open, so the extra statistics behind it are now the collector's job. This is
+		// the only spot that lifts on the opening path: it is below every early return of the
+		// logtail branch above (a remote host, an empty log, a log that could not be stat'ed or
+		// opened - all no-ops that must leave the freeze intact) and below openExtraView's own error
+		// return, and it is OUTSIDE the switch, so B/N/F reach it too. Silent variant: the write at
+		// the end of this handler repaints the prefix.
+		liftPause(app.config)
 
 		// Update views configuration and notify stats goroutine - it have to start collecting extra stats.
 		for k, v := range app.config.views {

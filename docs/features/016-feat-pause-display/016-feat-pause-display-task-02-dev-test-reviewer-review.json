@@ -1,0 +1,62 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "All four tests named in the task's TDD Anchor exist, run under the targeted pattern and are green: Test_pauseToken, Test_togglePause, the two new Test_cmdlineTokens subtests, Test_cmdlineTokensPauseNeverDegrades and Test_cmdlineMarkerAfterUIRebuild. The token half of the task is genuinely well pinned - Test_cmdlineTokensPauseNeverDegrades walks the composer ladder with real tokens at six widths and would fail if the marker gained a second variant or moved right of the filter token, and Test_pauseToken pins the single-variant property that makes the marker non-degradable. Two acceptance criteria are not pinned by any test, both confirmed by mutation rather than by reading: (1) deleting printCmdline(g, \"\") from togglePause leaves the whole suite green, so the 'exactly one silent cmdline write on the keypress' criterion has zero automated coverage; (2) deleting printCmdline(app.ui, \"%s\", app.uiError) from layout's cmdline-creation branch also leaves the suite green, so Test_cmdlineMarkerAfterUIRebuild does not in fact pin Decision 8 - it re-implements the production path inside the test instead of exercising it. Three minor issues: no coverage at all of the Space keybinding row, a tautological expected value in one new subtest, and two assertions that cannot fail by construction. Zero critical, two major.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "top/pause_test.go:44 (Test_togglePause) / top/pause.go:44",
+      "issue": "Test_togglePause pins only the flag flip and nil-Gui safety. The acceptance criterion 'pressing the bound key flips the flag and produces exactly one cmdline write, with no text message' is untested: the write goes through printCmdline(g, \"\") with g == nil, which writeCmdline (top/ui.go:441-444) discards silently, so nothing about the write is observable. Verified by mutation: replacing the printCmdline(g, \"\") line with `_ = g` keeps `go test ./top/ -run '[Pp]ause|[Cc]mdline'` fully green. A regression that drops the re-render (marker never appears until the next frame) or that adds a text message (defect class [027], forbidden by the user-spec) would ship undetected. Note the same gap exists today for toggleVerbose, so this is a package-wide seam problem rather than sloppiness in this task.",
+      "recommendation": "Add a one-line test seam and assert on it. In top/pause.go: `var cmdlineRefresh = func(g *gocui.Gui) { printCmdline(g, \"\") }` and call `cmdlineRefresh(g)` from the handler. In Test_togglePause: `prev := cmdlineRefresh; t.Cleanup(func() { cmdlineRefresh = prev }); var calls int; cmdlineRefresh = func(*gocui.Gui) { calls++ }`. Assertions: `assert.Equal(t, 1, calls)` after the first keypress and `assert.Equal(t, 2, calls)` after the second (exactly one write per press, never two); keep the existing flag assertions; keep an unswapped NotPanics call so the real nil-Gui path is still exercised. If the team judges the seam not worth the production line (it is one var and one call), then record the deviation in the decisions log and make Task 10's stand run assert explicitly that Space makes [PAUSED] appear on the same keypress with no accompanying message text - do not leave the criterion unclaimed by both.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "top/ui_test.go:400 (Test_cmdlineMarkerAfterUIRebuild)",
+      "issue": "The test claims to pin Decision 8 ('the marker comes back after a pager/editor return because layout re-renders through a non-nil app.uiError'), but it never touches layout. It hand-builds `fmt.Errorf(\"\")`, takes `.Error()`, and calls composeCmdline itself - a re-implementation of the production path inside the test. Verified by mutation: deleting `printCmdline(app.ui, \"%s\", app.uiError)` from layout (top/ui.go:189) leaves this test green, so the property it advertises is not guarded at all. What remains is a duplicate of Test_composeCmdline's 'single variant token fits whole' case (msg \"\", width 8 -> \"[PAUSED]\") with the token read off a config instead of a literal - which Test_cmdlineTokens/'paused config' already covers. False confidence about a decision that deliberately ships no code is exactly the case where the test has to be the guard.",
+      "recommendation": "Drive the empty message out of real production code instead of constructing it. Replace `uiError := fmt.Errorf(\"\")` with `err := layout(&app{ui: &gocui.Gui{}, config: c})(nil)` - verified feasible: gocui's Gui.Size() (gui.go:100) just returns g.maxX/g.maxY, so a zero-value &gocui.Gui{} reports 0x0 and layout takes its `return fmt.Errorf(\"\")` branch (top/ui.go:148-150) without a terminal. Assertions: `assert.Error(t, err)`, `assert.Equal(t, \"\", err.Error())` (this is now a statement about layout, not about fmt), then `assert.Equal(t, \"[PAUSED]\", composeCmdline(cmdlineTokens(cmdlineCfg), err.Error(), 80))`. To close the second half - that layout actually writes on the rebuild path - reuse the seam from the previous finding: have layout's uiError branch call the same indirection and assert in this test that a rebuild with app.uiError set performs exactly one cmdline write and clears app.uiError. Keep the t.Cleanup ambient restore as it is.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings.go:58 (the {\"sysstat\", gocui.KeySpace, togglePause(app)} row)",
+      "issue": "The acceptance criterion 'Space is bound via gocui.KeySpace in the \"sysstat\" context only' has no automated coverage. The `keys` slice is a local variable inside keybindings(), so no test can inspect it, and gocui's registered bindings are unexported. A regression to the rune ' ' would compile, register and never fire (Decision 13) with every test still green; a regression to the global \"\" context would swallow the space bar in dialogs. The task file acknowledges this and defers to the Task 10 stand run, so this is a known and accepted gap rather than an oversight - flagged because the deferral is the only thing standing between a silent binding regression and the user.",
+      "recommendation": "Extract the table: `func keybindingsTable(app *app) []key` returning the slice, with keybindings() ranging over it (no behaviour change, no new abstraction). Then add top/keybindings_test.go::Test_keybindingsPauseRow with assertions: exactly one row satisfies `r.viewname == \"sysstat\" && r.key == gocui.KeySpace`; no row has `r.key == ' '`; no row with `r.key == gocui.KeySpace` has `r.viewname == \"\"`. Build the app as `&app{config: newConfig()}` - the handlers are only constructed, never invoked. If the extraction is judged out of scope for this task, ensure Task 10 checks the binding explicitly on the stand and records it.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/ui_test.go:333-342 (Test_cmdlineTokens/\"paused config\")",
+      "issue": "The expected value is produced by pauseToken - the very function cmdlineTokens delegates to - so the subtest cannot detect a wrong marker string: if pauseToken returned \"[PAUSE]\" or \"[HOLD]\", `want` would change with it and the subtest would still pass. It does pin the useful half (cmdlineTokens includes the pause token: dropping the new block from cmdlineTokens makes it fail), and the literal is pinned by Test_pauseToken and by the sibling 'paused config with active filters' subtest, so nothing is actually unguarded. It also matches the pre-existing 'config with active filters' style in the same function.",
+      "recommendation": "Assert the literal so the subtest stands on its own: `assert.Equal(t, []cmdlineToken{{variants: []string{\"[PAUSED]\"}}}, cmdlineTokens(c))`, dropping the `want, ok := pauseToken(c)` lines. If the file's existing style is worth preserving over independence, leave it - but do not extend the pattern to further subtests.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/ui_test.go:391 and top/ui_test.go:411",
+      "issue": "Two assertions cannot fail by construction. `assert.NotContains(t, got, \"PAUS\")` follows `assert.Equal(t, \"\", got)` on the same value - once got is known empty, the substring check adds nothing. `assert.Equal(t, \"\", msg)` in Test_cmdlineMarkerAfterUIRebuild asserts that fmt.Errorf(\"\").Error() is empty, i.e. a property of the standard library, not of the code under test. Both read as coverage but protect nothing.",
+      "recommendation": "Delete the NotContains line; the width-7 equality already states the full property ('absent, never a partial marker'), and the accompanying comment carries the intent. For the second one, the fix falls out of the Test_cmdlineMarkerAfterUIRebuild rework above: once the empty message comes from layout, `assert.Equal(t, \"\", err.Error())` becomes a real assertion about production code and should stay.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 9,
+      "passed": 7,
+      "failed": 2
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 9,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

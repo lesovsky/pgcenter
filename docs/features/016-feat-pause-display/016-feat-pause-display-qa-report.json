@@ -1,0 +1,404 @@
+{
+  "feature": "016-feat-pause-display",
+  "task": "10 — Pre-deploy QA",
+  "branch": "feature/016-feat-pause-display",
+  "head": "d7801a344fa28eedab38819a8ee0f0cf0a9c7457",
+  "base": "25f9754bf7c16539225a0bc13680f1558e823550 (merge-base with master)",
+  "date": "2026-08-03",
+  "status": "passed_with_open_manual_gate",
+  "verdict": "GO — automated and inspection gates pass; the stand run remains outstanding. This is NOT 'the feature is verified'.",
+
+  "scopeOfThisRun": {
+    "executed": [
+      "automated half in full (build, test -race, lint, vuln)",
+      "every inspection-based criterion (containment, code reading, test-body reading, test-name evidence)"
+    ],
+    "notExecuted": [
+      "the manual half — the 15-row stand-run table from the user-spec plus the three added steps 7e / 7f / 6a"
+    ],
+    "reasonNotExecuted": "The ephemeral remote stand address is requested from the project owner at the start of the run; no address was supplied to this run and the agent cannot ask for one. tmux is also not installed on the local host. Per the task text a local terminal must not be substituted for the stand, and no capture may be invented.",
+    "rule": "No terminal-only criterion was marked PASS on the strength of a unit test. Criterion 10 (logtail) is explicitly NOT VERIFIABLE HERE, as the task requires."
+  },
+
+  "environment": {
+    "status": "healthy",
+    "note": "pgcenter is a CLI utility — Phase 1 of the pre-deploy-qa skill (Environment Rebuild) collapses to a fresh `make build`. There is no deploy step, no services, no images.",
+    "rebuildAttempts": 1,
+    "fixCommits": [],
+    "hostToolchain": {
+      "golangci-lint": "2.12.2 (built with go1.26.2)",
+      "gosec": "dev, Go go1.25.12",
+      "govulncheck": "v1.4.0, DB updated 2026-07-27"
+    },
+    "testFixtures": {
+      "where": "docker lesovsky/pgcenter-testing:0.0.11, repo bind-mounted read-write",
+      "why": "`make test` runs `go test ./...`; top/top_test.go and top/report_test.go need live PostgreSQL on ports 21914-21919, absent on the host",
+      "prepare": "prepare-test-environment.sh — brought PG 14..19 online, exit 0",
+      "go": "go1.25.12 linux/amd64",
+      "leftovers": "none — .test_coverage.txt written and removed by the Makefile; `git status` clean afterwards; `find -not -user lesovsky` empty (no root-owned files left in the tree)"
+    }
+  },
+
+  "commands": [
+    {
+      "command": "make build",
+      "where": "host",
+      "exitCode": 0,
+      "summary": "bin/pgcenter built. size=18223871, mtime=2026-08-03 23:28:30 +0500, sha256=83654d90c143e8559fb096b25a8c34848808aae23da683b63d82b48d40f12346, `--version` reports 'pgcenter v0.11.0 d7801a3-feature/016-feat-pause-display'. bin/ is gitignored (.gitignore:2)."
+    },
+    {
+      "command": "make test",
+      "where": "container lesovsky/pgcenter-testing:0.0.11",
+      "exitCode": 0,
+      "summary": "go test -race -p 1 -timeout 300s ./... — every package ok. Total test coverage: 71.8%; top package 51.8%, 9.396s. Zero occurrences of 'DATA RACE'; zero 'WARNING', 'FAIL', 'panic:'. profile.Test_profileLoop (tech debt [030]) did NOT fail — no re-run was needed."
+    },
+    {
+      "command": "go test -race -count=1 ./top/...",
+      "where": "container",
+      "exitCode": 0,
+      "summary": "ok github.com/lesovsky/pgcenter/top 9.300s — second, independent run of the feature's package with the fixtures up."
+    },
+    {
+      "command": "make lint",
+      "where": "host (no fixtures needed)",
+      "exitCode": 0,
+      "summary": "golangci-lint run --timeout 5m -> '0 issues.'; gosec -quiet ./... -> no output (clean). No complaint about untouched code either."
+    },
+    {
+      "command": "make vuln",
+      "where": "host (no fixtures needed)",
+      "exitCode": 0,
+      "summary": "govulncheck ./... -> 'No vulnerabilities found.' 0 affecting the code, 0 in imported packages, 1 in a required module that the code does not call."
+    },
+    {
+      "command": "go test ./top/ -race -count=1 -v -run '<50 feature test names>'",
+      "where": "host",
+      "exitCode": 0,
+      "summary": "50 named feature/regression tests all --- PASS. Used as pointwise evidence below."
+    }
+  ],
+
+  "crossTestInterference": {
+    "checked": true,
+    "result": "none observed",
+    "evidence": "The whole accumulated feature test set ran together for the first time under `make test` (-race -p 1, full ./...) and under a second `./top/...` run — both exit 0. The 50-test -run-filtered subset also passes. No test fails only in the full run; no test fails only in isolation."
+  },
+
+  "testSuite": {
+    "status": "passed",
+    "details": "All packages green with -race. Feature-owned tests: 33 new/extended tests across top/pause_test.go (18), top/ui_test.go (statLoop x4, resizeDetector, cmdline x2), top/stat_test.go (timestamp x2, printDataCell x2, selectLogtail x3, repaintLogtail), top/help_test.go (3), top/dialog_test.go (5), top/config_view_test.go (2), top/verbose_test.go (1)."
+  },
+
+  "summary": {
+    "totalChecks": 34,
+    "passed": 18,
+    "failed": 0,
+    "notVerifiable": 16,
+    "criticals": 0,
+    "majors": 0,
+    "minors": 2
+  },
+
+  "userSpecAcceptanceCriteria": [
+    {
+      "n": 1,
+      "criterion": "Space on a live screen instantly freezes the whole frame (table, both top panels, header clock), and [PAUSED] appears in the cmdline at the same moment.",
+      "status": "not_verifiable",
+      "reason": "Simultaneity and 'the whole frame froze' only exist on a live terminal — stand step 2.",
+      "partialEvidence": "Test_togglePause (flag flips per press, no panic on a nil Gui); Test_pauseToken (paused config yields exactly []string{\"[PAUSED]\"}); Test_statLoop_drainsWhilePaused asserts renderCalls == 0 while paused; the header clock is frozen by Test_renderSysstat_timestampIsTheOnlySource + Test_frameStore_publishOnlyOnLivePath ('a repaint must not restamp the stored frame')."
+    },
+    {
+      "n": 2,
+      "criterion": "The freeze holds indefinitely while stat collection never blocks — pinned by a test in which the collector completes no fewer than five consecutive sends while paused.",
+      "status": "passed",
+      "evidence": "Test_statLoop_drainsWhilePaused (top/ui_test.go:546). Read the body: `const frames = 5` with the comment naming this criterion; the harness builds an UNBUFFERED statCh (newStatLoopHarness), the producer records a completion only AFTER each send returns, so 5 recorded completions == 5 receives; asserts renderCalls == 0 and repaintCalls == 5; fails by 5s timeout rather than hanging. PASS in the -v run and inside `make test`."
+    },
+    {
+      "n": 3,
+      "criterion": "The frame shown while paused is the one that was on screen when Space was pressed: after several minutes a repaint shows the original values, not current ones.",
+      "status": "not_verifiable",
+      "reason": "Stand step 3a — pause >= 3 min on fast-moving numbers, force a repaint with '[', compare against the pause-time capture. A store that is silently republished on repaint looks perfect at 5 seconds; only real waiting settles it.",
+      "partialEvidence": "Test_frameStore_publishOnlyOnLivePath (repaint params write nothing: not `at`, not `stats`, not logPath/logBuf — and the live half proves the helper does write, so the first half is not vacuous); Test_frameStore_repaintRendersIdenticalBytes (a different frame pushed through the REAL statLoop gate leaves the stored frame's rendered bytes identical); storedRender() sets publish:false (top/pause.go:101-103) and publishFrame returns early on !p.publish (top/pause.go:148-151)."
+    },
+    {
+      "n": 4,
+      "criterion": "No keypress during pause hangs the UI — checked by running every key of the main layout while paused (step 11).",
+      "status": "not_verifiable",
+      "reason": "Stand step 11. This is the feature's worst failure mode and has no automated harness.",
+      "partialEvidence": "The structural argument is pinned: statLoop's receive is unconditional (`if paused.Load() { repaint(); continue }`, top/ui.go), so the collector is never parked and viewCh-pushing handlers cannot block MainLoop. Test_statLoop_drainsWhilePaused is that argument's test. It does not cover the key table."
+    },
+    {
+      "n": 5,
+      "criterion": "On the frozen frame these have a visible effect: filter '/' (expression + Enter), clear filters '\\', scroll '[' / ']', width up/down.",
+      "status": "not_verifiable",
+      "reason": "'Visible effect' is a capture — stand step 3.",
+      "partialEvidence": "Test_applyFilter_repaintsWhenPaused (the dialog path repaints exactly once when paused, never when live — Decision 4, the one path that pushes no viewCh); Test_applyFilter_repaintsOnUnchangedFilter (invalid regexp and empty answer still repaint). Scroll/width/clear-filters ride their existing viewCh push and are answered by the gate's repaint (Test_statLoop_drainsWhilePaused: repaintCalls == 5)."
+    },
+    {
+      "n": 6,
+      "criterion": "Every lifting action (sort left/right/'<', ',', I, A, screen-switch key, menu item D/X/P/J, S, v, B/N/F/L) returns live updating, and the first frame after is an ordinary one with no value spike.",
+      "status": "not_verifiable",
+      "reason": "Stand step 7. 'The first frame is ordinary, no spike' is terminal-only, and per the task every non-lifting key on the stand needs its cmdline message as proof of an early return.",
+      "partialEvidence": "Test_liftingHandlers walks 8 handlers (viewSwitchHandler, orderKeyLeft, orderKeyRight, switchSortOrder, toggleSysTables, toggleIdleConns, toggleVerbose, changeQueryAge), each asserting `paused == false` afterwards with viewCh drained so a multi-push handler cannot deadlock. Test_showExtraCloseLifts covers panel close. Test_toggleVerboseLiftsPause covers 'v'. Test_noOpHandlersKeepPause covers the negative half (7 early-return rows, incl. S-remote and L-remote), with a select over viewCh proving a no-op never asked for a fresh frame. INSPECTION: all 11 production liftPause/liftPauseRefresh call sites map onto the criterion's key set — config_view.go:37 orderKeyLeft, :56 orderKeyRight, :137 switchSortOrder, :353 viewSwitchHandler (the D/X/P/J menu route), :383 switchViewToProcPidStat (S), :463 toggleSysTables (','), :502 changeQueryAge (A), :561 toggleIdleConns (I); extra.go:27 showExtra open (B/N/F/L) and :93 showExtra close; verbose.go:29 toggleVerbose (v)."
+    },
+    {
+      "n": 7,
+      "criterion": "Opening a menu and leaving it with Esc do not lift the pause; selecting an item does — except the config menu 'E', where selection goes to the editor and the pause survives.",
+      "status": "not_verifiable",
+      "reason": "Stand step 7a for the Esc half, added step 7e for the 'E' -> editor round-trip. The 'E' exception is the only exclusion in the feature with no unit coverage by construction, and menuSelect is unreachable from a unit test (it ends with an unconditional menuClose that calls g.DeleteView on a *gocui.Gui).",
+      "partialEvidence": "INSPECTION: `grep -n liftPause top/help.go top/menu.go top/pgconfig.go` -> no hits. So neither opening a menu, nor Esc, nor the menuConf branch can lift. The lifting for a selected screen lives in viewSwitchHandler (top/config_view.go:353), which the menuConf branch does not go through — it calls editPgConfig(g, db, filename, uiExit) directly, a signature that receives no *config and therefore has nothing to lift. Note: editPgConfig has its own remote guard (top/pgconfig.go, 'Edit config is not supported for remote hosts'); if that message appears on the stand, step 7e did not run."
+    },
+    {
+      "n": 8,
+      "criterion": "A collection error or lost connection during the pause does not change the image; the message appears on the first frame after the pause is lifted.",
+      "status": "not_verifiable",
+      "reason": "Stand step 7b (stop the cluster while paused, then Space).",
+      "partialEvidence": "top/ui.go statLoop: the paused branch is `repaint(); continue` with the comment 'A frame carrying Stat.Error is discarded like any other; it surfaces on the first frame after the pause is lifted' — no error path bypasses the gate. Test_statLoop_drainsWhilePaused asserts renderCalls == 0 for every discarded frame; Test_statLoop_rendersAfterResume proves the frame after the flag is cleared goes to the live render path (renderCalls == 1, repaintCalls == 1)."
+    },
+    {
+      "n": 9,
+      "criterion": "The built-in help (h) opens and closes during the pause without lifting it.",
+      "status": "not_verifiable",
+      "reason": "Stand step 7c / added step 7f — 'opens and closes' is a UI transition.",
+      "partialEvidence": "INSPECTION: top/help.go contains no liftPause / liftPauseRefresh call (grep, no hits), so no help path can clear the flag."
+    },
+    {
+      "n": 10,
+      "criterion": "A log panel opened before the pause gains no new lines while the pause is active, even if the log is being written, and comes back with its own lines after a pager round-trip instead of empty.",
+      "status": "not_verifiable",
+      "reason": "EXPLICITLY not passable on unit tests — the task names this criterion as the example. Stand step 7d. Task 9's tests say nothing about what the panel looks like after a UI rebuild. If 'L' on the stand produces one of the no-op messages ('Log tail is not supported for remote hosts', 'Empty logfile', 'Failed to stat logfile: ...', 'Failed to open ...'), step 7d cannot run at all and this criterion stays NOT VERIFIABLE with that reason.",
+      "partialEvidence": "(NOT a substitute) Test_selectLogtail_repaintNeverInvokesTheRead — the repaint path fails the test the moment the read thunk is entered; Test_selectLogtail_livePathReadsTheFile keeps that honest (live must read exactly once); Test_repaintLogtail_noFileAccess proves the same by effect with a real, open, readable adversary file whose bytes must not reach the screen; Test_frameStore_syncLogtail_emptyReadKeepsBuffer (a nil/empty read leaves the last non-empty pair stored, which is the 'not empty after the pager' mechanism); Test_frameStore_syncLogtail_dropsForEveryNonLogtailShowExtra (incl. CollectNone, the closed-panel case)."
+    },
+    {
+      "n": 11,
+      "criterion": "The built-in help (h) contains a line about Space with the list of actions that lift the pause.",
+      "status": "passed",
+      "evidence": "helpTemplate is a compile-time constant, so its content is fully decidable here. Test_helpTemplate_pauseEntry pins the description word for word — \"'Space' pause/resume display; actions that need fresh data\" — its position (immediately after the '[,]' row, immediately before 'C,E,R config:'), the shared description column and the 80-column bound on both lines. Test_helpTemplate_pauseLiftingActions pins all ten lifting actions in the continuation line (sort, screen switch, ',', I, A, v, B, N, F, L) and its 'resume it.' suffix. Both PASS.",
+      "residual": "The on-screen half — that the help renders this while paused — is added stand step 7f."
+    },
+    {
+      "n": 12,
+      "criterion": "Leaving the pager/editor during a pause shows the same frozen frame, not an empty screen; [PAUSED] stays. The one exception: the pause was set before the first frame, when there is nothing to draw.",
+      "status": "not_verifiable",
+      "reason": "Stand steps 4 and 8 for the pager half; added step 7e is the ONLY exercise of the 'or editor' half.",
+      "partialEvidence": "Test_cmdlineMarkerAfterUIRebuild pins Decision 8's two reachable halves: layout's error on the rebuild path stringifies to \"\", and an empty message still composes to \"[PAUSED]\". Test_resizeDetector_observe row 'zero start state repaints, the pass after it does not' pins the mechanism that puts the frozen frame back after a rebuild (the detector's state is per-Gui, and mainLoop rebuilds layout's closure for every Gui). The exception case is Test_repaintStored_invalidStoreIsNoop: an empty store is a no-op, no panic, latch untouched."
+    },
+    {
+      "n": 13,
+      "criterion": "A terminal resize during the pause repaints the frame under the new width: wider shows more columns, narrower fewer, and the arrows disappear on the side with no hidden columns left.",
+      "status": "not_verifiable",
+      "reason": "Stand step 5 (tmux resize-window 190 -> 60 -> 190). The wiring inside layout has no unit coverage by construction — the test's own comment says so, since a *gocui.Gui with a non-zero size cannot be built outside the gocui package.",
+      "partialEvidence": "Test_resizeDetector_observe drives the decision as a sequence over 5 scenario tables: one repaint per size change, termination (the size is recorded before the answer is given, so the pass after the repaint asks for nothing), width-only, height-only, both-dimensions, and 'live mode never asks for a repaint'. INSPECTION: the call sits last in layout, after every SetView and below the zero-geometry guard (top/ui.go), and repaintStored enters g.Update so the redraw lands in the next flush."
+    },
+    {
+      "n": 14,
+      "criterion": "A second Space returns live updating; the first frame after the lift is an ordinary fresh frame.",
+      "status": "not_verifiable",
+      "reason": "Named by no stand row explicitly — its evidence is stand step 2's resume plus a capture one refresh interval later showing the header clock advancing and no value spike. Must be cited as its own capture, not folded into 7b or 11.",
+      "partialEvidence": "Test_togglePause (second press clears the flag); Test_statLoop_rendersAfterResume (with the flag cleared the next frame goes to render, not repaint, and the store is not repainted again); Test_liftPause / Test_liftPauseRefresh (idempotent on an already-cleared flag)."
+    },
+    {
+      "n": 15,
+      "criterion": "Space pressed before the first frame turns the pause on: [PAUSED] appears, the screen stays empty, and after the lift an ordinary first frame arrives.",
+      "status": "not_verifiable",
+      "reason": "Stand step 8. PASS there means the marker is present AND the screen is empty — not that a frame appears.",
+      "partialEvidence": "Test_repaintStored_invalidStoreIsNoop drives the REAL repaint closure with an empty store and a nil *gocui.Gui: it returns nil without panicking, which proves the `valid` check runs before any g.View lookup; the store stays empty and the pre-armed failure latch is untouched (an empty store is a normal state, not a failure)."
+    },
+    {
+      "n": 16,
+      "criterion": "The [PAUSED] marker is restored after returning from the pager or the editor — including when there is no stored frame and nothing to repaint.",
+      "status": "not_verifiable",
+      "reason": "Stand steps 4, 8 (pager) and added step 7e (editor).",
+      "partialEvidence": "Test_cmdlineMarkerAfterUIRebuild — see criterion 12. The write itself needs a live Gui and is verified on the stand."
+    },
+    {
+      "n": 17,
+      "criterion": "Widening a column during the pause does not leave a permanently truncated value.",
+      "status": "passed",
+      "evidence": "The property is entirely determined by the cell printer, and the printer is directly testable. Test_printDataCell_widenAfterTruncation renders the SAME stat.Stat twice — narrow (asserts the premise: 'abcd~' present) then wide — and asserts the full 'abcdefghij' is shown with no surviving '~'. Test_printDataCell_doesNotMutateSource asserts the source cell still holds the untruncated text after a truncating render, with a premise guard so it cannot pass vacuously. Both PASS.",
+      "residual": "Stand step 9 is the on-screen confirmation."
+    },
+    {
+      "n": 18,
+      "criterion": "During the pause the dialog prompt is about 8 characters shorter — on a narrow terminal it truncates earlier than usual. Expected behaviour, not a defect.",
+      "status": "passed",
+      "evidence": "Test_dialogPromptShorterUnderPause measures it: the state-mask prompt (93 runes, truncated in BOTH states — require-guarded so the comparison is not vacuous) loses exactly renderedPauseMarker + 1 = 9 columns, derived from the marker rather than hardcoded. Test_dialogPromptFitWithPauseMarker sweeps every dialog type across every width from a DERIVED floor up to 200, for both 'paused' and 'paused + active filter', asserting the line stays inside the budget, the input field never starts inside the prompt, the field keeps its usable columns, and the shown prompt is a prefix of the real one (never a rewrite). Both PASS.",
+      "residual": "Added stand step 6a (a dialog on the -x 60 pass) is the capture the task asks for."
+    },
+    {
+      "n": 19,
+      "criterion": "On a narrow terminal with an active filter, [PAUSED] stays visible; the filter indicator yields space first.",
+      "status": "passed",
+      "evidence": "Test_cmdlineTokensPauseNeverDegrades walks the real tokens of a paused, filtered config down the composer's ladder: at 27 cols both fit; at 26 the filter steps down while the marker does not; at 20 the filter is on its last variant; at 12 and 8 the filter is dropped and '[PAUSED]' survives whole; at 7 the line is empty rather than a partial '[PAUSE'. Test_dialogMarkerSurvivesNarrowDialog does the same at exactly 60 columns with a dialog open: the marker is the line's prefix, x0 < x1, and the input keeps minDialogInputWidth. Both PASS.",
+      "residual": "The -x 60 stand pass (step 6) is the visual confirmation."
+    },
+    {
+      "n": 20,
+      "criterion": "A space typed into a dialog (e.g. into a filter regexp) does not turn the pause on.",
+      "status": "not_verifiable",
+      "reason": "The keybinding table has no unit coverage by construction — `keys` is a local slice inside keybindings(app), so nothing can assert the binding exists or its scope. Stand step 7c is the only proof that Space is bound at all AND that it is scoped away from dialogs.",
+      "partialEvidence": "INSPECTION: top/keybindings.go:58-61 — `{\"sysstat\", gocui.KeySpace, togglePause(app)}`, with the comment recording both facts: gocui.KeySpace rather than the rune ' ' (termbox delivers Ch = 0 for bytes <= 0x20, so a rune binding would register and never fire), and the \"sysstat\" scope so a space typed into a dialog or a menu stays a plain space."
+    },
+    {
+      "n": 21,
+      "criterion": "make test, make lint, make vuln pass; no races under -race.",
+      "status": "passed",
+      "evidence": "make test exit 0 in the fixture container, all packages ok, 'DATA RACE' occurrences = 0, no WARNING/FAIL/panic; make lint exit 0 on the host — golangci-lint '0 issues.', gosec silent; make vuln exit 0 — 'No vulnerabilities found.' This is stand-table row 1, and it is the only row of that table that was executed."
+    }
+  ],
+
+  "techSpecAcceptanceCriteria": [
+    {
+      "n": "T1",
+      "criterion": "make test passes with -race; no new races reported.",
+      "status": "passed",
+      "evidence": "exit 0; grep -c 'DATA RACE' over the full log = 0. Total coverage 71.8%. profile.Test_profileLoop (tech debt [030]) passed on the first run — no re-run performed or needed."
+    },
+    {
+      "n": "T2",
+      "criterion": "make lint and make vuln clean.",
+      "status": "passed",
+      "evidence": "make lint exit 0 ('0 issues.' + silent gosec); make vuln exit 0 ('No vulnerabilities found.', 0 called vulns; 1 vulnerability sits in a required module the code does not call). No lint complaint about untouched code either, so there is nothing to note separately."
+    },
+    {
+      "n": "T3",
+      "criterion": "The statLoop test proves >= 5 completed collector sends while paused.",
+      "status": "passed",
+      "evidence": "Test_statLoop_drainsWhilePaused — body read, not just the name: unbuffered statCh, the producer counts only completed sends, `const frames = 5`, asserts 5 completions + renderCalls == 0 + repaintCalls == 5, timeout-fails instead of hanging."
+    },
+    {
+      "n": "T4",
+      "criterion": "No production code outside top/ is modified.",
+      "status": "passed",
+      "evidence": "git diff --name-only master...HEAD, excluding docs/, lists exactly 18 files, all under top/: config.go, config_view.go, config_view_test.go, dialog.go, dialog_test.go, extra.go, help.go, help_test.go, keybindings.go, pause.go, pause_test.go, stat.go, stat_test.go, top.go, ui.go, ui_test.go, verbose.go, verbose_test.go. go.mod / go.sum untouched."
+    },
+    {
+      "n": "T5",
+      "criterion": "view.View gains no field; record/report/profile untouched.",
+      "status": "passed",
+      "evidence": "`git diff master...HEAD -- internal/ record/ report/ profile/` produces empty output. `git diff master...HEAD -- internal/view/view.go` is empty; the current struct still ends at NotRecordable (internal/view/view.go:10-32), 22 fields, no pause field."
+    },
+    {
+      "n": "T6",
+      "criterion": "Every existing top/ test still passes; the five renderSysstat call sites updated mechanically, no assertion weakened.",
+      "status": "passed",
+      "evidence": "top package ok under -race, twice. Containment by diff: `git diff master...HEAD -- top/stat_test.go | grep '^-'` returns EXACTLY five lines, and they are exactly the five renderSysstat calls; each reappears on the '+' side identical but for the appended `, testRenderTime`. No golden string, regex or assertion was removed or edited — the line-1 timestamp regex at stat_test.go:76 is byte-identical to master's. Two further renderSysstat calls exist in the working tree but are pure additions inside the two new Test_renderSysstat_timestamp* tests. Across the other pre-existing test files the only removals in the whole feature diff are three stale comment lines in top/ui_test.go (a feature-015 note saying no pause code exists yet); no assertion anywhere was removed."
+    },
+    {
+      "n": "T7",
+      "criterion": "Pressing the down arrow before the first frame does not crash the process.",
+      "status": "passed",
+      "evidence": "gocui.KeyArrowDown is bound to decreaseWidth (top/keybindings.go:25). The guard is a bounds check, not a nil check: `if idx < 0 || idx >= len(config.view.Cols) { return nil }` (top/config_view.go:119-121). Test_decreaseWidthNoColumnMetadata asserts the precondition (Cols is nil until the first render), then runs the handler in a goroutine with a select over done/viewCh/timeout so a 'narrowed anyway' implementation would be caught rather than hang, and asserts the width is untouched. Test_decreaseWidthStaleColumnMetadata covers the non-nil-but-too-short case that a nil check would let through. Both PASS."
+    },
+    {
+      "n": "T8",
+      "criterion": "All user-spec acceptance criteria verified: automated ones by tests, terminal ones by the stand run.",
+      "status": "not_verifiable",
+      "reason": "The automated half is complete and green (6 user-spec criteria fully PASS, plus every partial mechanism named above). The terminal half was not run — no stand address was available to this run. 15 of the 21 user-spec criteria remain open on the stand."
+    }
+  ],
+
+  "containmentByInspection": [
+    {
+      "check": "No production code changed outside top/",
+      "status": "passed",
+      "method": "git diff --name-only master...HEAD",
+      "evidence": "18 files, all top/. See T4."
+    },
+    {
+      "check": "view.View gained no field",
+      "status": "passed",
+      "method": "git diff master...HEAD -- internal/view/view.go (empty) + grep 'type View struct' -A 40",
+      "evidence": "Struct identical to base; field list unchanged."
+    },
+    {
+      "check": "record / report / profile untouched",
+      "status": "passed",
+      "method": "git diff master...HEAD -- record/ report/ profile/",
+      "evidence": "Empty diff. (internal/ is empty too.)"
+    },
+    {
+      "check": "The five renderSysstat call sites in top/stat_test.go updated mechanically, no assertion weakened",
+      "status": "passed",
+      "method": "git diff master...HEAD -- top/stat_test.go, removed-line census",
+      "evidence": "Exactly 5 removed lines, all of them the 5 calls; each returns with `, testRenderTime` appended and nothing else. See T6."
+    },
+    {
+      "check": "This QA task changed no code",
+      "status": "passed",
+      "method": "git status --porcelain",
+      "evidence": "Empty at the start of the run and empty after `make build`, `make test`, `make lint`, `make vuln`. .test_coverage.txt was written and removed by the Makefile. `find . -not -user lesovsky` returns nothing — the container left no root-owned files despite the read-write bind mount."
+    }
+  ],
+
+  "standRun": {
+    "status": "not_executed",
+    "blocker": "No stand address. It is deliberately not stored in the repository (stands are ephemeral, TTL in hours) and is requested from the project owner at the start of each run; none was supplied. tmux is also absent locally, and substituting a local terminal for the stand is forbidden by the task.",
+    "notAttempted": [
+      "stand inventory (tmux presence, PostgreSQL flavour, shared_preload_libraries)",
+      "shipping the feature binary and a second binary built from master, invoked by absolute path",
+      "tmux sessions at -x 190 -y 52 and -x 60"
+    ],
+    "outstandingSteps": [
+      {"step": "1", "what": "make test / make lint / make vuln", "status": "DONE — this is the only row of the table executed; see commands above"},
+      {"step": "2", "what": "Pause on a loaded activity screen (1s refresh); two captures >= 60s apart identical, [PAUSED] visible, header clock unchanged", "status": "OUTSTANDING"},
+      {"step": "3", "what": "Work the frozen frame: '/' + expression + Enter, then '\\', '[', ']', up, down — each gives a visible change, [PAUSED] stays", "status": "OUTSTANDING"},
+      {"step": "3a", "what": "Frame is not silently replaced: pause >= 3 MINUTES on fast-moving numbers, then '[' and capture; values must equal the pause-time capture. Do not shorten it", "status": "OUTSTANDING"},
+      {"step": "4", "what": "Pager round-trip: send 'l', exit, capture — same frame, screen not empty, [PAUSED] in place", "status": "OUTSTANDING"},
+      {"step": "5", "what": "tmux resize-window 190 -> 60 -> 190 while paused; fewer/more columns, the arrow disappears where nothing is hidden", "status": "OUTSTANDING"},
+      {"step": "6", "what": "Narrow pass: -x 60 session with an active filter; [PAUSED] visible, filter indicator yields first", "status": "OUTSTANDING"},
+      {"step": "6a", "what": "ADDED — a dialog ('/' or 'z') on the -x 60 paused session: prompt truncated under the marker's budget, input field not overlaid (criterion 18)", "status": "OUTSTANDING"},
+      {"step": "7", "what": "Every lifting key one at a time with the pause restored between: left, right, '<', ',', I, A, t, D+Enter, X+Enter, P+Enter, J+Enter, S, v, B, N, F, L. A non-lift is a FAIL unless the capture shows the matching cmdline message", "status": "OUTSTANDING"},
+      {"step": "7a", "what": "Menus/dialogs do not lift on open: 'D' then Esc, 'A' then Esc", "status": "OUTSTANDING"},
+      {"step": "7b", "what": "Error during pause: stop the cluster while paused, wait, then Space — image frozen until the lift, error message on the first frame after", "status": "OUTSTANDING"},
+      {"step": "7c", "what": "'h' then Esc (no lift); then '/' and a space typed into the input (a plain character, no toggle)", "status": "OUTSTANDING"},
+      {"step": "7d", "what": "Logtail panel: open 'L', pause, write to the log, capture; then 'l' pager, exit, capture again", "status": "OUTSTANDING — if 'L' returns a no-op message, criterion 10 stays NOT VERIFIABLE with that reason, never PASS"},
+      {"step": "7e", "what": "ADDED — editor round-trip: pause, 'E', pick a config, leave the editor (':q' in vi), capture. Frozen frame AND [PAUSED] both back. Watch for 'Edit config is not supported for remote hosts'", "status": "OUTSTANDING"},
+      {"step": "7f", "what": "ADDED — help while paused: 'h' on a paused screen, capture the Space entry with its lifting list (criterion 11)", "status": "OUTSTANDING"},
+      {"step": "8", "what": "Space before the first frame: launch and immediately send Space, then 'l' and exit the pager — [PAUSED] present, screen empty", "status": "OUTSTANDING"},
+      {"step": "9", "what": "Widen a column while paused (up arrow): value shown in full, no leftover '~'", "status": "OUTSTANDING"},
+      {"step": "10", "what": "Second binary built from master, same steps 2-9; every difference classified feature-introduced vs pre-existing", "status": "OUTSTANDING"},
+      {"step": "11", "what": "Every key of the main layout while paused, one at a time, capture between presses — nothing hangs the UI. Include Space and the viewCh-pushing keys", "status": "OUTSTANDING"},
+      {"step": "cleanup", "what": "Leave the stand as found: reset any changed GUC and verify with SHOW, restart the cluster if step 7b stopped it, tmux kill-session", "status": "OUTSTANDING"}
+    ]
+  },
+
+  "findings": [
+    {
+      "severity": "minor",
+      "title": "The task file's renderSysstat line numbers are master coordinates, not working-tree ones",
+      "expected": "Five call sites at top/stat_test.go:60, :97, :192, :440, :441",
+      "actual": "Those are exactly master's line numbers and they match master exactly. In the working tree the same five sites are at :69, :106, :294, :544, :545, and two additional calls (:133, :184) belong to the new Test_renderSysstat_timestamp* tests, so a grep of the working tree finds seven, not five.",
+      "reproduction": "grep -n 'renderSysstat(' top/stat_test.go vs. the same grep on `git show master:top/stat_test.go`",
+      "classification": "A note against the spec text, not a FAIL — the build compiles and the census is exact. The task itself instructs to verify by grep and treat a count mismatch this way."
+    },
+    {
+      "severity": "minor",
+      "title": "Tech debt [029] (unsanitised row values) gains two new persistence consequences — RECORD ONLY",
+      "expected": "n/a — this is a register entry, not a defect of this feature",
+      "actual": "The pause makes hostile row content longer-lived in two new ways: (1) an unsanitised value now survives on a frozen screen indefinitely instead of one refresh interval, and across a pager/editor return, because the store is redrawn from retained bytes; (2) the same applies to the stored logtail buffer (frameStore.logBuf), which is replayed on every repaint without re-reading the file.",
+      "reproduction": "n/a",
+      "classification": "Recorded only. Editing docs/tech-debt.md belongs to /done, which owns that register; this task edits no documents beyond its own report."
+    }
+  ],
+
+  "knownLimitationsNotObserved": [
+    {
+      "item": "The blackholed-connection limitation",
+      "note": "Recorded in the tech-spec Risks table: while paused, a viewCh-pushing key blocks until the collector answers, and on a silently dropped connection the frozen screen stops responding to every key including Space. Stand step 7b does NOT reproduce it — a stopped cluster closes the socket and errors immediately, so the UI stays responsive. Reproducing it needs a genuinely blackholed connection and the only exit is killing the process. Reported as a known, unobserved limitation: neither claimed covered nor filed as a new defect."
+    },
+    {
+      "item": "Accepted deviations from tasks 1-9",
+      "note": "Read from the decisions log before judging. None of them is a FAIL: the removal of the vacuous Test_menuConfPathDoesNotLift (task 5), the absence of a separate sizeChanged helper (task 7, prescribed by the task itself), the viewCh mention inside a doc comment in top/dialog.go (task 8, accepted at review), the extraction of selectLogtail and the touching of top/pause_test.go outside task 9's file list (task 9, accepted at review round 2 — no assertion weakened, and Test_frameStore_publishOnlyOnLivePath was strengthened)."
+    }
+  ],
+
+  "deferredToPostDeploy": [
+    {
+      "criterion": "User-spec criteria 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 15, 16, 20 and tech-spec T8",
+      "reason": "Each requires a live terminal driven over ssh in tmux against a live PostgreSQL — the stand run IS the E2E layer for this TUI, and no stand address was available to this run.",
+      "verificationCondition": "An ephemeral stand address supplied by the project owner, with tmux available (installing it is fine — these stands carry passwordless sudo), plus a second pgcenter binary built from master shipped alongside the feature binary and both invoked by absolute path.",
+      "verificationSteps": "Walk the 15 outstanding rows of the user-spec «Как проверить» table plus added steps 6a, 7e and 7f, at fixed geometry (tmux new-session -d -s cap -x 190 -y 52; a second session at -x 60 for the token ladder). capture-pane -p for layout/content, capture-pane -p -e where attributes matter. Then leave the stand as found: reset any changed GUC and verify with SHOW, restart the cluster if step 7b stopped it, tmux kill-session."
+    }
+  ]
+}

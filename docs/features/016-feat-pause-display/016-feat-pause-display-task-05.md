@@ -1,9 +1,9 @@
 ---
-status: planned
+status: done
 depends_on: ["03"]  # store/repaint и статус-флаг должны уже существовать
 wave: 3
 skills: [code-writing]
-verify: "bash — go test ./top/ -run 'Test_liftPause|Test_liftingHandlers|Test_noOpHandlersKeepPause|Test_menuConfPathDoesNotLift|Test_showExtraClose|Test_decreaseWidth|Test_increaseWidth|Test_toggleVerbose|Test_toggleSysTables|Test_toggleIdleConns|Test_changeQueryAge|Test_switchSortOrder|Test_orderKey|Test_viewSwitch|Test_switchViewTo|NextView' -v"
+verify: "bash — go test ./top/ -run 'Test_liftPause|Test_liftingHandlers|Test_noOpHandlersKeepPause|Test_showExtraClose|Test_decreaseWidth|Test_increaseWidth|Test_toggleVerbose|Test_toggleSysTables|Test_toggleIdleConns|Test_changeQueryAge|Test_switchSortOrder|Test_orderKey|Test_viewSwitch|Test_switchViewTo|NextView' -v"
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]
 teammate_name:
 ---
@@ -339,7 +339,7 @@ teammate_name:
 
 - Основной критерий `verify` — **прицельный** прогон, он же единственный, который проходит без живой
   БД:
-  `go test ./top/ -run 'Test_liftPause|Test_liftingHandlers|Test_noOpHandlersKeepPause|Test_menuConfPathDoesNotLift|Test_showExtraClose|Test_decreaseWidth|Test_increaseWidth|Test_toggleVerbose|Test_toggleSysTables|Test_toggleIdleConns|Test_changeQueryAge|Test_switchSortOrder|Test_orderKey' -v`
+  `go test ./top/ -run 'Test_liftPause|Test_liftingHandlers|Test_noOpHandlersKeepPause|Test_showExtraClose|Test_decreaseWidth|Test_increaseWidth|Test_toggleVerbose|Test_toggleSysTables|Test_toggleIdleConns|Test_changeQueryAge|Test_switchSortOrder|Test_orderKey' -v`
   — все новые и затронутые тесты зелёные, имена читаются как утверждения (`Test_liftPause` в regexp
   ловит и `Test_liftPauseRefresh`).
 - То же с `-race` — гонок нет: флаг пишется из горутины gocui, читается из воркера.

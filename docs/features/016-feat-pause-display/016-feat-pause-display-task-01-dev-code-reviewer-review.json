@@ -1,0 +1,63 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The change is exactly the surgical rewrite task 01 asked for: printDataCell binds the cell value to a local, truncates the local and prints the local, leaving the result set read-only. Verified in an isolated HEAD+diff worktree — go vet clean, gofmt clean, all render tests pass, and both new tests genuinely fail against the pre-change implementation, so they are real regression guards rather than tautologies. Byte-identity of rendered output holds by construction (the error-path ordering, the strictly-greater comparison, the width-1 cut plus '~' and the %-*s padding are preserved verbatim), and the doc comment's factual claim about calculateDelta was checked against internal/stat/postgres.go:596. Only minor, optional suggestions remain.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat.go",
+      "line": 1116,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "The `width <= 0` branch (returns `fmt.Errorf(\"zero or negative width, skip\")` and prints nothing) has no direct test in top/stat_test.go — grep finds only comments referencing that error text, never an assertion on it. Acceptance criterion 3 of the task ('the zero/negative-width branch still returns an error and prints nothing') is therefore verified by code reading alone. Since the task touched this function, a five-line test would pin it: build a config whose ColsWidth[0] <= 0, seed a non-empty value (the branch is only reachable when len(value) > width, so an empty cell never enters it), call printDataCell/printStatData and assert both the error and an empty bytes.Buffer.",
+      "benefit": "Turns the last unverified acceptance criterion into an executable guard and pins the exact error text, which task 03 (frame store) and task 09 will render through repeatedly.",
+      "optional": true
+    },
+    {
+      "file": "top/stat_test.go",
+      "line": 1290,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "Both new tests are named Test_printDataCell_* but neither calls printDataCell — they drive it through printStatData + visibleColumns. The names were prescribed verbatim by the task's TDD Anchor, so this is not a deviation, and testing through the public render entry point is arguably the better level (it also covers the frozen-column call site). Worth a one-line note in the test comment that the function under test is reached via printStatData, or renaming to Test_printStatData_* if the task's naming is not load-bearing for downstream tasks.",
+      "benefit": "A reader grepping for printDataCell coverage is not misled about the level at which the behaviour is pinned.",
+      "optional": true
+    },
+    {
+      "file": "top/stat_test.go",
+      "line": 1310,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_printDataCell_widenAfterTruncation asserts only Contains(\"abcdefghij\") on the wide render. Adding NotContains(\"abcd~\") would make the intent explicit rather than implicit (today a hypothetical render that printed BOTH the full value and a stale truncated one somewhere in the row would still pass). Low value — the current assertion is sufficient for the stated property — but it costs one line.",
+      "benefit": "Makes the 'the truncated form is gone, not merely accompanied by the full value' intent explicit for future editors of the render path.",
+      "optional": true
+    }
+  ],
+  "verification": {
+    "method": "Isolated git worktree at HEAD with only task01.diff applied, so the parallel task-02 work in the working tree (top/pause.go, top/pause_test.go, top/ui.go, top/ui_test.go, top/config.go, top/keybindings.go) could not affect the result. Worktree removed afterwards; the user's working tree was not modified.",
+    "results": [
+      "go vet ./top/ — clean (exit 0)",
+      "gofmt -l top/stat.go top/stat_test.go — no output (both formatted)",
+      "go test ./top/ -run 'printDataCell|printStatData' -v — 5 tests, all PASS, including Test_printStatData_truncation unmodified",
+      "go test ./top/ -run 'render|visibleColumns|printStat|Test_print' — ok, no regressions in the wider render suite",
+      "Negative control: with top/stat.go reverted to HEAD and the new tests kept, BOTH new tests FAIL (doesNotMutateSource: expected 'abcdefghij', actual 'abcd~'; widenAfterTruncation: wide render still shows 'abcd~'). The tests are genuine regression guards.",
+      "AC1 grep: `grep -rn 'Result\\.Values\\[' top/ --include='*.go' | grep -v _test.go` returns exactly two hits (top/stat.go:1054 filter match, top/stat.go:1111 the new local read) — both reads. No assignment into any field of s.Result remains in non-test code.",
+      "Byte-identity reasoning: the truncation condition stays strictly-greater, the width<=0 check stays INSIDE the overflow branch (so a short value in a zero-width column behaves as before), the cut is still byte-based value[:width-1]+\"~\", and the padding is still %-*s with ColsWidth[i]+2. visibleColumns returns a window over scrollable columns starting at index 1 (`first: 1` in the degenerate case), so column 0 is never printed twice within one render; even if it were, old and new produce identical bytes for a re-printed cell.",
+      "Doc-comment fact check: internal/stat/postgres.go:590-597 confirms `delta = curr` when interval == [2]int{0,0} — the comment's aliasing rationale is accurate, not a plausible-sounding invention."
+    ]
+  },
+  "dimensionNotes": {
+    "architecture": "Restores the printer's contract (format, do not mutate). Matches patterns.md 'Testable TUI Rendering' — printers take io.Writer, tests assert against bytes.Buffer. No signature change, no deep copy (Decision 10's rejected alternative correctly avoided).",
+    "errorHandling": "Unchanged error path, still returned before any slicing and before any write to w. No swallowed errors; printStatData still propagates.",
+    "crossFileConsistency": "printDataCell's two call sites in printStatData (frozen column 0 and the windowed loop) are untouched and still pass the absolute column index. stat.Stat / stat.PGresult field usage matches internal/stat definitions. No import or signature drift.",
+    "security": "No new input handling; the [029] value-sanitisation debt is untouched as the task required. Removing the write also removes the only mutation of a values array that, for DiffIntvl == [0,0] views (including the default `activity` screen), is shared with the collector's own snapshot.",
+    "performance": "Neutral. One string header copy into a local; the truncation still allocates the same single concatenated string, and only on the overflow path.",
+    "scopeDiscipline": "Diff is 5 changed lines in stat.go plus a doc-comment block and 44 added test lines. No neighbouring function reformatted, no existing test edited or relaxed (confirmed: the diff against stat_test.go is additions only)."
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  }
+}

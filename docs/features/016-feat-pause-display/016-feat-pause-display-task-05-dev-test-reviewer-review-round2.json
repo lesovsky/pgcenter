@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Round-1 major is resolved, and honestly rather than conveniently. I independently probed whether the deleted Test_menuConfPathDoesNotLift could have been rewritten to actually exercise the menuConf branch: a zero-value &gocui.View{} does compile and does satisfy v.Cursor() from outside the gocui package (contrary to the letter of the replacement comment's justification), so I drove menuSelect(app)(nil, v) with config.menu.menuType=menuConf and db.Local=false. It reached the real editPgConfig no-op, then panicked on menuClose's unconditional g.DeleteView(\"menu\") / g.SetCurrentView(\"sysstat\") against a nil *gocui.Gui — a call made on every branch of menuSelect regardless of menu type, so no formulation of this test can avoid needing a real, live *gocui.Gui (gocui.NewGui opens a real terminal backend). The conclusion the implementer reached — this branch cannot be honestly unit tested without inventing a seam the task forbids — holds; only the stated reason (View/Cursor) is not quite the real blocker (Gui/menuClose is). Diff review confirms the removal is the only change: pause_test.go went from 13 to 12 top-level test functions, and a line-by-line diff against d0bc90d shows every other test body byte-for-byte unchanged — only the comment block replacing the deleted test, plus the new intentional-leak note on Test_showExtraCloseLifts, were added. The comment's static claim (`top/menu.go` and `top/pgconfig.go` contain no liftPause/liftPauseRefresh call) was verified with grep and is empty, matching exactly. Production code (11 call sites, decreaseWidth guard, logtail causal fix) is untouched — 2d2b973 touches only top/pause_test.go, +22/-13. Build, go vet, and the full targeted suite (-race -count=3/5) are clean. The security auditor's flakiness probe (4 concurrent -race processes × -count=10) is corroborated by my own repeated -race runs; nothing I saw contradicts a sandbox-artifact conclusion.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/pause_test.go:435-453 (comment replacing Test_menuConfPathDoesNotLift)",
+      "issue": "The comment states menuSelect 'needs a real *gocui.View for v.Cursor(), and one cannot be constructed outside the gocui package.' I checked this directly: View.Cursor() just returns unexported v.cx/v.cy, and an external package CAN construct a zero-value &gocui.View{} (Go allows empty composite literals of exported types regardless of unexported fields) — calling v.Cursor() on it does not panic and returns (0,0), which is enough to route menuSelect into the menuConf/cy==0 branch. So the specific claim about View/Cursor() is false as stated. The real, and genuinely unavoidable, blocker is one line later in the same function: menuSelect unconditionally calls menuClose(g, v) after the switch, and menuClose calls g.DeleteView(\"menu\") and g.SetCurrentView(\"sysstat\") on a real *gocui.Gui — which panics on nil and which cannot be faked/constructed from outside the gocui package without opening a real terminal backend via gocui.NewGui. This is what actually makes the branch untestable, not the View argument. The overall conclusion (don't write this test, no seam to invent) is still correct — I reproduced the panic myself and confirmed it is unavoidable regardless of branch — but the written justification points at the wrong mechanism.",
+      "recommendation": "Amend the comment to name the actual blocker: 'menuSelect unconditionally calls menuClose(g, v) after the switch, and menuClose calls g.DeleteView/g.SetCurrentView on a real *gocui.Gui — every branch of menuSelect panics on a nil Gui, and a real one cannot be obtained outside gocui.NewGui (which opens an actual terminal backend). v.Cursor() itself is not the obstacle: a zero-value &gocui.View{} answers it fine.' This keeps the do-not-restore instruction and the do-not-invent-a-seam instruction exactly as they are — only the stated mechanism changes — so no code or test behavior needs to change, only the doc comment's precision.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/pause_test.go:459-471 (Test_showExtraCloseLifts)",
+      "issue": "Round-1 tech-debt note (goroutine leak, one per test run) is now resolved: the function doc comment explicitly names the leak as intentional and pre-empts a future 'fix'. No further action needed; recording for traceability only.",
+      "recommendation": "None — addressed as requested.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 1,
+    "litmusTest": {
+      "checked": 0,
+      "passed": 0,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 11,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

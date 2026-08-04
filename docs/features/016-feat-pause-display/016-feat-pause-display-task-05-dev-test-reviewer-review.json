@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "The core contract of this task — an action that changed nothing must not lift the pause — is well tested. All eight TDD-anchor test groups exist and were verified: I re-ran the targeted suite (-race -count=5, all green), then manually mutated six production sites the implementer claims are each killed by a named test (dropping liftPause from viewSwitchHandler, hoisting the lift above the guard in toggleSysTables, hoisting it above the guard in changeQueryAge, hoisting it above the logtail Close() error return in showExtra's closing path, dropping the lift from showExtra's closing path, dropping the decreaseWidth bounds guard) — every one of the six was caught by the corresponding test. The 11-call-site table, the exclusion of menuConf, and the file scope were independently confirmed by grep and git diff --stat, matching the task's own verification recipe exactly. config_view_test.go and verbose_test.go were extended, not overwritten (pure appends), and the one authorized edit to an existing test's comment (Test_frameStore_repaintRendersIdenticalBytes) is comment-only as claimed. Concurrency handling (unbuffered viewCh drained with 'for range' until close, select-with-timeout for the no-op table, and the deliberately un-recovered parked goroutine in Test_showExtraCloseLifts) is race-clean and does not deadlock. One test, however, does not verify what it claims: Test_menuConfPathDoesNotLift asserts on a local *config that is never passed to editPgConfig (whose signature has no *config parameter at all), so the assertion is structurally disconnected from the call under test and passes regardless of what editPgConfig does — a genuine litmus-test failure on a test the TDD anchor names as covering the task's most error-prone exclusion (menuConf/Decision 9).",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "top/pause_test.go:441-448",
+      "issue": "Test_menuConfPathDoesNotLift creates a local `config := newConfig()`, sets `config.paused.Store(true)`, then calls `editPgConfig(nil, &postgres.DB{Local: false}, gucMainConfFile, nil)` — but editPgConfig's signature is `func editPgConfig(g *gocui.Gui, db *postgres.DB, filename string, uiExit chan int) error` (top/pgconfig.go:70): it takes no *config parameter and has no way to reach the local `config` variable at all. The final assertion `assert.True(t, config.paused.Load(), ...)` therefore checks a variable the function under test never touched, structurally, regardless of what editPgConfig does internally. Litmus test: even a hypothetical regression that added a real pause-lift somewhere in the actual menuConf execution path would not be caught by this test, because there is no config plumbed through the call to observe it on. The test can only fail via a panic or a non-nil error from editPgConfig; the pause-related assertion is dead weight that looks like runtime protection of the task's most error-prone exclusion (Decision 9's menuConf carve-out) but provides none.",
+      "recommendation": "Either (a) drop the `config.paused` assertion from this test and replace it with a comment stating plainly that editPgConfig cannot reach any config's pause flag by construction (no *config parameter in its signature) — the real protection for the menuConf branch is diff review (confirmed: top/menu.go has zero liftPause/liftPauseRefresh occurrences and is not in this diff) plus step 7 of the stand run, exactly as task-05.md already states for the menuSelect gap — or (b) if runtime coverage of this exact property is wanted, it needs a seam that actually threads a *config (or an equivalent observable) through the call, which the task explicitly forbids inventing for testability. Do not leave the current form as-is: its doc comment presents it as verifying the same property Test_liftingHandlers verifies causally, when it does not.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/pause_test.go:459-467 (Test_showExtraCloseLifts)",
+      "issue": "The test intentionally leaves its goroutine permanently parked on an unbuffered send inside closeExtraView (no reader, by design, to avoid dereferencing a nil *gocui.Gui). This is the correct choice given the constraints the task lays out (draining would let the handler run on into g.DeleteView(nil); closing viewCh would panic on send), and it is race-clean under repeated runs. Flagging only as accepted tech debt: every run of this test (and every -count=N repetition) leaks one goroutine for the remainder of the test binary's life. Not a defect today, but worth a one-line note in case a goroutine-leak detector (e.g. goleak) is ever wired into this package's CI.",
+      "recommendation": "No action required now. If a leak detector is later added to top/'s test suite, this test will need an explicit exemption; consider adding a short code comment cross-referencing this so a future contributor does not spend time 'fixing' an intentional leak.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 7,
+    "litmusTest": {
+      "checked": 24,
+      "passed": 23,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 10,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

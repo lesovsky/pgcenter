@@ -140,6 +140,45 @@ View configuration happens in `internal/view/view.go: Configure(opts)` which cal
 
 The `view.View.NotRecordable` field and the `record/record.go:filterViews()` branch that honors it still exist, but no production view sets it anymore (feature 008 cleared the last of them — the five 0.11.0 screens, plus a stale flag on `procpidstat`). The mechanism is kept solely for the synthetic drop-branch test (`record.TestFilterViews_dropsExplicitNotRecordable`).
 
+## Display Pause (016-feat-pause-display)
+
+`Space` freezes the displayed frame while collection continues. The pieces live in `top/pause.go`
+(created by this feature), with the gate in `top/ui.go` and the shared render core in `top/stat.go`.
+
+**The gate must keep receiving.** `statLoop` (`top/ui.go`, extracted from `doWork` for testability)
+receives on `statCh` unconditionally; when paused it discards the frame and calls a repaint instead
+of rendering it. Not receiving would park the collector — `collectStat` reaches its `viewCh` receive
+only after a successful `statCh` send, and ~17 key handlers push on the unbuffered `viewCh`, so the
+first keypress would block `MainLoop` with no way back. `statLoop` takes neither `*app` nor the store,
+and its `repaint` parameter is a bare `func()`: from inside the gate there is nothing to race with.
+
+**`frameStore` is owned by the gocui goroutine for reads as well as writes**, with no mutex. The
+happens-before chain that makes this safe: collector's send → worker's receive → `g.Update(f)` →
+`MainLoop`'s receive → `f(g)`. The logtail buffer is born inside the render closure while `stat.Stat`
+arrives on the worker goroutine, so publishing from inside the closure is what puts both halves in
+one goroutine. A read from the worker side would risk a torn frame (`Nrows` from one sample, `Values`
+from another) — a slice-bounds panic inside a `g.Update` closure, which gocui does not recover.
+
+**One render core, two paths.** `renderFrame` (`top/stat.go`) is shared by the live path and the
+repaint path, which differ in four dimensions: error policy (propagate live, swallow-and-latch on
+repaint), the render timestamp (fresh vs stored — this is what freezes the header clock), the logtail
+source (file vs stored buffer, selected by `selectLogtail`), and whether the first-tick hint runs.
+Only the live path publishes into the store, so a repaint cannot restamp the frame. A repaint error
+is swallowed and reported once per no-failure → failure transition via a latch beside the store —
+an error escaping a `g.Update` closure would tear down `MainLoop` and loop until `errorRate` kills
+the process.
+
+**Repaint entry points:** the paused gate (every discarded tick), the resize detector at the end of
+`layout` (gocui delivers no resize event, so `layout`'s `app.ui.Size()` is the only observation
+point; its zero value after a UI rebuild is also what restores the frame on return from a pager or
+editor), and the filter dialog, which repaints rather than lifting because `setFilter` pushes nothing
+on `viewCh`.
+
+**Lifting** is explicit (`liftPause` / `liftPauseRefresh` in `top/pause.go`, 11 call sites), always
+placed *below* a handler's early returns so an action that changed nothing leaves the freeze intact.
+`liftPauseRefresh` uses `CompareAndSwap` and re-renders the cmdline only on a successful swap, so the
+`[PAUSED]` marker never outlives the pause.
+
 ## PostgreSQL Driver
 
 pgx/v5 (`github.com/jackc/pgx/v5`). Connection uses `QueryExecModeSimpleProtocol` for PgBouncer compatibility. Error types from `pgx/v5/pgconn`.

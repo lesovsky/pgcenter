@@ -38,6 +38,12 @@ never survives to a frame, so the user gets no explanation for why verbose did n
 
 Same root cause as [027] and identical on `master`; 015 only moved the threshold from 13 rows to 12.
 
+**Widened by 016-feat-pause-display (2026-08-04):** the resize-triggered `repaintStored` and the
+filter dialog's repaint are two more same-pass `g.Update` emitters on this path. Neither can corrupt
+a message — `repaintStoredFrame` never touches the `cmdline` view — so the class stays cosmetic, but
+the ordering is now non-deterministic in more places. A fix belongs in the cmdline write path, not in
+the individual callers.
+
 ### [029] Row values reach the terminal unsanitised
 
 **Added:** 2026-08-03 (surfaced during feature: 015-feat-tui-papercuts, security review)
@@ -50,6 +56,13 @@ wrapper, so escape sequences in a crafted database object name reach the termina
 `gocui.View.Clear()` does not reset the escape-interpreter state and corruption lasts the whole
 session; the stats table repaints every tick amid correct sequences and self-heals. The asymmetry is
 deliberate and recorded here so it stays a decision rather than an oversight.
+
+**Extended by 016-feat-pause-display (2026-08-04):** the self-healing argument weakens under pause.
+A hostile row value now survives on screen for as long as the freeze holds, and across a return from
+the pager or editor, instead of being overwritten on the next tick. The same applies to the stored
+logtail buffer (`frameStore.logBuf`), which retains raw log content — including query text — for the
+duration of the pause. Neither is a new sink (nothing is written to disk or logged), but the exposure
+window is no longer one refresh interval.
 
 ### [030] `profile.Test_profileLoop` is flaky
 
@@ -70,6 +83,32 @@ regression gets waved through.
 
 `make test` writes `.test_coverage.txt` and deletes it on success only — a failing run leaves it
 behind, where `git add -A` will happily stage it. Add it to `.gitignore`.
+
+### [032] A held logtail descriptor pins a rotated-away inode
+
+**Added:** 2026-08-04 (surfaced during feature: 016-feat-pause-display, security review)
+**Severity:** Low — needs a rotation during a pause, and self-corrects on the next reopen
+**Area:** `top/stat.go` (logtail branch), `internal/stat/log.go`
+
+The open log descriptor keeps the old inode alive across a rotation, and the rotation detector
+compares sizes — so a fresh log file that grows past the frozen size defeats it and the panel keeps
+reading the rotated-away file. Bounded rather than leaking: `Reopen` always closes before reopening,
+so at most one stale descriptor exists at a time. Pausing makes the window longer, since the file is
+deliberately not touched while frozen, but does not create the behaviour.
+
+### [033] The cmdline is not repainted on terminal resize
+
+**Added:** 2026-08-04 (surfaced during feature: 016-feat-pause-display, stand run)
+**Severity:** Trivial — cosmetic, self-corrects on the next cmdline write
+**Area:** `top/ui.go` (`layout`, resize detector), `top/ui.go` (cmdline composer)
+
+The resize detector repaints the stats frame for the new width but nothing rewrites the cmdline, so
+its previous text stays until something writes to it again — on a narrowed terminal it appears
+clipped mid-token (`[PAUSED][F:datna`). Once any event writes to the cmdline, the composer's token
+ladder degrades correctly (`[PAUSED][F:datname]` → `[PAUSED][F:…]` → `[PAUSED]`), verified on the
+stand down to 10 columns. The fix is to compose the cmdline from the resize path too; it was left out
+because the composer needs the config and the detector deliberately holds neither `*app` nor the
+store.
 
 
 ### [022] Stats descriptions in `internal/stat/help.go` are dead code, and stale on top of it

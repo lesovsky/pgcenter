@@ -1,5 +1,5 @@
 ---
-status: planned                    # planned -> in_progress -> done
+status: done                       # planned -> in_progress -> done
 depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
@@ -79,14 +79,14 @@ Write these first, watch the first one fail against the current implementation, 
 
 ## Acceptance Criteria
 
-- [ ] `printDataCell` performs no assignment into `s.Result.Values` (or any other field of the passed
+- [x] `printDataCell` performs no assignment into `s.Result.Values` (or any other field of the passed
       `stat.Stat`); `grep -rn "Result.Values\[" top/ --include='*.go'` shows reads only outside tests.
-- [ ] Rendered output is byte-identical to before the change for both the truncating and the
+- [x] Rendered output is byte-identical to before the change for both the truncating and the
       non-truncating path (existing render tests pass unmodified).
-- [ ] The zero/negative-width branch still returns an error and prints nothing.
-- [ ] New test proves the source value is unchanged after a render that truncates it.
-- [ ] New test proves a second render at a larger column width shows the full original value.
-- [ ] `go test ./top/ -run 'printDataCell|printStatData'` passes; `make lint` is clean.
+- [x] The zero/negative-width branch still returns an error and prints nothing.
+- [x] New test proves the source value is unchanged after a render that truncates it.
+- [x] New test proves a second render at a larger column width shows the full original value.
+- [x] `go test ./top/ -run 'printDataCell|printStatData'` passes; `make lint` is clean.
       (The full `./top/...` run additionally needs the fixture clusters on ports 21914-21919 —
       without them `top/report_test.go` panics on a nil connection. That is an environment
       condition, not a failure of this task.)
@@ -189,6 +189,6 @@ because of this task).
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [x] Записать краткий отчёт в [016-feat-pause-display-decisions.md](016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

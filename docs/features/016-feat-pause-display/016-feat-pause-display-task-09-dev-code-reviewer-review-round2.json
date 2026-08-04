@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "status": "approved",
+  "summary": "Commit 1b8de07 extracts the repaint/live logtail-source decision into `selectLogtail(p renderParams, read logtailReader) (string, []byte, error)`, closing round 1's major finding. Everything requiring g/v (readLogfileRecent's v.Size() geometry, v.Clear(), Reopen's DB round-trip, the printCmdline error write, logtail.Size bookkeeping) stays inside the thunk passed from renderFrame's case block; selectLogtail itself only chooses, and does not evaluate the thunk eagerly. Control-flow comparison against 0ae64cf confirms the consolidation to one printLogtail call is behaviour-preserving: byte output, the Clear-only-on-content semantics, and the error-return/printCmdline behaviour are all identical. I independently reran the round-1 mutation (`if !p.fromFile {` -> `if false {`, now inside selectLogtail) and confirmed it reddens both Test_selectLogtail_repaintNeverInvokesTheRead and Test_repaintLogtail_noFileAccess; reverted cleanly. renderParams and renderFrame's signature are untouched, task 03's seam is unchanged, and the change stays within top/stat.go and top/stat_test.go (top/pause.go and top/pause_test.go have zero diff in this commit). The major is resolved.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "adequate",
+    "tech_debt": false
+  },
+  "round1MajorResolution": {
+    "finding": "Test_repaintLogtail_noFileAccess called renderLogtail directly, a function with no path to config.logtail, so the adversary fixture was inert and a mutation removing the repaint/live routing distinction went undetected.",
+    "fix": "selectLogtail(p renderParams, read logtailReader) (string, []byte, error) extracted as the single place the source is chosen: `if !p.fromFile { return p.logPath, p.logBuf, nil }; return read()`. The live branch's file read, v.Clear(), Reopen, printCmdline and Size bookkeeping all moved into the `read` closure passed in from renderFrame's case stat.CollectLogtail, unchanged in content.",
+    "verifiedResolved": true,
+    "verificationMethod": "Read the diff, confirmed the thunk is passed as a value and only invoked inside read() when p.fromFile is true; independently reran the exact mutation described (if !p.fromFile { -> if false {) inside selectLogtail and confirmed via `go test ./top/ -run 'Logtail|logtail|selectLogtail' -v` that it fails Test_selectLogtail_repaintNeverInvokesTheRead (t.Fatal fires) and Test_repaintLogtail_noFileAccess (adversary bytes/path leak through, Size advances to 33); reverted, git diff --stat top/stat.go is empty afterward."
+  },
+  "verifiedInvariants": {
+    "gocui_bound_work_stays_in_thunk": "confirmed by reading: readLogfileRecent(v, ...), the size<Size rotation check with v.Clear()+Reopen(app.db,...), both printCmdline(g, ...) error writes, and app.config.logtail.Size = size all remain inside the closure literal passed to selectLogtail; selectLogtail's own body touches neither g nor v nor app.config",
+    "thunk_not_eager": "confirmed: `path, buf, err := selectLogtail(p, func() (...) {...})` passes an unevaluated function value; selectLogtail's `if !p.fromFile { return ...}` branch returns without ever calling `read()`, so on the repaint path the closure body never executes",
+    "single_printLogtail_call": "confirmed: both paths now fall through to one `err = printLogtail(v, path, buf)` after selectLogtail returns, replacing the two call sites (one per branch) that existed in 0ae64cf; behaviour is identical because both call sites previously invoked printLogtail with the same respective arguments",
+    "byte_output_and_clear_semantics_unchanged": "printLogtail/renderLogtail definitions are untouched by this commit (grep confirms their line numbers are the only place they're defined); Test_renderLogtail_outputUnchanged and Test_renderLogtail_emptyBufferPrintsNothing, unmodified, still pass",
+    "error_path_not_swallowed_or_reordered": "confirmed: the thunk returns (\"\", nil, err) immediately after each printCmdline call, exactly mirroring 0ae64cf's `printCmdline(...); return err`; selectLogtail propagates that error unchanged via `return read()`; renderFrame's `if err != nil { return err }` immediately after the selectLogtail call is new only in position, not in effect — Test_selectLogtail_livePathPropagatesReadError pins this and passes",
+    "renderParams_renderFrame_signature_untouched": "confirmed: `func renderFrame(g *gocui.Gui, app *app, s stat.Stat, props stat.PostgresProperties, p renderParams) error` is byte-identical between 0ae64cf and 1b8de07; top/pause.go (which owns renderParams) has zero diff in this commit",
+    "file_perimeter": "confirmed: `git diff --stat 0ae64cf 1b8de07` touches only top/stat.go and top/stat_test.go, both within task 09's allowed file set",
+    "single_routing_check": "confirmed: `if !p.fromFile` appears exactly once as executable code (top/stat.go:354, inside selectLogtail); its only other two occurrences in the package are inside doc comments (top/stat.go:344, top/stat_test.go:1801)",
+    "no_live_path_access_reachable_from_repaint": "confirmed both by reading (selectLogtail's early return precedes any g/v/config.logtail touch) and by the reverted mutation test above"
+  },
+  "verificationRun": {
+    "targeted_tests": "go test ./top/ -run 'Logtail|logtail|selectLogtail|frameStore|publishFrame|repaint' -race -count=3 -v : all pass, no races",
+    "vet_gofmt": "go vet ./top/... clean; gofmt -l top/ empty",
+    "lint": "golangci-lint run ./top/... : 0 issues; gosec -quiet ./top/... : clean",
+    "mutation_reproduced": "if !p.fromFile { -> if false { inside selectLogtail: reddens Test_selectLogtail_repaintNeverInvokesTheRead and Test_repaintLogtail_noFileAccess as claimed in the fix commit message; reverted, tree clean"
+  }
+}

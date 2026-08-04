@@ -22,6 +22,8 @@ general actions:
     \                 '\' clear all filters of the current screen.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     [,]               '[' scroll columns left, ']' scroll columns right.
+    Space             'Space' pause/resume display; actions that need fresh data
+                      (sort, screen switch, ',', I, A, v, B, N, F, L) resume it.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.
     ~                 start psql session.
     l                 open log file with pager.

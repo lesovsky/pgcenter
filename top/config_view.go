@@ -19,8 +19,8 @@ const (
 )
 
 // orderKeyLeft switches sort order to left column.
-func orderKeyLeft(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
-	return func(_ *gocui.Gui, _ *gocui.View) error {
+func orderKeyLeft(config *config) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
 		config.view.OrderKey--
 		if config.view.OrderKey < 0 {
 			config.view.OrderKey = config.view.Ncols - 1
@@ -31,14 +31,19 @@ func orderKeyLeft(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 		// data, which happens on the render path.
 		config.autoScrollToOrderKey = true
 
+		// Re-sorting is the collector's job, so the frozen frame has to give way. The refreshing
+		// variant: this handler writes no cmdline of its own, so nobody else would repaint the
+		// [PAUSED] marker away.
+		liftPauseRefresh(g, config)
+
 		config.viewCh <- config.view
 		return nil
 	}
 }
 
 // orderKeyRight switches sort order to right column.
-func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
-	return func(_ *gocui.Gui, _ *gocui.View) error {
+func orderKeyRight(config *config) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
 		config.view.OrderKey++
 		if config.view.OrderKey >= config.view.Ncols {
 			config.view.OrderKey = 0
@@ -46,6 +51,9 @@ func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 
 		// See orderKeyLeft: the scroll is deferred to the next render, which knows the widths.
 		config.autoScrollToOrderKey = true
+
+		// See orderKeyLeft: the refreshing variant, for the same reason.
+		liftPauseRefresh(g, config)
 
 		config.viewCh <- config.view
 		return nil
@@ -101,6 +109,17 @@ func decreaseWidth(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
 		idx := config.view.OrderKey // index of the current selected column
 
+		// The lower bound of the width is the length of the column's NAME, and names are known only
+		// after a frame has been rendered - config.view.Cols is populated on the render path, while
+		// view.New() leaves it nil, and metadata left over from a wider screen can be shorter than
+		// the current sort key. Indexing it unconditionally panics inside a key handler, which gocui
+		// does not recover. There is no sensible fallback floor to invent, so the handler returns
+		// having changed nothing and having asked for no frame: with no columns on screen there is
+		// nothing to narrow. Bounds, not a nil check - stale metadata is non-nil.
+		if idx < 0 || idx >= len(config.view.Cols) {
+			return nil
+		}
+
 		// Decrease the width using current width. Clamp the value, it should not be less than width of column's name.
 		config.view.ColsWidth[idx] = math.Max(config.view.ColsWidth[idx]-colsWidthStep, len(config.view.Cols[idx]))
 
@@ -113,6 +132,10 @@ func decreaseWidth(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 func switchSortOrder(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		config.view.OrderDesc = !config.view.OrderDesc
+
+		// Re-sorting is done by the collector. Silent variant: the write below repaints the prefix.
+		liftPause(config)
+
 		printCmdline(g, "Switch sort order")
 
 		config.viewCh <- config.view
@@ -312,11 +335,23 @@ func progressNextView(current string) string {
 }
 
 // viewSwitchHandler is routine handler which switches views and notify channel.
+//
+// The pause is lifted HERE rather than in the ~26 places that call this helper: a new screen is
+// filled by the collector, and doing it inside covers every screen switch - letter keys and the
+// D/X/P/J menus alike - without touching a single call site. Silent variant: every caller writes
+// the cmdline immediately afterwards, which repaints the token prefix.
+//
+// Callers with an early return of their own keep it ABOVE their call to this helper (switchViewTo's
+// "pg_stat_statements is not available" guard, top/config_view.go), so a switch that did not happen
+// does not lift the pause.
 func viewSwitchHandler(config *config, c string) {
 	config.views[config.view.Name] = config.view
 	config.view = config.views[c]
 	config.scrollOffset = 0             // horizontal scroll is ephemeral; reset on view switch
 	config.autoScrollToOrderKey = false // a pending auto-scroll must not fire on the new screen
+
+	liftPause(config)
+
 	config.viewCh <- config.view
 }
 
@@ -340,6 +375,12 @@ func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 			printCmdline(g, "Per-process stats available in local mode only")
 			return nil
 		}
+
+		// The screen really is being switched now, so the frozen frame has to give way. This
+		// handler bypasses viewSwitchHandler on purpose (see the doc comment), so it has nobody to
+		// inherit the lift from. Silent variant: the switch below writes the cmdline itself, on
+		// every one of its branches.
+		liftPause(app.config)
 
 		// Probe IO access using the first real PG backend PID from pg_stat_activity.
 		// /proc/self/io is always readable by the owner process, so it is not a
@@ -415,6 +456,12 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		config.view = config.views[name]
+
+		// Below the guard AND below the reformatting loop's error return: a query that could not be
+		// reformatted changed nothing, and the collector was never asked for anything. Silent
+		// variant: the write below repaints the prefix.
+		liftPause(config)
+
 		config.viewCh <- config.view
 
 		printCmdline(g, "Show relations: %s", config.queryOptions.ViewType)
@@ -448,6 +495,12 @@ func changeQueryAge(answer string, config *config) string {
 
 	// Update query and view.
 	config.view.Query = q
+
+	// Below both early returns - a rejected input and a query that would not format changed
+	// nothing. Silent variant: dialogFinish prints the string returned below (top/dialog.go), and
+	// that write is the one that repaints the prefix.
+	liftPause(config)
+
 	config.viewCh <- config.view
 
 	return "Activity age: set " + answer
@@ -502,6 +555,11 @@ func toggleIdleConns(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		config.view.Query = q
+
+		// Below the screen guard AND below the query.Format error return, for the same reason as in
+		// toggleSysTables. Silent variant: both branches below write the cmdline.
+		liftPause(config)
+
 		config.viewCh <- config.view
 
 		if config.queryOptions.ShowNoIdle {

@@ -1,12 +1,17 @@
 package top
 
 import (
+	"context"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 )
@@ -128,9 +133,9 @@ func Test_composeCmdline(t *testing.T) {
 }
 
 // Test_composeCmdlineTwoTokens is the user-spec acceptance criterion: the composer accepts a
-// second token - the [PAUSED] one a later feature will add - and assembles the line without the
-// function itself being edited. The pause token is built here as a literal; no pause code exists
-// in this feature and none must appear.
+// second token - the [PAUSED] one - and assembles the line without the function itself being
+// edited. The pause token stays a literal here even now that pauseToken exists: this test is about
+// the composer, and building the token from feature code would make it test that instead.
 func Test_composeCmdlineTwoTokens(t *testing.T) {
 	pause := cmdlineToken{variants: []string{"[PAUSED]"}}
 
@@ -328,6 +333,95 @@ func Test_cmdlineTokens(t *testing.T) {
 		got := cmdlineTokens(c)
 		assert.Equal(t, []cmdlineToken{want}, got)
 	})
+
+	t.Run("paused config", func(t *testing.T) {
+		c := newConfig()
+		c.paused.Store(true)
+
+		// The marker is spelled out rather than taken from pauseToken: an expected value built by
+		// the function under test would follow a wrong rendering instead of catching it.
+		got := cmdlineTokens(c)
+		assert.Equal(t, []cmdlineToken{{variants: []string{"[PAUSED]"}}}, got)
+	})
+
+	t.Run("paused config with active filters", func(t *testing.T) {
+		re := regexp.MustCompile("^a")
+		c := newConfig()
+		c.paused.Store(true)
+		c.view = view.View{
+			Cols:    []string{"datname", "usename"},
+			Filters: map[int]*regexp.Regexp{1: re},
+		}
+
+		// Order is the assertion: the marker is left of the filter indicator, so the composer -
+		// which degrades and drops from the RIGHT - reaches the filter token first.
+		got := cmdlineTokens(c)
+		assert.Len(t, got, 2)
+		assert.Equal(t, []string{"[PAUSED]"}, got[0].variants)
+		assert.Equal(t, "[F:usename]", got[1].variants[0])
+	})
+}
+
+// Test_cmdlineTokensPauseNeverDegrades walks the real tokens of a paused, filtered config down the
+// composer's ladder. The filter token steps through its variants and is eventually dropped while
+// [PAUSED] stays whole; below the marker's own width it disappears rather than being cut. Nothing
+// in composeCmdline enforces this - it follows from the marker having a single variant and sitting
+// leftmost, so this test is what keeps both properties from regressing.
+func Test_cmdlineTokensPauseNeverDegrades(t *testing.T) {
+	re := regexp.MustCompile("^a")
+	c := newConfig()
+	c.paused.Store(true)
+	c.view = view.View{
+		Cols:    []string{"datname", "usename"},
+		Filters: map[int]*regexp.Regexp{0: re, 1: re},
+	}
+
+	tokens := cmdlineTokens(c)
+
+	// 8 + 19 runes: everything fits.
+	assert.Equal(t, "[PAUSED][F:datname,usename]", composeCmdline(tokens, "", 27))
+	// One column short: the filter steps down, the marker does not.
+	assert.Equal(t, "[PAUSED][F:datname,…]", composeCmdline(tokens, "", 26))
+	// The filter's last variant.
+	assert.Equal(t, "[PAUSED][F:…]", composeCmdline(tokens, "", 20))
+	// Too narrow even for that: the filter is dropped, the marker survives whole.
+	assert.Equal(t, "[PAUSED]", composeCmdline(tokens, "", 12))
+	assert.Equal(t, "[PAUSED]", composeCmdline(tokens, "", 8))
+
+	// One column below the marker's width: absent, never a partial "[PAUSE".
+	assert.Equal(t, "", composeCmdline(tokens, "", 7))
+}
+
+// Test_cmdlineMarkerAfterUIRebuild pins Decision 8, which deliberately ships no code. After a
+// pager/editor return the UI is rebuilt only through a non-nil app.uiError, and layout's
+// cmdline-creation branch writes it with printCmdline(app.ui, "%s", app.uiError). The message on
+// that path is empty, and the write still re-renders the token prefix - which is how the marker
+// comes back without a restoration branch.
+//
+// The error is taken from layout itself rather than hand-built, so a change to what layout returns
+// for a 0x0 terminal reaches this test. The write that follows cannot be: it needs a live Gui, and
+// layout returns before creating the cmdline view here. So this test guards the two halves a unit
+// test can reach - the message is empty, and an empty message still composes the marker - while the
+// branch that performs the write is verified on the stand.
+func Test_cmdlineMarkerAfterUIRebuild(t *testing.T) {
+	prev := cmdlineCfg
+	t.Cleanup(func() { cmdlineCfg = prev })
+
+	c := newConfig()
+	c.paused.Store(true)
+	setCmdlineConfig(c)
+
+	// A zero-size terminal is what layout sees right after a pager or editor closed the Gui, and
+	// the error it returns there is what mainLoop stores in app.uiError. gocui.Gui.Size() only
+	// reads two struct fields, so a bare Gui reaches that branch without a terminal.
+	uiError := layout(&app{config: c, ui: &gocui.Gui{}})(nil)
+	assert.Error(t, uiError)
+
+	// "%s" of an error is its Error(): the message layout's write carries is empty.
+	msg := uiError.Error()
+	assert.Equal(t, "", msg)
+
+	assert.Equal(t, "[PAUSED]", composeCmdline(cmdlineTokens(cmdlineCfg), msg, 80))
 }
 
 // Test_setCmdlineConfig checks the ambient is published by the named setter and read back by
@@ -362,4 +456,282 @@ func Test_printCmdlineNilGui(t *testing.T) {
 	assert.NotPanics(t, func() { printCmdline(nil, "%s", "message") })
 	assert.NotPanics(t, func() { printCmdlinePersist(nil, "%s", "prompt") })
 	assert.NotPanics(t, func() { printCmdline(nil, "") })
+}
+
+// statLoopHarness drives statLoop on its own goroutine with stub render/repaint steps.
+//
+// The stubs are the reason the loop is testable at all: statLoop takes function values instead of
+// *app, so app.ui.Update - which panics on a nil *gocui.Gui (gocui/gui.go:312) - is never reached.
+//
+// The call counters are written ONLY by the loop goroutine and must be read after it has returned
+// (wait()), which is what keeps the tests themselves -race clean.
+type statLoopHarness struct {
+	statCh    chan stat.Stat
+	uiExit    chan int
+	paused    atomic.Bool
+	cancel    context.CancelFunc
+	exit      chan statLoopExit
+	rendered  chan struct{}
+	repainted chan struct{}
+
+	renderCalls  int
+	repaintCalls int
+}
+
+// newStatLoopHarness starts statLoop against an UNBUFFERED statCh. The lack of buffering is the
+// whole argument of the drain test: on an unbuffered channel a completed send is proof that the
+// loop performed a receive.
+func newStatLoopHarness(paused bool) *statLoopHarness {
+	h := &statLoopHarness{
+		statCh:    make(chan stat.Stat),
+		uiExit:    make(chan int),
+		exit:      make(chan statLoopExit, 1),
+		rendered:  make(chan struct{}, 1),
+		repainted: make(chan struct{}, 1),
+	}
+	h.paused.Store(paused)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	h.cancel = cancel
+
+	go func() {
+		h.exit <- statLoop(ctx, h.uiExit, h.statCh, &h.paused,
+			func(stat.Stat) {
+				h.renderCalls++
+				signalStep(h.rendered)
+			},
+			func() {
+				h.repaintCalls++
+				signalStep(h.repainted)
+			},
+		)
+	}()
+
+	return h
+}
+
+// signalStep reports a step to the test WITHOUT ever blocking the loop goroutine. A blocking send would
+// park the loop inside its own render/repaint step, which is precisely the state the drain test
+// exists to prove impossible - the test would then deadlock on the thing it is measuring instead of
+// measuring it. The counters, not this channel, carry the totals.
+func signalStep(ch chan struct{}) {
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// wait returns the loop's exit reason, failing the test rather than hanging the suite if the loop
+// never returns.
+func (h *statLoopHarness) wait(t *testing.T) statLoopExit {
+	t.Helper()
+	select {
+	case reason := <-h.exit:
+		return reason
+	case <-time.After(5 * time.Second):
+		t.Fatal("statLoop did not return")
+		return exitCtx
+	}
+}
+
+// Test_statLoop_drainsWhilePaused is the feature's central concurrency assertion: while paused the
+// gate keeps RECEIVING. collectStat reaches its viewCh receive only after a successful statCh send
+// (top/stat.go:72-84) and ~17 key handlers push on the unbuffered viewCh, so a gate that stopped
+// receiving would park the collector and the first keypress would block MainLoop forever - with
+// Space itself unable to recover it.
+//
+// The producer is shaped like the real collector: it records a completion only AFTER the send
+// returns. On an unbuffered channel that recorded completion IS the proof that a receive happened.
+// The test fails by timeout instead of hanging the suite if the gate ever stops draining.
+func Test_statLoop_drainsWhilePaused(t *testing.T) {
+	const frames = 5 // the user-spec's "no fewer than five consecutive sends" criterion
+
+	h := newStatLoopHarness(true)
+
+	sent := make(chan int, 1)
+	go func() {
+		n := 0
+		for i := 0; i < frames; i++ {
+			h.statCh <- stat.Stat{}
+			n++
+		}
+		sent <- n
+	}()
+
+	select {
+	case n := <-sent:
+		assert.Equal(t, frames, n)
+	case <-time.After(5 * time.Second):
+		t.Fatal("collector blocked: the paused gate stopped receiving")
+	}
+
+	// The loop is sequential: the fifth send completed, so the fifth receive happened, so the
+	// fifth repaint has run (or is running) before the loop reaches its next select. Cancelling
+	// here therefore cannot race the count below.
+	h.cancel()
+	assert.Equal(t, exitCtx, h.wait(t))
+
+	assert.Equal(t, 0, h.renderCalls, "a discarded frame must never be rendered")
+	assert.Equal(t, frames, h.repaintCalls, "every discarded frame repaints the store")
+}
+
+// Test_statLoop_rendersAfterResume covers the other half of the gate: with the flag cleared the
+// next frame goes to the live render path and does not repaint the store.
+//
+// The handshake on h.repainted before flipping the flag is load-bearing: a completed send only
+// means the loop received the frame, not that it has read the flag yet, so flipping immediately
+// after the send would make the first frame's fate a race.
+func Test_statLoop_rendersAfterResume(t *testing.T) {
+	h := newStatLoopHarness(true)
+
+	h.statCh <- stat.Stat{}
+	<-h.repainted
+
+	h.paused.Store(false)
+
+	h.statCh <- stat.Stat{}
+	<-h.rendered
+
+	h.cancel()
+	assert.Equal(t, exitCtx, h.wait(t))
+
+	assert.Equal(t, 1, h.renderCalls)
+	assert.Equal(t, 1, h.repaintCalls)
+}
+
+// Test_statLoop_exitOnUIExit pins the exit reason of the pager/editor path. doWork keys wg.Wait()
+// off this value - it must NOT wait here, because ctx is not cancelled on that path and the
+// collector may still be parked on its send - so the reason itself is the assertion.
+func Test_statLoop_exitOnUIExit(t *testing.T) {
+	h := newStatLoopHarness(false)
+
+	// A producer parked on the send, exactly like collectStat when the pager is opened. It is
+	// JOINED rather than abandoned: whichever branch of its select wins - the loop happening to
+	// take the frame before uiExit, or the release below - the goroutine returns, so the join
+	// cannot hang and the test leaves nothing running. Release first, then wait, in one deferred
+	// step; this changes nothing the test asserts, which is only the exit reason.
+	stop := make(chan struct{})
+	producerDone := make(chan struct{})
+	defer func() {
+		close(stop)
+		<-producerDone
+	}()
+	go func() {
+		defer close(producerDone)
+		select {
+		case h.statCh <- stat.Stat{}:
+		case <-stop:
+		}
+	}()
+
+	h.uiExit <- 1
+	assert.Equal(t, exitUI, h.wait(t))
+}
+
+// Test_statLoop_exitOnContextCancel covers the shutdown/UI-rebuild path, whose reason is what makes
+// doWork wait for the collector goroutine.
+func Test_statLoop_exitOnContextCancel(t *testing.T) {
+	h := newStatLoopHarness(false)
+
+	h.cancel()
+	assert.Equal(t, exitCtx, h.wait(t))
+
+	assert.Equal(t, 0, h.renderCalls)
+	assert.Equal(t, 0, h.repaintCalls)
+}
+
+// observation is one layout pass as the resize detector sees it: the pause flag and the size that
+// pass read from the terminal, plus whether that pass must ask for a repaint.
+type observation struct {
+	paused bool
+	x, y   int
+	want   bool
+}
+
+// Test_resizeDetector_observe drives the detector as a SEQUENCE, because what it pins is a state
+// machine, not a single comparison. Three properties, and every row below belongs to one of them:
+//
+//   - a size change while paused asks for exactly one repaint - the frozen frame's visible-column
+//     window was computed for the old width, so it has to be redrawn once for the new one;
+//   - the repaint chain TERMINATES: the size is recorded before the answer is given, so the layout
+//     pass that follows the repaint sees no change and asks for nothing;
+//   - the size is recorded even while live, so resuming a pause after a resize does not manufacture
+//     a repaint out of a size that was already on screen.
+//
+// The detector is what makes any of this testable: layout itself calls app.ui.Size(), and a
+// *gocui.Gui with a non-zero size cannot be built outside the gocui package. The wiring inside
+// layout is covered by the stand run of task 10.
+func Test_resizeDetector_observe(t *testing.T) {
+	testcases := []struct {
+		name string
+		seq  []observation
+	}{
+		{
+			// The zero value of the detector is the state of a freshly built Gui: mainLoop
+			// recreates layout's closure for every Gui, so the first pass after a return from the
+			// pager, the editor or psql counts as a change and puts the frozen frame back.
+			name: "zero start state repaints, the pass after it does not",
+			seq: []observation{
+				{paused: true, x: 190, y: 52, want: true},
+				{paused: true, x: 190, y: 52, want: false},
+			},
+		},
+		{
+			name: "width only",
+			seq: []observation{
+				{paused: true, x: 190, y: 52, want: true},
+				{paused: true, x: 60, y: 52, want: true},
+				{paused: true, x: 60, y: 52, want: false},
+			},
+		},
+		{
+			// A height-only resize re-lays out the panel bands, so it is a change like any other.
+			name: "height only",
+			seq: []observation{
+				{paused: true, x: 190, y: 52, want: true},
+				{paused: true, x: 190, y: 24, want: true},
+				{paused: true, x: 190, y: 24, want: false},
+			},
+		},
+		{
+			name: "both dimensions, growth then shrink",
+			seq: []observation{
+				{paused: true, x: 60, y: 24, want: true},
+				{paused: true, x: 190, y: 52, want: true},
+				{paused: true, x: 60, y: 24, want: true},
+				{paused: true, x: 60, y: 24, want: false},
+			},
+		},
+		{
+			// Live mode redraws every tick on its own, and a repaint there would race the natural
+			// frame.
+			name: "live mode never asks for a repaint",
+			seq: []observation{
+				{paused: false, x: 190, y: 52, want: false},
+				{paused: false, x: 60, y: 52, want: false},
+				{paused: false, x: 60, y: 52, want: false},
+			},
+		},
+		{
+			// The resize happened while live, so its size is already on screen: pressing Space
+			// afterwards freezes exactly what the operator is looking at and needs no repaint.
+			name: "a resize while live is recorded, so a later pause does not repaint",
+			seq: []observation{
+				{paused: false, x: 190, y: 52, want: false},
+				{paused: false, x: 60, y: 52, want: false},
+				{paused: true, x: 60, y: 52, want: false},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			var d resizeDetector
+
+			for i, o := range tc.seq {
+				assert.Equalf(t, o.want, d.observe(o.paused, o.x, o.y),
+					"step %d: paused=%v size=%dx%d", i, o.paused, o.x, o.y)
+			}
+		})
+	}
 }

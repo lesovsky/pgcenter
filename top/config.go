@@ -1,6 +1,7 @@
 package top
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lesovsky/pgcenter/internal/query"
@@ -30,6 +31,13 @@ type config struct {
 	// renderDbstat on the next frame, so manual [ / ] scrolling afterwards is never undone by the
 	// following refresh. Ephemeral like scrollOffset: reset on BOTH view-switch paths.
 	autoScrollToOrderKey bool
+	// paused freezes the displayed statistics: while it is set the collector keeps running and the
+	// screen keeps being repainted from the last rendered frame instead of the incoming one.
+	// It is the only cross-goroutine value of the pause feature, which is why it is an atomic and
+	// not a plain bool: written on the gocui goroutine (the Space handler, and the handlers that
+	// lift the pause) and read on the worker goroutine (statLoop). Same discipline as uiGeneration,
+	// top/ui.go:24-29. Zero value is "not paused", so newConfig needs no change.
+	paused atomic.Bool
 	// refresh is the durable copy of the current refresh interval, kept solely for displaying it in
 	// the sysstat header. It cannot be read back from view.Refresh: that field is a transient courier
 	// for the stats goroutine — both writers (doWork in ui.go and changeRefresh in config_view.go)

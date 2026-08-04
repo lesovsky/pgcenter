@@ -55,6 +55,10 @@ func keybindings(app *app) error {
 		{"sysstat", 'F', showExtra(app, stat.CollectFsstats)},
 		{"sysstat", 'L', showExtra(app, stat.CollectLogtail)},
 		{"sysstat", 'v', toggleVerbose(app)},
+		// gocui.KeySpace, not the rune ' ': termbox classifies bytes <= 0x20 as functional keys and
+		// delivers Ch = 0, so a rune binding would register and never fire. Scoped to "sysstat" so
+		// a space typed into a dialog or a menu stays a plain space.
+		{"sysstat", gocui.KeySpace, togglePause(app)},
 		{"sysstat", 'S', switchViewToProcPidStat(app)},
 		{"sysstat", 'R', dialogOpen(app, dialogPgReload)},
 		{"sysstat", '/', dialogOpen(app, dialogFilter)},

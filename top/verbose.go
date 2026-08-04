@@ -23,6 +23,11 @@ func toggleVerbose(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		app.config.view.Verbose = newVal
 		app.config.verbose = newVal
 
+		// Verbose changes what the summary panels are built from, which is the collector's output,
+		// so the frozen frame gives way. No early returns in this handler. Silent variant: both
+		// branches below write the cmdline.
+		liftPause(app.config)
+
 		app.config.viewCh <- app.config.view
 
 		if newVal {

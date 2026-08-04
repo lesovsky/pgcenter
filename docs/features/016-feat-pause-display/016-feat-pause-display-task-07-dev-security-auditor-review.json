@@ -1,0 +1,37 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Pre-existing g.Update ordering nondeterminism now has two same-pass emitters",
+      "description": "layout can, in the same pass, both flip verboseTooShortShown (which calls printCmdline -> app.ui.Update) and have resize.observe return true (which calls repaintStored -> app.ui.Update). gocui v0.5.0's Update spawns a goroutine per call to send on the buffered userEvents channel and MainLoop does not guarantee delivery order across concurrent senders (documented directly in the gocui source: \"Given that Update spawns a goroutine, the order in which the user events will be handled is not guaranteed.\"). This is defect class [028], already known and explicitly called out in the commit message and in task-07's Details/Edge-cases section as pre-existing, harmless debt (both writers compose the cmdline prefix through cmdlineTokens, so only which one's transient text wins is at stake, not [PAUSED] itself). This task does not introduce the race, it only adds a second occasional emitter into an already-existing pattern.",
+      "impact": "None security-relevant. Worst case is a cosmetic race on which transient cmdline message displays first after a resize that coincides with a verbose-hint flip; no data corruption, no crash, no availability impact.",
+      "recommendation": "No action required for this task. If the flakiness of the transient message ordering ever becomes user-visible, address it as a standalone fix to the cmdline write path, not by adding ordering logic here.",
+      "location": "top/ui.go:296-337 (Height-guard hint block and the resize-detector block, both in layout)",
+      "cwe": ""
+    }
+  ],
+  "tech_debt": true,
+  "verification": {
+    "build": "go build ./top/... — clean",
+    "targeted_race_run": "go test ./top/ -run 'Test_resizeDetector' -race -v — PASS, all 6 subtests, no races",
+    "regression_run": "go test ./top/ -run 'Test_composeCmdline|Test_cmdlineTokens|Test_filterToken|Test_setCmdlineConfig|Test_printCmdlineNilGui' -race -v — PASS, all pre-existing tests unaffected",
+    "full_suite_note": "go test ./top/... not run (requires live PostgreSQL fixture cluster on 127.0.0.1:21917, not available in this environment), per task instructions",
+    "diff_scope": "git diff --stat d12dd96~1 d12dd96 — only top/ui.go (+52) and top/ui_test.go (+96) touched, matches commit",
+    "grep_checks": "grep for 'func sizeChanged|Latch|latch' in top/ui.go — no matches (no second comparison layer, no latch state added here, matching task constraints); no secret/token/password patterns found in the diff"
+  },
+  "notes": [
+    "Repaint self-trigger loop was specifically checked: resizeDetector.observe() records the new (x,y) BEFORE returning, so the layout pass that runs immediately after the queued repaint's g.Update closure fires sees an unchanged size and returns false — verified against gocui v0.5.0 source (jroimartin/gocui@v0.5.0, MainLoop/flush/handleEvent) at $GOPATH/pkg/mod: flush() is the only place gocui compares termbox.Size() against g.maxX/g.maxY, EventResize from termbox falls into handleEvent's default branch (return nil) and the SetManager-time synthetic EventResize push is unrelated to live terminal resizes. No live resize path bypasses layout(). Confirmed no infinite-repaint risk.",
+    "Queue growth checked: gocui's Update spawns a goroutine to send on the buffered (20) userEvents channel; MainLoop drains both tbEvents and userEvents every iteration via consumeevents before flush(). A rapid sequence of resizes each produces at most one repaint request per flush, and since paused mode still receives periodic discarded stat frames that themselves call repaintStored via statLoop's drain-and-discard path, the detector's own request cannot accumulate unboundedly. No deadlock or flood found; there is also no separate 'key-handler goroutine' in this gocui version — MainLoop is single-goroutine and sequential, so no concurrency hazard there either.",
+    "Ownership/concurrency checked: resizeDetector's lastX/lastY live in layout's closure and are read/written only inside the func(_ *gocui.Gui) error body, which only ever executes on the gocui MainLoop goroutine (via flush()). The only cross-goroutine read is app.config.paused.Load() (atomic.Bool), exactly as expected. frameStore access continues to go exclusively through repaintStored/repaintStoredFrame, unchanged by this diff.",
+    "Crash surface checked: the maxX == 0 || maxY == 0 guard (top/ui.go, early in layout) still executes and returns fmt.Errorf(\"\") before resize.observe is ever called (detector call sits at top/ui.go:334, guard at top/ui.go:~148-150), so a (0,0) terminal after a pager/editor/psql return is neither recorded by the detector nor used to trigger a repaint. repaintStoredFrame (top/pause.go) returns nil unconditionally regardless of render/latch outcome, so this feature adds no new path that can escape an error out of layout() or out of the g.Update closure and tear down MainLoop.",
+    "No hardcoded secrets, credentials, or sensitive data logged anywhere in the diff; cmdline messages emitted (repaint failure text, verbose-too-short hint) carry no PII or credentials."
+  ]
+}

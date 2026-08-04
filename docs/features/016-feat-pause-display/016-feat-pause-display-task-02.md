@@ -1,5 +1,5 @@
 ---
-status: planned                    # planned -> in_progress -> done
+status: done                       # planned -> in_progress -> done
 depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
@@ -91,18 +91,18 @@ Extending `top/ui_test.go` (the file exists — extend it, never overwrite):
 
 ## Acceptance Criteria
 
-- [ ] `config` has a `paused atomic.Bool` field with a comment naming its writer and reader goroutines.
-- [ ] `view.View` gains **no** field; nothing outside `top/` is modified.
-- [ ] `Space` is bound via `gocui.KeySpace` in the `"sysstat"` context only — a space typed into a
+- [x] `config` has a `paused atomic.Bool` field with a comment naming its writer and reader goroutines.
+- [x] `view.View` gains **no** field; nothing outside `top/` is modified.
+- [x] `Space` is bound via `gocui.KeySpace` in the `"sysstat"` context only — a space typed into a
       dialog or a menu is still a plain space.
-- [ ] Pressing the bound key flips the flag and produces **exactly one** cmdline write, with no text
+- [x] Pressing the bound key flips the flag and produces **exactly one** cmdline write, with no text
       message.
-- [ ] `[PAUSED]` renders only while paused, always to the left of `[F:...]`, always with exactly one
+- [x] `[PAUSED]` renders only while paused, always to the left of `[F:...]`, always with exactly one
       variant.
-- [ ] `composeCmdline` and `renderCmdlineTokens` are unchanged.
-- [ ] `top/pause.go` and `top/pause_test.go` are created; `top/ui_test.go` is extended and all its
+- [x] `composeCmdline` and `renderCmdlineTokens` are unchanged.
+- [x] `top/pause.go` and `top/pause_test.go` are created; `top/ui_test.go` is extended and all its
       existing tests still pass unmodified in substance.
-- [ ] `go test ./top/ -run '[Pp]ause|[Cc]mdline'` passes; `make lint` clean (in particular `go vet`
+- [x] `go test ./top/ -run '[Pp]ause|[Cc]mdline'` passes; `make lint` clean (in particular `go vet`
       copylocks — see Edge cases). The full `./top/...` run additionally needs the fixture clusters
       on ports 21914-21919 — without them `top/report_test.go` panics on a nil connection, which is
       an environment condition rather than a failure of this task.
@@ -221,6 +221,6 @@ are their contract, so do not rename them opportunistically later.
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [016-feat-pause-display-decisions.md](docs/features/016-feat-pause-display/016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [x] Записать краткий отчёт в [016-feat-pause-display-decisions.md](docs/features/016-feat-pause-display/016-feat-pause-display-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

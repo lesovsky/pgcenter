@@ -365,10 +365,10 @@ normal rows always did; and dialog prompts line up with their input field in bot
   and verbose mode. An overlong prompt is cut with an ellipsis rather than covered by the field.
 
 **Limitations:**
-- Pause on `Space` was planned for this batch and **split into its own feature** ([016] on the
-  0.12.0 roadmap): sorting runs in the collector goroutine, so a paused screen cannot re-sort, and
-  returning from the pager rebuilds the UI with no frame to repaint. Both need product decisions of
-  their own.
+- Pause on `Space` was planned for this batch and **split into its own feature** — delivered as
+  [016-feat-pause-display]. Both blockers named here were resolved there: sorting lifts the pause
+  instead of re-sorting a frozen frame, and the frame store survives the UI rebuild so the pager
+  returns to the frozen frame rather than a blank screen.
 - The auto-scroll fires only when the sort column changes. Entering a screen whose default sort
   column sits off-screen leaves it there until the first arrow press — reachable only on terminals
   narrower than about 80 columns.
@@ -382,3 +382,37 @@ normal rows always did; and dialog prompts line up with their input field in bot
 limitation and reuses its column-window function. [010-feat-overview-dashboard] — fixes two defects
 in the verbose panels it introduced. The command-line composer added here is the foundation the
 deferred pause feature builds on.
+
+---
+
+### [016-feat-pause-display] Pause the Display on `Space`
+
+**What it does:** `Space` freezes the whole picture — the stats table, both top panels and the header
+clock — so a row can be read without it scrolling away, while collection keeps running underneath.
+`[PAUSED]` appears in the command line. The frozen frame is the moment `Space` was pressed, together
+with the timestamp of that moment, and it holds indefinitely.
+
+**Key scenarios:**
+- Freeze a busy `activity` screen to read a long query text or copy a pid, then resume with `Space`.
+- Work with the frozen frame: filter (`/`), clear filters (`\`), scroll columns (`[` / `]`) and
+  change column width (`↑` / `↓`) all keep working — this is what separates it from `tmux copy-mode`.
+- Resize the terminal or step into the pager or config editor and come back: the same frozen frame
+  is redrawn for the new width, marker included.
+- Actions that need fresh data — sorting, screen switch, `,`, `I`, `A`, `v`, `B`/`N`/`F`/`L` — resume
+  the display on their own; the built-in help (`h`) lists them.
+- Open the log panel (`L`) before pausing: it stops taking new lines for as long as the pause holds.
+
+**Limitations:**
+- Pressing `Space` before the first frame arrives leaves the screen empty with the marker shown —
+  there is nothing to freeze yet. Returning from a pager in that state also stays empty.
+- A collection error or a lost connection during the pause is not shown until the pause is lifted.
+- An action that changed nothing (a key that hit its own early return, e.g. `,` on a screen without
+  system tables) does not resume the display.
+- The command line keeps its previous text until something writes to it again, so right after a
+  terminal resize the marker line can appear clipped until the next update.
+- No new screens, columns or SQL. `record`/`report` archives are unaffected.
+
+**Touches:** [015-feat-tui-papercuts] — resolves the pause limitation it recorded and adds the second
+token (`[PAUSED]`) to the command-line composer it introduced, left of the filter indicator.
+[009-feat-horizontal-scroll] — its column scroll and width keys are the ones that keep working on a
+frozen frame.

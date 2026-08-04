@@ -59,6 +59,35 @@ When the row identity is **composite** (more than one column), emit a synthetic 
 
 **Caveat learned in manual QA:** a window function that admits a scrollable column only when it fits *whole* silently drops a deliberately wide trailing column (e.g. `query`). Allow the last column to render *partially* (start-in-budget), and reserve marker-glyph width in **both** the forward and backward walk, or the last column becomes unreachable at the right edge. This class of bug is invisible to unit tests written against the original (whole-column) semantics — a litmus test that fails on the wrong semantics is the guard.
 
+## Extract the decision out of the unreachable closure (016-feat-pause-display)
+
+The `io.Writer` pattern above covers *rendering*. This one covers *decisions* made inside a `g.Update`
+closure — code a test can never enter, because its failure site is `g.View(...)` and neither
+`*gocui.Gui` nor `*gocui.View` can be built outside the gocui package (the repo already records this
+on `Test_printCmdlineNilGui`, `top/ui_test.go`).
+
+Give each such decision its own callable unit and have the closure do nothing but call it:
+
+- **The repaint failure latch** is a method on the store taking the repaint outcome and returning
+  whether to emit a message. Its fail → fail → success → fail transition behaviour is driven directly
+  by a test; the closure keeps one call.
+- **"Which path am I"** is a value (`renderParams`, built by one constructor per path) rather than a
+  branch inside the closure, so "the repaint path never publishes" is checkable by calling the two
+  constructors and the publish helper.
+- **The logtail source choice** is `selectLogtail(params, read)`, where the live read is passed as a
+  closure. A test asserts non-invocation with a `read` that calls `t.Fatal`.
+
+**Why this is a rule and not a preference.** Two review rounds in 016 produced the same defect class
+twice: a test that looks like proof and cannot fail. One asserted on a local `config` that the
+handler under test never receives; the other drove a function whose signature could not reach the file
+it claimed to prove untouched. Both passed. Both were caught only by **mutating the production code**
+and observing that the suite stayed green — inverting `if !p.fromFile`, deleting a bounds guard,
+hoisting a lift above its early return. Make that the acceptance criterion when a test guards an
+invariant: name the mutation the test must fail on, run it, and see red before believing the green.
+
+When the property genuinely cannot be reached without a forbidden seam, say so in the test comment
+and defer it to the stand run — do not dress inspection up as a red test.
+
 ## Verbose display-mode toggle (010-feat-overview-dashboard)
 
 When adding an on/off *display mode* that layers extra rows over the current screen (not a new screen),

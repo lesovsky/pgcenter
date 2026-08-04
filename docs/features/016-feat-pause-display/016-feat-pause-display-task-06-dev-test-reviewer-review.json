@@ -1,0 +1,48 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "All three TDD Anchor tests exist and match their names/claims. Litmus-tested by mutation (not just reasoning): dropping 'v' from the lifting list fails Test_helpTemplate_pauseLiftingActions, shifting the entry one column left fails Test_helpTemplate_pauseEntry's alignment check, and a doubled '%%' typo fails Test_helpTemplate_formatVerbs's strings.Count check. The delimited substrings (' I,', ' A,', ' v,', ' L)') scoped to the continuation line are sound, not brittle. The alignment check computes its expected column from the sibling '[,]' row rather than a magic number, and was verified to actually pin alignment (fails on a 1-column shift). Two findings, both minor: (1) the first line's free-text clause 'actions that need fresh data' is never asserted anywhere, only the marker prefix and the enumerated continuation line are; (2) Test_helpTemplate_formatVerbs's stated rationale overstates its unique value — go vet's printf check (which go test runs automatically) already catches ordinary stray-% mutations at build time before this test's own assertions run; the test's real unique contribution is narrower (catches %% escaping mistakes that vet accepts). Neither finding is a defect in test correctness; both are precision/documentation gaps worth a small follow-up.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/help_test.go:44-64 (Test_helpTemplate_pauseEntry)",
+      "issue": "The entry line is located via the marker \"'Space' pause/resume display\" and only that prefix/marker plus placement/alignment are asserted. The trailing clause on the same line — \"actions that need fresh data\" — is never asserted by any test (the continuation-line test only checks the enumerated actions and the \"resume it.\" suffix). A wording drift on that clause (e.g. changed to \"actions that require fresh data\" or \"actions needing live data\") would pass all three existing tests silently, even though the task requires the two-line entry verbatim/character-for-character.",
+      "recommendation": "Add one more assertion in Test_helpTemplate_pauseEntry pinning the full first line, e.g. assert.Equal(t, \"    Space             'Space' pause/resume display; actions that need fresh data\", entry) — or at minimum assert.Contains(t, entry, \"actions that need fresh data\") — so the whole first line is pinned the same way the continuation line's suffix already is.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/help_test.go:107-116 (Test_helpTemplate_formatVerbs)",
+      "issue": "Commit message frames this test as the guard against a 'stray %' typo rendering as '%!x(MISSING)' on the user's screen. Verified empirically with three independent mutations (a bare stray '%', '100%,', and an extra '%s') that all three fail at the `go vet` printf check — which `go test` runs automatically as part of the build — before this test's own runtime assertions ever execute. So for the exact defect class described in the rationale, `go vet` is the actual first line of defense, and it fails harder (build failure) than this test would. The test's genuine unique value is narrower: a doubled '%%' mistake is valid escaping to `go vet` (confirmed: `go vet` exits 0 on it) but is caught by this test's strings.Count(helpTemplate, \"%\") assertion (confirmed: count 3 vs expected 1). The test is not vacuous, but the stated rationale overstates what it uniquely contributes versus what the toolchain already provides.",
+      "recommendation": "No test-code change required. Tighten the doc-comment above Test_helpTemplate_formatVerbs (and the task's TDD Anchor description, if revisited) to say something like: 'go vet already rejects malformed/mismatched printf verbs at build time; this test additionally guards against %% escaping mistakes, which are valid to vet but wrong here.' This keeps the test's real, narrower value legible to future readers instead of implying it is the primary defense against stray-% typos.",
+      "litmusTestFailed": false
+    }
+  ],
+  "tech_debt": {
+    "found": true,
+    "items": [
+      {
+        "description": "Prior to this task, no line of helpTemplate (top/help.go:10-48) had any test coverage; this task adds coverage only for the two new Space-entry lines. The remaining ~35 lines of the help block (mode keys, activity actions, other actions, etc.) remain completely untested — a typo or misalignment introduced there later would go undetected, exactly the risk this task's own commit message describes for the constant as a whole.",
+        "recommendation": "Not in scope for task 06 (which is deliberately limited to the Space entry). Worth a small follow-up task/backlog item if the help screen is touched again: extend help_test.go with a light structural check (e.g. every 'general actions:' row has a description starting at the same column) rather than asserting each row's literal text.",
+        "scope": "pre-existing, not introduced by this commit"
+      }
+    ]
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

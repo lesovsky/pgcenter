@@ -1,0 +1,47 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "All five TDD-anchor tests exist and test what they claim. Verified by direct experiment: (1) dialog_test.go diff is 206/0 (pure addition, nine pre-existing tests untouched and still pass); dialog.go's single deletion is exactly the old setFilter call replaced by applyFilter — matches the implementer's claim. (2) Mutated applyFilter to lift the pause instead of repainting: Test_applyFilter_repaintsWhenPaused and Test_applyFilter_repaintsOnUnchangedFilter both fail as expected, and no other test in the package reacts — the central property is genuinely pinned by these two tests, not just plausible. (3) The sweep lower bound (prefixLen + minDialogInputWidth + 1) is tight, not loose: probing maxX == bound-1 with the actual dialogPromptFit/dialogInputX0/composeCmdline code shows the invariant legitimately breaks (the prefix alone already exceeds the budget), for both the {paused} and {paused+filter} prefixes. (4) Test_dialogPromptShorterUnderPause derives the expected 9-column gap from the rendered marker plus separator, never a literal, and requires both prompts to actually be truncated first (via require.True on the ellipsis suffix) so the comparison isn't vacuous. (5) The two-row repaintsWhenPaused table varying only paused/live with a single valid pattern matches the TDD anchor's own wording verbatim (\"a valid pattern lands in the map... in both rows\") — this is not a deviation, and the guard being pause-only (independent of setFilter's outcome) means a live+invalid-answer combination would not exercise any code path the existing tests miss. (6) The invalid-regexp literal message reuses the exact convention already established in Test_setFilter (top/config_view_test.go:421); it isn't a new brittleness introduced by this task, it's consistency with precedent. go vet and gofmt are clean on both files; make lint itself could not be run (golangci-lint binary unavailable in this environment) — environmental, not a defect. All 14 tests (9 pre-existing + 5 new) pass under `-race -count=5`.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/dialog_test.go:412 (Test_applyFilter_repaintsOnUnchangedFilter)",
+      "issue": "The invalid-regexp and empty-answer edge cases are only exercised while paused. There is no explicit assertion that these same answers produce zero repaints in live mode, unlike the valid-pattern case which is cross-checked in both states by Test_applyFilter_repaintsWhenPaused.",
+      "recommendation": "Optional hardening, not a real gap: applyFilter's guard is `if config.paused.Load() { repaint() }`, entirely independent of setFilter's return value or map mutation, so a live+invalid-answer row would exercise no branch the current tests miss. If you want the symmetry documented anyway, add `paused bool` to the two Test_applyFilter_repaintsOnUnchangedFilter subtests and assert `wantRepaints` accordingly — but this is a nice-to-have, not required for this task's acceptance criteria.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/dialog_test.go:421 (Test_applyFilter_repaintsOnUnchangedFilter/invalid_regexp)",
+      "issue": "The invalid-regexp case asserts the exact literal string \"Filters: error parsing regexp: missing closing ): `(`\", which is Go's regexp package's own error text rather than something the codebase controls. A stdlib error-message wording change would break this assertion with no behavioral regression.",
+      "recommendation": "Not a new problem introduced by this task — it matches the pre-existing convention at top/config_view_test.go:421 (Test_setFilter's own \"invalid-regexp\" case), so it is consistency with precedent rather than newly added brittleness. No action needed for this task; if the team ever revisits Test_setFilter's style, consider asserting only `strings.HasPrefix(message, \"Filters: error parsing regexp\")` in both places at once.",
+      "litmusTestFailed": false,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 5,
+      "passed": 5,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 14,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  },
+  "techDebt": [
+    {
+      "location": "top/dialog_test.go:421 and top/config_view_test.go:421",
+      "note": "Two now-parallel tests assert Go stdlib regexp.Compile error text verbatim. Low risk (this error format has been stable for years) but worth a single shared helper or prefix-only assertion if either is ever touched again.",
+      "severity": "minor"
+    }
+  ]
+}
