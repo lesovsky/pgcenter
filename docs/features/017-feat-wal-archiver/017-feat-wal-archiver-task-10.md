@@ -360,7 +360,7 @@ per-feature copy, mirror it as `017-feat-wal-archiver-qa-report.json` in the fea
   (the FPI piece is detachable), not a silent feature FAIL — report it as such with the observed
   catalog contents.
 - **Three accepted behaviours must not be filed as defects.** Decision 11: on a cluster whose
-  `archive_status` directory is missing, the verbose panel now shows `0 B` instead of `n/a`.
+  `archive_status` directory is missing, the verbose panel now shows a bare `0` instead of `n/a`.
   Decision 12: `report -W a` over an N-tick recording prints N−1 rows — the first sample is dropped by
   the shared report path, as it is for every `DiffIntvl{0,0}` screen. Decision 15: `report -W a` over
   an archive with no archiver entries prints no rows **and no header**, exiting 0. All three are
@@ -414,3 +414,17 @@ accepted by the project owner at feature acceptance.
       `docs/tech-debt.md` belongs to `/done`, which owns that register.
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось
+
+
+## Correction applied during task validation (2026-08-06)
+
+**The verbose backlog renders `0`, not `0 B`.** Both specs and an earlier draft of this task quoted
+`0 B` as the value shown when the `archive_status` directory is missing. The panel formats that field
+through the project's size formatter, whose zero case returns a bare `0`. A QA gate checking for the
+string `0 B` would report a false FAIL on correct behaviour.
+
+**The stand's TTL has lapsed.** The stand named in the specs (`pgpro@10.128.31.96`) was issued on
+2026-08-05 with a 24-hour TTL, so it is gone by the time this task runs. Do NOT quietly skip the manual
+half: ask the project owner for a fresh stand at the start of this task, and record in the QA report
+which scenarios were executed and which were blocked waiting for one. The automated half — the full
+suite inside the CI image, lint and vuln — does not depend on the stand and runs regardless.

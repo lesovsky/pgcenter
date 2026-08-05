@@ -50,8 +50,9 @@ together. The substance is in the tests.
 ## What to do
 
 1. Change the `showWAL` field on the `options` struct (`cmd/report/report.go:25`) from `bool` to
-   `string`, and update its comment to name both screens. `gofmt` will re-align the comment column of
-   the whole struct — that realignment is expected, not scope creep.
+   `string`, and update its comment to name both screens. The struct already holds `string` fields
+   (`showDatabases`, `showStatIO`), so the comment column is already sized for `string` — expect a
+   one-line diff, no gofmt realignment.
 2. Change the flag definition (`cmd/report/report.go:70`) from `BoolVarP` to `StringVarP` with an
    empty default and the description **verbatim**:
    `show pg_stat_wal / pg_stat_archiver report (w - wal, a - archiver)`.
@@ -85,14 +86,20 @@ table-driven, matching the file's existing style.
   and by name: **other flags' letters** `c` and `t` (valid for `-J`), `g` (valid for `-D` and `-X`),
   the case-variant `W`, the spelled-out `wal` and `archiver`, an arbitrary `x`, and the literal
   `-f` — the value pflag actually assigns on the legacy `-W -f dump.tar` invocation. Each row carries
-  a comment saying why that value is dangerous, not just that it is invalid.
+  a comment saying why that value is dangerous, not just that it is invalid. In the same function,
+  after the table, add one direct assertion that `options{showWAL: "-f"}.validate()` returns an error
+  whose message is exactly `report type is not specified, quit` — this is where the contract literal
+  lives, since `Test_options_validate`'s table has no field for a message.
 - `cmd/report/report_test.go::Test_selectReport_WALPrecedence` — `options{showActivity: true, showWAL: "a"}`
   yields `"activity"`. Pins that the new arm did not move up the first-match-wins chain and change
   flag precedence.
 - `cmd/report/report_test.go::Test_options_validate` — existing table, one new invalid row:
-  `options{showWAL: "-f"}` → error. Additionally assert the message is exactly
-  `report type is not specified, quit`, because that literal is what the release notes quote for the
-  legacy `-W -f dump.tar` shape.
+  `{valid: false, opts: options{showWAL: "-f"}}` → error. The table's fields are `valid`, `opts`,
+  `want` — there is **no** field for an expected message, and the loop only does `assert.Error`. Do
+  not restructure the table to carry one; the exact literal
+  `report type is not specified, quit` is pinned in the dedicated
+  `Test_selectReport_WALWhitelistIsClosed` / a small standalone assertion instead, since that literal
+  is what the release notes quote for the legacy `-W -f dump.tar` shape.
 - `cmd/report/report_test.go::Test_walFlagDefinition` — read-only assertions via
   `CommandDefinition.Flags().Lookup("wal")`: `Value.Type() == "string"`, `Shorthand == "W"`,
   `DefValue == ""`, and `Usage` equal to the verbatim description. This is what makes the
@@ -113,11 +120,18 @@ table-driven, matching the file's existing style.
 - [ ] `selectReport` maps `w` → `"wal"` and `a` → `"archiver"`, and **nothing else** — no `default`
       arm, no normalisation (no lowercasing, no trimming, no prefix matching).
 - [ ] Every unmapped value yields `""` → `validate()` returns `report type is not specified, quit`.
-      Covered explicitly for `c`, `t`, `g`, `W`, `wal`, `archiver`, `x` and `-f`.
+      Covered explicitly for `c`, `t`, `g`, `W`, `wal`, `archiver`, `x` and `-f` in
+      `Test_selectReport_WALWhitelistIsClosed`, which is also where the exact error message is
+      asserted (`Test_options_validate`'s table only records `valid: false`).
 - [ ] Flag precedence is unchanged: the `showWAL` arm sits between `showFunctions` and `showBgwriter`,
       and `-A` still beats `-W`.
-- [ ] Exactly the four known `showWAL` sites changed; `grep -rn showWAL --include=*.go .` returns
-      four hits and no more.
+- [ ] All four **pre-existing** `showWAL` sites are updated and none was missed — named, not counted:
+      the struct field (`cmd/report/report.go:25`), the flag definition (`:70`), the `selectReport`
+      arm (`:151`), and the `showWAL: true` row in `Test_selectReport`
+      (`cmd/report/report_test.go:46`). No fifth pre-existing site exists — confirm with
+      `grep -rn showWAL --include=*.go .` that no file **outside `cmd/report/`** mentions it. The
+      total hit count **grows** after this task (the guarded outer case, the inner switch, and the new
+      tests all reference `showWAL`); a rising count is correct and is never a reason to remove a test.
 - [ ] **Mutation 1 — the fallback.** Adding `default: return "wal"` to the inner switch (or making the
       outer arm `return "wal"` unconditionally) turns `Test_selectReport_WALWhitelistIsClosed` **red**.
       Run it, observe the failure, revert. A green suite under this mutation means the whitelist is
@@ -157,15 +171,19 @@ table-driven, matching the file's existing style.
 - Apply Mutation 1 (`default: return "wal"` inside the inner switch), run `go test ./cmd/report/...`,
   confirm **FAIL**, revert. Repeat for Mutations 2 and 3. This step is the actual acceptance gate for
   Decision 17 — a green run under a mutation means the test is decorative.
-- `grep -rn "showWAL" --include=*.go .` — exactly four hits (three in `cmd/report/report.go`, one in
-  `cmd/report/report_test.go`; the test file will have more rows referencing it — count *sites*, and
-  confirm no production file outside `cmd/report/report.go` mentions it).
+- `grep -rn "showWAL" --include=*.go .` — used as a **containment** check, not a count check: every
+  hit must be in `cmd/report/report.go` or `cmd/report/report_test.go`, and no production file outside
+  `cmd/report/report.go` may mention it. The number of hits legitimately grows (new switch lines, new
+  test rows) — do not "restore" it to four.
 - `go build ./...` — the whole tree still compiles (nothing else consumes `options`).
 - `gofmt -l cmd/report` — empty output.
 - `make lint` — clean.
-- Sanity by hand: `go run . report -W 2>&1` prints `flag needs an argument: 'W' in -W`;
-  `go run . report -W -f /nonexistent.tar 2>&1` prints `report type is not specified, quit` — the
-  error must come from the flag mapping, **before** any attempt to open the file.
+- Sanity by hand — note the package path: the repository root contains **no** Go files, the `main`
+  package is `./cmd` (`cmd/pgcenter.go`), so `go run .` fails with `no Go files in …`.
+  Use `go run ./cmd report -W 2>&1` → prints `flag needs an argument: 'W' in -W`;
+  `go run ./cmd report -W -f /nonexistent.tar 2>&1` → prints `report type is not specified, quit` —
+  the error must come from the flag mapping, **before** any attempt to open the file. (Verified
+  today: `go run ./cmd report …` reaches `report.RunMain`.)
 
 ## Details
 
@@ -173,9 +191,10 @@ table-driven, matching the file's existing style.
 
 - `cmd/report/report.go` — three edits, no more:
   1. `:25` — `showWAL bool` → `showWAL string`, comment becomes
-     `// Show stats from pg_stat_wal / pg_stat_archiver`. The field currently sits in the `bool`
-     column block of the struct; after the change `gofmt` re-aligns the comment column across the
-     whole struct and the diff will carry whitespace-only lines. Let it — do not hand-align.
+     `// Show stats from pg_stat_wal / pg_stat_archiver`. The struct's comment column is already
+     sized for `string` (`showDatabases string`, `showStatIO string` sit in the same block), so this
+     is a **one-line** diff with no whitespace churn on neighbouring lines. If `gofmt` does move other
+     lines, something else was edited — check the diff.
   2. `:70` — `BoolVarP(&opts.showWAL, "wal", "W", false, "show pg_stat_wal report")` →
      `StringVarP(&opts.showWAL, "wal", "W", "", "show pg_stat_wal / pg_stat_archiver report (w - wal, a - archiver)")`.
      Keep the line in place among the other flag registrations; the ordering there is cosmetic but

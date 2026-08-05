@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["01"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 2                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: "bash — go test ./internal/query/... ./internal/stat/...; the aggregate returns a number under a role holding only pg_monitor"
+verify: "bash — go test ./internal/query/... ./internal/stat/... inside the CI image (these packages need live clusters; on a bare host they panic, not skip); the aggregate returns a number under a role holding only pg_monitor"
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -64,7 +64,8 @@ ADR log in this task.** Amending it happens at feature finalization.
    `pg_ls_dir` query. A test that only runs as the fixture superuser proves nothing here — it is
    precisely the test that passes today with the broken query.
 2. Change `OverviewArchivingBacklog`'s `FROM` clause to `pg_ls_archive_statusdir()`, dropping the
-   `AS name` relation alias. The `SELECT` list stays character-identical.
+   `AS name` relation alias — it is redundant on a function that already returns a named `name` OUT
+   column, not a syntax error (see Edge cases). The `SELECT` list stays character-identical.
 3. Rewrite the doc comment above the constant: state the real privilege requirement
    (`pg_ls_archive_statusdir()` — superuser or `pg_monitor`), keep the own-`QueryRow` requirement and
    its real reason (the field must degrade to `n/a` without aborting the whole overview sample), and
@@ -84,16 +85,18 @@ ADR log in this task.** Amending it happens at feature finalization.
 Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.
 
 - `internal/query/overview_test.go::Test_ArchivingBacklogQuery_PgMonitorRole` — for each version in
-  `overviewVersions` (PG 14–19, `t.Skipf` on unavailable clusters): create a `NOLOGIN`, non-superuser
-  role, `GRANT pg_monitor` to it, `SET ROLE` to it, **assert the session is actually restricted**
+  `overviewVersions` (PG 14–19, `t.Skipf` on unavailable clusters): set up the `pg_monitor`-only role
+  **through the shared helper in `internal/postgres/testing.go`** (Decision 19 — no local helper, no
+  inline `CREATE ROLE`), `SET ROLE` to it, **assert the session is actually restricted**
   (`current_user` equals the role name and `rolsuper` is false for it), then scan
   `OverviewArchivingBacklog` into an `int64` — `assert.NoError` and `>= 0`. `RESET ROLE` in a
   `defer`. **RED today**: fails with `permission denied for function pg_ls_dir`.
-- `internal/query/overview_test.go::Test_ArchivingBacklogQuery_NoPrivilegeRole` — same shape, but the
-  role is granted nothing: the query must return a permission error (`42501`). Proves the new
-  function is not a privilege downgrade — it is not readable by an unprivileged role.
-- `internal/stat/postgres_test.go::Test_collectOverviewStat_PgMonitorRole` — under the same
-  `pg_monitor`-only role on the default test cluster, `collectOverviewStat` returns
+- `internal/query/overview_test.go::Test_ArchivingBacklogQuery_NoPrivilegeRole` — same shape, using the
+  shared helper's **deny** role (granted nothing): the query must return a permission error (`42501`).
+  Proves the new function is not a privilege downgrade — it is not readable by an unprivileged role.
+- `internal/stat/postgres_test.go::Test_collectOverviewStat_PgMonitorRole` — the same shared helper is
+  imported from `internal/stat` too (it lives in `internal/postgres` precisely so both packages can
+  use it); under the `pg_monitor`-only role on the default test cluster, `collectOverviewStat` returns
   `ArchivingBacklogValid == true` with `ArchivingBacklog >= 0`, and the rest of the sample stays
   populated (`Valid`, `DatabasesCount >= 1`). **RED today**: `ArchivingBacklogValid` is false because
   the aggregate 42501s. This is the end-to-end proof that the panel now shows a number for the role
@@ -115,14 +118,19 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
 - [ ] **Mutation:** delete the `SET ROLE` statement from `Test_ArchivingBacklogQuery_PgMonitorRole`
       (leaving the session as the fixture superuser) → the test must go RED on its own
       `current_user` / `rolsuper` guard. A test that would still pass here is a vacuous gate.
-- [ ] **Mutation:** remove the `GRANT pg_monitor` from the role setup →
-      `Test_ArchivingBacklogQuery_PgMonitorRole` must go RED with a permission error.
-- [ ] **Mutation:** add `GRANT pg_monitor` to the deny role in
-      `Test_ArchivingBacklogQuery_NoPrivilegeRole` → that test must go RED (it asserts a permission
-      error).
-- [ ] Role creation is idempotent (safe to re-run against a cluster where the role already exists),
-      the roles are `NOLOGIN` and non-superuser, and every test that calls `SET ROLE` issues
-      `RESET ROLE` via `defer` so no assumed role leaks into later assertions (Decision 18).
+- [ ] **Mutation (role-state-sensitive — read the note below):** remove the `GRANT pg_monitor` from
+      the role setup → `Test_ArchivingBacklogQuery_PgMonitorRole` must go RED with a permission error.
+      Counts only when run against a cluster where the role does not already hold `pg_monitor`.
+- [ ] **Mutation (role-state-sensitive — read the note below, and it poisons the cluster):** add
+      `GRANT pg_monitor` to the deny role in `Test_ArchivingBacklogQuery_NoPrivilegeRole` → that test
+      must go RED (it asserts a permission error). Counts only on a cluster where the deny role does
+      not already hold the grant, and the cluster must be discarded afterwards.
+- [ ] All role setup goes through the shared helper in `internal/postgres/testing.go` (Decision 19):
+      this task adds **no** role helper of its own and no inline `CREATE ROLE`/`GRANT` SQL in either
+      package, and `internal/postgres/testing.go` is not modified here. Role creation is therefore
+      idempotent (safe to re-run against a cluster where the role already exists) and the roles are
+      `NOLOGIN` and non-superuser; every test that calls `SET ROLE` issues `RESET ROLE` via `defer`
+      so no assumed role leaks into later assertions (Decision 18).
 - [ ] `Test_ArchivingBacklogQuery_Degrades` and `Test_collectOverviewStat_Degradation` pass with their
       assertions unmodified.
 - [ ] All four stale comments are corrected: no comment in the tree still claims `pg_ls_dir` requires
@@ -134,13 +142,28 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
       (`pg_ls_archive_statusdir()` is `missing_ok=true`). This is accepted by Decision 11 — it must
       **not** be "fixed", worked around, or guarded against in this task.
 - [ ] `go test ./internal/query/... ./internal/stat/...` passes inside the CI image; `make lint` and
-      `make vuln` are clean on the host.
+      `make vuln` are clean on the host. (Those two packages are not host-runnable — on a machine
+      without the fixture clusters `./internal/stat/...` panics rather than skipping.)
+
+> **Note on the two role mutations — they are not undone by reverting the code.** Roles and grants are
+> **cluster-global** catalog state, and the role setup is idempotent with **no** `REVOKE` and no
+> `DROP ROLE` (Decision 18). So reverting the source leaves the mutation's effect behind:
+> — deleting the `GRANT pg_monitor` line stays **GREEN** if an earlier run in the same container
+> already granted `pg_monitor` to that role, which is a false pass, not evidence;
+> — granting `pg_monitor` to the deny role **poisons the cluster** — after you revert the code, the
+> deny role still holds `pg_monitor`, and `Test_ArchivingBacklogQuery_NoPrivilegeRole` will keep
+> failing on a tree that is correct.
+> Therefore a role mutation counts as evidence **only** when it runs against clean role state: either
+> `DROP ROLE` the affected role first (these roles own nothing, so no `REASSIGN`/`DROP OWNED` is
+> needed), or throw the containers away and start the CI image fresh. Do the two role mutations
+> **last**, after the code and comment mutations, and rebuild the containers before the final
+> full-suite run.
 
 ## Context Files
 
 **Feature artifacts:**
 - [017-feat-wal-archiver.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md) — user-spec
-- [017-feat-wal-archiver-tech-spec.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-tech-spec.md) — tech-spec (Task 3 in Wave 1; Decisions 8, 11, 18)
+- [017-feat-wal-archiver-tech-spec.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-tech-spec.md) — tech-spec (Task 3 in **Wave 2**, depends on Task 1; Decisions 8, 11, 18, 19)
 - [017-feat-wal-archiver-code-research.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-code-research.md) — §10.A has the exact current SQL, the live ACL measurement, the consumer, and the affected tests; §8 has the CI-image command
 - [017-feat-wal-archiver-decisions.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md) — decisions log
 
@@ -155,12 +178,21 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
 - [internal/stat/postgres.go](internal/stat/postgres.go) — `collectOverviewStat` at `:288-295`: comment only, code unchanged
 - [internal/stat/postgres_test.go](internal/stat/postgres_test.go) — add the collect-level role test; correct the comment at `:224`
 - [docs/decisions-log.md](docs/decisions-log.md) — ADR [010] "Archiving backlog via `count(.ready) × wal_segment_size`" at `:654-666`; read-only in this task
-- [internal/postgres/testing.go](internal/postgres/testing.go) — `NewTestConnect()` (PG 17) and `NewTestConnectVersion()` port map
+- [internal/postgres/testing.go](internal/postgres/testing.go) — read-only here: `NewTestConnect()`
+  (PG 17), the `NewTestConnectVersion()` port map, **and the shared role-creation / `SET ROLE` helper
+  added by Task 1** (Decision 19). Call that helper; do not edit this file and do not copy it
 
 ## Verification Steps
 
-- Before implementing: run the three new tests and confirm they are RED for the right reason —
-  `permission denied for function pg_ls_dir` (not a typo, not a connection failure).
+**Everything below runs inside the CI image.** `internal/query` and `internal/stat` tests need live
+clusters, and on a bare host they do **not** skip — `go test ./internal/stat/...` **panics** with a nil
+pointer in `internal/postgres/postgres.go` via `GetPostgresProperties`. Never present a bare-host
+`go test ./internal/stat/...` as a gate. The only host-runnable form is a `-run` scope narrowed to
+tests that touch no cluster; `make lint` and `make vuln` are the genuinely host-side checks.
+
+- Before implementing: run the three new tests **in the CI image** (same `docker run` wrapper as below,
+  with `-run 'PgMonitorRole|NoPrivilegeRole'`) and confirm they are RED for the right reason —
+  `permission denied for function pg_ls_dir` (not a typo, not a connection failure, not a panic).
 - After implementing, in the CI image (PG 14–19 fixtures; the clusters do not exist on the host):
 
   ```bash
@@ -177,7 +209,10 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
   `Test_collectOverviewStat_Degradation` with unmodified assertions.
 - Re-run the same command a second time without recreating the containers: the role-creating tests
   must still pass (idempotency).
-- Run each mutation from Acceptance Criteria, confirm the named test goes RED, revert.
+- Run each mutation from Acceptance Criteria, confirm the named test goes RED, revert. Code and
+  comment mutations first; the two **role** mutations last, each on clean role state (dropped role or
+  fresh containers), then rebuild the containers — see the note in Acceptance Criteria for why a
+  reverted role mutation does not restore the cluster.
 - Grep the tree for the stale claims — no hit may remain:
   `grep -rn "pg_ls_dir" internal/` and `grep -rn "has pg_monitor" internal/`.
 - `make lint` and `make vuln` on the host.
@@ -210,24 +245,30 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
 - `internal/stat/postgres_test.go` — `Test_collectOverviewStat_Degradation` at `:206-236` keeps its
   assertions; the comment at `:224` is corrected. One new test is added.
 
-**Dependencies:** none — `depends_on: []`. No new Go packages. Wave 1, alongside Tasks 1, 2 and 4.
+**Dependencies:** `depends_on: ["01"]` — Wave 2. No new Go packages. The dependency is the shared
+privilege-test helper in `internal/postgres/testing.go`, which Task 1 adds (Decision 19); this task
+cannot start until that helper is in the tree.
 
-**Coordination risk (read before writing test helpers):** Task 1 creates
-`internal/query/archiver_test.go` in the **same Go package** (`query`) and also needs `SET ROLE`
-plumbing. Two package-level helpers with the same name will not compile. If a suitable helper already
-exists in the package when you start, reuse it; otherwise give yours an overview-specific name. The
-same applies to the SQL role names — creation is idempotent, so a shared name is functionally safe
-(`make test` runs with `-p 1` and these tests do not call `t.Parallel()`), but a Go identifier clash
-is not. `internal/stat` is a separate package and needs its own helper.
+**Test helper — reuse, do not define (Decision 19):** the role-creation / `SET ROLE` helper lives
+**once** in `internal/postgres/testing.go`, is owned by Task 1, and is imported by both `internal/query`
+and `internal/stat`. This task defines **no** helper of its own — not in `internal/query`, not in
+`internal/stat`, not "overview-specific", not a copy under a different name. Read
+`internal/postgres/testing.go` for the helper's actual signature and call it. If it is not there when
+you start, the dependency has not landed and this task is not startable yet — say so rather than
+writing a second helper. The SQL role names come from the helper too; do not invent parallel ones.
 
 **Edge cases:**
 
-- **`AS name` must be dropped.** `pg_ls_dir(text)` returns `SETOF text` with an unnamed column, so
-  `AS name` was doing double duty: aliasing the relation *and* supplying the column name that
-  `FILTER (WHERE name LIKE …)` resolves against. `pg_ls_archive_statusdir()` is `SETOF record` with
-  OUT parameters `name text, size bigint, modification timestamptz` — it already provides `name`.
-  Keeping `AS name` renames the whole relation and the query fails with
-  `column "name" does not exist`.
+- **`AS name` is dropped because it is meaningless, not because it breaks.** With `pg_ls_dir(text)`
+  — `SETOF text`, single unnamed column — the alias was load-bearing: it named both the relation and
+  the column that `FILTER (WHERE name LIKE …)` resolves against. `pg_ls_archive_statusdir()` is
+  `SETOF record` with OUT parameters `name text, size bigint, modification timestamptz`, so it already
+  supplies `name` and the alias supplies nothing. Drop it as dead syntax.
+  **Do not claim keeping it would fail.** It would not: checked live on PG 17.10, a column reference
+  wins over the whole-row reference, so
+  `SELECT count(*) FILTER (WHERE name LIKE '%.ready') FROM pg_ls_archive_statusdir() AS name`
+  still returns a number. Nothing in this task — no test, no comment, no acceptance check — may be
+  pinned to a `column "name" does not exist` failure mode, because that failure does not occur.
 - **Type and NULL-ness are unchanged.** `count(*)` is `bigint`, `pg_size_bytes()` is `bigint`, the
   product is `bigint`; over an empty set `count(*)` is `0`, never NULL. The consumer's
   `sql.NullInt64` scan needs no change.
@@ -239,9 +280,16 @@ is not. `internal/stat` is a separate package and needs its own helper.
   tests. The tests prove *privilege and executability*, not archiving behaviour — the behavioural
   check is the stand run in Task 10. Do not try to make the fixtures archive.
 - **Test roles are created at test time** (Decision 18) — the test image is deliberately frozen and
-  the tree contains no `CREATE ROLE`/`GRANT` today, so this is a new pattern in this repo. Make
-  creation tolerant of an existing role, make the roles `NOLOGIN` and non-superuser, grant nothing
-  beyond `pg_monitor` (never `CREATEROLE`, never `SUPERUSER`), and always `RESET ROLE` in a `defer`.
+  the tree contains no `CREATE ROLE`/`GRANT` today, so this is a new pattern in this repo. The
+  properties (idempotent creation, `NOLOGIN`, non-superuser, nothing granted beyond `pg_monitor` —
+  never `CREATEROLE`, never `SUPERUSER`) are implemented **inside the shared helper** from Task 1;
+  this task's job is to call it and to `RESET ROLE` in a `defer` at the call site, not to re-implement
+  any of it. Verify those properties by reading `internal/postgres/testing.go`, and raise it with the
+  lead if the helper does not hold them — do not patch around it locally.
+- **Roles and grants are cluster-global and this task never revokes them.** Anything the tests create
+  outlives the test process and the git checkout: a `git checkout .` does not un-grant `pg_monitor`.
+  That is fine for the normal green path (creation is idempotent) but it is exactly why role-level
+  mutation testing needs a dropped role or a fresh container — see the note in Acceptance Criteria.
 - **PG version spread:** `pg_ls_archive_statusdir()` exists from PG 12; the matrix here starts at
   PG 14, so every fixture has it. No version branching in this query.
 
@@ -257,9 +305,9 @@ is not. `internal/stat` is a separate package and needs its own helper.
 - The consumer comment in `collectOverviewStat` says the same thing in one or two lines: own
   `QueryRow` so a privilege error or `archive_mode=off` degrades this field alone; the error is
   swallowed rather than surfaced. Keep it a comment change only.
-- Idempotent role creation is easiest as a `DO $$ … $$` block guarded on `pg_roles`, executed through
-  `db.Exec` (`internal/postgres.DB` exposes `Exec`, `Query`, `QueryRow`; pgx runs in simple-protocol
-  mode, so multi-statement DDL strings are acceptable).
+- Role setup is a **call into the Task 1 helper** in `internal/postgres/testing.go` — read its
+  signature there and use it as-is. Writing `CREATE ROLE` / `GRANT` SQL in this task's test files is
+  the wrong answer to any problem you hit here (Decision 19).
 - The anti-vacuous guard is the load-bearing part of the `pg_monitor` test: assert `current_user` and
   the role's `rolsuper = false` **before** running the aggregate, so deleting the `SET ROLE` cannot
   leave the test silently passing as `postgres`.

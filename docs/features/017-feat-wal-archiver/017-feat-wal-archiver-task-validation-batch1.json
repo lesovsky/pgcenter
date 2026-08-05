@@ -1,0 +1,184 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
+  "iteration": 1,
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "frontmatter",
+      "task": "01",
+      "section": "frontmatter",
+      "issue": "The frontmatter is not parseable YAML. `verify:` is an unquoted plain scalar containing a colon+space (\"... in the CI image: 9 columns on PG 14-19 ...\"), which yields `mapping values are not allowed here` (confirmed with yaml.safe_load). Any tool that reads status/depends_on/wave/skills/reviewers from this file fails on the whole block, not just on `verify`.",
+      "fix": "Quote the value (`verify: \"bash — go test ./internal/query/...; 9 columns on PG 14-19, succeeds under pg_monitor, fails without it\"`) or reduce it to `verify: bash` with the detail moved to a `#` comment, as tasks 02/05 do. Task 03 already shows the quoted form."
+    },
+    {
+      "severity": "critical",
+      "category": "carry-forward",
+      "task": "01",
+      "section": "Description / What to do / Acceptance Criteria",
+      "issue": "Task 01 contradicts tech-spec Decision 19 and the tech-spec's own `Files to modify` for Task 1 (`internal/query/archiver.go`, `internal/query/archiver_test.go`, `internal/postgres/testing.go`). The Description says the task \"creates exactly two new files and touches nothing that exists\", `What to do` ends with \"Do not touch ... any existing file\", and the first acceptance criterion is \"no other file in the tree is modified\" — while Context Files simultaneously lists `internal/postgres/testing.go` as **MODIFY** for the shared role helper. The shared helper therefore has no step in `What to do`, no TDD anchor and no acceptance criterion, so nothing obliges Task 01 to produce it. Task 03 was moved to Wave 2 and given `depends_on: [\"01\"]` for exactly that helper (Decision 19), so an executor following Task 01 literally blocks Task 03.",
+      "fix": "Make the helper a first-class part of Task 01: add a `What to do` step (\"add the idempotent role-creation / SET ROLE / RESET ROLE helper to internal/postgres/testing.go, named and shaped so internal/query and internal/stat both use it — Decision 19\"), an acceptance criterion pinning its name/signature and its use by both privilege tests, and correct the two 'touches nothing that exists' claims plus the 'no other file is modified' criterion to name the three files from the tech-spec."
+    },
+    {
+      "severity": "critical",
+      "category": "consistency",
+      "task": "03",
+      "section": "Details → Dependencies",
+      "issue": "Body contradicts frontmatter and the task's own header note. Frontmatter is `depends_on: [\"01\"]`, `wave: 2`, and the blockquote at the top states the Decision 19 move to Wave 2; but `Details → Dependencies` reads \"none — `depends_on: []`. No new Go packages. Wave 1, alongside Tasks 1, 2 and 4.\" An executor reading Details will treat this as a Wave-1 task with no dependency on Task 01.",
+      "fix": "Rewrite the Dependencies subsection: depends on Task 01 (the shared role helper in `internal/postgres/testing.go`, Decision 19), Wave 2, no new Go packages. Also fix the stale Context Files annotation \"tech-spec (Task 3 in Wave 1; ...)\"."
+    },
+    {
+      "severity": "critical",
+      "category": "consistency",
+      "task": "03",
+      "section": "Details → Coordination risk",
+      "issue": "The 'Coordination risk' paragraph is the pre-Decision-19 text and instructs the opposite of the decision: \"If a suitable helper already exists in the package when you start, reuse it; otherwise give yours an overview-specific name\" and \"`internal/stat` is a separate package and needs its own helper.\" Decision 19 mandates ONE helper, in `internal/postgres/testing.go`, created by Task 01 and imported by both `internal/query` and `internal/stat`; two differently-named copies are exactly what the decision rejected. This paragraph also re-introduces the compile-collision race the wave move was made to remove.",
+      "fix": "Replace the paragraph with: Task 01 owns the single helper in `internal/postgres/testing.go`; this task imports and reuses it for both the `internal/query` and the `internal/stat` tests and must not define a second one. If the helper is missing when this task starts, that is a Task 01 defect to report, not a reason to fork it."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "01",
+      "section": "Acceptance Criteria",
+      "issue": "Mutation hazard (the 016 class). The criterion \"replace `pg_ls_archive_statusdir()` with `pg_ls_dir('pg_wal/archive_status')`: `Test_StatArchiverQuery_PgMonitorRoleSucceeds` turns red with a permission error. This is the mutation that proves the positive privilege test is exercising privileges and not the superuser fixture connection\" names a mutation that will not fail for the stated reason. `pg_ls_dir(text)` returns `SETOF text` with an unnamed column, so without the `AS name` relation alias the query fails at parse/plan time with `column \"name\" does not exist` (42703) — Task 03's own edge-case note documents this. The test goes red for a syntax reason under any role, including a leaked superuser session, so the anti-vacuity proof the criterion claims is not delivered.",
+      "fix": "Write the mutation as `FROM pg_ls_dir('pg_wal/archive_status') AS name` and require the observed failure to be SQLSTATE 42501 naming `pg_ls_dir` — anything else means the test is not running under the restricted role. Optionally add the direct guard Task 03 uses (assert `current_user` and `rolsuper = false` before running the query)."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "03",
+      "section": "Acceptance Criteria",
+      "issue": "Two role-setup mutations are not reversible by reverting code, so they can produce a false green and a poisoned cluster. Roles and grants are cluster-global and creation is idempotent with no REVOKE. (a) \"remove the `GRANT pg_monitor` from the role setup → `Test_ArchivingBacklogQuery_PgMonitorRole` must go RED\" stays GREEN if the role already holds `pg_monitor` from an earlier run in the same container — and Verification Steps explicitly run mutations inside a live container after a green run. (b) \"add `GRANT pg_monitor` to the deny role\" leaves that grant in place after the code is reverted, so `Test_ArchivingBacklogQuery_NoPrivilegeRole` fails spuriously on every later run against that cluster.",
+      "fix": "State that each role-setup mutation must be run in a freshly started CI container, or make role setup deterministic (drop-and-recreate, or an explicit REVOKE of everything before the intended GRANT) so the grant set is a function of the test code alone. Add the revert step for (b): `REVOKE pg_monitor FROM <deny role>`."
+    },
+    {
+      "severity": "major",
+      "category": "decomposition",
+      "task": "03",
+      "section": "Details / TDD Anchor",
+      "issue": "Tasks 01 and 03 both create test roles on the same six fixture clusters, in the same `internal/query` package, with opposite grant sets — and neither task fixes the actual role names or the grants. Because creation is idempotent and never revokes, the first creator wins: if Task 01's deny role and Task 03's `pg_monitor` role end up sharing a name (or vice versa), a privilege test silently inverts and still reports green. Task 03 makes this worse by asserting \"a shared name is functionally safe\".",
+      "fix": "Pin the exact role names and grant sets once, in the shared helper Decision 19 puts in `internal/postgres/testing.go` (e.g. `pgcenter_test_monitor` = pg_monitor only, `pgcenter_test_noprivs` = no grants), and have both tasks call it rather than issuing their own DDL. Remove the 'shared name is functionally safe' claim."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "04",
+      "section": "Acceptance Criteria",
+      "issue": "The criterion \"Exactly the four known `showWAL` sites changed; `grep -rn showWAL --include=*.go .` returns four hits and no more\" cannot be satisfied by the task as specified: the task itself adds `Test_selectReport_WALWhitelistIsClosed` (8+ rows referencing `showWAL`), `Test_selectReport_WALPrecedence` and a `Test_options_validate` row. The task's own Verification Steps already contradict it (\"the test file will have more rows referencing it — count *sites*\"). An unsatisfiable acceptance criterion either gets quietly dropped or forces the executor to weaken the tests.",
+      "fix": "Restate as a production-site criterion: the three production sites in `cmd/report/report.go` (struct field, flag registration, `selectReport` arm) are the only production references to `showWAL`, and no file outside `cmd/report/` mentions it — verified by `grep -rn showWAL --include=*.go . | grep -v _test.go`."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "05",
+      "section": "TDD Anchor",
+      "issue": "Mutation hazard (the 016 class). \"Set `NotRecordable: true` → `Test_filterViews` must go red on every row (the view is dropped before the version gate)\" overstates what the test can observe. In `record/record.go:199-233` a `NotRecordable` drop and a version-gate drop increment the same `filtered` counter, so on the four ≤PG13 rows both `wantN` and `wantV` are unchanged and those rows stay GREEN under the mutation; only the three ≥PG14 rows (`wantV` 28→27) redden. An executor checking 'every row' will see the ≤PG13 rows green and conclude the gate is broken.",
+      "fix": "Scope the claim: setting `NotRecordable: true` reddens the three ≥PG14 rows of `Test_filterViews` (wantV) and leaves the ≤PG13 rows green, because there the view is already dropped by the version gate and counted in the same `wantN`."
+    },
+    {
+      "severity": "major",
+      "category": "consistency",
+      "task": "02",
+      "section": "Description / scope boundaries",
+      "issue": "Cross-task contradiction about `internal/view/view_test.go`. Task 02 states \"`internal/view/view_test.go` belongs to Task 05, which adds the `wal` assertions to `TestViews_Configure`\"; Task 05 states \"`TestViews_Configure` ... **has no `wal` or `archiver` assertion** — do not claim to update it\" and its acceptance criteria never mention it. As written, no task pins the PG 19 `wal` layout as it emerges from `Configure()` — the coverage Task 02 hands off is never received.",
+      "fix": "Settle ownership in one place. Either Task 05 adds a `TestViews_Configure` (or `TestNew_WalView`-style) assertion that at 190000 the configured `wal` view carries `Ncols: 8` / `DiffIntvl{2,6}` — and Task 02 keeps its hand-off sentence — or Task 02 drops the claim and states that the PG 19 layout is pinned by the selector tests alone."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "TDD Anchor / Acceptance Criteria",
+      "issue": "Task 01's privilege tests have no direct 'the SET ROLE actually took effect' guard, while Task 03 makes exactly that guard load-bearing (assert `current_user` and `rolsuper = false` before running the aggregate, with a dedicated mutation for deleting the `SET ROLE`). The asymmetry leaves Task 01's positive privilege test resting entirely on the `pg_ls_dir` mutation — which, per the major finding above, currently reddens for the wrong reason.",
+      "fix": "Add the same pre-assertion to `Test_StatArchiverQuery_PgMonitorRoleSucceeds` and `Test_StatArchiverQuery_WithoutPgMonitorFails`, plus the mutation 'delete the SET ROLE → the test must go red on its own current_user/rolsuper guard'."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "01",
+      "section": "Acceptance Criteria",
+      "issue": "The mutation \"replace the `ready` sub-select with the literal `0` (no privileged call at all) → `Test_StatArchiverQuery_WithoutPgMonitorFails` turns red\" silently assumes `pg_stat_archiver` itself is selectable by a role holding no grants at all. If any fixture version restricts it, the mutated query still errors and the test stays green, proving nothing.",
+      "fix": "Have the task confirm on the fixtures that the mutated (unprivileged) query succeeds under the deny role — i.e. that the only thing making the real query fail is `pg_ls_archive_statusdir()` — and note the observation in the decisions-log entry."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Acceptance Criteria",
+      "issue": "Mutation M1 (`DiffIntvl` → `{2,7}`) is claimed to redden \"the `DiffIntvl` boundary assertion in `Test_StatWALQueries`\". With 8 live columns (indices 0-7), the assertion on `DiffIntvl[1]+1` indexes element 8 and the test fails by panic rather than by assertion. It is red either way, but a panic in a table test also aborts the surrounding subtests and obscures the signal.",
+      "fix": "Bound the boundary assertion (assert `DiffIntvl[1]+1 < len(fields)` first, or compare header names by lookup) so M1 produces a readable failure."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Acceptance Criteria",
+      "issue": "`Test_selectReport_WALPrecedence` guards an invariant (the new arm did not move up the first-match-wins chain) but no acceptance criterion names a mutation for it; AC \"Flag precedence is unchanged: the `showWAL` arm sits between `showFunctions` and `showBgwriter`, and `-A` still beats `-W`\" states the property without a red-proof, which is the shape `patterns.md` rules out for invariant guards.",
+      "fix": "Add 'Mutation 4 — move the `case opts.showWAL != \"\":` arm above `case opts.showActivity:` → `Test_selectReport_WALPrecedence` turns red. Run it, observe, revert.'"
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "03",
+      "section": "Acceptance Criteria",
+      "issue": "The user-spec promises \"для суперпользователя видимых изменений нет\" (superuser sees the same backlog value as before), but no criterion or test pins output equivalence between the old and new function — and it cannot be pinned on the fixtures, where the backlog is always 0. The criterion as written only requires \"one non-NULL bigint in bytes\".",
+      "fix": "Record explicitly that superuser-path value equivalence is verified by the stand run (Task 10) and add that item to Task 10's checklist, so the user-spec criterion is not silently dropped between Task 03 and QA."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "05",
+      "section": "frontmatter",
+      "issue": "`depends_on: [\"01\", \"02\"]` includes Task 02, but the task neither edits nor compiles against anything Task 02 produces — its own Details say \"This task does not edit anything wal-related, but it shares the Wave 1 → Wave 2 gate\". A wave gate is already expressed by `wave: 2`; the extra edge over-constrains the dependency graph.",
+      "fix": "Either drop \"02\" from `depends_on` (keeping `wave: 2`), or state the real reason for the edge in the Dependencies subsection."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "05",
+      "section": "What to do",
+      "issue": "`OrderDesc: true` is pinned for the archiver entry and asserted by `TestNew_ArchiverView`, but the tech-spec's Data Models block specifies only `Ncols: 9`, `DiffIntvl{0,0}`, `OrderKey: 0`, `UniqueKey: 0`, `NotRecordable: false`. It matches the `wal`/`bgwriter` precedent so it is a reasonable addition, but it is an addition to the spec, not a carry-forward.",
+      "fix": "Note the field in the decisions-log entry for the task (and, if the tech-spec is being touched anyway, add `OrderDesc` to the Data Models block)."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "01",
+      "section": "Context Files",
+      "issue": "The template requires `project.md` among Project knowledge; this repo's project-knowledge directory has no `project.md` (it has overview.md / architecture.md / patterns.md / deployment.md). Tasks 02 and 05 document the substitution inline; tasks 01, 03 and 04 list `overview.md` without saying why `project.md` is absent.",
+      "fix": "Add the same one-line note used in tasks 02 and 05 (\"there is no `project.md` in this repo's PK; `overview.md` plays that role\") to tasks 01, 03 and 04."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Link-path convention is inconsistent across the batch: tasks 01-04 use repo-root-relative paths (`docs/features/...`, `internal/query/...`, `.claude/skills/...`), task 05 uses file-relative paths (`../../../internal/view/view.go`, bare `017-feat-wal-archiver.md`). Executors resolving links one way or the other will hit dead paths in one of the two styles.",
+      "fix": "Normalise task 05 to the repo-root-relative style used by tasks 01-04."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "01",
+      "section": "TDD Anchor / Verification Steps",
+      "issue": "Template scaffolding left in place: the HTML comments `<!-- Fill if task includes writing code ... -->` and `<!-- How to verify task is complete ... -->` and the Russian boilerplate line \"Тесты, которые нужно написать ДО реализации ...\" survive in tasks 01 and 03 (task 03 keeps the boilerplate line and the Details comment; tasks 02, 04, 05 already removed most of them).",
+      "fix": "Delete the leftover template comments and the generic boilerplate sentence — the sections carry real content and the instructions are already in the acceptance criteria."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Details → Files",
+      "issue": "`internal/query/wal.go` is described as \"33 lines today\"; the file is 32 lines. The line anchors for the constants and the selector are correct, and the wal_test.go anchors (Test_SelectStatWALQuery at :10-31, the 190000 row at :21) check out against the tree.",
+      "fix": "Correct the line count, or drop it — the structural anchors are what matter."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 21,
+    "critical": 4,
+    "major": 6,
+    "minor": 11
+  }
+}

@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: []                     # ID задач-зависимостей (строки: ["01", "02"])
 wave: 1                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash                       # go test ./internal/query/... in the CI image: PG 19 wal query returns 8 columns; PG 14-18 counts unchanged
+verify: bash                       # gate = `go test -race -p 1 ./internal/query/...` INSIDE the CI image (PG 14-19 fixtures): PG 19 wal query returns 8 named columns; PG 14-18 counts unchanged
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -38,8 +38,13 @@ Scope boundaries, all verified rather than assumed:
 - **`internal/view/view.go` needs no edit** — its `case "wal":` (view.go:389-391) already delegates to
   the selector, so the new branch is picked up for free in both the TUI and the report replay. This is
   also why this task cannot collide with the view-registration work in Wave 2.
-- **`internal/view/view_test.go` belongs to Task 05**, which adds the `wal` assertions to
-  `TestViews_Configure`. Do not touch it here.
+- **`internal/view/view_test.go` belongs to Task 05.** Do not touch it here. Be precise about what
+  that means: `TestViews_Configure` has **no** `wal` and no `archiver` assertions today
+  (`grep wal internal/view/view_test.go` returns nothing), so the `Configure` hop is not covered by
+  anything this task writes. Task 05 is the sole owner of that file in this feature and owns the
+  view-level assertion that `case "wal":` hands a PG 19 `Options.Version` the 8-column layout. What
+  *this* task pins is the selector's own return values (`internal/query/wal_test.go`). Do not assume
+  the delegation is covered here.
 - Golden replay coverage for the wal screen at PG 18/PG 19 is Task 08; the `fpi,KiB` describe row is
   Task 07. Neither belongs here.
 
@@ -130,29 +135,35 @@ Tests are written first, run and observed failing, then the production code make
 ## Context Files
 
 **Feature artifacts:**
-- [017-feat-wal-archiver.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md) — user-spec
-- [017-feat-wal-archiver-tech-spec.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-tech-spec.md) — tech-spec: Task 2, Data Models (PG 19 layout), Decision 14 (header names), Acceptance Criteria
-- [017-feat-wal-archiver-decisions.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md) — decisions log (write the report here at the end)
-- [017-feat-wal-archiver-code-research.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-code-research.md) — §2.4 verified PG 19 catalog, §10.B exact insertion points and the executed PG 19 output, §10.G current test values, §8 the CI-image test command
+- [017-feat-wal-archiver.md](017-feat-wal-archiver.md) — user-spec
+- [017-feat-wal-archiver-tech-spec.md](017-feat-wal-archiver-tech-spec.md) — tech-spec: Task 2, Data Models (PG 19 layout), Decision 14 (header names), Acceptance Criteria
+- [017-feat-wal-archiver-decisions.md](017-feat-wal-archiver-decisions.md) — decisions log (write the report here at the end)
+- [017-feat-wal-archiver-code-research.md](017-feat-wal-archiver-code-research.md) — §2.4 verified PG 19 catalog, §10.B exact insertion points and the executed PG 19 output, §10.G current test values, §8 the CI-image test command
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md) — project context (there is no `project.md` in this repo's PK)
-- [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, data flow, "PostgreSQL Version Handling", "Testing"
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — "Version-Specific Query Pattern", "Adding a New PostgreSQL Version", "Extract the decision out of the unreachable closure" (the mutation rule this task's ACs implement)
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md) — project context (there is no `project.md` in this repo's PK)
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md) — package layout, data flow, "PostgreSQL Version Handling", "Testing"
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — "Version-Specific Query Pattern", "Adding a New PostgreSQL Version", "Extract the decision out of the unreachable closure" (the mutation rule this task's ACs implement)
 
 **Code files:**
-- [internal/query/wal.go](internal/query/wal.go) — modify: add `PgStatWALPG19`, add the third selector branch
-- [internal/query/wal_test.go](internal/query/wal_test.go) — modify: edit the `190000` row, add the forward row and the two layout guards, extend `Test_StatWALQueries` to name-driven assertions
-- [internal/query/bgwriter.go](internal/query/bgwriter.go) — read: the three-branch selector shape and the "counters outside DiffIntvl" convention
-- [internal/query/query.go](internal/query/query.go) — read: `PostgresV19 = 190000` (line 22) and the `Format`/`NewOptions` helpers the tests use
-- [internal/query/io_test.go](internal/query/io_test.go) — read: `Test_StatIOQueries` is the precedent for asserting live column names via `rows.FieldDescriptions()`
+- [internal/query/wal.go](../../../internal/query/wal.go) — modify: add `PgStatWALPG19`, add the third selector branch
+- [internal/query/wal_test.go](../../../internal/query/wal_test.go) — modify: edit the `190000` row, add the forward row and the two layout guards, extend `Test_StatWALQueries` to name-driven assertions
+- [internal/query/bgwriter.go](../../../internal/query/bgwriter.go) — read: the three-branch selector shape and the "counters outside DiffIntvl" convention
+- [internal/query/query.go](../../../internal/query/query.go) — read: `PostgresV19 = 190000` (line 22) and the `Format`/`NewOptions` helpers the tests use
+- [internal/query/io_test.go](../../../internal/query/io_test.go) — read: `Test_StatIOQueries` is the precedent for asserting live column names via `rows.FieldDescriptions()`
 
 ## Verification Steps
+
+Host runs are the fast inner loop, not the gate: the selector tests need no PostgreSQL, so
+`go test ./internal/query/...` runs on the host, but the only run that closes this task is the one
+inside the CI image, where the PG 14–19 fixtures exist. Note also that there is no runnable package
+at the repository root (no `.go` files there) — `go run .` fails; the binary is `./cmd`
+(`make build` → `./bin/pgcenter`). Nothing in this task needs it.
 
 - Write the tests first, run `go test ./internal/query/... -run 'Test_SelectStatWALQuery'` on the host
   (no Postgres needed for the selector tests) and confirm they fail for the expected reason.
 - Implement, re-run the same command, confirm green.
-- Run the full query-package suite against the PG 14–19 fixtures in the CI image:
+- **The gate** — run the full query-package suite against the PG 14–19 fixtures in the CI image:
   ```bash
   docker run --rm -v "$PWD":/work -v "$HOME/go/pkg/mod":/gomod \
     -e GOROOT=/gomod/golang.org/toolchain@v0.0.1-go1.25.12.linux-amd64 \
@@ -245,6 +256,6 @@ on them. No new Go packages.
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [017-feat-wal-archiver-decisions.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов) — включая результат прогона мутаций M1–M4
+- [ ] Записать краткий отчёт в [017-feat-wal-archiver-decisions.md](017-feat-wal-archiver-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов) — включая результат прогона мутаций M1–M4
 - [ ] Если отклонились от спека — описать отклонение и причину (в частности, если имя `wal_fpi_bytes` не подтвердилось на текущей PG 19 в образе)
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

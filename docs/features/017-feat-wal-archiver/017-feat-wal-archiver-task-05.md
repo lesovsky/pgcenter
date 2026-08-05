@@ -43,7 +43,12 @@ arrived in PG 12): the TUI screen would render a PostgreSQL error every tick, an
 oldest cluster in the test image, so the `TestView_VersionOK` rows at ≤ PG13 stay untouched.
 
 This task is the **sole owner** of `internal/view/view_test.go` in this feature — no other task
-edits that file.
+edits that file. That ownership carries one inherited obligation: task 02 added the PG 19 branch to
+`query.SelectStatWALQuery` but deliberately did not touch `view_test.go`, pointing at this task to add
+the `wal` assertions to `TestViews_Configure`. Nothing currently pins that `Configure()` actually
+carries the new wal layout into the registered view — the selector's own table test covers the
+selector, not the wiring. **This task adds that assertion** (step 4b below), so the two tasks stop
+pointing at each other and the gap closes.
 
 ## What to do
 
@@ -72,19 +77,35 @@ edits that file.
    one file instead of two.
 
 3. **Do not touch `case "wal":`** — it already delegates to `query.SelectStatWALQuery`, which task 02
-   updated. No edit is required in `view.go` for the PG 19 wal change.
+   updated. No edit is required in `view.go` for the PG 19 wal change. The *test-side* pin for that
+   delegation is step 4b — production code stays as it is, the assertion is what is missing.
 
 4. Add the guard test `TestNew_ArchiverView` to `internal/view/view_test.go`, modelled on the
    existing `TestNew_BgwriterView` (`:87-97`) and `TestNew_StatIOView` (`:36-49`), pinning
    `NotRecordable`, `MinRequiredVersion`, `Ncols`, `DiffIntvl`, `OrderKey`, `OrderDesc`, `UniqueKey`
    and the `archive_mode=on` substring of `Msg`.
 
+4b. Add `wal` assertions to `TestViews_Configure` (`internal/view/view_test.go:99-253`) — the wiring
+   guard task 02 left to this task. The test has a `switch tc.version` with existing `case 190000:`
+   and `case 140000:` arms that already assert on the progress screens; add to them, do not
+   restructure:
+   - in `case 190000:` — `views["wal"].QueryTmpl == query.PgStatWALPG19`, `Ncols == 8`,
+     `DiffIntvl == [2]int{2, 6}` (the layout task 02 introduced).
+   - in `case 140000:` — `views["wal"].QueryTmpl == query.PgStatWALPG14`, `Ncols == 11`,
+     `DiffIntvl == [2]int{2, 9}`, pinning that the PG 14–17 side did not move.
+   Add the `archiver` assertion in the same two arms:
+   `views["archiver"].QueryTmpl == query.PgStatArchiverDefault`, `Ncols == 9`,
+   `DiffIntvl == [2]int{0, 0}` — version-independent, so both arms assert the same values.
+   Follow the arms' existing comment style (one line saying what the assertion protects).
+
 5. Update the count-based tests to their new **correct** values (before → after below). Extend the
    explanatory comments that sit next to those numbers — they reason about the counts and would
    become wrong otherwise.
 
-6. Run `go test ./internal/view/... ./record/...` — both packages' count tests run without a
-   PostgreSQL fixture.
+6. Run the tests. `internal/view` runs fully on a bare host: `go test ./internal/view/...`.
+   The `record` package does **not** — `Test_tarRecorder` panics without a cluster — so on the host
+   scope it: `go test ./record/... -run Test_filterViews`. Run the full `record` package inside the CI
+   image (`lesovsky/pgcenter-testing:0.0.11`, command in code-research §8) if the wave gate asks for it.
 
 ## TDD Anchor
 
@@ -95,6 +116,12 @@ and observed failing **against the current tree** (no `archiver` key) before `vi
   carries `MinRequiredVersion == query.PostgresV14`, `Ncols == 9`, `DiffIntvl == [2]int{0,0}`,
   `OrderKey == 0`, `OrderDesc == true`, `UniqueKey == 0`, `NotRecordable == false`, and a `Msg`
   containing `archive_mode=on`. Red today: the map lookup returns `ok == false`.
+- `internal/view/view_test.go::TestViews_Configure` — the wiring guard inherited from task 02. In the
+  existing `case 190000:` arm assert `views["wal"]` has `QueryTmpl == query.PgStatWALPG19`,
+  `Ncols == 8`, `DiffIntvl == [2]int{2, 6}`; in `case 140000:` assert `query.PgStatWALPG14`, `11`,
+  `[2]int{2, 9}`. Add `views["archiver"]` (`query.PgStatArchiverDefault`, `Ncols == 9`,
+  `DiffIntvl == [2]int{0,0}`) to both arms. Red today on two counts: no `archiver` key exists (zero
+  value view → `Ncols == 0`), and nothing pins the wal layout at all.
 - `internal/view/view_test.go::TestNew` — total view count `27` → **28**. Red until the entry is
   added. The trailing comment "27 is the total number of views have to be returned" moves with it.
 - `internal/view/view_test.go::TestView_VersionOK` — rows at version ≥ 140000 gain one:
@@ -119,14 +146,23 @@ and see red before believing the green.
   `120000`, `110000`, `100000` rows, and `Test_filterViews` red on its four ≤ PG13 rows. If those
   stay green, the availability gate is untested.
 - Change `Ncols` to `8` or `DiffIntvl` to `[2]int{0,1}` → `TestNew_ArchiverView` must go red.
-- Set `NotRecordable: true` → `Test_filterViews` must go red on every row (the view is dropped
-  before the version gate).
+- Set `NotRecordable: true` → `Test_filterViews` must go red on the **three ≥ PG14 rows only**
+  (`{190000,"public"}`, `{140000,""}`, `{140000,"public"}`): there the view stops being counted in
+  `wantV` and starts being counted in `wantN`. The **four ≤ PG13 rows stay green** — `filterViews`
+  deletes the view and does `filtered++` in both branches (`record/record.go:205-217`), so swapping
+  the *reason* for dropping it (NotRecordable instead of the version gate) leaves both numbers
+  identical there. Expecting red on every row is arithmetically wrong; red on the three ≥ PG14 rows
+  is the correct, sufficient signal.
 - Drop `archive_mode=on` from `Msg` → `TestNew_ArchiverView` must go red.
 
 **Never** delete or loosen a count-based test to make the suite pass — update it to the new correct
-number. `record.Test_filterViews` runs **without** PostgreSQL, so a stale count there is a real
-failure even when the rest of the `record` package skips on a missing fixture; do not read a red
-`record` package as "just the connection-refused tests".
+number. `Test_filterViews` itself runs **without** PostgreSQL, so a stale count there is a real
+failure. Beware the environment though: the **whole** `record` package does *not* run on a bare host —
+`Test_tarRecorder` (`record/recorder_test.go:37`) calls `stat.GetPostgresProperties` on a nil
+connection and **panics** (nil-pointer in `postgres.(*DB).QueryRow`), taking the package binary down.
+It does not skip. So scope the host run with `-run Test_filterViews`, or run the package inside the CI
+image; and never dismiss a red `record` package as "just the connection-refused tests" without
+looking.
 
 ## Acceptance Criteria
 
@@ -139,6 +175,14 @@ failure even when the rest of the `record` package skips on a missing fixture; d
       a comment explaining why a functionally no-op case is kept.
 - [ ] `case "wal":` in `Configure()` is byte-identical to what it was before this task.
 - [ ] `TestNew_ArchiverView` exists and pins every field listed above, including the `Msg` substring.
+- [ ] `TestViews_Configure` gained `wal` assertions in its `case 190000:` arm
+      (`query.PgStatWALPG19`, `Ncols 8`, `DiffIntvl {2,6}`) and its `case 140000:` arm
+      (`query.PgStatWALPG14`, `Ncols 11`, `DiffIntvl {2,9}`), plus `archiver` assertions
+      (`query.PgStatArchiverDefault`, `Ncols 9`, `DiffIntvl {0,0}`) in both. This closes the gap task
+      02 pointed here.
+- [ ] Mutation check: reverting task 02's PG 19 branch in `SelectStatWALQuery` (so it returns the
+      PG 18 layout `7 / {2,5}` at 190000) turns `TestViews_Configure` red. If it stays green the
+      wiring is still unpinned.
 - [ ] `TestNew` asserts `28`, and its trailing comment says 28.
 - [ ] `TestView_VersionOK` asserts `{190000: 28}`, `{160000: 28}`, `{140000: 25}`; the `130000`,
       `120000`, `110000`, `100000` rows are byte-identical to before.
@@ -146,12 +190,14 @@ failure even when the rest of the `record` package skips on a missing fixture; d
       `9 / 12 / 14 / 14` on the four ≤ PG13 rows, and its block comment reflects the new counts.
 - [ ] Mutation check: dropping `MinRequiredVersion` from the entry turns `TestView_VersionOK` and
       `Test_filterViews` red on their ≤ PG13 rows. Observed, not reasoned about.
-- [ ] Mutation check: setting `NotRecordable: true` turns `Test_filterViews` red.
+- [ ] Mutation check: setting `NotRecordable: true` turns `Test_filterViews` red on the three ≥ PG14
+      rows (the ≤ PG13 rows correctly stay green — the view is dropped either way there).
 - [ ] Mutation check: perturbing `Ncols`, `DiffIntvl` or the `Msg` substring turns
       `TestNew_ArchiverView` red.
 - [ ] No existing test is deleted, skipped or loosened; every changed number is a new correct value.
-- [ ] `go test ./internal/view/... ./record/...` passes on the host (no PostgreSQL needed for the
-      count tests).
+- [ ] `go test ./internal/view/...` passes on the host, and so does
+      `go test ./record/... -run Test_filterViews`. (The **full** `record` package needs the CI image:
+      `Test_tarRecorder` panics on a bare host — that is pre-existing, not caused by this task.)
 - [ ] `make lint` is clean.
 
 ## Context Files
@@ -178,21 +224,27 @@ failure even when the rest of the `record` package skips on a missing fixture; d
 - [internal/view/view.go](../../../internal/view/view.go) — add the `archiver` entry to `New()` and
   the `case "archiver":` to `Configure()`
 - [internal/view/view_test.go](../../../internal/view/view_test.go) — add `TestNew_ArchiverView`;
-  update `TestNew` and `TestView_VersionOK`
+  update `TestNew`, `TestView_VersionOK` and `TestViews_Configure` (the `wal`/`archiver` wiring
+  assertions inherited from task 02). **Sole owner** — no other task in this feature edits it.
 - [record/record_test.go](../../../record/record_test.go) — update `Test_filterViews` counts and its
   block comment
 - [internal/query/archiver.go](../../../internal/query/archiver.go) — read-only; produced by task 01,
   source of `PgStatArchiverDefault` and `SelectStatArchiverQuery`
 - [internal/query/wal.go](../../../internal/query/wal.go) — read-only; the selector `case "wal":`
-  already delegates to, updated by task 02
+  already delegates to, updated by task 02. Source of `PgStatWALPG19` / `PgStatWALPG14` and the
+  `8 / {2,6}` and `11 / {2,9}` layouts asserted in `TestViews_Configure`
 - [record/record.go](../../../record/record.go) — read-only; `filterViews` (`:199-233`) is the code
   the `record` counts exercise. **Not modified by this task.**
 
 ## Verification Steps
 
-- Run the tests on the host — every test this task touches runs without PostgreSQL:
-  `go test ./internal/view/... ./record/...`. Expect PASS on `TestNew`, `TestNew_ArchiverView`,
-  `TestView_VersionOK` and `Test_filterViews`.
+- Every test this task *touches* runs without PostgreSQL, but its *package* may not. On the host run
+  exactly:
+  - `go test ./internal/view/...` — expect PASS on `TestNew`, `TestNew_ArchiverView`,
+    `TestViews_Configure` and `TestView_VersionOK`.
+  - `go test ./record/... -run Test_filterViews` — expect PASS. Do **not** run the bare
+    `go test ./record/...` on the host: `Test_tarRecorder` panics on the nil connection and the whole
+    package binary dies, hiding the result you care about.
 - Run each mutation from the TDD Anchor, confirm the named test goes **red**, revert the mutation.
   Record which mutation reddened which test in the decisions-log entry.
 - `git diff record/record.go` must be empty.
@@ -213,9 +265,11 @@ failure even when the rest of the `record` package skips on a missing fixture; d
 - `internal/view/view_test.go` — currently 280 lines. `TestNew` at `:9-12` (`assert.Equal(t, 27,
   len(v))` with the trailing comment on the same line). Guard tests at `:17-97`, one per non-trivial
   view — `TestNew_BgwriterView` (`:87-97`) is the closest model. `TestViews_Configure` (`:99-253`)
-  asserts only on progress/replication/activity screens and **has no `wal` or `archiver`
-  assertion** — do not claim to update it. `TestView_VersionOK` at `:255-280` with the seven-row
-  table at `:260-266`.
+  today asserts only on progress/replication/activity screens and has **no `wal` or `archiver`
+  assertion** — this task adds them (step 4b) into the existing `case 190000:` (`:183-192`) and
+  `case 140000:` (`:193-202`) arms of its `switch tc.version`; the version table (`:106-173`) and the
+  trailing `assert.NotEqual(t, "", v.Query)` loop stay untouched. `TestView_VersionOK` at `:255-280`
+  with the seven-row table at `:260-266`.
 - `record/record_test.go` — currently 219 lines. `Test_filterViews` at `:109-149`, with the
   reasoning block comment at `:116-134` and the table at `:135-141`. `Test_app_record` (`:32-107`)
   derives its expectation from `countRecordable(view.New())` at `:37` and needs **no** change.

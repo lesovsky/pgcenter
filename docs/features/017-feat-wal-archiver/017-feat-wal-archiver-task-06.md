@@ -3,7 +3,7 @@ status: planned
 depends_on: ["05"]
 wave: 3
 skills: [code-writing]
-verify: "bash — go test ./top/... (runs without PostgreSQL)"
+verify: "bash — `go test -race ./top/...` in the CI image (the whole package needs live clusters); on the host `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate'`"
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]
 teammate_name:
 ---
@@ -47,6 +47,27 @@ pinned **by test, not by review** — `top/help_test.go` exists for exactly that
 Two acceptance criteria of the user-spec ride on the help text, so the new `w,W` entry and the
 `archiver` addition to the `Q` caveat are pinned there too, in the style of the existing entry tests.
 
+**All five pieces are unit-testable, including the two TUI ones.** A **zero-value `&gocui.Gui{}`** is
+enough for both, and this was verified empirically against the existing `menuStatIO` branch before this
+task was written:
+
+- `gocui.Gui.SetView` builds a real `*gocui.View` from the passed coordinates without touching a
+  terminal (it returns `gocui.ErrUnknownView` as its *created* signal — that is what `menu.go:117`
+  keys off), `View.SetCursor` works on it, and `DeleteView`/`SetCurrentView` merely scan a slice,
+  returning `gocui.ErrUnknownView` instead of panicking. Driving `menuSelect(app)(&gocui.Gui{}, mv)`
+  over the `menuStatIO` branch with cursor 0 and 1 produced `stat_io` and `stat_io_time` on `viewCh`,
+  returned a nil error (once a `sysstat` view exists for `menuClose` to focus), and left the menu reset
+  to `menuNone`.
+- `keybindings(app)` with `app.ui = &gocui.Gui{}` returns nil: `gocui.SetKeybinding` only appends to a
+  slice. Uniqueness of a key is then assertable through the exported `DeleteKeybinding` — today `'J'`
+  deletes once and reports `keybinding not found` on the second call, while `'W'` reports not-found
+  immediately.
+
+So the `W` path gets a real test on both halves — the branch that resolves the cursor to a view, and
+the binding that reaches it — and the "`'W'` is free" claim becomes a regression test rather than a
+grep-and-trust note. The *nil* Gui that `top/pause_test.go:552-577` warns about is a different thing
+from a zero-value one; `top/ui_test.go:406-425` already uses the zero-value idiom.
+
 ## What to do
 
 1. **Add `walNextView`** to `top/config_view.go`, next to `statioNextView`, with the same shape and a
@@ -85,14 +106,24 @@ Two acceptance criteria of the user-spec ride on the help text, so the new `w,W`
    Description columns of the block stay aligned; the leftover `r` keeps its own line (the tech-spec
    settles this cosmetic question — do not fold it into the `a,b,f,o` line above).
 
-8. **Write the tests first** (see TDD Anchor): the new `Test_walNextView`, the new help-entry tests,
-   the two new rows/cases in `Test_switchViewTo` and `Test_selectMenuStyle`.
+8. **Amend the stale prohibition in `top/pause_test.go`** (`:561-568`): the sentences claiming that
+   *`menuSelect` itself is unreachable from a unit test* and that a Gui *"comes only from
+   `gocui.NewGui`"* are wrong — a zero-value `&gocui.Gui{}` reaches every branch (see Description).
+   Correct exactly those sentences to say that the blocker is specific to the `menuConf` branch, whose
+   terminal call `editPgConfig` needs a live `*postgres.DB`. Nothing else in that comment block moves,
+   and the deleted `Test_menuConfPathDoesNotLift` stays deleted — its problem was that it asserted on a
+   config the callee never receives, which is untouched by any of this.
+
+9. **Write the tests first** (see TDD Anchor): the new `Test_walNextView`, `Test_menuSelectWAL`,
+   `Test_keybindingsWAL`, the three help tests, and the new rows in `Test_switchViewTo` and
+   `Test_selectMenuStyle`.
 
 ## TDD Anchor
 
 Write these BEFORE the production code. Run them, see them fail for the right reason, then implement,
-then see them pass. All of them run locally without PostgreSQL, so there is no excuse for an
-unverified red-to-green transition here.
+then see them pass. Every test named here runs on the host under the `-run` filter from the frontmatter
+(the *package as a whole* needs live clusters — see Verification Steps — but none of these tests do),
+so there is no excuse for an unverified red-to-green transition.
 
 - `top/config_view_test.go::Test_walNextView` — three cases, modelled exactly on
   `Test_statioNextView` (`:670-683`): `wal` → `archiver`, `archiver` → `wal`, `unknown` → `wal`.

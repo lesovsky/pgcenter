@@ -1,6 +1,6 @@
 ---
 status: planned                    # planned -> in_progress -> done
-depends_on: ["05"]                 # ID задач-зависимостей (строки: ["01", "02"])
+depends_on: ["04", "05"]                 # ID задач-зависимостей (строки: ["01", "02"])
 wave: 3                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
 verify: bash — `go test ./report/...`; `report -d -W a` и `report -d -W w` печатают новый текст # инструмент верификации (опционально: curl, bash, user)

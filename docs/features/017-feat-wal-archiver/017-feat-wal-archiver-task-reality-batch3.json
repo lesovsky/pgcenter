@@ -1,0 +1,105 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
+  "tasks_checked": ["07", "08", "09", "10"],
+  "status": "approved",
+  "summary": "No hallucinated files, functions or literals in any of the four tasks. Every named symbol, line-anchored literal, tech-debt item, docker invocation and infrastructure claim was checked against the tree; the four claims singled out for scrutiny all hold, including task 08's central 'reordering SQL aliases cannot redden a golden' argument. One acceptance criterion (task 08, mutation A5) rests on a mechanism the code does not have and cannot fire; the rest of the findings are vacuous-assertion notes and line-number drift.",
+  "verified_claims": [
+    "T07: describeReport (report/report.go:665-709) prints 'unknown description requested' (:702) and returns nil (:709) for an unknown report type - a missing map entry exits zero and is invisible without a test. CONFIRMED.",
+    "T07: Test_describeReport pins that with {report: \"invalid\", want: \"unknown description requested\"} (report_test.go:1203) under assert.NoError (:1209). CONFIRMED.",
+    "T07: RunMain short-circuits on c.Describe at report/report.go:44-47, before os.Open - '-d -W a' needs no -f. CONFIRMED.",
+    "T07: report/*_test.go needs no live PostgreSQL - no NewTestConnect / sql.Open / internal/postgres import anywhere in report/; `go test ./report/...` was RUN on this host with no PostgreSQL and is green (ok, 0.797s). CONFIRMED empirically.",
+    "T07: 'wal' map entry at report/report.go:674; fpi row at report/describe.go:148; pgStatWALDescription spans :141-157 and documents the 11 columns the task lists, including write/sync/write,ms/sync,ms removed in PG 18. CONFIRMED.",
+    "T07: the trailing-tab marker trap is real - '- fpi' vs '- fpi,KiB', '- write' vs '- write,ms', '- sync' vs '- sync,ms' all exist in the constant, and the idiom to copy (require.NotEqual(-1, pos) before assert.Greater) is exactly what Test_describeActivityColumnOrder does. CONFIRMED.",
+    "T08: replay never runs SQL - readTar decodes stat.PGresult JSON (report/report.go:180-230), and printStatHeader/printStatSample render v.Cols computed by align.SetAlign from the fixture's own Cols (report.go:528-537, 560-566). view.Configure supplies only QueryTmpl/Ncols/DiffIntvl/OrderKey/UniqueKey. Reordering aliases in internal/query/archiver.go or wal.go therefore cannot redden a golden, and no mutation in the A1-A5/B1-B3 list is such a reorder. CONFIRMED - the honesty boundary is stated correctly.",
+    "T08: printReportHeader is called from RunMain (report/report.go:63, defined :541), outside doReport; the only INFO line inside processData is gated on config.ReportType == \"procpidstat\" (:391-395). Driving app.doReport on an archive with no matching entries yields a literally empty buffer. CONFIRMED.",
+    "T08: calculateDelta's {0,0} pass-through at internal/stat/postgres.go:590-597; 'diff failed: %w' at :593; diff() bounds its loop by curr.Ncols (:632) so a widened DiffIntvl over a pretty string or an interval fails ParseInt - the hostile fixture values do what the task claims. A1-A4 are all sound mutations (A4 reddens via the diff error emptying the buffer).",
+    "T08: harness anchors are accurate - bgwriter meta PGresult (:141-151), mkRow (:155-161), tar composition (:189-202), Config/newApp/doReport drive (:204-216), pre-golden invariants (:218-228), -update branch (:230-237); shared `var update` at report_test.go:24; isFilenameOK's four-part rule (:460-476); the ', rate: ' timestamp line (:607); TruncLimit truncation with '~' (:617-631); view.go wal registration :129-140 and Configure case :389-390.",
+    "T09: 'diff failed' IS a wrapped error - fmt.Errorf(\"diff failed: %w\", err) at internal/stat/postgres.go:593, so the user sees 'diff failed: <details>'. CONFIRMED.",
+    "T09: pretty.Size returns the bare string \"0\" for zero (internal/pretty/pretty.go:11-12) - '0 B' is not a screen literal. CONFIRMED.",
+    "T09: doc/release-notes/ exists and holds exactly v0.8.0.md and v0.9.0.md; v0.9.0 is the newest and carries '## Release 0.9.0', 'Release date: 2021-06-15', '### Overview', '### New features', '### Fixes' (:84), '### Other' (:95) with the '--rate' removal one-liner at :104, and Google Drive image links. CONFIRMED.",
+    "T09: 'report type is not specified, quit' is exact at cmd/report/report.go:95; the -W bool definition is at :70; no -W or -J flag documentation exists in README.md, doc/pgcenter-report-readme.md or any doc/*.md. CONFIRMED.",
+    "T10: the docker invocation is byte-identical to code-research §8 and to the project's own verified recipe; the image is ubuntu:22.04 + PostgreSQL only (testing/Dockerfile) with no Go, and the mounted toolchain golang.org/toolchain@v0.0.1-go1.25.12.linux-amd64 EXISTS in this host's module cache. lesovsky/pgcenter-testing:0.0.11 matches both CI workflows. CONFIRMED coherent.",
+    "T10: golangci-lint is NOT on the default PATH (`which golangci-lint` empty) and lives in $(go env GOPATH)/bin alongside gosec and govulncheck. CONFIRMED.",
+    "T10: docs/tech-debt.md [030] '`profile.Test_profileLoop` is flaky ... canceling statement due to user request ... passes on an immediate re-run' (:67-76) and [019] 'Nine tests skip every version when one cluster is unavailable' (:217-229) exist exactly as described; [029] and [017] too. CONFIRMED.",
+    "T10: all five count-based tests exist - TestNew and TestView_VersionOK (internal/view/view_test.go:9, :255), Test_filterViews (record/record_test.go:109), Test_selectMenuStyle (top/menu_test.go:8), Test_switchViewTo (top/config_view_test.go:588). testing/prepare-test-environment.sh sets wal_level=logical and NO archive_mode / archive_command, so the stand run really is the only behavioural evidence. Criteria counts are exact: 23 in the user-spec, 11 in the tech-spec. Decisions 1-19 all exist.",
+    "Cross-task: internal/query/archiver.go does not exist yet, correctly declared as Task 01's wave-1 output and read-only in tasks 07/08/10; SelectStatArchiverQuery(_ int) (string, int, [2]int) returning DiffIntvl is fixed by task 01 and consumed by Configure per task 05, which is what makes mutation A1 valid."
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "08",
+      "issue": "Acceptance criterion A5 ('remove the archiver entry from view.New(): Test_app_doReport_Archiver turns red on all three subcases') rests on a mechanism the report path does not have. processData builds its own map - `views := view.Views{config.ReportType: v}` (report/report.go:282-284) - and Views.Configure switches on the MAP KEY, not on the registry (internal/view/view.go:372-373). With Task 05's `case \"archiver\":` present, a zero-value View under key \"archiver\" still receives QueryTmpl/Ncols/DiffIntvl from SelectStatArchiverQuery. The only view fields the report path then consumes are DiffIntvl/OrderKey/OrderDesc/UniqueKey (countDiff, report.go:505) plus Cols/ColsWidth computed by formatStatSample from the fixture; on a single-row archiver result OrderKey/OrderDesc/UniqueKey are inert (PGresult.sort returns without reordering one row). The output is therefore byte-identical with and without the view.New() entry, so the populated and never_archived goldens stay green - and the no_archiver_entries subcase, which asserts an empty buffer, cannot redden under any view change at all. The task's own rule ('when a mutation does not turn a test red ... Fix the test, then re-run') would send the executor chasing a red that replay cannot produce.",
+      "fix": "Drop A5, or restate it as what it actually guards: the registration is pinned by Task 05's own unit tests (internal/view/view_test.go TestNew / the Configure map test) and by record/record_test.go Test_filterViews, not by a replay golden. If a guard is wanted in this file, make it explicit - e.g. assert in the archiver test that view.New() contains an \"archiver\" entry with DiffIntvl{0,0} before driving doReport - and label it as a registry assertion rather than a golden mutation."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "08",
+      "issue": "The empty-archive subcase's 'asserts doReport returns nil' is vacuous: doReport returns nil unconditionally (report/report.go:148-149) and reports processData errors with fmt.Println to stdout, never to app.writer. So both halves of that assertion (nil error, empty buffer) also hold when the pipeline failed - e.g. when isFilenameOK/isFilenameTimestampOK silently skipped every entry, which is the exact trap the task documents elsewhere in Edge cases.",
+      "fix": "Keep the assertions but state in the doc comment that only the buffer-empty half carries signal, and defend against the degenerate case by reusing an identical tar construction (same filename format and TsStart/TsEnd) as the populated subcase, so a filename/interval mistake reddens the populated golden first."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "08",
+      "issue": "'Also asserts the output contains no `n/a`' (never_archived subcase) cannot fail. `n/a` is a TUI sentinel - naLiteral = \"n/a\" at top/stat.go:430 - and the report package never emits it; blank cells are produced by %-*s padding in printStatSample (report/report.go:634). This is the same vacuity the task correctly rejects for the delta-`3` sentinel.",
+      "fix": "Drop the n/a assertion or replace it with something the report path could actually print if the blank handling regressed - the field-count assertion already covers `0`, `-` and `n/a` in one check; assert additionally that the data line does not contain the literal '-' as a standalone field."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "08",
+      "issue": "Two internal/source inconsistencies. (a) The Description calls report/testdata/pgcenter.stat.golden.tar 'a 2021 PG14beta1 recording' while Verification Step 7 calls it 'the legacy PG13-era tar' - the fixture's sample timestamps are 2021-06-14 (report/report_test.go:59-77), i.e. the PG14 beta era, so the Description wording is the right one. (b) Line refs into report_record_statio_test.go drift: the single-golden precedent Test_app_doReport_StatIOTime starts at :185 (doc comment :176-184), not :177-206, and statIOStripANSI/statIOAnsiRE are at :42-47, not :43-46. The bgwriter refs are accurate.",
+      "fix": "Say 'the legacy 2021 PG14-beta fixture' in both places; refresh the two statio line anchors (or drop the line numbers and name the symbols, which do not drift)."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "09",
+      "issue": "The 'do not quote 0 B' hint names the wrong renderer for the backlog cell. The verbose row formats it through pretty.SizeWidth(float64(o.ArchivingBacklog), sizeFieldWidth) (top/stat.go:722-725), not pretty.Size directly - SizeWidth right-aligns Size(v) into a fixed-width field, so the rendered cell is a space-padded '0', not a bare '0'. The conclusion the hint draws is correct ('0 B' is not a screen literal, prose is the right form); only the attribution is off, and quoting a bare `0` as a screen literal would be almost as wrong as quoting `0 B`.",
+      "fix": "Amend the hint: 'the panel formats sizes through pretty.SizeWidth, which right-aligns pretty.Size(v) into a fixed-width field; pretty.Size returns \"0\" for zero (internal/pretty/pretty.go:11-12), so the cell shows a padded 0 and neither `0 B` nor a bare `0` should be quoted as a screen literal.'"
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "09",
+      "issue": "Line anchors mix pre- and post-Task-04 state: 'report type is not specified, quit' (:95) and the -W definition (:70) are exact in today's tree, but selectReport is at cmd/report/report.go:132, not :151. A writer who opens :151 to check the flag mapping lands in setReportInterval-adjacent code.",
+      "fix": "Point at the symbol (`selectReport`) rather than a line, or note that all three anchors are pre-Task-04 and will shift once -W becomes a string flag."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "Line anchors have drifted by a few lines in several places: describeReport spans :665-709 (task says :665-698) and its map :666-694 (task says :666-693); Test_describeActivityColumnOrder starts at :1257 (task says :1255-1279) and the trailing-tab trap comment it points to is at :1268-1271 (task says :1266-1269); the two trailing-space rows in pgStatWALDescription are :145 and :151 (task says :146 and :151 - :146 is the wal,KiB row, which has no trailing space). All the load-bearing anchors (:674 wal map entry, :148 fpi row, :44-47 describe short-circuit) are exact.",
+      "fix": "Refresh or drop the four drifted line numbers; the symbol names alone are unambiguous."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "depends_on lists only [\"05\"], but the task reads internal/query/archiver.go (Task 01, wave 1) as its source of truth for column names, documents Task 02's fpi,KiB column, and its acceptance criterion `pgcenter report -d -W a` requires Task 04's string -W flag. Task 05 declares depends_on [\"01\",\"02\"], so 01 and 02 are transitively covered; Task 04 is not in that closure and is covered only by wave ordering (04 is wave 1, 07 is wave 3). The task text is explicit and honest about all three, so this is a declaration gap rather than an execution hazard.",
+      "fix": "Add \"04\" to depends_on (or keep as-is and note in the frontmatter comment that wave ordering covers it) so a re-planned wave assignment cannot silently break the -d -W a smoke check."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The verified docker invocation sets GOPATH=/gopath (empty inside the container) while the host module cache is mounted at /gomod only to supply GOROOT - so the run re-downloads all modules into the container and needs network access. This is the project's documented, previously-executed recipe (verified green on feature 016), not a defect, but a QA agent hitting a module download failure on an offline runner could misread it as a broken image or a dependency problem.",
+      "fix": "Add one line to Details: 'the container downloads modules into /gopath, so the run needs network; a download failure is an environment issue, not a suite failure'. Optionally mount the cache a second time as GOMODCACHE=/gomod/... to make the run hermetic."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The recorded stand pgpro@10.128.31.96 carries a 24h TTL from 2026-08-05 and is already past it as of today, so the manual half of this gate is blocked on a new address from the moment the task starts. The task handles this correctly (re-confirm first, NOT VERIFIABLE rather than PASS, never skip silently) - flagged only so the orchestrator requests a stand before scheduling wave 4 rather than mid-run.",
+      "fix": "No change to the task. Request the stand address at the start of wave 4; if none can be had, expect the archiving, navigation, narrow-terminal, subtitle and cost criteria to come back NOT VERIFIABLE and the verdict to be NEEDS WORK on evidence, not on defects."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "claims_verified": 62,
+    "issues_found": 10
+  }
+}

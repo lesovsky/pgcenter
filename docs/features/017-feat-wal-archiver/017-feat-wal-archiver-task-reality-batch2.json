@@ -1,0 +1,90 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Acceptance Criterion 'Exactly the four known showWAL sites changed; `grep -rn showWAL --include=*.go .` returns four hits and no more' cannot be satisfied after the task is implemented. Four hits is the CURRENT state (verified: cmd/report/report.go:25,70,151 and cmd/report/report_test.go:46). After the change production grows to four lines in report.go alone (field, flag, `case opts.showWAL != \"\":`, `switch opts.showWAL`), and the mandated TDD Anchor adds ~12 more test references (2 rows in Test_selectReport, 8 rows in Test_selectReport_WALWhitelistIsClosed, 1 in Test_selectReport_WALPrecedence, 1 in Test_options_validate). The grep will return ~16. The Verification Steps hedge this ('count *sites*'), but the AC checkbox is unconditional — an executor checking it literally is pushed toward deleting the very whitelist rows Decision 17 exists to protect.",
+      "fix": "Reword the AC to what is actually invariant: 'no production file outside cmd/report/report.go mentions showWAL, and cmd/report/report.go has exactly the three edited sites (field, flag registration, selectReport arm)'. Drop the numeric grep count, or scope it to `grep -rn showWAL --include=*.go . | grep -v _test.go`."
+    },
+    {
+      "severity": "critical",
+      "category": "feasibility",
+      "task": "06",
+      "issue": "The `verify:` frontmatter ('bash — go test ./top/... (runs without PostgreSQL)'), Acceptance Criterion '`go test ./top/...` passes' and Verification Step 1 all assert that the top package tests pass on a host without PostgreSQL. They do not. Verified by running it on a clean tree: Test_getQueryReport (top/report_test.go:12-14) fails on a refused connection and then PANICS with a nil-pointer dereference in internal/postgres.(*DB).QueryRow (internal/postgres/postgres.go:125), which aborts the whole test binary and exits FAIL. The tests this task cares about (Test_switchViewTo, Test_statioNextView, Test_selectMenuStyle, the three help tests) do all run and pass BEFORE the panic, but the prescribed command can never report success — an automated wave gate running the `verify:` command will read the task as failed forever.",
+      "fix": "Change the verify command and the AC to a filtered run that genuinely passes on the host, e.g. `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_statioNextView|Test_selectMenuStyle|Test_helpTemplate'` (confirmed green), and state explicitly that the unfiltered `go test ./top/...` requires the CI image lesovsky/pgcenter-testing:0.0.11 — the same caveat Task 05 already carries for `make test`."
+    },
+    {
+      "severity": "critical",
+      "category": "tdd",
+      "task": "06",
+      "issue": "The claim 'menuSelect cannot be unit-tested. Every branch ends in an unconditional menuClose(g, v), which calls g.DeleteView/g.SetCurrentView on a *gocui.Gui that only gocui.NewGui can produce' is FALSE — verified empirically against the existing menuStatIO branch. A zero-value &gocui.Gui{} is enough: gocui@v0.5.0 Gui.SetView (gui.go:130) builds a real *View with real dimensions without touching any terminal backend, so v.SetCursor(0,1) works and both cursor branches are reachable; DeleteView (gui.go:219) and SetCurrentView just scan a slice and return ErrUnknownView, they do not panic. A throwaway probe drove menuSelect(app)(app.ui, mv) for cy=0 and cy=1 and observed app.config.view.Name become 'stat_io' / 'stat_io_time', the correct view arriving on viewCh, and app.config.menu reset to menuNone — menuClose merely returns a benign 'unknown view' error the test asserts on. The pause_test.go:552-577 comment the task cites says only that a NIL Gui panics; it never considered the zero value, which top/ui_test.go:417 already uses (`layout(&app{config: c, ui: &gocui.Gui{}})`). Consequence: the W-menu path — one of the two user-facing halves of this task — is left with zero automated coverage on a false premise, and the task's own hint ('Before assuming anything in top/ is untested, grep top/*_test.go') is exactly the discipline it skips.",
+      "fix": "Delete the 'menuSelect cannot be unit-tested' edge case and add a real test to the TDD Anchor: top/menu_test.go::Test_menuSelect_WAL — build app{config: newConfig(), ui: &gocui.Gui{}}, set app.config.menu = selectMenuStyle(menuWAL), create the menu view with app.ui.SetView(\"menu\", 0, 5, 72, 6+len(items)), SetCursor(0, cy) for cy in {0,1}, read viewCh in a goroutine, call menuSelect(app)(app.ui, mv) and assert app.config.view.Name is 'wal' / 'archiver'. Add the corresponding mutation (swap the two cursor arms) to the Acceptance Criteria. Do not restore the forbidden pattern from pause_test.go — this test observes the real config mutation, so it can fail."
+    },
+    {
+      "severity": "critical",
+      "category": "tdd",
+      "task": "06",
+      "issue": "The companion claim '`keybindings()` cannot be unit-tested either, for the same reason (it needs a live *gocui.Gui). The W-is-free claim is a static one: grep the table for W before and after' is also FALSE. Verified: keybindings(app) with app.ui = &gocui.Gui{} returns nil and sets InputEsc — gocui.SetKeybinding (gui.go:249) only appends to a slice. Registration is assertable through the exported DeleteKeybinding (gui.go:262), which returns nil for a registered binding and 'keybinding not found' otherwise. A probe confirmed today's state: 'J' deletes once then reports not found (registered exactly once), and 'W' reports not found (free). This turns the task's central 'W is free and claimed exactly once' assertion from a grep-and-trust into a regression guard that survives future edits to the keys table.",
+      "fix": "Replace the 'cannot be unit-tested' edge case with top/keybindings_test.go::Test_keybindings_WAL: assert.NoError(keybindings(&app{config: newConfig(), ui: &gocui.Gui{}})), then assert.NoError on the first DeleteKeybinding(\"sysstat\", 'W', gocui.ModNone) and assert.Error on the second (registered exactly once). Add the mutation 'remove the W row -> the test goes red' to the Acceptance Criteria."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Step 6, the Acceptance Criterion '`go test ./internal/view/... ./record/...` passes on the host (no PostgreSQL needed for the count tests)' and the Verification Step that repeats it are wrong. Verified on a clean tree: internal/view passes, but the record package panics in Test_tarRecorder (record/recorder_test.go:37 -> internal/stat.GetPostgresProperties -> internal/postgres.(*DB).QueryRow, postgres.go:125) and the binary exits FAIL. The task's own guidance compounds this — it says 'the rest of the record package skips on a missing fixture', while the real behaviour is a panic that aborts the run. (Test_filterViews itself does run and pass before the panic, so the number can still be observed; only the prescribed pass/fail gate is unusable. patterns.md:154 is more accurate: 'skips/fails on a missing PG fixture'.)",
+      "fix": "Change the AC and Verification Step to `go test ./internal/view/...` plus `go test ./record/ -run 'Test_filterViews|TestFilterViews'` — both confirmed green on the host — and replace 'skips on a missing fixture' with 'panics and aborts the binary on a missing fixture, so read the Test_filterViews result before the panic, not the package exit code'."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "05",
+      "issue": "The mutation expectation 'Set `NotRecordable: true` -> Test_filterViews must go red on every row (the view is dropped before the version gate)' is arithmetically wrong. On the four <= PG13 rows the archiver view is dropped either way — by NotRecordable instead of by the version gate — so wantN and wantV are identical under the mutation and those rows stay GREEN. The mutation reddens only the three >= PG14 rows ({190000,\"public\"}, {140000,\"\"}, {140000,\"public\"}), where wantV drops back from 28/19/25 to 27/18/24. Stating 'every row' invites the executor to conclude the mutation did not take effect and go hunting, or to 'strengthen' the <= PG13 rows to compensate.",
+      "fix": "Reword to: 'Set NotRecordable: true -> Test_filterViews goes red on the three >= PG14 rows only; the four <= PG13 rows stay green because the view is dropped there either way. That asymmetry is the point — it is what distinguishes the NotRecordable gate from the version gate.'"
+    },
+    {
+      "severity": "major",
+      "category": "missing_file",
+      "task": "06",
+      "issue": "Acceptance Criterion and Verification Step 3 prescribe `go build ./cmd/pgcenter`. There is no such directory — `go build ./cmd/pgcenter` fails with 'stat .../cmd/pgcenter: directory not found'. The main package lives in ./cmd (cmd/pgcenter.go, cmd/help.go); the Makefile builds it as `go build ... -o bin/pgcenter ./cmd` (Makefile:40).",
+      "fix": "Replace `go build ./cmd/pgcenter` with `go build ./cmd` (or `make build`) in both the Acceptance Criteria and Verification Step 3."
+    },
+    {
+      "severity": "major",
+      "category": "missing_file",
+      "task": "04",
+      "issue": "The 'Sanity by hand' verification step prescribes `go run . report -W 2>&1` and `go run . report -W -f /nonexistent.tar 2>&1`. Both fail before reaching the flag parser: the repository root has no Go files ('no Go files in /home/lesovsky/Git/github.com/lesovsky/pgcenter'). The main package is ./cmd — `go run ./cmd report -W` works (verified today it reaches report.RunMain and reports 'open pgcenter.stat.tar: no such file or directory', which is the pre-change bool behaviour).",
+      "fix": "Change both invocations to `go run ./cmd report -W` and `go run ./cmd report -W -f /nonexistent.tar`."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "04",
+      "issue": "Details/Files item 1 claims 'The field currently sits in the bool column block of the struct; after the change gofmt re-aligns the comment column across the whole struct and the diff will carry whitespace-only lines. Let it — do not hand-align.' This will not happen. The options struct (cmd/report/report.go:15-41) already contains string fields (showDatabases, showStatIO, showStatements, showProgress), so gofmt's type and comment columns are already sized for 'string'; changing `showWAL bool` to `showWAL string` shifts nothing. Telling the executor that whitespace churn is 'expected' pre-authorises a diff that should not appear.",
+      "fix": "Drop the paragraph, or replace it with 'the struct already aligns to `string`, so the diff is exactly the two changed tokens and the comment text — any whitespace-only lines in the diff mean something went wrong'."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "06",
+      "issue": "Edge case 'The new help line is 88 characters. Its j,J neighbour is already 85' — both figures are off by one. Measured on the tree: top/help.go:19 (the j,J line) is 86 characters, and the proposed line `    w,W               'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.` at the same description column (22) is 89. The conclusion the numbers support — that the new line is consistent with the block and that the <= 80 rule at top/help_test.go:78-79 applies only to the Space entry — is correct and unaffected.",
+      "fix": "Correct the two numbers to 86 and 89, or drop the exact figures and keep only the qualitative point (the j,J neighbour is already well past 80; the <= 80 assertion is scoped to the Space entry)."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "04",
+      "issue": "The TDD Anchor asks to extend the existing Test_options_validate table with a row `options{showWAL: \"-f\"}` AND to 'assert the message is exactly `report type is not specified, quit`'. The existing table (cmd/report/report_test.go:10-32) carries only `valid bool`, `opts options` and an unused `want report.Config` — it has no field to express an expected error message, and its loop only calls assert.Error for invalid rows. The instruction cannot be followed as written without reshaping the table or splitting the message assertion into a separate test.",
+      "fix": "Say which shape is intended: either add a `wantErr string` field to the table and assert.EqualError when non-empty, or keep the table untouched and pin the literal in a separate small test (e.g. Test_options_validate_WALUnmappedMessage) — the second keeps the existing rows byte-identical."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 56,
+    "issues_found": 11
+  }
+}

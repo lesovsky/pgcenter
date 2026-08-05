@@ -75,8 +75,9 @@ Say so in each file's doc comment, the way `report_record_statio_test.go:50-60` 
   - **never archived** — the four NULL-able columns arrive as `sql.NullString{Valid: false}` in both
     ticks; **no golden**, pinned by a field-count assertion (see TDD Anchor for why that is the stronger
     pin here, and Details for why no fourth golden is added);
-  - **empty archive** — a tar carrying `meta.*` and `sysinfo.*` but no `archiver.*` entry; `doReport`
-    returns nil and writes nothing.
+  - **empty archive** — a tar carrying `meta.*` and `sysinfo.*` but no `archiver.*` entry; the buffer
+    stays empty. The claim is about the *buffer*, not the error: `doReport` returns nil unconditionally
+    (see Details), so the return value carries no information.
 - Write `report/report_record_wal_test.go` with `Test_app_doReport_WAL` in the table form of
   `Test_app_doReport_Bgwriter`: two subcases (`pg18`, `pg19`), one golden each,
   `report/testdata/report_record_wal_pg18.golden` and `report/testdata/report_record_wal_pg19.golden`.
@@ -123,7 +124,10 @@ a test ends up asserting the bug.
   counters are `0`. Asserts the header line still names all nine columns, and that the single data line,
   ANSI-stripped, splits into exactly **five** `strings.Fields` — `Archiver`, `0`, `0`, `0`, `02:00:00`.
   That is the direct machine reading of the user-spec's "колонки пустые (не `0` и не прочерк)": if the
-  cells rendered `0`, `-` or `n/a` the count would be nine. Also asserts the output contains no `n/a`.
+  cells rendered any token the count would be nine, and mutation B4 proves the assertion actually catches
+  it. Do **not** add a `NotContains "n/a"` assertion — `n/a` (`naLiteral`, `top/stat.go:430`) is a
+  TUI-only sentinel from the `top` package and can never appear in report output, so the assertion would
+  be vacuous by construction.
 - `report/report_record_archiver_test.go::Test_app_doReport_Archiver/no_archiver_entries` — a tar with
   `meta.*` + `sysinfo.*` for two ticks and no `archiver.*` entry at all. Asserts `doReport` returns nil
   and the buffer is **empty** — no column header, no notice (Decision 15; the `INFO:` lines are printed
@@ -166,10 +170,20 @@ not vacuous. Both classes are required.
       **inside** it and did not push `buffers_full` out.
 - [ ] **A4** — make `SelectStatWALQuery`'s PG 18 branch return the PG 14 values (`PgStatWALPG14, 11,
       [2]int{2, 9}`): `Test_app_doReport_WAL/pg18` turns red.
-- [ ] **A5** — remove the `archiver` entry from `view.New()` (`internal/view/view.go`, Task 5's
-      registration): `Test_app_doReport_Archiver` turns red on all three subcases. This is the guard on
-      the dependency that makes this task Wave 3 — `newApp` resolves the view by report type
-      (`report/report.go:83-85`) and an unregistered name yields a zero-value `view.View`.
+- [ ] **There is deliberately no A5, and no mutation of `view.New()` is attempted.** Removing the
+      `archiver` entry from the registry **cannot** redden any subcase, and the task must not pretend
+      otherwise. `processData` never consults the registry when it configures the view: it builds its own
+      one-entry map, `views := view.Views{config.ReportType: v}` (`report/report.go:282-284`), and
+      `Views.Configure` switches on the **map key** (`internal/view/view.go:372-373`). So a zero-value
+      `view.View` — which is exactly what `newApp` hands over for an unregistered name
+      (`report/report.go:83-85`, no error) — still receives `Ncols` and `DiffIntvl` from
+      `SelectStatArchiverQuery` through Task 5's `case "archiver":`, and the only other fields the replay
+      reads (`OrderKey`, `OrderDesc`, `UniqueKey`) are inert on a single-row result. The output is
+      byte-identical; the empty-archive subcase never reaches `processData` at all. This is the same
+      argument as the honesty boundary in the Description — apply it consistently instead of chasing an
+      impossible red. **The registry is pinned by Task 5's unit tests**
+      (`internal/view/view_test.go::TestNew_ArchiverView` plus the `TestNew` count), which is the right
+      layer for it. Say so in the decisions report rather than silently dropping a criterion.
 - [ ] **B1** — swap two adjacent columns in the archiver fixture's `cols` slice and the matching values
       (e.g. `failed` and `last_failed`): the archiver golden turns red. Proves the golden pins column
       order and not merely the presence of a row.
@@ -178,14 +192,34 @@ not vacuous. Both classes are required.
 - [ ] **B3** — move the wal pg19 ticks two seconds apart instead of one: the pg19 golden turns red (the
       rate divisor `itv` becomes 2 and every delta halves). Proves the one-second spacing is load-bearing
       and documented, not accidental.
+- [ ] **B4** (gate for `never_archived`, which has no other one) — in the never-archived fixture, replace
+      the four `sql.NullString{Valid: false}` cells with `sql.NullString{String: "0", Valid: true}` —
+      what the screen would render if someone wrapped those columns in `coalesce(..., 0)`. The
+      field-count assertion turns red: the data line splits into **nine** fields instead of five. That
+      mutation is the user-visible promise itself ("колонки пустые, не `0` и не прочерк"), so this is the
+      gate that makes the subcase worth having. Repeat once with `"-"` instead of `"0"` if the extra
+      thirty seconds are cheap; one of the two is mandatory.
+- [ ] **B5** (gate for `no_archiver_entries`, which has no other one) — take the empty-archive tar and
+      add back the two `archiver.*` entries from the populated subcase, changing nothing else: the buffer
+      becomes non-empty and the emptiness assertion turns red. This is not ceremony — an empty buffer is
+      also what a *broken* fixture produces (`TsStart`/`TsEnd` not bracketing the filename dates, a
+      three-part entry name failing `isFilenameOK`, a mistyped `ReportType`), so without B5 the subcase
+      passes for the wrong reason and proves nothing about Decision 15. B5 is what distinguishes
+      "nothing matched" from "nothing ever could".
 - [ ] Fixture values are hostile to a wrongly widened diff range: `waldir_size` is a pretty string
       (`1040 MB` / `1088 MB`) and `stats_age` an interval (`01:00:00` / `02:00:00`), both of which fail
       `strconv.ParseInt` — so a `DiffIntvl` that swallows either produces `diff failed` rather than a
       plausible-looking number.
 - [ ] The never-archived subcase asserts on the **field count** of the ANSI-stripped data line, not on a
-      whole-line string equality, and the assertion fails if the blank cells render `0`, `-` or `n/a`.
-- [ ] The empty-archive subcase asserts `doReport` returns nil **and** the buffer is empty — it does not
-      assert on `INFO:` lines, which `doReport` never writes.
+      whole-line string equality, and B4 above demonstrates that the assertion fails if the blank cells
+      render a token. It does **not** assert `NotContains "n/a"`: `naLiteral` is a `top`-package constant
+      (`top/stat.go:430`) used by the TUI system-stats block only, never reachable from report output, so
+      that assertion cannot fail and would only pad the test.
+- [ ] The empty-archive subcase's load-bearing assertion is the **empty buffer**. It does not assert on
+      `INFO:` lines, which `doReport` never writes; and it does not lean on the error return, because
+      `doReport` returns nil on every path (`report/report.go:109-151` — `processData`'s error is printed
+      with `fmt.Println` and swallowed). Keeping a `require.NoError` as hygiene is fine, with a comment
+      saying it is not evidence; presenting it as evidence is not.
 - [ ] Each file's doc comment states what the replay does and does not prove — in particular that column
       names come from the fixture, so a reordering of SQL aliases would not be caught here.
 - [ ] `make lint` (golangci-lint + gosec) is clean on the host.
