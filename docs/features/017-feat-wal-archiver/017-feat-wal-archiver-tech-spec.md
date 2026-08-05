@@ -302,6 +302,20 @@ arbitrary unknown value.
 **Alternatives considered:** defaulting an unrecognised value to `wal` — rejected: it would silently
 run a different report than the operator asked for.
 
+### Decision 19: the privilege-test helper lives in `internal/postgres/testing.go`, owned by one task
+
+**Decision:** the role-creation/`SET ROLE` helper is added once to `internal/postgres/testing.go` by
+Task 1, and Task 3 reuses it. Task 3 therefore moves from Wave 1 to Wave 2 and depends on Task 1.
+**Rationale:** the wave conflict analysis compared *files* and missed that Tasks 1 and 3 both add test
+helpers to the **same Go package** (`internal/query`) — different files, one package namespace, so two
+package-level helpers of the same name simply would not compile, and two differently-named copies of
+the same logic would be duplication a reviewer would rightly reject. `internal/postgres/testing.go` is
+already the shared home for test helpers (`NewTestConnect`, `NewTestConnectVersion`) and is imported by
+both packages, so one helper serves `internal/query` and `internal/stat` alike.
+**Alternatives considered:** two differently-named per-task helpers — rejected as duplicated logic in
+one package; keeping both tasks in Wave 1 and hoping the names differ — rejected, that is a compile
+failure waiting on task ordering.
+
 ### Decision 18: the SET ROLE test roles are created at test time, idempotently
 
 **Decision:** the privilege tests create their own roles at runtime on whichever fixture cluster the
@@ -511,14 +525,15 @@ Technical criteria, complementing the user-facing ones in the user-spec:
   backlog query and a version-independent selector returning query, `Ncols` and `DiffIntvl`. This is
   the data source for the whole feature; no view wiring here. The privilege behaviour the design rests
   on is proven by test, both directions, using roles created at test time per Decision 18 — not
-  asserted in prose. The query carries a
-  comment pointing at Decision 16, which is why its two server-supplied text columns need no
+  asserted in prose. It also adds the shared role helper both privilege tests use, per Decision 19.
+  The query carries a comment pointing at Decision 16, which is why its two server-supplied text columns need no
   sanitisation.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/...` in the CI image: the query returns 9 columns on
   PG 14–19, succeeds under a `pg_monitor`-only role and fails with a permission error without it
-- **Files to modify:** `internal/query/archiver.go`, `internal/query/archiver_test.go`
+- **Files to modify:** `internal/query/archiver.go`, `internal/query/archiver_test.go`,
+  `internal/postgres/testing.go`
 - **Files to read:** `internal/query/wal.go`, `internal/query/io.go`, `internal/query/wal_test.go`,
   `docs/features/017-feat-wal-archiver/017-feat-wal-archiver-code-research.md`
 
@@ -531,6 +546,19 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Verify:** bash — `go test ./internal/query/...` in the CI image, PG 19 query returns 8 columns
 - **Files to modify:** `internal/query/wal.go`, `internal/query/wal_test.go`
 - **Files to read:** `internal/query/bgwriter.go`, `internal/query/query.go`
+
+#### Task 4: report CLI — `-W` becomes a string flag
+- **Description:** Change `showWAL` from bool to string, map `w` → wal and `a` → archiver in
+  `selectReport`, and update the flag description. The mapping is a closed whitelist that fails
+  closed on any unmapped value, for the reason recorded in Decision 17.
+- **Skill:** code-writing
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Verify:** bash — `go test ./cmd/report/...`; `-W w`, `-W a` map correctly and every unmapped value
+  (including other flags' letters, e.g. `c`, `t`, `g`) fails closed
+- **Files to modify:** `cmd/report/report.go`, `cmd/report/report_test.go`
+- **Files to read:** `report/report.go`
+
+### Wave 2 (зависит от Wave 1 — регистрация вью и всё, что от неё зависит)
 
 #### Task 3: Verbose panel backlog on a pg_monitor-accessible function
 - **Description:** Switch `OverviewArchivingBacklog` from `pg_ls_dir('pg_wal/archive_status')` to
@@ -547,19 +575,6 @@ Technical criteria, complementing the user-facing ones in the user-spec:
   `internal/stat/postgres.go`, `internal/stat/postgres_test.go` — the last three carry the four stale
   privilege comments
 - **Files to read:** `docs/decisions-log.md`
-
-#### Task 4: report CLI — `-W` becomes a string flag
-- **Description:** Change `showWAL` from bool to string, map `w` → wal and `a` → archiver in
-  `selectReport`, and update the flag description. The mapping is a closed whitelist that fails
-  closed on any unmapped value, for the reason recorded in Decision 17.
-- **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./cmd/report/...`; `-W w`, `-W a` map correctly and every unmapped value
-  (including other flags' letters, e.g. `c`, `t`, `g`) fails closed
-- **Files to modify:** `cmd/report/report.go`, `cmd/report/report_test.go`
-- **Files to read:** `report/report.go`
-
-### Wave 2 (зависит от Wave 1 — регистрация вью и всё, что от неё зависит)
 
 #### Task 5: Register the archiver view and update every layout-pinning test
 - **Description:** Register the `archiver` view in `view.New()` with its static parameters and `Msg`,
