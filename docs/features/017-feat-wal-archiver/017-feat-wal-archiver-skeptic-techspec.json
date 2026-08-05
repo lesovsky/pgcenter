@@ -1,100 +1,97 @@
 {
   "status": "approved",
-  "summary": "Checked 57 claims in 017-feat-wal-archiver-tech-spec.md against the tree at 41fb586; found 7 mirages, none critical. Every file the spec plans to modify exists, every named test exists with the exact value the spec states, all four showWAL sites are real, the Configure() `case \"wal\":` genuinely needs no edit, and every cited ADR / tech-debt number resolves. The defects are one false statement about TestViews_Configure's current content, one deliverable (\"0.12.0 release notes\") that has no artifact in the tree, a help.go edit the spec undercounts relative to its own research, and four imprecise file:line references.",
+  "summary": "Round 2. Re-checked only the NEW or CHANGED claims (24 of them); round 1's 57 claims / 50 confirmations stand and were not re-verified. All seven substantive new arguments hold: OverviewWalSize really does call pg_ls_waldir() on every verbose tick, the recorder really does run every recordable view's query each tick, printStatHeader really does gate on Aligned, the procpidstat no-data notice really is ReportType-gated, doc/release-notes/ really stops at v0.9.0 and v0.9.0.md really documents a hotkey break in prose, the fixture role really is the superuser `postgres`, and ReportType really is both a tar-entry filter and a view-map key. Seven defects found, none critical: one testing-strategy gap (the pg_monitor-only role the SET ROLE tests need does not exist anywhere and nothing says who creates it), one mislocated acceptance criterion, two round-1 fixes that were only half-applied, one new off-by-one introduced by a round-1 fix, one over-strong wording in Decision 15, and one claim that pgcenter's tree cannot support either way.",
   "findings": [
     {
       "severity": "major",
       "type": "missing_pattern",
-      "claim": "tech-spec Task 5 says view_test.go's TestViews_Configure contains \"matrix rows that pin the PG 19 `wal` column count changed in Wave 1\", which the task must *update*.",
-      "reality": "internal/view/view_test.go:99-253 — TestViews_Configure asserts nothing about the `wal` view at any version. The `case 190000:` block (:183-192) and `case 140000:` block (:193-202) assert only progress_vacuum / progress_analyze / progress_basebackup; there is no `views[\"wal\"]` reference anywhere in the file. The companion research (§10.G row 10) states this correctly: \"no `wal` assertion at any version; add the wal assertions\". Spec and research disagree.",
-      "source": "017-feat-wal-archiver-tech-spec.md, Implementation Tasks, Wave 2, Task 5 (Description)",
-      "fix": "Reword Task 5 to \"add PG 19 / PG 18 `wal` Ncols+DiffIntvl assertions to TestViews_Configure\" instead of \"update the matrix rows that pin\" — an executor told to update non-existent rows may conclude the work is already done and skip the assertion entirely."
+      "claim": "Testing Strategy (:334-338), Task 1 (:467) and Task 3 (:498-499): privilege behaviour is proven \"Using `SET ROLE` against the fixture cluster\" — the archiver query and the verbose backlog aggregate run \"under a role holding only `pg_monitor`\", and the archiver query fails without it.",
+      "reality": "Mechanically possible but nothing in the tree provides the role. `internal/postgres/testing.go:6-7,:41` connects as user `postgres` (trust auth, db `pgcenter_fixtures`) — a superuser — and `DB.Conn` is a single `*pgx.Conn` (internal/postgres/postgres.go:22-26) with an `Exec` wrapper (:119-121), so `CREATE ROLE`/`SET ROLE`/`RESET ROLE` do work on that session. But: grep over the whole repo finds ZERO occurrences of `SET ROLE`, `CREATE ROLE` or `GRANT` in any .go file — no precedent to copy. The `pg_monitor`-only role does not exist in the fixture image, and the Risks table (:430) states the image is deliberately NOT changed, so the test itself must create it. Neither Task 1 nor Task 3 says so, names the role, or addresses that role creation is a cluster-wide persistent side effect (a second run of the suite against the same container hits `role already exists` unless the test is written idempotently, and a missing `RESET ROLE` would leak the demoted role into every later query on that connection).",
+      "source": "017-feat-wal-archiver-tech-spec.md, Testing Strategy (\"Privilege behaviour is tested, not asserted\"), Task 1 Description/Verify, Task 3 Verify, Acceptance Criteria :453-455",
+      "fix": "State in Task 1 (and reference from Task 3) that the test creates its own role — e.g. `DROP ROLE IF EXISTS pgcenter_test_monitor; CREATE ROLE pgcenter_test_monitor IN ROLE pg_monitor;` via `db.Exec`, then `SET ROLE` / `RESET ROLE` with a `t.Cleanup` that drops it — and note that the negative direction needs a second role with no `pg_monitor` membership. Without this the executor has no precedent in the tree to imitate."
     },
     {
       "severity": "major",
-      "type": "missing_file",
-      "claim": "Decision 13 and Task 9 make \"the 0.12.0 release notes\" a deliverable that \"must name the literal failure text users will see\"; Task 9's Files to modify is `docs/roadmap-0.12.0.md` and its verify step is \"grep the release notes for both literal messages\".",
-      "reality": "There is no 0.12.0 release-notes artifact in the tree. `doc/release-notes/` contains only `v0.8.0.md` and `v0.9.0.md` (nothing for 0.10.0 or 0.11.0), and `docs/roadmap-0.12.0.md:478` states the project's own policy: \"Version bump — git-tag-driven via ldflags; no CHANGELOG (GoReleaser generates release notes)\". `docs/roadmap-0.12.0.md` exists but is a planning roadmap, not release notes.",
-      "source": "017-feat-wal-archiver-tech-spec.md, Decision 13 and Implementation Tasks Task 9; also Backward Compatibility (\"Migration strategy\") and the Risks table",
-      "fix": "Either name the concrete file the text goes into (e.g. a new `doc/release-notes/v0.12.0.md`, which would be a new practice given the GoReleaser policy) or say plainly that the breaking-change text is recorded in `docs/roadmap-0.12.0.md`. As written, Task 9's verify step does not identify which file to grep."
+      "type": "name_mismatch",
+      "claim": "Acceptance Criteria :456: \"The two comments in `internal/stat/` that state `pg_ls_dir` requires 'pg_monitor/superuser' are corrected\".",
+      "reality": "The pair Task 3 describes (wrong privilege requirement AND the path-swallowing justification) is `internal/query/overview.go:97-99` (\"pg_ls_dir requires pg_monitor/superuser; this query MUST be run as its OWN QueryRow ... The raw error (containing the path) must never be surfaced\") and `internal/stat/postgres.go:288-290` (\"pg_ls_dir requires pg_monitor/superuser ... The raw error (which contains a filesystem path) is deliberately swallowed\"). Both exist and say exactly what the spec says they say — but only ONE of them is in `internal/stat/`; the other is in `internal/query/`. An executor grepping `internal/stat/` for the criterion finds a single hit and may \"complete\" it by also editing the unrelated struct-field comment at internal/stat/postgres.go:83-84.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Acceptance Criteria (last bullet); cross-checked against Task 3 Description and Files to modify",
+      "fix": "Reword to \"The two comments — `internal/query/overview.go:97-99` and `internal/stat/postgres.go:288-290` — that state `pg_ls_dir` requires pg_monitor/superuser are corrected\". Task 3's Files to modify already lists both files, so only the criterion's wording is wrong."
     },
     {
       "severity": "minor",
       "type": "missing_pattern",
-      "claim": "Architecture and Task 6 say the `top/` work touches \"two help-screen lines (`top/help.go`)\".",
-      "reality": "The research lists three edit sites in `top/help.go`: `:14` (`r,w  'r' replication, 'w' WAL,`), `:19` (the `j,J` line, model for a new `w,W` line) and `:45` (`('Q' does not reset shared stats: pg_stat_io, bgwriter, wal)`), noting at §10.A/:80 that the archiver is likewise not reset by `Q` and that line should gain `archiver`. All three lines are present in the tree as described. The spec's count of two silently drops the `Q`-caveat edit.",
-      "source": "017-feat-wal-archiver-tech-spec.md, Architecture \"What we're building/modifying\" and Task 6 Description",
-      "fix": "Say \"three help-screen lines\" and name `help.go:45` explicitly, or state that the `Q`-caveat line is deliberately left alone."
+      "claim": "Task 3 scopes the comment corrections to \"Two existing comments\" (plus the four files it lists as Files to modify).",
+      "reality": "Two MORE comments in the same files carry the same false premise and are not named anywhere: `internal/query/overview_test.go:124-126` — \"pg_ls_dir, which requires pg_monitor/superuser. On the test clusters the fixtures role has access\" — and `internal/stat/postgres_test.go:224` — \"the fixtures role has pg_monitor, so the OWN-QueryRow aggregate must run\". The fixtures role is the superuser `postgres` (internal/postgres/testing.go), not a pg_monitor member; these comments are exactly the wrong-assumption trail the criterion at :456 exists to erase, and both files are already in Task 3's Files to modify.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Task 3 Description",
+      "fix": "Say \"four comments — two in the source files and two in their tests\", or add a sentence to Task 3 that the test comments must stop claiming the fixtures role has pg_monitor when it is in fact the superuser."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 15: \"`report -W a` over an archive containing no `archiver` entries prints an empty output — no rows and no header — and exits 0.\"",
+      "reality": "The load-bearing half is confirmed: `printStatHeader` (report/report.go:559-563) returns early on `printedNum < repeatHeaderAfter || !v.Aligned`; `Aligned` is set only in `formatStatSample` (report/report.go:527-538), whose sole call site is report/report.go:363 — inside the data branch, after the first-sample discard; and the no-data notice at report/report.go:391 is gated on `!anyDataPrinted && config.ReportType == \"procpidstat\"`. But the output is never literally empty: `RunMain` calls `printReportHeader` at report/report.go:63 before `doReport`, which unconditionally prints three INFO lines (\"INFO: reading from …\", \"INFO: report …\", \"INFO: start from: …, to: …\").",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 15 (Decision line)",
+      "fix": "Phrase it as \"prints the usual three INFO header lines and nothing else — no column header, no rows — and exits 0\", so a QA step that greps for empty stdout is not written against a false expectation."
     },
     {
       "severity": "minor",
       "type": "name_mismatch",
-      "claim": "Decision 12: \"`report/report.go:315-320` discards the first sample unconditionally\".",
-      "reality": "The discard is the block `if !prevStat.Valid || versionChanged {` at report/report.go:277, whose body assigns prevMeta/prevStat/prevTs at :278-280 and ends with `continue` at :319. Lines 315-318 belong to the `if versionChanged` sub-branch (`orderConfigured = false`, `v.OrderKey = seedOrderKey`, `v.OrderDesc = seedOrderDesc`) — unrelated to the first-sample drop. Only :319 falls inside the cited range. \"Unconditionally\" is also loose: the drop is conditional on `!prevStat.Valid` (the first sample) or a recorded-version change.",
-      "source": "017-feat-wal-archiver-tech-spec.md, Decision 12 (Rationale)",
-      "fix": "Cite `report/report.go:277-320` (condition at :277, `continue` at :319) and phrase it as \"the first sample is always dropped because it has no predecessor\"."
-    },
-    {
-      "severity": "minor",
-      "type": "name_mismatch",
-      "claim": "Decision 2: the calculateDelta short-circuit was \"verified by reading both call sites (`internal/stat/stat.go:440` for the TUI, `report/report.go:505` for the report)\".",
-      "reality": "internal/stat/stat.go:440 is the comment line `// Compare previous and current Postgres stats snapshots and calculate delta.`; the actual `calculateDelta(...)` call is at :441. report/report.go:505 is `stat.Compare(curr, prev, interval, v.DiffIntvl, ...)` inside `countDiff` — not a call to `calculateDelta` but to the exported one-line wrapper `Compare` (internal/stat/postgres.go:575-577), which delegates to `calculateDelta`. The conclusion (the {0,0} short-circuit covers both paths) holds; the references are off.",
+      "claim": "Decision 2 (rewritten in round 1): \"the TUI calls `calculateDelta` directly (`internal/stat/stat.go:441`)\".",
+      "reality": "Off by one in the opposite direction: internal/stat/stat.go:439 is the comment `// Compare previous and current Postgres stats snapshots and calculate delta.`, the `calculateDelta(...)` call is at :440, and :441 is `if err != nil {`. (Round 1's own report said comment :440 / call :441 — that was itself off by one, and the correction propagated the wrong number into the spec.) The other two references in the same sentence are exact: `report/report.go:505` is the `stat.Compare(...)` call inside `countDiff`, and `internal/stat/postgres.go:575-577` is the `Compare` wrapper that delegates to `calculateDelta`. Architecture's `internal/stat/postgres.go:589-597` for the `{0,0}` short-circuit is also exact.",
       "source": "017-feat-wal-archiver-tech-spec.md, Decision 2 (Rationale)",
-      "fix": "Cite `internal/stat/stat.go:441` and `report/report.go:505 → stat.Compare → internal/stat/postgres.go:575-577 → calculateDelta`, so the indirection through `Compare` is visible."
+      "fix": "Change `internal/stat/stat.go:441` to `internal/stat/stat.go:440`."
     },
     {
       "severity": "minor",
       "type": "name_mismatch",
-      "claim": "Decision 3: rendering NULL as blank is \"the same decision ADR [013] took for `backend_xid`\".",
-      "reality": "The ADR at docs/decisions-log.md:872 is `[013-feat-activity-xmin-horizon] backend_xid kept as a raw column though only its presence matters` — its decision is \"keep `backend_xid` as a raw catalog column rather than synthesising a boolean indicator\", i.e. a column-choice decision, not a coalesce-vs-blank decision. It does contain the supporting observation \"only blank-versus-set carries information\", so the analogy is defensible, but the ADR did not decide anything about `coalesce`.",
-      "source": "017-feat-wal-archiver-tech-spec.md, Decision 3 (Rationale)",
-      "fix": "Reword to \"consistent with ADR [013]'s reasoning that blank-versus-set is itself the signal\"; the load-bearing precedent for the coalesce rule is patterns.md:46, which the spec already cites correctly."
+      "claim": "Decision 12 still reads: \"`report/report.go:315-320` discards the first sample unconditionally\". Round 1 reported this line reference as fixed.",
+      "reality": "Not applied — the text is unchanged and still wrong. The discard is the block `if !prevStat.Valid || versionChanged {` at report/report.go:277, whose body reassigns prevMeta/prevStat/prevTs and ends with `continue` at :319. Lines 314-317 are `orderConfigured = false` / `v.OrderKey = seedOrderKey` / `v.OrderDesc = seedOrderDesc` inside the `if versionChanged` sub-branch, unrelated to the first-sample drop. \"Unconditionally\" is also loose: the drop is conditional on `!prevStat.Valid` or a recorded-version change.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 12 (Rationale)",
+      "fix": "Cite `report/report.go:277-319` (condition at :277, `continue` at :319) and say \"the first sample is always dropped because it has no predecessor\"."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Task 6: \"Add the `walNextView` cycle and its dispatch case, the two-item `W` menu with its keybinding, and **the two help-screen lines**.\" Round 1 reported the two-vs-three count as corrected to three.",
+      "reality": "Half-applied. Architecture (:41-43) now correctly says \"three help-screen lines (`help.go`): the `w` entry moves out of the plain-switch line into its own `w,W` line, and the `Q`-does-not-reset caveat gains `archiver`\" — and all three sites exist as described (top/help.go:14 `r,w  'r' replication, 'w' WAL,`; :19 the `j,J` model line; :45 `('Q' does not reset shared stats: pg_stat_io, bgwriter, wal)`). Task 6, the file the executor actually works from, still says two.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Task 6 Description",
+      "fix": "Change Task 6 to \"three help-screen lines\" to match Architecture, naming `help.go:45` so the `Q`-caveat edit is not dropped."
     },
     {
       "severity": "minor",
       "type": "missing_pattern",
-      "claim": "Architecture: \"`report/` — a describe entry and constant for the archiver screen ... `report/describe.go`, `report/report.go`\" (Task 7 Files to modify).",
-      "reality": "Correct but worth pinning: the description constants live in `report/describe.go` (`pgStatWALDescription` at :141) while the map that Task 7 must extend is `describeReport` in `report/report.go:665-...` (the `\"wal\": pgStatWALDescription` entry is at report/report.go:674) — not in describe.go. The test to extend is `Test_describeReport` in report/report_test.go, whose `{report: \"wal\", want: pgStatWALDescription}` row is at :1183 (research §10.G says :1184).",
-      "source": "017-feat-wal-archiver-tech-spec.md, Task 7 and Testing Strategy (\"The describe map returns the new archiver description\")",
-      "fix": "No change strictly required; optionally note in Task 7 that the constant goes to describe.go and the map entry to report.go:674, so both edits are explicit."
+      "claim": "Task 1: the query comment must record that \"PostgreSQL only ever reports names that passed its `VALID_XFN_CHARS` filter (hex plus `.history/.backup/.partial`), so debt [029] is not widened here\".",
+      "reality": "The claim is correctly attributed to PostgreSQL's own behaviour (\"its `VALID_XFN_CHARS` filter\"), not to pgcenter — so it is not a mirage about this codebase. But pgcenter's tree cannot support it in either direction: `VALID_XFN_CHARS` appears nowhere in the repo outside this feature's own documents, and no vendored PostgreSQL source exists to check against. Debt [029] does exist (docs/tech-debt.md:47, \"Row values reach the terminal unsanitised\"). The feature's own security audit carries the citation the spec drops: `VALID_XFN_CHARS \"0123456789ABCDEF.history.backup.partial\"` in src/include/postmaster/pgarch.h, enforced by the `strspn` filter in `pgarch_readyXlog` (src/backend/postmaster/pgarch.c), with the fields written only by `pgstat_report_archiver`.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Task 1 Description",
+      "fix": "Carry the audit's citation into Task 1 (pgarch.h / pgarch_readyXlog), so the comment the executor writes points at a source a future reader can verify — the assertion is otherwise unfalsifiable from inside this repo."
     }
   ],
   "stats": {
-    "total_claims_checked": 57,
-    "confirmed": 50,
+    "total_claims_checked": 24,
+    "confirmed": 17,
     "mirages_found": 7,
     "verified_claims": [
-      "internal/view/view_test.go:9-11 TestNew asserts 27 views — exactly as spec/research state",
-      "internal/view/view_test.go:255-280 TestView_VersionOK rows {190000,27} {160000,27} {140000,24} {130000,19} {120000,16} {110000,14} {100000,14} — exact",
-      "record/record_test.go:109-149 Test_filterViews rows {190000,public,0,27} {140000,\"\",9,18} {140000,public,3,24} {130000,8,19} {120000,11,16} {110000,13,14} {100000,13,14} — exact",
-      "top/menu_test.go:8-25 Test_selectMenuStyle with {menuStatIO, want: 2} — exists",
-      "top/config_view_test.go:588 Test_switchViewTo; row {current:\"sizes\", to:\"wal\", want:\"wal\"} at :604 and {\"wal\"→\"replication\"} at :605 — exact, Decision 6's claim that it survives holds (walNextView default returns \"wal\")",
-      "internal/query/wal_test.go:21 {version:190000, wantNcols:7, wantDiffIntvl:{2,5}} — the row the spec says must change, not be added",
-      "internal/view/view.go:389 `case \"wal\":` already delegates to query.SelectStatWALQuery(opts.Version) — needs no edit, as claimed",
-      "showWAL has exactly 4 references: cmd/report/report.go:25, :70, :151, cmd/report/report_test.go:46",
-      "internal/query/io.go:99 SelectStatIOTimeQuery(_ int) — the unused-parameter precedent; .golangci.yml enables revive unused-parameter",
-      "internal/query/query.go:17-22 PostgresV14..PostgresV19 constants exist (V19 = 190000)",
-      "internal/stat/postgres.go:580-597 calculateDelta short-circuits on DiffIntvl{0,0}; Compare at :575-577 wraps it",
-      "internal/query/overview.go:100-102 OverviewArchivingBacklog uses pg_ls_dir('pg_wal/archive_status') — the source the spec switches",
-      "record/recorder.go:136-139 — per-view query error returns nil,err and aborts the whole recording",
-      "top/keybindings.go:38 {\"sysstat\", 'w', switchViewTo(app, \"wal\")}; :49 {\"sysstat\",'J',menuOpen(menuStatIO,...)} — the j/J precedent",
-      "top/config_view.go:232-256 switchViewTo cases are exactly databases/statements/progress/statio + default; Msg printed once at :253",
-      "top/menu.go:194-202 menuStatIO branch calls viewSwitchHandler directly then printCmdline(app.config.view.Msg) — one print, as claimed",
-      "internal/view/view.go:188 stat_io_time Msg contains \"(requires track_io_timing=on)\" — exact line",
-      "internal/view/view.go:129-140 wal view: MinRequiredVersion PostgresV14, DiffIntvl{2,9}, Ncols 11; bgwriter and replslots also PostgresV14",
-      "internal/view/view.go:43 activity DiffIntvl{0,0} — Decision 12's \"activity included\" holds",
-      "docs/decisions-log.md:429 ADR [008] \"Lift NotRecordable only\"; :446 ADR [008] \"-J c|t\"; :462 ADR [008] replay tests; :654 ADR [010] archiving backlog; :686 ADR [010] latency guard; :872 ADR [013] backend_xid — all resolve",
-      "docs/tech-debt.md:10 [027] and :27 [028] are the two lost-message debts; :186 [017] is the beta apt channel",
-      "internal/stat/stat_test.go:450 latencyGuardThreshold exists (the [010] machinery)",
-      "top/config.go:57 viewCh: make(chan view.View) — unbuffered, as claimed",
-      ".claude/skills/project-knowledge/patterns.md:46 — coalesce(...,0) prescribed only for diffed columns",
-      "cmd/report/report.go:70 -W is BoolVarP today; :64 -J is StringVarP \"c - count, t - time\"; :95 \"report type is not specified, quit\"",
-      "doc/pgcenter-report-readme.md documents no CLI flags at all (no -W, no -J); no '-W' occurrence in README.md or doc/*.md — Decision 13's premise holds",
-      ".github/workflows/default.yml:9 and release.yml:11 use lesovsky/pgcenter-testing:0.0.11",
-      "internal/postgres/testing.go:20-27 test clusters PG 14-19; TestViews_Configure exercises 90400 (view_test.go:166-173)",
-      "report/report_record_bgwriter_test.go and report_record_statio_test.go exist; report_record_wal_test.go and report_record_archiver_test.go do not (new, as claimed)",
-      "All Task 1-9 'Files to modify/read' paths exist except the intentionally new internal/query/archiver.go, report/report_record_*_test.go and their goldens",
-      "docs/roadmap-0.12.0.md:302-322 [017] section confirms the spec's Decision 1 rationale, the w/W cycle+menu scope and the PG 19 FPI column"
+      "Decision 9: internal/query/overview.go:66 OverviewWalSize = \"SELECT coalesce((SELECT count(1) * pg_size_bytes(...) FROM pg_ls_waldir()), 0)::bigint\" — pg_ls_waldir() confirmed",
+      "Decision 9: internal/stat/postgres.go:268 runs OverviewWalSize unconditionally inside collectOverviewStat; internal/stat/stat.go:401 `if view.Verbose {` is its only caller (:417) — so one pg_ls_waldir walk per verbose tick, exactly as claimed",
+      "Decision 9: record/recorder.go collect() — `for k, v := range views { stat.NewPGresultQuery(db, v.Query) }` runs every view in the set each tick; the set is filterViews' output (NotRecordable=false + MinRequiredVersion satisfied), and there is no displayed screen at all in `pgcenter record`, so the claim holds for the archiver view",
+      "Decision 15: report/report.go:559-563 printStatHeader returns early on `printedNum < repeatHeaderAfter || !v.Aligned`",
+      "Decision 15: report/report.go:527-538 formatStatSample is the only place `view.Aligned = true` is set, and its sole call site is :363 — inside the data branch, after the first-sample `continue` at :319",
+      "Decision 15: report/report.go:391 `if !anyDataPrinted && config.ReportType == \"procpidstat\"` — the no-data INFO is gated on procpidstat alone, no other screen has one",
+      "Decision 13: doc/release-notes/ exists and contains exactly v0.8.0.md and v0.9.0.md — it does stop at v0.9.0",
+      "Decision 13: doc/release-notes/v0.9.0.md:27 — \"For `top` utility a new shortcut has been introduced: `G` ... Existing `g` shortcut now is working as switcher\" — a user-visible hotkey change in prose, exactly the analogy claimed",
+      "Decision 13: docs/roadmap-0.12.0.md:478 \"Version bump — git-tag-driven via ldflags; no CHANGELOG (GoReleaser generates release notes)\", and :469 confirms it sits under `## Finalization` — both halves of the sentence check out",
+      "Task 9 / Decision 13: doc/release-notes/v0.12.0.md does not yet exist (new file, as intended); doc/release-notes/v0.9.0.md exists as a Files-to-read reference",
+      "Fixture role: internal/postgres/testing.go:6-7 NewTestConfig and :41 NewTestConnectVersion both connect as user `postgres` on pgcenter_fixtures — the superuser, which is why the current pg_ls_dir query passes today",
+      "SET ROLE mechanics: internal/postgres/postgres.go:22-26 DB wraps a single *pgx.Conn (session-scoped SET ROLE) and :119-121 exposes Exec — SET ROLE is mechanically usable from a test",
+      "Task 4: report/report.go:171 `isFilenameOK(hdr.Name, config.ReportType)` and :460-470 `if s[0] != report && s[0] != \"meta\" && s[0] != \"sysinfo\" { return ... }` — ReportType is the tar-entry filter",
+      "Task 4: report/report.go:85 `v := views[config.ReportType]` in newApp (also :283, :292) — a Go map lookup, so an unmapped ReportType yields a zero-value view.View, not an error, exactly as Task 4 warns",
+      "Task 3: internal/query/overview.go:97-99 says \"pg_ls_dir requires pg_monitor/superuser ... The raw error (containing the path) must never be surfaced\" — exists, says what the spec says",
+      "Task 3: internal/stat/postgres.go:288-290 says \"pg_ls_dir requires pg_monitor/superuser; a 42501 privilege error (or archive_mode=off) degrades this field to n/a. The raw error (which contains a filesystem path) is deliberately swallowed\" — exists, says what the spec says",
+      "Task 1: debt [029] resolves — docs/tech-debt.md:47 \"### [029] Row values reach the terminal unsanitised\"",
+      "Decision 2 (round-1 fix, partially landed): report/report.go:505 is `stat.Compare(curr, prev, interval, v.DiffIntvl, ...)` in countDiff — exact; internal/stat/postgres.go:574-577 is the Compare wrapper delegating to calculateDelta — exact",
+      "Architecture: internal/stat/postgres.go:589-597 is precisely the `if interval != [2]int{0,0} { diff(...) } else { delta = curr }` short-circuit — the cited range is exact",
+      "Architecture (round-1 fix landed): three help.go edit sites all exist — :14 `r,w  'r' replication, 'w' WAL,`, :19 the `j,J` model line, :45 the `('Q' does not reset shared stats: pg_stat_io, bgwriter, wal)` caveat"
     ]
   }
 }

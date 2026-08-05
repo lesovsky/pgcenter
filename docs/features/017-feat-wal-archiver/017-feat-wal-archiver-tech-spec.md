@@ -248,6 +248,18 @@ a breaking change needs its own home). Writing full CLI flag documentation for t
 rejected as new, unestimated scope of a different kind; the omission is recorded here so it stays
 visible.
 
+### Decision 14 (Autopilot assumption): column header names
+
+**Decision:** the SQL aliases are exactly the headers the user-spec's mock-up prints — `source`,
+`ready`, `archived`, `last_archived`, `archived_age`, `failed`, `last_failed`, `failed_age`,
+`stats_age` — plus `fpi,KiB` on the wal screen.
+**Rationale (autopilot assumption):** the user-spec fixes column order and semantics but writes the
+headers in prose rather than naming aliases. The mock-up is the most direct reading of intent, the
+comma-unit form matches the existing `wal,KiB`, and `stats_age` matches every other screen.
+**Alternatives considered:** longer, more explicit names (`last_archived_wal`, `ready_files`) —
+rejected: they widen a screen that already carries two 24-character WAL names, and `ready` was chosen
+over `ready_files`/`backlog` by the roadmap owner during the interview.
+
 ### Decision 15: an archive with no archiver data prints nothing, and that stays
 
 **Decision:** `report -W a` over an archive containing no `archiver` entries prints an empty output —
@@ -261,17 +273,44 @@ other screen has. The user-spec's edge case and acceptance criterion were correc
 inconsistent with every other screen and outside this feature's mandate; making it consistent for all
 screens is its own change.
 
-### Decision 14 (Autopilot assumption): column header names
+### Decision 16: the two WAL-name columns need no escape sanitisation
 
-**Decision:** the SQL aliases are exactly the headers the user-spec's mock-up prints — `source`,
-`ready`, `archived`, `last_archived`, `archived_age`, `failed`, `last_failed`, `failed_age`,
-`stats_age` — plus `fpi,KiB` on the wal screen.
-**Rationale (autopilot assumption):** the user-spec fixes column order and semantics but writes the
-headers in prose rather than naming aliases. The mock-up is the most direct reading of intent, the
-comma-unit form matches the existing `wal,KiB`, and `stats_age` matches every other screen.
-**Alternatives considered:** longer, more explicit names (`last_archived_wal`, `ready_files`) —
-rejected: they widen a screen that already carries two 24-character WAL names, and `ready` was chosen
-over `ready_files`/`backlog` by the roadmap owner during the interview.
+**Decision:** `last_archived_wal` and `last_failed_wal` are rendered as-is, with no escaping, and the
+query carries a comment saying why.
+**Rationale:** they are server-supplied text reaching the terminal, which is the shape of tech-debt
+item [029] — but PostgreSQL only ever reports a name that passed its own `VALID_XFN_CHARS` filter
+(hex digits plus the `.history`/`.backup`/`.partial` suffixes) before recording it in the archiver
+statistics. That character set contains no ESC and no control characters, so these two columns cannot
+carry a terminal escape sequence even if an operator hand-places a bogus `.ready` file. Debt [029] is
+therefore not widened here.
+**Alternatives considered:** sanitising the two columns defensively — rejected: it would add a
+transformation on a value that is already constrained at the source, and would diverge from every
+other text column on every other screen, none of which sanitise.
+
+### Decision 17: the `-W` mapping is a closed whitelist
+
+**Decision:** `selectReport` maps only `w` and `a`; every other value falls through and the command
+exits with "report type is not specified, quit".
+**Rationale:** `ReportType` is not an inert label — it is the tar-entry filter in `isFilenameOK` and
+the key into the view map. An unmapped value leaking through would select a zero-value `view.View`
+and produce a silently empty report rather than an error, which is the worst outcome for a
+report tool: a clean exit that shows nothing. The existing `-D`/`-J` flags already fail closed; this
+keeps the family consistent. Tests cover other flags' letters (`c`, `t`, `g`) explicitly, not just an
+arbitrary unknown value.
+**Alternatives considered:** defaulting an unrecognised value to `wal` — rejected: it would silently
+run a different report than the operator asked for.
+
+### Decision 18: the SET ROLE test roles are created at test time, idempotently
+
+**Decision:** the privilege tests create their own roles at runtime on whichever fixture cluster the
+test connects to, tolerate a role that already exists, and always `RESET ROLE` afterwards.
+**Rationale:** the test image is deliberately not changed (Risks), so the roles cannot be baked into
+the fixtures, and the tree today contains no `CREATE ROLE`/`GRANT` at all — this is a new pattern, so
+it needs stating rather than assuming. The tests run against six clusters and may run repeatedly, so
+creation must be idempotent and the session must not leak an assumed role into later assertions.
+**Alternatives considered:** baking the roles into the test image — rejected, it would need an image
+bump and change what every existing test sees; skipping the privilege tests and relying on the stand
+— rejected, that is exactly the gap that let the wrong `pg_ls_dir` privilege assumption survive.
 
 ## Data Models
 
@@ -336,7 +375,8 @@ None.
   a permission error under a role holding neither. The same two-direction check covers the verbose
   backlog aggregate, whose whole justification is that `pg_monitor` could not run the old one. This
   closes the gap that the fixture superuser role would otherwise hide — it is precisely why the
-  current `pg_ls_dir` query passes today.
+  current `pg_ls_dir` query passes today. The roles are created by the tests themselves, idempotently,
+  with `RESET ROLE` afterwards (Decision 18) — the test image stays frozen.
 
 ### Integration tests
 
@@ -464,10 +504,10 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Add `internal/query/archiver.go` with the 9-column `pg_stat_archiver` + `.ready`
   backlog query and a version-independent selector returning query, `Ncols` and `DiffIntvl`. This is
   the data source for the whole feature; no view wiring here. The privilege behaviour the design rests
-  on is proven by test, both directions, using `SET ROLE` — not asserted in prose. The query carries a
-  comment recording why the two server-supplied WAL-name columns cannot smuggle terminal escapes:
-  PostgreSQL only ever reports names that passed its `VALID_XFN_CHARS` filter (hex plus
-  `.history/.backup/.partial`), so debt [029] is not widened here.
+  on is proven by test, both directions, using roles created at test time per Decision 18 — not
+  asserted in prose. The query carries a
+  comment pointing at Decision 16, which is why its two server-supplied text columns need no
+  sanitisation.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/...` in the CI image: the query returns 9 columns on
@@ -490,9 +530,9 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Switch `OverviewArchivingBacklog` from `pg_ls_dir('pg_wal/archive_status')` to
   `pg_ls_archive_statusdir()` so roles with `pg_monitor` see the backlog instead of `n/a`. Output
   stays bytes and the degradation path is unchanged. Two existing comments assert the wrong privilege
-  requirement for the old function, and both also justify swallowing the error text on the grounds
-  that it contains a filesystem path — an argument that no longer applies once the function changes.
-  Correct them in the same task: they are what a future reader would trust.
+  requirement for the old function and justify swallowing the error text with an argument that no
+  longer applies; correct both in the same task, since they are what a future reader would trust.
+  **Only the comments and the function change — the degrade-to-`n/a` behaviour itself is untouched.**
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/... ./internal/stat/...`; the aggregate returns a number
@@ -503,11 +543,8 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 
 #### Task 4: report CLI — `-W` becomes a string flag
 - **Description:** Change `showWAL` from bool to string, map `w` → wal and `a` → archiver in
-  `selectReport`, and update the flag description. The mapping must be a closed whitelist: an
-  unmapped value falls through to the existing "report type is not specified" path and must never
-  reach `ReportType`, which is used both as a tar-entry filter and as a view-map key — an unmapped
-  value leaking through would produce a zero-value view and a silently empty report instead of an
-  error.
+  `selectReport`, and update the flag description. The mapping is a closed whitelist that fails
+  closed on any unmapped value, for the reason recorded in Decision 17.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./cmd/report/...`; `-W w`, `-W a` map correctly and every unmapped value
@@ -533,17 +570,23 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 
 #### Task 6: TUI navigation — `w` cycle, `W` menu, help
 - **Description:** Add the `walNextView` cycle and its dispatch case, the two-item `W` menu with its
-  keybinding, and the two help-screen lines. Copies the `j`/`J` machinery for `pg_stat_io`.
+  keybinding, and the three help-screen lines, copying the `j`/`J` machinery for `pg_stat_io`. The
+  help screen is the project's only user-facing hotkey documentation and is pinned by test rather
+  than by review, so the new `w,W` entry and the `archiver` addition to the `Q` line are pinned the
+  same way, following the existing entry tests.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...` (runs without PostgreSQL)
 - **Files to modify:** `top/config_view.go`, `top/menu.go`, `top/keybindings.go`, `top/help.go`,
-  `top/config_view_test.go`, `top/menu_test.go`
+  `top/config_view_test.go`, `top/menu_test.go`, `top/help_test.go`
 - **Files to read:** `internal/view/view.go`
 
 #### Task 7: report describe text for archiver and the wal FPI row
 - **Description:** Add the archiver description constant and its entry in the describe map, and add
-  the `fpi,KiB` row to the wal description so `report -d -W w` documents the PG 19 column.
+  the `fpi,KiB` row to the wal description so `report -d -W w` documents the PG 19 column. The
+  describe text is a single static constant per report type with no version awareness — it already
+  documents `write`/`sync`, removed in PG 18 — so the new row will also be printed for PG 14–18
+  archives. That is the existing contract, not a regression to fix here.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; `report -d -W a` and `-d -W w` print the new text
@@ -566,11 +609,8 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Add the 0.12.0 release-notes entries for the breaking `-W` change and the PG 19
   legacy-archive limitation, quoting the literal messages users will see (`report type is not
   specified, quit` and `diff failed`), and note that on a cluster whose `archive_status` directory is
-  missing the verbose panel now reports `0 B` instead of `n/a`. Per Decision 13 the notes live in
-  `doc/release-notes/`, the
-  project's established home for user-visible breaks; there is no existing `-W` documentation to
-  update, the flag's own help string is changed in Task 4, and full CLI documentation for the `doc/`
-  tree stays out of scope.
+  missing the verbose panel now reports `0 B` instead of `n/a`. Target, scope and what is deliberately
+  left out are fixed by Decision 13.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
 - **Verify:** bash — grep the release notes for both literal messages
@@ -584,7 +624,6 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Acceptance testing: full `make test` on the PG 14–19 fixtures inside the CI image,
   `make lint` and `make vuln`, then verification of every acceptance criterion from the user-spec and
   this tech-spec. Includes the manual stand run — archiving states, navigation, narrow terminal — and
-  the cost measurement, which must be taken under a `pg_monitor`-only role with verbose mode on and a
-  concurrent recording, per Decision 9, since a superuser run would measure the wrong baseline.
+  the cost measurement, taken under the conditions fixed in Decision 9.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
