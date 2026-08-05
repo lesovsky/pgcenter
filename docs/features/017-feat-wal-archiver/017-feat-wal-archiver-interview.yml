@@ -1,0 +1,627 @@
+# Interview Plan for Feature Planning
+#
+# Tracks progress of adaptive discovery interview for a new feature/bug/refactoring.
+# Updated after EACH user response with scoring, values, and remaining gaps.
+
+# ============================================================================
+# Interview Metadata (Session Recovery)
+# ============================================================================
+interview_metadata:
+  feature_name: "wal-archiver"
+  feature_base: "docs/features/017-feat-wal-archiver/017-feat-wal-archiver"
+  work_type: "feature"
+  started: "2026-08-05 21:59:47"
+  last_updated: "2026-08-05 22:15:00"
+  status: "in_progress"
+  can_resume: true
+  current_question_num: 8
+  feature_size: "M"
+
+# ============================================================================
+# Conversation History (for session recovery)
+# ============================================================================
+conversation_history:
+  - question_num: 1
+    timestamp: "2026-08-05 22:05:00"
+    topic: "archiver column set"
+    agent_question: |
+      pg_stat_archiver gives 7 columns. Proposal: add an 8th — the .ready backlog via
+      pg_ls_archive_statusdir() (the pg_ls_waldir idiom already in wal.go, and the same number the
+      [010] verbose panel computes) — because "how much has piled up" is the question
+      pg_stat_archiver cannot answer. Also: archived_count/failed_count cumulative (bgwriter
+      ckpt_* precedent) or per-interval delta?
+    user_answer: |
+      Add the backlog column. archived_count/failed_count — cumulative.
+    summary: "8 columns incl. backlog; counters cumulative, outside DiffIntvl"
+
+  - question_num: 2
+    timestamp: "2026-08-05 22:05:00"
+    topic: "report flag for archiver"
+    agent_question: |
+      -W is already a bool flag (showWAL). Options: (a) keep -W bool, give archiver a new letter;
+      (b) -W becomes a string "-W w|a" mirroring "-J c|t" — symmetric with the TUI cycle but a
+      breaking change for scripts using bare `-W`; (c) string with cobra NoOptDefVal="w" — bare -W
+      keeps working, but `-W a` with a space silently fails.
+    user_answer: |
+      Вариант B — breaking change, ok.
+    summary: "-W becomes string: -W w (wal) | -W a (archiver). Breaking change accepted."
+
+  - question_num: 3
+    timestamp: "2026-08-05 22:05:00"
+    topic: "PG 19 FPI column on wal"
+    agent_question: |
+      The roadmap justifies a separate archiver view by "widening wal would change the recorded
+      layout for report -W", yet adds a PG 19 FPI column to wal. Safe because the column is
+      version-branched and report replays by the archive's recorded version ([008]) — confirm we
+      accept a PG 19 wal layout that differs from PG 18. And: is the FPI-bytes column a
+      per-interval delta (inside DiffIntvl next to wal,KiB) or cumulative?
+    user_answer: |
+      Да, добавляем FPI-колонку в wal. Колонка — дельта в интервале.
+    summary: "FPI bytes goes on the wal screen, PG 19 branch, diffed (inside DiffIntvl)"
+
+  - question_num: 4
+    timestamp: "2026-08-05 22:05:00"
+    topic: "testing strategy"
+    agent_question: |
+      Proposal: unit tests for the selectors across PG 14-19, the count-based tests that break on a
+      new view (TestNew, TestView_VersionOK, Test_filterViews, Test_selectMenuStyle,
+      Test_switchViewTo), report tests (describe + flag), plus a manual stand run. Caveat: test
+      fixtures almost certainly run archive_mode=off, so pg_stat_archiver is all zeros/NULLs and
+      proves nothing — are you willing to enable archive_mode on the stand with a succeeding and
+      then a deliberately failing archive_command?
+    user_answer: |
+      По тестам ок. Адрес стенда закину позже, стенд полностью в нашем распоряжении, конфиги можно
+      менять как угодно. В качестве команд обычно хорошо заходят /bin/true и /bin/false.
+    summary: "Testing plan accepted; stand run with archive_command=/bin/true then /bin/false"
+
+  - question_num: 5
+    timestamp: "2026-08-05 22:15:00"
+    topic: "backlog query cost"
+    agent_question: |
+      pg_ls_archive_statusdir() is a directory listing, and the archiver screen is opened exactly
+      when archive_status/ holds 100k+ .ready files — we would list them every tick. Precedent
+      exists (verbose panel [010] and wal.go's pg_ls_waldir do it unconditionally), but the
+      roadmap's cross-cutting principle is "do not make an incident worse". (a) accept as-is;
+      (b) throttle/cache it like dbSizeThrottled.
+    user_answer: |
+      Вариант А.
+    summary: "Backlog computed every tick, unthrottled — consistent with wal/verbose precedent"
+
+  - question_num: 6
+    timestamp: "2026-08-05 22:15:00"
+    topic: "time column format"
+    agent_question: |
+      last_archived_time / last_failed_time as absolute timestamps (correlate with the PG log,
+      copy-paste into a ticket) or as age (the stats_age idiom already used on wal, replslots,
+      tables — the direct incident answer) or both (10 columns, fine after [009] scroll)?
+    user_answer: |
+      Age — с обычными таймстемпами пользователю всё равно придётся вычислять возраст в уме.
+    summary: "Age columns only (archived_age, failed_age); no absolute timestamps"
+
+  - question_num: 7
+    timestamp: "2026-08-05 22:15:00"
+    topic: "archive_mode=off hint"
+    agent_question: |
+      With archive_mode=off the view returns zeros/NULLs and the screen reads as "all quiet" when
+      archiving simply does not exist. Precedent: the stat_io_time screen prints a track_io_timing
+      hint to the cmdline. Add an equivalent hint?
+    user_answer: |
+      Да, хинт делаем.
+    summary: "cmdline hint when archive_mode is off"
+
+  - question_num: 8
+    timestamp: "2026-08-05 22:15:00"
+    topic: "feature boundaries"
+    agent_question: |
+      Three pieces: (1) archiver screen + w cycle / W menu + help, (2) record/report with the
+      breaking -W w|a, (3) PG 19 FPI column on wal. Size M. Cut or add anything? Specifically:
+      should Q also reset pg_stat_archiver statistics (today Q resets pgss only)?
+    user_answer: |
+      Ничего не добавляем, сброс не добавляем.
+    summary: "Scope locked at three pieces; no stats reset via Q"
+
+  - question_num: 9
+    timestamp: "2026-08-05 22:40:00"
+    topic: "privileges / versions / breaking change / success criteria"
+    agent_question: |
+      (1) Accept all-or-nothing privilege degradation (no pg_monitor -> the whole archiver screen
+      errors, exactly as the wal screen does today with pg_ls_waldir)? (2) Confirm the archiver
+      view needs no MinRequiredVersion and no version branch. (3) The broken `-W` fails loudly with
+      cobra's "flag needs an argument"; update flag text, README, release notes — want an extra
+      hint inside the error text? (4) Confirm the 7-point definition of done.
+    user_answer: |
+      1. Ок, принимаем как есть и консистентно с существующим поведением. 2. Подтверждаю.
+      3. Ок, но явную подсказку в тексте ошибки не надо. 4. Всё ок.
+    summary: "All four confirmed; no custom text in the flag error"
+
+  - question_num: 10
+    timestamp: "2026-08-05 22:35:00"
+    topic: "manual stand"
+    agent_question: |
+      Where and how do we run the manual verification?
+    user_answer: |
+      Стенд pgpro@10.128.31.96, TTL 24h, postgrespro-ent-18.service уже стоит (остановлен), можно
+      гнать тесты на нём либо поставить ванильный PostgreSQL. Конфиги менять как угодно.
+    summary: "Stand assigned; PG 19 not available there, CI image covers it"
+
+  - question_num: 11
+    timestamp: "2026-08-05 23:05:00"
+    topic: "screen layout / DiffIntvl / backlog name / archive_mode hint"
+    agent_question: |
+      (1) Confirm the 9-column layout and order. (2) Confirm DiffIntvl {0,0} (full pass-through,
+      NULLs render blank). (3) Backlog column named `ready`? (4) The hint question REOPENED,
+      because the cited precedent was wrong: the stat_io_time "hint" is a static view.Msg
+      (internal/view/view.go:188) printed unconditionally, and no GUC is read anywhere in the
+      codebase. Options: (a) static Msg "(requires archive_mode=on)"; (b) a truly conditional
+      cmdline hint — archive_mode GUC through the 4-place chain plus a branch on BOTH entry points,
+      on a surface where two registered debt items ([027], [028]) are about messages losing races;
+      (c) a `mode` column from current_setting('archive_mode') in the same query — permanently
+      visible, no GUC plumbing, costs a 10th column. Agent recommended (c).
+    user_answer: |
+      1. Раскладка ок. 2. Подтверждаю. 3. `ready` — норм. 4. Вариант A — самый дешёвый, без хрупкой
+      схемы B и без лишнего запроса current_setting и избыточной колонки.
+    summary: |
+      Layout, DiffIntvl {0,0} and the `ready` name confirmed. Hint = option (a), a static Msg.
+      This SUPERSEDES the "cmdline hint" answer of Q7. (Agent noted for the record that (c) added
+      no extra query, only a column; the user's objection to the extra column stands.)
+    alternatives_considered:
+      chosen: "(a) static view.Msg '(requires archive_mode=on)'"
+      rejected:
+        - option: "(b) conditional cmdline hint on the live archive_mode GUC"
+          reason: "fragile — needs a 4-place GUC lockstep plus branches on two entry points, on a
+                   cmdline surface with two registered debt items about lost messages"
+        - option: "(c) a `mode` column from current_setting('archive_mode')"
+          reason: "an extra column judged redundant by the user"
+
+  - question_num: 12
+    timestamp: "2026-08-05 23:20:00"
+    topic: "cycle name / golden tests / user stories"
+    agent_question: |
+      (1) The `w` group name collides with the `wal` view name (every existing cycle uses a name
+      that is not a view name), and the view cannot be renamed — it is the report type and the tar
+      entry prefix. (a) reuse "wal" as the group name in the one dispatch case; (b) invent a
+      separate group name. (2) The wal screen has NO golden replay test today and we are changing
+      its PG 19 layout — add report_record_wal_test.go with PG 18 and PG 19 goldens on top of the
+      archiver golden? (3) Confirm the three user stories; does the FPI column need one of its own?
+    user_answer: |
+      1. Вариант A — ок. 2. Да, берём (к слову, у нас есть стенд, можно на нём собрать
+      голден-файлы). 3. Да, всё верно. По FPI-колонке можно без отдельного сценария.
+    summary: |
+      Cycle name "wal" reused (option a); wal PG18/PG19 goldens added to scope; three user stories
+      confirmed, FPI gets no story. Agent note: [008] goldens are built from a synthetic in-memory
+      tar with deterministic timestamps, so the stand is for verifying a real record->report round
+      trip rather than for generating goldens.
+    alternatives_considered:
+      chosen: "(a) reuse the string \"wal\" as the cycle/group name"
+      rejected:
+        - option: "(b) a separate group name (walgroup / archiving)"
+          reason: "adds an entity the user never sees; the single dispatch case is clearer with a
+                   code comment"
+
+# ============================================================================
+# Phase 1: High-Level Feature Understanding
+# ============================================================================
+phase1_feature_overview:
+
+  feature_description:
+    score: 90
+    status: "complete"
+    value: |
+      Roadmap [017] "WAL and archiving area — one pass", three pieces, scope locked:
+      (1) New single-row `archiver` view over pg_stat_archiver, reached by cycling the existing
+          `w` hotkey (wal -> archiver), `W` opens a 2-item menu (the [006] j/J precedent).
+          Columns: the 7 catalog columns rendered as archived_count (cumulative),
+          last_archived_wal, archived_age, failed_count (cumulative), last_failed_wal, failed_age,
+          stats_age — plus an 8th, the .ready backlog from pg_ls_archive_statusdir(), computed
+          every tick (no throttle). Time is shown as age, never as an absolute timestamp.
+          cmdline hint when archive_mode is off.
+      (2) record/report folded in from day one; `-W` changes from bool to string: `-W w` (wal),
+          `-W a` (archiver) — an accepted breaking change, mirroring `-J c|t`.
+      (3) PG 19: WAL bytes written for full page images added to the existing `wal` view as a
+          per-interval delta (inside DiffIntvl, next to wal,KiB), under a PG 19 query branch.
+      Explicitly NOT in scope: resetting pg_stat_archiver via `Q`.
+    gaps: ""
+    required: true
+
+  user_problem:
+    score: 90
+    status: "complete"
+    value: |
+      Archiving failure -> WAL accumulation -> disk fill. Low frequency, high severity. The
+      backlog of .ready files already ships in the [010] verbose panel
+      (OverviewArchivingBacklog); what pg_stat_archiver adds is the identity and timeline of the
+      failure: last_failed_wal, how long since the last failure and since the last success,
+      failed_count growth, and the backlog size next to them on one screen. Today all of this
+      requires leaving pgcenter for psql. Secondary problem: with archive_mode=off the cluster
+      looks quiet rather than unconfigured — hence the hint.
+    gaps: ""
+    required: true
+
+  target_users:
+    score: 85
+    status: "complete"
+    value: |
+      Practicing PostgreSQL DBA during or after an archiving incident (the release's audience
+      lens). Same audience as the rest of pgcenter — no new user class.
+    gaps: ""
+    required: false
+
+  success_criteria:
+    score: 90
+    status: "complete"
+    value: |
+      Confirmed by the user verbatim ("все ок"):
+      1. On the `archiver` screen a DBA answers at a glance: is archiving configured at all; how
+         many segments are not archived yet; when was the last success and the last failure; which
+         segment it stumbled on; is the failure counter growing.
+      2. `w` cycles wal -> archiver -> wal; `W` opens a 2-item menu; both screens documented in
+         the built-in help.
+      3. The archiver screen carries a STATIC subtitle "(requires archive_mode=on)" in its
+         view.Msg, printed unconditionally on both entry paths (switchViewTo and menuSelect),
+         with no live GUC lookup. [Rewritten after Q11, which superseded the "conditional cmdline
+         hint when archive_mode is off" wording originally agreed in Q7.]
+      4. `pgcenter record` records `archiver`; `pgcenter report -W a` replays it; `report -d -W a`
+         prints the describe text.
+      5. On PG 19 the `wal` screen shows FPI bytes as a per-interval delta; on PG 14-18 the screen
+         is unchanged.
+      6. Full `make test` green on the PG 14-19 fixtures; `make lint` and `make vuln` clean.
+      7. Manual stand run: archive_command=/bin/true (success), then /bin/false (.ready pile-up and
+         failed_count growth), then archive_mode=off (hint).
+    gaps: ""
+    required: true
+
+  constraints:
+    score: 90
+    status: "complete"
+    value: |
+      - Privileges, all-or-nothing (accepted): pg_ls_archive_statusdir() requires superuser or
+        pg_monitor. The screen runs ONE query, so without the privilege the whole archiver screen
+        errors every tick rather than losing one column. Consistent with today's `wal` screen,
+        which calls pg_ls_waldir() unconditionally. Rejected alternative: two query variants with
+        different Ncols — too much machinery for the case.
+      - Versions: pg_stat_archiver exists since PG 9.0 and pg_ls_archive_statusdir() since PG 12,
+        while pgcenter supports PG 14-19 — so the archiver view needs NO MinRequiredVersion and
+        NO version branch; one query for all supported versions (the
+        SelectStatReplicationSlotsQuery precedent). The only version branch in the feature is the
+        PG 19 FPI column on `wal`.
+      - Breaking change on `-W`: the old `pgcenter report -W -f dump.tar` fails loudly with
+        cobra's "flag needs an argument" — deliberately loud rather than a silent change of
+        meaning. Flag description, README and the 0.12.0 release notes are updated. The user
+        declined adding an extra explanatory hint to the error text itself.
+      - The `.ready` backlog is computed every tick with no throttle (decided in Q5).
+      - Stand: pgpro@10.128.31.96, TTL 24h, postgrespro-ent-18.service present but stopped;
+        configs may be changed freely. PG 19 is NOT available there — the PG 19 catalog is checked
+        against the project CI image lesovsky/pgcenter-testing:0.0.11 (PG 19 on port 21919).
+    gaps: ""
+    required: true
+
+  testing_strategy:
+    score: 90
+    status: "complete"
+    value: |
+      Size M. Unit tests + a manual stand run; no new E2E harness.
+      - Query selector unit tests over the PG 14-19 version matrix, in the existing
+        internal/query/*_test.go style.
+      - The count-based tests that a new view breaks: view.TestNew, view.TestView_VersionOK,
+        record.Test_filterViews, and the top tests that break on a new menu/cycle entry
+        (Test_selectMenuStyle, Test_switchViewTo, plus the walNextView equivalent of
+        Test_statementsNextView / statioNextView).
+      - report tests: the flag -> report-type mapping for the new string -W, and the describe map.
+      - Manual stand run (pgpro@10.128.31.96): archive_command=/bin/true, then /bin/false, then
+        archive_mode=off. Rationale: the test fixtures almost certainly run archive_mode=off, so
+        pg_stat_archiver is all zeros/NULLs there and proves nothing about the failure path.
+      - PG 19 FPI column verified against the live PG 19 catalog in the CI image, not release notes.
+      - Because the archiver screen can be exercised before record/report and before the FPI work,
+        the stand run may happen early (the stand's 24h TTL may expire before the whole feature is
+        done).
+    gaps: ""
+    required: true
+
+# ============================================================================
+# Phase 2: User Experience & Scenarios
+# ============================================================================
+phase2_user_experience:
+
+  user_stories:
+    score: 90
+    status: "complete"
+    value: |
+      Confirmed by the user ("да, всё верно"); the FPI column deliberately gets no story of its own.
+
+      Story 1 — incident. As a DBA, I want to see on one screen that archiving is broken and how
+      badly, so I can tell whether I have hours or minutes before the disk fills.
+      Scenario: pg_wal grows -> pgcenter -> `w` (wal screen, waldir_size climbing) -> `w` again
+      (archiver screen) -> ready = 14231, failed = 3781 and climbing, last_failed_wal =
+      000000010000..., archived_age = 4 days 02:11:44 -> conclusion: archiving stopped four days
+      ago, 14k segments piled up.
+
+      Story 2 — verification after the fix. As a DBA, I want to confirm archiving actually resumed
+      after I fixed archive_command, so I do not close the incident blind.
+      Scenario: fix archive_command -> pgcenter -> `w`,`w` -> archived is growing, ready is
+      falling, archived_age stays near zero, failed is frozen.
+
+      Story 3 — post mortem from a recording. As a DBA, I want to replay a `pgcenter record`
+      archive of the night and find when the pile-up started, so I can correlate it with a deploy
+      or a storage change.
+      Scenario: `pgcenter report -W a -f night.tar -s 02:00 -e 06:00` -> tick by tick, ready goes
+      up and archived_age starts growing.
+    gaps: ""
+    required: true
+
+  acceptance_criteria:
+    score: 88
+    status: "complete"
+    value: |
+      Derived from the confirmed success criteria plus the batch 4/5 decisions; the full testable
+      list goes into the user-spec. Highlights:
+      - `archiver` screen renders 9 columns in the agreed order and reads correctly with
+        archive_mode=off (zeros for counters, BLANK — not zero — for the never-archived text/age
+        columns).
+      - `w` cycles wal -> archiver -> wal; `W` opens a 2-item menu; both entries in help;
+        `Q`'s help line lists archiver among the stats it does not reset.
+      - The archiver view's Msg reads "(requires archive_mode=on)" and is printed on both entry
+        paths (switchViewTo and menuSelect) exactly once per path.
+      - `pgcenter record` records the archiver view with no recorder change (NotRecordable stays
+        false); `report -W a` replays it; `report -d -W a` prints the describe text; `report -W w`
+        is unchanged for wal; `report -W` with no value fails loudly; `report -W x` reports
+        "report type is not specified".
+      - PG 19 `wal` screen carries the fpi bytes column as a per-interval delta next to wal,KiB;
+        PG 14-18 layouts byte-identical to today.
+      - Golden replay tests: one for archiver (version-independent), plus NEW per-version wal
+        goldens for PG 18 and PG 19.
+    gaps: ""
+    required: true
+
+  edge_cases:
+    score: 88
+    status: "complete"
+    value: |
+      - archive_mode=off (the test fixtures' state): counters 0, WAL-name and age columns blank,
+        ready=0. Screen must read as "not configured", helped by the Msg.
+      - Cluster that has archived nothing yet: last_archived_wal / last_failed_wal /
+        last_archived_time / last_failed_time are SQL NULL (verified live). Render BLANK, never 0 —
+        the [013] backend_xid decision. Do NOT coalesce them: coalesce is prescribed only for
+        DIFFED columns, and this screen diffs nothing.
+      - Standby: the archiver only runs with archive_mode=always, so on a standby with
+        archive_mode=on the screen honestly shows zeros.
+      - Huge backlog (100k+ .ready files): the directory listing runs every tick, accepted in Q5.
+      - Role without pg_monitor: the whole screen shows the query error every tick (see error
+        scenarios) — same as the wal screen today.
+      - Pause [016]: switching w / W lifts the pause via viewSwitchHandler — already implemented,
+        nothing to add.
+      - Replay of a pre-0.12 archive: report picks the layout from the archive's recorded version,
+        so old wal archives keep the old column set.
+      - PG 19 is beta2 in the CI image; the column name is verified there but may still move at
+        beta3/RC.
+    gaps: ""
+    required: true
+
+  error_scenarios:
+    score: 88
+    status: "complete"
+    value: |
+      - Permission denied on pg_ls_archive_statusdir(): collectPostgresStat returns the error,
+        printDbstat replaces the whole table area with formatError(...) ("ERROR: permission denied
+        for function pg_ls_archive_statusdir"), and the next tick retries. No crash, no latch.
+        Accepted as-is (Q9) — identical to the wal screen's behaviour with pg_ls_waldir().
+      - `pgcenter record` with the same missing privilege: recorder.collect returns on the first
+        query error and the WHOLE recording stops. Pre-existing behaviour, not introduced here;
+        must be stated in the spec so it is not discovered as a surprise.
+      - `report -W` with no value: cobra fails with "flag needs an argument: 'W' in -W". Deliberate
+        and loud (Q2/Q9); no custom text added to the error.
+      - `report -W x`: selectReport returns "" and validate() errors "report type is not specified,
+        quit" — the existing -J x path.
+      - Empty or archiver-less archive under `report -W a`: header only, no data, no error (the
+        [008] behaviour).
+    gaps: ""
+    required: true
+
+  verification_strategy:
+    score: 88
+    status: "complete"
+    value: |
+      Agent-side: full `make test` inside the project CI image (PG 14-19 fixtures) per
+      local-test-fixtures; `make lint` and `make vuln` on the host; the PG 19 catalog re-checked
+      against port 21919 in that image.
+      User/agent-side on the stand (pgpro@10.128.31.96, TTL 24h, configs free to change; the
+      stopped postgrespro-ent-18.service may be used or vanilla PostgreSQL installed): drive the
+      TUI in tmux with a fixed geometry, A/B against a master-built binary, and run the three
+      archiving states — archive_command=/bin/true, then /bin/false, then archive_mode=off.
+      Note on goldens: the [008] replay goldens are built from a SYNTHETIC in-memory tar with
+      deterministic timestamps, not from a live recording — the stand is the place to verify a real
+      record -> report round trip, not to generate the golden files.
+      Because the archiver screen can be exercised before record/report and before the FPI work,
+      the stand run may be done early if the stand's TTL is at risk.
+    gaps: ""
+    required: true
+
+  ui_ux_requirements:
+    score: 90
+    status: "complete"
+    value: |
+      Single-row screen, 9 columns, order confirmed by the user:
+
+        source    ready  archived  last_archived             archived_age  failed  last_failed               failed_age  stats_age
+        Archiver   1423     84512  00000001000000A300000012      00:47:12    3781   00000001000000A300000013    00:00:03  12 days 04:11:56
+
+      - Column 0 is the literal 'Archiver' (the 'WAL'/'Bgwriter' convention; frozen by [009] and it
+        is what makes UniqueKey=0 work).
+      - Order rationale: "how bad is it right now" (ready) first, then the success block, then the
+        failure block, then stats age.
+      - `ready` counts .ready files via pg_ls_archive_statusdir(); name chosen over `backlog` /
+        `ready_files`.
+      - Times are ages (date_trunc('seconds', now() - ts)), never absolute timestamps — the user's
+        reasoning: with a timestamp the reader computes the age in their head anyway.
+      - Hotkeys: `w` cycles wal <-> archiver, `W` opens a 2-item menu. Cycle name is the string
+        "wal" (option (a)), with an explicit code comment — no separate group name.
+      - The archiver view's Msg is a STATIC subtitle "(requires archive_mode=on)", the
+        stat_io_time precedent; no conditional cmdline hint and no archive_mode GUC plumbing.
+      - Help screen gains the `w,W` line and archiver in the `Q`-does-not-reset line.
+    gaps: ""
+    required: true
+
+  risks:
+    score: 88
+    status: "complete"
+    value: |
+      - PG 19 is beta2: wal_fpi_bytes verified live there, but the name may move at beta3/RC.
+        Mitigation: re-verification pass at RC/GA is already a roadmap finalization item, and
+        tech-debt [017] tracks the beta apt channel.
+      - Breaking change on -W: scripts using bare `-W` break. Mitigation: loud cobra failure,
+        updated flag text, README and 0.12.0 release notes.
+      - Unthrottled .ready listing on a cluster already in trouble. Accepted (Q5), precedent in
+        wal.go and the [010] verbose panel.
+      - Stand TTL is 24h and the manual run comes last in the pipeline; the stand may be gone by
+        then. Mitigation: run the archiver part of the stand check as soon as the screen works.
+      - Two renderings of one signal: the [010] verbose panel shows the archiving backlog in BYTES,
+        this screen shows a COUNT. Deliberate, but the spec must say so or a reader will read it as
+        an inconsistency.
+    gaps: ""
+    required: true
+
+  technical_decisions:
+    score: 88
+    status: "complete"
+    value: |
+      - archiver selector takes the version-independent form SelectStatArchiverQuery(_ int)
+        (the io.go:99 precedent); no version branch, MinRequiredVersion PostgresV14 (project floor,
+        keeps the <=PG13 test rows untouched).
+      - DiffIntvl {0,0} = full pass-through; calculateDelta short-circuits before diff(), so the
+        'Archiver' literal at column 0 is never parsed. (The code-research draft claimed the
+        opposite and was corrected in the document.)
+      - The `w` cycle reuses the string "wal" as the group name (option (a)); menu goes through
+        viewSwitchHandler directly, so nothing else is affected.
+      - record needs NO recorder change — NotRecordable stays false (ADR [008] "lift NotRecordable
+        only"). filterViews needs no edit.
+      - -W becomes StringVarP with the description "show pg_stat_wal / pg_stat_archiver report
+        (w - wal, a - archiver)".
+      - New golden replay tests: report_record_archiver (one, version-independent) AND a new
+        report_record_wal with PG 18 + PG 19 goldens — the wal screen has none today and its layout
+        is changing.
+      - Test image is NOT changed to enable archive_mode; the behavioural gate is the stand.
+      - pgStatWALDescription gains the FPI row; a new pgStatArchiverDescription is added.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 3: Integration & Technical Context
+# ============================================================================
+phase3_integration:
+
+  integration_points:
+    score: 88
+    status: "complete"
+    value: |
+      - internal/query/archiver.go (new) + internal/query/wal.go (PG 19 branch), both wired in
+        internal/view/view.go Configure().
+      - internal/view/view.go New(): the 28th view; MinRequiredVersion PostgresV14, DiffIntvl
+        {0,0}, UniqueKey/OrderKey 0, Msg with the archive_mode note.
+      - top/: keybindings (`W`), config_view.go (walNextView + the "wal" dispatch case), menu.go
+        (menuWAL constant, style entry, select branch), help.go (w,W line and the Q line).
+      - record/: nothing to change (NotRecordable stays false).
+      - report/: describeReport map entry, describe.go constants (new archiver text + FPI row in
+        the wal text), and cmd/report/report.go's four showWAL references.
+      - Tests that break on the new view/menu: view.TestNew (27->28), view.TestView_VersionOK (+1
+        on rows >=140000), record.Test_filterViews (wantV+1 on >=PG14 rows, wantN+1 on <=PG13),
+        top.Test_selectMenuStyle (a 2-item row), top.Test_switchViewTo, plus a new Test_walNextView
+        and TestNew_ArchiverView, and Test_SelectStatWALQuery's PG 19 row.
+    gaps: ""
+    required: true
+
+  dependencies:
+    score: 85
+    status: "complete"
+    value: |
+      No new Go dependency. Depends on existing pgcenter machinery: the [006] j/J cycle+menu
+      precedent, the [008] record/report wiring and golden-replay test shape, the [009] frozen
+      first column / horizontal scroll (which is what makes a 9-column screen acceptable), and the
+      [016] pause (nothing to add — viewSwitchHandler already lifts it).
+      Server-side: pg_stat_archiver (PG 9.0+) and pg_ls_archive_statusdir() (PG 12+, pg_monitor).
+    gaps: ""
+    required: false
+
+  data_requirements:
+    score: 85
+    status: "complete"
+    value: |
+      One SQL query per tick, returning exactly one row of 9 columns; no new state, no cache, no
+      GUC fetching. Recorded to the tar as archiver.TIMESTAMP.json by the existing recorder loop
+      (entry prefix = view name = report type).
+    gaps: ""
+    required: false
+
+  migration_needs:
+    score: 85
+    status: "complete"
+    value: |
+      One user-visible migration: `pgcenter report -W` changes from a boolean to a string
+      (`-W w` / `-W a`). Old invocations fail loudly rather than silently changing meaning.
+      Flag help text, README and the 0.12.0 release notes are updated. Recorded archives need no
+      migration — the report replays each sample by its recorded PG version, so pre-0.12 wal
+      archives keep the old layout.
+    gaps: ""
+    required: false
+
+# ============================================================================
+# Phase 4: Completion
+# ============================================================================
+phase4_completion:
+  userspec_file: ""
+  status: "pending"
+
+# ============================================================================
+# Decision Rules
+# ============================================================================
+decision_rules:
+
+  required_threshold: 85
+  optional_threshold: 50
+
+  stop_criteria:
+    - "All required items in current cycle scope score >= 85%"
+    - "Structural: every required item has non-empty value, no TBD, gaps empty or conscious limitations"
+
+  question_strategy:
+    - "3-4 questions per batch about different gaps"
+    - "Run as many batches as needed — batch size is NOT cycle limit"
+    - "Propose solutions based on PK or code findings, not just ask questions"
+    - "Challenge with substance: counterexamples, code references, unexplored scenarios"
+    - "After each response: update scores, values, gaps, conversation_history, save"
+
+# ============================================================================
+# Progress
+# ============================================================================
+progress:
+  current_phase: "phase3_integration"
+  questions_asked: 12
+  last_question: "cycle name / golden tests / user stories"
+  completion_estimate: "90%"
+
+# ============================================================================
+# Notes
+# ============================================================================
+notes: |
+  Seeded from docs/roadmap-0.12.0.md section [017]. Roadmap already fixes: separate `archiver`
+  view (not extra columns on `wal`, to avoid changing the recorded `report -W` layout), the w/W
+  cycle+menu, record/report folded in, and the PG 19 FPI column on `wal`.
+
+  Catalog facts verified LIVE (CI image lesovsky/pgcenter-testing:0.0.11, PG 14/17/18/19), not from
+  release notes:
+  - PG 19 pg_stat_wal adds `wal_fpi_bytes numeric` (attnum 4, after wal_bytes). PG 18 lacks it.
+  - pg_stat_archiver is byte-identical on PG 14 and PG 19 -> no version branch.
+  - pg_ls_archive_statusdir() ACL is {postgres, pg_monitor} — the same class as the pg_ls_waldir()
+    the wal screen already calls unconditionally.
+  - Fixtures run archive_mode=off with archive_command disabled, so integration tests can only
+    prove the query executes; the behavioural gate is the stand.
+
+  Scope change during the interview: the "cmdline hint when archive_mode is off" (Q7) was
+  DOWNGRADED to a static view Msg (Q11), because the precedent it was modelled on turned out to be
+  a static string rather than a conditional hint. The success criterion listing a cmdline hint is
+  superseded accordingly.
+
+  Correction applied to the code-research document: its §7.1 claimed DiffIntvl{0,0} routes column 0
+  through diffPair and would abort every sample on the 'Archiver' literal, and called it the
+  feature's highest risk. That is wrong — calculateDelta (internal/stat/postgres.go:589-597)
+  short-circuits on a {0,0} interval and never calls diff(); both the TUI path (stat.go:440) and
+  the report path (report/report.go:505 -> stat.Compare) go through it. §7.1, §1.1 and appendix I
+  were rewritten in place.
