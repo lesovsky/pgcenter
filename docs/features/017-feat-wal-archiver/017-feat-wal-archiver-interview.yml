@@ -12,7 +12,7 @@ interview_metadata:
   work_type: "feature"
   started: "2026-08-05 21:59:47"
   last_updated: "2026-08-05 22:15:00"
-  status: "in_progress"
+  status: "completed"
   can_resume: true
   current_question_num: 8
   feature_size: "M"
@@ -566,8 +566,8 @@ phase3_integration:
 # Phase 4: Completion
 # ============================================================================
 phase4_completion:
-  userspec_file: ""
-  status: "pending"
+  userspec_file: "docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md"
+  status: "approved"
 
 # ============================================================================
 # Decision Rules
