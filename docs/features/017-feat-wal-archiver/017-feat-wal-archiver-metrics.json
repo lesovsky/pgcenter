@@ -21,9 +21,9 @@
     },
     "tech_spec": {
       "start_time": "2026-08-05T18:15:00Z",
-      "end_time": null,
-      "duration_min": null,
-      "touch_time_min": null,
+      "end_time": "2026-08-05T19:05:00Z",
+      "duration_min": 50,
+      "touch_time_min": 50,
       "human_wait_time_min": 0,
       "steps": {}
     },
@@ -33,7 +33,8 @@
   },
   "quality": {
     "validation_rounds": {
-      "user_spec": 2
+      "user_spec": 2,
+      "tech_spec": 3
     },
     "validation_findings": {
       "critical": 0,
@@ -52,7 +53,7 @@
     "interview_questions": 12,
     "tasks_count": 0,
     "waves_count": 0,
-    "agents_spawned": 6,
+    "agents_spawned": 15,
     "commits_count": 0
   }
 }

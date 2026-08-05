@@ -1,6 +1,6 @@
 ---
 created: 2026-08-05
-status: draft
+status: approved
 branch: feature/017-feat-wal-archiver
 size: M
 ---
@@ -79,7 +79,7 @@ the roadmap's own reasoning and the user-spec locks it.
 cross-checking with the PostgreSQL log, not a per-second rate. `calculateDelta` short-circuits on a
 `{0,0}` interval and never enters `diff()`, so the `'Archiver'` literal at column 0 is never parsed
 and the NULL columns never reach `strconv.ParseInt`. Verified by reading both call sites: the TUI calls `calculateDelta` directly
-(`internal/stat/stat.go:441`), and the report reaches it through the `stat.Compare` wrapper
+(`internal/stat/stat.go:440`), and the report reaches it through the `stat.Compare` wrapper
 (`report/report.go:505` → `internal/stat/postgres.go:575-577`).
 **Alternatives considered:** placing the counters inside a diffed range (the bgwriter idiom for
 work columns) — rejected by the user-spec; a non-empty diffed range purely to avoid diffing column 0
@@ -219,8 +219,9 @@ machinery Decision 4 already ruled out.
 ### Decision 12: the first recorded sample is not printed — pre-existing, now documented
 
 **Decision:** `report -W a` over an N-tick recording prints N−1 rows, and this is accepted as-is.
-**Rationale:** `report/report.go:315-320` discards the first sample unconditionally, because for a
-diffed screen the first sample has no predecessor to diff against. The `archiver` screen is pure
+**Rationale:** the report discards the first sample of a run — the `if !prevStat.Valid ||
+versionChanged` block at `report/report.go:277` ends in a `continue` at `:319` — because for a diffed
+screen the first sample has no predecessor to diff against. The `archiver` screen is pure
 pass-through, so its first sample *is* printable data and is nonetheless dropped. This is not
 introduced here — every `DiffIntvl{0,0}` screen behaves this way today, `activity` included — and
 changing it would alter shared report behaviour and every existing golden.
@@ -262,8 +263,8 @@ over `ready_files`/`backlog` by the roadmap owner during the interview.
 
 ### Decision 15: an archive with no archiver data prints nothing, and that stays
 
-**Decision:** `report -W a` over an archive containing no `archiver` entries prints an empty output —
-no rows and no header — and exits 0.
+**Decision:** `report -W a` over an archive containing no `archiver` entries prints no data rows and
+no column header — only the three INFO lines every report emits at start-up — and exits 0.
 **Rationale:** the user-spec originally promised "header only", which the code contradicts:
 `printStatHeader` returns early unless the view has been aligned, and alignment happens inside the
 data branch, so with no samples nothing is printed at all. A "no data" notice exists for exactly one
@@ -281,8 +282,9 @@ query carries a comment saying why.
 item [029] — but PostgreSQL only ever reports a name that passed its own `VALID_XFN_CHARS` filter
 (hex digits plus the `.history`/`.backup`/`.partial` suffixes) before recording it in the archiver
 statistics. That character set contains no ESC and no control characters, so these two columns cannot
-carry a terminal escape sequence even if an operator hand-places a bogus `.ready` file. Debt [029] is
-therefore not widened here.
+carry a terminal escape sequence even if an operator hand-places a bogus `.ready` file. The filter
+lives in PostgreSQL's own `pgarch.h` / `pgarch_readyXlog()`, not in this repository, so the claim is
+attributed rather than verifiable from this tree. Debt [029] is not widened here.
 **Alternatives considered:** sanitising the two columns defensively — rejected: it would add a
 transformation on a value that is already constrained at the source, and would diverge from every
 other text column on every other screen, none of which sanitise.
@@ -493,8 +495,12 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - [ ] A test proves the archiver query succeeds under a `pg_monitor`-only role and fails without it,
       and that the verbose backlog aggregate returns a number under the same `pg_monitor`-only role.
       Running as the fixture superuser only would hide exactly the defect piece 4 exists to fix.
-- [ ] The two comments in `internal/stat/` that state `pg_ls_dir` requires "pg_monitor/superuser" are
-      corrected — they are the reason the wrong privilege assumption survived into ADR [010].
+- [ ] All four stale comments about the old function's privileges are corrected — two asserting
+      `pg_ls_dir` requires "pg_monitor/superuser" (`internal/query/overview.go`,
+      `internal/stat/postgres.go`) and two asserting the fixture role "has pg_monitor" when it is in
+      fact the superuser (`internal/query/overview_test.go`, `internal/stat/postgres_test.go`). These
+      comments are why the wrong privilege assumption survived into ADR [010] and went unnoticed in
+      tests.
 
 ## Implementation Tasks
 
@@ -538,7 +544,8 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Verify:** bash — `go test ./internal/query/... ./internal/stat/...`; the aggregate returns a number
   under a role holding only `pg_monitor`
 - **Files to modify:** `internal/query/overview.go`, `internal/query/overview_test.go`,
-  `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
+  `internal/stat/postgres.go`, `internal/stat/postgres_test.go` — the last three carry the four stale
+  privilege comments
 - **Files to read:** `docs/decisions-log.md`
 
 #### Task 4: report CLI — `-W` becomes a string flag
