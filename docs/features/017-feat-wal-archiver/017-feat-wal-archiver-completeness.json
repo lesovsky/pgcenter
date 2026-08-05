@@ -1,0 +1,85 @@
+{
+  "status": "fail",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 21,
+  "requirements_covered": 15,
+  "requirements_partial": 5,
+  "requirements_missing": 1,
+  "findings": [
+    {
+      "type": "gap",
+      "source": "user-spec",
+      "requirement": "US-15: `pgcenter report -W a` on an archive with no archiver entries prints only the header, no error, exit code 0",
+      "detail": "No task, decision, test or verification step in the tech-spec addresses this criterion — it is the only acceptance criterion with zero mentions anywhere in the tech-spec. Worse, the expected output is contradicted by the code: `printStatHeader` (report/report.go:560) is called only inside the data branch of `processData`, after `countDiff`. With no matching tar entries `readTar` sends nothing, `processData` falls straight to `<-doneCh` and returns nil, so the run prints NOTHING at all — not a header. (The only no-data INFO line is hard-coded for `procpidstat`.) The same is true for a single recorded sample, which Decision 12's N-1 rule discards. Task 10 (pre-deploy QA) will verify this criterion literally and it will fail. Either correct the criterion to 'prints nothing, exits 0' in both the user-spec (Граничные случаи + AC) and the tech-spec, or add an explicit task to emit a header/INFO line for empty archives.",
+      "severity": "critical"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-19: under a `pg_monitor` role (non-superuser) the [010] verbose panel shows a numeric backlog instead of `n/a`; unchanged for superuser",
+      "detail": "Implementation is covered (Task 3, Decision 8), but nothing verifies the effect that is the entire justification for the fourth piece. Task 3's `verify` says 'aggregate runs under a pg_monitor role', yet there is no role-switching harness in the tree: `grep -rn 'CREATE ROLE|SET ROLE'` over *.go returns nothing, and the fixture role is a superuser (which is why the current `pg_ls_dir` query passes today — see the misleading comment at internal/stat/postgres_test.go:224). The user-spec's stand checklist (Пользователь проверяет) also has no pg_monitor run: it lists working/broken/off archiving, cost measurement, navigation, narrow terminal. So the one observable improvement Decision 8 buys is unverified by both the agent plan and the manual plan. Add either a test that creates a `pg_monitor` role and re-runs the aggregate on that connection, or an explicit stand step (`pgcenter -U monitor_role` with `v` enabled).",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-12: a role without `pg_monitor` gets the PostgreSQL error text on `archiver` (`permission denied for function pg_ls_archive_statusdir`), pgcenter does not crash and retries next tick; `wal` behaves as before",
+      "detail": "Decision 4 argues the design, but no task, no unit/integration test and no entry in the Agent Verification Plan or the stand checklist exercises a privilege-less role. The behaviour is inherited from the existing collector error path, so the risk is low — but the criterion has a checkbox that nobody can tick, and it shares the missing prerequisite with US-19 (a non-superuser test role). Fold it into the same verification step.",
+      "severity": "major"
+    },
+    {
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "US-21: documentation updates — flag help string, 0.12.0 release notes, embedded help screen; README explicitly EXCLUDED",
+      "detail": "The tech-spec contradicts its own Decision 13 and Task 9 in two places: Backward Compatibility ('Flag help text, README and the 0.12.0 release notes are updated in the same feature') and the Risks table ('flag help text and README updated'). Decision 13 and Task 9 correctly exclude README work because there is no `-W` documentation in `doc/` to update. An implementer reading Backward Compatibility would go looking for a README target that does not exist. The user-spec has the same residue: AC 21 says 'Правка README не входит', but Ограничения ('Изменение отражается в описании флага, README и release notes 0.12.0') and Риски ('плюс правим описание флага и README') were not updated when the criterion was corrected. Four sentences across two documents need to drop README.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-21: 0.12.0 release notes carry the breaking `-W` change with the literal `report type is not specified, quit` and the PG 19 legacy-archive `diff failed`",
+      "detail": "Task 9 writes these into `docs/roadmap-0.12.0.md`, but that file's own Finalization checklist states 'Version bump — git-tag-driven via ldflags; no CHANGELOG (GoReleaser generates release notes)'. There is no release-notes artifact in the tree, and GoReleaser builds notes from commit history — so text placed in a planning document does not reach the users whose scripts break. Release notes are the ONLY mitigation the user-spec and tech-spec offer for the accepted breaking change and for the `diff failed` limitation, so the delivery target must be real: either name the commit/tag message as the carrying vehicle, or state explicitly that the roadmap entry is the source the release step copies from.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-11: `-W` as last token fails with `flag needs an argument: 'W' in -W`; `-W -f dump.tar` and `-W x` end with `report type is not specified, quit` and a non-zero exit code",
+      "detail": "Task 4's verify covers `-W w`, `-W a`, `-W x` (the `selectReport` mapping), and the unit-test list covers unknown-value → `\"\"`. Neither the cobra literal for the bare-`-W` form, the pflag argument-swallowing behaviour of `-W -f dump.tar`, nor the non-zero exit code is assigned to any task or verification step — yet all three are quoted verbatim in the acceptance criteria and in the release notes Task 9 must write. Add them to Task 4's verify (a CLI-level check, not a `selectReport` unit test).",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-13: `pgcenter record` under a role without `pg_monitor` stops recording with an error — recorded as expected existing behaviour, not a defect",
+      "detail": "No verification step. The claim is sound (record/recorder.go:136-139 returns on the first query error, and the pre-existing `wal` view already calls `pg_ls_waldir()`, so the archiver view adds no new exposure) — but like US-12 it is an unverifiable checkbox. Either mark it as a documented non-goal without a checkbox, or verify it with the same role fixture as US-12/US-19.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Decision 8: verbose backlog moves to `pg_ls_archive_statusdir()`",
+      "detail": "Decision 8 disproves the ADR [010] claim that `pg_ls_dir` is reachable by `pg_monitor`, but that claim is written into code comments in files Task 3 does not modify: internal/stat/postgres.go:288 ('pg_ls_dir requires pg_monitor/superuser') and internal/stat/postgres_test.go:224 ('the fixtures role has pg_monitor, so the OWN-QueryRow aggregate must run'). Task 3's Files to modify lists only internal/query/overview.go and overview_test.go, with postgres.go merely as Files to read. Two comments asserting a measured-false ACL survive the feature. Add both files to Task 3's modify list.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "Ограничения → Версии PostgreSQL: 'экрану archiver не нужны ни минимальная версия сверх общей, ни ветвление запроса по версиям'",
+      "detail": "One of the three claims the brief says was corrected after code research, but the user-spec still carries the original wording. Tech-spec Decision 10 states the opposite in explicit terms: 'the user-spec's phrasing does not survive contact with the code — there is no common floor', the registry still serves down to PG 9.4, and `MinRequiredVersion: PostgresV14` is mandatory or `pgcenter record` aborts the whole recording on PG <= 11. The documents disagree as written. The engineering outcome in the tech-spec is correct; the user-spec sentence needs to say 'MinRequiredVersion = PG 14, like every other recent view — there is no implicit floor'.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Decision 12: the first recorded sample is not printed (N-1 rows)",
+      "detail": "Stale cross-reference. Decision 12's 'Consequence to carry' says the user-spec's scenario 3 claims 'one row per tick' and that 'the user-spec is corrected in the same commit' — but the user-spec has already been corrected (scenario 3 now reads 'кроме первого тика' with the full rationale). The decision text describes a divergence that no longer exists and asks for an edit that is already made. Harmless to code, but it will read as an open action item to the implementer.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "15/21 acceptance criteria fully covered, 5 partial, 1 with no coverage at all. Forward traceability is otherwise strong: all four declared pieces map to tasks (piece 1 -> Tasks 1/5/6, piece 2 -> Tasks 4/7/8, piece 3 -> Tasks 2/5/7, piece 4 -> Task 3), and every tech-spec decision has an implementing task. No scope creep found — the fourth piece and the wal golden tests are justified in both documents, and the added engineering (MinRequiredVersion PG14, column-name-driven assertions, count-test updates) is legitimate infrastructure. No overengineering: tasks are scope-level with no pseudocode, no speculative abstraction, every mechanism copies an existing precedent. One critical gap (US-15, empty-archive replay: uncovered and contradicted by report/report.go, which prints nothing rather than a header). The remaining findings cluster in verification rather than implementation: three criteria (US-12, US-13, US-19) need a non-superuser role that no test harness or stand step provides, and US-19 is the sole observable outcome of piece 4. Documentation targets need pinning: README is excluded by both specs' criteria but still promised in four other sentences, and the 0.12.0 release notes — the only mitigation for the breaking -W change — are routed to a planning document while the roadmap itself says GoReleaser generates the notes. Two of the three post-research corrections (N-1 rows, README) left stale residue; the MinRequiredVersion correction never reached the user-spec at all."
+}

@@ -1,0 +1,100 @@
+{
+  "status": "approved",
+  "summary": "Checked 57 claims in 017-feat-wal-archiver-tech-spec.md against the tree at 41fb586; found 7 mirages, none critical. Every file the spec plans to modify exists, every named test exists with the exact value the spec states, all four showWAL sites are real, the Configure() `case \"wal\":` genuinely needs no edit, and every cited ADR / tech-debt number resolves. The defects are one false statement about TestViews_Configure's current content, one deliverable (\"0.12.0 release notes\") that has no artifact in the tree, a help.go edit the spec undercounts relative to its own research, and four imprecise file:line references.",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "tech-spec Task 5 says view_test.go's TestViews_Configure contains \"matrix rows that pin the PG 19 `wal` column count changed in Wave 1\", which the task must *update*.",
+      "reality": "internal/view/view_test.go:99-253 — TestViews_Configure asserts nothing about the `wal` view at any version. The `case 190000:` block (:183-192) and `case 140000:` block (:193-202) assert only progress_vacuum / progress_analyze / progress_basebackup; there is no `views[\"wal\"]` reference anywhere in the file. The companion research (§10.G row 10) states this correctly: \"no `wal` assertion at any version; add the wal assertions\". Spec and research disagree.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Implementation Tasks, Wave 2, Task 5 (Description)",
+      "fix": "Reword Task 5 to \"add PG 19 / PG 18 `wal` Ncols+DiffIntvl assertions to TestViews_Configure\" instead of \"update the matrix rows that pin\" — an executor told to update non-existent rows may conclude the work is already done and skip the assertion entirely."
+    },
+    {
+      "severity": "major",
+      "type": "missing_file",
+      "claim": "Decision 13 and Task 9 make \"the 0.12.0 release notes\" a deliverable that \"must name the literal failure text users will see\"; Task 9's Files to modify is `docs/roadmap-0.12.0.md` and its verify step is \"grep the release notes for both literal messages\".",
+      "reality": "There is no 0.12.0 release-notes artifact in the tree. `doc/release-notes/` contains only `v0.8.0.md` and `v0.9.0.md` (nothing for 0.10.0 or 0.11.0), and `docs/roadmap-0.12.0.md:478` states the project's own policy: \"Version bump — git-tag-driven via ldflags; no CHANGELOG (GoReleaser generates release notes)\". `docs/roadmap-0.12.0.md` exists but is a planning roadmap, not release notes.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 13 and Implementation Tasks Task 9; also Backward Compatibility (\"Migration strategy\") and the Risks table",
+      "fix": "Either name the concrete file the text goes into (e.g. a new `doc/release-notes/v0.12.0.md`, which would be a new practice given the GoReleaser policy) or say plainly that the breaking-change text is recorded in `docs/roadmap-0.12.0.md`. As written, Task 9's verify step does not identify which file to grep."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Architecture and Task 6 say the `top/` work touches \"two help-screen lines (`top/help.go`)\".",
+      "reality": "The research lists three edit sites in `top/help.go`: `:14` (`r,w  'r' replication, 'w' WAL,`), `:19` (the `j,J` line, model for a new `w,W` line) and `:45` (`('Q' does not reset shared stats: pg_stat_io, bgwriter, wal)`), noting at §10.A/:80 that the archiver is likewise not reset by `Q` and that line should gain `archiver`. All three lines are present in the tree as described. The spec's count of two silently drops the `Q`-caveat edit.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Architecture \"What we're building/modifying\" and Task 6 Description",
+      "fix": "Say \"three help-screen lines\" and name `help.go:45` explicitly, or state that the `Q`-caveat line is deliberately left alone."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 12: \"`report/report.go:315-320` discards the first sample unconditionally\".",
+      "reality": "The discard is the block `if !prevStat.Valid || versionChanged {` at report/report.go:277, whose body assigns prevMeta/prevStat/prevTs at :278-280 and ends with `continue` at :319. Lines 315-318 belong to the `if versionChanged` sub-branch (`orderConfigured = false`, `v.OrderKey = seedOrderKey`, `v.OrderDesc = seedOrderDesc`) — unrelated to the first-sample drop. Only :319 falls inside the cited range. \"Unconditionally\" is also loose: the drop is conditional on `!prevStat.Valid` (the first sample) or a recorded-version change.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 12 (Rationale)",
+      "fix": "Cite `report/report.go:277-320` (condition at :277, `continue` at :319) and phrase it as \"the first sample is always dropped because it has no predecessor\"."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 2: the calculateDelta short-circuit was \"verified by reading both call sites (`internal/stat/stat.go:440` for the TUI, `report/report.go:505` for the report)\".",
+      "reality": "internal/stat/stat.go:440 is the comment line `// Compare previous and current Postgres stats snapshots and calculate delta.`; the actual `calculateDelta(...)` call is at :441. report/report.go:505 is `stat.Compare(curr, prev, interval, v.DiffIntvl, ...)` inside `countDiff` — not a call to `calculateDelta` but to the exported one-line wrapper `Compare` (internal/stat/postgres.go:575-577), which delegates to `calculateDelta`. The conclusion (the {0,0} short-circuit covers both paths) holds; the references are off.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 2 (Rationale)",
+      "fix": "Cite `internal/stat/stat.go:441` and `report/report.go:505 → stat.Compare → internal/stat/postgres.go:575-577 → calculateDelta`, so the indirection through `Compare` is visible."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 3: rendering NULL as blank is \"the same decision ADR [013] took for `backend_xid`\".",
+      "reality": "The ADR at docs/decisions-log.md:872 is `[013-feat-activity-xmin-horizon] backend_xid kept as a raw column though only its presence matters` — its decision is \"keep `backend_xid` as a raw catalog column rather than synthesising a boolean indicator\", i.e. a column-choice decision, not a coalesce-vs-blank decision. It does contain the supporting observation \"only blank-versus-set carries information\", so the analogy is defensible, but the ADR did not decide anything about `coalesce`.",
+      "source": "017-feat-wal-archiver-tech-spec.md, Decision 3 (Rationale)",
+      "fix": "Reword to \"consistent with ADR [013]'s reasoning that blank-versus-set is itself the signal\"; the load-bearing precedent for the coalesce rule is patterns.md:46, which the spec already cites correctly."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Architecture: \"`report/` — a describe entry and constant for the archiver screen ... `report/describe.go`, `report/report.go`\" (Task 7 Files to modify).",
+      "reality": "Correct but worth pinning: the description constants live in `report/describe.go` (`pgStatWALDescription` at :141) while the map that Task 7 must extend is `describeReport` in `report/report.go:665-...` (the `\"wal\": pgStatWALDescription` entry is at report/report.go:674) — not in describe.go. The test to extend is `Test_describeReport` in report/report_test.go, whose `{report: \"wal\", want: pgStatWALDescription}` row is at :1183 (research §10.G says :1184).",
+      "source": "017-feat-wal-archiver-tech-spec.md, Task 7 and Testing Strategy (\"The describe map returns the new archiver description\")",
+      "fix": "No change strictly required; optionally note in Task 7 that the constant goes to describe.go and the map entry to report.go:674, so both edits are explicit."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 57,
+    "confirmed": 50,
+    "mirages_found": 7,
+    "verified_claims": [
+      "internal/view/view_test.go:9-11 TestNew asserts 27 views — exactly as spec/research state",
+      "internal/view/view_test.go:255-280 TestView_VersionOK rows {190000,27} {160000,27} {140000,24} {130000,19} {120000,16} {110000,14} {100000,14} — exact",
+      "record/record_test.go:109-149 Test_filterViews rows {190000,public,0,27} {140000,\"\",9,18} {140000,public,3,24} {130000,8,19} {120000,11,16} {110000,13,14} {100000,13,14} — exact",
+      "top/menu_test.go:8-25 Test_selectMenuStyle with {menuStatIO, want: 2} — exists",
+      "top/config_view_test.go:588 Test_switchViewTo; row {current:\"sizes\", to:\"wal\", want:\"wal\"} at :604 and {\"wal\"→\"replication\"} at :605 — exact, Decision 6's claim that it survives holds (walNextView default returns \"wal\")",
+      "internal/query/wal_test.go:21 {version:190000, wantNcols:7, wantDiffIntvl:{2,5}} — the row the spec says must change, not be added",
+      "internal/view/view.go:389 `case \"wal\":` already delegates to query.SelectStatWALQuery(opts.Version) — needs no edit, as claimed",
+      "showWAL has exactly 4 references: cmd/report/report.go:25, :70, :151, cmd/report/report_test.go:46",
+      "internal/query/io.go:99 SelectStatIOTimeQuery(_ int) — the unused-parameter precedent; .golangci.yml enables revive unused-parameter",
+      "internal/query/query.go:17-22 PostgresV14..PostgresV19 constants exist (V19 = 190000)",
+      "internal/stat/postgres.go:580-597 calculateDelta short-circuits on DiffIntvl{0,0}; Compare at :575-577 wraps it",
+      "internal/query/overview.go:100-102 OverviewArchivingBacklog uses pg_ls_dir('pg_wal/archive_status') — the source the spec switches",
+      "record/recorder.go:136-139 — per-view query error returns nil,err and aborts the whole recording",
+      "top/keybindings.go:38 {\"sysstat\", 'w', switchViewTo(app, \"wal\")}; :49 {\"sysstat\",'J',menuOpen(menuStatIO,...)} — the j/J precedent",
+      "top/config_view.go:232-256 switchViewTo cases are exactly databases/statements/progress/statio + default; Msg printed once at :253",
+      "top/menu.go:194-202 menuStatIO branch calls viewSwitchHandler directly then printCmdline(app.config.view.Msg) — one print, as claimed",
+      "internal/view/view.go:188 stat_io_time Msg contains \"(requires track_io_timing=on)\" — exact line",
+      "internal/view/view.go:129-140 wal view: MinRequiredVersion PostgresV14, DiffIntvl{2,9}, Ncols 11; bgwriter and replslots also PostgresV14",
+      "internal/view/view.go:43 activity DiffIntvl{0,0} — Decision 12's \"activity included\" holds",
+      "docs/decisions-log.md:429 ADR [008] \"Lift NotRecordable only\"; :446 ADR [008] \"-J c|t\"; :462 ADR [008] replay tests; :654 ADR [010] archiving backlog; :686 ADR [010] latency guard; :872 ADR [013] backend_xid — all resolve",
+      "docs/tech-debt.md:10 [027] and :27 [028] are the two lost-message debts; :186 [017] is the beta apt channel",
+      "internal/stat/stat_test.go:450 latencyGuardThreshold exists (the [010] machinery)",
+      "top/config.go:57 viewCh: make(chan view.View) — unbuffered, as claimed",
+      ".claude/skills/project-knowledge/patterns.md:46 — coalesce(...,0) prescribed only for diffed columns",
+      "cmd/report/report.go:70 -W is BoolVarP today; :64 -J is StringVarP \"c - count, t - time\"; :95 \"report type is not specified, quit\"",
+      "doc/pgcenter-report-readme.md documents no CLI flags at all (no -W, no -J); no '-W' occurrence in README.md or doc/*.md — Decision 13's premise holds",
+      ".github/workflows/default.yml:9 and release.yml:11 use lesovsky/pgcenter-testing:0.0.11",
+      "internal/postgres/testing.go:20-27 test clusters PG 14-19; TestViews_Configure exercises 90400 (view_test.go:166-173)",
+      "report/report_record_bgwriter_test.go and report_record_statio_test.go exist; report_record_wal_test.go and report_record_archiver_test.go do not (new, as claimed)",
+      "All Task 1-9 'Files to modify/read' paths exist except the intentionally new internal/query/archiver.go, report/report_record_*_test.go and their goldens",
+      "docs/roadmap-0.12.0.md:302-322 [017] section confirms the spec's Decision 1 rationale, the w/W cycle+menu scope and the PG 19 FPI column"
+    ]
+  }
+}

@@ -38,8 +38,9 @@ the codebase.
 - **`internal/query/overview.go`** — `OverviewArchivingBacklog` switches source function.
 - **`internal/view/view.go`** — registers the `archiver` view in `New()` and configures both
   `archiver` and the PG 19 `wal` layout in `Configure()`.
-- **`top/`** — the `w` cycle (`config_view.go`), the `W` menu (`menu.go`, `keybindings.go`) and two
-  help-screen lines (`help.go`).
+- **`top/`** — the `w` cycle (`config_view.go`), the `W` menu (`menu.go`, `keybindings.go`) and three
+  help-screen lines (`help.go`): the `w` entry moves out of the plain-switch line into its own
+  `w,W` line, and the `Q`-does-not-reset caveat gains `archiver`.
 - **`cmd/report/report.go`** — `showWAL` becomes a string; `selectReport` maps `w`/`a`.
 - **`report/`** — a describe entry and constant for the archiver screen, plus the new `fpi,KiB` row in
   the wal description; two new golden replay tests.
@@ -77,8 +78,9 @@ the roadmap's own reasoning and the user-spec locks it.
 **Rationale:** during an incident the operator needs the fact of growth and the absolute value for
 cross-checking with the PostgreSQL log, not a per-second rate. `calculateDelta` short-circuits on a
 `{0,0}` interval and never enters `diff()`, so the `'Archiver'` literal at column 0 is never parsed
-and the NULL columns never reach `strconv.ParseInt`. Verified by reading both call sites
-(`internal/stat/stat.go:440` for the TUI, `report/report.go:505` for the report).
+and the NULL columns never reach `strconv.ParseInt`. Verified by reading both call sites: the TUI calls `calculateDelta` directly
+(`internal/stat/stat.go:441`), and the report reaches it through the `stat.Compare` wrapper
+(`report/report.go:505` → `internal/stat/postgres.go:575-577`).
 **Alternatives considered:** placing the counters inside a diffed range (the bgwriter idiom for
 work columns) — rejected by the user-spec; a non-empty diffed range purely to avoid diffing column 0
 — unnecessary, since `diff()` is not reached at all.
@@ -89,7 +91,8 @@ work columns) — rejected by the user-spec; a non-empty diffed range purely to 
 cluster has never archived.
 **Rationale:** `patterns.md` prescribes `coalesce(...,0)` only for **diffed** columns, where an empty
 string would abort the sample in `ParseInt`. Nothing here is diffed. A blank is the honest rendering
-of "never happened" — the same decision ADR [013] took for `backend_xid`.
+of "never happened". ADR [013] is the nearest precedent: it kept `backend_xid` a raw column
+precisely because blank-versus-set is the information, rather than synthesising a value.
 **Alternatives considered:** `coalesce(..., '-')` or `0` — rejected as inventing a value.
 
 ### Decision 4: privilege failure takes down the whole screen, by design
@@ -166,8 +169,23 @@ when the directory is largest — but it is the same class and roughly the same 
 `pg_ls_waldir()` call the `wal` screen already makes in the same incident (both are `SETOF record`,
 verified), since an unarchived segment produces one file in each directory.
 **Follow-up, not a blocker:** the stand run measures the real cost on ~200 000 `.ready` files,
-including the view-switch latency caused by the unbuffered `viewCh`. If the numbers are bad,
-throttling returns as its own decision, reusing the [010] `latencyGuardThreshold` machinery.
+including the view-switch latency caused by the unbuffered `viewCh`.
+**The measurement must be taken under the right role, or it measures the wrong baseline.** For a
+superuser the verbose panel already pays one `stat`-walk of comparable cardinality every tick
+(`OverviewWalSize` calls `pg_ls_waldir()`), so Decision 8 takes it from one walk to two. But for a
+role holding only `pg_monitor` — precisely the role Decision 8 exists to serve — today's aggregate
+fails instantly with 42501 and costs **nothing**; afterwards it pays the full walk. So the honest
+comparison is zero → full, not 1× → 2×, and a measurement run as `postgres` would miss it entirely.
+The stand run therefore fixes its conditions: a `pg_monitor`-only role, verbose mode on, and a
+concurrent `pgcenter record` (the recorder runs every registered view's query every tick regardless
+of which screen is displayed).
+**Outcome agreed in advance, so the measurement cannot end in a shrug:** if the numbers are bad, the
+throttle is applied using the machinery that already exists for exactly this
+(`verboseCollectState` + `latencyGuardThreshold`, today used only for the DB-size aggregate); if they
+are acceptable, the remainder is written into the tech-debt register rather than left implicit.
+**Alternatives considered:** a cached value behind a latency guard, reusing [010]'s
+`latencyGuardThreshold` + `dbSizeThrottled` machinery — rejected for now by the roadmap owner as
+complexity ahead of evidence, and explicitly re-openable if the stand numbers are bad.
 
 ### Decision 10: `MinRequiredVersion: PostgresV14` is mandatory, not cosmetic
 
@@ -206,30 +224,54 @@ diffed screen the first sample has no predecessor to diff against. The `archiver
 pass-through, so its first sample *is* printable data and is nonetheless dropped. This is not
 introduced here — every `DiffIntvl{0,0}` screen behaves this way today, `activity` included — and
 changing it would alter shared report behaviour and every existing golden.
-**Consequence to carry:** the user-spec's scenario 3 says the report prints "one row per tick"; the
-honest wording is "one row per tick after the first". The user-spec is corrected in the same commit.
+**Consequence carried:** the user-spec's scenario 3 originally said "one row per tick"; it has been
+corrected to "one row per tick, except the first".
 **Alternatives considered:** skipping the discard when `DiffIntvl == {0,0}` — rejected as
 out-of-scope shared-path surgery with golden churn across unrelated screens.
 
-### Decision 13 (Autopilot assumption): the README criterion is narrowed to what exists
+### Decision 13 (Autopilot assumption): the documentation target is `doc/release-notes/v0.12.0.md`
 
-**Autopilot assumption:** the user-spec's criterion "обновлены README (описание флага `-W`)" has no
-target in the tree — `-W` is documented nowhere, and `doc/pgcenter-report-readme.md` carries no flag
-reference at all (not for `-W`, not for `-J`). Writing full CLI flag documentation is new,
-unestimated scope and a different kind of work from this feature. Narrowed to: **the flag's help
-string in `cmd/report/report.go`** (which is what `pgcenter report --help` prints) **plus the 0.12.0
-release notes**, which must name the literal failure text users will see (`report type is not
-specified, quit`) and the literal `diff failed` for the PG 19 legacy-archive case. Full flag
-documentation for the `doc/` tree is left out and flagged here so it is a visible omission rather
-than a silent one.
+**Decision:** the breaking change is documented in a new `doc/release-notes/v0.12.0.md`, plus the
+flag's own help string in `cmd/report/report.go` (what `pgcenter report --help` prints). The
+user-spec's "update the README" criterion is dropped.
+**Rationale:** there is nothing to update — `-W` is documented nowhere in the tree, and
+`doc/pgcenter-report-readme.md` carries no flag reference at all, not for `-W` and not for `-J`.
+`doc/release-notes/` is the project's established home for exactly this kind of note: `v0.9.0.md`
+documents a hotkey change (`g`/`G`) in prose, which is the same class of user-visible break. The
+directory has been unused since v0.9.0, so this revives a convention rather than inventing one.
+The file must quote the literal messages users will hit: `report type is not specified, quit` for a
+legacy `-W -f …` invocation, and `diff failed` for the PG 19 legacy-archive case.
+**Alternatives considered:** `docs/roadmap-0.12.0.md` — rejected, it is a planning document that gets
+archived when the release ships, and its own Finalization section says the project keeps no CHANGELOG
+because GoReleaser generates GitHub release notes from commits (which is exactly why a prose note for
+a breaking change needs its own home). Writing full CLI flag documentation for the `doc/` tree —
+rejected as new, unestimated scope of a different kind; the omission is recorded here so it stays
+visible.
+
+### Decision 15: an archive with no archiver data prints nothing, and that stays
+
+**Decision:** `report -W a` over an archive containing no `archiver` entries prints an empty output —
+no rows and no header — and exits 0.
+**Rationale:** the user-spec originally promised "header only", which the code contradicts:
+`printStatHeader` returns early unless the view has been aligned, and alignment happens inside the
+data branch, so with no samples nothing is printed at all. A "no data" notice exists for exactly one
+screen, `procpidstat` (`report/report.go:391`), and giving `archiver` one would introduce behaviour no
+other screen has. The user-spec's edge case and acceptance criterion were corrected to match the code.
+**Alternatives considered:** emitting an INFO line for empty archiver reports — rejected as
+inconsistent with every other screen and outside this feature's mandate; making it consistent for all
+screens is its own change.
 
 ### Decision 14 (Autopilot assumption): column header names
 
-**Autopilot assumption:** the user-spec fixes the column order and semantics but writes headers in
-prose. Assumed SQL aliases exactly as the user-spec's mock-up prints them: `source`, `ready`,
-`archived`, `last_archived`, `archived_age`, `failed`, `last_failed`, `failed_age`, `stats_age`, and
-`fpi,KiB` on the wal screen. The comma-unit form (`fpi,KiB`) matches the existing `wal,KiB`
-convention; `stats_age` matches every other screen.
+**Decision:** the SQL aliases are exactly the headers the user-spec's mock-up prints — `source`,
+`ready`, `archived`, `last_archived`, `archived_age`, `failed`, `last_failed`, `failed_age`,
+`stats_age` — plus `fpi,KiB` on the wal screen.
+**Rationale (autopilot assumption):** the user-spec fixes column order and semantics but writes the
+headers in prose rather than naming aliases. The mock-up is the most direct reading of intent, the
+comma-unit form matches the existing `wal,KiB`, and `stats_age` matches every other screen.
+**Alternatives considered:** longer, more explicit names (`last_archived_wal`, `ready_files`) —
+rejected: they widen a screen that already carries two 24-character WAL names, and `ready` was chosen
+over `ready_files`/`backlog` by the roadmap owner during the interview.
 
 ## Data Models
 
@@ -289,6 +331,12 @@ None.
   new cycle transitions.
 - `selectReport` maps `-W w` → `wal`, `-W a` → `archiver`, and an unknown value → `""`.
 - The describe map returns the new archiver description.
+- **Privilege behaviour is tested, not asserted.** Using `SET ROLE` against the fixture cluster: the
+  archiver query succeeds and returns 9 columns under a role holding only `pg_monitor`, and fails with
+  a permission error under a role holding neither. The same two-direction check covers the verbose
+  backlog aggregate, whose whole justification is that `pg_monitor` could not run the old one. This
+  closes the gap that the fixture superuser role would otherwise hide — it is precisely why the
+  current `pg_ls_dir` query passes today.
 
 ### Integration tests
 
@@ -321,14 +369,17 @@ verified by driving the TUI over ssh/tmux on the stand.
 
 | Task | verify: | What to check |
 |------|---------|--------------|
-| 1 | bash | `go test ./internal/query/...` in the CI image — archiver selector + live query on PG 14–19 |
-| 2 | bash | `go test ./internal/view/... ./record/...` — registration and filterViews counts |
-| 3 | bash | `go test ./top/...` — cycle, menu, help; runs without PostgreSQL |
-| 4 | bash | `go test ./cmd/report/... ./report/...` — flag mapping and describe |
-| 5 | bash | `go test ./report/...` — golden replay for archiver and wal PG18/PG19 |
-| 6 | bash | `go test ./internal/query/... ./internal/stat/...` — verbose backlog query on PG 14–19 |
-| 7 | bash | full `make test` in the CI image + `make lint` + `make vuln` on the host |
-| 8 | user | stand run: archiving states, navigation, narrow terminal, cost measurement |
+| 1 | bash | `go test ./internal/query/...` in the CI image — archiver selector + live query returns 9 columns on PG 14–19 |
+| 2 | bash | `go test ./internal/query/...` in the CI image — PG 19 wal query returns 8 columns; PG 14–18 counts unchanged |
+| 3 | bash | `go test ./internal/query/... ./internal/stat/...` — verbose backlog aggregate runs under a `pg_monitor` role |
+| 4 | bash | `go test ./cmd/report/...` — `-W w`, `-W a`, `-W x` map as specified |
+| 5 | bash | `go test ./internal/view/... ./record/...` — registration, availability and filterViews counts |
+| 6 | bash | `go test ./top/...` — cycle, menu, help; runs without PostgreSQL |
+| 7 | bash | `go test ./report/...` — describe text for archiver and the wal FPI row |
+| 8 | bash | `go test ./report/...` — golden replay for archiver and for wal at PG 18 and PG 19 |
+| 9 | bash | grep the release notes for both literal messages (`report type is not specified, quit`, `diff failed`) |
+| 10a | bash | full `make test` in the CI image + `make lint` + `make vuln` on the host |
+| 10b | user | stand run: archiving states, navigation, narrow terminal, cost measurement |
 
 ### Tools required
 
@@ -350,8 +401,9 @@ Both exit non-zero; neither silently changes meaning. The release notes must des
 shape, because that is what users will actually hit.
 
 **Migration strategy:** none beyond documentation — the roadmap owner rejected both a deprecation
-period and a `NoOptDefVal` compatibility shim. Flag help text, README and the 0.12.0 release notes are
-updated in the same feature.
+period and a `NoOptDefVal` compatibility shim. The flag's help string and a new
+`doc/release-notes/v0.12.0.md` are written in the same feature; there is no README text to update
+because the report command's flags are documented nowhere (Decision 13).
 
 **DB migration compatibility:** N/A — pgcenter has no schema of its own here.
 
@@ -374,7 +426,7 @@ updated in the same feature.
 | `wal_fpi_bytes` is verified against PG 19 **beta2**; the name or semantics may move at beta3/RC | Name taken from the live catalog, not release notes. Blast radius is one query line plus one golden file; the other three pieces do not depend on PG 19 at all and the FPI piece can be detached and shipped at RC/GA. Roadmap finalization already carries a re-verification item, and tech-debt [017] tracks the beta channel. |
 | The unthrottled listing runs on a cluster already in trouble, and the verbose panel now pays an lstat walk on every screen | Accepted by the roadmap owner. The stand run measures the query on ~200 000 `.ready` files, the view-switch latency, and the verbose-panel cost against a `master`-built binary. Bad numbers reopen throttling as its own decision. |
 | A slow collector query blocks the next view switch (unbuffered `viewCh`) | Pre-existing structural property, equally true of the `wal` screen. Documented in the user-spec, measured on the stand; not fixed here. |
-| The breaking `-W` change hits scripts, and the common legacy form fails with a message that does not explain why | Release notes describe that exact form; flag help text and README updated. |
+| The breaking `-W` change hits scripts, and the common legacy form fails with a message that does not explain why | `doc/release-notes/v0.12.0.md` quotes that exact failure text, and the flag's help string is updated. No README change — the flags are undocumented there today (Decision 13). |
 | Integration tests cannot exercise archiving at all (fixtures run `archive_mode=off`) | Behavioural gate is the stand run with `/bin/true` then `/bin/false`. The test image is deliberately not changed — that would need an image bump and would alter what every existing test sees. |
 | The stand's TTL is 24h from 2026-08-05 and manual QA comes last | The archiver screen is exercisable as soon as Wave 2 lands, before record/report and FPI. If the stand expires, a new one must be requested — the pipeline does not silently skip the manual gate. |
 
@@ -398,6 +450,11 @@ Technical criteria, complementing the user-facing ones in the user-spec:
       fail if the corresponding layout changes.
 - [ ] Column-name-driven assertions: tests reference columns by header name where the layout is
       pinned, so a future column insertion cannot silently shift an index.
+- [ ] A test proves the archiver query succeeds under a `pg_monitor`-only role and fails without it,
+      and that the verbose backlog aggregate returns a number under the same `pg_monitor`-only role.
+      Running as the fixture superuser only would hide exactly the defect piece 4 exists to fix.
+- [ ] The two comments in `internal/stat/` that state `pg_ls_dir` requires "pg_monitor/superuser" are
+      corrected — they are the reason the wrong privilege assumption survived into ADR [010].
 
 ## Implementation Tasks
 
@@ -406,10 +463,15 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 #### Task 1: Archiver query and selector
 - **Description:** Add `internal/query/archiver.go` with the 9-column `pg_stat_archiver` + `.ready`
   backlog query and a version-independent selector returning query, `Ncols` and `DiffIntvl`. This is
-  the data source for the whole feature; no view wiring here.
+  the data source for the whole feature; no view wiring here. The privilege behaviour the design rests
+  on is proven by test, both directions, using `SET ROLE` — not asserted in prose. The query carries a
+  comment recording why the two server-supplied WAL-name columns cannot smuggle terminal escapes:
+  PostgreSQL only ever reports names that passed its `VALID_XFN_CHARS` filter (hex plus
+  `.history/.backup/.partial`), so debt [029] is not widened here.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/query/...` in the CI image, query executes on PG 14–19
+- **Verify:** bash — `go test ./internal/query/...` in the CI image: the query returns 9 columns on
+  PG 14–19, succeeds under a `pg_monitor`-only role and fails with a permission error without it
 - **Files to modify:** `internal/query/archiver.go`, `internal/query/archiver_test.go`
 - **Files to read:** `internal/query/wal.go`, `internal/query/io.go`, `internal/query/wal_test.go`,
   `docs/features/017-feat-wal-archiver/017-feat-wal-archiver-code-research.md`
@@ -427,21 +489,29 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 #### Task 3: Verbose panel backlog on a pg_monitor-accessible function
 - **Description:** Switch `OverviewArchivingBacklog` from `pg_ls_dir('pg_wal/archive_status')` to
   `pg_ls_archive_statusdir()` so roles with `pg_monitor` see the backlog instead of `n/a`. Output
-  stays bytes and the degradation path is unchanged.
+  stays bytes and the degradation path is unchanged. Two existing comments assert the wrong privilege
+  requirement for the old function, and both also justify swallowing the error text on the grounds
+  that it contains a filesystem path — an argument that no longer applies once the function changes.
+  Correct them in the same task: they are what a future reader would trust.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/query/... ./internal/stat/...`; aggregate runs under a
-  `pg_monitor` role
-- **Files to modify:** `internal/query/overview.go`, `internal/query/overview_test.go`
-- **Files to read:** `internal/stat/postgres.go`, `docs/decisions-log.md`
+- **Verify:** bash — `go test ./internal/query/... ./internal/stat/...`; the aggregate returns a number
+  under a role holding only `pg_monitor`
+- **Files to modify:** `internal/query/overview.go`, `internal/query/overview_test.go`,
+  `internal/stat/postgres.go`, `internal/stat/postgres_test.go`
+- **Files to read:** `docs/decisions-log.md`
 
 #### Task 4: report CLI — `-W` becomes a string flag
 - **Description:** Change `showWAL` from bool to string, map `w` → wal and `a` → archiver in
-  `selectReport`, and update the flag description. An unknown value must fall through to the existing
-  "report type is not specified" path.
+  `selectReport`, and update the flag description. The mapping must be a closed whitelist: an
+  unmapped value falls through to the existing "report type is not specified" path and must never
+  reach `ReportType`, which is used both as a tar-entry filter and as a view-map key — an unmapped
+  value leaking through would produce a zero-value view and a silently empty report instead of an
+  error.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./cmd/report/...`; `-W w`, `-W a`, `-W x` behave as specified
+- **Verify:** bash — `go test ./cmd/report/...`; `-W w`, `-W a` map correctly and every unmapped value
+  (including other flags' letters, e.g. `c`, `t`, `g`) fails closed
 - **Files to modify:** `cmd/report/report.go`, `cmd/report/report_test.go`
 - **Files to read:** `report/report.go`
 
@@ -449,10 +519,10 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 
 #### Task 5: Register the archiver view and update every layout-pinning test
 - **Description:** Register the `archiver` view in `view.New()` with its static parameters and `Msg`,
-  and add its `case` to `Configure()`. This task is the **sole owner of `internal/view/view_test.go`**:
-  it updates the view-count and per-version availability tests for the new view AND the
-  `TestViews_Configure` matrix rows that pin the PG 19 `wal` column count changed in Wave 1. The
-  `wal` case in `Configure()` itself needs no edit — it already delegates to the selector.
+  and add its `case` to `Configure()`. Update the view-count, per-version availability and
+  record-filter counts, and add a per-view guard test pinning the new view's parameters, following
+  the existing guard tests for the `stat_io` and `bgwriter` views. The `wal` case in `Configure()`
+  needs no edit — it already delegates to the selector.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/view/... ./record/...`
@@ -465,7 +535,7 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Add the `walNextView` cycle and its dispatch case, the two-item `W` menu with its
   keybinding, and the two help-screen lines. Copies the `j`/`J` machinery for `pg_stat_io`.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./top/...` (runs without PostgreSQL)
 - **Files to modify:** `top/config_view.go`, `top/menu.go`, `top/keybindings.go`, `top/help.go`,
   `top/config_view_test.go`, `top/menu_test.go`
@@ -475,7 +545,7 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Add the archiver description constant and its entry in the describe map, and add
   the `fpi,KiB` row to the wal description so `report -d -W w` documents the PG 19 column.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; `report -d -W a` and `-d -W w` print the new text
 - **Files to modify:** `report/describe.go`, `report/report.go`, `report/report_test.go`
 - **Files to read:** `internal/query/archiver.go`, `internal/query/wal.go`
@@ -485,31 +555,36 @@ Technical criteria, complementing the user-facing ones in the user-spec:
   version-independent archiver screen, and PG 18 + PG 19 goldens for the version-aware wal screen,
   which has no replay coverage today and whose layout this feature changes.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./report/...`; goldens fail when the layout is perturbed
 - **Files to modify:** `report/report_record_archiver_test.go`, `report/report_record_wal_test.go`,
-  `report/testdata/`
+  `report/testdata/report_record_archiver.golden`, `report/testdata/report_record_wal_pg18.golden`,
+  `report/testdata/report_record_wal_pg19.golden`
 - **Files to read:** `report/report_record_bgwriter_test.go`, `report/report_record_statio_test.go`
 
 #### Task 9: User-facing documentation
 - **Description:** Add the 0.12.0 release-notes entries for the breaking `-W` change and the PG 19
   legacy-archive limitation, quoting the literal messages users will see (`report type is not
-  specified, quit` and `diff failed`). Per Decision 13 there is no existing `-W` documentation to
-  update — the flag's own help string is changed in Task 4, and full CLI documentation for the `doc/`
+  specified, quit` and `diff failed`), and note that on a cluster whose `archive_status` directory is
+  missing the verbose panel now reports `0 B` instead of `n/a`. Per Decision 13 the notes live in
+  `doc/release-notes/`, the
+  project's established home for user-visible breaks; there is no existing `-W` documentation to
+  update, the flag's own help string is changed in Task 4, and full CLI documentation for the `doc/`
   tree stays out of scope.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
 - **Verify:** bash — grep the release notes for both literal messages
-- **Files to modify:** `docs/roadmap-0.12.0.md`
-- **Files to read:** `docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md`,
-  `doc/pgcenter-report-readme.md`
+- **Files to modify:** `doc/release-notes/v0.12.0.md`
+- **Files to read:** `doc/release-notes/v0.9.0.md`,
+  `docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md`
 
 ### Final Wave
 
 #### Task 10: Pre-deploy QA
 - **Description:** Acceptance testing: full `make test` on the PG 14–19 fixtures inside the CI image,
   `make lint` and `make vuln`, then verification of every acceptance criterion from the user-spec and
-  this tech-spec, including the manual stand run (archiving states, navigation, narrow terminal, and
-  the cost measurement on a large `.ready` directory).
+  this tech-spec. Includes the manual stand run — archiving states, navigation, narrow terminal — and
+  the cost measurement, which must be taken under a `pg_monitor`-only role with verbose mode on and a
+  concurrent recording, per Decision 9, since a superuser run would measure the wrong baseline.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none

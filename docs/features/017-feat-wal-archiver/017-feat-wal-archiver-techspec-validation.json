@@ -1,0 +1,54 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "verification",
+      "issue": "The Per-task verification table numbering does not correspond to the Implementation Tasks numbering. Row 2 (`go test ./internal/view/... ./record/...`) is Task 5, row 3 (`go test ./top/...`) is Task 6, row 4 mixes Task 4 and Task 7, row 5 is Task 8, row 6 (verbose backlog) is Task 3, and rows 7-8 both describe Task 10. Task 2 (PG 19 FPI column) and Task 9 (documentation) have no row at all.",
+      "fix": "Renumber the table's Task column to the actual task numbers in the Implementation Tasks section, add a row for Task 2 (`go test ./internal/query/...`, PG 19 wal query returns 8 columns) and Task 9 (grep the documentation target for both literal messages), and merge the two Task 10 rows or label them 10a/10b."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Tasks 6, 7 and 8 use the `code-writing` skill but list only `dev-code-reviewer, dev-test-reviewer`. The skills-and-reviewers catalog's default reviewer set for `code-writing` is `dev-code-reviewer, dev-security-auditor, dev-test-reviewer`. Tasks 1-5 use the full set, so the deviation is inconsistent within the same spec rather than a deliberate project-wide rule.",
+      "fix": "Either add `dev-security-auditor` to Tasks 6, 7 and 8 to match the catalog mapping, or state explicitly in the Decisions section why the security reviewer is dropped for TUI navigation, describe text and golden-replay tasks."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Task 5's description claims it must update \"the `TestViews_Configure` matrix rows that pin the PG 19 `wal` column count changed in Wave 1\". `internal/view/view_test.go:99` `TestViews_Configure` contains no assertions about the `wal` view — its per-version `case` blocks assert only on `replication`, `databases_general` and `activity`, plus a generic non-empty-query loop. That scope item is empty, and the description is also 4 sentences of file-ownership bookkeeping rather than 2-3 sentences of WHAT and WHY.",
+      "fix": "Correct Task 5's description to the real scope (register the archiver view in `New()` and `Configure()`, update `TestNew`, `TestView_VersionOK` and `Test_filterViews` counts, add a `TestNew_ArchiverView` guard in the style of `TestNew_StatIOView`). Keep the one-line note that Task 5 is the sole owner of `internal/view/view_test.go`, and drop the unverified `TestViews_Configure` claim."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Task 9 says it adds \"the 0.12.0 release-notes entries\" but its only file to modify is `docs/roadmap-0.12.0.md` — a planning document that has no release-notes section and is archived when the release ships. The roadmap's own Finalization checklist states \"no CHANGELOG (GoReleaser generates release notes)\", and `doc/release-notes/` holds only stale v0.8.0/v0.9.0 files. As written, the breaking `-W` change and the PG 19 legacy-archive limitation get no user-facing home.",
+      "fix": "Point Task 9 at a real user-facing target: either `doc/pgcenter-report-readme.md` (which is where a `-W w|a` description belongs and is already listed as a file to read), or a new `doc/release-notes/v0.12.0.md`. Update Decision 13 to name the same target so the decision and the task agree."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task 8 lists `report/testdata/` — a directory — under \"Files to modify\". The rule is concrete file paths.",
+      "fix": "Name the golden files explicitly, e.g. `report/testdata/report_archiver.golden`, `report/testdata/report_wal_pg18.golden`, `report/testdata/report_wal_pg19.golden`, matching the naming already used by `report_record_bgwriter_test.go`."
+    },
+    {
+      "severity": "minor",
+      "category": "wave_conflict",
+      "issue": "No two tasks in the same wave modify the same file — the known hotspots are clean: `internal/view/view_test.go` is touched only by Task 5 (Wave 2), `report/describe.go` only by Task 7, and Task 7 (`report/report.go`, `report/report_test.go`) and Task 8 (`report/report_record_*_test.go`) are disjoint despite sharing a package in Wave 3. One soft hazard remains: Task 1 lists `internal/query/wal.go` and `internal/query/wal_test.go` under \"Files to read\" while Task 2 modifies both in the same wave, so Task 1 may read a version that changes underneath it.",
+      "fix": "No merge conflict — leave the waves as they are. Optionally note in Task 1 that `wal.go` is read as a pattern reference for the PG 14-18 branches only, so a concurrent PG 19 edit by Task 2 does not affect it."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Decision 9 (\"no throttling of the directory listing\") has no `Alternatives considered` line — it ends with \"Follow-up, not a blocker\" instead. Throttling is discussed there as a future option, but the alternative that was actually weighed and rejected is not stated in the template's field.",
+      "fix": "Add `**Alternatives considered:** caching / a latency guard reusing the [010] `latencyGuardThreshold` machinery — rejected for now by the roadmap owner, reopened if the stand measurement is bad.`"
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Decisions 13 and 14 are written as a single `**Autopilot assumption:**` paragraph and do not carry the template's Decision / Rationale / Alternatives considered triad, unlike Decisions 1-12.",
+      "fix": "Reformat both into the standard triad, keeping the \"Autopilot assumption\" label in the heading so the provenance stays visible."
+    }
+  ],
+  "summary": "Template compliance is solid: frontmatter is correct (created 2026-08-05, status draft, branch feature/017-feat-wal-archiver, size M), every required section is present with real content, 10 tasks (limit 15), Final Wave carries the mandatory Pre-deploy QA task, no time-based estimates, no acceptance criteria or TDD anchors inside tasks, no line-number references in task descriptions, and all skills and reviewers are valid catalog names. Wave conflict check is clean — no two tasks in the same wave modify the same file, and both named hotspots (internal/view/view_test.go, report/describe.go) have a single explicit owner. Zero critical findings, so status is approved. Four major items to fix before decomposition: the Per-task verification table numbers do not match the task numbers, Tasks 6-8 drop dev-security-auditor from the code-writing default reviewer set, Task 5 claims a TestViews_Configure scope that does not exist in the test file, and Task 9's release-notes target is a planning document rather than user-facing documentation."
+}

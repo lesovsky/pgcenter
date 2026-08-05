@@ -1,0 +1,47 @@
+{
+  "status": "approved",
+  "checks": {
+    "architectural_fit": "pass",
+    "scalability": "pass",
+    "database": "pass",
+    "coupling": "pass",
+    "api_contracts": "pass",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Decision 6 reuses the string \"wal\" as both a registered view name and the w-cycle group name passed to switchViewTo. Every other cycle (statio, databases, progress, statements) uses a group name that is deliberately NOT a view name, precisely to avoid this ambiguity. The tech-spec's reasoning is sound (the view name is load-bearing elsewhere as the report type and tar-entry prefix, so it cannot be renamed) and the one affected test case (Test_switchViewTo's 'sizes'->'wal'->'wal') is shown to survive only because walNextView's default arm returns \"wal\" -- verified directly in view.go/config_view.go. This is a conscious, tested exception to an established naming idiom, not an oversight, but it is the kind of divergence a future maintainer editing walNextView's default could silently break (as Decision/finding 10.I.6 in the code-research already flags).",
+      "location": "Decision 6 (\"the w cycle reuses the string 'wal' as its group name\")",
+      "fix": "No code change needed. Task 6 should carry forward the code-research's warning (10.I.6) as an inline comment on walNextView's default case, matching the comment already drafted in the code-research (10.D.3), so the coupling between the cycle default and the pre-existing switchViewTo test row is visible at the point most likely to be edited later."
+    },
+    {
+      "check": "architectural_fit",
+      "severity": "minor",
+      "issue": "Piece 4 preserves collectOverviewStat's mechanical degradation contract (own QueryRow, swallowed error, sql.NullInt64/*Valid sentinel -- verified unchanged at internal/stat/postgres.go:288-295) but silently narrows what that contract can detect: pg_ls_dir('pg_wal/archive_status') is missing_ok=false, pg_ls_archive_statusdir() is missing_ok=true (Decision 11, verified live by the code-research by moving the directory aside on PG 18.4). A cluster whose archive_status directory is gone now renders a confident \"0 B\" instead of \"n/a\", i.e. the same code path that used to signal \"something is wrong, I can't tell you the backlog\" now reports a healthy zero. The tech-spec accepts this consciously (Decision 11) as a low-probability, low-value-loss trade for fixing the common case (pg_monitor role finally sees the backlog at all).",
+      "location": "Decision 11 (\"pg_ls_archive_statusdir() tolerates a missing directory\")",
+      "fix": "No code change required -- the trade-off is reasonable and documented. Confirm the release notes (Task 9) mention the behavior change so an operator who deliberately damages/relocates the data directory during an incident does not misread a confident \"0 B\" as a healthy archiver."
+    },
+    {
+      "check": "scalability",
+      "severity": "minor",
+      "issue": "Piece 4 upgrades OverviewArchivingBacklog from pg_ls_dir (SETOF text, name-only, cheap) to pg_ls_archive_statusdir (SETOF record with size+mtime, effectively an lstat per file). This aggregate is part of the always-on verbose top-panel (ADR [010]), collected every tick on whatever screen is displayed, and is NOT wrapped by the [010] latencyGuardThreshold mechanism that already exists for the one other \"dear\" aggregate (DB sizes/growth). So a cost increase lands unconditionally on every screen, not just archiver/wal, exactly at the moment (a large archiving backlog) when the directory is largest. Decision 9 and the Risks table both name this explicitly and propose a reactive fallback (stand-run measurement, then reuse the existing latencyGuardThreshold machinery if numbers are bad) rather than wiring the guard in up front.",
+      "location": "Decision 9 (\"no throttling of the directory listing\"); Risks table row 2",
+      "fix": "No blocking change -- the tech-spec already schedules the cost measurement as part of the manual stand run (Task 10) before the feature ships, and the fallback reuses an existing mechanism rather than inventing one. Consider, as a cheap preventive alternative, wrapping OverviewArchivingBacklog in the existing dbSizeThrottled-style guard from the start rather than waiting for a bad measurement, since the guard already exists and the call site is a single QueryRow."
+    },
+    {
+      "check": "backward_compat",
+      "severity": "minor",
+      "issue": "Decision 7 converts an existing, released bool flag (-W) to a string flag with no deprecation period, no NoOptDefVal compatibility shim, and no versioning -- a genuine breaking change for any external script invoking `pgcenter report -W`. The tech-spec's own consumer-impact analysis is exhaustive (all 4 internal references found and updated in lockstep; both external failure shapes traced to exact pflag/cobra error text; one additional known incompatibility -- PG19 wal archives recorded by a pre-0.12 pgcenter now fail replay with `diff failed` -- traced end-to-end through diff()/calculateDelta). Both softer alternatives were considered and explicitly rejected by the roadmap owner. This is a consciously accepted, fully documented risk rather than an overlooked one, but it is still a break with no soft landing for external consumers, which the checklist's letter treats as a fail-class item absent a migration strategy.",
+      "location": "Decision 7 (\"-W becomes a string flag\"); Backward Compatibility section",
+      "fix": "No code change required given the roadmap owner's explicit sign-off. Confirm Task 9's release notes name both observable failure shapes verbatim (`flag needs an argument: 'W' in -W` and `report type is not specified, quit`) and the `diff failed` PG19-replay case, exactly as the tech-spec already commits to, so the break is discoverable by an affected user without filing an issue."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "medium",
+    "complexity": "low",
+    "tech_debt": "low"
+  },
+  "summary": "Every piece of this tech-spec copies an existing, already-vetted idiom (DiffIntvl{0,0} pass-through, literal-column single-row view with UniqueKey 0, the j/J two-view+cycle+menu split, the -J c|t string-flag shape, NotRecordable-zero-value record/report reuse) rather than inventing a new mechanism, and the code-research backing it verifies every claim against live PG 14-19 catalogs and exact file:line code paths, including catching and fixing a real bug the user-spec would otherwise have introduced (missing MinRequiredVersion, Decision 10). No critical or major architectural problems found; the four minor findings (wal/cycle name overload, a narrowed n/a-degradation edge case, an unthrottled cost increase riding the always-on verbose panel, and a deliberately un-cushioned breaking CLI flag change) are all already surfaced and consciously accepted in the spec's own Decisions/Risks sections, not blind spots."
+}
