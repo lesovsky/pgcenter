@@ -241,7 +241,9 @@ user-spec's "update the README" criterion is dropped.
 documents a hotkey change (`g`/`G`) in prose, which is the same class of user-visible break. The
 directory has been unused since v0.9.0, so this revives a convention rather than inventing one.
 The file must quote the literal messages users will hit: `report type is not specified, quit` for a
-legacy `-W -f …` invocation, and `diff failed` for the PG 19 legacy-archive case.
+legacy `-W -f …` invocation, and, for the PG 19 legacy-archive case, an error *beginning*
+`diff failed` — it is wrapped (`fmt.Errorf("diff failed: %w", err)`), so the user sees
+`diff failed: …` rather than those two words alone.
 **Alternatives considered:** `docs/roadmap-0.12.0.md` — rejected, it is a planning document that gets
 archived when the release ships, and its own Finalization section says the project keeps no CHANGELOG
 because GoReleaser generates GitHub release notes from commits (which is exactly why a prose note for
@@ -471,7 +473,7 @@ because the report command's flags are documented nowhere (Decision 13).
   recorded PostgreSQL version.
 - **One known incompatibility:** a `wal` recording made **on PG 19** by a pre-0.12 pgcenter has 7
   columns but will be replayed against the new 8-column PG 19 layout, so `stats_age` falls inside
-  `DiffIntvl{2,6}` and `report -W w` fails with `diff failed`. Narrow (PG 19 is still beta) and
+  `DiffIntvl{2,6}` and `report -W w` fails with an error beginning `diff failed`. Narrow (PG 19 is still beta) and
   accepted in the user-spec; it goes to the release notes rather than being fixed by
   column-count-aware replay.
 
