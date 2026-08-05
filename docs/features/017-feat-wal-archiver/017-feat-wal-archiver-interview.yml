@@ -619,6 +619,35 @@ notes: |
   a static string rather than a conditional hint. The success criterion listing a cmdline hint is
   superseded accordingly.
 
+  Post-interview review outcomes (Phase 6 dev-customer + Phase 7 completeness + Phase 9 quality):
+  - `-W w|a` breaking change REAFFIRMED by the user after being told the `-J c|t` symmetry argument
+    is not a precedent for BREAKING an existing flag (`-J` was born a string). Recorded as a
+    knowingly paid cost.
+  - Msg wording REAFFIRMED as "(requires archive_mode=on)" — the user rejected the softer
+    "only populated when archive_mode=on" ("ничего он не усомнится"). Consistency with
+    stat_io_time's phrasing wins.
+  - CRITICAL fixed in the spec: the legacy call `report -W -f dump.tar` does NOT produce cobra's
+    "flag needs an argument" — pflag consumes `-f` as the flag's value, so the user sees
+    "report type is not specified, quit". Only a trailing bare `-W` produces the argument error.
+    Both the edge case and the risk mitigation said otherwise and were rewritten.
+  - FPI column position REFINED: pinned as `fpi,KiB` immediately AFTER the existing `fpi` count
+    column (Q3's proposal said "next to wal,KiB"), so count and volume of full page images sit
+    together. Still inside DiffIntvl, still `round(wal_fpi_bytes/1024,2)`. PG 19 wal layout: 8
+    columns, DiffIntvl {2,6}.
+  - Privilege degradation reopened by the adequacy validator (a cheap has_function_privilege()
+    guard in a CASE) and CLOSED BY MEASUREMENT: PostgreSQL checks EXECUTE at function-node init, so
+    under a privilege-less role ALL of these fail — CASE with an uncorrelated subquery (InitPlan,
+    evaluated first), CASE with a correlated subquery, and LEFT JOIN LATERAL ... ON
+    has_function_privilege(). Verified live on PG 18 with a purpose-made role. The only working
+    form (probe at connect time, pick one of two same-shape queries in Go) was rejected by the user
+    on the merits: it would fix half the WAL area for a role that cannot use the other half anyway
+    (the wal screen's pg_ls_waldir() has no guard). All-or-nothing stands.
+  - Added to the stand plan: measure pg_ls_archive_statusdir() on ~200k .ready files. The
+    no-throttle decision stands; the measurement gives it a number instead of an assumption.
+  - Recorded explicitly in the spec: the screen is for diagnosis, not detection ([010] detects);
+    two of three pieces work on PG 14-18; the new wal goldens close pre-existing test debt rather
+    than adding functionality.
+
   Correction applied to the code-research document: its §7.1 claimed DiffIntvl{0,0} routes column 0
   through diffPair and would abort every sample on the 'Archiver' literal, and called it the
   feature's highest risk. That is wrong — calculateDelta (internal/stat/postgres.go:589-597)
