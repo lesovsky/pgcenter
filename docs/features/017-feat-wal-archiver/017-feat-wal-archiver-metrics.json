@@ -25,14 +25,14 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
+    "validation_rounds": { "user_spec": 2 },
     "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
     "review_rounds": {},
     "review_findings": { "critical": 0, "major": 0, "minor": 0 },
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 0,
+    "interview_questions": 12,
     "tasks_count": 0,
     "waves_count": 0,
     "agents_spawned": 0,

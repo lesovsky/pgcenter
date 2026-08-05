@@ -634,6 +634,17 @@ notes: |
     column (Q3's proposal said "next to wal,KiB"), so count and volume of full page images sit
     together. Still inside DiffIntvl, still `round(wal_fpi_bytes/1024,2)`. PG 19 wal layout: 8
     columns, DiffIntvl {2,6}.
+  - SCOPE ADDITION (round 2, adequacy validator, accepted by the user): the [010] verbose panel's
+    archiving backlog moves from pg_ls_dir('pg_wal/archive_status') to pg_ls_archive_statusdir().
+    Verified live: pg_ls_dir's ACL is {postgres} — superuser only — while pg_ls_waldir and
+    pg_ls_archive_statusdir are {postgres, pg_monitor}. So a plain pg_monitor role sees n/a for the
+    backlog today and gets no first signal at all. Accepted cost: the panel's walk becomes an
+    lstat-per-file walk and the panel rides every screen, so the cost is paid regardless of which
+    screen is open. The user chose this over merely correcting the spec's framing.
+  - Known limitation recorded: a wal archive recorded ON PG 19 by a pre-0.12 pgcenter (7 columns)
+    replays against the new 8-column PG 19 layout, so stats_age falls inside DiffIntvl {2,6} and
+    `report -W w` fails with "diff failed". Narrow (PG 19 is beta); documented in release notes
+    rather than fixed by column-count-aware replay.
   - Privilege degradation reopened by the adequacy validator (a cheap has_function_privilege()
     guard in a CASE) and CLOSED BY MEASUREMENT: PostgreSQL checks EXECUTE at function-node init, so
     under a privilege-less role ALL of these fail — CASE with an uncorrelated subquery (InitPlan,
