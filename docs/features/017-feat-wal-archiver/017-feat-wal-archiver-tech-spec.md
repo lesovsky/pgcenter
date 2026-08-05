@@ -169,15 +169,61 @@ verified), since an unarchived segment produces one file in each directory.
 including the view-switch latency caused by the unbuffered `viewCh`. If the numbers are bad,
 throttling returns as its own decision, reusing the [010] `latencyGuardThreshold` machinery.
 
-### Decision 10 (Autopilot assumption): `MinRequiredVersion` is `PostgresV14`
+### Decision 10: `MinRequiredVersion: PostgresV14` is mandatory, not cosmetic
 
-**Autopilot assumption:** the user-spec says the archiver view needs no version gate beyond the
-project's own floor, without naming a constant. Assumed `query.PostgresV14`, because that is the
-floor every recent view uses (`wal`, `bgwriter`, `replslots`), it is the oldest cluster in the test
-image, and it keeps `TestView_VersionOK`'s ≤PG13 rows untouched. `pg_stat_archiver` (PG 9.0+) and
-`pg_ls_archive_statusdir()` (PG 12+) both predate it, so nothing is actually gated out.
+**Decision:** the archiver view sets `MinRequiredVersion: query.PostgresV14`.
+**Rationale:** the user-spec's phrasing ("no minimum version beyond the common one") does not survive
+contact with the code — **there is no common floor.** The view registry still serves versions down to
+PG 9.4 and `TestViews_Configure` exercises `90400`. Left at its zero value, the view would be offered
+on PG ≤11, where `pg_ls_archive_statusdir()` does not exist (PG 12+): the screen would error every
+tick, and worse, `pgcenter record` would abort the **entire recording** on the first query error
+(`record/recorder.go:136-139`). `PostgresV14` is also the floor every recent view uses (`wal`,
+`bgwriter`, `replslots`) and the oldest cluster in the test image, so it keeps `TestView_VersionOK`'s
+≤PG13 rows untouched.
+**Alternatives considered:** `PostgresV12` (the true function floor) — rejected: pgcenter does not
+test below PG 14, so it would promise a version nobody verifies.
 
-### Decision 11 (Autopilot assumption): column header names
+### Decision 11: `pg_ls_archive_statusdir()` tolerates a missing directory — `n/a` becomes `0`
+
+**Decision:** accept the behavioural difference introduced by Decision 8 and record it.
+**What changes:** `pg_ls_dir('pg_wal/archive_status')` is `missing_ok=false`, while
+`pg_ls_archive_statusdir()` is `missing_ok=true`. Proven by moving `$PGDATA/pg_wal/archive_status`
+aside on a live PG 18.4: the old query errors, the new one returns `0`. So on a cluster whose
+`archive_status` directory is gone, the verbose panel flips from `n/a` to a confident `0 B`.
+**Rationale:** a missing `archive_status` means a damaged or hand-edited data directory — a state in
+which the backlog number is the least of the operator's problems, and one that no supported
+PostgreSQL configuration produces on its own. Weighed against the gain (the most common monitoring
+role finally sees the backlog at all), the trade is worth it.
+**Alternatives considered:** wrapping the call to distinguish "empty" from "absent" — rejected: it
+cannot be done in SQL without another privileged call, and it would re-introduce the degradation
+machinery Decision 4 already ruled out.
+
+### Decision 12: the first recorded sample is not printed — pre-existing, now documented
+
+**Decision:** `report -W a` over an N-tick recording prints N−1 rows, and this is accepted as-is.
+**Rationale:** `report/report.go:315-320` discards the first sample unconditionally, because for a
+diffed screen the first sample has no predecessor to diff against. The `archiver` screen is pure
+pass-through, so its first sample *is* printable data and is nonetheless dropped. This is not
+introduced here — every `DiffIntvl{0,0}` screen behaves this way today, `activity` included — and
+changing it would alter shared report behaviour and every existing golden.
+**Consequence to carry:** the user-spec's scenario 3 says the report prints "one row per tick"; the
+honest wording is "one row per tick after the first". The user-spec is corrected in the same commit.
+**Alternatives considered:** skipping the discard when `DiffIntvl == {0,0}` — rejected as
+out-of-scope shared-path surgery with golden churn across unrelated screens.
+
+### Decision 13 (Autopilot assumption): the README criterion is narrowed to what exists
+
+**Autopilot assumption:** the user-spec's criterion "обновлены README (описание флага `-W`)" has no
+target in the tree — `-W` is documented nowhere, and `doc/pgcenter-report-readme.md` carries no flag
+reference at all (not for `-W`, not for `-J`). Writing full CLI flag documentation is new,
+unestimated scope and a different kind of work from this feature. Narrowed to: **the flag's help
+string in `cmd/report/report.go`** (which is what `pgcenter report --help` prints) **plus the 0.12.0
+release notes**, which must name the literal failure text users will see (`report type is not
+specified, quit`) and the literal `diff failed` for the PG 19 legacy-archive case. Full flag
+documentation for the `doc/` tree is left out and flagged here so it is a visible omission rather
+than a silent one.
+
+### Decision 14 (Autopilot assumption): column header names
 
 **Autopilot assumption:** the user-spec fixes the column order and semantics but writes headers in
 prose. Assumed SQL aliases exactly as the user-spec's mock-up prints them: `source`, `ready`,
@@ -401,10 +447,12 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 
 ### Wave 2 (зависит от Wave 1 — регистрация вью и всё, что от неё зависит)
 
-#### Task 5: Register the archiver view and configure both layouts
+#### Task 5: Register the archiver view and update every layout-pinning test
 - **Description:** Register the `archiver` view in `view.New()` with its static parameters and `Msg`,
-  wire both `archiver` and the PG 19 `wal` layout into `Configure()`, and update every count-based
-  view and record test to its new correct value.
+  and add its `case` to `Configure()`. This task is the **sole owner of `internal/view/view_test.go`**:
+  it updates the view-count and per-version availability tests for the new view AND the
+  `TestViews_Configure` matrix rows that pin the PG 19 `wal` column count changed in Wave 1. The
+  `wal` case in `Configure()` itself needs no edit — it already delegates to the selector.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/view/... ./record/...`
@@ -444,14 +492,17 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Files to read:** `report/report_record_bgwriter_test.go`, `report/report_record_statio_test.go`
 
 #### Task 9: User-facing documentation
-- **Description:** Update the README's `-W` flag description and add the 0.12.0 release-notes entries
-  for the breaking flag change (including the legacy-invocation failure shape) and the PG 19 archive
-  replay limitation.
+- **Description:** Add the 0.12.0 release-notes entries for the breaking `-W` change and the PG 19
+  legacy-archive limitation, quoting the literal messages users will see (`report type is not
+  specified, quit` and `diff failed`). Per Decision 13 there is no existing `-W` documentation to
+  update — the flag's own help string is changed in Task 4, and full CLI documentation for the `doc/`
+  tree stays out of scope.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
-- **Verify:** bash — grep the README and release notes for the new flag form
-- **Files to modify:** `README.md`, `docs/roadmap-0.12.0.md`
-- **Files to read:** `docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md`
+- **Verify:** bash — grep the release notes for both literal messages
+- **Files to modify:** `docs/roadmap-0.12.0.md`
+- **Files to read:** `docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md`,
+  `doc/pgcenter-report-readme.md`
 
 ### Final Wave
 
