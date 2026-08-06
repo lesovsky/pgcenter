@@ -1,0 +1,31 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Role-creating helper with interpolated DDL is still compiled into the released pgcenter binary (carried over from round 1, unchanged)",
+      "description": "Round-1 finding 2, re-verified in round 2 and unchanged. postgres.SetupTestRole builds CREATE ROLE / GRANT pg_monitor / SET ROLE with fmt.Sprintf (internal/postgres/testing.go:73-91). The identifier cannot be a $1 placeholder, so interpolation is unavoidable; the file carries no build tag (its own doc comment at line 63-64 states this explicitly, as the reason it returns an error instead of taking *testing.T) and therefore ships in the released binary. The sole defense remains testRoleNameRE (`^[a-z_][a-z0-9_]*$`, line 12), pinned by Test_SetupTestRole_RejectsUnsafeName (internal/query/archiver_test.go:348-366), which asserts the name is refused before any statement is built (nil *postgres.DB suffices). Re-checked every call site in the module this round: internal/query/overview_test.go:193 (backlogRoleMonitor), :227 (backlogRoleNoRole), internal/stat/postgres_test.go:267 (backlogRoleCollect), internal/query/archiver_test.go:212, :250 (archiverRoleMonitor/NoRole), and the negative test at archiver_test.go:361. Every one passes an untyped string constant declared in the same file - no variable, argument, env value, table-driven fixture name or format string reaches the helper. The round-2 fix additionally moved the stat package off the query package's role name onto its own literal constant, so the constant-only invariant is preserved by the fix. Task 03 does not own internal/postgres/testing.go and is forbidden to modify it.",
+      "location": "internal/postgres/testing.go:58-94 (helper, owned by task 01); call sites this task owns: internal/query/overview_test.go:193,227 and internal/stat/postgres_test.go:267",
+      "impact": "A privilege-management primitive (role creation plus pg_monitor grant) is linked into production builds and callable by any future in-module caller. With the regex in place there is no injection path today; the residual risk is a later caller passing a non-constant name and relying on the regex alone, or the regex being relaxed.",
+      "recommendation": "Unchanged from round 1: move SetupTestRole behind a build tag or into a *_test.go / test-only package so it is not linked into the release binary. This is task 01's file - raise with the lead rather than patching from task 03.",
+      "cwe": "CWE-89"
+    },
+    {
+      "severity": "minor",
+      "category": "A05: Security Misconfiguration",
+      "title": "Test roles and their pg_monitor grant remain permanent cluster state with no cleanup and no fixture-cluster assertion (carried over from round 1)",
+      "description": "Round-1 finding 3, re-verified and accepted as designed (Decision 18: no DROP ROLE, no REVOKE). The round-2 change adds a third permanent role rather than reusing an existing one: internal/stat now creates pgcenter_test_backlog_collect (granted pg_monitor) alongside internal/query's pgcenter_test_backlog_monitor / pgcenter_test_backlog_norole and the archiver task's pgcenter_test_archiver_monitor / pgcenter_test_archiver_norole. The de-sharing is the correct trade for the isolation it buys - a stray grant to one package's role can no longer silently weaken the other package's assertion, and the two packages no longer race on pg_authid via SetupTestRole's non-atomic DO block outside `go test -p 1` - but it does widen the standing residue by one pg_monitor grantee per cluster. The target is still chosen by postgres.NewTestConnectVersion, which hardcodes 127.0.0.1 and fixture ports 21910-21919/21994-21996 with user postgres / database pgcenter_fixtures (internal/postgres/testing.go:27-56), so the blast radius is normally a disposable CI container; there is still no assertion that the connected cluster is actually a throwaway fixture before DDL is issued. All roles are created NOLOGIN NOSUPERUSER, so the residue is not directly usable to authenticate.",
+      "location": "internal/stat/postgres_test.go:241,267 (new third role), internal/query/overview_test.go:193,227, internal/postgres/testing.go:68-94 (no drop/revoke)",
+      "impact": "Persistent monitoring-privileged catalog state on any cluster the suite is pointed at, outliving the test process and the checkout, now one role larger. On a fixture container this is accepted design; on a misdirected run against something else listening on those loopback ports it is an unnoticed standing grant.",
+      "recommendation": "Accepted as-is for this task. If tightened later, do it once in the shared helper rather than at the five call sites: refuse to issue any DDL unless the target matches a recognised fixture (port present in the NewTestConnectVersion map AND database = pgcenter_fixtures).",
+      "cwe": "CWE-732"
+    }
+  ]
+}

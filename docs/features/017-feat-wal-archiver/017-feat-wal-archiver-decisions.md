@@ -189,3 +189,53 @@ Major и один minor от dev-test-reviewer закрыты деривацио
   - M9 предикат `'%.ready'` → `'%.done'` → `Test_StatArchiverQuery_Structure`
   - M10 выдача `pg_monitor` deny-роли после `DROP ROLE` → `Test_StatArchiverQuery_WithoutPgMonitorFails` на «Should be empty, but was [pg_monitor]»
   - M11 расширение регекспа имени роли до верхнего регистра → `Test_SetupTestRole_RejectsUnsafeName`
+
+---
+
+## Task 03: Verbose panel backlog on a pg_monitor-accessible function
+
+**Status:** Done
+**Commit:** e3ac49d
+**Agent:** основной агент
+
+**Summary:** `OverviewArchivingBacklog` переведён с `pg_ls_dir('pg_wal/archive_status') AS name` на `pg_ls_archive_statusdir()` — контракт вывода посимвольно тот же (один `bigint`, байты, `count(.ready) × wal_segment_size`), алиас `AS name` снят как мёртвый синтаксис (функция сама отдаёт OUT-колонку `name`). Причина ровно одна: у `pg_ls_dir` ACL `{postgres}` — только суперюзер, поэтому роль с одним `pg_monitor` получала 42501 на каждом тике и панель показывала `n/a` вместо первого сигнала об остановке архивации (Decision 8 отменяет ADR [010]). Механизм деградации в `collectOverviewStat` (собственный `QueryRow`, проглоченная ошибка, `ArchivingBacklogValid`) не тронут — изменился только комментарий над ним. Роли под тесты создаются общим хелпером `postgres.SetupTestRole` из задачи 01; собственного хелпера и inline `CREATE ROLE`/`GRANT` не добавлено, `internal/postgres/testing.go` не изменялся.
+
+**Deviations:**
+
+1. **Тестов четыре, а не три.** Сверх TDD Anchor добавлен бессерверный `Test_ArchivingBacklogQuery_Structure` — по major-находке test-ревьюера и по прецеденту задачи 01: на фикстурах `archive_mode=off` и пустой каталог статусов, поэтому любая живая проверка бэклога сводится к `0 >= 0`, и снятие FILTER `.ready` либо множителя `pg_size_bytes(...)` осталось бы зелёным во всех живых тестах. Обе мутации наблюдались красными только на нём.
+2. **`assert.True(t, got.Valid)` в collect-тесте заменён на сравнение с суперюзерским baseline'ом.** TDD Anchor называет `Valid`, но `collectOverviewStat` выставляет `s.Valid = true` безусловно (`postgres.go:202`) — ассерция не могла бы покраснеть никогда. Вместо неё снимается образец под суперюзером до `SET ROLE` и сравниваются `TotalSizeValid`/`DatabasesCount`: утверждение «остальная выборка не пострадала» стало фальсифицируемым.
+3. **Поправлен пятый комментарий сверх четырёх названных** — `internal/stat/postgres.go:84`, комментарий поля `ArchivingBacklogValid`: он утверждал, что поле становится `n/a` при `archive_mode=off`. Это неверно (каталог статусов создаётся initdb, агрегат возвращает настоящий `0`) и противоречило сразу Decision 11, переписанному комментарию потребителя и `Test_collectOverviewStat_Degradation`. Major-находка code-ревьюера; правка в одну строку внутри файла, уже входящего в скоуп.
+4. **Роль для `internal/stat` отдельная** (`pgcenter_test_backlog_collect`), а не общая с `internal/query` (`pgcenter_test_backlog_monitor` / `pgcenter_test_backlog_norole`). DO-блок в `SetupTestRole` не атомарен, и общий объект между пакетами дал бы гонку на `pg_authid` вне `-p 1`; сходящаяся minor-находка code- и test-ревьюеров.
+5. **Рекомендация перевести новые тесты на `connectArchiverFixture` отклонена** — форма `NewTestConnectVersion` + `t.Skipf` предписана Implementation Hints самой задачи и совпадает с остальными тестами файла, а аккуратное переиспользование требовало бы переименования хелпера в `archiver_test.go` (файл задачи 01). Test-ревьюер снял находку, записав переименование в follow-up.
+
+**Tech debt:**
+
+1. `assertRestrictedSession`/`resetRole` продублированы: в `internal/query` они пакетные (задача 01), в `internal/stat` guard написан инлайном. Объединение требует переноса рядом с `SetupTestRole` в `internal/postgres/testing.go` — файл вне скоупа обеих задач. На финализацию.
+2. Ни один тест не наблюдает **ненулевой** бэклог: фикстуры работают с `archive_mode=off`. Поведенческая проверка отнесена к стендовому прогону (задача 10); на этом слое её заменяет структурный тест.
+3. Ролей на кластере стало на три больше (`pgcenter_test_backlog_*`), teardown'а нет по Decision 18 — для эфемерных CI-контейнеров это верный размен, на долгоживущем кластере роли снимаются вручную.
+4. ADR [010] в `docs/decisions-log.md` по-прежнему называет `pg_monitor` достаточным для `pg_ls_dir` — не трогается в этой задаче намеренно, правка на финализации фичи.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 1 major + 4 minor → [017-feat-wal-archiver-task-03-dev-code-reviewer-review.json](017-feat-wal-archiver-task-03-dev-code-reviewer-review.json)
+- dev-security-auditor: approved, 3 minor → [017-feat-wal-archiver-task-03-dev-security-auditor-review.json](017-feat-wal-archiver-task-03-dev-security-auditor-review.json)
+- dev-test-reviewer: needs_improvement, 1 major + 4 minor → [017-feat-wal-archiver-task-03-dev-test-reviewer-review.json](017-feat-wal-archiver-task-03-dev-test-reviewer-review.json)
+
+*Round 2 (после исправлений):*
+- dev-code-reviewer: approved_with_suggestions, 0 critical/major → [017-feat-wal-archiver-task-03-dev-code-reviewer-review-round2.json](017-feat-wal-archiver-task-03-dev-code-reviewer-review-round2.json)
+- dev-security-auditor: approved, 2 minor (обе вне скоупа задачи) → [017-feat-wal-archiver-task-03-dev-security-auditor-review-round2.json](017-feat-wal-archiver-task-03-dev-security-auditor-review-round2.json)
+- dev-test-reviewer: passed, 0 находок → [017-feat-wal-archiver-task-03-dev-test-reviewer-review-round2.json](017-feat-wal-archiver-task-03-dev-test-reviewer-review-round2.json)
+
+**Verification:**
+- `go test -race -p 1 -count=1 -timeout 300s ./internal/query/... ./internal/stat/...` в образе `lesovsky/pgcenter-testing:0.0.11` (PG 14–19) → зелено; два подряд некэшированных прогона в одном контейнере → оба зелёные (создание ролей идемпотентно)
+- `go build ./cmd`, `go vet`, `gofmt` по четырём файлам → чисто; `make lint` (golangci-lint + gosec) → 0 issues; `make vuln` → чисто
+- Грепы из Verification Steps: `grep -rn "pg_ls_dir" internal/` → только объясняющие комментарии и `NotContains`-ассерция; `grep -rn "has pg_monitor" internal/` → пусто
+- Мутационный контроль (каждая применена, наблюдалась **красной**, откачена):
+  - M1 `FROM` откачен на `pg_ls_dir('pg_wal/archive_status') AS name` → `Test_ArchivingBacklogQuery_PgMonitorRole` и `Test_collectOverviewStat_PgMonitorRole` с `permission denied for function pg_ls_dir (SQLSTATE 42501)`, плюс `Test_ArchivingBacklogQuery_Structure`
+  - M2 пропуск вызова `SetupTestRole` в позитивном тесте → красный на собственном гварде: `current_user` = `postgres`, `rolsuper` = true, членство пустое — до запроса
+  - M3 `SetupTestRole(conn, backlogRoleMonitor, false)` на **свежем контейнере** → красный на гварде членства; с дополнительно перевёрнутым ожиданием гварда — красный на самом запросе с `permission denied for function pg_ls_archive_statusdir (SQLSTATE 42501)`
+  - M4 `SetupTestRole(conn, backlogRoleNoRole, true)` на **свежем контейнере** (отравляет кластер, контейнер выброшен) → `…_NoPrivilegeRole` красный на «Should be empty, but was [pg_monitor]»; с перевёрнутым ожиданием гварда — красный на «An error is expected but got nil»
+  - M5 снят FILTER `.ready` → `Test_ArchivingBacklogQuery_Structure`
+  - M6 снят множитель `pg_size_bytes(current_setting('wal_segment_size'))` → `Test_ArchivingBacklogQuery_Structure`
+- Мутации M3/M4 прогонялись на копии дерева внутри свежего контейнера, поэтому рабочее дерево ими не затрагивалось; M1/M2/M5/M6 применялись к дереву и откатывались

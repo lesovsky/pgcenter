@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A01: Broken Access Control",
+      "title": "Restricted-session guard in the internal/stat role test is weaker than the internal/query one",
+      "description": "Test_collectOverviewStat_PgMonitorRole re-implements the anti-vacuous guard inline (current_user, rolsuper, pg_has_role(current_user,'pg_monitor','USAGE')) instead of the internal/query equivalent assertRestrictedSession, which additionally asserts the role's membership set is EXACTLY {pg_monitor} (archiver_test.go:312-318). Roles are cluster-global, SetupTestRole never normalises an already-existing role, and Decision 18 mandates no DROP ROLE / no REVOKE. On a long-lived container a stray GRANT to pgcenter_test_backlog_monitor (e.g. pg_read_server_files, pg_read_all_settings, or the role mutation described in the task's Acceptance Criteria) silently decays the assertion from 'pg_monitor is sufficient' to 'some privileged role works' — the exact class of false-green that let the wrong pg_ls_dir privilege assumption survive into ADR [010]. Secondarily, the deferred RESET ROLE at internal/stat/postgres_test.go:267-270 only asserts the Exec returned no error; it does not verify current_user actually left the test role, unlike resetRole() in internal/query. Blast radius is currently bounded because the connection is closed immediately after, but the guard is strictly weaker than the one the same change ships in the neighbouring package.",
+      "location": "internal/stat/postgres_test.go:271-287 (guard), internal/stat/postgres_test.go:267-270 (reset)",
+      "impact": "A privilege regression could pass undetected: the end-to-end proof that a pg_monitor-only role gets a backlog number would still go green under a role that has accumulated grants beyond pg_monitor, so the change's core security claim (the field is readable with pg_monitor and nothing more) would no longer be pinned by this test.",
+      "recommendation": "Add the membership assertion to the inline guard so it matches the internal/query one, e.g. extend the probe with `coalesce((SELECT array_agg(DISTINCT r.rolname::text) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)), ARRAY[]::text[])` and `assert.Equal(t, []string{\"pg_monitor\"}, memberOf)`; and assert current_user != backlogRoleMonitor after RESET ROLE. Alternatively, promote assertRestrictedSession/resetRole into internal/postgres so both packages share one guard — but that edits a file this task is forbidden to touch, so raise it with the lead rather than doing it here.",
+      "cwe": "CWE-1071"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Role-creating helper with interpolated DDL is compiled into the released pgcenter binary",
+      "description": "postgres.SetupTestRole executes CREATE ROLE / GRANT pg_monitor / SET ROLE built with fmt.Sprintf (internal/postgres/testing.go:73-91). The identifier cannot be a $1 placeholder, so interpolation is unavoidable, and the file's own comment states it carries no build tag and therefore ships in the released binary. The only defense is testRoleNameRE (`^[a-z_][a-z0-9_]*$`), which is correct and is pinned by Test_SetupTestRole_RejectsUnsafeName. Task 03 does not introduce this — the file is owned by Task 01 and is read-only here — but Task 03 is its second consumer and cements the exported API. Verified for this task's call sites: internal/query/overview_test.go:18-21 and internal/stat/postgres_test.go:249 pass untyped string constants only, never a variable, argument, env value, or fixture-derived name; both roles are created NOLOGIN NOSUPERUSER; the deny role receives no GRANT at all.",
+      "location": "internal/postgres/testing.go:68-94 (helper, task 01), internal/query/overview_test.go:177,211 and internal/stat/postgres_test.go:262 (this task's call sites)",
+      "impact": "A privilege-management primitive (role creation plus pg_monitor grant) is present in production builds and reachable from any future in-module caller. With the regex in place there is no injection path today; the risk is that a later caller passes a non-constant name and relies on the regex alone, or that the regex is relaxed.",
+      "recommendation": "Move SetupTestRole behind a build tag or into a *_test.go / test-only package so it is not linked into the release binary. This belongs to Task 01's file and must not be patched from Task 03 — raise it with the lead per the task's own instruction ('raise it with the lead if the helper does not hold them — do not patch around it locally').",
+      "cwe": "CWE-89"
+    },
+    {
+      "severity": "minor",
+      "category": "A05: Security Misconfiguration",
+      "title": "Test roles and their pg_monitor grant are permanent cluster state with no cleanup and no fixture-cluster assertion",
+      "description": "The two new tests create pgcenter_test_backlog_monitor (granted pg_monitor) and pgcenter_test_backlog_norole on every cluster the suite connects to, and by Decision 18 nothing ever drops or revokes them. The target is chosen by postgres.NewTestConnectVersion, which hardcodes 127.0.0.1 and fixture ports 21914-21919 with user postgres / db pgcenter_fixtures, so the blast radius is normally a disposable CI container. There is, however, no assertion that the connected cluster is actually a throwaway fixture; anyone who runs `go test ./internal/query/... ./internal/stat/...` while something else listens on those loopback ports leaves a persistent pg_monitor grantee behind. The task file itself documents the consequence ('a git checkout does not un-grant pg_monitor') and that a poisoned deny role makes a correct tree fail. The roles are NOLOGIN, so the residue is not directly usable to authenticate; it becomes usable only in combination with a later GRANT ... TO or SET ROLE by a privileged user.",
+      "location": "internal/query/overview_test.go:177,211 and internal/stat/postgres_test.go:262 (role creation), internal/postgres/testing.go:68-94 (no drop/revoke)",
+      "impact": "Persistent monitoring-privileged catalog state on any cluster the suite is pointed at, outliving the test process and the checkout. On a fixture container this is accepted design; on a misdirected run it is an unnoticed standing grant.",
+      "recommendation": "Accepted as-is for this task (Decision 18 is explicit and the ports are fixture-only). If tightened later, do it in the shared helper rather than at these call sites: refuse to run when the target is not a recognised fixture (e.g. assert the port is in the NewTestConnectVersion map and the database is pgcenter_fixtures) before issuing any DDL.",
+      "cwe": "CWE-732"
+    }
+  ]
+}

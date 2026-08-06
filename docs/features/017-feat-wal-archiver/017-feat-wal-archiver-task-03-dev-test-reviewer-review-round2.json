@@ -1,0 +1,55 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "round": 2,
+  "previousReport": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver-task-03-dev-test-reviewer-review.json",
+  "summary": "All four applied fixes verified; the one declined fix is accepted on its merits. The major finding is closed: Test_ArchivingBacklogQuery_Structure (internal/query/overview_test.go:159-172) now pins the aggregate's arithmetic without a server, and I re-ran the three mutations myself on this host rather than taking the executor's word — dropping the .ready FILTER, dropping the pg_size_bytes(current_setting('wal_segment_size')) product, and reverting FROM to pg_ls_dir('pg_wal/archive_status') AS name each turn the test RED, the last one on two assertions at once (Contains pg_ls_archive_statusdir and NotContains pg_ls_dir). That closes the hole where every live assertion on the backlog reduced to 0 >= 0 on the archive_mode=off fixtures. Minor 1 is closed correctly: assert.True(t, got.Valid) is gone and the superuser baseline taken before SetupTestRole makes the 'rest of the sample' claim falsifiable — and it cannot collapse into a 0==0 tautology, because assert.GreaterOrEqual(got.DatabasesCount, 1) pins the compared value and Test_collectOverviewStat_Degradation:236 independently pins TotalSizeValid absolutely as superuser on the same cluster. Minor 2 is closed: the collect-level guard now scans the same DISTINCT membership array as assertRestrictedSession and gates on assert.Equal([]string{\"pg_monitor\"}, memberOf), and the RESET ROLE defer re-reads current_user. Minor 4 is closed by construction: internal/stat owns pgcenter_test_backlog_collect, internal/query owns pgcenter_test_backlog_monitor / _norole, so no cluster-global object is shared across packages and the SetupTestRole DO-block race is gone regardless of -p. Minor 3 (connectArchiverFixture) is accepted as declined — see roundOneDisposition for the reasoning. Verified independently: go vet clean, go build clean, gofmt clean on both changed files (the one gofmt hit, internal/stat/procpidstat_test.go, is unmodified pre-existing state and out of scope), and the working tree is byte-restored after my mutation runs. One coverage gap remains by design, not by omission: no test observes a NON-zero backlog, because the fixtures run archive_mode=off with an empty status directory — the task file defers that to the Task 10 stand run, and the structure test is the correct substitute at this layer.",
+  "findings": [],
+  "roundOneDisposition": [
+    {
+      "roundOneSeverity": "major",
+      "category": "missing_coverage",
+      "disposition": "fixed",
+      "verification": "Test_ArchivingBacklogQuery_Structure added at internal/query/overview_test.go:159-172 with the four prescribed assertions. I re-ran all three mutations on this host, not just the one the executor reported. (a) count(*) FILTER (WHERE name LIKE '%.ready') -> count(*): RED, 'does not contain count(*) FILTER (WHERE name LIKE %.ready)'. (b) removing * pg_size_bytes(current_setting('wal_segment_size')) from the constant: RED, 'does not contain pg_size_bytes(current_setting(wal_segment_size))'. (c) FROM pg_ls_archive_statusdir() -> FROM pg_ls_dir('pg_wal/archive_status') AS name: RED on two assertions simultaneously. Note on method: the multiplication mutation must be anchored on the constant, since the same substring also appears in the doc comment above it — a comment-only edit leaves the test green, correctly, because assert.Contains reads the constant's value and not the file. Acceptance criterion 1 is now gated by a test that reproduces on a bare host with no CI image."
+    },
+    {
+      "roundOneSeverity": "minor",
+      "category": "empty_test",
+      "disposition": "fixed",
+      "verification": "assert.True(t, got.Valid) is removed. internal/stat/postgres_test.go:265 captures the superuser baseline before SetupTestRole; :314-316 assert base.TotalSizeValid == got.TotalSizeValid and base.DatabasesCount == got.DatabasesCount. I checked the fix for the obvious way a baseline parity check goes vacuous — both sides degrading to the same wrong value — and it is covered from two directions: assert.GreaterOrEqual(got.DatabasesCount, int64(1)) forbids the 0==0 case, and Test_collectOverviewStat_Degradation:236 already asserts TotalSizeValid absolutely as the fixture superuser on the same cluster, so a suite-wide break of the size aggregate reddens there rather than sliding through here as false parity."
+    },
+    {
+      "roundOneSeverity": "minor",
+      "category": "anti_pattern",
+      "disposition": "fixed",
+      "verification": "internal/stat/postgres_test.go:288-306 now selects the fourth column verbatim from assertRestrictedSession, including the DISTINCT that PG 16+ per-grantor rows require, scans it into memberOf, and adds okMembers = assert.Equal([]string{\"pg_monitor\"}, memberOf) to the early-return condition — so the test can no longer decay from 'pg_monitor is sufficient' to 'some privileged role works'. The defer at :272-280 follows RESET ROLE with a current_user re-read and assert.NotEqual, matching resetRole. The remaining duplication of assertRestrictedSession's body across the two packages is forced (it lives in package query; internal/postgres/testing.go is read-only in this task) and was noted as forced in round 1."
+    },
+    {
+      "roundOneSeverity": "minor",
+      "category": "anti_pattern",
+      "disposition": "fixed",
+      "verification": "internal/stat/postgres_test.go:243 defines its own const backlogRoleCollect = \"pgcenter_test_backlog_collect\"; internal/query/overview_test.go:20-21 keeps pgcenter_test_backlog_monitor / pgcenter_test_backlog_norole. The two packages no longer touch a common role, so the non-atomic NOT EXISTS / CREATE ROLE window in SetupTestRole cannot be entered concurrently by them, and the tests are now independent of whether the invocation passes -p 1. This is option (a) from the round-1 recommendation, the one I preferred: it fixes the property rather than constraining how the suite may be invoked."
+    },
+    {
+      "roundOneSeverity": "minor",
+      "category": "anti_pattern",
+      "disposition": "accepted_as_declined",
+      "verification": "The pushback holds on all three of its claims and I verified each. (1) The task file's Implementation Hints prescribe this shape explicitly, at 017-feat-wal-archiver-task-03.md:332-333: 'Follow the existing live-PG test shape in this file: postgres.NewTestConnectVersion(version) with t.Skipf when the cluster is unavailable, and conn.Close() per iteration.' Re-raising the finding would ask the executor to contradict its own task file. (2) It is the file's prevailing convention, including the pre-existing Test_ArchivingBacklogQuery_Degrades, so the concern is file-wide rather than something these tests introduced. (3) internal/query/archiver_test.go is not among task 03's Context Files, and adopting the helper without the rename would leave an archiver-named function connecting overview fixtures. The impact I flagged is latent, and I confirmed it is latent today: all six entries of overviewVersions (140000-190000) are present in the NewTestConnectVersion port map at internal/postgres/testing.go:28-44, so no subtest can currently skip for the wrong reason. Follow-up for a later task, not a blocker for this one: rename connectArchiverFixture to connectFixture and route every live-PG test in package query through it, so that adding a version to a version list without adding it to the port map fails loudly instead of skipping silently."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 14,
+      "passed": 14,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 3,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
