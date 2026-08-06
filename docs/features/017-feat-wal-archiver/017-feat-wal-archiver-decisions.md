@@ -239,3 +239,41 @@ Major и один minor от dev-test-reviewer закрыты деривацио
   - M5 снят FILTER `.ready` → `Test_ArchivingBacklogQuery_Structure`
   - M6 снят множитель `pg_size_bytes(current_setting('wal_segment_size'))` → `Test_ArchivingBacklogQuery_Structure`
 - Мутации M3/M4 прогонялись на копии дерева внутри свежего контейнера, поэтому рабочее дерево ими не затрагивалось; M1/M2/M5/M6 применялись к дереву и откатывались
+
+---
+
+## Task 09: User-facing documentation
+
+**Status:** Done
+**Commit:** a35ada7
+**Agent:** основной агент
+
+**Summary:** Создан `doc/release-notes/v0.12.0.md` в прозаическом стиле `v0.9.0.md` (`## Release` → `Release date: TBD` → `### Overview` → секции): ломающее изменение `-W` (строковый флаг, `-W w` / `-W a`) с дословной цитатой `report type is not specified, quit` и объяснением, почему pflag съедает `-f` как значение флага; известное ограничение — запись `wal`, снятая **на PG 19** pgcenter'ом старше 0.12, падает при воспроизведении с ошибкой, начинающейся с `diff failed` (записи PG 14–18 не затронуты); заметка про archiving backlog, поданная с выигрыша (`pg_monitor` наконец видит значение), а не с регрессии. Дополнительно, по расширению скоупа Wave 1, обновлена строка `cmd/help.go:170` — реальный help `pgcenter report --help` печатается через `printReportHelp()`/`SetHelpTemplate`, а не cobra, поэтому описание флага из `StringVarP` (задача 04) до пользователя не доходило; строка приведена к паттерну `SELECTOR` соседних `-D`, `-X`, `-P` с сохранением табуляции.
+
+**Deviations:**
+
+1. **`0 B` не цитируется как экранный литерал** (известно заранее, п. Post-completion). Спеки пишут новое значение бэклога как `0 B`, но `pretty.Size` в нулевом случае возвращает голую строку `"0"` (`internal/pretty/pretty.go:11-12`). В release notes формулировка прозой — «reports a backlog of zero instead of `n/a`»; `n/a` остаётся цитатой, потому что это настоящий литерал (`naReserve`). Это исправление формулировки спека, а не отход от его смысла.
+2. **Секции названы `### Breaking changes` и `### Known limitations`** вместо `### New features`/`### Fixes` из v0.9.0. Скелет (заголовок, `Release date:`, обрамляющее предложение, `### Overview` с одностроечниками, затем разворачивающая проза, `### Other` как список) сохранён дословно, но в этой фиче нет ни новых фич для пользователя, ни фиксов — есть ломающее изменение и ограничение. Задача прямо разрешает «reuse that skeleton, minus the sections you have nothing to put in».
+3. **`Release date: TBD`** — строка оставлена явно незаполненной, дата не выдумана (0.12.0 не выпущен).
+4. **Добавлен второй файл сверх исходного AC** (`git diff --name-only` в AC требовал ровно один файл). Это не отход, а расширение скоупа, записанное в самой задаче в разделе «Scope added during Wave 1»: `cmd/help.go:170`. Соответственно AC про «ровно один файл» больше не действует; всё остальное из списка исключений (`cmd/report/report.go`, `README.md`, `doc/pgcenter-report-readme.md`, `docs/roadmap-0.12.0.md`) не тронуто.
+5. **Про exit code сказано прямо и дважды.** Замер Wave 1 подтверждён локально: `main()` (`cmd/pgcenter.go:66-70`) печатает ошибку и возвращается без `os.Exit(1)`. В notes это отдельный абзац с примером `|| alert` и пустым выходным файлом. Заодно замерена и вторая форма (`-W` последним токеном): `flag needs an argument: 'W' in -W`, **тоже exit 0** — в тексте это оговорено, чтобы читатель не решил, что вторая форма скриптово безопасна.
+
+**Tech debt:**
+
+1. Флаги `-W`, `-J`, `-B`, `-L` не документированы нигде, кроме `cmd/help.go` и `--help`: ни README, ни `doc/pgcenter-report-readme.md` не содержат справочника флагов (Decision 13, намеренно вне скоупа). Написание справочника — отдельная неоценённая работа.
+2. Расхождение «cobra-описание флага vs `printReportHelp()`» системное: `cmd/help.go` — рукописный шаблон, полностью перекрывающий usage cobra, поэтому любое изменение флага требует правки в двух местах, и ничто не проверяет их согласованность. В этой фиче расхождение поймали случайно, в Wave 1. Кандидат на тест-сверку «каждый флаг из `CommandDefinition.Flags()` встречается в `printReportHelp()`».
+3. `doc/Changelog` не обновлён — вне скоупа задачи; актуализация на финализации релиза.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: не запускался на момент записи (задача документационная, ревью назначается оркестратором) → [017-feat-wal-archiver-task-09-dev-code-reviewer-review.json](017-feat-wal-archiver-task-09-dev-code-reviewer-review.json)
+
+**Verification:**
+- `grep -n 'report type is not specified, quit' doc/release-notes/v0.12.0.md` → 1 попадание (строка 35); `grep -n 'diff failed' …` → 1 попадание (строка 62) — оба половины `verify`-гейта зелёные
+- `grep -n '\-W w\|\-W a' …` → 4 попадания; `grep -n 'n/a' …` → 2 попадания; `grep -n '0 B' …` → **пусто** (литерал не просочился)
+- Сверка каждой цитаты с источником: `cmd/report/report.go:95` → `report type is not specified, quit`; `internal/stat/postgres.go:594` → `fmt.Errorf("diff failed: %w", err)` (обёрнутая — в тексте «beginning `diff failed`»); `internal/pretty/pretty.go:11` → нулевой случай возвращает `"0"`
+- Живой прогон собранного бинарника: `pgcenter report -W -f dump.tar` → `report type is not specified, quit`, `EXIT=0`; `pgcenter report -f dump.tar -W` → `flag needs an argument: 'W' in -W`, `EXIT=0`
+- `go build -o /dev/null ./cmd` → ок; `gofmt -l cmd/help.go` → пусто
+- `go run ./cmd report --help` → новая строка `-W, --wal SELECTOR` с продолжением `'w' - wal; 'a' - archiver` печатается и выровнена ровно по колонке соседних `-D`/`-X`/`-P`
+- `git show --stat HEAD` → ровно два файла: `cmd/help.go`, `doc/release-notes/v0.12.0.md`; коммит сделан явным pathspec'ом, чужие правки в `report/` и `top/` в рабочем дереве не захвачены
