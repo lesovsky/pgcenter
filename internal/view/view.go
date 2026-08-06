@@ -138,6 +138,18 @@ func New() Views {
 			Msg:                "Show WAL statistics",
 			Filters:            map[int]*regexp.Regexp{},
 		},
+		"archiver": {
+			Name:               "archiver",
+			MinRequiredVersion: query.PostgresV14,
+			QueryTmpl:          query.PgStatArchiverDefault,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              9,
+			OrderKey:           0,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show archiver statistics (requires archive_mode=on)",
+			Filters:            map[int]*regexp.Regexp{},
+		},
 		"bgwriter": {
 			Name:               "bgwriter",
 			MinRequiredVersion: query.PostgresV14,
@@ -388,6 +400,13 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "wal":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatWALQuery(opts.Version)
+			v[k] = view
+		case "archiver":
+			// Version-independent today: the selector returns the same three values the static
+			// entry carries, so this case is functionally a no-op. It is kept for symmetry with
+			// stat_io_time (also version-independent) and so a future version branch stays
+			// confined to query/archiver.go on the production side.
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatArchiverQuery(opts.Version)
 			v[k] = view
 		case "bgwriter":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatBgwriterQuery(opts.Version)

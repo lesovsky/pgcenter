@@ -108,10 +108,11 @@ func Test_app_record(t *testing.T) {
 
 func Test_filterViews(t *testing.T) {
 	testcases := []struct {
-		version    int
-		pgssSchema string
-		wantN      int
-		wantV      int
+		version      int
+		pgssSchema   string
+		wantN        int
+		wantV        int
+		wantArchiver bool
 	}{
 		// wantN counts filtered views (version-incompatible + statements_* without pgss);
 		// wantV counts remaining views after filtering. After feature 008 no production
@@ -129,22 +130,32 @@ func Test_filterViews(t *testing.T) {
 		// On PG13 and below all five views are version-incompatible and dropped by the
 		// version gate regardless of NotRecordable, so those rows are unchanged from the
 		// pre-008 baseline.
+		// The archiver view (feature 017, MinRequiredVersion=PostgresV14, recordable) is the
+		// 28th registered view: it passes both gates on PG14+ and joins wantV there, and is
+		// dropped by the version gate on PG13 and below, where it joins wantN. That is the
+		// only difference between these numbers and the feature 008 baseline.
+		// wantArchiver asserts that survival by name, not by arithmetic: the counts alone
+		// would also be satisfied by dropping archiver while some other view's gate loosens.
 		// On PG 19 nothing is filtered: the highest MinRequiredVersion in the registry is
 		// PostgresV16, and with a pgss schema supplied no statements_* view is dropped either —
-		// so all 27 registered views survive. Copying the PG14 row here would be wrong.
-		{version: 190000, pgssSchema: "public", wantN: 0, wantV: 27},
-		{version: 140000, pgssSchema: "", wantN: 9, wantV: 18},
-		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 24},
-		{version: 130000, pgssSchema: "public", wantN: 8, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 11, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 13, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 13, wantV: 14},
+		// so all 28 registered views survive. Copying the PG14 row here would be wrong.
+		{version: 190000, pgssSchema: "public", wantN: 0, wantV: 28, wantArchiver: true},
+		{version: 140000, pgssSchema: "", wantN: 9, wantV: 19, wantArchiver: true},
+		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 25, wantArchiver: true},
+		{version: 130000, pgssSchema: "public", wantN: 9, wantV: 19, wantArchiver: false},
+		{version: 120000, pgssSchema: "public", wantN: 12, wantV: 16, wantArchiver: false},
+		{version: 110000, pgssSchema: "public", wantN: 14, wantV: 14, wantArchiver: false},
+		{version: 100000, pgssSchema: "public", wantN: 14, wantV: 14, wantArchiver: false},
 	}
 
 	for _, tc := range testcases {
 		n, v := filterViews(tc.version, tc.pgssSchema, view.New())
-		assert.Equal(t, tc.wantN, n)
-		assert.Equal(t, tc.wantV, len(v))
+		assert.Equal(t, tc.wantN, n, "version=%d pgss=%q", tc.version, tc.pgssSchema)
+		assert.Equal(t, tc.wantV, len(v), "version=%d pgss=%q", tc.version, tc.pgssSchema)
+		// Membership by lookup rather than assert.Contains: a failing Contains on a view map
+		// dumps all 28 View structs, which buries the one bit of information needed here.
+		_, gotArchiver := v["archiver"]
+		assert.Equal(t, tc.wantArchiver, gotArchiver, "archiver kept? version=%d pgss=%q", tc.version, tc.pgssSchema)
 	}
 }
 

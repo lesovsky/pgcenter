@@ -8,7 +8,7 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 27, len(v)) // 27 is the total number of views have to be returned
+	assert.Equal(t, 28, len(v)) // 28 is the total number of views have to be returned
 }
 
 // TestNew_StatementsJITView guards the statements_jit view wiring: it must be registered,
@@ -94,6 +94,38 @@ func TestNew_BgwriterView(t *testing.T) {
 	assert.Equal(t, 12, bgwriter.Ncols)
 	assert.Equal(t, [2]int{3, 10}, bgwriter.DiffIntvl)
 	assert.Equal(t, "Show bgwriter / checkpointer statistics", bgwriter.Msg)
+}
+
+// TestNew_ArchiverView guards the archiver view wiring: it must be registered,
+// gated to PG14+, recordable, undiffed, and keyed by the constant 'Archiver' literal
+// at column 0.
+func TestNew_ArchiverView(t *testing.T) {
+	v := New()
+	archiver, ok := v["archiver"]
+	assert.True(t, ok)
+	// Name must equal the map key: top/config_view.go writes the working view back with
+	// views[view.Name], so a divergence silently parks column widths and filters in a
+	// phantom entry. It is also the report type string and the tar entry prefix.
+	assert.Equal(t, "archiver", archiver.Name)
+	assert.False(t, archiver.NotRecordable)
+	assert.Equal(t, query.PostgresV14, archiver.MinRequiredVersion)
+	// The static seed, before Configure() reassigns it from the selector.
+	assert.Equal(t, query.PgStatArchiverDefault, archiver.QueryTmpl)
+	assert.Equal(t, 9, archiver.Ncols)
+	// DiffIntvl{0,0} is deliberate: nothing on this screen is diffed, which is what
+	// keeps the NULL-able columns away from diff()/strconv.ParseInt.
+	assert.Equal(t, [2]int{0, 0}, archiver.DiffIntvl)
+	assert.Equal(t, 0, archiver.OrderKey)
+	assert.True(t, archiver.OrderDesc)
+	assert.Equal(t, 0, archiver.UniqueKey)
+	// Both maps must be non-nil: top/config_view.go:100 and :124 write into ColsWidth and :166
+	// writes into Filters in place, so a nil map is a runtime panic inside a gocui key handler
+	// that no count test would catch.
+	assert.NotNil(t, archiver.ColsWidth)
+	assert.NotNil(t, archiver.Filters)
+	// Msg is load-bearing and pinned verbatim (Decision 5): it is the cmdline text on every
+	// switch to the screen, and the only place the archive_mode requirement is stated.
+	assert.Equal(t, "Show archiver statistics (requires archive_mode=on)", archiver.Msg)
 }
 
 func TestViews_Configure(t *testing.T) {
@@ -190,6 +222,19 @@ func TestViews_Configure(t *testing.T) {
 			assert.Equal(t, query.PgStatProgressBasebackupPG19, views["progress_basebackup"].QueryTmpl)
 			assert.Equal(t, 12, views["progress_basebackup"].Ncols)
 			assert.Equal(t, [2]int{10, 10}, views["progress_basebackup"].DiffIntvl)
+			// PG 19 added wal_fpi_bytes; this pins that Configure carries the new wal layout
+			// into the registered view, not just that the selector returns it.
+			assert.Equal(t, query.PgStatWALPG19, views["wal"].QueryTmpl)
+			assert.Equal(t, 8, views["wal"].Ncols)
+			assert.Equal(t, [2]int{2, 6}, views["wal"].DiffIntvl)
+			// pg_stat_archiver is schema-stable, so the archiver layout is the same on every version.
+			// Regression guard only: New() already sets these values, so deleting case "archiver":
+			// from Configure() cannot redden this. What it does catch is drift between
+			// SelectStatArchiverQuery and the static entry. The wal assertions above are the
+			// real wiring gate.
+			assert.Equal(t, query.PgStatArchiverDefault, views["archiver"].QueryTmpl)
+			assert.Equal(t, 9, views["archiver"].Ncols)
+			assert.Equal(t, [2]int{0, 0}, views["archiver"].DiffIntvl)
 		case 140000:
 			// Everything below PG 19 keeps today's progress layouts, byte for byte.
 			assert.Equal(t, query.PgStatProgressVacuumDefault, views["progress_vacuum"].QueryTmpl)
@@ -200,6 +245,15 @@ func TestViews_Configure(t *testing.T) {
 			assert.Equal(t, query.PgStatProgressBasebackupDefault, views["progress_basebackup"].QueryTmpl)
 			assert.Equal(t, 11, views["progress_basebackup"].Ncols)
 			assert.Equal(t, [2]int{9, 9}, views["progress_basebackup"].DiffIntvl)
+			// The PG 14-17 wal layout must not move when the PG 19 branch is added.
+			assert.Equal(t, query.PgStatWALPG14, views["wal"].QueryTmpl)
+			assert.Equal(t, 11, views["wal"].Ncols)
+			assert.Equal(t, [2]int{2, 9}, views["wal"].DiffIntvl)
+			// pg_stat_archiver is schema-stable, so the archiver layout is the same on every version.
+			// Regression guard only — see the note in the 190000 arm above.
+			assert.Equal(t, query.PgStatArchiverDefault, views["archiver"].QueryTmpl)
+			assert.Equal(t, 9, views["archiver"].Ncols)
+			assert.Equal(t, [2]int{0, 0}, views["archiver"].DiffIntvl)
 		case 130000:
 			if tc.trackCommit == "on" {
 				assert.Equal(t, query.PgStatReplicationExtended, views["replication"].QueryTmpl)
@@ -257,9 +311,9 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
-		{version: 190000, total: 27},
-		{version: 160000, total: 27},
-		{version: 140000, total: 24},
+		{version: 190000, total: 28},
+		{version: 160000, total: 28},
+		{version: 140000, total: 25},
 		{version: 130000, total: 19},
 		{version: 120000, total: 16},
 		{version: 110000, total: 14},
@@ -275,6 +329,6 @@ func TestView_VersionOK(t *testing.T) {
 				total++
 			}
 		}
-		assert.Equal(t, tc.total, total)
+		assert.Equal(t, tc.total, total, "version=%d", tc.version)
 	}
 }
