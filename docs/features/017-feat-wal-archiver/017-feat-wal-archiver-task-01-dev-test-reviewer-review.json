@@ -1,0 +1,94 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Five tests, no vacuous or mock-only tests, and the mutation evidence (M1-M8) is genuine: every named mutation reddens the test it was supposed to redden, and M6 in particular proves the positive privilege test guards itself rather than riding the superuser fixture. The helpers are sound: runArchiverQuery correctly collects the error from both Query and the drain (the pgx simple-protocol path that would otherwise let the negative test miss the failure), assertRestrictedSession asks the server rather than the test's own state and returns a bool so the caller reddens on the guard, and the defer order (resetRole registered after conn.Close, so it runs first) is right. Two gaps are worth blocking on. First, the '.ready' FILTER predicate — the only real logic in the query and the feature's headline number — has no guard at all: the fixtures return zero directory rows, so count(*) FILTER (WHERE name LIKE '%.ready') and a bare count(*) are both 0, and no test asserts the value of ready anywhere; dropping the FILTER or changing it to '%.done' leaves all five tests green on all six clusters. Second, the privilege guard proves 'a named non-superuser' but never 'pg_monitor and nothing else', while the roles are cluster-global, never normalized by SetupTestRole on a pre-existing role, and explicitly mutated by the AC's own Step 4 procedure — so the positive test can decay from 'pg_monitor is sufficient' to 'some privileged role works' with nothing to signal it. The rest are minor: no value assertions at all (the 'Archiver' literal and the date_trunc truncation are both unfalsifiable), a skip that cannot distinguish an unmapped version from a downed cluster even though this same package already hardened against exactly that (testing_test.go:10-23), no offline guard on the locked column order, no unmapped/future version in the selector table despite the comment claiming one, SetupTestRole's exists-branch never executing in a CI run, and resetRole being the one assertion in the file with no falsifying mutation. On the deviation: the split of test 3 is the right call and should stand — see finding 9.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/query/archiver.go:39 (ready sub-select) — no covering assertion in internal/query/archiver_test.go",
+      "issue": "The '.ready' FILTER predicate is the only piece of logic in the query (every other column is a plain reference or a date_trunc), and nothing guards it. The fixtures run archive_mode=off, so pg_ls_archive_statusdir() returns zero rows and count(*) FILTER (WHERE name LIKE '%.ready') is indistinguishable from a bare count(*) — both 0, both Valid. No test asserts the value of the ready column at all: Test_StatArchiverQueries asserts only its NAME (line 83) and Test_StatArchiverQuery_NullsStayNull only Valid == true (line 141). Deleting the FILTER clause, or changing the pattern to '%.done' or '%ready%', leaves all five tests green on all six clusters. M3 caught deletion of the whole column, not corruption of the predicate inside it. This is the feature's headline metric — the archiving backlog — and it is the one thing here a reader would assume is tested.",
+      "recommendation": "Two additions, both reachable without fixtures or a forbidden seam. (a) Offline structural pin, mirroring the in-package precedent Test_SelectStatIOQuery_NullSafety (internal/query/io_test.go:66-107): assert.Contains(t, PgStatArchiverDefault, \"count(*) FILTER (WHERE name LIKE '%.ready')\") and assert.Contains(t, PgStatArchiverDefault, \"FROM pg_ls_archive_statusdir()\"). (b) A live semantic check of the predicate against synthetic input, which needs no archived segment and no writable directory: conn.QueryRow(\"SELECT count(*) FILTER (WHERE name LIKE '%.ready') FROM (VALUES ('000000010000000000000001.ready'),('000000010000000000000002.done'),('000000010000000000000003.ready.tmp')) AS t(name)\").Scan(&n), assert.Equal(t, 2, n) — this reddens on a dropped FILTER, on '%.done', and on '%ready%' (which would wrongly count the .ready.tmp). If the team instead prefers to defer the predicate to the stand run, patterns.md requires that be stated: the test file is currently silent about it, and the task's 'the tests cannot prove archiving behaviour' note lives only in the task file.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/query/archiver_test.go:236-254 (assertRestrictedSession), used at :176 and :214",
+      "issue": "The guard proves the session runs as a named non-superuser role. It does not prove the positive role holds pg_monitor AND NOTHING ELSE, nor that the deny role holds nothing — both stated requirements of the task. That matters because the roles are cluster-global and outlive the run, and SetupTestRole never normalizes a role that already exists: the DO block skips creation, and pgMonitor=false issues no REVOKE. So any grant that lands on pgcenter_test_archiver_monitor — including through the AC's own Step 4 procedure, which instructs engineers to drop and re-grant these very roles, or through a future task reusing the helper — permanently downgrades the positive test from 'pg_monitor is sufficient for this query' to 'some privileged role can run this query', with nothing to signal the change. M7 proved that dependency once, by hand, in a container that no longer exists; nothing keeps it proven. The mirror case on the deny role is loud rather than silent (it fails with 'An error is expected but got nil'), but that message names neither the role nor the grant, so the diagnosis costs a full re-derivation.",
+      "recommendation": "Give assertRestrictedSession an expected-membership parameter and assert it in the same round trip: SELECT current_user, (SELECT rolsuper FROM pg_roles WHERE rolname = current_user), pg_has_role(current_user, 'pg_monitor', 'USAGE'), coalesce((SELECT array_agg(r.rolname ORDER BY r.rolname) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)), '{}'). Assert the membership array equals []string{\"pg_monitor\"} and pg_has_role is true in Test_StatArchiverQuery_PgMonitorRoleSucceeds; equals []string{} and pg_has_role is false in Test_StatArchiverQuery_WithoutPgMonitorFails. pg_has_role covers indirect membership that array_agg over pg_auth_members alone would miss. This turns M7 from a one-off manual mutation into a standing gate, and makes a polluted cluster fail on a line that names the cause.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/archiver_test.go:140-142",
+      "issue": "Test_StatArchiverQuery_NullsStayNull asserts NULL-ness for all nine columns and not one value, so several documented invariants are unfalsifiable. The 'Archiver' literal (archiver.go:38, documented there as 'the stable row identity across samples') can be changed to any non-empty string and every test stays green — the alias 'source' is what the column-name assertion checks, and any string is Valid. archived and failed can be swapped with each other, or replaced by any other non-NULL bigint expression, and stay green (both are 0 on fixtures, both Valid). date_trunc('seconds', ...) can be dropped from all three age columns: the value merely gains fractional seconds, Valid stays true, and the rendering an operator actually sees changes with no test noticing.",
+      "recommendation": "Assert values inside the existing loop, on the premise wantValid already relies on (the fixtures never archived): assert.Equal(t, \"Archiver\", values[0].String); assert.Equal(t, \"0\", values[2].String) and the same for values[5] (archived and failed counters); assert.Regexp(t, `^-?(\\d+ days? )?\\d{2}:\\d{2}:\\d{2}$`, values[8].String) to pin the truncation on stats_age so a dropped date_trunc reddens. For ready, do not pin 0 — assert it parses as a non-negative integer via strconv.Atoi, which guards the type and non-NULL-ness without coupling the suite to the state of the archive_status directory.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/archiver_test.go:73-76 (also :120-123, :160-163, :201-204)",
+      "issue": "Every live test skips on any error from NewTestConnectVersion, collapsing three different causes into one message: an unmapped version, a cluster that is down, and a connection refused for a reason the suite itself created. archiverVersions (line 17) is a hand-maintained list, so adding a future major there before internal/postgres/testing.go gains its port entry produces a permanent silent skip — precisely the failure this package already hardened against and documented (internal/postgres/testing_test.go:10-23: 'made a forgotten port entry invisible: every subtest for the new version passed while exercising a completely different server'), with the accepted mitigation shown at :30. archiver_test.go does not use it. The partial-skip case is the sharper one: with five of six clusters up, the suite is green and non-verbose output shows nothing, so a version-specific regression lands unnoticed. Verification Step 2 catches this only by a human reading -v subtest names, which is tech-debt [019] restated rather than closed.",
+      "recommendation": "Before each t.Skipf, add assert.NotContains(t, err.Error(), \"no test cluster port mapping\") exactly as internal/postgres/testing_test.go:30 does, so a bad entry in archiverVersions fails instead of skipping forever. Then make the skip refusable: if os.Getenv(\"PGCENTER_REQUIRE_FIXTURES\") != \"\" { t.Fatalf(\"postgres %d required but unavailable: %v\", version, err) } else { t.Skipf(...) }, and export that variable in the CI-image command of Verification Step 2. That converts Step 2's manual 'check the subtest names before believing the green' into an automatic gate and removes the whole class from this feature.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/archiver_test.go:34-59 (selector test), :54 in particular",
+      "issue": "Everything about the query text except 'contains no coalesce' is asserted only behind live fixtures. assert.Equal(t, PgStatArchiverDefault, gotQuery) at :54 compares the selector's return value against the very constant it returns — it can fail only if a version branch is introduced, never if the query text is wrong — so it is not the content guard its position suggests. Consequently a host run (all live subtests skipped) leaves the locked nine-column order, the aliases and the FROM clause with no guard whatsoever, and M4 (swap ready/archived) is catchable only inside the CI image. The package already has two precedents for pinning SQL structure with no server: Test_SelectStatIOQuery_NullSafety (io_test.go:66) and Test_SelectStatWALQuery_PG19ColumnOrder (wal_test.go:44).",
+      "recommendation": "Add a server-free Test_StatArchiverQuery_ColumnOrder that walks archiverColumns and pins each alias's position in the constant: prev := -1; for _, col := range archiverColumns { idx := strings.Index(PgStatArchiverDefault, \" AS \"+col); assert.NotEqual(t, -1, idx, \"query must select %q\", col); assert.Greater(t, idx, prev, \"%q must follow the previous locked column\", col); prev = idx }, plus assert.True(t, strings.HasSuffix(PgStatArchiverDefault, \"FROM pg_stat_archiver\")). M3 and M4 then redden on the host as well as in the CI image, which also blunts the skip risk in the previous finding.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/archiver_test.go:40-45, comment at :52-53",
+      "issue": "The comment claims the table exists 'so a future branch cannot be added silently', but the table covers only 140000-190000. A branch keyed on a future major — if version >= 200000, the exact shape wal.go already carries and wal_test.go:27 deliberately covers with a 200000 row — passes this table untouched, as does a branch on any version below 14. The cited precedent (io_test.go:43-48) has the same gap, but wal_test.go is the newer in-package standard and treats a forward version as required coverage for a version-keyed selector. For a selector that ignores its argument entirely, the invariant is 'any argument', and the table currently tests six specific ones.",
+      "recommendation": "Add rows {version: 200000}, {version: 130000} and {version: 0}, all with wantNcols 9 and wantDiffIntvl [2]int{0, 0}. Three lines, and the comment at :52-53 becomes true.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/postgres/testing.go:59-81 (SetupTestRole) / internal/postgres/testing_test.go",
+      "issue": "The DO block's 'role already exists' branch never executes in a CI run. The image starts fresh, each test uses a distinct role name, and each name is created exactly once per cluster — so a single go test run only ever takes the CREATE path, on every cluster. Idempotency is both an explicit acceptance criterion and the property Task 03 will lean on when it adds its own roles through this helper, and it is verified only by the manual 'run the suite twice inside one container' procedure that CI does not perform. The helper is a published cross-task contract and has no test in internal/postgres/testing_test.go, which already exists and covers its two neighbours.",
+      "recommendation": "Add TestSetupTestRole_isIdempotent to internal/postgres/testing_test.go, following the local skip style at :28-32: connect to 170000, call SetupTestRole(db, \"pgcenter_test_setup_idem\", true) twice in a row, require.NoError on both, assert QueryRow(\"SELECT current_user\") returns the role name, then Exec(\"RESET ROLE\") and assert current_user is back to postgres. Add a second case that documents the helper's real contract on a pre-existing role — call it once with pgMonitor true and once with false and assert pg_has_role(current_user,'pg_monitor','USAGE') is still true — so the 'reverting a mutation to role setup does not undo it on the server' caution the AC spells out in prose becomes an asserted property instead of tribal knowledge.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/archiver_test.go:257-262 (resetRole), registered at :174 and :212",
+      "issue": "Both privilege tests open a dedicated connection and close it at the end of the same subtest, so a leaked SET ROLE cannot reach any later assertion — the hazard Decision 18 and the task's Edge cases describe ('a leaked SET ROLE poisons later tests on the same connection') is structurally absent as written. No mutation reddens resetRole: deleting both defers leaves the suite green, and the assert.NoError inside it is the one assertion in this file with no falsifying mutation. It also never verifies the reset took effect — only that the Exec did not error. Keeping the call is correct (Decision 18 mandates it and it is the belt to the connection-per-test braces), but it must not be counted as a guard, and the AC line 'both privilege tests RESET ROLE even when they fail' is likewise closed only by a manual broken-assertion experiment.",
+      "recommendation": "Keep the defer and make it assert something observable: after RESET ROLE, run QueryRow(\"SELECT current_user\").Scan(&u) and assert.NotEqual(t, wantRole, u) — pass the role name to resetRole for that. Add one line to its comment stating that the per-test connection, not RESET ROLE, is what currently contains a leak, so a later refactor that shares one connection between the two privilege tests does not assume a guard that is not yet exercised.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/archiver_test.go:95-145 (Test_StatArchiverQuery_NullsStayNull) — the known deviation",
+      "issue": "Verdict on the deviation first: the split is the right call and should stand. The TDD Anchor contradicts itself — its preamble says tests 1 and 3 run without PostgreSQL, while its own bullet for test 3 requires scanning fixture rows into sql.NullString receivers and asserting Valid flags, which no amount of care makes server-free. The implementation resolved the contradiction the only way that keeps both halves, and it placed the coalesce assertion at :96-97, outside the version loop and before any connect, which is what makes Verification Step 1 ('on the host only tests 1 and 3 produce a real red') satisfiable at all; inside the loop it would have skipped on the host and the red-first evidence for Decision 3 would have been unobtainable without the CI image. M5 confirms both halves redden. The residual cost is only in naming: one test name now spans a server-free assertion and a per-version live loop, so a host run reports PASS while exactly one of its ten assertions executed, and the deviation itself is recorded nowhere in the tree.",
+      "recommendation": "Split by name, not by logic: move :96-97 into Test_StatArchiverQuery_NoCoalesce (server-free, the host-side red-first evidence for Decision 3) and leave the fixture loop in Test_StatArchiverQuery_NullsStayNull, so a PASS names exactly what ran and a skipped run cannot report a green for the coalesce guard's neighbour. Then record the deviation in 017-feat-wal-archiver-decisions.md per Post-completion: state that the anchor's preamble contradicts its own bullet for test 3, and that the bullet won.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 16,
+      "passed": 12,
+      "failed": 4
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 4,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

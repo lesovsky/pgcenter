@@ -81,3 +81,58 @@ Major и один minor от dev-test-reviewer закрыты деривацио
 - `go build ./...`, `go vet ./cmd/...`, `gofmt -l cmd/report` (пусто), `golangci-lint run ./cmd/report/...` → 0 issues
 - Мутационный контроль (каждая применена, наблюдалась красной, откачена): `default: return "wal"` → `Test_selectReport_WALWhitelistIsClosed`; `case "a"` возвращает `"wal"` → `Test_selectReport`; правка одного символа в help-тексте → `Test_walFlagDefinition`; `NoOptDefVal = "w"` → `Test_walFlagDefinition`; перенос ветки выше `showDatabases`/`showFunctions` и ниже `showBgwriter` → `Test_selectReport_WALPrecedence`; `strings.TrimSpace`/`TrimLeft`/`ToLower` → `Test_selectReport_WALWhitelistIsClosed`; `ReportType` захардкожен в `validate()` → `Test_selectReport_WALWhitelistIsClosed`
 - Ручная проверка: `go run ./cmd report -W` → `flag needs an argument: 'W' in -W`; `go run ./cmd report -W -f /nonexistent.tar` → `report type is not specified, quit` (файл не открывается); `-W x` → та же ошибка; `-W w` / `-W a` / `-A -W a` доходят до открытия файла
+
+---
+
+## Task 01: Archiver query, selector and the shared test-role helper
+
+**Status:** Done
+**Commit:** ae50197 (round-1 содержимое тех же трёх файлов попало в 23a7b1f — см. Deviations)
+**Agent:** основной агент
+
+**Summary:** Добавлены `internal/query/archiver.go` с константой `PgStatArchiverDefault` (9 колонок в зафиксированном порядке: `source, ready, archived, last_archived, archived_age, failed, last_failed, failed_age, stats_age`) и селектором `SelectStatArchiverQuery(_ int) (string, int, [2]int)` → `(PgStatArchiverDefault, 9, [2]int{0,0})`; версионной ветки нет, потому что `pg_stat_archiver` схемно идентичен на PG 14–19, а `pg_ls_archive_statusdir()` есть на всех (форма `SelectStatIOTimeQuery`, `io.go:99`). В `internal/postgres/testing.go` добавлен общий хелпер `SetupTestRole(db *DB, name string, pgMonitor bool) error` — идемпотентное создание роли через `DO`-блок, опциональный `GRANT pg_monitor`, `SET ROLE`; он возвращает `error` и не тянет пакет `testing`, потому что файл не имеет build-тега и попадает в релизный бинарь. Привилегии Decision 4 доказаны тестами в обе стороны: роль с `pg_monitor` выполняет запрос, роль без него получает SQLSTATE `42501` с именем `pg_ls_archive_statusdir` в сообщении.
+
+**Deviations:**
+
+1. **TDD Anchor противоречит сам себе по тесту 3.** Преамбула утверждает, что тесты 1 и 3 идут без PostgreSQL, а собственный буллет теста 3 требует сканирования строк фикстуры в `sql.NullString` и проверки `Valid` — это невозможно без сервера. Разрешено расщеплением: проверка «в запросе нет `coalesce`» вынесена в бессерверный `Test_StatArchiverQuery_Structure`, живая проверка NULL/значений осталась в `Test_StatArchiverQuery_NullsStayNull`. Оба ревьюера round 2 подтвердили, что это правильный выбор.
+2. **Тестов шесть, а не пять.** Сверх пяти из TDD Anchor добавлены `Test_StatArchiverQuery_Structure` (бессерверная фиксация предиката `.ready` и порядка алиасов — по major-находке test-ревьюера: на фикстурах пустой каталог статусов, поэтому `count(*) FILTER (WHERE name LIKE '%.ready')` и голый `count(*)` живьём неразличимы) и `Test_SetupTestRole_RejectsUnsafeName` (по сходящейся находке code-ревьюера и test-ревьюера round 2 — новая проверка имени роли иначе не покрыта ничем).
+3. **Мутация M7 краснеет иначе, чем обещает AC.** AC требует, чтобы `pgMonitor: false` в позитивном тесте дал красный «с SQLSTATE 42501». После усиления гварда (проверка `pg_has_role` и точного состава членства) тест краснеет раньше — на самом гварде, до запроса, — и 42501 в этой мутации больше не достигается. В round 1, до усиления, 42501 наблюдался. Зависимость от `42501` теперь утверждается не разовой мутацией, а постоянно — тестом `Test_StatArchiverQuery_WithoutPgMonitorFails` на каждом прогоне. Формулировку чек-бокса в task-файле стоит поправить.
+4. **Коммит не тот, который планировался.** Round-1 содержимое всех трёх файлов было заметено параллельным агентом задачи 04 в чужой коммит `23a7b1f` (он сделал `git add`/commit поверх моего staged-состояния). `internal/query/archiver.go` с тех пор не менялся, поэтому в коммите ae50197 его нет — там только правки по итогам ревью в двух оставшихся файлах. Содержимое дерева корректное; пострадала только атрибуция.
+
+**Tech debt:**
+
+1. Идемпотентность `SetupTestRole` (ветка «роль уже существует») проверяется только процедурой Verification Step 3 — два прогона в одном контейнере, — но не автотестом. Тест на это должен лежать в `internal/postgres/testing_test.go`, а это четвёртый файл, запрещённый критерием приёмки №1. Вынесено в follow-up; оба ревьюера round 2 согласились, что отложить правильно.
+2. Роли `pgcenter_test_archiver_monitor` / `pgcenter_test_archiver_norole` остаются на кластере навсегда (teardown запрещён — на нём держится критерий переиспользуемости). Для эфемерных CI-контейнеров это верный размен; на долгоживущем кластере роли надо снимать вручную. Роли `NOLOGIN`, без членов, `SET ROLE` в них требует суперюзера — практического доступа не дают.
+3. Регексп `^[a-z_][a-z0-9_]*$` ограничивает синтаксис, но не семантику: `none`, `default`, `public` его проходят. Три из них падают громко, `SET ROLE NONE` — тихо (сброс к session user). Сегодня недостижимо (оба вызова передают константы) и ловится ниже `assertRestrictedSession`. Записано, чтобы регексп позже не читали как более сильный контракт.
+4. Рекомендация security-аудитора заменить якоря `^`/`$` на `\A`/`\z` не применена: в Go `regexp.Perl` включает `OneLine`, поэтому обхода через завершающий `\n` нет — оба ревьюера проверили это эмпирически. Ценность правки только в переносимости паттерна в другой язык.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 3 minor → [017-feat-wal-archiver-task-01-dev-code-reviewer-review.json](017-feat-wal-archiver-task-01-dev-code-reviewer-review.json)
+- dev-security-auditor: approved, 3 minor → [017-feat-wal-archiver-task-01-dev-security-auditor-review.json](017-feat-wal-archiver-task-01-dev-security-auditor-review.json)
+- dev-test-reviewer: needs_improvement, 2 major + 7 minor → [017-feat-wal-archiver-task-01-dev-test-reviewer-review.json](017-feat-wal-archiver-task-01-dev-test-reviewer-review.json)
+
+*Round 2 (после исправлений):*
+- dev-code-reviewer: approved_with_suggestions, 4 minor → [017-feat-wal-archiver-task-01-dev-code-reviewer-review-round2.json](017-feat-wal-archiver-task-01-dev-code-reviewer-review-round2.json)
+- dev-security-auditor: approved, 3 minor (round-1 находка 1 закрыта) → [017-feat-wal-archiver-task-01-dev-security-auditor-review-round2.json](017-feat-wal-archiver-task-01-dev-security-auditor-review-round2.json)
+- dev-test-reviewer: passed, 5 minor → [017-feat-wal-archiver-task-01-dev-test-reviewer-review-round2.json](017-feat-wal-archiver-task-01-dev-test-reviewer-review-round2.json)
+
+Одна рекомендация round 1 отклонена по существу: живая проверка предиката `.ready` через `VALUES`-литерал. Она проверяла бы семантику `LIKE` самого PostgreSQL, а не код репозитория, и пропускалась бы на хосте; подстрочная фиксация в бессерверном тесте краснеет на всех тех же мутациях (снятый FILTER, `%.done`, `%ready%`). Test-ревьюер в round 2 согласился и снял рекомендацию, назвав бессерверную фиксацию не более дешёвым, а более удачным инструментом.
+
+**Verification:**
+- `go test -race -p 1 -timeout 300s ./internal/query/... ./internal/postgres/...` в образе `lesovsky/pgcenter-testing:0.0.11` → зелено; `-v`-прогон: **0 пропущенных** подтестов Archiver, все PG 14–19 реально отработали
+- Переиспользуемость: два прогона подряд в одной сессии контейнера → оба зелёные (создание роли идемпотентно, второй прогон встречает существующие роли)
+- `make lint` (golangci-lint + gosec) → 0 issues; `make vuln` → чисто; `gofmt -l` пусто; `go build -o /dev/null ./cmd` → ок; `grep -n '"testing"' internal/postgres/testing.go` → пусто
+- Мутационный контроль — 11 мутаций, каждая применена в контейнере, наблюдалась **красной**, откачена; итоговое дерево побайтово совпадает с исходным:
+  - M1 `Ncols` 9→8 → `Test_SelectStatArchiverQuery`
+  - M2 `DiffIntvl {0,0}`→`{2,5}` → `Test_SelectStatArchiverQuery` (и только он)
+  - M3 удаление колонки `ready` → `Test_StatArchiverQueries` и по счётчику, и по списку имён
+  - M4 перестановка `ready`/`archived` → `Test_StatArchiverQueries` по **порядку имён** (счётчик не сработал) + `Test_StatArchiverQuery_Structure`
+  - M5 `coalesce(last_archived_wal,'-')` → `Test_StatArchiverQuery_NullsStayNull` + `Test_StatArchiverQuery_Structure`
+  - M6 пропуск `SetupTestRole`/`SET ROLE` в позитивном тесте → `Test_StatArchiverQuery_PgMonitorRoleSucceeds` ровно на своём гварде (`current_user` + `rolsuper`), до запроса
+  - M7 `pgMonitor: false` после `DROP ROLE` на всех шести кластерах → `Test_StatArchiverQuery_PgMonitorRoleSucceeds` (в round 1 — с SQLSTATE 42501, после усиления гварда — на членстве; см. Deviations 3); `Test_StatArchiverQuery_WithoutPgMonitorFails` в том же прогоне остался зелёным → `RESET ROLE` не утекает
+  - M8 подстановка литерала `0` вместо привилегированного вызова → `Test_StatArchiverQuery_WithoutPgMonitorFails`
+  - M9 предикат `'%.ready'` → `'%.done'` → `Test_StatArchiverQuery_Structure`
+  - M10 выдача `pg_monitor` deny-роли после `DROP ROLE` → `Test_StatArchiverQuery_WithoutPgMonitorFails` на «Should be empty, but was [pg_monitor]»
+  - M11 расширение регекспа имени роли до верхнего регистра → `Test_SetupTestRole_RejectsUnsafeName`

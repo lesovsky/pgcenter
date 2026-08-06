@@ -1,0 +1,51 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "All three round-1 minors are addressed and nothing regressed: archiver.go is byte-identical to the reviewed round-1 version, the two test-side files changed only in the directions requested. The new code is sound on the points that carry weight — I empirically confirmed the SetupTestRole regex is genuinely anchored in Go (regexp.Perl sets OneLine, so 'role\\n; DROP ...' is rejected, unlike the PCRE/Python trailing-newline bypass) and that connectArchiverFixture's assert-then-Skipf really reports FAIL rather than a silent SKIP when a port mapping is missing. Zero critical, zero major; four optional minors below, the only substantive one being that the new regex guard itself has no test pinning it.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/postgres/testing.go",
+      "line": 69,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "The new guard is correct but entirely unpinned: nothing in the tree exercises it. internal/postgres/testing_test.go covers only NewTestConnectVersion, and the two callers in archiver_test.go pass valid literals, so widening testRoleNameRE to `.*` or deleting the four-line check breaks no test. That is the same class of gap the round-1 finding was about, just moved one level up — a later refactor can drop the invariant silently. The fix is a server-free table test in internal/postgres/testing_test.go and it can pass a nil *DB, because the MatchString check runs before the first db.Exec: `err := SetupTestRole(nil, \"a; DROP ROLE x\", false)` returns 'invalid test role name' with no dereference. Worth rows for the accepted literal, a semicolon, a space, an uppercase name, an empty string, a leading digit, and — the interesting one — a trailing newline, which is the case that documents why the Go anchoring is safe where PCRE's would not be.",
+      "benefit": "The 'literal constants only' invariant stops being load-bearing-but-unverified; the trailing-newline row also records the non-obvious Go-vs-PCRE anchoring fact for whoever touches the regex next.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/archiver_test.go",
+      "line": 291,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The membership sub-select aggregates pg_auth_members rows without DISTINCT: `array_agg(r.rolname::text ORDER BY r.rolname)`. Since PG 16 the same role can be granted to the same member more than once when the grantors differ, producing two catalog rows and therefore [\"pg_monitor\",\"pg_monitor\"], which would fail assert.Equal with a confusing message rather than the privilege regression the assertion is meant to catch. It cannot happen in the fixture environment today (SetupTestRole always grants as the fixture superuser, and a repeat grant by the same grantor does not duplicate the row), so this is hardening, not a defect. `array_agg(DISTINCT r.rolname::text ORDER BY r.rolname)` is a one-word change and stays valid SQL on 14-19.",
+      "benefit": "The membership guard keeps failing only for the reason it exists — an unexpected role membership — instead of for a duplicate-grant artifact on PG 16+.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/archiver_test.go",
+      "line": 83,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The order loop searches for `\" AS \"+col`, and two locked aliases are prefixes of later ones: 'archived' of 'archived_age', 'failed' of 'failed_age'. Deleting `archived_count AS archived, ` therefore does not trip the NotEqual(-1) assertion — strings.Index finds the archived_age occurrence instead. I reproduced this on a mutated copy of the query: the test still goes RED, but on `\"last_archived\" must follow the previous locked column / \"140\" is not greater than \"214\"`, which points at the wrong column. So the guard is sound, the diagnostics are not. Searching for `\" AS \"+col+\",\"` (with the last alias matched by the existing HasSuffix assertion, or by appending a space) removes the ambiguity.",
+      "benefit": "A dropped column is reported as a dropped column, so the structure test stays self-explanatory when it fires years from now.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/archiver_test.go",
+      "line": 130,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_StatArchiverQuery_NullsStayNull is 58 physical lines (130-187), which crosses the automatic '>50 lines' mapping. Reporting it as major would be noise: 13 of those lines are the wantValid fixture map and explanatory comments, the executable body is ~40 lines with a single version loop and no branching, and it grew only because the round-1 test review asked for value assertions here. Graded minor deliberately, and noted rather than fixed — splitting the NULL-ness loop from the value assertions would mean two live round-trips per version for no added coverage. If it grows again in a later task, lifting wantValid to a package-level var alongside archiverColumns is the cheap way back under the line.",
+      "benefit": "Records the threshold crossing and the reasoning, so a later reviewer does not re-litigate it or split the test at a cost in fixture round-trips.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "excellent"
+  }
+}
