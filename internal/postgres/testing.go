@@ -1,6 +1,15 @@
 package postgres
 
-import "fmt"
+import (
+	"fmt"
+	"regexp"
+)
+
+// testRoleNameRE constrains the role name SetupTestRole interpolates into its statements. The name
+// is an SQL identifier, so it cannot travel as a $1 placeholder; this turns "callers pass literal
+// constants" from a comment into an enforced invariant. Lowercase-only is not a restriction: the
+// identifier positions are unquoted, so PostgreSQL down-folds the name anyway.
+var testRoleNameRE = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
 
 // NewTestConfig returns test config used for testing purposes.
 func NewTestConfig() (Config, error) {
@@ -57,6 +66,10 @@ func NewTestConnectVersion(version int) (*DB, error) {
 // The role name is an SQL identifier, not a value, so it cannot travel as a $1 placeholder and is
 // interpolated instead. Callers must pass literal constants - never user input.
 func SetupTestRole(db *DB, name string, pgMonitor bool) error {
+	if !testRoleNameRE.MatchString(name) {
+		return fmt.Errorf("invalid test role name %q", name)
+	}
+
 	create := fmt.Sprintf(
 		"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '%s') "+
 			"THEN CREATE ROLE %s NOLOGIN NOSUPERUSER; END IF; END $$", name, name,

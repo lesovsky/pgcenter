@@ -3,6 +3,7 @@ package query
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -43,19 +44,63 @@ func Test_SelectStatArchiverQuery(t *testing.T) {
 		{version: 170000, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
 		{version: 180000, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
 		{version: 190000, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
+		// The selector ignores its argument by verified fact, so the invariant is "any argument",
+		// not "these six". A future major, a version below the project floor and the zero value all
+		// have to come back identical, or a branch was added.
+		{version: 200000, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
+		{version: 130000, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
+		{version: 0, wantNcols: 9, wantDiffIntvl: [2]int{0, 0}},
 	}
 
 	for _, tc := range testcases {
 		t.Run(fmt.Sprintf("version/%d", tc.version), func(t *testing.T) {
 			gotQuery, gotNcols, gotDiffIntvl := SelectStatArchiverQuery(tc.version)
 
-			// The selector is version-independent by verified fact, not by omission: every version
-			// must return the very same query text, so a future branch cannot be added silently.
+			// Guards only against a version branch being introduced - the query text itself is
+			// pinned by Test_StatArchiverQuery_Structure.
 			assert.Equal(t, PgStatArchiverDefault, gotQuery)
 			assert.Equal(t, tc.wantNcols, gotNcols)
 			assert.Equal(t, tc.wantDiffIntvl, gotDiffIntvl)
 		})
 	}
+}
+
+// Test_StatArchiverQuery_Structure pins the query's shape with no server, so the locked column order
+// and the privileged .ready predicate stay guarded on a plain host run, where every live test skips.
+// The predicate needs this test specifically: the fixtures have an empty archive status directory,
+// so count(*) FILTER (WHERE name LIKE '%.ready') and a bare count(*) are both 0 on every cluster and
+// no live assertion can tell them apart.
+func Test_StatArchiverQuery_Structure(t *testing.T) {
+	// The .ready filter is the only logic in the query and the feature's headline number.
+	assert.Contains(t, PgStatArchiverDefault, "count(*) FILTER (WHERE name LIKE '%.ready')",
+		"the backlog must count .ready files only - a bare count(*) or a wider pattern is a different number")
+	assert.Contains(t, PgStatArchiverDefault, "FROM pg_ls_archive_statusdir()",
+		"the backlog must come from pg_ls_archive_statusdir(), the pg_monitor-granted function")
+
+	// Locked column order (Decision 14): every alias present, and in this exact sequence. The needle
+	// carries the alias's delimiter so "archived" cannot match inside "archived_age" (nor "failed"
+	// inside "failed_age") and blame the wrong column.
+	prev := -1
+	for i, col := range archiverColumns {
+		needle := " AS " + col + ","
+		if i == len(archiverColumns)-1 {
+			needle = " AS " + col + " FROM"
+		}
+
+		idx := strings.Index(PgStatArchiverDefault, needle)
+		assert.NotEqual(t, -1, idx, "query must select the %q column", col)
+		assert.Greater(t, idx, prev, "%q must follow the previous locked column", col)
+		prev = idx
+	}
+
+	assert.True(t, strings.HasSuffix(PgStatArchiverDefault, "FROM pg_stat_archiver"),
+		"pg_stat_archiver must be the outer relation")
+
+	// Decision 3: nothing on this screen is diffed, so calculateDelta short-circuits before diff()
+	// and the strconv.ParseInt("") trap that forces coalesce(...,0) elsewhere does not apply. A
+	// blank cell is the honest rendering of "this cluster has never archived".
+	assert.NotContains(t, strings.ToLower(PgStatArchiverDefault), "coalesce",
+		"no column on this screen is diffed, so no column may be coalesced (Decision 3)")
 }
 
 // Test_StatArchiverQueries tests query execution against all supported Postgres versions and pins the
@@ -70,10 +115,7 @@ func Test_StatArchiverQueries(t *testing.T) {
 			assert.NoError(t, err)
 			assert.NotContains(t, q, "{{", "formatted query must carry no template artifacts")
 
-			conn, err := postgres.NewTestConnectVersion(version)
-			if err != nil {
-				t.Skipf("postgres %d not available in test environment", version)
-			}
+			conn := connectArchiverFixture(t, version)
 			defer conn.Close()
 
 			descs, nrows, err := runArchiverQuery(conn, q)
@@ -86,16 +128,13 @@ func Test_StatArchiverQueries(t *testing.T) {
 	}
 }
 
-// Test_StatArchiverQuery_NullsStayNull verifies Decision 3: the four columns that are NULL on a
-// cluster that has never archived stay SQL NULL and are not coalesced into an invented value.
-// Nothing on this screen is diffed (DiffIntvl{0,0}), so calculateDelta short-circuits before diff()
-// and the strconv.ParseInt("") trap that forces coalesce(...,0) elsewhere does not apply here.
-// The coalesce check needs no server; the Valid/NULL check runs against the fixtures, which have
-// archive_mode=off and have therefore never archived a segment.
+// Test_StatArchiverQuery_NullsStayNull verifies Decision 3 against a live cluster: the four columns
+// that are NULL on a cluster that has never archived stay SQL NULL and are not coalesced into an
+// invented value. It also pins the values that are fixed on such a cluster, so the 'Archiver' row
+// identity, the two counters and the date_trunc truncation are falsifiable rather than assumed.
+// The no-coalesce guard on the query text itself lives in Test_StatArchiverQuery_Structure, which
+// needs no server.
 func Test_StatArchiverQuery_NullsStayNull(t *testing.T) {
-	assert.NotContains(t, strings.ToLower(PgStatArchiverDefault), "coalesce",
-		"no column on this screen is diffed, so no column may be coalesced (Decision 3)")
-
 	// The fixtures never archived: the two WAL names and the two age columns are NULL, while the
 	// literal, the .ready count, both bigint counters and stats_age are always set.
 	wantValid := map[string]bool{
@@ -117,10 +156,7 @@ func Test_StatArchiverQuery_NullsStayNull(t *testing.T) {
 			q, err := Format(tmpl, NewOptions(version, "f", "off", 256, "public"))
 			assert.NoError(t, err)
 
-			conn, err := postgres.NewTestConnectVersion(version)
-			if err != nil {
-				t.Skipf("postgres %d not available in test environment", version)
-			}
+			conn := connectArchiverFixture(t, version)
 			defer conn.Close()
 
 			// Scan into sql.NullString receivers - the very type the stats pipeline uses
@@ -140,6 +176,19 @@ func Test_StatArchiverQuery_NullsStayNull(t *testing.T) {
 			for i, col := range archiverColumns {
 				assert.Equal(t, wantValid[col], values[i].Valid, "column %q NULL-ness", col)
 			}
+
+			assert.Equal(t, "Archiver", values[0].String,
+				"column 0 is the row identity the single-row screen matches itself by across samples")
+			assert.Equal(t, "0", values[2].String, "archived counter on a cluster that never archived")
+			assert.Equal(t, "0", values[5].String, "failed counter on a cluster that never archived")
+			assert.Regexp(t, `^-?(\d+ days? )?\d{2}:\d{2}:\d{2}$`, values[8].String,
+				"stats_age must be truncated to whole seconds by date_trunc")
+
+			// ready counts a live directory, so assert its type rather than a value - pinning 0
+			// would couple the suite to the state of the archive status directory.
+			ready, err := strconv.Atoi(values[1].String)
+			assert.NoError(t, err, "ready must be an integer, got %q", values[1].String)
+			assert.GreaterOrEqual(t, ready, 0)
 		})
 	}
 }
@@ -157,10 +206,7 @@ func Test_StatArchiverQuery_PgMonitorRoleSucceeds(t *testing.T) {
 			q, err := Format(tmpl, NewOptions(version, "f", "off", 256, "public"))
 			assert.NoError(t, err)
 
-			conn, err := postgres.NewTestConnectVersion(version)
-			if err != nil {
-				t.Skipf("postgres %d not available in test environment", version)
-			}
+			conn := connectArchiverFixture(t, version)
 			defer conn.Close()
 
 			err = postgres.SetupTestRole(conn, archiverRoleMonitor, true)
@@ -171,9 +217,9 @@ func Test_StatArchiverQuery_PgMonitorRoleSucceeds(t *testing.T) {
 			// RESET ROLE immediately after the successful SET ROLE, so it runs even when an
 			// assertion below fails - a leaked SET ROLE would silently change what later
 			// assertions on this connection see.
-			defer resetRole(t, conn)
+			defer resetRole(t, conn, archiverRoleMonitor)
 
-			if !assertRestrictedSession(t, conn, archiverRoleMonitor) {
+			if !assertRestrictedSession(t, conn, archiverRoleMonitor, true) {
 				return
 			}
 
@@ -198,10 +244,7 @@ func Test_StatArchiverQuery_WithoutPgMonitorFails(t *testing.T) {
 			q, err := Format(tmpl, NewOptions(version, "f", "off", 256, "public"))
 			assert.NoError(t, err)
 
-			conn, err := postgres.NewTestConnectVersion(version)
-			if err != nil {
-				t.Skipf("postgres %d not available in test environment", version)
-			}
+			conn := connectArchiverFixture(t, version)
 			defer conn.Close()
 
 			err = postgres.SetupTestRole(conn, archiverRoleNoRole, false)
@@ -209,9 +252,9 @@ func Test_StatArchiverQuery_WithoutPgMonitorFails(t *testing.T) {
 			if err != nil {
 				return
 			}
-			defer resetRole(t, conn)
+			defer resetRole(t, conn, archiverRoleNoRole)
 
-			if !assertRestrictedSession(t, conn, archiverRoleNoRole) {
+			if !assertRestrictedSession(t, conn, archiverRoleNoRole, false) {
 				return
 			}
 
@@ -228,37 +271,114 @@ func Test_StatArchiverQuery_WithoutPgMonitorFails(t *testing.T) {
 	}
 }
 
-// assertRestrictedSession asserts the session really runs as the named non-superuser role. It is the
-// load-bearing guard of both privilege tests: deleting the SET ROLE would otherwise leave them
-// silently passing as the fixture superuser - the exact failure mode that let a wrong privilege
-// assumption survive a whole release. Returns false when the session is not restricted, so the
-// caller can stop before the query and redden on the guard rather than on the query.
-func assertRestrictedSession(t *testing.T, conn *postgres.DB, wantRole string) bool {
+// assertRestrictedSession asserts the session really runs as the named non-superuser role AND that
+// the role's privileges are exactly what the caller intends. It is the load-bearing guard of both
+// privilege tests: deleting the SET ROLE would otherwise leave them silently passing as the fixture
+// superuser - the exact failure mode that let a wrong privilege assumption survive a whole release.
+//
+// The membership assertion matters because the roles are cluster-global and SetupTestRole never
+// normalises a role that already exists: without it the positive test could silently decay from
+// "pg_monitor is sufficient" to "some privileged role works" after any stray GRANT.
+//
+// Returns false when the session is not as intended, so the caller can stop before the query and
+// redden on the guard rather than on the query.
+func assertRestrictedSession(t *testing.T, conn *postgres.DB, wantRole string, wantPgMonitor bool) bool {
 	t.Helper()
 
 	var (
 		currentUser string
 		isSuper     bool
+		hasMonitor  bool
+		memberOf    []string
 	)
 	err := conn.QueryRow(
-		"SELECT current_user, (SELECT rolsuper FROM pg_roles WHERE rolname = current_user)",
-	).Scan(&currentUser, &isSuper)
+		"SELECT current_user::text, "+
+			"(SELECT rolsuper FROM pg_roles WHERE rolname = current_user), "+
+			"pg_has_role(current_user, 'pg_monitor', 'USAGE'), "+
+			// DISTINCT because PG 16+ stores one pg_auth_members row per grantor, so a role
+			// re-granted by hand (the mutation procedure does exactly that) would list twice.
+			"coalesce((SELECT array_agg(DISTINCT r.rolname::text ORDER BY r.rolname::text) "+
+			"FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid "+
+			"WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)), ARRAY[]::text[])",
+	).Scan(&currentUser, &isSuper, &hasMonitor, &memberOf)
 	if !assert.NoError(t, err) {
 		return false
 	}
 
 	okUser := assert.Equal(t, wantRole, currentUser, "session must run as the test role")
 	okSuper := assert.False(t, isSuper, "the test role must not be a superuser")
+	okMonitor := assert.Equal(t, wantPgMonitor, hasMonitor, "pg_monitor membership of the test role")
 
-	return okUser && okSuper
+	var okMembers bool
+	if wantPgMonitor {
+		okMembers = assert.Equal(t, []string{"pg_monitor"}, memberOf,
+			"the test role must hold pg_monitor and nothing else")
+	} else {
+		okMembers = assert.Empty(t, memberOf, "the deny role must hold no role membership at all")
+	}
+
+	return okUser && okSuper && okMonitor && okMembers
 }
 
-// resetRole restores the session to the fixture superuser.
-func resetRole(t *testing.T, conn *postgres.DB) {
+// resetRole restores the session to the fixture superuser and asserts the reset took effect.
+// Both privilege tests use a dedicated connection they close at the end of the subtest, so a leaked
+// SET ROLE cannot currently reach a later test - RESET ROLE is required by Decision 18 and is the
+// belt to that braces. Should the two tests ever share one connection, this is the guard they rely on.
+func resetRole(t *testing.T, conn *postgres.DB, role string) {
 	t.Helper()
 
 	_, err := conn.Exec("RESET ROLE")
 	assert.NoError(t, err)
+
+	var currentUser string
+	if assert.NoError(t, conn.QueryRow("SELECT current_user::text").Scan(&currentUser)) {
+		assert.NotEqual(t, role, currentUser, "RESET ROLE must leave the test role")
+	}
+}
+
+// Test_SetupTestRole_RejectsUnsafeName pins the role-name guard in postgres.SetupTestRole. A role
+// name is an SQL identifier, so it cannot travel as a $1 placeholder and the helper interpolates it;
+// the guard is what keeps "callers pass literal constants" an invariant instead of a doc comment, in
+// a file that has no build tag and ships in the released binary. Validation runs before the
+// connection is touched, so a nil *postgres.DB suffices - and without the guard these names would
+// reach db.Exec rather than being refused.
+//
+// It lives in this file rather than in internal/postgres because this task may modify only three
+// files (acceptance criterion 1), and the helper's only callers are here.
+func Test_SetupTestRole_RejectsUnsafeName(t *testing.T) {
+	unsafe := map[string]string{
+		"statement separator": "a; DROP ROLE victim",
+		"trailing newline":    "role\n; DROP ROLE victim",
+		"quote and comment":   "role'--",
+		"dollar sign":         "pgcenter_test$x",
+		"upper case":          "PgCenter_Test",
+		"leading digit":       "1role",
+		"empty":               "",
+	}
+
+	for name, role := range unsafe {
+		t.Run(name, func(t *testing.T) {
+			err := postgres.SetupTestRole(nil, role, false)
+			assert.Error(t, err, "unsafe role name must be refused before any statement is built")
+			assert.Contains(t, fmt.Sprint(err), "invalid test role name")
+		})
+	}
+}
+
+// connectArchiverFixture connects to the fixture cluster of the given version. A version missing
+// from the port map fails instead of skipping: a forgotten entry would otherwise make every subtest
+// for a new version pass while exercising nothing at all (internal/postgres/testing_test.go).
+func connectArchiverFixture(t *testing.T, version int) *postgres.DB {
+	t.Helper()
+
+	conn, err := postgres.NewTestConnectVersion(version)
+	if err != nil {
+		assert.NotContains(t, err.Error(), "no test cluster port mapping",
+			"version %d is missing from the test port map", version)
+		t.Skipf("postgres %d not available in test environment", version)
+	}
+
+	return conn
 }
 
 // runArchiverQuery executes q and returns the result's column names, its row count and the first
