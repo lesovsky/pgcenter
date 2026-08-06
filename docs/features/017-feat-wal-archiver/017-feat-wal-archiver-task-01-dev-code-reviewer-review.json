@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The three files implement task 01 exactly as specified: a single version-independent 9-column pg_stat_archiver query in the locked alias order, a selector matching the io.go:99 form, and one shared append-only role helper in internal/postgres/testing.go with no testing import. Cross-file consistency checks out (postgres.DB.Exec/Query/QueryRow, query.Format/NewOptions, pgx v5 FieldDescription.Name, pgconn.PgError), the doc comments make the four required claims and each is verifiable against the code they cite (calculateDelta short-circuits on [2]int{0,0} at internal/stat/postgres.go:590-597). No critical or major findings; three optional improvements below.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/postgres/testing.go",
+      "line": 59,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "SetupTestRole is an exported symbol in a file with no build tag, so it is part of the released binary's API surface and it builds three DDL statements (CREATE ROLE / GRANT pg_monitor / SET ROLE) by fmt.Sprintf interpolation. The safety contract today is a comment ('Callers must pass literal constants - never user input'). Decision 19 forces the file location and gosec is clean, and no production code calls it, so this is exposure rather than a defect. It can be made enforced rather than documented at ~2 lines of cost: reject a name that does not match a plain identifier pattern before the first Exec, or quote it with pgx.Identifier{name}.Sanitize() for the two identifier positions (the pg_roles lookup stays a quoted literal). Task 03 consumes this signature, so any change must be agreed with it — the error return type is unaffected either way.",
+      "benefit": "The 'literal constants only' invariant becomes machine-checked instead of comment-checked, and a future caller in another package (or a later production caller) cannot turn the helper into a DDL injection point.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/archiver_test.go",
+      "line": 38,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The Test_SelectStatArchiverQuery table stops at 190000, but its comment claims 'a future branch cannot be added silently'. That holds only for PG 14-19: a later `if version >= PostgresV20 { return PgStatArchiverPG20, ... }` would leave every existing case green. wal_test.go:26-27 already carries the precedent for closing this — a `{version: 200000, ...}` row commented as 'Forward version: the branch must fire for every future major'. Adding the same row here makes the comment's claim true for all inputs; alternatively soften the comment to name the 14-19 range.",
+      "benefit": "The selector's version-independence stays pinned when PG 20 support is added, and the test comment matches what the test actually guards.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/archiver_test.go",
+      "line": 64,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "Four of the five tests repeat the same eight-line preamble: SelectStatArchiverQuery -> NewOptions(version, \"f\", \"off\", 256, \"public\") -> Format -> assert.NoError -> NewTestConnectVersion -> t.Skipf -> defer conn.Close(). A single file-local helper returning (query, *postgres.DB) and skipping internally would remove ~24 duplicated lines and keep the skip message in one place. Note this duplication matches the existing style in wal_test.go / replication_slots_test.go / io_test.go, so leaving it as-is is a defensible consistency choice — take this only if the file grows further in later tasks.",
+      "benefit": "One place to change when the Options arguments or the skip convention move; the intent of each test (privilege, NULL-ness, shape) stands out from the boilerplate.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

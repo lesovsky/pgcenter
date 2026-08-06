@@ -1,0 +1,51 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Task 02 is implemented exactly as specified: a third PG 19 branch in SelectStatWALQuery returning (PgStatWALPG19, 8, [2]int{2,6}), guarded by the PostgresV19 constant, with the PG 14-17 and PG 18 constants and return statements byte-identical (verified: the wal.go diff is additions only). The new tests are strong — I independently re-ran mutations M1-M4 in an isolated worktree and all four turned the named tests red, and the full query suite in the CI image (lesovsky/pgcenter-testing:0.0.11) is green with the PG 19 subtest of Test_StatWALQueries actually running (not skipped) and asserting the 8 live column names. No critical or major findings; three minor, optional observations, two of which conflict with an explicit acceptance criterion and should not be applied blindly.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/query/wal.go",
+      "line": 13,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The PgStatWALDefault doc comment still reads \"defines query for pg_stat_wal (PG 18+)\", which is no longer true — PG 19+ now resolves to PgStatWALPG19, so this constant covers PG 18 only. The same drift affects the name: with three branches, \"Default\" no longer denotes the newest layout, unlike the bgwriter file where every constant is version-bounded (PgStatBgwriterPG14 \"PG 14-16\", PgStatBgwriterPG17 \"PG 17\", PgStatBgwriterPG18 \"PG 18+\"). Note the tension before acting: this task's acceptance criteria require that the wal.go diff shows only additions and that the PG 18 constant is left exactly as it is, so a comment or rename edit here would violate the task contract. Recommend either a one-line comment fix agreed with the task owner, or a follow-up item to rename PgStatWALDefault -> PgStatWALPG18 (it is referenced in internal/view/view.go only indirectly; the static QueryTmpl there is PgStatWALPG14, so the rename is confined to internal/query).",
+      "benefit": "Keeps the version-range comments accurate as the file grows a fourth branch; prevents a future reader from assuming PgStatWALDefault is still the fallthrough for the newest PG.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/wal_test.go",
+      "line": 99,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "assert.NoError(t, err) after conn.Query is non-fatal, so a failing query (e.g. wal_fpi_bytes renamed at PG 19 RC — the caveat this task carries) lets the subtest continue into FieldDescriptions() and produce a cascade of secondary failures around the real cause. There is no panic risk (pgx v5 returns a non-nil &baseRows{err:...} on every Query error path — verified in pgx v5.9.2/v5.10.0 conn.go:760), so this is purely about failure readability. require.NoError would stop at the first, meaningful message; the test already imports require for exactly this reason at line 113. Note this mirrors the io_test.go precedent the task told you to follow, so leaving it as-is for consistency is a defensible choice.",
+      "benefit": "A failed live query reports one actionable error instead of three derived ones.",
+      "optional": true
+    },
+    {
+      "file": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md",
+      "line": 0,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The acceptance criteria require the M1-M4 mutation runs to be recorded in the feature decisions log, and the Post-completion checklist points at 017-feat-wal-archiver-decisions.md — that file does not exist in docs/features/017-feat-wal-archiver/ yet. Create it (or append to it) with the task-02 entry, including the mutation results. For the record, I re-verified all four independently in a detached worktree: M1 (DiffIntvl {2,7}) reddens Test_SelectStatWALQuery at 190000 and 200000; M2 (fpi,KiB moved after stats_age) reddens Test_SelectStatWALQuery_PG19ColumnOrder; M3 (== PostgresV19) reddens the 200000 row; M4 (wal_fpi_bytes added to PgStatWALDefault) reddens Test_SelectStatWALQuery_LegacyBranchesUntouched.",
+      "benefit": "Closes the task's own acceptance criterion and leaves the mutation evidence discoverable for the next reviewer.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/wal.go",
+      "line": 43,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The function now mixes the named constant (version >= PostgresV19) with a bare literal (version >= 180000) in adjacent branches. The task explicitly rules this out of scope for Task 02 (\"The 180000 literal in the existing branch stays a literal\"), so no action here — recording it only so it can be picked up by whichever task next owns this file, together with the PgStatWALDefault rename above.",
+      "benefit": "One consistent version-constant style across the selector once the file is next opened for edit.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "excellent"
+  }
+}

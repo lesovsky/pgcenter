@@ -458,8 +458,14 @@ existing invocations:
 - `pgcenter report -W -f dump.tar` (the common legacy shape) → pflag consumes `-f` as the flag's
   value, `selectReport` returns `""`, and the command exits with `report type is not specified, quit`.
 
-Both exit non-zero; neither silently changes meaning. The release notes must describe the second
-shape, because that is what users will actually hit.
+**Neither exits non-zero** — measured, not assumed: `main()` prints the message and returns without
+`os.Exit(1)`, so both shapes exit 0. This is pre-existing and repo-wide (`-J q` behaves identically),
+but this feature is what makes it bite: a legacy wrapper like
+`pgcenter report -W -f dump.tar > out.txt || alert` now writes an empty file and reports success. So
+the failure is loud on the terminal and SILENT to a script. The release notes must say exactly that,
+and must describe the second shape, because that is the one real invocations take. Fixing the exit
+code is out of scope here — it would change behaviour for every report type — and goes to the
+tech-debt register at finalization.
 
 **Migration strategy:** none beyond documentation — the roadmap owner rejected both a deprecation
 period and a `NoOptDefVal` compatibility shim. The flag's help string and a new

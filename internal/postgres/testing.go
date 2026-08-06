@@ -45,3 +45,37 @@ func NewTestConnectVersion(version int) (*DB, error) {
 	}
 	return Connect(config)
 }
+
+// SetupTestRole ensures a test role exists on the connected cluster and switches the session to it.
+// Creation is idempotent (DO block guarded on pg_roles): the role is created NOLOGIN and
+// non-superuser when missing, and granted pg_monitor when pgMonitor is true. The caller is
+// responsible for RESET ROLE, normally in a defer immediately after a successful call.
+//
+// It returns an error rather than taking *testing.T on purpose: this file carries no build tag and
+// is compiled into the released pgcenter binary, so it must not import the testing package.
+//
+// The role name is an SQL identifier, not a value, so it cannot travel as a $1 placeholder and is
+// interpolated instead. Callers must pass literal constants - never user input.
+func SetupTestRole(db *DB, name string, pgMonitor bool) error {
+	create := fmt.Sprintf(
+		"DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '%s') "+
+			"THEN CREATE ROLE %s NOLOGIN NOSUPERUSER; END IF; END $$", name, name,
+	)
+	if _, err := db.Exec(create); err != nil {
+		return fmt.Errorf("create role %s failed: %w", name, err)
+	}
+
+	// GRANT is naturally idempotent, unlike bare CREATE ROLE. A role that must hold nothing gets no
+	// GRANT at all rather than a REVOKE, so two roles created by neighbouring tests never interfere.
+	if pgMonitor {
+		if _, err := db.Exec(fmt.Sprintf("GRANT pg_monitor TO %s", name)); err != nil {
+			return fmt.Errorf("grant pg_monitor to %s failed: %w", name, err)
+		}
+	}
+
+	if _, err := db.Exec(fmt.Sprintf("SET ROLE %s", name)); err != nil {
+		return fmt.Errorf("set role %s failed: %w", name, err)
+	}
+
+	return nil
+}

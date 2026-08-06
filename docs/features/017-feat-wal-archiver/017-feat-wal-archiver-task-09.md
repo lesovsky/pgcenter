@@ -233,3 +233,22 @@ inventing one, which is exactly why the new file must look like its neighbours.
       спеки пишут новое значение backlog как `0 B`, а программа печатает `0` — в release notes
       формулировка прозой, литерал не цитируется
 - [ ] Обновить user-spec/tech-spec если что-то изменилось
+
+
+## Scope added during Wave 1 (2026-08-06)
+
+Task 04 discovered that **the flag help users actually see is not cobra's.** `printReportHelp()` in
+`cmd/help.go` is installed via `SetHelpTemplate`/`SetUsageTemplate` and fully overrides cobra's flag
+usage, so the `StringVarP` description task 04 updated never reaches `pgcenter report --help`.
+`cmd/help.go:170` still reads `-W, --wal    show pg_stat_wal statistics` — describing a boolean flag
+with no selectors. No task in this feature covered `cmd/help.go`: every `help.go` reference in the
+tech-spec and the other tasks means `top/help.go`, the TUI screen.
+
+**This task now also updates `cmd/help.go:170`**, following the `SELECTOR` pattern the neighbouring
+`-D`, `-X` and `-P` lines already use. Without it, the release notes this task writes would point at
+help text nobody sees.
+
+**Also required in the release notes, measured during Wave 1:** the failure exits with **code 0**.
+`pgcenter report -W -f dump.tar` prints `report type is not specified, quit` and returns success, so a
+wrapper using `|| alert` will not fire and will keep an empty output file. Say so explicitly — this is
+the difference between a loud failure and a silent one for anything scripted.

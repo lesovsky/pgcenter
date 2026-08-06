@@ -277,7 +277,11 @@ Archiver   1423     84512  00000001000000A300000012      00:47:12    3781   0000
       отчёт по `pg_stat_wal`; `pgcenter report -d -W a` печатает описание колонок.
 - [ ] `pgcenter report -W` последним токеном падает с ошибкой `flag needs an argument: 'W' in -W`;
       `pgcenter report -W -f dump.tar` и `pgcenter report -W x` завершаются сообщением
-      `report type is not specified, quit` и ненулевым кодом возврата.
+      `report type is not specified, quit`. **Код возврата при этом 0** (проверено): сообщение
+      печатается, но `os.Exit(1)` не вызывается. Поведение существующее и общее для всех типов отчёта,
+      но именно эта фича делает его болезненным — обёртка вида
+      `pgcenter report -W -f dump.tar > out.txt || alert` запишет пустой файл и отрапортует успех.
+      Чинить код возврата в этой фиче не будем (это меняет поведение всех отчётов) — пойдёт в техдолг.
 - [ ] Роль без прав `pg_monitor`: экран `archiver` вместо таблицы показывает текст ошибки Postgres
       (`permission denied for function pg_ls_archive_statusdir`), pgcenter не падает, а на следующем
       тике повторяет попытку; экран `wal` в тех же условиях ведёт себя так же, как до фичи.
