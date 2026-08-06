@@ -379,3 +379,66 @@ Major и один minor от dev-test-reviewer закрыты деривацио
   - M12 подмена литерала `'Archiver'` на `'WAL'` в строке `source` → `Test_describeArchiverColumnOrder`
   - Дополнительно оба ревьюера round 2 независимо прогнали свои мутации на изолированных копиях дерева (перевод карты на `pgStatWALDescription`, замена табов пробелами, перестановки строк и origin'ов, строка после URL) — все красные на названных тестах
 - Коммит сделан явным pathspec'ом по трём своим файлам; параллельные правки соседних агентов в `top/`, `report/report_record_*_test.go` и `report/testdata/*.golden` в коммит не попали (`git show --stat` → ровно 3 файла)
+
+---
+
+## Task 06: TUI navigation — `w` cycle, `W` menu, help
+
+**Status:** Done
+**Commit:** 18fb822
+**Agent:** основной агент
+
+**Summary:** Добавлен навигационный слой к экрану `archiver` по образцу пятичастного прецедента `j`/`J`: `walNextView` рядом с `statioNextView`, ветка `case "wal":` в диспетче `switchViewTo`, константа `menuWAL` внутри menu-группы iota-блока, её двухпунктовая ветка в `selectMenuStyle`, ветка в `menuSelect` (курсор 0 → `wal`, 1 → `archiver`, default → `wal`, через `viewSwitchHandler` напрямую, ровно один `printCmdline` на путь), биндинг `{"sysstat", 'W', menuOpen(menuWAL, app.config, "")}` и три строки `helpTemplate`. Ключевое решение — не изобретать отдельное имя группы: строка `"wal"` одновременно имя вью и имя цикла (Decision 6), зафиксировано комментарием в единственной точке диспетчеризации. Главное методическое: утверждение прошлой ревизии таск-файла, что `menuSelect` и `keybindings()` невозможно покрыть юнит-тестом, оказалось ложным — нулевой `&gocui.Gui{}` доходит до каждой ветки, поэтому обе половины пути `W` покрыты реальными тестами, а не грепом.
+
+**Deviations:**
+
+1. **`keybindings()` разделён на `keybindings()` + `keybindingsList(app *app) []key`** — сверх буквы задачи, которая предполагала только вставку строки в таблицу. Причина: dev-test-reviewer (round 1, major) показал мутацией, что `{"sysstat", 'W', menuOpen(menuStatIO, ...)}` оставляет **весь** фильтрованный прогон зелёным — критерий user-spec «`W` открывает WAL-меню» не был защищён ничем. gocui держит зарегистрированные биндинги неэкспортируемыми и не даёт ни достать, ни выполнить обработчик, поэтому единственный способ проверить, *какой* обработчик несёт клавиша, — вернуть таблицу наружу и вызвать строку. Это ровно паттерн patterns.md «Extract the decision out of the unreachable closure», на который ссылается сама задача; ни один параметр никуда не протянут, `keybindings()` по-прежнему владеет `InputEsc` и циклом регистрации. Мутация воспроизведена мной независимо до правки.
+2. **Три теста сверх списка TDD Anchor:** `Test_keybindingsWALOpensMenu` (гоняет обработчик `'W'`, пиннит тип меню, заголовок, пункты и содержимое окна `menuDraw`), `Test_keybindingsWALCycles` (гоняет обработчик `'w'` с экрана `wal`, ждёт `archiver`) и подтест «lower-case 'w' still registered». Закрывают major round 1 и по одному minor каждого ревьюера: заголовок `menuWAL` и строка `'w'` до этого держались только на диффревью. Побочно снято утверждение задачи, что `menuOpen` «не задействован» — он задействован и запиннен.
+3. **`wg.Wait()` в `Test_switchViewTo` перенесён внутрь замыкания `t.Run`** (minor dev-code-reviewer). Преднаходящийся дефект харнесса, но нагруженный именно этой задачей: ассерт живёт в горутине, и на красной строке testify звал `t.Errorf` на завершённом сабтесте — падение приходило паникой `Fail in goroutine after Test_switchViewTo/26_ has completed`, без имени строки и с обрывом остального прогона. После правки мутация «удалить `case "wal":`» рапортует `--- FAIL: Test_switchViewTo/26_`.
+4. **Ничего из этого не касается запретов задачи:** удалённый `Test_menuConfPathDoesNotLift` не восстановлен, в `editPgConfig` шов не заведён, комментарий в `top/pause_test.go` исправлен ровно в двух названных предложениях (проверено: `top/pgconfig.go:70-74` действительно уходит по раннему возврату на `!db.Local`).
+5. **Строка `{current: "activity", to: "wal", want: "wal"}`** оставлена, хотя dev-test-reviewer назвал её дублем `sizes → wal`: она предписана TDD Anchor дословно.
+
+**Tech debt:**
+
+1. `menuSelect` (`top/menu.go`) перевалил за 100 строк — новая ветка `menuWAL` его и перевела. Это шесть почти одинаковых вложенных switch, где содержательна только пара «индекс курсора → имя вью»; естественная форма — таблица `map[menuType][]string` с `menuConf`/`menuNone` как единственными явными ветками. Не тронуто сознательно: задача предписывает «Copy, do not improvise», повторяемость преднаходящаяся, а переделка шести веток вне мандата. Кандидат на отдельную уборку (major, optional, dev-code-reviewer round 1 — он же сам пометил это как «NOT a request to change this task»).
+2. `app.ui.InputEsc = true` не покрыт ничем: его удаление не валит ни один тест. Преднаходящийся пробел; строка переехала в этом диффе, но перенос доказуемо нейтрален (та же функция, перед тем же циклом, между ними ничего не читает).
+3. Идиома «читатель `viewCh` в горутине с таймаутом» продублирована между `top/keybindings_test.go` и `top/menu_test.go`. При двух копиях выносить хелпер преждевременно.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 1 major (optional) + 3 minor → [017-feat-wal-archiver-task-06-dev-code-reviewer-review.json](017-feat-wal-archiver-task-06-dev-code-reviewer-review.json)
+- dev-security-auditor: approved, 0 critical/major, 1 minor (информационный — намеренная утечка горутины в тесте) → [017-feat-wal-archiver-task-06-dev-security-auditor-review.json](017-feat-wal-archiver-task-06-dev-security-auditor-review.json)
+- dev-test-reviewer: needs_improvement, 1 major + 3 minor → [017-feat-wal-archiver-task-06-dev-test-reviewer-review.json](017-feat-wal-archiver-task-06-dev-test-reviewer-review.json)
+
+*Round 2 (после исправлений):*
+- dev-code-reviewer: approved_with_suggestions, 0 critical/major, 3 minor → [017-feat-wal-archiver-task-06-dev-code-reviewer-review-round2.json](017-feat-wal-archiver-task-06-dev-code-reviewer-review-round2.json)
+- dev-test-reviewer: needs_improvement, 0 critical/major, 3 minor → [017-feat-wal-archiver-task-06-dev-test-reviewer-review-round2.json](017-feat-wal-archiver-task-06-dev-test-reviewer-review-round2.json)
+
+*Round 3 (после исправлений):*
+- dev-test-reviewer: passed → [017-feat-wal-archiver-task-06-dev-test-reviewer-review-round3.json](017-feat-wal-archiver-task-06-dev-test-reviewer-review-round3.json)
+
+**Verification:**
+- CI-образ `lesovsky/pgcenter-testing:0.0.11`, `go test -race -p 1 -count=1 -timeout 300s ./top/... ./internal/view/...` → `ok top 9.560s`, `ok internal/view 1.065s` (первый прогон включал и `./record/...` → `ok 7.174s`)
+- Хостовой фильтрованный прогон `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate'` → зелено; под `-v` видно, что фильтр действительно захватывает все новые тесты (`-run` в Go регистрозависим — из-за этого `Test_keybindingsWalCycles` был переименован в `…WALCycles`, иначе он молча не запускался). `Test_helpTemplate_pauseEntry`, `_pauseLiftingActions`, `_formatVerbs` проходят без изменений
+- `go build -o /dev/null ./cmd`, `go vet ./top/...`, `gofmt -l top/` → чисто; `golangci-lint run ./top/...` → 0 issues
+- Мутационный контроль (каждая применена, наблюдалась **красной**, откачена):
+  - M1 `walNextView` в ветке `case "wal":` возвращает `"wal"` → `Test_walNextView` («expected archiver, actual wal») **и** строка 26 `Test_switchViewTo`
+  - M2 удалена ветка `case "wal":` из `switchViewTo` → красной стала **только** строка 26 (`wal → archiver`); строки 6 (`sizes → wal`), 27 (`archiver → wal`) и 28 (`activity → wal`) остались зелёными — как и предсказывала задача, диспетч доказывает именно первая строка
+  - M3 удалён один пункт из стиля `menuWAL` → `Test_selectMenuStyle` («expected 2, actual 1»)
+  - M4 переставлены цели `case 0:` и `case 1:` ветки `menuWAL` → `Test_menuSelectWAL` красный на обеих позициях; `out_of_range` остался зелёным
+  - M5 удалён сброс `app.config.menu = selectMenuStyle(menuNone)` → `Test_menuSelectWAL` красный на ассерции `menuNone` во всех трёх подтестах
+  - M6a вторая строка `'W'` в таблице → `Test_keybindingsWAL` на «удаляется ровно один раз»; M6b строка `'W'` удалена → на первом удалении
+  - M7 возвращён клаузул `'w' WAL,` в строку `r` → `Test_helpTemplate_walEntry` («marker "'w' " must appear on exactly one line») **и** `Test_helpTemplate_replicationEntry`
+  - M8 возвращён ключевой токен `r,w` → `Test_helpTemplate_replicationEntry` на префиксе `    r `
+  - M9 переформулировано описание новой строки → `Test_helpTemplate_walEntry`
+  - M10 убран `archiver` из оговорки про `Q` → `Test_helpTemplate_resetCaveat`
+  - M11 `'W'` привязан к `menuOpen(menuStatIO, …)` → `Test_keybindingsWALOpensMenu` (три ассерции сразу)
+  - M12 удалена строка `'w'` → `Test_keybindingsWALCycles` («no binding for key 119 on view "sysstat"») и подтест «lower-case 'w' still registered»
+  - M13 переформулирован заголовок `menuWAL` → `Test_keybindingsWALOpensMenu`
+  - M14 цикл регистрации пропускает строку `'w'` → подтест «lower-case 'w' still registered» (ребро «таблица → gocui», которого `boundHandler` не видит)
+  - M15 `menuDraw` превращён в no-op → `Test_keybindingsWALOpensMenu` («"" does not contain " pg_stat_wal"»)
+  - M16 строка `'w'` продублирована → подтест «lower-case 'w' still registered» на втором удалении (`execKeybindings` в gocui зовёт **все** совпавшие обработчики, так что дубль означал бы двойной цикл за нажатие)
+  - M11–M16 прогонялись под тем же фильтром из frontmatter, что и M1–M10; ревьюеры round 2 и round 3 независимо перепрогнали свои мутации на копиях/рабочем дереве и подтвердили красноту
+- Визуальная сверка блока `general actions:`: `a,b,f,o` / `r` / `s,t,i` / `d,D` / `x,X` / `p,P` / `j,J` / `w,W` / `S` … — описания в одной колонке (проверено ассерциями `descColumn` между записями, без магических чисел)
+- Коммит сделан явным pathspec'ом; параллельные правки соседних агентов в `report/` в него не попали (`git show --stat` → ровно 15 файлов: 9 своих в `top/` и 6 JSON-отчётов)
