@@ -221,7 +221,9 @@ func Test_collectOverviewStat_Degradation(t *testing.T) {
 	assert.False(t, got.RetainedValid, "no slots -> retained WAL is n/a")
 	assert.Equal(t, int64(0), got.SlotsCount)
 
-	// Archiving backlog: the fixtures role has pg_monitor, so the OWN-QueryRow aggregate must run.
+	// Archiving backlog: the fixtures role is postgres, a superuser, so the OWN-QueryRow aggregate
+	// runs here regardless of the privilege question (Test_collectOverviewStat_PgMonitorRole covers
+	// the pg_monitor-only role).
 	// On archive_mode=off it is a real 0 with ArchivingBacklogValid=true; either way it must be a
 	// non-negative value distinguishable from n/a, and its outcome must NOT have blanked other rows.
 	if got.ArchivingBacklogValid {
@@ -233,6 +235,85 @@ func Test_collectOverviewStat_Degradation(t *testing.T) {
 	assert.GreaterOrEqual(t, got.DatabasesCount, int64(1))
 	assert.True(t, got.TotalSizeValid, "size runs as its own QueryRow and is unaffected by degraded rows")
 	assert.GreaterOrEqual(t, got.TotalSize, int64(0))
+}
+
+// backlogRoleCollect is this package's own pg_monitor-only role. It deliberately does NOT share a
+// name with the query package's role: SetupTestRole's DO block is not atomic, so two packages
+// creating the same role against the same cluster would race on pg_authid outside `go test -p 1`.
+const backlogRoleCollect = "pgcenter_test_backlog_collect"
+
+// Test_collectOverviewStat_PgMonitorRole is the end-to-end proof that the verbose panel now shows a
+// number for the role it was written for. Under a role holding only pg_monitor the backlog aggregate
+// used to fail with 42501 (pg_ls_dir is superuser-only) and the field degraded to n/a; with
+// pg_ls_archive_statusdir() it returns a value, and the rest of the sample stays populated.
+//
+// The restricted-session guard runs before collect: the fixtures role is the superuser postgres, so
+// a test that forgot to switch roles would pass here while proving nothing.
+func Test_collectOverviewStat_PgMonitorRole(t *testing.T) {
+	conn, err := postgres.NewTestConnect()
+	assert.NoError(t, err)
+	defer conn.Close()
+
+	// Read properties as the fixture superuser: the subject under test is the backlog aggregate, not
+	// the privileges of the properties probe.
+	props, err := GetPostgresProperties(conn)
+	assert.NoError(t, err)
+
+	// Superuser baseline, taken before the role switch. It turns "the rest of the sample stays
+	// populated" into a falsifiable comparison: a privilege regression in any neighbouring aggregate
+	// now shows up as a divergence from what the same cluster reports unrestricted.
+	base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+
+	err = postgres.SetupTestRole(conn, backlogRoleCollect, true)
+	assert.NoError(t, err)
+	if err != nil {
+		return
+	}
+	defer func() {
+		_, err := conn.Exec("RESET ROLE")
+		assert.NoError(t, err)
+
+		var user string
+		if assert.NoError(t, conn.QueryRow("SELECT current_user::text").Scan(&user)) {
+			assert.NotEqual(t, backlogRoleCollect, user, "RESET ROLE must leave the test role")
+		}
+	}()
+
+	var (
+		currentUser string
+		isSuper     bool
+		hasMonitor  bool
+		memberOf    []string
+	)
+	err = conn.QueryRow(
+		"SELECT current_user::text, "+
+			"(SELECT rolsuper FROM pg_roles WHERE rolname = current_user), "+
+			"pg_has_role(current_user, 'pg_monitor', 'USAGE'), "+
+			// DISTINCT because PG 16+ stores one pg_auth_members row per grantor.
+			"coalesce((SELECT array_agg(DISTINCT r.rolname::text ORDER BY r.rolname::text) "+
+			"FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid "+
+			"WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)), ARRAY[]::text[])",
+	).Scan(&currentUser, &isSuper, &hasMonitor, &memberOf)
+	assert.NoError(t, err)
+	okUser := assert.Equal(t, backlogRoleCollect, currentUser, "collect must run as the test role")
+	okSuper := assert.False(t, isSuper, "the test role must not be a superuser")
+	okMonitor := assert.True(t, hasMonitor, "the test role must hold pg_monitor")
+	// Roles are cluster-global and SetupTestRole never normalises an existing one, so without this
+	// the test could silently decay from "pg_monitor is sufficient" to "some privileged role works".
+	okMembers := assert.Equal(t, []string{"pg_monitor"}, memberOf,
+		"the test role must hold pg_monitor and nothing else")
+	if !okUser || !okSuper || !okMonitor || !okMembers {
+		return
+	}
+
+	got, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)
+	assert.True(t, got.ArchivingBacklogValid, "pg_monitor must get a backlog number, not n/a")
+	assert.GreaterOrEqual(t, got.ArchivingBacklog, int64(0))
+
+	// The rest of the sample must be unaffected by running under a restricted role.
+	assert.Equal(t, base.TotalSizeValid, got.TotalSizeValid, "the db-size aggregate must not degrade under pg_monitor")
+	assert.Equal(t, base.DatabasesCount, got.DatabasesCount, "the databases aggregate must see the same databases under pg_monitor")
+	assert.GreaterOrEqual(t, got.DatabasesCount, int64(1))
 }
 
 func TestGetPostgresProperties(t *testing.T) {

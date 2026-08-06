@@ -81,7 +81,7 @@ type PgstatOverview struct {
 	RetainedValid bool  // false when there are no slots (n/a)
 
 	ArchivingBacklog      int64 // count(.ready) * wal_segment_size, bytes
-	ArchivingBacklogValid bool  // false on archive_mode=off / missing privilege (42501) -> n/a
+	ArchivingBacklogValid bool  // false when the aggregate failed (e.g. missing privilege, 42501) -> n/a
 
 	Senders   int // active walsenders
 	Receivers int // active walreceivers
@@ -285,9 +285,10 @@ func collectOverviewStat(db *postgres.DB, props PostgresProperties, itv int, pre
 		}
 	}
 
-	// replication: archiving backlog. OWN QueryRow: pg_ls_dir requires pg_monitor/superuser; a 42501
-	// privilege error or archive_mode=off degrades this field to n/a. The raw error (which contains a
-	// filesystem path) is deliberately swallowed and never logged or surfaced.
+	// replication: archiving backlog. OWN QueryRow so a failure degrades this field alone to n/a
+	// instead of aborting the sample; the aggregate needs superuser or pg_monitor
+	// (pg_ls_archive_statusdir). The error is deliberately swallowed and never logged or surfaced.
+	// archive_mode=off is not an error: nothing is queued, so the field is a real 0, not n/a.
 	var backlog sql.NullInt64
 	if err := db.QueryRow(query.OverviewArchivingBacklog).Scan(&backlog); err == nil && backlog.Valid {
 		s.ArchivingBacklog = backlog.Int64
