@@ -1,0 +1,342 @@
+{
+  "feature": "017-feat-wal-archiver",
+  "task": "10 — Pre-deploy QA",
+  "date": "2026-08-06",
+  "branch": "feature/017-feat-wal-archiver",
+  "headCommit": "b47ff76",
+  "status": "failed",
+  "statusReason": "Zero defects found in the automated half, but the manual stand gate could not be run: the stand pgpro@10.128.28.194 answers on port 22 and rejects every available credential. Ten user-facing criteria that only exist against a live archiver or a live terminal have no evidence, so the feature is NOT verified. This is an access blocker, not a code failure.",
+  "verdict": "NEEDS WORK — blocked on the manual gate. No code fix is owed by any task; a reachable stand is.",
+  "environment": {
+    "status": "healthy",
+    "rebuildAttempts": 1,
+    "note": "pgcenter is a CLI: Phase 1 collapses to a fresh build plus the CI image fixtures.",
+    "services": [
+      "bin/pgcenter: rebuilt from HEAD b47ff76 at 12:43, 18233101 bytes",
+      "logs/working/pgcenter-master: built from master 25f9754 for A/B, 18215415 bytes",
+      "lesovsky/pgcenter-testing:0.0.11 with PG 14-19 fixtures on 21914-21919: up",
+      "fixture archive_mode=off, archive_command=(disabled) — confirmed live, which is why the stand run is mandatory"
+    ],
+    "standAccess": "BLOCKED — see findings[0]",
+    "fixCommits": []
+  },
+  "summary": {
+    "totalChecks": 34,
+    "passed": 24,
+    "failed": 0,
+    "notVerifiable": 10,
+    "criticals": 1,
+    "majors": 0,
+    "minors": 2
+  },
+  "testSuite": {
+    "status": "passed",
+    "details": "go test -race -p 1 -timeout 300s ./... inside lesovsky/pgcenter-testing:0.0.11 with PG 14-19 fixtures up: exit 0, every package ok, 0 WARNING: DATA RACE. Verbose re-run for skip accounting: 1085 PASS, 86 SKIP, 0 FAIL (1171 RUN). All 86 skips are EOL-cluster subtests (PG 9.4-9.6, 10-13) absent from the image — debt [019]; none falls in the PG 14-19 range and none belongs to feature 017. Every archiver and wal subtest ran on all six live versions. profile.Test_profileLoop (flaky, debt [030]) PASSED on both full runs.",
+    "logs": [
+      "logs/working/full-test-run.log",
+      "logs/working/full-test-verbose.log"
+    ]
+  },
+  "lint": {
+    "status": "passed",
+    "details": "PATH extended with $(go env GOPATH)/bin — golangci-lint, gosec, govulncheck and gofmt are all installed there (an earlier task's 'not installed' report was wrong). make lint: golangci-lint '0 issues.', gosec quiet, exit 0. make vuln: 'No vulnerabilities found', 0 vulnerabilities called, exit 0."
+  },
+  "testWeakeningAudit": {
+    "status": "passed",
+    "details": "Diffs read line by line, not summaries. TestNew 27->28. TestView_VersionOK 190000/160000 27->28, 140000 24->25, PG13 and below unchanged (archiver is MinRequiredVersion PG14) plus a new failure message naming the version. Test_filterViews: wantV 27->28 / 18->19 / 24->25 on PG14+, wantN 8->9 / 11->12 / 13->14 on PG13 and below, plus a NEW wantArchiver membership field so the counts cannot be satisfied by dropping archiver while another gate loosens. Test_selectMenuStyle gained a menuWAL row (want 2). Test_switchViewTo gained three rows and moved wg.Wait() inside the subtest closure so a failing row names itself instead of panicking. Every change is a new correct number or a strengthening; nothing deleted, loosened or removed."
+  },
+  "acceptanceCriteria": [
+    {
+      "id": "US-1",
+      "criterion": "archiver shows 9 columns in the order source, ready, archived, last_archived, archived_age, failed, last_failed, failed_age, stats_age",
+      "status": "passed",
+      "evidence": "Test_StatArchiverQueries asserts the live pg_wire column names against the locked list (by NAME, not length) on PG 14/15/16/17/18/19 — all six PASS. Real replay confirms the same header: logs/working/cli-checks.log:52."
+    },
+    {
+      "id": "US-2",
+      "criterion": "archive_mode=off: counters are zero and last_archived / archived_age / last_failed / failed_age are BLANK (not 0, not a dash)",
+      "status": "passed",
+      "evidence": "The fixtures run archive_mode=off (verified live: 'off' / '(disabled)'). Test_StatArchiverQuery_NullsStayNull pins the four columns as SQL NULL and the two counters as '0' on all six versions. Rendered proof through the shared print path: cli-checks.log:54 — 'Archiver  0  0 <blank> <blank>  0  <blank> <blank>  11 days 23:04:05'. The TUI screen itself was not captured (stand); the report and TUI share the align/print path."
+    },
+    {
+      "id": "US-3",
+      "criterion": "working archiving (/bin/true, 3x pg_switch_wal): archived +>=3, archived_age <= 00:00:30, last_archived set, ready back to 0, failed unchanged",
+      "status": "not_verifiable",
+      "evidence": "No evidence source exists outside the stand: the fixtures run archive_mode=off with no archive_command, so every integration test sees an all-zero, all-NULL archiver row. Stand unreachable — findings[0]."
+    },
+    {
+      "id": "US-4",
+      "criterion": "broken archiving (/bin/false, 3x pg_switch_wal): failed grows tick to tick, ready >= 3 and not falling, last_failed set, failed_age <= 00:00:30, archived unchanged",
+      "status": "not_verifiable",
+      "evidence": "Same reason as US-3. Stand unreachable — findings[0]."
+    },
+    {
+      "id": "US-5",
+      "criterion": "'w' on wal opens archiver; 'w' on archiver opens wal; 'w' from any other screen opens wal",
+      "status": "not_verifiable",
+      "evidence": "Strong non-terminal evidence, but no live capture. Test_walNextView pins all three mappings; Test_switchViewTo pins wal->archiver, archiver->wal, activity->wal through the real dispatch; Test_keybindingsWALCycles pulls the REGISTERED 'w' handler out of gocui and runs it, observing the new view on viewCh. Mutation control by task 6 (M1, M2, M12, M14) showed each of these red. The only unproven link is gocui delivering the keypress from a real terminal."
+    },
+    {
+      "id": "US-6",
+      "criterion": "'W' opens a two-item menu, each item opening its screen",
+      "status": "not_verifiable",
+      "evidence": "Test_selectMenuStyle pins two items for menuWAL; Test_menuSelectWAL drives the real menuSelect closure over cursor rows 0/1/out-of-range and asserts wal / archiver / wal on viewCh; Test_keybindingsWALOpensMenu pulls the registered 'W' handler and asserts it opens menuWAL with both item titles drawn. Live capture missing — findings[0]."
+    },
+    {
+      "id": "US-7",
+      "criterion": "'Show archiver statistics (requires archive_mode=on)' appears EXACTLY ONCE per entry path, verified on BOTH paths separately (w hotkey and W menu)",
+      "status": "not_verifiable",
+      "evidence": "This is the criterion the stand exists for and it has no substitute. Code reading shows one printCmdline per path and no third site: switchViewTo prints once after dispatch (top/config_view.go:261), the menuWAL branch of menuSelect prints once (top/menu.go:214-224), and viewSwitchHandler prints nothing. internal/view TestNew_ArchiverView pins the Msg verbatim. No test asserts the cmdline count on either path, and neither capture was taken — findings[0]."
+    },
+    {
+      "id": "US-8",
+      "criterion": "the help screen carries the w,W line and the Q line lists archiver among the non-resettable stats",
+      "status": "passed",
+      "evidence": "The help screen IS the helpTemplate constant. Test_helpTemplate_walEntry pins the line word for word and its position directly after j,J with a shared description column; Test_helpTemplate_replicationEntry pins that the 'r' line lost its 'w' clause; Test_helpTemplate_resetCaveat pins 'pg_stat_io, bgwriter, wal, archiver'. Mutations M7-M10 confirmed red. A live capture of the rendered page was not taken (stand)."
+    },
+    {
+      "id": "US-9",
+      "criterion": "pgcenter record writes archiver entries with no recorder change",
+      "status": "passed",
+      "evidence": "Real 4-tick recording on the PG 18 fixture contains archiver.<ts>.json for every tick (cli-checks.log:11-14); the same on PG 14 and PG 19. git diff develop...HEAD touches no file under record/ except record_test.go."
+    },
+    {
+      "id": "US-10",
+      "criterion": "report -W a replays recorded data; -W w gives the previous pg_stat_wal report; -d -W a prints the column description",
+      "status": "passed",
+      "evidence": "Real recording, real replay. -W a: 9-column header + 3 data rows, exit 0 (cli-checks.log:48-59). -W w: the unchanged 7-column PG 18 layout, exit 0 (:64-75). -d -W a: the full archiver description, exit 0 (:77-92)."
+    },
+    {
+      "id": "US-11",
+      "criterion": "-W as the last token fails with \"flag needs an argument: 'W' in -W\"; -W -f dump.tar and -W x end with 'report type is not specified, quit'; exit code is 0 in all three cases",
+      "status": "passed",
+      "evidence": "Measured on the real binary: '-W x' -> report type is not specified, quit, exit=0; '-W -f rec18.tar' -> same message, exit=0; trailing '-W' -> flag needs an argument: 'W' in -W, exit=0 (cli-checks.log:99-109). Exit 0 is the documented pre-existing behaviour, quoted in the release notes and going to the tech-debt register."
+    },
+    {
+      "id": "US-12",
+      "criterion": "a role without pg_monitor: the archiver screen shows the PostgreSQL error instead of a table, pgcenter does not crash and retries next tick; the wal screen behaves as before the feature",
+      "status": "not_verifiable",
+      "evidence": "The query half is proven: Test_StatArchiverQuery_WithoutPgMonitorFails pins SQLSTATE 42501 and the pg_ls_archive_statusdir name on all six versions. The terminal half — error text rendered instead of a table, no crash, retry next tick, and the wal screen A/B against the master binary — needs a stand. findings[0]."
+    },
+    {
+      "id": "US-13",
+      "criterion": "pgcenter record under a role without pg_monitor stops the whole recording with an error (existing recorder behaviour, not a defect of this feature)",
+      "status": "passed",
+      "evidence": "Measured: a purpose-created LOGIN role with no pg_monitor -> 'ERROR: permission denied to examine \"shared_preload_libraries\" (SQLSTATE 42501)', no tar written (cli-checks.log:200-203). The recording aborts even before the archiver query, on properties collection — pre-existing recorder behaviour, recorded as expected."
+    },
+    {
+      "id": "US-14",
+      "criterion": "report -W w on a pre-0.12 archive (PG 18 and older) prints the previous wal column set — no new column appears",
+      "status": "passed",
+      "evidence": "A PG 18 archive recorded with the master-built binary and replayed by the feature binary prints the identical 7-column header and three data rows, exit 0 (cli-checks.log:131-142); byte-identical to what the master binary prints from the same tar (:123-129). The PG 19 counterpart correctly fails with 'diff failed: convert ...' (:151-158) — the accepted, release-noted limitation."
+    },
+    {
+      "id": "US-15",
+      "criterion": "report -W a on an archive with no archiver entries prints no data rows and no column header (only the three INFO lines) and exits 0",
+      "status": "passed",
+      "evidence": "The master-recorded tar has no archiver entries; replaying it with -W a prints exactly 3 lines, all INFO, no header, exit 0 (cli-checks.log:144-149). Decision 15 as specified."
+    },
+    {
+      "id": "US-16",
+      "criterion": "under a pg_monitor-only role (not superuser) the archiver query succeeds and returns 9 columns, and the [010] backlog aggregate returns a number — proven by test through SET ROLE, not only on the stand",
+      "status": "passed",
+      "evidence": "Test_StatArchiverQuery_PgMonitorRoleSucceeds (all six versions) and Test_ArchivingBacklogQuery_PgMonitorRole, plus Test_collectOverviewStat_PgMonitorRole asserting ArchivingBacklogValid=true through the real collector. Each guards with assertRestrictedSession before the query — not a superuser, pg_monitor and nothing else — so the test cannot silently decay into a superuser run."
+    },
+    {
+      "id": "US-17",
+      "criterion": "under a role without pg_monitor the archiver query fails with permission denied for function pg_ls_archive_statusdir — all-or-nothing degradation proven by test",
+      "status": "passed",
+      "evidence": "Test_StatArchiverQuery_WithoutPgMonitorFails pins SQLSTATE 42501 AND the function name in the message (so a syntax typo cannot pass it) on PG 14-19; Test_ArchivingBacklogQuery_NoPrivilegeRole is the same check for the aggregate."
+    },
+    {
+      "id": "US-18",
+      "criterion": "on PG 19 the wal screen carries fpi,KiB right after the fpi counter, rendered as a per-interval delta; on PG 14-18 the column set, order and diffed range are unchanged",
+      "status": "passed",
+      "evidence": "Test_SelectStatWALQuery_PG19ColumnOrder and Test_SelectStatWALQuery_LegacyBranchesUntouched; TestViews_Configure pins PgStatWALPG19/8/{2,6} at 190000 and PgStatWALPG14/11/{2,9} at 140000; Test_StatWALQueries runs the query live on all six versions. End to end on a real PG 19 recording: header source waldir_size wal,KiB records fpi fpi,KiB buffers_full stats_age (cli-checks.log:166), with fpi,KiB inside DiffIntvl{2,6} and stats_age outside it. The delta arithmetic itself is pinned by report/testdata/report_record_wal_pg19.golden (240.25)."
+    },
+    {
+      "id": "US-19",
+      "criterion": "golden replay tests exist for archiver and for the wal screen on PG 18 and PG 19",
+      "status": "passed",
+      "evidence": "report/testdata/report_record_archiver.golden (9 columns), report_record_wal_pg18.golden (7 columns, no fpi,KiB), report_record_wal_pg19.golden (8 columns with fpi,KiB after fpi). Test_app_doReport_Archiver (populated + never_archived) and Test_app_doReport_WAL pass; task 8 recorded mutation control showing each golden red on a perturbed layout."
+    },
+    {
+      "id": "US-20",
+      "criterion": "full make test green on the PG 14-19 fixtures; make lint and make vuln clean",
+      "status": "passed",
+      "evidence": "See testSuite and lint above: exit 0 / 0 races / 0 FAIL, golangci-lint 0 issues, gosec quiet, govulncheck 0 vulnerabilities."
+    },
+    {
+      "id": "US-21",
+      "criterion": "under a pg_monitor role the [010] verbose panel shows a numeric backlog instead of n/a; unchanged for a superuser on a normal cluster; on a missing archive_status directory it now shows a bare 0, not '0 B'",
+      "status": "passed",
+      "evidence": "Test_collectOverviewStat_PgMonitorRole: ArchivingBacklogValid true under a pg_monitor-only role, and TotalSizeValid/DatabasesCount identical to the superuser baseline. Superuser path unchanged: Test_collectOverviewStat and _Degradation. The bare-0 rendering is code-level: pretty.Size(0) returns \"0\" (internal/pretty/pretty.go:12). The missing-directory case itself was measured during spec work on live PG 18.4 (Decision 11) and was NOT re-measured here; the A/B stand observation of the panel is part of the blocked cost run."
+    },
+    {
+      "id": "US-22",
+      "criterion": "report -d -W w documents the fpi,KiB column",
+      "status": "passed",
+      "evidence": "Real run: '- fpi,KiB\\twal_fpi_bytes\\tAmount of WAL generated by full page images, in KiB (PG 19+)' printed directly under the fpi row, exit 0 (cli-checks.log:94-97). Version-independence of describe text is the existing contract, stated in the row itself."
+    },
+    {
+      "id": "US-23",
+      "criterion": "updated: the -W flag help line, release notes 0.12.0 (flag type change with the literal refusal text, and the PG 19 archive limitation with the literal 'diff failed'), and the built-in help screen",
+      "status": "passed",
+      "evidence": "pgcenter report --help prints ' -W, --wal SELECTOR  show pg_stat_wal / pg_stat_archiver statistics ... 'w' - wal; 'a' - archiver' (cli-checks.log:206-208); the pflag usage string is pinned by Test_walFlagDefinition. doc/release-notes/v0.12.0.md carries both literals ('report type is not specified, quit', 'diff failed'), the exit-0 warning and the missing-archive_status note. Help screen: US-8. README deliberately untouched (Decision 13)."
+    },
+    {
+      "id": "TS-1",
+      "criterion": "go test -race -p 1 ./... green inside the CI image with PG 14-19 fixtures, zero race reports",
+      "status": "passed",
+      "evidence": "exit 0, every package ok, grep -c 'DATA RACE' = 0 on both runs."
+    },
+    {
+      "id": "TS-2",
+      "criterion": "make lint (golangci-lint + gosec) and make vuln clean on the host",
+      "status": "passed",
+      "evidence": "0 issues / quiet / no vulnerabilities, all exit 0. Note findings[2]: two files are gofmt-dirty, but identically so on master, and the golangci-lint v2 config enables no formatters."
+    },
+    {
+      "id": "TS-3",
+      "criterion": "no existing test's expectations weakened: TestNew, TestView_VersionOK, Test_filterViews, Test_selectMenuStyle, Test_switchViewTo all carry new CORRECT numbers",
+      "status": "passed",
+      "evidence": "See testWeakeningAudit."
+    },
+    {
+      "id": "TS-4",
+      "criterion": "the archiver query executes on every version PG 14-19 and returns exactly 9 columns",
+      "status": "passed",
+      "evidence": "Test_StatArchiverQueries — six live subtests, all PASS, each asserting 9 named columns and exactly one row. No SKIP in the range."
+    },
+    {
+      "id": "TS-5",
+      "criterion": "the PG 19 wal query returns exactly 8 columns; PG 14-17 and PG 18 branches unchanged",
+      "status": "passed",
+      "evidence": "Test_SelectStatWALQuery (190000 -> 8 / {2,6}, 180000 -> 7 / {2,5}, 140000-170000 -> 11 / {2,9}), Test_SelectStatWALQuery_LegacyBranchesUntouched, Test_StatWALQueries live on six versions."
+    },
+    {
+      "id": "TS-6",
+      "criterion": "SelectStatArchiverQuery is version-independent and its unused parameter is named _",
+      "status": "passed",
+      "evidence": "internal/query/archiver.go: func SelectStatArchiverQuery(_ int) (string, int, [2]int). revive's unused-parameter rule is enabled and lint is clean."
+    },
+    {
+      "id": "TS-7",
+      "criterion": "the archiver view sets NotRecordable: false and needs no change in record/record.go",
+      "status": "passed",
+      "evidence": "The registration omits NotRecordable (zero value false) and TestNew_ArchiverView asserts False. git diff develop...HEAD contains no record/record.go. Confirmed by behaviour: archiver entries appear in a real recording (US-9)."
+    },
+    {
+      "id": "TS-8",
+      "criterion": "golden replay tests exist for archiver and for wal at PG 18 and PG 19, and fail if the layout changes",
+      "status": "passed",
+      "evidence": "See US-19."
+    },
+    {
+      "id": "TS-9",
+      "criterion": "column-name-driven assertions: tests reference columns by header name where the layout is pinned",
+      "status": "passed",
+      "evidence": "archiverColumns is a named list compared against the live field descriptions in Test_StatArchiverQueries and indexes the NULL-ness map in Test_StatArchiverQuery_NullsStayNull; Test_SelectStatWALQuery_PG19ColumnOrder asserts the alias order in the query text; the report goldens carry the rendered header line."
+    },
+    {
+      "id": "TS-10",
+      "criterion": "a test proves the archiver query succeeds under a pg_monitor-only role and fails without it, and that the verbose backlog aggregate returns a number under the same role",
+      "status": "passed",
+      "evidence": "See US-16 and US-17. The load-bearing part is assertRestrictedSession / its stat-package twin: each asserts NOT superuser, pg_monitor present, and membership exactly [pg_monitor] BEFORE the subject query, so deleting the SET ROLE turns the test red instead of leaving it silently passing as the fixture superuser."
+    },
+    {
+      "id": "TS-11",
+      "criterion": "all four stale comments about the old function's privileges are corrected",
+      "status": "passed",
+      "evidence": "internal/query/overview.go (now: pg_ls_archive_statusdir is superuser+pg_monitor, the predecessor was superuser-only), internal/stat/postgres.go (same, plus 'archive_mode=off is not an error'), internal/query/overview_test.go ('the fixtures role is postgres, a superuser'), internal/stat/postgres_test.go (same). All four read correctly in the diff; two new NotContains assertions keep pg_ls_dir from coming back."
+    }
+  ],
+  "standRun": {
+    "status": "not_run",
+    "address": "pgpro@10.128.28.194",
+    "reachability": "ICMP: 2/2 replies, 32 ms. TCP 22: open, SSH banner served. Authentication: rejected — 'Permission denied (publickey,password)' for every combination tried.",
+    "attempts": [
+      "default ssh (agent + ~/.ssh/config): denied; ssh-add -l reports no identities",
+      "explicit -i for each key on the host — aiw-stand-ed25519, postgrespro_id_ed25519, id_ed25519, id_rsa — with IdentitiesOnly: denied",
+      "users pgpro, lesovsky, root, ubuntu with the stand key: denied",
+      "~/.ssh/config and config_pgpro carry no entry for 10.128.28.194; no password recorded anywhere in the repo, the memory files or the feature docs"
+    ],
+    "blockedScenarios": [
+      "working archiving: archive_mode=on + archive_command='/bin/true' + 3x pg_switch_wal (US-3)",
+      "broken archiving: archive_command='/bin/false' + 3x pg_switch_wal (US-4)",
+      "archive_mode=off on a live screen with the subtitle on the cmdline (the TUI half of US-2)",
+      "navigation: the w cycle both ways and from a third screen, the two-item W menu, the rendered help page (US-5, US-6, live half of US-8)",
+      "the subtitle counted once per entry path, on each path separately (US-7) — the single check this task exists to prevent passing by inference",
+      "60-column terminal: the source column frozen (attribute check with capture-pane -e) and the rest reachable by horizontal scroll",
+      "privilege degradation on a terminal: the archiver screen showing the error text, no crash, retry next tick; wal A/B against the master binary (terminal half of US-12)",
+      "cost measurement under Decision 9's conditions: pg_monitor-only role, verbose on, concurrent pgcenter record, archive_mode=off, ~200000 dummy .ready files — query wall time, view-switch latency, verbose-panel A/B"
+    ],
+    "cleanup": "Nothing to clean: no session was ever established, no GUC changed, no file created, no tmux session started on the stand."
+  },
+  "decision9": {
+    "status": "not_applied",
+    "reason": "Decision 9's pre-agreed outcome is a function of three measured numbers (query wall time on ~200000 .ready files, view-switch latency, verbose-panel A/B cost against the master binary). None could be taken — the stand is unreachable and the CI fixtures cannot substitute: 200000 dummy .ready files would have to be created in a live cluster's archive_status directory under a pg_monitor-only role with a concurrent recorder, which is exactly the stand scenario. Choosing either branch — 'throttle' or 'acceptable, register the remainder' — without the numbers would be the shrug Decision 9 was written to forbid.",
+    "carryForward": "The measurement stays an open obligation of feature 017. It must be run on the next reachable stand BEFORE the merge, under the conditions fixed in Decision 9 (a superuser run measures the wrong baseline: for pg_monitor the change is zero->full, not 1x->2x)."
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "The manual stand gate could not be run: pgpro@10.128.28.194 rejects every available credential",
+      "expected": "ssh pgpro@10.128.28.194 succeeds, tmux drives the TUI, ten live criteria get captures and the cost measurement gets numbers",
+      "actual": "The host is up (ping 32 ms, TCP 22 open, SSH banner served) but authentication fails with 'Permission denied (publickey,password)' for all four local keys and four usernames. No password exists in the repo, the ssh configs, the memory notes or the feature docs, and the agent has no identities loaded.",
+      "reproduction": "ssh -o BatchMode=yes -o IdentitiesOnly=yes -i ~/.ssh/aiw-stand-ed25519 pgpro@10.128.28.194 hostname",
+      "owner": "not a task defect — the project owner must supply a reachable stand (or a key for this one)",
+      "impact": "US-3, US-4, US-5, US-6, US-7, US-12 and the narrow-terminal and cost checks have no evidence. The feature cannot be declared verified."
+    },
+    {
+      "severity": "minor",
+      "title": "go.mod still marks github.com/spf13/pflag as // indirect although a test now imports it directly",
+      "expected": "go.mod lists pflag in the direct require block, and the working tree stays clean after a build",
+      "actual": "cmd/report/report_test.go (task 4) imports github.com/spf13/pflag, but go.mod was not updated. Any build or test run with GOFLAGS=-mod=mod — including the documented docker invocation and this developer's local `make build` — rewrites go.mod, leaving ' M go.mod' in git status. It was already dirty when this QA session started.",
+      "reproduction": "git stash; make build; git status --short  ->  M go.mod (pflag moves out of the indirect block)",
+      "owner": "task 4 (report CLI -W string flag)",
+      "impact": "Cosmetic. A default (readonly) build, vet and test on the committed go.mod all succeed — verified in a clean worktree of HEAD — so CI does not break; the annotation is simply stale and makes every build dirty the tree."
+    },
+    {
+      "severity": "minor",
+      "title": "Two files are gofmt-dirty — pre-existing, not this feature's doing",
+      "expected": "gofmt -l . prints nothing",
+      "actual": "report/report.go (trailing whitespace on the blank line at :304) and internal/stat/procpidstat_test.go. Both are identically dirty in master and in develop, i.e. they predate feature 017; the feature's own change to report/report.go is one line in the describe map at :675.",
+      "reproduction": "git show master:report/report.go | gofmt -l /dev/stdin  ->  /dev/stdin",
+      "owner": "pre-existing repo hygiene, no task of this feature",
+      "impact": "None on the gate: the golangci-lint v2 config declares a formatters section with no linters enabled, so gofmt is not enforced and make lint stays green. Reported so 'lint clean' is not read as 'gofmt clean'."
+    }
+  ],
+  "deferredToPostDeploy": [
+    {
+      "criterion": "US-3 / US-4: live archiving behaviour with /bin/true and /bin/false",
+      "reason": "Requires a live cluster with archiving enabled; the CI fixtures run archive_mode=off by design and the image is deliberately frozen",
+      "verificationCondition": "A reachable stand with a writable $PGDATA and permission to restart the cluster",
+      "verificationSteps": "archive_mode=on + archive_command='/bin/true', restart, 3x pg_switch_wal, capture the archiver screen; then archive_command='/bin/false', reload, 3x pg_switch_wal, capture twice one interval apart; then archive_mode=off, restart, capture. Delete any dummy files before restoring archive_mode; reset every GUC and verify with SHOW."
+    },
+    {
+      "criterion": "US-5 / US-6 / US-7 / live half of US-8: navigation, the W menu, the once-per-path subtitle and the rendered help page",
+      "reason": "Requires a real terminal; unit tests reach the handler but not gocui's key delivery, and nothing asserts the cmdline occurrence count",
+      "verificationCondition": "tmux on the stand at fixed geometry (190x52)",
+      "verificationSteps": "send-keys the hotkey, wait one refresh interval, capture-pane -p. For the subtitle: enter archiver by 'w', capture, grep -c 'Show archiver statistics'; leave, enter through the W menu, capture, grep -c again. Both counts must be exactly 1."
+    },
+    {
+      "criterion": "60-column terminal: the source column stays frozen, the rest reachable by [ / ]",
+      "reason": "Terminal-only, and the freeze is a rendering attribute",
+      "verificationCondition": "A second tmux session at -x 60",
+      "verificationSteps": "capture-pane -p -e (not plain -p: without escapes a lost attribute is invisible), then scroll with [ / ] and confirm the remaining columns become reachable while source stays put."
+    },
+    {
+      "criterion": "Terminal half of US-12: the archiver screen under a role without pg_monitor",
+      "reason": "The query-level failure is tested; the rendering, the no-crash and the retry-next-tick are terminal behaviour, and the wal comparison needs the master binary side by side",
+      "verificationCondition": "Stand plus both binaries shipped under distinct names",
+      "verificationSteps": "Run each binary by absolute path under the privilege-less role, capture the archiver and wal screens, confirm the error text renders, pgcenter survives and retries, and classify any difference as feature-introduced or pre-existing."
+    },
+    {
+      "criterion": "Decision 9 cost measurement and its pre-agreed outcome",
+      "reason": "Needs ~200000 dummy .ready files in a live archive_status directory, a pg_monitor-only role, verbose mode and a concurrent pgcenter record",
+      "verificationCondition": "Stand with sudo access to the cluster's archive_status directory",
+      "verificationSteps": "archive_mode=off; create ~200000 empty NNNN.ready files (empty files only — 200000 real segments is ~3 TiB); measure (1) SELECT count(*) FILTER (WHERE name LIKE '%.ready') FROM pg_ls_archive_statusdir(), (2) the w view-switch latency with archiver open, (3) the verbose panel on an unrelated screen A/B against the master binary. Then apply Decision 9: bad numbers -> throttle via verboseCollectState + latencyGuardThreshold as its own decision; acceptable -> record the remainder for the tech-debt register. Delete the dummy files BEFORE restoring archive_mode."
+    }
+  ]
+}
