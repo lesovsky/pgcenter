@@ -41,17 +41,6 @@ Pre-existing, confirmed by A/B against a `master`-built binary — the feature's
 because WAL segment names differ only in their tail, so truncating from the right removes exactly the
 part that identifies the segment — the reason the column is on the screen at all.
 
-### [036] `go.mod` marks `spf13/pflag` as `// indirect` although a test imports it directly
-
-**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
-**Severity:** Trivial
-**Area:** `go.mod`, `cmd/report/report_test.go`
-
-The flag-definition test imports `github.com/spf13/pflag` directly, but the `require` line still
-carries `// indirect`. Nothing fails today — the default readonly module mode builds, tests and lints
-fine, and CI has no `go mod tidy -diff` gate — but any build with `-mod=mod` rewrites `go.mod` and
-dirties the working tree. Fix is one `go mod tidy` run at a moment when no parallel work holds the
-branch.
 
 ### [027] Messages printed after a dialog closes are never visible
 
@@ -352,6 +341,23 @@ third unsafe consumer alongside `diff`, so fixing `diff` alone would not close t
 ---
 
 ## Resolved Debt
+
+### [036] `go.mod` marks `spf13/pflag` as `// indirect` although a test imports it directly
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
+**Severity:** Trivial
+**Area:** `go.mod`, `cmd/report/report_test.go`
+
+The flag-definition test imports `github.com/spf13/pflag` directly, but the `require` line still
+carries `// indirect`. Nothing fails today — the default readonly module mode builds, tests and lints
+fine, and CI has no `go mod tidy -diff` gate — but any build with `-mod=mod` rewrites `go.mod` and
+dirties the working tree. Fix is one `go mod tidy` run at a moment when no parallel work holds the
+branch.
+
+**Resolved:** 2026-08-06, during finalization of 017-feat-wal-archiver — `go mod tidy` moved
+`github.com/spf13/pflag` into the direct requires, matching the direct import in
+`cmd/report/report_test.go`. One line; build and the report tests verified after.
+
 
 ### [025] `PGresult.sort` does not bounds-check its sort key
 
