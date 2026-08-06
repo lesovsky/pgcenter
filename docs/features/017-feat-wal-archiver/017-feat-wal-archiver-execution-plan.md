@@ -16,7 +16,7 @@
 
 - Full suite: CI image `lesovsky/pgcenter-testing:0.0.11` with PG 14–19 fixtures.
 - Host runs must be `-run` scoped: `./top/...` and `./record/...` panic without PostgreSQL.
-- Build: `go build ./cmd`. Lint needs `export PATH="$PATH:$(go env GOPATH)/bin"`.
+- Build: `make build` (note: `go build ./cmd` fails — Go refuses to write an executable named `cmd` next to the `cmd/` directory; use `make build` or `go build -o /dev/null ./cmd` as a compile check). Lint needs `export PATH="$PATH:$(go env GOPATH)/bin"`.
 
 ## Review rule
 

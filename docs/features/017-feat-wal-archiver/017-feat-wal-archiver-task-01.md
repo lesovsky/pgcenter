@@ -304,7 +304,7 @@ Two cautions before running any of them:
   already carry the mutated grants. Run `DROP ROLE IF EXISTS <role>` on every cluster under test, or
   restart the container, before trusting the result in either direction.
 - Step 5 — production-build guard: `grep -n '"testing"' internal/postgres/testing.go` finds nothing, and
-  `go build ./cmd` succeeds (the main package is `./cmd` — the repository root holds no Go files, so
+  `make build` (note: `go build ./cmd` fails — Go refuses to write an executable named `cmd` next to the `cmd/` directory; use `make build` or `go build -o /dev/null ./cmd` as a compile check) succeeds (the main package is `./cmd` — the repository root holds no Go files, so
   `go build .` / `go run .` do not work here).
 - Step 6 — `make lint` and `make vuln` on the host: clean, with no revive complaint about the unused
   selector parameter.
@@ -442,7 +442,7 @@ Two cautions before running any of them:
 - This task does **not** add the view, so nothing renders yet. Verification is entirely
   `go test ./internal/query/... ./internal/postgres/...` inside the CI image — resist the urge to wire
   `view.go` "just to see it", that is Task 5 and would create a wave conflict. If you want a build
-  sanity check, it is `go build ./cmd`: the repository root contains no Go files and the main package
+  sanity check, it is `make build` (note: `go build ./cmd` fails — Go refuses to write an executable named `cmd` next to the `cmd/` directory; use `make build` or `go build -o /dev/null ./cmd` as a compile check): the repository root contains no Go files and the main package
   lives in `./cmd`, so `go build .` and `go run .` fail with "no Go files".
 
 ## Reviewers

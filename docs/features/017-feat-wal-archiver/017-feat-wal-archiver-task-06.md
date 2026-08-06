@@ -237,7 +237,7 @@ test observed failing, and the mutation reverted.
 - [ ] The host-side filtered run
       `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate'`
       passes
-- [ ] `go build ./cmd` (that is the main package — `cmd/pgcenter.go`; the Makefile builds it as
+- [ ] `make build` (note: `go build ./cmd` fails — Go refuses to write an executable named `cmd` next to the `cmd/` directory; use `make build` or `go build -o /dev/null ./cmd` as a compile check) (that is the main package — `cmd/pgcenter.go`; the Makefile builds it as
       `go build … -o bin/pgcenter ./cmd`) and `go vet ./top/...` are clean
 - [ ] `make lint` reports no new findings in `top/`
 
@@ -324,7 +324,7 @@ host, one full run in the image.
    `./internal/view/...` and `./record/...` ride along unchanged by this task — a failure there means
    accidental coupling was introduced. (The `GOROOT` path tracks the local toolchain; check
    `go env GOROOT` if the image errors out on it.)
-4. Run `go build ./cmd` — exits 0. (`./cmd` is the main package, `cmd/pgcenter.go`; there is no
+4. Run `make build` (note: `go build ./cmd` fails — Go refuses to write an executable named `cmd` next to the `cmd/` directory; use `make build` or `go build -o /dev/null ./cmd` as a compile check) — exits 0. (`./cmd` is the main package, `cmd/pgcenter.go`; there is no
    `./cmd/pgcenter` package.)
 5. Run `go vet ./top/...` and `make lint` — no new findings. `golangci-lint` lives in
    `$(go env GOPATH)/bin`, which is not on the default PATH; without it `make lint` exits 127.
