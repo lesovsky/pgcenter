@@ -1,0 +1,70 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "The five new/changed tests in cmd/report/report_test.go are honest work: every assertion is non-vacuous, every one can fail for the right reason, the whitelist table carries per-row 'why' text into its failure message, error-message contracts are pinned with assert.EqualError rather than bare assert.Error, and the local pflag.FlagSet mirror correctly avoids mutating the package-level opts (verified: -shuffle=on x3, -race, and each new test run in isolation all pass). All six TDD Anchor items are present and match the anchor's wording. The problem is not test quality but perimeter: I ran six additional mutations against the finished code and four stayed GREEN. Two are major. (1) Setting NoOptDefVal=\"w\" on the -W flag - the shim Decision 7 explicitly rejected - leaves the whole suite green while destroying both documented failure shapes and making 'report -W a' silently produce the wal report (confirmed by running the real binary under the mutation). Test_walFlagDefinition does not assert NoOptDefVal, so the property that makes the pflag mirror faithful is exactly the one property the mirror's guard does not check. (2) Test_selectReport_WALPrecedence pins only that -A beats -W; moving the showWAL arm up above showDatabases/showTables/showIndexes/showFunctions keeps the suite green, so half of AC 5 ('the arm sits between showFunctions and showBgwriter') is unpinned. Four minors follow, all cheap to close. The three mutations named in the Acceptance Criteria were re-confirmed as taken facts and were not re-run.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "cmd/report/report_test.go:119-126 (Test_walFlagDefinition)",
+      "issue": "NoOptDefVal is not asserted, so the exact shim Decision 7 rejected is invisible to the suite. VERIFIED MUTATION (green): adding `CommandDefinition.Flags().Lookup(\"wal\").NoOptDefVal = \"w\"` to init() leaves all 10 tests passing, while the real CLI changes behaviour in both documented shapes - `report -W -f x.tar` no longer prints 'report type is not specified, quit' (it proceeds to open the file), and `report -W a -f x.tar` silently resolves to the WAL report with 'a' dropped as a positional arg, i.e. exactly the 'silently fails' outcome the roadmap owner rejected the shim for. This is also the load-bearing gap in the mirror contract: Test_walFlagPflagFailureShapes asserts pflag's 'flag needs an argument' message against a locally built FlagSet, and its comment claims Test_walFlagDefinition keeps the mirror honest - but whether the flag demands an argument at all is governed by NoOptDefVal, the one field the guard does not read. Type/shorthand/DefValue/Usage can all still match while parsing behaviour diverges.",
+      "recommendation": "Add one line to Test_walFlagDefinition: `assert.Equal(t, \"\", f.NoOptDefVal, \"-W must demand an argument; a non-empty NoOptDefVal is the rejected shim from Decision 7 and makes '-W a' silently mean 'wal'\")`. That single assertion turns the mutation red and makes the mirror's honesty claim true. Optionally also assert `assert.False(t, f.Changed)` is not needed - NoOptDefVal is the whole gap.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "cmd/report/report_test.go:112-114 (Test_selectReport_WALPrecedence)",
+      "issue": "The test pins one direction only - that showActivity outranks showWAL - so it survives any repositioning of the arm that keeps it below the showActivity case. VERIFIED MUTATION (green): relocating the whole `case opts.showWAL != \"\":` arm to directly after `case opts.showReplication:` (above showDatabases, showTables, showIndexes and showFunctions) keeps the entire suite passing, yet `report -F -W a` changes from 'functions' to 'archiver' and `report -D g -W a` from 'databases_general' to 'archiver'. AC 5 has two clauses - '-A still beats -W' AND 'the showWAL arm sits between showFunctions and showBgwriter' - and only the first is tested. Test_selectReport cannot help: every row sets exactly one flag, so the first-match-wins ordering is never exercised there. Per patterns.md the mutation a precedence test must fail on is 'the arm moved', and this one does not fail on 3 of the 4 directions it could move.",
+      "recommendation": "Grow Test_selectReport_WALPrecedence into a small table that pins both boundaries of the arm's slot: `{opts: options{showActivity: true, showWAL: \"a\"}, want: \"activity\"}` (keep - upper bound vs the flag chain head), `{opts: options{showFunctions: true, showWAL: \"a\"}, want: \"functions\"}` (upper bound - the arm may not rise above showFunctions), `{opts: options{showWAL: \"a\", showBgwriter: true}, want: \"archiver\"}` (lower bound - the arm may not sink below showBgwriter), and `{opts: options{showDatabases: \"g\", showWAL: \"a\"}, want: \"databases_general\"}`. Keep the existing per-assert message style so a failure names which boundary moved.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "cmd/report/report_test.go:138 and :148-151 (Test_walFlagPflagFailureShapes)",
+      "issue": "The `-f` half of the mirror is inert and is presented as load-bearing. VERIFIED MUTATION (green): deleting the `fs.StringP(\"file\", \"f\", \"pgcenter.stat.tar\", ...)` line entirely leaves the test passing, because pflag makes a string flag consume the next token unconditionally - `*wal == \"-f\"` would hold even if -f were never defined. So the second failure shape demonstrates 'the -W value is the literal -f' but does NOT demonstrate the thing the comment claims, namely that pflag consumed -f as a value INSTEAD of parsing it as the file flag. Separately, Test_walFlagDefinition guards only the 'wal' flag, so nothing keeps the -f half of the mirror in sync with the real definition at report.go:79 - the honesty claim in the comment covers half the mirror.",
+      "recommendation": "Make the -f line load-bearing by binding and asserting it: `file := fs.StringP(\"file\", \"f\", \"pgcenter.stat.tar\", \"read stats from file\")`, then after the successful Parse add `assert.Equal(t, \"pgcenter.stat.tar\", *file, \"-f was swallowed as the value of -W, so the file flag keeps its default\")` and `assert.Equal(t, []string{\"dump.tar\"}, fs.Args(), \"dump.tar falls through as a positional argument - the input file is never set, which is why no 'file not found' masks the real cause\")`. Also extend Test_walFlagDefinition with a Lookup(\"file\") block asserting Value.Type()==\"string\", Shorthand==\"f\", DefValue==\"pgcenter.stat.tar\", so both halves of the mirror are guarded as the comment promises.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "cmd/report/report_test.go:120-122 (Test_walFlagDefinition)",
+      "issue": "`assert.NotNil(t, f)` records a failure but does not stop the test, so a nil Lookup result falls straight into `f.Value.Type()`. VERIFIED MUTATION: renaming the flag from \"wal\" to \"wal-report\" panics with a nil pointer dereference at report_test.go:122, and the panic aborts the whole test binary - Test_walFlagPflagFailureShapes, Test_setReportInterval, Test_parseTimestamp, Test_parseTimepart and Test_parseFilterString never ran. The suite still goes red (correctly), but a single flag rename hides the results of five unrelated tests and buries the real assertion output under a stack trace.",
+      "recommendation": "Halt on the nil: either import `github.com/stretchr/testify/require` and use `require.NotNil(t, f, \"flag 'wal' must be registered on CommandDefinition\")`, or keep the assert-only import style of the file with `if f == nil { t.Fatal(\"flag 'wal' is not registered on CommandDefinition\") }`. Everything after it stays unchanged.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "cmd/report/report_test.go:85-97 (Test_selectReport_WALWhitelistIsClosed table)",
+      "issue": "AC 3 forbids three kinds of normalisation - lowercasing, trimming, prefix matching - and the table pins two of them. The 'W' row kills a strings.ToLower widening and the 'wal'/'archiver' rows kill a prefix/HasPrefix widening, but no row is whitespace-padded. VERIFIED MUTATION (green): changing the inner switch to `switch strings.TrimSpace(opts.showWAL)` keeps the entire suite passing, because none of the eight values changes under trimming. A trimming widening is the most likely of the three to be added in good faith by a later maintainer ('be forgiving about shell quoting'), and it is precisely the class Decision 17 calls 'a new way to select a report the operator did not ask for'.",
+      "recommendation": "Add two rows to the existing table: `{value: \" w\", why: \"leading whitespace - no trimming is done on purpose; a trim would make a quoted ' w' select the wal report\"}` and `{value: \"a \", why: \"trailing whitespace - same widening from the other side\"}`. No other change; the loop and assert message already handle them.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "cmd/report/report.go:118 (`ReportType: r`) / cmd/report/report_test.go:12-35 (Test_options_validate)",
+      "issue": "Nothing asserts that selectReport's carefully-whitelisted result actually reaches report.Config.ReportType. VERIFIED MUTATION (green): hardcoding `ReportType: \"wal\"` in validate() leaves the suite passing. The cause is pre-existing and not this task's doing - Test_options_validate's positive branch does `assert.NotNil(t, got)` on a non-pointer report.Config (vacuously true for any struct value) and its declared `want report.Config` field is never read, so the same blind spot covers -J, -X and -P too. It matters here because the task's Dependencies section explicitly anticipates the wrong move it would hide: a temporary 'archiver -> wal' alias added in validate() while Task 5 is unlanded would pass every test in this diff, including the whole whitelist suite, and would ship exactly the silently-wrong-report Decision 17 exists to prevent. Note the TDD Anchor forbids restructuring the Test_options_validate table, so the fix must live outside it.",
+      "recommendation": "Add a small standalone test (no table restructure, per the anchor): `func Test_options_validate_WALReportTypeReachesConfig(t *testing.T)` asserting `cfg, err := options{showWAL: \"a\"}.validate(); assert.NoError(t, err); assert.Equal(t, \"archiver\", cfg.ReportType, \"the whitelisted value must reach report.Config unchanged - no aliasing in validate()\")`, and the same for `\"w\"` -> `\"wal\"`. Two calls, four assertions, and the aliasing mutation turns red.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 12,
+      "passed": 12,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 12,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}
