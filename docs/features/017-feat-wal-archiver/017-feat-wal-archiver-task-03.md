@@ -115,16 +115,22 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
 - [ ] **Mutation:** revert the `FROM` clause to `pg_ls_dir('pg_wal/archive_status') AS name` →
       `Test_ArchivingBacklogQuery_PgMonitorRole` and `Test_collectOverviewStat_PgMonitorRole` must go
       RED. If they stay green, the tests are not running under the restricted role.
-- [ ] **Mutation:** delete the `SET ROLE` statement from `Test_ArchivingBacklogQuery_PgMonitorRole`
-      (leaving the session as the fixture superuser) → the test must go RED on its own
-      `current_user` / `rolsuper` guard. A test that would still pass here is a vacuous gate.
-- [ ] **Mutation (role-state-sensitive — read the note below):** remove the `GRANT pg_monitor` from
-      the role setup → `Test_ArchivingBacklogQuery_PgMonitorRole` must go RED with a permission error.
-      Counts only when run against a cluster where the role does not already hold `pg_monitor`.
-- [ ] **Mutation (role-state-sensitive — read the note below, and it poisons the cluster):** add
-      `GRANT pg_monitor` to the deny role in `Test_ArchivingBacklogQuery_NoPrivilegeRole` → that test
-      must go RED (it asserts a permission error). Counts only on a cluster where the deny role does
-      not already hold the grant, and the cluster must be discarded afterwards.
+> **All three mutations below act on THIS task's call sites, never on the helper.** `SET ROLE` and the
+> grant now live inside `postgres.SetupTestRole`, which Task 01 owns and this task must not edit — so
+> a mutation phrased as "delete the SET ROLE line" or "remove the GRANT" would send the executor into
+> a file its own acceptance criteria forbid touching. Mutate the call instead.
+
+- [ ] **Mutation:** in `Test_ArchivingBacklogQuery_PgMonitorRole`, skip the `SetupTestRole` call and
+      run the query on the plain fixture connection (session stays the superuser) → the test must go
+      RED on its own `current_user` / `rolsuper` guard. A test that still passes here is a vacuous gate.
+- [ ] **Mutation (role-state-sensitive — read the note below):** flip the call site to
+      `SetupTestRole(db, <monitor role>, false)` so the role is created without `pg_monitor` →
+      `Test_ArchivingBacklogQuery_PgMonitorRole` must go RED with a permission error. Counts only on a
+      cluster where that role does not already hold `pg_monitor` from an earlier run.
+- [ ] **Mutation (role-state-sensitive — read the note below, and it poisons the cluster):** flip the
+      deny call site to `SetupTestRole(db, <deny role>, true)` → `…_NoPrivilegeRole` must go RED (it
+      asserts a permission error). Counts only on a cluster where the deny role does not already hold
+      the grant, and the cluster must be discarded afterwards.
 - [ ] All role setup goes through the shared helper in `internal/postgres/testing.go` (Decision 19):
       this task adds **no** role helper of its own and no inline `CREATE ROLE`/`GRANT` SQL in either
       package, and `internal/postgres/testing.go` is not modified here. Role creation is therefore
@@ -138,9 +144,12 @@ Green alone is not evidence (patterns.md, "Extract the decision out of the unrea
       claims the fixtures role holds `pg_monitor`.
 - [ ] `collectOverviewStat`'s error-swallow + `ArchivingBacklogValid` degradation path is
       byte-identical apart from its comment; `top/stat.go` is not touched.
-- [ ] A cluster whose `archive_status` directory is absent now reports `0 B` instead of `n/a`
-      (`pg_ls_archive_statusdir()` is `missing_ok=true`). This is accepted by Decision 11 — it must
-      **not** be "fixed", worked around, or guarded against in this task.
+- [ ] A cluster whose `archive_status` directory is absent now reports a zero backlog instead of
+      `n/a` (`pg_ls_archive_statusdir()` is `missing_ok=true`). Note the rendering: the panel prints a
+      bare `0`, not `0 B` — a check written against the string `0 B` would report a false failure.
+      This is accepted by Decision 11 and must **not** be "fixed", worked around, or guarded against
+      here. Not gated by a test: reproducing it means moving the directory aside on a live cluster,
+      which belongs to the stand run (Task 10), not to this task.
 - [ ] `go test ./internal/query/... ./internal/stat/...` passes inside the CI image; `make lint` and
       `make vuln` are clean on the host. (Those two packages are not host-runnable — on a machine
       without the fixture clusters `./internal/stat/...` panics rather than skipping.)
@@ -213,8 +222,12 @@ tests that touch no cluster; `make lint` and `make vuln` are the genuinely host-
   comment mutations first; the two **role** mutations last, each on clean role state (dropped role or
   fresh containers), then rebuild the containers — see the note in Acceptance Criteria for why a
   reverted role mutation does not restore the cluster.
-- Grep the tree for the stale claims — no hit may remain:
-  `grep -rn "pg_ls_dir" internal/` and `grep -rn "has pg_monitor" internal/`.
+- Grep the tree for the stale CLAIMS, not for the string itself. `pg_ls_dir` legitimately survives in
+  the new doc comment that explains what was wrong with it, so a zero-hit rule is unsatisfiable — the
+  same defect that was fixed in task 04's grep-count criterion. Check instead that no remaining
+  occurrence still asserts the old privilege requirement:
+  `grep -rn "pg_ls_dir" internal/` must show only the explanatory comment, and
+  `grep -rn "has pg_monitor" internal/` must return nothing.
 - `make lint` and `make vuln` on the host.
 
 ## Details
@@ -255,7 +268,10 @@ and `internal/stat`. This task defines **no** helper of its own — not in `inte
 `internal/stat`, not "overview-specific", not a copy under a different name. Read
 `internal/postgres/testing.go` for the helper's actual signature and call it. If it is not there when
 you start, the dependency has not landed and this task is not startable yet — say so rather than
-writing a second helper. The SQL role names come from the helper too; do not invent parallel ones.
+writing a second helper. **Role names are this task's to choose**, since the helper takes the name as
+an argument — pick names distinct from task 01's (`pgcenter_test_archiver_*`), e.g.
+`pgcenter_test_backlog_monitor` / `pgcenter_test_backlog_norole`, following the existing
+`pgcenter_test_*` convention. Sharing task 01's roles would couple the two tasks' cluster state.
 
 **Edge cases:**
 

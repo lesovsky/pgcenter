@@ -1,90 +1,65 @@
 {
   "validator": "dev-reality-checker",
   "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
-  "tasks_checked": ["04", "05", "06"],
-  "status": "changes_required",
+  "tasks_checked": ["02", "04", "05", "08"],
+  "status": "approved",
+  "round": 2,
+  "note": "Round-2 re-validation of revised tasks. All round-1 criticals and majors in scope are resolved and re-verified against the tree (see 'resolved' below). Remaining findings are minor: two are round-1 minors that the revision did not pick up, two are new imprecisions introduced or left by the revision.",
+  "resolved": [
+    "task 02 — the Task 05 handoff is now coherent: Task 02 says Task 05 OWNS the TestViews_Configure wal assertion, Task 05 step 4b adds it. Verified `grep -in 'wal|archiver' internal/view/view_test.go` returns nothing, so the gap is real and is closed exactly once, by Task 05.",
+    "task 04 — the impossible 'grep returns four hits' AC is gone. The containment form is satisfiable: today `grep -rn showWAL --include=*.go .` returns exactly the four named sites (cmd/report/report.go:25, :70, :151; cmd/report/report_test.go:46) and nothing outside cmd/report/; after the change all hits stay inside those two files. All four anchors verified exact, as are :157-163 (the showStatIO shape to copy), :132 (selectReport), :91/:95 (validate and the literal), report_test.go :34-73 / :46 / :65-66 / :10-32.",
+    "task 04 — `go run ./cmd report -W` is the working form: verified today it reaches report.RunMain (prints 'open pgcenter.stat.tar: no such file or directory' under the current bool flag). The repository root has no Go files, so `go run .` would fail.",
+    "task 04 — the gofmt-churn hint and the Test_options_validate message-field instruction are both corrected and now match the tree (the options struct already carries string fields; the validate table has only valid/opts/want).",
+    "task 05 (a) — the NotRecordable mutation claim is mechanically correct. record/record.go filterViews: the NotRecordable branch and the version-gate branch both `delete(views, k)` and `filtered++`, so on the four <=PG13 rows swapping the reason leaves wantN and wantV identical (green), while the three >=PG14 rows move wantV -1 / wantN +1 (red). Current tree values match every before-number the task quotes: wantV 27/18/24 and wantN 8/11/13/13.",
+    "task 05 (b) — the host commands are correctly scoped. `go test ./internal/view/...` and `go test ./record/... -run Test_filterViews` both run green on this host (executed); the frontmatter verify:, the AC and the Verification Steps all carry the scoped form plus the Test_tarRecorder panic caveat.",
+    "task 05 (c) — the TestViews_Configure arms accommodate the assertions as described. `case 190000:` is at view_test.go:183 and `case 140000:` at :193, each already a flat list of assert.Equal calls on views[...] after `views.Configure(opts)`; adding wal/archiver asserts needs no restructuring. Configure does not filter by version, so views['wal'] and views['archiver'] exist in both arms. Constants and values are consistent across tasks: PgStatWALPG14/11/{2,9} is what SelectStatWALQuery returns today; PgStatWALPG19/8/{2,6} is exactly what Task 02 adds; PgStatArchiverDefault/9/{0,0} is exactly what Task 01 defines. The `case \"wal\":` delegation is at view.go:389-391 and the map-key switch at :372-373, as cited.",
+    "task 08 — dropping A5 is correct and the argument checks out line-for-line: processData builds `views := view.Views{config.ReportType: v}` at report/report.go:282-284, Views.Configure switches on the map key at internal/view/view.go:372-373, newApp returns a zero-value view.View without error at report/report.go:83-85, and formatStatSample REPLACES view.ColsWidth/Cols wholesale (report.go:528-538) so the nil maps of a zero-value View never panic. PGresult.sort returns early / is stable on a single row, so OrderKey/OrderDesc/UniqueKey really are inert. Removing the registry entry would indeed leave the output byte-identical.",
+    "task 08 — B4 can genuinely fire: with source='Archiver', ready/archived/failed='0', four NULL cells and stats_age='02:00:00', strings.Fields of the ANSI-stripped data line yields exactly 5 tokens; replacing the four NULLs with '0' yields 9. printStatSample prints the 'ts, rate: ...' header on its own line (report.go:607-613), so the data row is never mixed into the count.",
+    "task 08 — B5 can genuinely fire: readTar only emits a sample when both meta and stat entries are present, so a meta+sysinfo-only tar prints nothing; adding the two archiver.* ticks yields one printed row (first sample discarded, Decision 12), making the buffer non-empty.",
+    "task 08 — the unfalsifiable assertions are gone and correctly justified. doReport really does end in an unconditional `return nil` after wg.Wait() (report/report.go:109-151, return at :151) and prints processData's error with fmt.Println, not to app.writer. naLiteral='n/a' is at top/stat.go:430 in package top and appears nowhere in report/, so the NotContains would have been vacuous.",
+    "task 08 — the markdown links now resolve from the task file's own directory: ../../decisions-log.md -> docs/decisions-log.md and ../../../<path> -> repo root all exist (checked on disk). The bgwriter anchors (:141-151 meta, :155-161 mkRow, :188-202 tar, :204-216 drive, :218-228 invariants, :230-237 -update) and report_test.go:24 / :73-77 are all exact.",
+    "task 08 — the A1-A4 mutations were re-checked against the diff/render code and each does redden its named subcase: A1 turns archived into the delta 3, A2/A3 push buffers_full out of the diffed range on pg19, A4 pulls the pg18 stats_age string into DiffIntvl{2,9} so diffPair -> ParseInt fails and the buffer stays empty (assert.NotEmpty fails). Ncols on the view is not consulted by diff(), which loops on curr.Ncols, so none of these panic instead of failing cleanly."
+  ],
   "findings": [
     {
-      "severity": "critical",
-      "category": "feasibility",
-      "task": "04",
-      "issue": "Acceptance Criterion 'Exactly the four known showWAL sites changed; `grep -rn showWAL --include=*.go .` returns four hits and no more' cannot be satisfied after the task is implemented. Four hits is the CURRENT state (verified: cmd/report/report.go:25,70,151 and cmd/report/report_test.go:46). After the change production grows to four lines in report.go alone (field, flag, `case opts.showWAL != \"\":`, `switch opts.showWAL`), and the mandated TDD Anchor adds ~12 more test references (2 rows in Test_selectReport, 8 rows in Test_selectReport_WALWhitelistIsClosed, 1 in Test_selectReport_WALPrecedence, 1 in Test_options_validate). The grep will return ~16. The Verification Steps hedge this ('count *sites*'), but the AC checkbox is unconditional — an executor checking it literally is pushed toward deleting the very whitelist rows Decision 17 exists to protect.",
-      "fix": "Reword the AC to what is actually invariant: 'no production file outside cmd/report/report.go mentions showWAL, and cmd/report/report.go has exactly the three edited sites (field, flag registration, selectReport arm)'. Drop the numeric grep count, or scope it to `grep -rn showWAL --include=*.go . | grep -v _test.go`."
+      "severity": "minor",
+      "category": "hints",
+      "task": "02",
+      "issue": "Round-1 minor not picked up by the revision: Details still says '`internal/query/wal.go` (33 lines today)'. The file is 32 lines (`wc -l internal/query/wal.go`). Every other anchor in Task 02 re-verified exact this round: PgStatWALPG14 :5-11, PgStatWALDefault :15-21, SelectStatWALQuery :25-32, wal_test.go 56 lines with Test_SelectStatWALQuery :10-31 and the 190000 row at :21 reading `{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}}`, Test_StatWALQueries :34-56 with the version list at :35, SelectStatBgwriterQuery bgwriter.go:41-52, PostgresV19 query.go:22, view.go `case \"wal\":` :389-391.",
+      "fix": "Change '33 lines today' to '32 lines today', or drop the count."
     },
     {
-      "severity": "critical",
-      "category": "feasibility",
-      "task": "06",
-      "issue": "The `verify:` frontmatter ('bash — go test ./top/... (runs without PostgreSQL)'), Acceptance Criterion '`go test ./top/...` passes' and Verification Step 1 all assert that the top package tests pass on a host without PostgreSQL. They do not. Verified by running it on a clean tree: Test_getQueryReport (top/report_test.go:12-14) fails on a refused connection and then PANICS with a nil-pointer dereference in internal/postgres.(*DB).QueryRow (internal/postgres/postgres.go:125), which aborts the whole test binary and exits FAIL. The tests this task cares about (Test_switchViewTo, Test_statioNextView, Test_selectMenuStyle, the three help tests) do all run and pass BEFORE the panic, but the prescribed command can never report success — an automated wave gate running the `verify:` command will read the task as failed forever.",
-      "fix": "Change the verify command and the AC to a filtered run that genuinely passes on the host, e.g. `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_statioNextView|Test_selectMenuStyle|Test_helpTemplate'` (confirmed green), and state explicitly that the unfiltered `go test ./top/...` requires the CI image lesovsky/pgcenter-testing:0.0.11 — the same caveat Task 05 already carries for `make test`."
-    },
-    {
-      "severity": "critical",
-      "category": "tdd",
-      "task": "06",
-      "issue": "The claim 'menuSelect cannot be unit-tested. Every branch ends in an unconditional menuClose(g, v), which calls g.DeleteView/g.SetCurrentView on a *gocui.Gui that only gocui.NewGui can produce' is FALSE — verified empirically against the existing menuStatIO branch. A zero-value &gocui.Gui{} is enough: gocui@v0.5.0 Gui.SetView (gui.go:130) builds a real *View with real dimensions without touching any terminal backend, so v.SetCursor(0,1) works and both cursor branches are reachable; DeleteView (gui.go:219) and SetCurrentView just scan a slice and return ErrUnknownView, they do not panic. A throwaway probe drove menuSelect(app)(app.ui, mv) for cy=0 and cy=1 and observed app.config.view.Name become 'stat_io' / 'stat_io_time', the correct view arriving on viewCh, and app.config.menu reset to menuNone — menuClose merely returns a benign 'unknown view' error the test asserts on. The pause_test.go:552-577 comment the task cites says only that a NIL Gui panics; it never considered the zero value, which top/ui_test.go:417 already uses (`layout(&app{config: c, ui: &gocui.Gui{}})`). Consequence: the W-menu path — one of the two user-facing halves of this task — is left with zero automated coverage on a false premise, and the task's own hint ('Before assuming anything in top/ is untested, grep top/*_test.go') is exactly the discipline it skips.",
-      "fix": "Delete the 'menuSelect cannot be unit-tested' edge case and add a real test to the TDD Anchor: top/menu_test.go::Test_menuSelect_WAL — build app{config: newConfig(), ui: &gocui.Gui{}}, set app.config.menu = selectMenuStyle(menuWAL), create the menu view with app.ui.SetView(\"menu\", 0, 5, 72, 6+len(items)), SetCursor(0, cy) for cy in {0,1}, read viewCh in a goroutine, call menuSelect(app)(app.ui, mv) and assert app.config.view.Name is 'wal' / 'archiver'. Add the corresponding mutation (swap the two cursor arms) to the Acceptance Criteria. Do not restore the forbidden pattern from pause_test.go — this test observes the real config mutation, so it can fail."
-    },
-    {
-      "severity": "critical",
-      "category": "tdd",
-      "task": "06",
-      "issue": "The companion claim '`keybindings()` cannot be unit-tested either, for the same reason (it needs a live *gocui.Gui). The W-is-free claim is a static one: grep the table for W before and after' is also FALSE. Verified: keybindings(app) with app.ui = &gocui.Gui{} returns nil and sets InputEsc — gocui.SetKeybinding (gui.go:249) only appends to a slice. Registration is assertable through the exported DeleteKeybinding (gui.go:262), which returns nil for a registered binding and 'keybinding not found' otherwise. A probe confirmed today's state: 'J' deletes once then reports not found (registered exactly once), and 'W' reports not found (free). This turns the task's central 'W is free and claimed exactly once' assertion from a grep-and-trust into a regression guard that survives future edits to the keys table.",
-      "fix": "Replace the 'cannot be unit-tested' edge case with top/keybindings_test.go::Test_keybindings_WAL: assert.NoError(keybindings(&app{config: newConfig(), ui: &gocui.Gui{}})), then assert.NoError on the first DeleteKeybinding(\"sysstat\", 'W', gocui.ModNone) and assert.Error on the second (registered exactly once). Add the mutation 'remove the W row -> the test goes red' to the Acceptance Criteria."
-    },
-    {
-      "severity": "major",
-      "category": "feasibility",
-      "task": "05",
-      "issue": "Step 6, the Acceptance Criterion '`go test ./internal/view/... ./record/...` passes on the host (no PostgreSQL needed for the count tests)' and the Verification Step that repeats it are wrong. Verified on a clean tree: internal/view passes, but the record package panics in Test_tarRecorder (record/recorder_test.go:37 -> internal/stat.GetPostgresProperties -> internal/postgres.(*DB).QueryRow, postgres.go:125) and the binary exits FAIL. The task's own guidance compounds this — it says 'the rest of the record package skips on a missing fixture', while the real behaviour is a panic that aborts the run. (Test_filterViews itself does run and pass before the panic, so the number can still be observed; only the prescribed pass/fail gate is unusable. patterns.md:154 is more accurate: 'skips/fails on a missing PG fixture'.)",
-      "fix": "Change the AC and Verification Step to `go test ./internal/view/...` plus `go test ./record/ -run 'Test_filterViews|TestFilterViews'` — both confirmed green on the host — and replace 'skips on a missing fixture' with 'panics and aborts the binary on a missing fixture, so read the Test_filterViews result before the panic, not the package exit code'."
-    },
-    {
-      "severity": "major",
-      "category": "tdd",
-      "task": "05",
-      "issue": "The mutation expectation 'Set `NotRecordable: true` -> Test_filterViews must go red on every row (the view is dropped before the version gate)' is arithmetically wrong. On the four <= PG13 rows the archiver view is dropped either way — by NotRecordable instead of by the version gate — so wantN and wantV are identical under the mutation and those rows stay GREEN. The mutation reddens only the three >= PG14 rows ({190000,\"public\"}, {140000,\"\"}, {140000,\"public\"}), where wantV drops back from 28/19/25 to 27/18/24. Stating 'every row' invites the executor to conclude the mutation did not take effect and go hunting, or to 'strengthen' the <= PG13 rows to compensate.",
-      "fix": "Reword to: 'Set NotRecordable: true -> Test_filterViews goes red on the three >= PG14 rows only; the four <= PG13 rows stay green because the view is dropped there either way. That asymmetry is the point — it is what distinguishes the NotRecordable gate from the version gate.'"
-    },
-    {
-      "severity": "major",
-      "category": "missing_file",
-      "task": "06",
-      "issue": "Acceptance Criterion and Verification Step 3 prescribe `go build ./cmd/pgcenter`. There is no such directory — `go build ./cmd/pgcenter` fails with 'stat .../cmd/pgcenter: directory not found'. The main package lives in ./cmd (cmd/pgcenter.go, cmd/help.go); the Makefile builds it as `go build ... -o bin/pgcenter ./cmd` (Makefile:40).",
-      "fix": "Replace `go build ./cmd/pgcenter` with `go build ./cmd` (or `make build`) in both the Acceptance Criteria and Verification Step 3."
-    },
-    {
-      "severity": "major",
+      "severity": "minor",
       "category": "missing_file",
       "task": "04",
-      "issue": "The 'Sanity by hand' verification step prescribes `go run . report -W 2>&1` and `go run . report -W -f /nonexistent.tar 2>&1`. Both fail before reaching the flag parser: the repository root has no Go files ('no Go files in /home/lesovsky/Git/github.com/lesovsky/pgcenter'). The main package is ./cmd — `go run ./cmd report -W` works (verified today it reaches report.RunMain and reports 'open pgcenter.stat.tar: no such file or directory', which is the pre-change bool behaviour).",
-      "fix": "Change both invocations to `go run ./cmd report -W` and `go run ./cmd report -W -f /nonexistent.tar`."
+      "issue": "Task 04's markdown links are repo-root-relative but the file lives at docs/features/017-feat-wal-archiver/, so none of them resolve. Verified from the task's own directory: docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md, cmd/report/report.go, .claude/skills/project-knowledge/overview.md and docs/decisions-log.md are all MISSING as written; the same targets resolve fine as `017-feat-wal-archiver.md`, `../../../cmd/report/report.go`, `../../../.claude/...`, `../../decisions-log.md` — which is precisely the form Tasks 02, 05 and 08 use, and the form Task 08 was fixed to this round. This affects the whole Context Files section plus the Post-completion decisions-log link.",
+      "fix": "Rewrite Task 04's links in the same relative form the other three tasks use: bare filenames for feature artifacts, `../../decisions-log.md` for the ADR log, `../../../<path>` for code and project-knowledge files."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "05",
+      "issue": "The new step 4b brings a red-first claim that cannot hold for its wal half. The TDD Anchor says of TestViews_Configure: 'Red today on two counts: no `archiver` key exists ... and nothing pins the wal layout at all.' The second count is only true against a tree without Task 02. Task 05 declares depends_on ['01','02'] and sits in Wave 2, so by the time it runs SelectStatWALQuery already returns PgStatWALPG19/8/{2,6} at 190000 and PgStatWALPG14/11/{2,9} at 140000 — both new wal assertions pass the moment they are written, and the executor following the section's own instruction ('the tests must be written and observed failing against the current tree') will see green and may conclude the assertion is wrong or the wiring is missing. Only the archiver assertions can be observed red. The task does supply the correct compensation (the AC mutation 'reverting task 02's PG 19 branch ... turns TestViews_Configure red'), so the guard is real — the framing is what is off.",
+      "fix": "Say it explicitly in the TDD Anchor: 'the archiver assertions are red today; the wal assertions are green on first write because Task 02 has already landed — their red-first evidence is the AC mutation that reverts Task 02's PG 19 branch, which must be run and observed.'"
     },
     {
       "severity": "minor",
       "category": "hints",
-      "task": "04",
-      "issue": "Details/Files item 1 claims 'The field currently sits in the bool column block of the struct; after the change gofmt re-aligns the comment column across the whole struct and the diff will carry whitespace-only lines. Let it — do not hand-align.' This will not happen. The options struct (cmd/report/report.go:15-41) already contains string fields (showDatabases, showStatIO, showStatements, showProgress), so gofmt's type and comment columns are already sized for 'string'; changing `showWAL bool` to `showWAL string` shifts nothing. Telling the executor that whitespace churn is 'expected' pre-authorises a diff that should not appear.",
-      "fix": "Drop the paragraph, or replace it with 'the struct already aligns to `string`, so the diff is exactly the two changed tokens and the comment text — any whitespace-only lines in the diff mean something went wrong'."
+      "task": "08",
+      "issue": "Round-1 minor (the 'two internal/source inconsistencies' item) was not picked up by the revision, and both halves are still wrong. (a) Verification Step 7 still calls the legacy fixture 'the legacy PG13-era tar' and says 'the PG 19 branch must not reach a ~PG13 recording', contradicting the Description's 'a 2021 PG14beta1 recording'. The Description is right: report/testdata/pgcenter.stat.golden.tar carries meta version_num '140000' / version '14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)' (read out of the tar this round). (b) The report_record_statio_test.go anchors still drift: statIOAnsiRE/statIOStripANSI are at :42-47 (var at :44, func at :47), not ':43-46'; the version-independent single-golden precedent Test_app_doReport_StatIOTime starts at :185 with its doc comment at :176-184, not ':177-206'. The bgwriter anchors, by contrast, are all exact.",
+      "fix": "Say 'the legacy 2021 PG14-beta fixture' in Step 7 as well as in the Description, and refresh the two statio anchors (or name the symbols without line numbers — they do not drift)."
     },
     {
       "severity": "minor",
       "category": "hints",
-      "task": "06",
-      "issue": "Edge case 'The new help line is 88 characters. Its j,J neighbour is already 85' — both figures are off by one. Measured on the tree: top/help.go:19 (the j,J line) is 86 characters, and the proposed line `    w,W               'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.` at the same description column (22) is 89. The conclusion the numbers support — that the new line is consistent with the block and that the <= 80 rule at top/help_test.go:78-79 applies only to the Space entry — is correct and unaffected.",
-      "fix": "Correct the two numbers to 86 and 89, or drop the exact figures and keep only the qualitative point (the j,J neighbour is already well past 80; the <= 80 assertion is scoped to the Space entry)."
-    },
-    {
-      "severity": "minor",
-      "category": "tdd",
-      "task": "04",
-      "issue": "The TDD Anchor asks to extend the existing Test_options_validate table with a row `options{showWAL: \"-f\"}` AND to 'assert the message is exactly `report type is not specified, quit`'. The existing table (cmd/report/report_test.go:10-32) carries only `valid bool`, `opts options` and an unused `want report.Config` — it has no field to express an expected error message, and its loop only calls assert.Error for invalid rows. The instruction cannot be followed as written without reshaping the table or splitting the message assertion into a separate test.",
-      "fix": "Say which shape is intended: either add a `wantErr string` field to the table and assert.EqualError when non-empty, or keep the table untouched and pin the literal in a separate small test (e.g. Test_options_validate_WALUnmappedMessage) — the second keeps the existing rows byte-identical."
+      "task": "08",
+      "issue": "New imprecision in the text that replaced A5: 'the empty-archive subcase never reaches `processData` at all'. processData is always started (report/report.go:130-148 launches it as a goroutine before any tar entry is read); on an archive with no archiver.* entries it simply never enters the data branch and exits through `case <-doneCh`. What the argument needs — that the subcase never reaches the `views.Configure` call inside the first-sample branch — is true, but as written the sentence is a claim about the code that is false, in a paragraph whose whole purpose is to model the report path accurately. The A5 conclusion itself is unaffected and correct.",
+      "fix": "Reword to 'the empty-archive subcase never reaches the Configure call inside processData's first-sample branch — no sample is ever delivered, so processData exits through its doneCh arm'."
     }
   ],
   "stats": {
-    "tasks_checked": 3,
-    "claims_verified": 56,
-    "issues_found": 11
+    "tasks_checked": 4,
+    "claims_verified": 78,
+    "issues_found": 5
   }
 }

@@ -120,8 +120,14 @@ and observed failing **against the current tree** (no `archiver` key) before `vi
   existing `case 190000:` arm assert `views["wal"]` has `QueryTmpl == query.PgStatWALPG19`,
   `Ncols == 8`, `DiffIntvl == [2]int{2, 6}`; in `case 140000:` assert `query.PgStatWALPG14`, `11`,
   `[2]int{2, 9}`. Add `views["archiver"]` (`query.PgStatArchiverDefault`, `Ncols == 9`,
-  `DiffIntvl == [2]int{0,0}`) to both arms. Red today on two counts: no `archiver` key exists (zero
-  value view → `Ncols == 0`), and nothing pins the wal layout at all.
+  `DiffIntvl == [2]int{0,0}`) to both arms.
+
+  **Be honest about what each half proves.** The `archiver` assertions are red *today* only because the
+  view is not registered yet; once step 1 lands they pass, and they can never be reddened by removing
+  `case "archiver":` from `Configure()` — `New()` already sets the same `Ncols`/`DiffIntvl`, so the
+  selector call changes nothing observable here. They are a regression guard, not a proof that
+  `Configure()` is wired. The `wal` half is the real gate, and its mutation (below) is what makes it
+  one; it is green from the moment it is written, because task 02 has already landed in Wave 1.
 - `internal/view/view_test.go::TestNew` — total view count `27` → **28**. Red until the entry is
   added. The trailing comment "27 is the total number of views have to be returned" moves with it.
 - `internal/view/view_test.go::TestView_VersionOK` — rows at version ≥ 140000 gain one:
@@ -178,8 +184,9 @@ looking.
 - [ ] `TestViews_Configure` gained `wal` assertions in its `case 190000:` arm
       (`query.PgStatWALPG19`, `Ncols 8`, `DiffIntvl {2,6}`) and its `case 140000:` arm
       (`query.PgStatWALPG14`, `Ncols 11`, `DiffIntvl {2,9}`), plus `archiver` assertions
-      (`query.PgStatArchiverDefault`, `Ncols 9`, `DiffIntvl {0,0}`) in both. This closes the gap task
-      02 pointed here.
+      (`query.PgStatArchiverDefault`, `Ncols 9`, `DiffIntvl {0,0}`) in both. The `wal` half closes the
+      gap task 02 pointed here; the `archiver` half is a regression guard that cannot be reddened by a
+      `Configure()` mutation, and the criterion below is the one that gates the wiring.
 - [ ] Mutation check: reverting task 02's PG 19 branch in `SelectStatWALQuery` (so it returns the
       PG 18 layout `7 / {2,5}` at 190000) turns `TestViews_Configure` red. If it stays green the
       wiring is still unpinned.

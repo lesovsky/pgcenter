@@ -189,7 +189,7 @@ at the repository root (no `.go` files there) — `go run .` fails; the binary i
 <!-- All details for task execution — technical, organizational, any other. -->
 
 **Files:**
-- `internal/query/wal.go` (33 lines today) — holds two constants, `PgStatWALPG14` (lines 5-11, PG 14-17,
+- `internal/query/wal.go` (32 lines today) — holds two constants, `PgStatWALPG14` (lines 5-11, PG 14-17,
   11 columns) and `PgStatWALDefault` (lines 15-21, PG 18+, 7 columns), plus
   `SelectStatWALQuery(version int) (string, int, [2]int)` (lines 25-32) with two branches: `>= 180000`
   → `(PgStatWALDefault, 7, {2,5})` and the fallthrough → `(PgStatWALPG14, 11, {2,9})`. Add the third

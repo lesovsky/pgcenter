@@ -108,9 +108,6 @@ that claims otherwise — see the "no A5" item below.
 
 ## TDD Anchor
 
-<!-- Fill if task includes writing code. For non-code tasks (user instructions, deploy, config) — delete this section. -->
-
-Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.
 
 This task *is* tests, so "red first" means something specific: write each subcase with its assertions
 **before** generating its golden, run it, and confirm it fails on the missing golden file and on the
@@ -333,7 +330,7 @@ those two.
 
 - Step 6 — `make lint` on the host: clean.
 - Step 7 — confirm the pre-existing `Test_app_doReport` wal case
-  (`report/report_test.go:73-77`, driven by the legacy PG13-era tar) is still green and its golden
+  (`report/report_test.go:73-77`, driven by the legacy PG 14beta1 tar) is still green and its golden
   unchanged — the PG 19 branch must not reach a ~PG13 recording.
 
 ## Details

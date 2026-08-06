@@ -181,9 +181,11 @@ Two cautions before running any of them:
       red on the column-name order (the count alone must not be what catches it).
 - [ ] Mutation — wrap `last_archived_wal` in `coalesce(last_archived_wal, '-')`:
       `Test_StatArchiverQuery_NullsStayNull` turns red.
-- [ ] Mutation — delete the `SET ROLE` line from `Test_StatArchiverQuery_PgMonitorRoleSucceeds`, so the
-      test runs on the fixture superuser connection: the test turns red **on its own
-      `current_user` / `rolsuper` guard**, before it ever reaches the query. This is the mutation that
+- [ ] Mutation — in `Test_StatArchiverQuery_PgMonitorRoleSucceeds`, skip the `SetupTestRole` call and
+      the `SET ROLE` it performs, so the test runs on the fixture superuser connection: the test turns
+      red **on its own `current_user` / `rolsuper` guard**, before it ever reaches the query. Mutate
+      the call site in the test, not the helper — the helper is shared with task 03, so editing it
+      would redden that task's tests too and obscure which gate actually fired. This is the mutation that
       proves the positive privilege test is exercising privileges rather than riding the superuser
       fixture connection. If it stays green, the guard is missing or asserts nothing.
       *Do not substitute the older "swap `pg_ls_archive_statusdir()` for `pg_ls_dir('pg_wal/archive_status')`"

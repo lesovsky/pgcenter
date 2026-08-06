@@ -67,7 +67,7 @@ measurement (Decision 9), which this task *decides* but does not implement.
   `Test_selectMenuStyle`, `Test_switchViewTo` — and confirm each carries a new **correct** number, not
   a deleted assertion, a loosened comparison or a removed row.
 - Confirm the stand address with the project owner at the start of the run. The recorded address
-  (`pgpro@10.128.31.96`) has a 24h TTL from 2026-08-05 and is very likely stale. **If the stand has
+  (`pgpro@10.128.28.194`) has a 24h TTL from 2026-08-05 and is very likely stale. **If the stand has
   expired, say so and ask for a new one — do not silently skip the manual gate.** There is no
   fallback: the archiving, navigation, narrow-terminal and cost criteria cannot be satisfied any other
   way, and marking them PASS without a capture is the failure mode this task exists to prevent.
@@ -312,7 +312,7 @@ per-feature copy, mirror it as `017-feat-wal-archiver-qa-report.json` in the fea
   the CI image — a missing cluster is an environment blocker, and calling it a criterion FAIL would be
   wrong.
 - A stand is required and its address must be re-confirmed with the project owner. The recorded
-  `pgpro@10.128.31.96` has a 24h TTL from 2026-08-05.
+  `pgpro@10.128.28.194` has a 24h TTL from 2026-08-05.
 
 **Stand regimen (from `patterns.md` → «Driving the TUI on a remote test stand»):**
 1. Confirm the address with the owner at the start of the run; do not record it afterwards.
@@ -329,8 +329,7 @@ per-feature copy, mirror it as `017-feat-wal-archiver-qa-report.json` in the fea
 6. Leave the stand as found — see the cleanup order in Edge cases.
 
 **Edge cases:**
-- **The stand has expired.** Its TTL is 24h from 2026-08-05, and manual QA comes last. Ask for a new
-  one. Do **not** mark the manual criteria PASS by inference and do **not** quietly drop them — the
+- **The stand has expired.** Its   one. Do **not** mark the manual criteria PASS by inference and do **not** quietly drop them — the
   tech-spec Risks table already names this as the scenario in which the pipeline must not silently
   skip the gate. NOT VERIFIABLE with the reason is the honest outcome if no stand can be had.
 - **`archive_mode` needs a restart, `archive_command` only a reload.** Plan the scenario order around
@@ -416,15 +415,7 @@ accepted by the project owner at feature acceptance.
 - [ ] Обновить user-spec/tech-spec если что-то изменилось
 
 
-## Correction applied during task validation (2026-08-06)
 
-**The verbose backlog renders `0`, not `0 B`.** Both specs and an earlier draft of this task quoted
-`0 B` as the value shown when the `archive_status` directory is missing. The panel formats that field
-through the project's size formatter, whose zero case returns a bare `0`. A QA gate checking for the
-string `0 B` would report a false FAIL on correct behaviour.
-
-**The stand's TTL has lapsed.** The stand named in the specs (`pgpro@10.128.31.96`) was issued on
-2026-08-05 with a 24-hour TTL, so it is gone by the time this task runs. Do NOT quietly skip the manual
-half: ask the project owner for a fresh stand at the start of this task, and record in the QA report
-which scenarios were executed and which were blocked waiting for one. The automated half — the full
-suite inside the CI image, lint and vuln — does not depend on the stand and runs regardless.
+> **Stand address updated 2026-08-06:** `pgpro@10.128.28.194`. The earlier one
+> (`10.128.31.96`) expired. Re-confirm it is alive at the start of the run; if it is gone again, ask
+> for a new one rather than skipping the manual half.

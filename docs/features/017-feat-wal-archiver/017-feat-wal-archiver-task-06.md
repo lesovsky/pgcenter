@@ -110,8 +110,12 @@ from a zero-value one; `top/ui_test.go:406-425` already uses the zero-value idio
 8. **Amend the stale prohibition in `top/pause_test.go`** (`:561-568`): the sentences claiming that
    *`menuSelect` itself is unreachable from a unit test* and that a Gui *"comes only from
    `gocui.NewGui`"* are wrong — a zero-value `&gocui.Gui{}` reaches every branch (see Description).
-   Correct exactly those sentences to say that the blocker is specific to the `menuConf` branch, whose
-   terminal call `editPgConfig` needs a live `*postgres.DB`. Nothing else in that comment block moves,
+   Correct exactly those sentences to say that the blocker is narrower than stated — and do **not**
+   replace one false claim with another: `editPgConfig` is *not* out of reach for want of a live
+   `*postgres.DB`, because `top/pgconfig.go` returns early on `!db.Local`, so the `menuConf` branch is
+   drivable with `&gocui.Gui{}` plus `&postgres.DB{Local: false}` — an idiom this package already uses
+   in `top/config_view_test.go`. What genuinely needs a real environment is only the local-DB editor
+   path beyond that early return. Nothing else in that comment block moves,
    and the deleted `Test_menuConfPathDoesNotLift` stays deleted — its problem was that it asserted on a
    config the callee never receives, which is untouched by any of this.
 
@@ -388,8 +392,9 @@ what makes it work is that `gocui.SetKeybinding` (`gui.go:249-259`) only appends
   what the user actually sees is verified on the stand (Task 10).
 - **The zero-value Gui is the seam — do not invent another one.** `menuSelect` and `keybindings` are
   both driven directly, as described in the Description and the TDD Anchor. What remains genuinely
-  out of reach is narrower and unrelated to this task: the `menuConf` branch, whose `editPgConfig`
-  needs a live `*postgres.DB` and an editor. Nothing here justifies threading new parameters through
+  out of reach is narrower and unrelated to this task: only the local-DB editor path inside
+  `editPgConfig`, past its `!db.Local` early return — the branch itself is drivable with
+  `&gocui.Gui{}` and `&postgres.DB{Local: false}`. Nothing here justifies threading new parameters through
   production signatures to make something observable, and nothing here justifies restoring the
   deleted `Test_menuConfPathDoesNotLift`, which asserted on a config its callee never received.
 - **`menuOpen` is still not exercised.** The test drives `menuSelect` with a hand-built menu view and
