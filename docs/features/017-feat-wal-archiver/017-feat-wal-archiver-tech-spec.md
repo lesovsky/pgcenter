@@ -333,34 +333,37 @@ creation must be idempotent and the session must not leak an assumed role into l
 bump and change what every existing test sees; skipping the privilege tests and relying on the stand
 — rejected, that is exactly the gap that let the wrong `pg_ls_dir` privilege assumption survive.
 
-### Decision 20: the verbose backlog is throttled — measured, then decided
+### Decision 20: the backlog walk was measured, and accepted without throttling
 
-**Decision:** `OverviewArchivingBacklog` gets the latency guard that [010] already built for the
-DB-size aggregate (`verboseCollectState` + `latencyGuardThreshold` + the `dbSizeThrottled` cadence).
-The archiver screen's own `.ready` sub-select is NOT throttled.
-**The measurement that triggered it** (stand run, 2026-08-06, under Decision 9's exact conditions — a
-`pg_monitor`-only role, verbose on, concurrent `pgcenter record`, 200 005 `.ready` files):
+**Decision:** no throttling. The verbose panel keeps walking `archive_status` every tick.
+**The measurement** (stand run 2026-08-06, under Decision 9's exact conditions — a `pg_monitor`-only
+role, verbose on, concurrent `pgcenter record`, 200 005 `.ready` files):
 
 | | |
 |---|---|
 | Backlog query wall time | ~1108 ms mean (0.9 ms on an empty directory) |
-| View-switch latency | 70–240 ms — acceptable |
+| View-switch latency | 70–240 ms |
 | Effective refresh, feature, verbose on | 1.9 s/tick |
 | Effective refresh, master, verbose on | 1.0 s/tick |
 
-The default refresh interval is 1 s, so the query exceeds it, and the A/B shows the consequence
-directly: for a `pg_monitor` role with verbose on, the feature **halves the refresh rate on every
-screen**. That is the zero→full cost Decision 9 predicted for exactly this role, and it fires when the
-directory is largest — during the incident. Decision 9's pre-agreed outcome therefore applies.
+So at 200 005 files the feature halves the refresh rate on every screen, and the panel rides every
+screen, so the cost is not confined to the archiver view. Superusers are affected too, not only
+`pg_monitor` roles: the old `pg_ls_dir` returned names, the new call stats every file.
 
-**Why the archiver screen is out of scope.** Its backlog is one sub-select inside the view's single
-statement, and the collector runs a view's query whole — throttling part of a statement would mean
-breaking the one-query-per-view model. Its cost is also paid only while that screen is displayed,
-which the roadmap owner accepted knowingly during the interview. The panel is different: it rides
-every screen, which is what turns a screen-local cost into a global one.
-**Alternatives considered:** shipping the measured regression and throttling in a later release —
-rejected by the roadmap owner; reverting the panel to `pg_ls_dir` — rejected, it would restore the
-`n/a` that piece 4 exists to remove.
+**Why that is accepted anyway.** The cost is linear — ~5.5 µs per file. A five-thousand-segment
+backlog costs ~28 ms and a twenty-thousand one ~110 ms, both inside the noise. The doubling needs
+200 000 segments, which is **3.1 TB of unarchived WAL** — a state that is barely reachable in
+practice, would be noticed long before, and in which a screen refreshing every two seconds instead of
+every second is nowhere near the operator's biggest problem.
+
+**Not recorded as tech debt, deliberately.** The roadmap owner declined: a debt entry is a commitment
+to fix, and there is no intention to fix this. The numbers live here instead, so the next person
+asking "how expensive is that directory walk" has an answer without re-measuring.
+
+**Alternatives considered:** applying [010]'s existing `latencyGuardThreshold` +
+`dbSizeThrottled` machinery to the aggregate — implementable and briefly started, then stopped once
+the per-file cost was put against realistic backlog sizes; reverting the panel to `pg_ls_dir` —
+rejected, it would restore the `n/a` that this piece of the feature exists to remove.
 
 ## Data Models
 
