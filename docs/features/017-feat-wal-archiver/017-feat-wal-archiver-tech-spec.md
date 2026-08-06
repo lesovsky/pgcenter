@@ -333,6 +333,35 @@ creation must be idempotent and the session must not leak an assumed role into l
 bump and change what every existing test sees; skipping the privilege tests and relying on the stand
 — rejected, that is exactly the gap that let the wrong `pg_ls_dir` privilege assumption survive.
 
+### Decision 20: the verbose backlog is throttled — measured, then decided
+
+**Decision:** `OverviewArchivingBacklog` gets the latency guard that [010] already built for the
+DB-size aggregate (`verboseCollectState` + `latencyGuardThreshold` + the `dbSizeThrottled` cadence).
+The archiver screen's own `.ready` sub-select is NOT throttled.
+**The measurement that triggered it** (stand run, 2026-08-06, under Decision 9's exact conditions — a
+`pg_monitor`-only role, verbose on, concurrent `pgcenter record`, 200 005 `.ready` files):
+
+| | |
+|---|---|
+| Backlog query wall time | ~1108 ms mean (0.9 ms on an empty directory) |
+| View-switch latency | 70–240 ms — acceptable |
+| Effective refresh, feature, verbose on | 1.9 s/tick |
+| Effective refresh, master, verbose on | 1.0 s/tick |
+
+The default refresh interval is 1 s, so the query exceeds it, and the A/B shows the consequence
+directly: for a `pg_monitor` role with verbose on, the feature **halves the refresh rate on every
+screen**. That is the zero→full cost Decision 9 predicted for exactly this role, and it fires when the
+directory is largest — during the incident. Decision 9's pre-agreed outcome therefore applies.
+
+**Why the archiver screen is out of scope.** Its backlog is one sub-select inside the view's single
+statement, and the collector runs a view's query whole — throttling part of a statement would mean
+breaking the one-query-per-view model. Its cost is also paid only while that screen is displayed,
+which the roadmap owner accepted knowingly during the interview. The panel is different: it rides
+every screen, which is what turns a screen-local cost into a global one.
+**Alternatives considered:** shipping the measured regression and throttling in a later release —
+rejected by the roadmap owner; reverting the panel to `pg_ls_dir` — rejected, it would restore the
+`n/a` that piece 4 exists to remove.
+
 ## Data Models
 
 No database schema, no Go types added. Two SQL shapes:
