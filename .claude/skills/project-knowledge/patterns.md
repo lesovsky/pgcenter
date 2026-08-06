@@ -88,6 +88,34 @@ invariant: name the mutation the test must fail on, run it, and see red before b
 When the property genuinely cannot be reached without a forbidden seam, say so in the test comment
 and defer it to the stand run — do not dress inspection up as a red test.
 
+## Running the mutation, and reading its result honestly (017-feat-wal-archiver)
+
+The rule above ("name the mutation, see it red") is necessary but not sufficient. Three ways it was
+observed to lie in 017, all found by doing it rather than by reasoning about it:
+
+- **A mutation that reddens for the wrong reason proves nothing.** Name the mutation *and* check
+  which assertion goes red. Dropping `pg_monitor` from the positive privilege test reddened on the
+  test's own membership guard — before the query ran — so the SQLSTATE 42501 the criterion asked
+  about was never reached, and the claim ended up resting on a permanently-present negative test
+  instead. Same class, recorded as a deliberate negative control: deleting the `archiver` case from
+  `Views.Configure()` leaves the package green, because `New()` already seeds the same
+  `QueryTmpl`/`Ncols`/`DiffIntvl` — so those `TestViews_Configure` asserts guard drift between the
+  selector and the static entry, not the wiring they look like they guard. Write that boundary next
+  to the assertion; the next reader will otherwise assume the stronger claim.
+- **"No FAIL lines" is not "the test passed".** A mutation that breaks compilation produces
+  neither — one in 017 left a variable unused, the package did not build, and grepping the output
+  for `FAIL` read as green. Mutate through a declaration that stays used (or otherwise keep the
+  package compiling), and confirm the run by counting PASS/RUN for the named subtest rather than by
+  the absence of FAIL. The sibling trap: `go test -run` is case-sensitive, so a filter that silently
+  matches nothing looks identical to a clean pass.
+- **"This cannot be unit-tested" was false twice in one feature.** A zero-value `&gocui.Gui{}` is
+  enough to drive `menuSelect`'s branches to completion and to exercise keybinding registration —
+  the gocui constraint recorded above applies to `g.Update` closures and `*gocui.View`, not to
+  everything that mentions gocui. What gocui does not give you is the registered binding: the
+  handlers are unexported and cannot be fetched or invoked, so `keybindings()` was split into a
+  `keybindingsList(app) []key` table plus the registration loop, which makes *which handler a key
+  carries* assertable. Before that split, binding `W` to the wrong menu left the whole suite green.
+
 ## Verbose display-mode toggle (010-feat-overview-dashboard)
 
 When adding an on/off *display mode* that layers extra rows over the current screen (not a new screen),
@@ -153,7 +181,15 @@ Registering a view in `view.New()` couples to count-based tests that fail in CI 
 - `internal/view/view_test.go: TestNew` pins the total view count. `TestView_VersionOK` pins per-version availability — its row at a version **≥ the new view's `MinRequiredVersion`** also increases by one (feature 007's PG15+ view bumped only the `160000` row, not the `≤140000` rows).
 - `record/record_test.go: Test_filterViews` pins, per version, how many views `filterViews` drops vs keeps. A `NotRecordable: true` view is always dropped, so every `wantN` row increases by the number of new `NotRecordable` views (feature 006 added 2 → `+2` each row; feature 007 added 1 → `+1`; `wantV` unchanged). This test runs without Postgres, so a stale count is a real failure even though the rest of the `record` package skips/fails on a missing PG fixture — do not assume a red `record` package is only the connection-refused tests.
 
-Adding a `pg_stat_statements` **sub-screen** (or any `menuPgss`/cycle entry) additionally breaks `top` tests — `Test_selectMenuStyle` (pins each menu's item count), `Test_statementsNextView`, and `Test_switchViewTo` (pin the `x`-cycle transitions). These `top` tests DO run locally without Postgres, so they catch the miss in `make test` — but feature 007's code-research overlooked them (the task wrongly assumed the TUI layer had no tests). When touching `top/menu.go` or `top/config_view.go`, grep `top/*_test.go` for the function you changed before assuming it is untested.
+Counts alone are a weak guard, and 017 measured it: with `Test_filterViews` pinning only numbers, a
+view that fell out of the kept set could be masked by an arithmetic coincidence, so the table gained
+a per-row "is *this* view kept" field. The same feature also found that nothing pins the registry's
+own invariants for any other view — `key == v.Name`, and non-nil `ColsWidth`/`Filters`. The maps
+matter beyond tidiness: three writers in `top/config_view.go` write into them **in place**, so a nil
+map is a panic on the first column-width change or filter, not a wrong number. Pin them for any view
+you add.
+
+Adding a `pg_stat_statements` **sub-screen** (or any `menuPgss`/cycle entry) additionally breaks `top` tests — `Test_selectMenuStyle` (pins each menu's item count), `Test_statementsNextView`, and `Test_switchViewTo` (pin the `x`-cycle transitions). These `top` tests DO run locally without Postgres, so they catch the miss in `make test` — but feature 007's code-research overlooked them (the task wrongly assumed the TUI layer had no tests). When touching `top/menu.go` or `top/config_view.go`, grep `top/*_test.go` for the function you changed before assuming it is untested. A **new** hotkey group (017's `w`/`W`) breaks the same three plus the help-screen tests, and needs one thing more: the binding itself, which only `keybindingsList` makes assertable (see the mutation section above).
 
 ## Error Wrapping
 

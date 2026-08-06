@@ -62,7 +62,8 @@ Version-specific query selectors in `internal/query/`:
 - `SelectStatReplicationQuery(version, track)` — branches at PG 10
 - `SelectStatDatabaseGeneralQuery(version)` — branches at PG 12
 - `SelectStatStatementsTimingQuery(version)` — branches at PG 13, PG 17
-- `SelectStatWALQuery(version)` — branches at PG 18 (columns removed)
+- `SelectStatWALQuery(version)` — branches at PG 18 (columns removed) and PG 19 (`fpi,KiB` from `wal_fpi_bytes` inserted right after the `fpi` counter, so 8 cols / `DiffIntvl{2,6}`; the new column lands *inside* the diffed range and pushes its upper bound out by one, while `stats_age` must stay outside it — a `date_trunc` text value inside the range aborts the whole sample in `ParseInt`)
+- `SelectStatArchiverQuery(_ int)` — version-independent: `pg_stat_archiver` is schema-identical on PG 14–19, so one query serves all, returning `(query, 9, [2]int{0,0})`
 - `SelectStatBgwriterQuery(version)` — branches at PG 17 (`pg_stat_checkpointer` split off `pg_stat_bgwriter`) and PG 18 (`slru_written` added). Returns `(query, Ncols, DiffIntvl)` — DiffIntvl also differs per version.
 - `SelectStatReplicationSlotsQuery(_ int)` — version-independent on PG 14–19 (chosen column subset is stable), returns `(query, 15, [2]int{6,13})`; the `version` param is kept for selector-signature symmetry. Single hybrid `pg_replication_slots LEFT JOIN pg_stat_replication_slots` query.
 - `SelectStatProgressVacuumQuery(version)` / `SelectStatProgressAnalyzeQuery(version)` / `SelectStatProgressBasebackupQuery(version)` — branch at PG 19, which adds `started_by`+`mode` to the vacuum screen, `started_by` to analyze and `backup_type` to basebackup. All three return `(query, Ncols, DiffIntvl)`: the columns are inserted before `state`, so the diffed pairs shift (vacuum 13/`{10,11}` → 15/`{12,13}`; analyze 12 → 13, `DiffIntvl` stays `{0,0}`; basebackup 11/`{9,9}` → 12/`{10,10}`). `UniqueKey` stays 0 — `pid` remains column 0 in every layout, so the [007] 4-tuple is not needed.
@@ -75,6 +76,46 @@ The `replslots` view (hotkey `o`, `internal/query/replication_slots.go`) is a mu
 The `pg_stat_io` screen (hotkey `j`/`J`, `internal/query/io.go`) is split into **two registered views** — `stat_io` (count) and `stat_io_time` (time) — for logical grouping of related counters (count vs latency), the same idiom `pg_stat_statements` uses for its sub-screens. `j` toggles between them via `statioNextView` (`top/config_view.go`), `J` opens `menuStatIO` (`top/menu.go`). Both were TUI-only in 0.11.0 and became recordable via feature 008 (`report -J c` → `stat_io`, `report -J t` → `stat_io_time`). Row identity is a composite (`backend_type × object × context`), but `view.UniqueKey` is a single column index, so the query emits a synthetic `left(md5(backend_type||object||context),10) AS io_key` as column 0 and points `UniqueKey` at it — the same trick `statements_io` uses for its `queryid`; `io_key` is displayed like the pgss `queryid`.
 
 > **Note (009-feat-horizontal-scroll):** the main stats table now *has* horizontal column scroll (see "Horizontal Column Scroll" below), so the historical "no horizontal scroll" framing in the [006-feat-pg-stat-io] / [007] ADRs no longer holds as a constraint. The two-screen `pg_stat_io` split, the seven `pg_stat_statements` sub-screens, and the synthetic `io_key` are kept deliberately — they are a product decision (logical grouping and isolation of related data), not a workaround for a missing feature. Scroll exists for narrow terminals; it is not meant to collapse the sub-screens into one wide view.
+
+## WAL and Archiving Area (017-feat-wal-archiver)
+
+The `archiver` view (`internal/query/archiver.go`) is a single-row screen over `pg_stat_archiver`
+plus one privileged sub-select — the count of `.ready` entries from `pg_ls_archive_statusdir()`.
+
+- **Nothing is diffed.** `DiffIntvl{0,0}` makes `calculateDelta` short-circuit before `diff()`, so
+  the whole row passes through untouched. That is what makes the literal `'Archiver'` at column 0
+  safe (it is never parsed) and what lets the four nullable columns — both WAL names and both ages —
+  stay uncoalesced: a blank cell is the honest rendering of "this cluster has never archived", the
+  same reasoning as `backend_xid` on the activity screen. Coalescing is required only *inside* a
+  diffed range.
+- **`MinRequiredVersion: PostgresV14` is load-bearing, not cosmetic.** There is no common version
+  floor in the registry — it still serves down to PG 9.4 — so a zero value would offer the screen on
+  PG ≤ 11, where `pg_ls_archive_statusdir()` (PG 12+) does not exist. The TUI would error every
+  tick, and `pgcenter record` aborts the **entire** recording on the first failing view query.
+- **The privileged call is unconditional and takes the whole screen down without `pg_monitor`** —
+  deliberately, the same shape the `wal` screen already has with `pg_ls_waldir()`. See the ADR log
+  for why a `has_function_privilege()` guard cannot work at all.
+- **Navigation.** `w` cycles `wal` ↔ `archiver` through `walNextView` (`top/config_view.go`); `W`
+  opens the two-item `menuWAL` (`top/menu.go`), whose branch calls `viewSwitchHandler` directly and
+  therefore never passes through `switchViewTo`. This is the only cycle whose group name *is* a view
+  name: `"wal"` cannot be renamed — it is the `report -W w` report type and the tar entry prefix in
+  recorded archives — so the dispatch case carries a comment saying so. `walNextView`'s default arm
+  returns `"wal"`, which is why `w` from any other screen behaves exactly as before the cycle existed.
+- **record/report needed no recorder change** (the [008] pure-SQL rule). The CLI side is where the
+  work was: `-W` became a string flag with a **closed** `w`/`a` whitelist and no default arm —
+  `ReportType` is both the tar-entry filter in `isFilenameOK` and the key into the view map, so a
+  leaked value would select a zero-value `view.View` and print a silently empty report instead of an
+  error.
+
+**The verbose panel's archiving backlog moved to `pg_ls_archive_statusdir()`** in the same pass
+(`internal/query/overview.go`). Its predecessor `pg_ls_dir('pg_wal/archive_status')` has ACL
+`{postgres}` — superuser only — while `pg_ls_waldir` and `pg_ls_archive_statusdir` are
+`{postgres, pg_monitor}`, so the field was `n/a` for exactly the monitoring role the panel serves.
+Output (bytes) and the degrade-to-`n/a` path are unchanged. Two consequences to know: the new
+function is `missing_ok=true`, so a cluster whose `archive_status` directory is absent now shows a
+confident `0` (a bare `0` — the size formatter's zero case returns the digit alone — not `0 B`);
+and it stats every file instead of listing names, so the panel, which rides every screen, pays that
+walk on every screen. Measured cost and why it is not throttled are in the ADR log.
 
 ## Horizontal Column Scroll (009-feat-horizontal-scroll)
 
@@ -193,6 +234,7 @@ Integration tests require a running PostgreSQL instance.
 Test helpers in `internal/postgres/testing.go`:
 - `NewTestConnect()` — connects to PG 17 (port 21917, default)
 - `NewTestConnectVersion(version)` — connects to specific version; returns an error for a version with no port mapping (it used to fall back to the oldest cluster, which made a forgotten entry invisible) and for unavailable versions (callers use `t.Skipf`)
+- `SetupTestRole(db, name, pgMonitor)` (017-feat-wal-archiver) — creates a `NOLOGIN` role idempotently, optionally grants `pg_monitor`, and does `SET ROLE`; used by tests that must prove a query's privilege behaviour in both directions. It returns an `error` and takes no `*testing.T` on purpose: `testing.go` carries no build tag, so it links into the release binary and must not import `testing`. The roles are never dropped (their reusability is the point) — correct for ephemeral CI containers, worth knowing on a long-lived cluster.
 
 Port map: PG14=21914, PG15=21915, PG16=21916, PG17=21917, PG18=21918, PG19=21919.
 EOL entries (PG 9.5–13) kept in map but connections will fail gracefully.

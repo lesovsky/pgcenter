@@ -7,6 +7,52 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [034] `pgcenter report` exits with code 0 on every failure path
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
+**Severity:** Medium — loud on a terminal, silent to a script
+**Area:** `cmd/pgcenter.go` (`main`), `cmd/report/report.go`
+
+`main()` prints the error and returns without `os.Exit(1)`, so every `report` failure exits 0.
+Measured on the built binary, not inferred: `pgcenter report -W -f dump.tar` prints
+`report type is not specified, quit` and exits 0, and `-W` as the last token prints cobra's
+`flag needs an argument: 'W' in -W` and also exits 0. This is pre-existing and repo-wide — `-J q`
+behaves identically — but the breaking `-W` change of 017 is what makes it bite: a legacy wrapper
+like `pgcenter report -W -f dump.tar > out.txt || alert` now writes an empty file and reports
+success, so the one shape most likely to break is the one least likely to be noticed.
+
+Not fixed inside the feature because the exit code is shared by every report type and every
+subcommand error path — changing it is a behaviour change for all of them and needs its own review.
+Called out in `doc/release-notes/v0.12.0.md` so users are not the ones to discover it.
+
+### [035] WAL segment names truncate to header width when the screen is opened before any value exists
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver, stand run)
+**Severity:** Low — needs the screen opened on a cluster that has archived nothing yet
+**Area:** `internal/align/align.go`, `top/stat.go` (`printDataCell`, `alignViewToResult`)
+
+Column widths are computed from the first batch and `view.Aligned` is never reset while a screen
+stays open, so entering `archiver` on a cluster that has never archived freezes the two WAL-name
+columns at header width; values arriving later render as `000000010000~` / `0000000100~`. Entering
+the screen when the values already exist shows the names in full.
+
+Pre-existing, confirmed by A/B against a `master`-built binary — the feature's diff touches neither
+`align.SetAlign` nor `printDataCell` nor `alignViewToResult`. Recorded rather than left implicit
+because WAL segment names differ only in their tail, so truncating from the right removes exactly the
+part that identifies the segment — the reason the column is on the screen at all.
+
+### [036] `go.mod` marks `spf13/pflag` as `// indirect` although a test imports it directly
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
+**Severity:** Trivial
+**Area:** `go.mod`, `cmd/report/report_test.go`
+
+The flag-definition test imports `github.com/spf13/pflag` directly, but the `require` line still
+carries `// indirect`. Nothing fails today — the default readonly module mode builds, tests and lints
+fine, and CI has no `go mod tidy -diff` gate — but any build with `-mod=mod` rewrites `go.mod` and
+dirties the working tree. Fix is one `go mod tidy` run at a moment when no parallel work holds the
+branch.
+
 ### [027] Messages printed after a dialog closes are never visible
 
 **Added:** 2026-08-03 (surfaced during feature: 015-feat-tui-papercuts, stand run)

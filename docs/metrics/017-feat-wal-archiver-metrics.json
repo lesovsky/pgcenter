@@ -8,7 +8,7 @@
     "feature_size": "M",
     "model": "Opus 5 (1M context)",
     "date_started": "2026-08-05T16:59:47Z",
-    "date_completed": ""
+    "date_completed": "2026-08-06T11:50:00Z"
   },
   "phases": {
     "user_spec": {
@@ -43,7 +43,14 @@
       "human_wait_time_min": 0,
       "steps": {}
     },
-    "done": null
+    "done": {
+      "start_time": "2026-08-06T11:33:00Z",
+      "end_time": "2026-08-06T11:50:00Z",
+      "duration_min": 17,
+      "touch_time_min": 17,
+      "human_wait_time_min": 0,
+      "steps": {}
+    }
   },
   "quality": {
     "validation_rounds": {
@@ -52,23 +59,40 @@
       "task_decomposition": 2
     },
     "validation_findings": {
-      "critical": 0,
-      "major": 0,
-      "minor": 0
+      "critical": 1,
+      "major": 18,
+      "minor": 74
     },
-    "review_rounds": {},
+    "review_rounds": {
+      "task_01": 2,
+      "task_02": 1,
+      "task_03": 2,
+      "task_04": 2,
+      "task_05": 2,
+      "task_06": 3,
+      "task_07": 2
+    },
     "review_findings": {
       "critical": 0,
-      "major": 0,
-      "minor": 0
+      "major": 15,
+      "minor": 96
     },
-    "first_pass_rate_pct": null
+    "first_pass_rate_pct": 0
   },
   "volume": {
     "interview_questions": 12,
     "tasks_count": 10,
     "waves_count": 4,
     "agents_spawned": 90,
-    "commits_count": 34
+    "commits_count": 29
+  },
+  "summary": {
+    "total_lead_time_min": 1130,
+    "sum_of_phase_durations_min": 882,
+    "idle_between_phases_min": 248,
+    "total_touch_time_min": 860,
+    "total_human_wait_time_min": 22,
+    "flow_efficiency_pct": 76.1,
+    "note": "Phase timestamps recorded manually by the orchestrator; approximate to ~5 min. Only the user_spec phase had human wait instrumented."
   }
 }
