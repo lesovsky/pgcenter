@@ -110,6 +110,48 @@ func Test_helpTemplate_pauseLiftingActions(t *testing.T) {
 	assert.True(t, strings.HasSuffix(cont, "resume it."), "continuation line is %q", cont)
 }
 
+// The 'w' key stopped being a one-way switch to the WAL screen and became a two-screen cycle with
+// a menu of its own, so the help entry moved out of the 'a,b,f,o' block into a row of its own next
+// to its 'j,J' precedent. The marker is "'w' " with the trailing space rather than the longer
+// "'w' pg_stat_wal": helpEntryLine fails on an AMBIGUOUS marker, which is what makes putting the
+// old "'w' WAL," clause back on the 'r' line fail here.
+func Test_helpTemplate_walEntry(t *testing.T) {
+	entryIdx, entry := helpEntryLine(t, "'w' ")
+	statioIdx, statio := helpEntryLine(t, "'j' pg_stat_io switch")
+
+	assert.True(t, strings.HasPrefix(entry, "    w,W"), "entry line is %q", entry)
+
+	// Pinned word for word, so a reworded description fails here instead of shipping. Only the
+	// description is compared - the padding in front of it is the alignment check's business.
+	assert.Equal(t, "'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.", entry[descColumn(entry):])
+
+	// It sits directly after its 'j,J' precedent, and shares the block's description column.
+	assert.Equal(t, statioIdx+1, entryIdx)
+	assert.Equal(t, descColumn(statio), descColumn(entry))
+}
+
+// The other half of the same edit: the 'r,w' row lost its 'w' and kept the replication clause
+// alone. Both the key token and the description are pinned, because a half-applied edit (the key
+// token left as 'r,w', or the WAL clause left in place) is what a reader would actually hit.
+func Test_helpTemplate_replicationEntry(t *testing.T) {
+	_, entry := helpEntryLine(t, "'r' replication,")
+	_, sizes := helpEntryLine(t, "'s' tables sizes")
+
+	assert.True(t, strings.HasPrefix(entry, "    r "), "entry line is %q", entry)
+	assert.NotContains(t, entry, "'w'")
+	assert.Equal(t, "'r' replication,", entry[descColumn(entry):])
+
+	assert.Equal(t, descColumn(sizes), descColumn(entry))
+}
+
+// 'Q' does not reset the shared statistics, and the archiver screen is now one of them. Asserted
+// on that single line: a bare "archiver" substring would match anywhere in the template.
+func Test_helpTemplate_resetCaveat(t *testing.T) {
+	_, caveat := helpEntryLine(t, "'Q' does not reset shared stats")
+
+	assert.Contains(t, caveat, "pg_stat_io, bgwriter, wal, archiver")
+}
+
 // helpTemplate is a format string for fmt.Fprintf (see showHelp). An ordinary stray or
 // mismatched verb is already caught harder and earlier by go vet's printf check, which
 // go test runs as part of the build — this test does not add to that. What it does add is

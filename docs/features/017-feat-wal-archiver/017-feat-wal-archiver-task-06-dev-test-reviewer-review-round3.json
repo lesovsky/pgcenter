@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "All three round-2 minors are closed, and closed for real — every claim was re-verified by mutation on this working tree rather than read off the report, with the tree restored byte-for-byte afterwards (git diff --stat matches the supplied diff, go vet green, filtered suite green). (1) The rename to Test_keybindingsWALCycles works: under the exact documented -run filter, `go test ./top/ -v` now lists Test_keybindingsWAL with all three sub-tests, Test_keybindingsWALOpensMenu and Test_keybindingsWALCycles. (2) Deleting the 'w' row turns BOTH Test_keybindingsWAL/lower-case_'w'_still_registered and Test_keybindingsWALCycles red under that filter — the acceptance-criteria hole from round 2 is gone. (3) The registration-loop skip mutation (`if k.viewname == \"sysstat\" && k.key == 'w' { continue }`) is now caught by the new sub-test alone, which is exactly the table-to-gocui edge it was written for. (4) The menuDraw no-op mutation fails Test_keybindingsWALOpensMenu on '\"\" does not contain \" pg_stat_wal\"' — the assertion reads the window, not the config, as intended. I also re-ran two mutations outside the round-2 set to check nothing regressed while these were being added: deleting `case \"wal\":` from switchViewTo goes red by name on Test_switchViewTo/26_ AND Test_keybindingsWALCycles, and swapping the menuWAL cursor rows goes red on two Test_menuSelectWAL sub-tests. dev-code-reviewer's boundHandler doc-comment addition is accurate — the freshly-constructed-closure caveat is the right thing to write down, and its 'equivalent as long as every row is a stateless constructor' condition holds for every row in the table today. Two minor items remain, both non-blocking and neither worth a fourth round: the 'w' probe implements only the first half of round 2's prescription (delete-succeeds) and not the second (second-delete-fails), so a DUPLICATE 'w' row is still invisible — and per gocui's execKeybindings, which runs every matching binding rather than the first, a duplicate would make 'w' advance the cycle twice per press, i.e. a visibly dead key; and the doc comment above Test_keybindingsWALCycles still opens with the old 'Test_keybindingsWalCycles' spelling. Both are one-line fixes that can ride along with any later edit to this file. The task's test layer is in good shape: every production line this task adds is individually mutation-guarded.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:74-78 (Test_keybindingsWAL/\"lower-case 'w' still registered\") + top/keybindings.go:54",
+      "issue": "The new sub-test is half of round 2's prescription: it asserts the first DeleteKeybinding succeeds (proving the row reaches SetKeybinding — the edge that mattered, now genuinely closed) but omits the follow-up second-delete-must-fail assertion, so it proves 'at least once' rather than 'exactly once'. 'W' has both halves. Verified by mutation: duplicating the row into `{\"sysstat\", 'w', switchViewTo(app, \"wal\")}, {\"sysstat\", 'w', switchViewTo(app, \"wal\")}` leaves the entire documented filtered run GREEN. This is not a theoretical hole. gocui's execKeybindings (jroimartin/gocui@v0.5.0 gui.go:622) iterates all bindings and calls every handler whose key and view match — it does not stop at the first — so two rows means two viewSwitchHandler sends per keypress, wal -> archiver -> wal, and 'w' looks like a dead key to the user while every test stays green. Test_keybindingsWALCycles cannot see it either: boundHandler returns the first matching row from the table and runs it once. Probability is low (it needs a copy-paste of the row, which the file's shape makes unlikely) — hence minor, not major — but the guard costs three lines and the asymmetry with 'W' is now the only uneven thing left in this file.",
+      "recommendation": "Extend the existing sub-test rather than add a fourth, so the fresh app is reused: after the existing `assert.NoError(t, app.ui.DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone))` add `err := app.ui.DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone)`; `require.Error(t, err)`; `assert.Equal(t, \"keybinding not found\", err.Error())` — byte-identical to the 'W' sub-test above it with the rune swapped. Rename it to \"lower-case 'w' registered exactly once\" to match. Re-check by duplicating the 'w' row and confirming this sub-test is the one that goes red. No other file changes; the documented -run filter already matches.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/keybindings_test.go:112",
+      "issue": "The rename fixed the function name but not the doc comment that introduces it: line 112 still opens `// Test_keybindingsWalCycles is the lower-case half.` while the function on line 120 is Test_keybindingsWALCycles. Go's convention that a doc comment starts with the identifier it documents is what makes `grep Test_keybindingsWALCycles top/` find the explanation along with the code — right now it finds only the func line, and the paragraph explaining WHY this test exists (the 'w' row is byte-identical to before the feature, only its meaning changed) is what a future contributor most needs when deciding whether the test still earns its place. It is also the last live occurrence of the old spelling anywhere in the tree outside the round-2 review JSONs; the cross-reference on line 71 already uses the corrected name.",
+      "recommendation": "Change line 112 to `// Test_keybindingsWALCycles is the lower-case half.` — one word, nothing else in the comment needs touching.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 9,
+    "litmusTest": {
+      "checked": 22,
+      "passed": 22,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 22,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

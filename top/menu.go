@@ -19,6 +19,7 @@ const (
 	menuProgress                  // menu with pg_stat_progress_* stats
 	menuConf                      // menu with configuration files
 	menuStatIO                    // menu with pg_stat_io stats
+	menuWAL                       // menu with pg_stat_wal / pg_stat_archiver stats
 
 	// Directions allowed when working with menu.
 	moveUp   direction = iota // move up
@@ -91,6 +92,15 @@ func selectMenuStyle(t menuType) menuStyle {
 			items: []string{
 				" pg_stat_io operations",
 				" pg_stat_io timings",
+			},
+		}
+	case menuWAL:
+		s = menuStyle{
+			menuType: menuWAL,
+			title:    " Choose WAL / archiver mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_wal",
+				" pg_stat_archiver",
 			},
 		}
 	default:
@@ -199,6 +209,16 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 				viewSwitchHandler(app.config, "stat_io_time")
 			default:
 				viewSwitchHandler(app.config, "stat_io")
+			}
+			printCmdline(app.ui, "%s", app.config.view.Msg)
+		case menuWAL:
+			switch cy {
+			case 0:
+				viewSwitchHandler(app.config, "wal")
+			case 1:
+				viewSwitchHandler(app.config, "archiver")
+			default:
+				viewSwitchHandler(app.config, "wal")
 			}
 			printCmdline(app.ui, "%s", app.config.view.Msg)
 		case menuConf:
