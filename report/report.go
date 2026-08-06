@@ -672,6 +672,7 @@ func describeReport(w io.Writer, report string) error {
 		"indexes":             pgStatIndexesDescription,
 		"functions":           pgStatFunctionsDescription,
 		"wal":                 pgStatWALDescription,
+		"archiver":            pgStatArchiverDescription,
 		"sizes":               pgStatSizesDescription,
 		"progress_vacuum":     pgStatProgressVacuumDescription,
 		"progress_cluster":    pgStatProgressClusterDescription,
