@@ -207,7 +207,10 @@ test below PG 14, so it would promise a version nobody verifies.
 **What changes:** `pg_ls_dir('pg_wal/archive_status')` is `missing_ok=false`, while
 `pg_ls_archive_statusdir()` is `missing_ok=true`. Proven by moving `$PGDATA/pg_wal/archive_status`
 aside on a live PG 18.4: the old query errors, the new one returns `0`. So on a cluster whose
-`archive_status` directory is gone, the verbose panel flips from `n/a` to a confident `0 B`.
+`archive_status` directory is gone, the verbose panel flips from `n/a` to a confident zero — and
+the rendering is a bare `0`, not `0 B`: the field goes through the project's size formatter, whose
+zero case returns the digit alone. A check written against the string `0 B` would fail on correct
+behaviour.
 **Rationale:** a missing `archive_status` means a damaged or hand-edited data directory — a state in
 which the backlog number is the least of the operator's problems, and one that no supported
 PostgreSQL configuration produces on its own. Weighed against the gain (the most common monitoring
@@ -432,7 +435,7 @@ verified by driving the TUI over ssh/tmux on the stand.
 | 3 | bash | `go test ./internal/query/... ./internal/stat/...` — verbose backlog aggregate runs under a `pg_monitor` role |
 | 4 | bash | `go test ./cmd/report/...` — `-W w`, `-W a`, `-W x` map as specified |
 | 5 | bash | `go test ./internal/view/... ./record/...` — registration, availability and filterViews counts |
-| 6 | bash | `go test ./top/...` — cycle, menu, help; runs without PostgreSQL |
+| 6 | bash | `go test ./top/...` in the CI image — cycle, menu, help, keybinding registration (the package panics on a bare host) |
 | 7 | bash | `go test ./report/...` — describe text for archiver and the wal FPI row |
 | 8 | bash | `go test ./report/...` — golden replay for archiver and for wal at PG 18 and PG 19 |
 | 9 | bash | grep the release notes for both literal messages (`report type is not specified, quit`, `diff failed`) |
@@ -600,9 +603,11 @@ Technical criteria, complementing the user-facing ones in the user-spec:
   same way, following the existing entry tests.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
-- **Verify:** bash — `go test ./top/...` (runs without PostgreSQL)
+- **Verify:** bash — `go test ./top/...` in the CI image; on a bare host the package panics
+  (`Test_getQueryReport` dereferences a nil connection), so a host-side run must be `-run` scoped
 - **Files to modify:** `top/config_view.go`, `top/menu.go`, `top/keybindings.go`, `top/help.go`,
-  `top/config_view_test.go`, `top/menu_test.go`, `top/help_test.go`
+  `top/config_view_test.go`, `top/menu_test.go`, `top/help_test.go`, `top/keybindings_test.go`,
+  `top/pause_test.go`
 - **Files to read:** `internal/view/view.go`
 
 #### Task 7: report describe text for archiver and the wal FPI row
@@ -633,7 +638,7 @@ Technical criteria, complementing the user-facing ones in the user-spec:
 - **Description:** Add the 0.12.0 release-notes entries for the breaking `-W` change and the PG 19
   legacy-archive limitation, quoting the literal messages users will see (`report type is not
   specified, quit` and `diff failed`), and note that on a cluster whose `archive_status` directory is
-  missing the verbose panel now reports `0 B` instead of `n/a`. Target, scope and what is deliberately
+  missing the verbose panel now reports a bare `0` instead of `n/a`. Target, scope and what is deliberately
   left out are fixed by Decision 13.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer

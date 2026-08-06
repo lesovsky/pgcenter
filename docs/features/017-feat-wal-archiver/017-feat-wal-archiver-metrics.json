@@ -42,7 +42,7 @@
     "validation_rounds": {
       "user_spec": 2,
       "tech_spec": 3,
-      "task_decomposition": 1
+      "task_decomposition": 2
     },
     "validation_findings": {
       "critical": 0,
@@ -61,7 +61,7 @@
     "interview_questions": 12,
     "tasks_count": 10,
     "waves_count": 4,
-    "agents_spawned": 36,
+    "agents_spawned": 45,
     "commits_count": 13
   }
 }
