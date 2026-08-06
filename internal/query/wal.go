@@ -19,10 +19,27 @@ const (
 		"wal_buffers_full AS buffers_full, " +
 		"date_trunc('seconds', now() - stats_reset)::text AS stats_age " +
 		"FROM pg_stat_wal"
+
+	// PgStatWALPG19 defines query for pg_stat_wal (PG 19+).
+	// wal_fpi_bytes added in PG 19: the volume of WAL written as full page images. It sits right after
+	// the wal_fpi count so the number of full page images and the bytes they cost are adjacent, and
+	// inside the diffed range so both render as per-interval deltas.
+	PgStatWALPG19 = "SELECT 'WAL' AS source, " +
+		"(SELECT pg_size_pretty(count(1) * pg_size_bytes(current_setting('wal_segment_size'))) AS waldir_size  FROM pg_ls_waldir()) AS waldir_size, " +
+		`round(wal_bytes / 1024, 2) AS "wal,KiB", ` +
+		"wal_records AS records, wal_fpi AS fpi, " +
+		`round(wal_fpi_bytes / 1024, 2) AS "fpi,KiB", ` +
+		"wal_buffers_full AS buffers_full, " +
+		"date_trunc('seconds', now() - stats_reset)::text AS stats_age " +
+		"FROM pg_stat_wal"
 )
 
 // SelectStatWALQuery returns the proper query, column count and diff interval for pg_stat_wal based on PG version.
 func SelectStatWALQuery(version int) (string, int, [2]int) {
+	if version >= PostgresV19 {
+		// PG 19 added wal_fpi_bytes; stats_age is col 7 and must not be diffed.
+		return PgStatWALPG19, 8, [2]int{2, 6}
+	}
 	if version >= 180000 {
 		// PG 18 removed wal_write/wal_sync columns; stats_age is col 6 and must not be diffed.
 		return PgStatWALDefault, 7, [2]int{2, 5}
