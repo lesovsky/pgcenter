@@ -1,0 +1,38 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Every round-1 finding is closed, and I did not take the mutation report on trust — I copied the working tree into a sandbox and re-ran all six claimed mutations plus three of my own. All nine reproduce exactly as described. Removing ColsWidth and Filters from the archiver entry gives two NotNil failures at view_test.go:123-124; Name mutated to \"archive\" reddens TestNew_ArchiverView alone; the QueryTmpl seed swapped to query.PgStatWALPG14 reddens it with a full query diff; the prefix-only Msg typo \"Show archiver stats\" reddens it, which the old Contains would not have caught. NotRecordable:true reddens Test_filterViews on exactly the three >=PG14 rows — six count assertions plus the three new wantArchiver assertions naming archiver directly — and the four <=PG13 rows correctly stay green. Dropping MinRequiredVersion reddens exactly the four <=PG13 rows in both TestView_VersionOK and Test_filterViews, and the added msgAndArgs names the offending version on every one of them, which is the diagnostic round 1 asked for. My own additions: reverting task 02's PG 19 branch in SelectStatWALQuery reddens TestViews_Configure on QueryTmpl/Ncols/DiffIntvl, and so does deleting case \"wal\" from Configure — the wal half is a genuine wiring gate, not a restatement of the selector's own table test. Deleting case \"archiver\" from Configure leaves the package green, exactly as the now-documented caveat at the assertion site says. The map-lookup form of the archiver membership assertion is a better call than the assert.Contains I suggested: it produced clean one-line failures naming the version, where Contains would have dumped 28 View structs. I accept the TestNew_ViewMapInvariants deferral — see the finding below; I checked the invariant against all 28 registered views and it holds today with zero violations, so it is a pure generalization with no latent defect behind it, and this task's own risk is fully covered by the archiver-specific assertions. Only cosmetic issues remain.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go — absent test TestNew_ViewMapInvariants (deferred from round 1)",
+      "issue": "ACCEPTED, NOT BLOCKING — recorded here only so the tech-debt entry has a traceable source. The round-1 recommendation to add one registry-wide invariant (key == Name, non-nil ColsWidth, non-nil Filters over all views from New()) was declined as out of scope, since it would guard views owned by other tasks and features. The substance of the round-1 major findings is fully closed by the archiver-specific assertions, each mutation-verified above, so nothing this task introduces is left unpinned. I ran the proposed invariant against the current registry to check the deferral is not hiding a defect: all 28 views satisfy all three conditions — no key/Name mismatch, no nil ColsWidth, no nil Filters. So the test would be green the day it is written; it is a generalization that lowers the cost of the next view registration, not a repair. The residual risk is narrow and real but small: the next view added by a different task can still omit a non-nil map or misspell Name and no test will notice, because the guard tests are per-view by construction.",
+      "recommendation": "Keep the deferral. When the tech-debt item is picked up, the whole test is: `func TestNew_ViewMapInvariants(t *testing.T) { for k, v := range New() { assert.Equal(t, k, v.Name, \"map key %q must equal Name\", k); assert.NotNil(t, v.ColsWidth, \"%s.ColsWidth must be non-nil\", k); assert.NotNil(t, v.Filters, \"%s.Filters must be non-nil\", k) } }`. Verified green against the current 28-entry registry, so it lands without touching any other task's view. Worth attaching to patterns.md 'Adding a New View' rather than to a feature task, since that is where the next registration will look.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/view/view_test.go:230",
+      "issue": "Typo in the honesty caveat added this round: the comment reads `deleting case \"archiver:\"` with the closing quote inside the colon instead of `case \"archiver\":`. Cosmetic, but this particular comment is load-bearing — it is the only place a future reader is told that these three assertions cannot be reddened by a Configure() mutation, and it names the exact code construct they should try deleting to check that claim. A mis-quoted identifier in an instruction to go look at the source is worth one character of care. Behaviour is unaffected; I confirmed the claim itself is accurate by deleting the case block and watching internal/view stay green.",
+      "recommendation": "In view_test.go:230 change `deleting case \"archiver:\"` to `deleting case \"archiver\":`. No assertion change.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "litmusTest": {
+      "checked": 16,
+      "passed": 15,
+      "failed": 1
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

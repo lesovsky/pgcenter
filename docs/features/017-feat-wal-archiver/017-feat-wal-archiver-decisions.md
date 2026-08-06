@@ -4,6 +4,59 @@
 
 ---
 
+## Task 05: Регистрация view `archiver` и обновление счётных тестов
+
+**Status:** Done
+**Commit:** 13c33f2
+**Agent:** основной агент
+
+**Summary:** В `view.New()` добавлена запись `archiver` (`MinRequiredVersion: query.PostgresV14`, `QueryTmpl: query.PgStatArchiverDefault`, `Ncols: 9`, `DiffIntvl{0,0}`, `OrderKey 0` / `OrderDesc true`, непустые `ColsWidth`/`Filters`, `NotRecordable` оставлен нулевым), в `Configure()` — соответствующий `case "archiver":`. Ключевое решение — `MinRequiredVersion` здесь несущий, а не косметический: общего нижнего порога в проекте нет (реестр обслуживает вплоть до PG 9.4, `TestViews_Configure` гоняет `90400`), и при нулевом значении экран предлагался бы на PG ≤ 11, где `pg_ls_archive_statusdir()` не существует, а `pgcenter record` обрывает **всю** запись на первой же ошибке запроса. Попутно закрыт долг задачи 02: в `TestViews_Configure` добавлены `wal`-ассерты в ветки `case 190000:` и `case 140000:` — до этого ничто не пиннило, что `Configure()` реально доносит PG 19 layout до зарегистрированного view (селекторный табличный тест проверяет селектор, а не проводку).
+
+**Deviations:** Отклонений от спека нет — все AC выполнены. Три уточнения по факту исполнения:
+
+1. `TestNew_ArchiverView` пиннит больше полей, чем перечисляет шаг 4 задачи: добавлены `Name`, `QueryTmpl`-seed и непустота `ColsWidth`/`Filters`. Задача внутренне противоречива — шаг 4 даёт узкий список, а AC №1 требует «pins every field listed above», включая non-nil карты. Разошлись в пользу AC: каждое из трёх полей провалило litmus-тест (мутация оставляла все пять тестов зелёными), причём потеря карт — не неверное число, а паника в gocui-обработчике при первом расширении колонки или установке фильтра.
+2. `Msg` закреплён полным равенством, а не подстрокой (`assert.Contains` → `assert.Equal`). AC №1 требует строку verbatim; равенство — строгое надмножество подстроки, поэтому мутация «убрать `archive_mode=on`» по-прежнему краснеет, но теперь ловится и опечатка в префиксе, которую `Contains` пропускал.
+3. Ассерт принадлежности `archiver` в `Test_filterViews` сделан через lookup в карте + `assert.Equal`, а не через предложенный ревьюером `assert.Contains`: падение `Contains` на `view.Views` печатает все 28 структур `View` (141 КБ вывода) и хоронит единственный нужный бит.
+
+**Tech debt:**
+
+1. Инварианты реестра (`key == v.Name`, непустые `ColsWidth`/`Filters`) не проверяются ни для одного view кроме `archiver`. Гарды `TestNew_BgwriterView`, `TestNew_ReplslotsView`, `TestNew_StatIOView`, `TestNew_StatIOTimeView`, `TestNew_StatementsJITView` пропускают их все. Реестро-широкий `TestNew_ViewMapInvariants` предложен обоими ревьюерами и сознательно не добавлен: он охраняет view, принадлежащие другим задачам и фичам, то есть делает эту задачу владельцем падений, которые она не может вызвать. Оба ревьюера в round 2 согласились с отсрочкой; dev-test-reviewer прогнал предложенный инвариант против текущего реестра — все 28 view его удовлетворяют, дефекта за отсрочкой не прячется. Правильное место записи — раздел `patterns.md` «Adding a New View», куда заглянет следующая регистрация.
+2. `record/recorder.go` роняет всю запись при ошибке любого одного view (`record/record.go:172-175`). Для `archiver` это Decision 4 by design (роль без `pg_monitor` теряет экран целиком), и `wal` с тем же порогом PG14 уже вызывает `pg_ls_waldir()` в том же классе привилегий — то есть экспозиция не новая. Долговременное решение — пропускать сбойный view с INFO-строкой, как это уже делает ветка `pg_stat_statements not found`, в `tarRecorder.collect()`, а не в реестре. Найдено dev-security-auditor.
+3. Имена WAL-файлов (колонки 3 и 6) рендерятся без escape-санитизации. Decision 16 корректен для настоящего сервера (`VALID_XFN_CHARS` не пропускает ESC), но не для враждебного эндпоинта, говорящего по протоколу; это уже зафиксированный техдолг [029] (`docs/tech-debt.md:47`), покрывающий все текстовые колонки всех экранов. Здесь не расширен; чинить один раз в `printDataCell`.
+4. Комментарий-обоснование над таблицей `Test_filterViews` вырос до 25 строк на 7 строк данных и накапливает археологию четырёх фич. Предложение dev-code-reviewer свернуть историю в один инвариант отклонено (задача явно предписывает комментарий **расширить**, а слои документируют, почему держатся числа в остальных строках), и в round 2 сам ревьюер его снял. Оставлено как housekeeping для следующего владельца файла.
+5. Раздел Edge cases самого task-файла (и первая редакция комментария в тесте) приписывает запись в `ColsWidth` функции `align.SetAlign`. Фактически `internal/align/align.go:18` строит новую карту, а `top/stat.go:788` присваивает её целиком — этот путь nil-карту **чинит**, а не роняет. Реальные незащищённые in-place writer'ы — `top/config_view.go:100`, `:124` и `:166`. В комментарии теста исправлено; в task-файле — нет.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 1 major + 3 minor → [017-feat-wal-archiver-task-05-dev-code-reviewer-review.json](017-feat-wal-archiver-task-05-dev-code-reviewer-review.json)
+- dev-security-auditor: approved, 0 critical / 0 major, 2 minor (оба вне скоупа, вынесены в Tech debt) → [017-feat-wal-archiver-task-05-dev-security-auditor-review.json](017-feat-wal-archiver-task-05-dev-security-auditor-review.json)
+- dev-test-reviewer: needs_improvement, 2 major + 5 minor → [017-feat-wal-archiver-task-05-dev-test-reviewer-review.json](017-feat-wal-archiver-task-05-dev-test-reviewer-review.json)
+
+*Round 2 (после исправлений):*
+- dev-code-reviewer: approved_with_suggestions, 1 minor (фактическая неточность комментария про `align.SetAlign` — исправлена) → [017-feat-wal-archiver-task-05-dev-code-reviewer-review-round2.json](017-feat-wal-archiver-task-05-dev-code-reviewer-review-round2.json)
+- dev-test-reviewer: passed, 2 minor (отсроченный реестровый инвариант + опечатка в комментарии — исправлена) → [017-feat-wal-archiver-task-05-dev-test-reviewer-review-round2.json](017-feat-wal-archiver-task-05-dev-test-reviewer-review-round2.json)
+
+Приняты и применены все major-находки round 1 (`ColsWidth`/`Filters`, `Name`) и все minor, кроме двух: сворачивание исторического комментария в `record_test.go` (отклонено, ревьюер снял в round 2) и реестро-широкий `TestNew_ViewMapInvariants` (отсрочено, оба ревьюера согласились — см. Tech debt 1). Оба ревьюера round 2 независимо воспроизвели весь мутационный набор в песочнице и подтвердили результаты построчно.
+
+**Verification:**
+- Счётчики before → after: `TestNew` 27 → 28; `TestView_VersionOK` 190000 27 → 28, 160000 27 → 28, 140000 24 → 25, строки 130000/120000/110000/100000 **не тронуты**; `Test_filterViews` `wantV` 27/18/24 → 28/19/25 на трёх строках ≥ PG14 и `wantN` 8/11/13/13 → 9/12/14/14 на четырёх строках ≤ PG13, блок-комментарий расширен.
+- Хост: `go test ./internal/view/...` → ok; `go test ./record/... -run Test_filterViews` → ok. Полный пакет `record` в образе `lesovsky/pgcenter-testing:0.0.11`: `go test -race -p 1 -timeout 300s ./internal/view/... ./record/...` → оба ok (в т.ч. `Test_app_record`, который считает recordable views динамически). Дополнительно в образе прогнаны `./report/...` и `./top/...` → ok, чтобы исключить незамеченный счётный пин вне двух известных мест.
+- `gofmt -l` пусто, `go vet` чисто, `golangci-lint run ./internal/view/... ./record/...` → 0 issues, `gosec` → 0 issues, `go build -o /dev/null ./cmd` → ok. `git diff record/record.go` пуст; `case "wal":` в `view.go` — только контекстная строка диффа.
+- Мутационный контроль — каждая мутация применена к продакшн-коду, падение **наблюдалось**, мутация откачена:
+  - **M1** удаление `MinRequiredVersion` → `TestView_VersionOK` красный ровно на четырёх строках ≤ PG13 (130000 `19/20`, 120000 `16/17`, 110000 `14/15`, 100000 `14/15`); `Test_filterViews` красный на тех же четырёх строках, и после доработки — с поимённым `archiver kept? version=…` на каждой.
+  - **M2** `Ncols` 9 → 8 и `DiffIntvl{0,0}` → `{0,1}` → `TestNew_ArchiverView` (`TestViews_Configure` при этом остаётся зелёным: селектор переприсваивает 9 — это и есть честная граница того, что пиннят archiver-ассерты).
+  - **M3** `Msg` без `archive_mode=on` → `TestNew_ArchiverView`.
+  - **M4** `NotRecordable: true` → `Test_filterViews` красный **ровно на трёх строках ≥ PG14** (`{190000,"public"}` `0/1` и `28/27`, `{140000,""}` `9/10` и `19/18`, `{140000,"public"}` `3/4` и `25/24`); четыре строки ≤ PG13 остаются **зелёными** — `filterViews` удаляет view и делает `filtered++` в обеих ветках, так что подмена *причины* отбрасывания там ничего не сдвигает. Ожидать красноты на каждой строке арифметически неверно.
+  - **M5** откат ветки PG 19 из `SelectStatWALQuery` (задача 02) → `TestViews_Configure` красный в ветке `case 190000:` по тексту запроса, `Ncols` `8/7` и `DiffIntvl` `{2,6}/{2,5}`. Это и есть настоящий гейт проводки.
+  - **M6** удаление `ColsWidth` и `Filters` из записи → `TestNew_ArchiverView`, два падения `NotNil`.
+  - **M7** `Name` → `"archive"` → `TestNew_ArchiverView` (все остальные тесты ищут view по ключу карты и остаются зелёными).
+  - **M8** `QueryTmpl`-seed → `query.PgStatWALPG14` → `TestNew_ArchiverView`.
+  - **M9** опечатка только в префиксе `Msg` (`"Show archiver stats (requires archive_mode=on)"`) → `TestNew_ArchiverView`; под прежним `assert.Contains` эта мутация оставалась зелёной.
+  - **Отрицательный контроль (задокументирован, не дефект):** удаление `case "archiver":` из `Configure()` оставляет пакет зелёным — `New()` уже выставляет те же `QueryTmpl`/`Ncols`/`DiffIntvl`. Archiver-ассерты в `TestViews_Configure` — регрессионный страж дрейфа между `SelectStatArchiverQuery` и статической записью, а не доказательство проводки; оговорка вынесена в комментарий рядом с самими ассертами.
+
+---
+
 ## Task 02: PG 19 FPI column on the wal screen
 
 **Status:** Done
