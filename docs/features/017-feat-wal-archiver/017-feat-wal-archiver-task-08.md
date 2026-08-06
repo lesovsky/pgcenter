@@ -67,6 +67,12 @@ pinned by the query and view unit tests of Tasks 1, 2 and 5. What these tests pi
 diff pipeline plus the version-driven `Configure` switch (`Ncols`, `DiffIntvl`, `OrderKey`, `UniqueKey`).
 Say so in each file's doc comment, the way `report_record_statio_test.go:50-60` says it about `stat_io`.
 
+The same reasoning has a second consequence that is easy to miss, so it is stated here and enforced in
+the Acceptance Criteria: the **view registry** is likewise invisible to this replay. `processData`
+configures through a map it builds itself, keyed by report type, so an unregistered `archiver` would still
+be handed `Ncols` and `DiffIntvl` by `Configure` and the output would not move. Do not write a criterion
+that claims otherwise — see the "no A5" item below.
+
 ## What to do
 
 - Write `report/report_record_archiver_test.go` with `Test_app_doReport_Archiver`, three subcases:
@@ -129,9 +135,11 @@ a test ends up asserting the bug.
   TUI-only sentinel from the `top` package and can never appear in report output, so the assertion would
   be vacuous by construction.
 - `report/report_record_archiver_test.go::Test_app_doReport_Archiver/no_archiver_entries` — a tar with
-  `meta.*` + `sysinfo.*` for two ticks and no `archiver.*` entry at all. Asserts `doReport` returns nil
-  and the buffer is **empty** — no column header, no notice (Decision 15; the `INFO:` lines are printed
-  outside `doReport`, so "empty" is literal here).
+  `meta.*` + `sysinfo.*` for two ticks and no `archiver.*` entry at all. Asserts the buffer is **empty** —
+  no column header, no notice (Decision 15; the `INFO:` lines are printed outside `doReport`, so "empty"
+  is literal here). The error return is not part of the claim: `doReport` returns nil on every path. The
+  subcase is only worth having together with mutation B5, which shows the same tar plus two `archiver.*`
+  entries does produce output.
 - `report/report_record_wal_test.go::Test_app_doReport_WAL/pg18` — `versionNum: "180000"`, 7 columns
   `source, waldir_size, wal,KiB, records, fpi, buffers_full, stats_age`, `DiffIntvl{2,5}` supplied by
   `Configure`. Asserts the output contains `WAL`, the `records` delta `500`, the pass-through
@@ -145,11 +153,18 @@ a test ends up asserting the bug.
 
 ## Acceptance Criteria
 
-Written as mutations, per `patterns.md` → "Extract the decision out of the unreachable closure": a golden
-is believed only after the named change has been applied and the suite observed **red**. Apply each one,
-see red, revert. Class A mutations touch production code — they prove the tests guard real behaviour.
-Class B mutations touch the test's own fixture — they prove the goldens are compared byte-for-byte and are
-not vacuous. Both classes are required.
+Written as mutations, per `patterns.md` → "Extract the decision out of the unreachable closure": an
+assertion is believed only after the named change has been applied and the suite observed **red**. Apply
+each one, see red, revert. Class A mutations touch production code — they prove the tests guard real
+behaviour. Class B mutations touch the test's own fixture — they prove the assertion (golden or otherwise)
+actually discriminates instead of passing by construction. Both classes are required.
+
+**Coverage rule: every subcase is named by at least one mutation.** `populated` by A1/B1/B2, `pg18` by A4,
+`pg19` by A2/A3/B3, `never_archived` by B4, `no_archiver_entries` by B5. A subcase with no mutation naming
+it is a subcase nobody has shown can fail — and the two that pin this feature's user-visible promises
+("blank cells, not `0`/`-`" and "no rows, no header") are exactly the two that only Class B can gate,
+because no production change reaches them. Do not drop B4 or B5 as ceremony; they are the whole proof for
+those two.
 
 - [ ] `report/report_record_archiver_test.go` and `report/report_record_wal_test.go` exist; the three
       goldens exist; no other file in the tree is modified.
@@ -197,8 +212,8 @@ not vacuous. Both classes are required.
       what the screen would render if someone wrapped those columns in `coalesce(..., 0)`. The
       field-count assertion turns red: the data line splits into **nine** fields instead of five. That
       mutation is the user-visible promise itself ("колонки пустые, не `0` и не прочерк"), so this is the
-      gate that makes the subcase worth having. Repeat once with `"-"` instead of `"0"` if the extra
-      thirty seconds are cheap; one of the two is mandatory.
+      gate that makes the subcase worth having. The `"0"` pass is mandatory; a second pass with `"-"` is
+      optional and costs half a minute.
 - [ ] **B5** (gate for `no_archiver_entries`, which has no other one) — take the empty-archive tar and
       add back the two `archiver.*` entries from the populated subcase, changing nothing else: the buffer
       becomes non-empty and the emptiness assertion turns red. This is not ceremony — an empty buffer is
@@ -230,59 +245,60 @@ not vacuous. Both classes are required.
 ## Context Files
 
 **Feature artifacts:**
-- [017-feat-wal-archiver.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md) — user-spec:
+- [017-feat-wal-archiver.md](017-feat-wal-archiver.md) — user-spec:
   the archiver column set, the "пустые колонки" criterion, the PG 14–18 "набор колонок не изменился"
   criterion, the corrected scenario 3 ("one row per tick, except the first")
-- [017-feat-wal-archiver-tech-spec.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-tech-spec.md) —
+- [017-feat-wal-archiver-tech-spec.md](017-feat-wal-archiver-tech-spec.md) —
   Task 8, Testing Strategy (E2E section), Data Models (the exact 9-column archiver layout and the PG 19
   wal layout), Decisions 2, 12, 14, 15
-- [017-feat-wal-archiver-decisions.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md) —
+- [017-feat-wal-archiver-decisions.md](017-feat-wal-archiver-decisions.md) —
   decisions log; read what Tasks 1, 2 and 5 recorded before writing fixtures against their names
-- [017-feat-wal-archiver-code-research.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-code-research.md) —
+- [017-feat-wal-archiver-code-research.md](017-feat-wal-archiver-code-research.md) —
   §5.4 the report-test inventory, §10.F the harness anatomy and the per-file requirements, §8 the CI-image
   docker command
-- [docs/decisions-log.md](docs/decisions-log.md) — ADR [008] "Replay tests: synthetic in-memory tar +
+- [docs/decisions-log.md](../../decisions-log.md) — ADR [008] "Replay tests: synthetic in-memory tar +
   golden files, not the legacy fixture" (`:462`), the governing decision for this task
 
 **Project knowledge:**
-- [overview.md](.claude/skills/project-knowledge/overview.md) — what pgcenter is, which statistics it
+- [overview.md](../../../.claude/skills/project-knowledge/overview.md) — what pgcenter is, which statistics it
   reports
-- [architecture.md](.claude/skills/project-knowledge/architecture.md) — package layout, the
+- [architecture.md](../../../.claude/skills/project-knowledge/architecture.md) — package layout, the
   record → tar → report data flow, PG version handling
-- [patterns.md](.claude/skills/project-knowledge/patterns.md) — Testing section (golden files, the
+- [patterns.md](../../../.claude/skills/project-knowledge/patterns.md) — Testing section (golden files, the
   `-update` flag, table-driven subtests, the `io.Writer` seam that makes `doReport` testable),
   "Extract the decision out of the unreachable closure" (the mutation rule applied above)
 
 **Code files:**
-- [report/report_record_archiver_test.go](report/report_record_archiver_test.go) — **NEW**, create
-- [report/report_record_wal_test.go](report/report_record_wal_test.go) — **NEW**, create
-- [report/testdata/report_record_archiver.golden](report/testdata/report_record_archiver.golden) —
+- [report/report_record_archiver_test.go](../../../report/report_record_archiver_test.go) — **NEW**, create
+- [report/report_record_wal_test.go](../../../report/report_record_wal_test.go) — **NEW**, create
+- [report/testdata/report_record_archiver.golden](../../../report/testdata/report_record_archiver.golden) —
   **NEW**, generated with `-update`
-- [report/testdata/report_record_wal_pg18.golden](report/testdata/report_record_wal_pg18.golden) —
+- [report/testdata/report_record_wal_pg18.golden](../../../report/testdata/report_record_wal_pg18.golden) —
   **NEW**, generated with `-update`
-- [report/testdata/report_record_wal_pg19.golden](report/testdata/report_record_wal_pg19.golden) —
+- [report/testdata/report_record_wal_pg19.golden](../../../report/testdata/report_record_wal_pg19.golden) —
   **NEW**, generated with `-update`
-- [report/report_record_bgwriter_test.go](report/report_record_bgwriter_test.go) — the template to copy:
+- [report/report_record_bgwriter_test.go](../../../report/report_record_bgwriter_test.go) — the template to copy:
   the version-aware table (`:31-132`), the meta `PGresult` (`:141-151`), `mkRow` (`:155-161`), the tar
   composition (`:188-202`), the `Config`/`newApp`/`doReport` drive (`:204-216`), the pre-golden
   invariants (`:218-228`), the `-update` branch (`:230-237`)
-- [report/report_record_statio_test.go](report/report_record_statio_test.go) — the version-**independent**
+- [report/report_record_statio_test.go](../../../report/report_record_statio_test.go) — the version-**independent**
   single-golden precedent (`:177-206`), the package-level ANSI strip helper `statIOStripANSI` (`:43-46`)
   that the never-archived subcase reuses, and the doc comment (`:50-60`) that states plainly what a
   replay test cannot prove — the model for this task's own honesty note
-- [report/report.go](report/report.go) — read-only here: `newApp` view lookup (`:83-85`), the
+- [report/report.go](../../../report/report.go) — read-only here: `newApp` view lookup (`:83-85`), the
   first-sample/version-change `continue` (`:277-319`), `formatStatSample`'s align-once rule (`:528-538`),
   `printStatHeader`'s `!v.Aligned` early return (`:560-563`), `printStatSample`'s timestamp line and cell
   padding (`:579-650`), `printReportHeader` living outside `doReport` (`:541`), `isFilenameOK` (`:460`)
-- [report/report_test.go](report/report_test.go) — the shared `var update = flag.Bool("update", …)`
+- [report/report_test.go](../../../report/report_test.go) — the shared `var update = flag.Bool("update", …)`
   (`:24`); **do not edit this file**, Task 7 owns it this wave
-- [internal/query/wal.go](internal/query/wal.go) — the PG 14/18 constants and `SelectStatWALQuery`; Task 2
+- [internal/query/wal.go](../../../internal/query/wal.go) — the PG 14/18 constants and `SelectStatWALQuery`; Task 2
   adds the PG 19 branch this task replays
-- [internal/query/archiver.go](internal/query/archiver.go) — Task 1's constant and selector; the source of
+- [internal/query/archiver.go](../../../internal/query/archiver.go) — Task 1's constant and selector; the source of
   the 9-column order the archiver fixture must mirror
-- [internal/view/view.go](internal/view/view.go) — the `wal` registration (`:129-140`) and its `Configure`
-  case (`:389-391`), plus Task 5's `archiver` registration that `newApp` resolves
-- [internal/stat/postgres.go](internal/stat/postgres.go) — `calculateDelta`'s `{0,0}` pass-through
+- [internal/view/view.go](../../../internal/view/view.go) — the `wal` registration (`:129-140`) and its
+  `Configure` case (`:389-391`); `Views.Configure` switching on the **map key** (`:372-373`), which is why
+  Task 5's `case "archiver":` — not its `New()` entry — is what these tests depend on
+- [internal/stat/postgres.go](../../../internal/stat/postgres.go) — `calculateDelta`'s `{0,0}` pass-through
   (`:589-597`), `diff` (row pairing by `UniqueKey`, per-column interval test), `diffPair` (floats via
   `%.2f`, integers via integer division by `itv`)
 
@@ -298,9 +314,10 @@ not vacuous. Both classes are required.
   row's absolute values and the pg19 `fpi,KiB` column and its delta.
 - Step 3 — green: `go test ./report/...` on the host. Expected green with no PostgreSQL running; this
   package's replay tests need none.
-- Step 4 — mutation gates, one at a time, reverting after each: A1–A5 (production code) and B1–B3
+- Step 4 — mutation gates, one at a time, reverting after each: A1–A4 (production code) and B1–B5
   (fixture). Each must turn the **named** subcase red. Green-only evidence does not close this task; the
-  report must list which mutations were run and what turned red.
+  report must list which mutations were run and what turned red. Do not invent a registry mutation — the
+  Acceptance Criteria explain at length why it cannot redden and where that guard actually lives.
 - Step 5 — for the record, the full suite inside the CI image (this task needs no cluster, but the goldens
   must survive the race detector and the container's environment):
 
@@ -366,9 +383,15 @@ not vacuous. Both classes are required.
 
 **Dependencies:**
 
-- **Task 5** (`depends_on`) — `newApp` does `view.New()[config.ReportType]` (`report/report.go:83-85`),
-  so without the `archiver` registration the report runs against a zero-value view. Transitively this
-  also needs Task 1 (the selector `Configure` calls) and Task 2 (the PG 19 wal branch): both landed in
+- **Task 5** (`depends_on`) — and it is worth being exact about *which half* of Task 5 this task needs,
+  because the obvious answer is wrong. `newApp` does `view.New()[config.ReportType]`
+  (`report/report.go:83-85`) and returns a zero-value `view.View` for an unregistered name **without an
+  error**; that alone would not break these tests. The load-bearing half is Task 5's `case "archiver":`
+  inside `Views.Configure` (`internal/view/view.go`), because `processData` re-configures through its own
+  one-entry map keyed by report type (`report/report.go:282-284`) and it is that `case` — not the
+  registry — that supplies `Ncols` and `DiffIntvl` from `SelectStatArchiverQuery`. Without it `Ncols`
+  stays `0` and the render is meaningless. Transitively this also needs Task 1 (the selector the `case`
+  calls) and Task 2 (the PG 19 wal branch, which `case "wal":` reaches the same way): both landed in
   Wave 1, both are prerequisites of Task 5.
 - **Task 7** runs in this same wave and owns `report/report.go`, `report/describe.go` and
   `report/report_test.go`. This task creates only new files — no shared file, no conflict. Do not add
@@ -407,6 +430,13 @@ not vacuous. Both classes are required.
   divide by `itv`. With `itv == 1` the pg19 `fpi,KiB` delta is the literal `240.25`.
 - **Do not assert on `INFO:` lines.** They are written by `printReportHeader` on the CLI path, not by
   `doReport`.
+- **`doReport` returns nil on every path** (`report/report.go:109-151`): `processData`'s error is printed
+  with `fmt.Println` inside the goroutine and then swallowed while the drain loop runs, and the function
+  ends in a bare `return nil` after `wg.Wait()`. An `assert.NoError` on it is a green light that can
+  never turn red. Assert on the buffer.
+- **`n/a` never occurs in report output.** `naLiteral` (`top/stat.go:430`) belongs to the `top` package's
+  system-stats block. Any `NotContains(t, out, "n/a")` here is vacuous; the field-count assertion plus
+  mutation B4 is what actually covers the blank-cell criterion.
 
 **Implementation hints:**
 
@@ -429,8 +459,12 @@ not vacuous. Both classes are required.
 - Name the tests `Test_app_doReport_Archiver` and `Test_app_doReport_WAL`, matching
   `Test_app_doReport_Bgwriter` / `Test_app_doReport_StatIOTime`. Subtest names appear in `-v` output and
   are how Step 4's mutation evidence is read.
-- When a mutation does **not** turn a test red, that is a finding, not a nuisance: it means the golden
-  does not cover what the acceptance criterion claims. Fix the test, then re-run the mutation.
+- When a mutation from the list above does **not** turn a test red, that is a finding, not a nuisance: it
+  means the golden does not cover what the acceptance criterion claims. Fix the test, then re-run the
+  mutation. The rule applies to A1–A4 and B1–B5 — the mutations this task has argued *can* redden. If you
+  invent an extra mutation of your own and it stays green, first check whether the mutation is reachable
+  at all (the dropped registry mutation is the worked example); a green that follows from the code's
+  structure is a fact about the code, not a hole in the test.
 
 ## Reviewers
 
@@ -440,6 +474,6 @@ not vacuous. Both classes are required.
 
 ## Post-completion
 
-- [ ] Записать краткий отчёт в [017-feat-wal-archiver-decisions.md](docs/features/017-feat-wal-archiver/017-feat-wal-archiver-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
+- [ ] Записать краткий отчёт в [017-feat-wal-archiver-decisions.md](017-feat-wal-archiver-decisions.md) (Summary: 1-3 предложения, ревью со ссылками на JSON, без таблиц файндингов и дампов)
 - [ ] Если отклонились от спека — описать отклонение и причину
 - [ ] Обновить user-spec/tech-spec если что-то изменилось

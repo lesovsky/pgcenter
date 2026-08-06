@@ -3,7 +3,7 @@ status: planned                    # planned -> in_progress -> done
 depends_on: ["01", "02"]           # ID задач-зависимостей (строки: ["01", "02"])
 wave: 2                            # волна параллельного выполнения
 skills: [code-writing]             # МАССИВ скиллов для загрузки
-verify: bash                       # инструмент верификации (опционально: curl, bash, user)
+verify: bash — `go test ./internal/view/...` and `go test ./record/... -run Test_filterViews` (the full record package needs the CI image; Test_tarRecorder panics without PostgreSQL)
 reviewers: [dev-code-reviewer, dev-security-auditor, dev-test-reviewer]  # явно указать. Пусто = fallback на defaults
 teammate_name:                     # имя агента-исполнителя (опционально; если не задано — генерируется по описанию задачи)
 ---
@@ -299,8 +299,11 @@ looking.
   interval and never enters `diff()`, which is exactly what keeps the `'Archiver'` string literal at
   column 0 and the four NULL-able columns away from `strconv.ParseInt` (Decision 2). Do not
   "fix" it into a diffed range.
-- **A wrong count can pass locally and fail in CI** for other views, but not for the four tests here
-  — all of them run fixture-free. There is no excuse for shipping a stale number in this task.
+- **A wrong count can pass locally and fail in CI** for other views, but not for the tests here —
+  every one of them (`TestNew`, `TestNew_ArchiverView`, `TestViews_Configure`, `TestView_VersionOK`,
+  `Test_filterViews`) executes no SQL and needs no fixture. The only catch is packaging: reaching
+  `Test_filterViews` on the host requires `-run`, because a sibling test in the same package panics
+  without a cluster. There is no excuse for shipping a stale number in this task.
 
 **Implementation hints:**
 - Code-research §10.C.2 has the exact registration block and a field-by-field justification table;
