@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Deliberate per-sub-test goroutine leak in Test_menuSelectWAL (test-only, documented)",
+      "description": "Test_menuSelectWAL drives menuSelect over a zero-value &gocui.Gui{}. The branch ends with printCmdline -> g.Update, which on a zero-value Gui parks a goroutine forever on the nil userEvents channel; a second goroutine (`go func() { received <- <-app.config.viewCh }()`) also parks if the handler ever stops sending on viewCh. Three sub-tests leak up to six parked goroutines for the lifetime of the test binary. This is explicitly acknowledged in the test comment and matches the pre-existing accepted pattern of Test_showExtraCloseLifts (top/pause_test.go). No production code path is affected: printCmdline/writeCmdline in top/ui.go run against a live Gui with a real userEvents channel, and writeCmdline additionally returns early on a nil Gui.",
+      "location": "top/menu_test.go:70-112 (Test_menuSelectWAL)",
+      "impact": "None in production. In the test binary the leaked goroutines are bounded by the number of sub-tests and are freed at process exit; the only practical consequence is that a future goroutine-leak detector (goleak or similar) added to the top package would need an exemption for these tests rather than a real fix.",
+      "recommendation": "No change required. If a leak detector is ever introduced in this package, register the exemption alongside the existing Test_showExtraCloseLifts one instead of reshaping the test; the comment in menu_test.go already records the reason.",
+      "cwe": "CWE-404"
+    }
+  ]
+}

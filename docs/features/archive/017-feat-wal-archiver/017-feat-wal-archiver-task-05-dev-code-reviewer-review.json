@@ -1,0 +1,51 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The archiver view registration and the count-test updates are correct, minimal and match the task spec field for field: the New() entry, the Configure() case, the guard test, and all seven Test_filterViews rows reconcile arithmetically (wantN + wantV == 28 on every row), and case \"wal\": is byte-identical while record/record.go is untouched. I re-ran all five mutations named in the TDD Anchor and each reddened exactly the predicted tests and no others — including the honest negative claim that removing case \"archiver\": from Configure() leaves the suite green. One gap: TestNew_ArchiverView pins the fields listed in step 4 of the task but not the non-nil ColsWidth/Filters maps that the acceptance criteria also list, and those are the one field pair whose loss is an unrecoverable runtime panic rather than a wrong number.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/view/view_test.go",
+      "line": 102,
+      "severity": "major",
+      "category": "testing",
+      "suggestion": "TestNew_ArchiverView does not assert that ColsWidth and Filters are non-nil, although the task's first acceptance criterion lists \"non-nil empty ColsWidth and Filters\" among the fields and the second says the test \"pins every field listed above\". (Step 4 of \"What to do\" enumerates a narrower field list, which is what was implemented — the task is internally inconsistent here, and the implementation followed the narrower half.) Add two lines: assert.NotNil(t, archiver.ColsWidth) and assert.NotNil(t, archiver.Filters). QueryTmpl is already covered indirectly by TestViews_Configure in both version arms, so it does not need duplicating.",
+      "benefit": "Every other pinned field fails loudly as a wrong number if it regresses; a nil ColsWidth or Filters instead panics at runtime on the first write — top/config_view.go:100 and :124 assign into ColsWidth[idx], and :166 assigns into Filters[view.OrderKey]. That is a hard crash the operator sees the moment they widen a column or set a filter on the archiver screen, and no count-based test in either package would catch it. The task's own Edge Cases section flags exactly this (\"A nil map here is a runtime panic on first use, and no count test would catch it\"). Two assertions close it. Note the sibling guard tests (TestNew_BgwriterView, TestNew_StatIOView) omit it too, so this is a convention gap rather than a regression introduced here.",
+      "optional": false
+    },
+    {
+      "file": "internal/view/view.go",
+      "line": 405,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The comment on case \"archiver\": claims a future version branch \"stays a one-line change in query/archiver.go instead of two files\". That is true only of the production files — a real version branch would still change SelectStatArchiverQuery, the guard test, and the TestViews_Configure arms. Consider narrowing the wording to \"a future version branch stays confined to query/archiver.go on the production side\".",
+      "benefit": "The comment's job is to stop a reviewer reading a functionally no-op case as dead code, and it does that well. Tightening the second half keeps it from over-promising and going stale the day the branch is actually added.",
+      "optional": true
+    },
+    {
+      "file": "record/record_test.go",
+      "line": 139,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_filterViews has no per-row identity on failure: the loop calls assert.Equal(t, tc.wantN, n) with no message, so a count drift reports only \"expected: 9, actual: 10\" with no version or pgssSchema. When I ran the NotRecordable:true mutation I had to count assertion pairs to work out which three rows had reddened. Either wrap the body in t.Run(fmt.Sprintf(\"pg%d_pgss=%q\", tc.version, tc.pgssSchema), ...) or pass the row as msgAndArgs: assert.Equal(t, tc.wantN, n, \"version=%d pgss=%q\", tc.version, tc.pgssSchema).",
+      "benefit": "This table is the tripwire every future view registration hits first, and this task moved all seven rows. Naming the row turns a future failure from an arithmetic puzzle into a one-line diagnosis. Pre-existing shape, but this task is the one that rewrote every number in it.",
+      "optional": true
+    },
+    {
+      "file": "record/record_test.go",
+      "line": 116,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The reasoning block above the table now stacks four historical layers (the feature 008 NotRecordable baseline, the bgwriter/replslots move, the stat_io/statements_jit \"only the reason changed\" note, and now the feature 017 archiver paragraph), 23 lines for a 7-row table. The new paragraph is correct and well placed, but the block is accreting archaeology. Consider collapsing the 008-era paragraphs into one sentence stating the current invariant — wantN + wantV == len(view.New()) on every row, wantN being version-incompatible plus pgss-gated statements_* views — and keeping only the per-feature delta that is still load-bearing.",
+      "benefit": "The invariant is what a future maintainer needs to recompute the numbers; the change history is recoverable from git. A shorter comment is likelier to be updated correctly by the next view registration than a long one.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  }
+}

@@ -621,6 +621,12 @@ func Test_switchViewTo(t *testing.T) {
 		{current: "activity", to: "statio", want: "stat_io"},
 		{current: "stat_io", to: "statio", want: "stat_io_time"},
 		{current: "stat_io_time", to: "statio", want: "stat_io"},
+		// The 'w' cycle. The first row is the one that proves the dispatch case exists: the other
+		// two land on "wal" through walNextView's default arm as well, so they stay green even
+		// without the case.
+		{current: "wal", to: "wal", want: "archiver"},
+		{current: "archiver", to: "wal", want: "wal"},
+		{current: "activity", to: "wal", want: "wal"},
 	}
 
 	wg := sync.WaitGroup{}
@@ -638,8 +644,12 @@ func Test_switchViewTo(t *testing.T) {
 
 			fn := switchViewTo(app, tc.to)
 			assert.NoError(t, fn(nil, nil))
+
+			// Inside the closure, not after it: the assertion lives in the goroutine above, and
+			// waiting outside would let a failing row call t.Errorf on a finished subtest - which
+			// panics ("Fail in goroutine after ... has completed") instead of naming the row.
+			wg.Wait()
 		})
-		wg.Wait()
 	}
 	close(app.config.viewCh)
 
@@ -679,6 +689,21 @@ func Test_statioNextView(t *testing.T) {
 
 	for _, tc := range testcases {
 		assert.Equal(t, tc.want, statioNextView(tc.current))
+	}
+}
+
+func Test_walNextView(t *testing.T) {
+	testcases := []struct {
+		current string
+		want    string
+	}{
+		{current: "wal", want: "archiver"},
+		{current: "archiver", want: "wal"},
+		{current: "unknown", want: "wal"},
+	}
+
+	for _, tc := range testcases {
+		assert.Equal(t, tc.want, walNextView(tc.current))
 	}
 }
 

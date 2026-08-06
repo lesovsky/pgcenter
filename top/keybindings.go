@@ -15,7 +15,23 @@ type key struct {
 
 // keybindings set up key bindings with handlers.
 func keybindings(app *app) error {
-	var keys = []key{
+	app.ui.InputEsc = true
+
+	for _, k := range keybindingsList(app) {
+		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
+			return fmt.Errorf("setup keybindings failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// keybindingsList returns the table of key bindings. It is split out of keybindings() because a
+// handler is observable only through this slice: gocui keeps its registered bindings unexported and
+// offers no way to fetch or run one, so which handler a key carries could otherwise be checked by
+// reading the table only. With the table returned, a test can pick a row and call its handler.
+func keybindingsList(app *app) []key {
+	return []key{
 		{"", gocui.KeyCtrlC, app.quit()},
 		{"", gocui.KeyCtrlQ, app.quit()},
 		{"sysstat", 'q', app.quit()},
@@ -47,6 +63,7 @@ func keybindings(app *app) error {
 		{"sysstat", 'X', menuOpen(menuPgss, app.config, app.postgresProps.ExtPGSSSchema)},
 		{"sysstat", 'P', menuOpen(menuProgress, app.config, "")},
 		{"sysstat", 'J', menuOpen(menuStatIO, app.config, "")},
+		{"sysstat", 'W', menuOpen(menuWAL, app.config, "")},
 		{"sysstat", 'l', showPgLog(app.db, app.postgresProps.VersionNum, app.uiExit)},
 		{"sysstat", 'C', showPgConfig(app.db, app.uiExit)},
 		{"sysstat", '~', runPsql(app.db, app.uiExit)},
@@ -83,14 +100,4 @@ func keybindings(app *app) error {
 		{"help", gocui.KeyEsc, closeHelp},
 		{"help", 'q', closeHelp},
 	}
-
-	app.ui.InputEsc = true
-
-	for _, k := range keys {
-		if err := app.ui.SetKeybinding(k.viewname, k.key, gocui.ModNone, k.handler); err != nil {
-			return fmt.Errorf("setup keybindings failed: %w", err)
-		}
-	}
-
-	return nil
 }

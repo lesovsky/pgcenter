@@ -301,7 +301,24 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [017] WAL and archiving area — one pass
 
-- **Status:** planned
+- **Status:** done (2026-08-06) — archived as `docs/features/archive/017-feat-wal-archiver`. All 34
+  acceptance criteria pass: the automated half in the project CI image against PG 14–19 fixtures
+  (full suite green, zero races, `make lint` and `make vuln` clean), the manual half on a live stand,
+  including the check the manual gate exists for — the screen caption printed **exactly once on each
+  of the two entry paths**, verified separately for the `w` hotkey and the `W` menu.
+- **What actually shipped, against the three-item plan below: four pieces, not three.** The fourth
+  was not scope creep but a defect the area pass exposed — the [010] verbose panel counted the
+  backlog through `pg_ls_dir`, which is superuser-only, so the `pg_monitor` role this roadmap keeps
+  citing as the typical monitoring role saw `n/a` and got no first signal at all. Moving it to
+  `pg_ls_archive_statusdir()` was the one-pass mandate applied honestly. Three other deltas worth
+  recording: the screen has **nine** columns, not the seven this document's cross-cutting policy
+  assumed (`ready` plus a `source` identity column on top of the `pg_stat_archiver` set); `-W` became
+  a string flag (`-W w` / `-W a`), an accepted **breaking** CLI change with its own release-notes
+  entry; and the "do not make an incident worse" principle below was tested rather than asserted —
+  the `archive_status` walk was measured on 200 005 `.ready` files, found to halve the refresh rate
+  at that size and be inside the noise at realistic ones, and deliberately left unthrottled. The
+  numbers are in `docs/decisions-log.md`, not in the tech-debt register: there is no intention to fix
+  it, so it is not a commitment.
 - **Value:** medium — low frequency, high severity (archiving failure → WAL accumulation → disk
   fill). Honest scoping: the *most* valuable archiving metric, the backlog of `.ready` files,
   **already ships** in the [010] verbose panel (`OverviewArchivingBacklog`). What

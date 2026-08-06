@@ -655,7 +655,7 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 
 **Date:** 2026-06-25
 **Feature:** 010-feat-overview-dashboard
-**Status:** Accepted
+**Status:** Superseded in part by [017-feat-wal-archiver] "The verbose backlog moves off `pg_ls_dir`" — the aggregate's shape (count of `.ready` × `wal_segment_size`, its own `QueryRow`, degrade to `n/a`) stands; the **function choice and the privilege claim below do not**. Measurement on live PG 14 and PG 18 showed `pg_ls_dir` has ACL `{postgres}` — superuser only — so instead of degrading gracefully for `pg_monitor`, this aggregate never worked for that role at all, which is the most common monitoring role and the one the panel exists to serve.
 
 **Context:** The replication row needs a WAL-archiving backlog signal that works over the network (no PL/Perl) and degrades cleanly when archiving is off.
 
@@ -1114,3 +1114,205 @@ is an invariant defended by inspection alone.
 **Alternatives considered:** Documenting the invariants in comments and relying on review (this is
 what failed twice). A fake `*gocui.Gui` (not possible outside the package). Deferring everything to
 the stand run (too coarse — the stand cannot isolate a single branch).
+
+---
+
+## [017-feat-wal-archiver] `has_function_privilege()` cannot guard a privileged call — measured, not assumed
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The `archiver` screen calls `pg_ls_archive_statusdir()`, which needs superuser or
+`pg_monitor`. The obvious way to keep the rest of the screen alive for a role without it is to hide
+the privileged call behind `has_function_privilege()` and let the column degrade instead of the
+screen.
+
+**Decision:** Do not attempt it in SQL. The privileged call is unconditional and a role without
+`pg_monitor` loses the whole screen, which then retries next tick — the same shape the `wal` screen
+already has with its unconditional `pg_ls_waldir()`.
+
+**Rationale:** PostgreSQL checks EXECUTE at **function-node initialisation**, not when a row would
+need the value, so every guarding form fails alike: `CASE` with an uncorrelated subquery (which
+becomes an InitPlan and is evaluated first), `CASE` with a correlated subquery, and `LEFT JOIN
+LATERAL … ON has_function_privilege(...)`. All three were run on a live PG 18 under a purpose-made
+privilege-less role and all three raised the permission error. This closes a whole class of future
+attempts: the guard has to live outside the statement, not inside it.
+
+**Alternatives considered:** two query variants of equal width, chosen in Go from a connect-time
+privilege probe — technically sound and the only surviving option, rejected here because it would fix
+half the WAL area for a role that cannot use the other half anyway. If per-column degradation is ever
+wanted, it must be done for both screens at once, as its own change.
+
+---
+
+## [017-feat-wal-archiver] The verbose backlog moves off `pg_ls_dir` to `pg_ls_archive_statusdir()`
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+**Supersedes (in part):** [010-feat-overview-dashboard] "Archiving backlog via `count(.ready) ×
+wal_segment_size`" — its function choice and its claim about `pg_monitor`.
+
+**Context:** ADR [010] assumed `pg_monitor` was enough to run the archiving-backlog aggregate and
+that insufficient privileges would merely degrade the field to `n/a`.
+
+**Decision:** `OverviewArchivingBacklog` counts `.ready` entries via `pg_ls_archive_statusdir()`.
+The output (bytes) and the degrade-to-`n/a` path are unchanged.
+
+**Rationale:** The assumption was wrong, and measurement on live PG 14 and PG 18 is what showed it:
+`pg_ls_dir` has ACL `{postgres}` — superuser only — while `pg_ls_waldir` and
+`pg_ls_archive_statusdir` are `{postgres, pg_monitor}`. So the most common monitoring role saw `n/a`
+permanently and never got the first signal that archiving had stopped. Two consequences are accepted
+knowingly: the new function is `missing_ok=true`, so a cluster whose `archive_status` directory is
+gone now reports a confident `0` instead of `n/a` (a damaged data directory, where the backlog is the
+least of the operator's problems) — and it renders as a bare `0`, not `0 B`, because the size
+formatter's zero case returns the digit alone. And it returns `SETOF record`, stating every file,
+where `pg_ls_dir` returned names only; since the verbose panel rides every screen, that walk is now
+paid on every screen. Showing the signal is worth more than saving the walk.
+
+**Alternatives considered:** leaving the panel alone and correcting the user-spec's framing — rejected
+by the roadmap owner in favour of fixing the signal. Doing it as a separate task later — rejected: the
+roadmap's mandate was to enter the WAL area exactly once.
+
+---
+
+## [017-feat-wal-archiver] The report always discards the first sample, so a pass-through screen loses real data
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** `report -W a` over an N-tick recording prints N−1 rows. The user-spec had promised one
+row per tick.
+
+**Decision:** Accept it and document it rather than fix it. The user-spec's scenario was corrected to
+"one row per tick, except the first".
+
+**Rationale:** The replay loop drops the first sample of a run because a **diffed** screen has nothing
+to diff it against. For a screen with `DiffIntvl{0,0}` the first sample *is* printable data and is
+dropped anyway. This is not introduced here — every pass-through screen behaves this way today,
+`activity` included — and it is worth recording because the reasoning does not survive contact with
+this class of screen: whoever next adds a `{0,0}` screen will lose a row and should know it is
+expected, not a bug in their view.
+
+**Alternatives considered:** skip the discard when `DiffIntvl == {0,0}` — rejected as surgery on a
+shared path with golden churn across unrelated screens; if it is ever done, it is its own change with
+its own review.
+
+---
+
+## [017-feat-wal-archiver] An archive with no matching entries prints nothing at all — no rows, no header
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The user-spec promised "header only" for a report over an archive containing no samples
+of the requested screen.
+
+**Decision:** No data rows and no column header — only the three INFO lines every report emits at
+start-up — and exit 0. The user-spec's edge case and its acceptance criterion were corrected to match
+the code.
+
+**Rationale:** The header cannot be printed: `printStatHeader` returns early unless the view has been
+aligned, and alignment happens inside the data branch, so with no samples there is nothing to align
+from and nothing is printed. A "no data" notice exists for exactly one screen, `procpidstat`, and
+giving a second screen one would introduce behaviour no other screen has. Recorded because the
+question ("shouldn't it at least say something?") will be asked again for the next screen.
+
+**Alternatives considered:** an INFO line for empty reports — rejected as inconsistent with every
+other screen; making it consistent across all screens is its own change.
+
+---
+
+## [017-feat-wal-archiver] Report flag values are a closed whitelist, because `ReportType` is not a label
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** `-W` became a string flag (`w`/`a`), joining `-J`, `-D`, `-P`, `-X` in taking a
+sub-selector value. The question is what an unrecognised value should do.
+
+**Decision:** map only the known letters, with no `default` arm; anything else falls through and the
+command exits with `report type is not specified, quit`. Tests cover other flags' letters (`c`, `t`,
+`g`) explicitly, not just one arbitrary unknown string.
+
+**Rationale:** `ReportType` is load-bearing, not an inert label — it is the tar-entry filter in
+`isFilenameOK` and the key into the view map. A value leaking through would select a zero-value
+`view.View` and produce a **silently empty report** rather than an error, which is the worst possible
+outcome for a report tool: a clean exit that shows nothing. Failing closed keeps the flag family
+consistent — `-D`/`-J` already behave this way.
+
+**Alternatives considered:** defaulting an unrecognised value to `wal` — rejected: it would silently
+run a different report than the operator asked for.
+
+---
+
+## [017-feat-wal-archiver] One shared test-role helper, and it must not take `*testing.T`
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** Two packages (`internal/query` and `internal/stat`) needed to prove privilege behaviour
+in both directions — a query succeeds under a `pg_monitor`-only role and fails without it. That needs
+`CREATE ROLE`/`GRANT`/`SET ROLE`, of which the tree contained none, and the test image is deliberately
+frozen so the roles cannot be baked into the fixtures.
+
+**Decision:** one helper, `postgres.SetupTestRole`, in `internal/postgres/testing.go` — the existing
+shared home for test helpers, imported by both packages. It creates the role idempotently at test
+time, optionally grants `pg_monitor`, and the callers always `RESET ROLE` afterwards.
+
+**Rationale:** the wave-conflict analysis compared *files* and missed that two tasks were adding
+package-level helpers to the **same Go package** — two identically-named helpers do not compile, and
+two differently-named copies are duplication a reviewer would rightly reject. The non-obvious
+constraint, and the reason this is worth an ADR: `internal/postgres/testing.go` has **no build tag**,
+so it links into the production binary. The helper therefore returns an `error` and must never take a
+`*testing.T` or import `testing` — the natural signature for a test helper is the one thing that file
+cannot have. Roles are not dropped afterwards: reusability across repeated runs is the point, correct
+for ephemeral CI containers and worth knowing on a long-lived cluster.
+
+**Alternatives considered:** per-package helpers (duplicated logic in one package); baking the roles
+into the test image (needs an image bump and changes what every existing test sees); skipping the
+privilege tests and relying on the stand — rejected, that is exactly the gap that let the wrong
+`pg_ls_dir` privilege assumption survive into ADR [010] unnoticed.
+
+---
+
+## [017-feat-wal-archiver] The `archive_status` walk was measured and left unthrottled
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The `.ready` listing runs every tick, in the TUI and in `pgcenter record`, and after the
+backlog function swap the verbose panel pays an `lstat` walk of the same directory on every screen.
+The screen is opened exactly when that directory is largest. The outcome was agreed in advance so the
+measurement could not end in a shrug: bad numbers mean throttling, acceptable numbers mean the
+remainder is written down.
+
+**Decision:** no throttling. The numbers live here so the next person asking "how expensive is that
+directory walk" has an answer without re-measuring.
+
+**Rationale:** measured on the stand under the conditions the design fixed — a `pg_monitor`-only role
+(for a superuser the comparison would be 1 walk → 2; for `pg_monitor` it is genuinely 0 → 1, because
+the old aggregate failed instantly), verbose on, a concurrent `pgcenter record`, 200 005 `.ready`
+files. Backlog query: ~1108 ms mean, against 0.9 ms on an empty directory. View-switch latency:
+70–240 ms, i.e. no input lag. Effective refresh with verbose on: 1.9 s/tick against 1.0 s/tick for a
+`master`-built binary — at that size the feature halves the refresh rate, on every screen. It is
+accepted anyway because the cost is linear at ~5.5 µs per file: 5 000 segments ≈ 28 ms, 20 000 ≈
+110 ms, both inside the noise. The doubling needs 200 000 segments — **3.1 TB of unarchived WAL** — a
+state that would be noticed long before, and in which a two-second refresh is nowhere near the
+operator's biggest problem.
+
+**Deliberately not recorded as tech debt.** The roadmap owner declined: a debt entry is a commitment
+to fix, and there is no intention to fix this. If it is ever reopened, the machinery already exists —
+[010]'s `verboseCollectState` + `latencyGuardThreshold`, today used only for the DB-size aggregate —
+and it would need applying in two places: the verbose panel's aggregate (which is what drops the
+refresh rate, since it runs on every screen) and the screen's own `.ready` sub-select.
+
+**Alternatives considered:** applying the latency guard now — briefly started, then stopped once the
+per-file cost was put against realistic backlog sizes; reverting the panel to `pg_ls_dir` — rejected,
+it restores the `n/a` this part of the feature exists to remove.

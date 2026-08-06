@@ -1182,6 +1182,7 @@ func Test_describeReport(t *testing.T) {
 		{report: "indexes", want: pgStatIndexesDescription},
 		{report: "functions", want: pgStatFunctionsDescription},
 		{report: "wal", want: pgStatWALDescription},
+		{report: "archiver", want: pgStatArchiverDescription},
 		{report: "sizes", want: pgStatSizesDescription},
 		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
 		{report: "progress_cluster", want: pgStatProgressClusterDescription},
@@ -1278,6 +1279,143 @@ func Test_describeActivityColumnOrder(t *testing.T) {
 		assert.Greater(t, pos, prev, "row %q is out of order", c)
 		prev = pos
 	}
+}
+
+// describeRow locates the row documenting column c in a describe constant and returns its offset
+// together with the whole row text. The marker is anchored on both sides: "\n- " keeps it off words
+// inside the prose, and the trailing tab keeps a short name off a longer row - without it
+// "\n- archived" matches the "- archived_age" row, "\n- fpi" matches "- fpi,KiB" and "\n- write"
+// matches "- write,ms", so the offsets compared by the callers would not be the ones being checked.
+// Presence is required here rather than asserted by the caller: strings.Index returns -1 for a
+// missing marker, and -1 is less than anything, so an ordering-only assertion would pass on a row
+// that is not there at all.
+func describeRow(t *testing.T, text string, c string) (int, string) {
+	t.Helper()
+
+	pos := strings.Index(text, "\n- "+c+"\t")
+	require.NotEqual(t, -1, pos, "description must contain a row for %q", c)
+
+	row := text[pos+1:]
+	if i := strings.Index(row, "\n"); i != -1 {
+		row = row[:i]
+	}
+
+	return pos, row
+}
+
+// assertDescribeColumns checks that text documents exactly the given columns, in the given order,
+// each with the given origin. Fields are split on whitespace, which collapses the alignment tabs:
+// no column name and no origin contains a space, so the row always reads "-", name, origin, prose.
+func assertDescribeColumns(t *testing.T, text string, columns []struct{ name, origin string }) {
+	t.Helper()
+
+	prev := -1
+	for _, c := range columns {
+		pos, row := describeRow(t, text, c.name)
+		assert.Greater(t, pos, prev, "row %q is out of order", c.name)
+		prev = pos
+
+		// Strictly greater than 3: a row of exactly name, origin and nothing else documents nothing,
+		// which is malformed too.
+		fields := strings.Fields(row)
+		require.Greater(t, len(fields), 3, "row %q is malformed: %q", c.name, row)
+		assert.Equal(t, c.origin, fields[2], "row %q documents the wrong origin", c.name)
+	}
+
+	// The loop above is bounded from below only - it cannot see a row that should not be there, and
+	// strings.Index reports the first hit, so a duplicated row is invisible to it as well.
+	assert.Equal(t, len(columns), strings.Count(text, "\n- "),
+		"description documents a row that is not in the column list")
+}
+
+func Test_describeArchiverColumnOrder(t *testing.T) {
+	// Same reason as Test_describeActivityColumnOrder: Test_describeReport compares descriptions by
+	// identity and cannot notice a row that landed in the wrong slot. The list below is a copy of the
+	// column order of query.PgStatArchiverDefault (internal/query/archiver.go) and must be kept in
+	// sync with archiverColumns in internal/query/archiver_test.go - it is the layout that
+	// `report -d -W a` claims to document.
+	columns := []struct{ name, origin string }{
+		{"source", "-"},
+		{"ready", "pg_ls_archive_statusdir"},
+		{"archived", "archived_count"},
+		{"last_archived", "last_archived_wal"},
+		{"archived_age", "last_archived_time"},
+		{"failed", "failed_count"},
+		{"last_failed", "last_failed_wal"},
+		{"failed_age", "last_failed_time"},
+		{"stats_age", "stats_reset"},
+	}
+
+	assertDescribeColumns(t, pgStatArchiverDescription, columns)
+
+	// The source column is a literal in the query, and this constant sits next to
+	// pgStatWALDescription whose source row says 'WAL' - exactly the value a copy-paste gets wrong.
+	_, row := describeRow(t, pgStatArchiverDescription, "source")
+	assert.Contains(t, row, "'Archiver'", "the source row must name the literal the query emits")
+}
+
+func Test_describeArchiverDetailsURL(t *testing.T) {
+	// Decision 13 keeps `pgcenter report` out of the README, so this line is the only pointer a user
+	// gets to the upstream documentation of the screen. HasSuffix rather than Contains, so a URL that
+	// survives but is no longer the closing line is caught too.
+	assert.True(t,
+		strings.HasSuffix(strings.TrimRight(pgStatArchiverDescription, "\n"),
+			"https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ARCHIVER-VIEW"),
+		"description must end with the pg_stat_archiver docs URL")
+}
+
+func Test_describeArchiverBlankCells(t *testing.T) {
+	// The four NULL-able columns render as blank cells by design (Decision 3, nothing is diffed and
+	// no coalesce is applied), and describe is the only place a user finds out a blank is not an
+	// error. Each row is asserted on its own, so deleting the clause from one row still reddens.
+	testcases := []struct {
+		column string
+		clause string
+	}{
+		{column: "last_archived", clause: "empty if nothing has been archived yet"},
+		{column: "archived_age", clause: "empty if nothing has been archived yet"},
+		{column: "last_failed", clause: "empty if there were no failures"},
+		{column: "failed_age", clause: "empty if there were no failures"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.column, func(t *testing.T) {
+			_, row := describeRow(t, pgStatArchiverDescription, tc.column)
+			assert.Contains(t, row, tc.clause, "row %q must say what a blank cell means", tc.column)
+		})
+	}
+}
+
+func Test_describeWALColumnOrder(t *testing.T) {
+	// Same reason as Test_describeActivityColumnOrder. The list below is the PG 14 superset layout
+	// the constant documents (it keeps write/sync, removed from pg_stat_wal in PG 18, and includes
+	// the PG 19 fpi,KiB) - describe has no version awareness, see the constant's comment. The point
+	// here is that fpi,KiB exists and sits between fpi and write.
+	columns := []struct{ name, origin string }{
+		{"source", "-"},
+		{"waldir_size", "-"},
+		{"wal,KiB", "wal_bytes"},
+		{"records", "wal_records"},
+		{"fpi", "wal_fpi"},
+		{"fpi,KiB", "wal_fpi_bytes"},
+		{"write", "wal_write"},
+		{"sync", "wal_sync"},
+		{"write,ms", "wal_write_time"},
+		{"sync,ms", "wal_sync_time"},
+		{"buffers_full", "wal_buffers_full"},
+		{"stats_age", "stats_reset"},
+	}
+
+	assertDescribeColumns(t, pgStatWALDescription, columns)
+}
+
+func Test_describeWALFPIVersionNote(t *testing.T) {
+	// wal_fpi_bytes exists only on PG 19+, while the constant is static and version-unaware, so the
+	// row is printed when describing a PG 14-18 archive as well. The annotation is what keeps that
+	// honest; without it the row silently claims a column those versions do not have.
+	_, row := describeRow(t, pgStatWALDescription, "fpi,KiB")
+	assert.True(t, strings.HasSuffix(row, "(PG 19+)"),
+		"the fpi,KiB row must be annotated with the version that introduced wal_fpi_bytes")
 }
 
 func Test_describeActivityCaveats(t *testing.T) {

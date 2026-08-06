@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The change does exactly what task 07 asks and nothing more: nine archiver rows in the query's emitted order, one map entry, one fpi,KiB row after fpi, and three test additions. I verified the column names/order against internal/query/archiver.go and internal/query/wal.go, verified tab alignment by rendering the output through `cat -A` (origin at column 16, description at column 40 on every row of both constants), verified the map key matches cmd/report/report.go:159 and internal/view/view.go:141, and re-ran all five mutations from the Acceptance Criteria plus one extra row-swap - each reddens the named test and only that test. Note for the record: Test_describeReport compares describeReport's output against the same constant, so it is tautological for row text - the two new order tests are what actually pin anything, and they pin names and order but not the origin-column spelling.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/describe.go",
+      "line": 165,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The `ready` row names pg_ls_archive_statusdir in the origin column but does not say the function is superuser/pg_monitor-only. Per Decision 4 (documented at internal/query/archiver.go:20-25) a role without pg_monitor loses the whole archiver screen, not just this cell - and describe is the only user-facing documentation of these columns (Decision 13 keeps the README out). A short clause on that row, e.g. '... (*.ready files); requires superuser or pg_monitor', would tell the operator why the screen errors out under a plain role. The file already carries privilege caveats of this kind for the activity screen (pgStatActivityDescription, pinned by Test_describeActivityCaveats).",
+      "benefit": "The one column in the feature with a privilege precondition documents it in the only place a user can read about it.",
+      "optional": true
+    },
+    {
+      "file": "report/report_test.go",
+      "line": 1284,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_describeActivityColumnOrder, Test_describeArchiverColumnOrder and Test_describeWALColumnOrder are now three copies of the same 12-line loop (marker build, require.NotEqual presence, assert.Greater ordering), differing only in the constant and the column list. A shared helper - assertColumnOrder(t *testing.T, text string, columns []string) - would remove roughly 30 duplicated lines while keeping the three separately named tests the task asks for (a failure would still name the screen through the calling test's name; add t.Helper()). Flagged as future consolidation only: the task explicitly directed copying the shape of Test_describeActivityColumnOrder, so the duplication here is compliance, not drift.",
+      "benefit": "One place to fix if the marker convention ever changes, instead of three that can silently diverge.",
+      "optional": true
+    },
+    {
+      "file": "report/describe.go",
+      "line": 149,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The version marker on the fpi,KiB row is an inline '(PG 19+)' parenthetical, while every other version note in this file is a trailing sentence after the table ('Note: started_by and mode are available since PG19.' at :262, :219, :328, :350, :491, :542, :583). No action is required - the tech-spec and the task text both settled on the inline annotation, and inline keeps the marker attached to the row it qualifies, which the trailing-Note form cannot do for a single column in a 12-row table. Recorded only so the next person editing this file knows the two styles coexist deliberately.",
+      "benefit": "Awareness of a deliberate style split; prevents a future 'cleanup' from moving the marker away from its row.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "adequate"
+  }
+}

@@ -558,14 +558,14 @@ func Test_noOpHandlersKeepPause(t *testing.T) {
 // has nothing to lift; and the branch calls it directly instead of going through viewSwitchHandler,
 // which is where the lift for every other screen switch lives.
 //
-// menuSelect itself is unreachable from a unit test, but NOT because of its *gocui.View argument:
-// a zero-value &gocui.View{} is constructible from outside the gocui package and answers v.Cursor()
-// with (0,0), which is enough to route into the menuConf branch. The real blocker is one line
-// later - menuSelect ends with an unconditional `return menuClose(g, v)` on EVERY branch, and
-// menuClose calls g.DeleteView("menu") and g.SetCurrentView("sysstat") on the *gocui.Gui
-// (top/menu.go). A nil Gui panics there, and a live one comes only from gocui.NewGui, which opens a
-// real terminal backend. No formulation of the test can dodge it, because no branch skips
-// menuClose.
+// menuSelect itself IS reachable from a unit test - Test_menuSelectWAL (top/menu_test.go) drives it
+// over a zero-value &gocui.Gui{}, which is enough for every branch: SetView builds a real view from
+// the passed coordinates without a terminal, and the unconditional `return menuClose(g, v)` that
+// ends menuSelect only makes DeleteView/SetCurrentView scan a slice. (A NIL Gui does panic there;
+// that is a different thing from a zero-value one.) What still needs a real environment is narrower
+// than "menuSelect": only the local-DB editor path inside editPgConfig, past its `!db.Local` early
+// return (top/pgconfig.go) - the branch up to that return is drivable with &gocui.Gui{} plus
+// &postgres.DB{Local: false}, the idiom top/config_view_test.go already uses.
 //
 // An earlier revision of this file did have a Test_menuConfPathDoesNotLift. It built a local
 // config, called editPgConfig, and asserted the local config was still paused - on a config the

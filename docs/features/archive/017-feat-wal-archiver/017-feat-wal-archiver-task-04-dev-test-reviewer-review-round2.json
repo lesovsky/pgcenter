@@ -1,0 +1,116 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "round": 2,
+  "status": "passed",
+  "summary": "Both round-1 majors are genuinely closed, and I re-ran every mutation myself on a byte-identical copy of the tree outside the repo rather than taking the claims on trust. (1) NoOptDefVal is now pinned: re-applying the rejected Decision 7 shim (`Flags().Lookup(\"wal\").NoOptDefVal = \"w\"` in init()) turns Test_walFlagDefinition RED, and so do a changed default (\"w\"), a changed shorthand (W->V) and a one-character help-text edit. (2) Precedence is now pinned on both sides: I moved the showWAL arm in three independent directions - above showDatabases, one slot above showFunctions, and one slot below showBgwriter - and all three redden Test_selectReport_WALPrecedence, so AC 5's second clause is now covered in every direction it could move. The three minors that mattered are closed too: strings.TrimSpace, strings.ToLower, first-character prefix matching, `default: return \"wal\"`, an unconditional `return \"wal\"` in the outer arm, `case \"a\"` returning \"wal\", ReportType hardcoded to \"wal\" in validate(), and a stray archiver->wal alias in validate() are all RED now. The declined suggestion (deriving the mirror FlagSet from CommandDefinition instead of hardcoding it) is defensible and I would not press it: both drift directions are already guarded - a wrong real definition reddens Test_walFlagDefinition, and I confirmed that a mirror-only drift in the load-bearing direction (setting NoOptDefVal on the mirror alone) reddens Test_walFlagPflagFailureShapes through its own Parse assertion. Deriving would trade that independence for nothing. The -f half of the mirror is still inert (deleting the fs.StringP(\"file\", ...) line keeps the test green), but the comment no longer claims otherwise, which was the actual round-1 complaint - the test now says what it proves. One residual minor: only the trailing-whitespace row was added, so a leading-only trim widening still survives. Hygiene re-checked on the real tree: -race -shuffle=on x3 green, each new test green in isolation, go vet clean, gofmt -l empty, and every showWAL hit contained to cmd/report/. Two pre-existing items noted below the findings are deliberately left alone as out of this task's scope.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "cmd/report/report_test.go:98 (Test_selectReport_WALWhitelistIsClosed table)",
+      "issue": "The round-1 recommendation named two whitespace rows - a leading-padded \" w\" and a trailing-padded \"a \" - and only the trailing one landed (`{value: \"w \", ...}`). That kills the widening that actually matters: I re-confirmed `switch strings.TrimSpace(opts.showWAL)` is RED, and so is `strings.TrimRight(..., \" \")`. But the asymmetry leaves one narrow hole: VERIFIED MUTATION (green) - `switch strings.TrimLeft(opts.showWAL, \" \")` keeps the whole suite passing, because no table value is left-padded. This is a much less likely widening than TrimSpace (a maintainer being 'forgiving about shell quoting' reaches for TrimSpace, not TrimLeft), which is why this stays minor rather than blocking - the dominant mutation in the class is dead.",
+      "recommendation": "One row, no other change - the loop and the assert message already handle it: `{value: \" w\", why: \"leading whitespace - no trimming is done on purpose, from the other side; a quoted '-W \\\" w\\\"' must not map\"}`. That closes the class symmetrically and turns the TrimLeft mutation red.",
+      "litmusTestFailed": false
+    }
+  ],
+  "resolvedFromRound1": [
+    {
+      "round1Severity": "major",
+      "item": "NoOptDefVal not asserted in Test_walFlagDefinition",
+      "verdict": "closed",
+      "evidence": "report_test.go:159 asserts f.NoOptDefVal == \"\" with an explanatory message naming Decision 7. Re-ran the shim mutation (`CommandDefinition.Flags().Lookup(\"wal\").NoOptDefVal = \"w\"` appended to init()) on an isolated copy: --- FAIL: Test_walFlagDefinition. Perimeter around the same test also re-probed: default \"\" -> \"w\" RED, shorthand W -> V RED, one-character Usage edit RED."
+    },
+    {
+      "round1Severity": "major",
+      "item": "Test_selectReport_WALPrecedence pinned only that -A beats -W",
+      "verdict": "closed",
+      "evidence": "Now a 4-row table (report_test.go:127-142) with a per-row `why` carried into the assert message. Three independent relocations of the showWAL arm all RED: hoisted above showDatabases, hoisted one slot above showFunctions (the tightest upper move), sunk one slot below showBgwriter (the tightest lower move). Both clauses of AC 5 are now covered."
+    },
+    {
+      "round1Severity": "minor",
+      "item": "The -f half of the mirror is inert but presented as load-bearing",
+      "verdict": "closed as documented, not as fixed - and that is the right call",
+      "evidence": "The comment at report_test.go:180-183 now states that a string flag consumes the next token unconditionally and that -f is defined for realism, not because the outcome depends on it. I re-confirmed the underlying fact - deleting the fs.StringP(\"file\", ...) line leaves the test GREEN - so the inertness is real, but the test no longer misrepresents what it proves, which was the finding. Keeping -f for scenario realism is legitimate; the alternative (asserting *file and fs.Args()) would have been fine too, and nothing is lost by not taking it."
+    },
+    {
+      "round1Severity": "minor",
+      "item": "assert.NotNil before dereferencing f can panic and take the package's other tests down",
+      "verdict": "closed",
+      "evidence": "report_test.go:151 uses require.NotNil, with a comment explaining why require rather than assert. A renamed flag now stops this one test instead of panicking through the binary. The nil-guard has no custom message, which round 1 suggested; require.NotNil's own output names the file and line, so this is cosmetic and not re-raised."
+    },
+    {
+      "round1Severity": "minor",
+      "item": "No whitespace row - a TrimSpace widening passed unnoticed",
+      "verdict": "closed for the dominant mutation, one narrow hole remains",
+      "evidence": "The `\"w \"` row makes strings.TrimSpace RED and strings.TrimRight RED. strings.TrimLeft survives - see the single finding above. Also re-confirmed in the same table: strings.ToLower RED (the \"W\" row) and first-character prefix matching `opts.showWAL[:1]` RED."
+    },
+    {
+      "round1Severity": "minor",
+      "item": "Nothing asserted that selectReport's result reaches report.Config.ReportType",
+      "verdict": "closed",
+      "evidence": "report_test.go:115-121 runs both mapped values end-to-end through validate() and asserts cfg.ReportType == \"archiver\" / \"wal\". Two mutations confirm it bites: ReportType hardcoded to \"wal\" in validate() RED, and a stray archiver->wal alias applied to r in validate() RED. This is the exact wrong move the task's Dependencies section anticipates while Task 5 is unlanded, and it is now caught. The anchor's ban on restructuring Test_options_validate's table was respected - the coverage lives in the dedicated whitelist test."
+    },
+    {
+      "round1Severity": "n/a (suggestion)",
+      "item": "Derive the mirror FlagSet from CommandDefinition.Flags().Lookup(\"wal\") instead of hardcoding literals - DECLINED",
+      "verdict": "declining is defensible; I would not press it",
+      "evidence": "Three reasons the decline holds. (a) The task file explicitly prescribes a hardcoded mirror guarded by Test_walFlagDefinition, and the guard is now complete on the axis that governs parsing: NoOptDefVal. (b) Independence is real value - a derived mirror is self-consistent with a wrong definition by construction, so it could only ever fail on pflag's behaviour, never on the definition being wrong. (c) I probed the drift risk the derivation was meant to remove and it is already covered from both sides: a wrong real definition reddens Test_walFlagDefinition (verified for NoOptDefVal, DefValue, Shorthand, Usage), and a mirror-only drift in the load-bearing direction - setting NoOptDefVal on the mirror alone while the real flag stays correct - reddens Test_walFlagPflagFailureShapes, because bare `-W` then parses without the expected error. Both halves of the drift are caught without coupling the tests."
+    }
+  ],
+  "preExistingNotRaised": [
+    {
+      "location": "cmd/report/report_test.go:31 (Test_options_validate positive branch)",
+      "note": "`assert.NotNil(t, got)` on a non-pointer report.Config is vacuously true for any struct value, and the table's declared `want report.Config` field is still never read - so the positive branch of that table still asserts nothing about -J, -X or -P. Round 1 recorded this as pre-existing and not this task's doing; the WAL-specific consequence is now closed by the end-to-end ReportType assertions in Test_selectReport_WALWhitelistIsClosed, and the TDD Anchor forbids restructuring this table. Correctly left alone here - it belongs in a separate cleanup, not in task 04."
+    },
+    {
+      "location": "cmd/report/report_test.go:134 (Test_selectReport_WALPrecedence, the showDatabases row)",
+      "note": "Strictly redundant against the showFunctions row: any hoist that reddens the showDatabases row also reddens the showFunctions row, since showFunctions is the arm's immediate upper neighbour (verified - the one-slot hoist above showFunctions is caught). Not raised as a finding: it is one documented line that pins a distinct stated boundary and keeps holding if the chain above is ever reordered. Cheap, honest, and it fails with a message naming which boundary moved."
+    }
+  ],
+  "verificationPerformed": {
+    "method": "Full tree copied to a scratch directory outside the repo; every mutation applied and reverted there. The working tree was never modified - re-confirmed by git diff --stat after the run (cmd/report/report.go +16, cmd/report/report_test.go +117, unchanged from the starting diff). Parallel agents' changes in internal/query/ and internal/postgres/ were ignored throughout.",
+    "mutationsRun": [
+      {"mutation": "NoOptDefVal = \"w\" on the real -W flag in init()", "result": "RED", "killedBy": "Test_walFlagDefinition"},
+      {"mutation": "flag default \"\" -> \"w\"", "result": "RED", "killedBy": "Test_walFlagDefinition"},
+      {"mutation": "shorthand W -> V", "result": "RED", "killedBy": "Test_walFlagDefinition"},
+      {"mutation": "one-character help-text edit (archiver -> archivers)", "result": "RED", "killedBy": "Test_walFlagDefinition"},
+      {"mutation": "showWAL arm hoisted above showDatabases", "result": "RED", "killedBy": "Test_selectReport_WALPrecedence"},
+      {"mutation": "showWAL arm hoisted one slot above showFunctions", "result": "RED", "killedBy": "Test_selectReport_WALPrecedence"},
+      {"mutation": "showWAL arm sunk one slot below showBgwriter", "result": "RED", "killedBy": "Test_selectReport_WALPrecedence"},
+      {"mutation": "switch strings.TrimSpace(opts.showWAL)", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "switch strings.TrimRight(opts.showWAL, \" \")", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "switch strings.TrimLeft(opts.showWAL, \" \")", "result": "GREEN - SURVIVED", "killedBy": "none - the single open finding"},
+      {"mutation": "switch strings.ToLower(opts.showWAL)", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "switch opts.showWAL[:1] (prefix matching)", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "default: return \"wal\" in the inner switch", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed, Test_options_validate, Test_walFlagPflagFailureShapes"},
+      {"mutation": "outer arm returns \"wal\" unconditionally", "result": "RED", "killedBy": "5 tests including Test_selectReport and Test_selectReport_WALPrecedence"},
+      {"mutation": "case \"a\" returns \"wal\"", "result": "RED", "killedBy": "Test_selectReport, Test_selectReport_WALPrecedence, Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "ReportType hardcoded to \"wal\" in validate()", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "archiver -> wal alias applied to r in validate()", "result": "RED", "killedBy": "Test_selectReport_WALWhitelistIsClosed"},
+      {"mutation": "delete fs.StringP(\"file\", \"f\", ...) from the mirror", "result": "GREEN - SURVIVED (expected; the comment now says so)", "killedBy": "none - by design"},
+      {"mutation": "mirror-only NoOptDefVal drift (mirror lies, real flag correct)", "result": "RED", "killedBy": "Test_walFlagPflagFailureShapes"}
+    ],
+    "hygieneOnRealTree": [
+      "go test ./cmd/report/... -race -shuffle=on -count=1, three runs: all ok",
+      "each of the four new tests run in isolation via -run: all PASS",
+      "go vet ./cmd/report/...: clean",
+      "gofmt -l cmd/report: empty",
+      "grep -rn showWAL --include=*.go .: all 10 hits inside cmd/report/ (containment holds)"
+    ]
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 14,
+      "passed": 14,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 14,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

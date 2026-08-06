@@ -416,3 +416,66 @@ with the timestamp of that moment, and it holds indefinitely.
 token (`[PAUSED]`) to the command-line composer it introduced, left of the filter indicator.
 [009-feat-horizontal-scroll] — its column scroll and width keys are the ones that keep working on a
 frozen frame.
+
+---
+
+### [017-feat-wal-archiver] Archiver Screen, FPI on PG 19, and `report -W w|a`
+
+**What it does:** Adds an `archiver` screen — one row, nine columns over `pg_stat_archiver` plus a
+live count of `.ready` segments waiting to be archived — so the question "has archiving stopped, when,
+on which segment, and how much has piled up" is answered in one look instead of in `psql`. It is
+reached by pressing `w` a second time (the hotkey now cycles `wal` ↔ `archiver`) or from the new `W`
+menu, and it is recorded and replayed like any other screen. Two smaller things ship in the same pass
+over the WAL area: on PostgreSQL 19 the `wal` screen gains a `fpi,KiB` column showing how much WAL the
+full-page images actually cost, and the verbose panel's archiving backlog now works for a plain
+`pg_monitor` role instead of showing `n/a` to everyone but a superuser.
+
+**Key scenarios:**
+- During an incident: `w`, `w` — read `ready` (how many segments are queued), `failed` climbing tick
+  by tick, `last_failed` (the segment to grep for in the PostgreSQL log) and `archived_age` (how long
+  since the last success). Decide whether the disk gives you hours or minutes.
+- After fixing `archive_command`: the same screen shows `archived` rising, `ready` draining and
+  `failed` no longer moving — the incident closes on evidence rather than on faith.
+- On an unfamiliar cluster: counters at zero with **blank** name and age cells, and a screen caption
+  that says `requires archive_mode=on`, so archiving that was never configured does not read as a
+  quiet healthy cluster.
+- Post-mortem from a recording: `pgcenter report -W a -f night.tar -s 02:00 -e 06:00` prints one row
+  per tick and pins the minute the backlog started growing. `pgcenter report -d -W a` describes the
+  columns.
+- On PG 19, sort the `wal` screen's `fpi` and `fpi,KiB` side by side to decide about `wal_compression`
+  and checkpoint spacing.
+
+**Limitations:**
+- **Breaking CLI change:** `report -W` is no longer a boolean — it takes `w` or `a`. Old invocations
+  fail rather than change meaning, but the most common legacy shape (`report -W -f dump.tar`) fails
+  with `report type is not specified, quit`, because pflag takes `-f` as the flag's value. Worse for
+  scripts than it looks: like every other report failure, it still exits 0.
+- The whole screen needs `pg_monitor` (or superuser). Without it the screen shows the PostgreSQL
+  permission error and retries next tick — it does not fall back to eight columns. `pgcenter record`
+  under such a role stops recording entirely, which is the recorder's existing behaviour.
+- PostgreSQL 14 and newer only.
+- The report drops the first sample of a run, so an N-tick recording prints N−1 rows of a screen that
+  diffs nothing. Pre-existing for every pass-through screen, `activity` included.
+- A recording that contains no archiver samples prints no rows and no column header — only the report's
+  own three information lines — and exits 0. There is no "no data" notice; exactly one screen
+  (`procpidstat`) has one.
+- A `wal` recording made **on PG 19 by a pre-0.12 pgcenter** replays against the new 8-column layout
+  and fails with `diff failed: …`. Narrow (PG 19 is still beta) and documented in the release notes
+  rather than fixed.
+- The `.ready` directory is listed on every tick, in the TUI and in `record`, with no throttling. The
+  cost is ~5.5 µs per file: unnoticeable at a five-thousand-segment backlog, and it halves the refresh
+  rate at 200 000 (≈3.1 TB of unarchived WAL). Since the verbose panel rides every screen, that cost is
+  paid on every screen when `v` is on.
+- On a cluster whose `archive_status` directory is missing, the verbose panel now shows `0` instead of
+  `n/a` — the new function tolerates a missing directory where the old one errored.
+- The `archive_mode=on` caption is static: it is printed whether archiving is off or working perfectly,
+  and reads no GUC. `Q` still does not reset `pg_stat_archiver`.
+
+**Touches:** [010-feat-overview-dashboard] — the verbose panel's archiving backlog is the earlier,
+coarser signal (bytes, not segments) and now uses the same function as this screen, so the two numbers
+cannot disagree; its ADR about privileges is superseded here. [008-feat-record-report-0-11-views] —
+record/report is folded in from day one under that feature's pure-SQL rule, and the `-J c|t` flag shape
+is what `-W w|a` copies. [006-feat-pg-stat-io] — the `j`/`J` cycle-plus-menu machinery is the model for
+`w`/`W`. [012-feat-pg19-compatibility-baseline] — the PG 19 catch-up column deliberately left to this
+feature so the WAL area was entered once. [009-feat-horizontal-scroll] — the `source` column stays
+frozen while the two 24-character WAL names are reached by scrolling on a narrow terminal.

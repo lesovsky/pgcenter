@@ -247,6 +247,14 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			viewSwitchHandler(app.config, progressNextView(app.config.view.Name))
 		case "statio":
 			viewSwitchHandler(app.config, statioNextView(app.config.view.Name))
+		// Unlike every other cycle here, "wal" is simultaneously the name of the group and the name
+		// of its first view - the view cannot be renamed, it is the 'report -W wal' report type and
+		// the tar entry prefix in recorded archives. This is the group's single dispatch point, and
+		// walNextView's default arm returns "wal", so 'w' pressed on any other screen still lands on
+		// the wal screen exactly as it did before the cycle existed. Do not "fix" this into a
+		// separate group name.
+		case "wal":
+			viewSwitchHandler(app.config, walNextView(app.config.view.Name))
 		default:
 			viewSwitchHandler(app.config, c)
 		}
@@ -282,6 +290,21 @@ func statioNextView(current string) string {
 		next = "stat_io"
 	default:
 		next = "stat_io"
+	}
+	return next
+}
+
+// walNextView depending on current WAL view returns next view.
+func walNextView(current string) string {
+	var next string
+
+	switch current {
+	case "wal":
+		next = "archiver"
+	case "archiver":
+		next = "wal"
+	default:
+		next = "wal"
 	}
 	return next
 }

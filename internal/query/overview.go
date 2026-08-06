@@ -90,14 +90,19 @@ const (
 		"FROM pg_stat_activity"
 
 	// OverviewArchivingBacklog reports the WAL archiving backlog in bytes:
-	// count(*.ready in pg_wal/archive_status) * wal_segment_size. This adapts the wal.go precedent
-	// count(1) * pg_size_bytes(current_setting('wal_segment_size')), replacing pg_ls_waldir() with
-	// pg_ls_dir('pg_wal/archive_status') filtered on the .ready suffix.
+	// count(.ready) * wal_segment_size, over the archive_status directory. This adapts the wal.go
+	// precedent count(1) * pg_size_bytes(current_setting('wal_segment_size')), replacing
+	// pg_ls_waldir() with pg_ls_archive_statusdir() filtered on the .ready suffix.
 	//
-	// pg_ls_dir requires pg_monitor/superuser; this query MUST be run as its OWN QueryRow so a 42501
-	// privilege error (or archive_mode=off) degrades only the archiving-backlog field to n/a without
-	// aborting the sample. The raw error (containing the path) must never be surfaced. Single column.
+	// The source function is pg_ls_archive_statusdir(), executable by superuser AND pg_monitor. Its
+	// predecessor here, pg_ls_dir('pg_wal/archive_status'), is superuser-only, so this field degraded
+	// to n/a for exactly the monitoring role the panel serves (Decision 8 supersedes ADR [010]).
+	//
+	// This query MUST still be run as its OWN QueryRow, so any error degrades only the
+	// archiving-backlog field to n/a instead of aborting the whole overview sample. The function is
+	// missing_ok=true: a cluster with no archive_status directory yields 0 rather than an error.
+	// Single column.
 	OverviewArchivingBacklog = "SELECT " +
 		"count(*) FILTER (WHERE name LIKE '%.ready') * pg_size_bytes(current_setting('wal_segment_size')) AS backlog " +
-		"FROM pg_ls_dir('pg_wal/archive_status') AS name"
+		"FROM pg_ls_archive_statusdir()"
 )
