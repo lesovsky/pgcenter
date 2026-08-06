@@ -323,3 +323,59 @@ Major и один minor от dev-test-reviewer закрыты деривацио
   - **B5** в tar пустого архива добавлены обратно две записи `archiver.*`, больше ничего: `assert.Empty` красный («Should be empty, but was …»). Это отличает «ничего не совпало» от «ничего и не могло совпасть» (сломанная фикстура даёт тот же пустой буфер).
   - Побочная находка по ходу B4: первая версия мутации оставляла переменную `null` неиспользованной, и пакет **не компилировался** — тест не запускался, а грепом это читалось как «зелено». Мутация переделана через саму декларацию `null :=`; вывод общий — «нет FAIL» и «тест прошёл» надо различать явно.
 - Коммит сделан явным pathspec'ом по пяти своим файлам; параллельные правки соседнего агента в `report/report.go`, `report/describe.go`, `report/report_test.go` и в `top/` в коммит не попали (`git show --stat` → ровно 5 файлов).
+
+---
+
+## Task 07: describe-текст экрана archiver и строка FPI на экране wal
+
+**Status:** Done
+**Commit:** e7192fd
+**Agent:** основной агент
+
+**Summary:** Добавлена константа `pgStatArchiverDescription` (9 колонок в том порядке, в котором их отдаёт `query.PgStatArchiverDefault`, литеральные табы, ссылка на `PG-STAT-ARCHIVER-VIEW`) и запись `"archiver"` в карте `describeReport`; в `pgStatWALDescription` вставлена строка `fpi,KiB` с origin `wal_fpi_bytes` сразу после `fpi` и пометкой `(PG 19+)`. Отсутствие записи в карте не ловится ни одним exit-кодом (`describeReport` печатает `unknown description requested` и возвращает `nil`), поэтому единственный детектор — тест, называющий `"archiver"`; он и был написан первым. Версионная осведомлённость намеренно не вводится: `describeReport` сохраняет сигнатуру `(w io.Writer, report string)`, константы не собираются условно, и строка `fpi,KiB` печатается в том числе при описании архива PG 14–18 — это действующий контракт этой области (константа уже документирует `write`/`sync`, удалённые из `pg_stat_wal` в PG 18), а не регрессия.
+
+**Deviations:**
+
+1. **Тестов шесть, а не три.** TDD Anchor называет `Test_describeReport` + два order-теста; по major-находке test-ревьюера добавлены `Test_describeArchiverDetailsURL`, `Test_describeArchiverBlankCells` и `Test_describeWALFPIVersionNote`, а order-тесты переведены с плоского списка имён на таблицу `{name, origin}`. Причина: маркер `"\n- "+name+"\t"` заканчивается на имени колонки, поэтому всё правее первого таба не проверялось — подмена `wal_fpi_bytes`, подмена `pg_ls_archive_statusdir` на `pg_ls_waldir`, снятие `(PG 19+)`, порча URL и удаление формулировки про пустую ячейку оставляли набор зелёным, хотя три из них — дословные acceptance criteria задачи.
+2. **Появились хелперы `describeRow` и `assertDescribeColumns`** вместо третьей копии inline-цикла. Задача предписывала копировать форму `Test_describeActivityColumnOrder`; форма (маркер с хвостовым табом, `require.NotEqual(-1, pos)` до сравнения порядка) сохранена дословно, вынесена только механика. Существующий `Test_describeActivityColumnOrder` не трогался: `pgStatActivityDescription` содержит блок caveats, и ассерция точного числа строк на нём не работает.
+3. **Проверка набора колонок ужесточена сверх спека** — `assert.Equal(len(columns), strings.Count(text, "\n- "))`: цикл ограничивал набор только снизу, лишняя и продублированная строка оставались невидимыми (`strings.Index` видит только первое вхождение).
+4. **Находка code-ревьюера про оговорку о привилегиях в строке `ready` не применена.** Задача прямо назначает называние `pg_ls_archive_statusdir` в колонке origin тем механизмом, который сообщает пользователю о привилегии; в round 2 ревьюер согласился и снял находку сам, приведя решающий довод: строка `waldir_size` на экране wal вызывает `pg_ls_waldir()` того же класса привилегий с тем же экранным отказом и оговорки не несёт — добавление её только в `ready` сделало бы файл несогласованным в другую сторону.
+5. **`make lint` и `make vuln` не прогонялись:** ни `golangci-lint`, ни `govulncheck` на хосте не установлены (`Ошибка 127`). Заменены на `go vet ./report/...` и `gofmt` — чисто. Для изменения из одной записи в карте и двух raw-строковых литералов пробел считаю несущественным, но фиксирую, чтобы гейт не считался пройденным.
+
+**Tech debt:**
+
+1. Прозаическая (четвёртая) колонка строк по-прежнему не закреплена там, где её не называет отдельный тест. Проверено: переписывание текста описания любой строки, кроме четырёх оговорок про пустую ячейку и `(PG 19+)`, остаётся зелёным. Живого дефекта нет — текст виден в любом `report -d`.
+2. Выравнивающие пробелы/табы правее origin не проверяются: `strings.Fields` схлопывает пробельные пробеги, поэтому закреплён ровно один таб — тот, что требует маркер. Замена выравнивающих табов на пробелы оставит набор зелёным при разъехавшейся таблице. Реальный триггер — настройка редактора; `gofmt` содержимое raw-строк не трогает.
+3. `Test_describeActivityColumnOrder` остаётся единственной inline-копией цикла — свести её на общий хелпер дороже, чем оставить (см. Deviations 2).
+4. `pgcenter report -d` не имеет версионной осведомлённости; строка `fpi,KiB` и строки `write`/`sync`/`write,ms`/`sync,ms` печатаются для версий, где соответствующих колонок нет. Принятый контракт, вне скоупа задачи.
+
+**Reviews:**
+
+*Round 1:*
+- dev-code-reviewer: approved_with_suggestions, 0 critical/major, 3 minor (все optional) → [017-feat-wal-archiver-task-07-dev-code-reviewer-review.json](017-feat-wal-archiver-task-07-dev-code-reviewer-review.json)
+- dev-security-auditor: approved, 0 находок → [017-feat-wal-archiver-task-07-dev-security-auditor-review.json](017-feat-wal-archiver-task-07-dev-security-auditor-review.json)
+- dev-test-reviewer: needs_improvement, 1 major + 4 minor → [017-feat-wal-archiver-task-07-dev-test-reviewer-review.json](017-feat-wal-archiver-task-07-dev-test-reviewer-review.json)
+
+*Round 2 (после исправлений):*
+- dev-code-reviewer: approved_with_suggestions, 0 critical/major → [017-feat-wal-archiver-task-07-dev-code-reviewer-review-round2.json](017-feat-wal-archiver-task-07-dev-code-reviewer-review-round2.json)
+- dev-test-reviewer: passed, 1 minor (информационный) → [017-feat-wal-archiver-task-07-dev-test-reviewer-review-round2.json](017-feat-wal-archiver-task-07-dev-test-reviewer-review-round2.json)
+
+**Verification:**
+- `go test ./report/... -count=1` → зелено (пакету не нужны PG-фикстуры); `go test ./report/ -run Test_describe -v` → все шесть describe-тестов реально исполняются, не пропущены по `-run`
+- `make build` → успешно; `./bin/pgcenter report -d -W a` и `-d -W w` без `-f` и без архива → exit 0, печатают новый текст; `-d -W a | cat -A` → разделители реальные табы (`^I`), origin на колонке 16, description на колонке 40, как в соседних константах
+- `go vet ./report/...`, `gofmt` по `describe.go`/`report_test.go` → чисто (`report/report.go:304` gofmt-грязный и в HEAD — не трогался); `make lint`/`make vuln` не прогонялись, см. Deviations 5
+- Мутационный контроль (каждая применена, наблюдалась **красной**, откачена; целостность `describe.go` после отката сверена по md5):
+  - M1 удаление `"archiver": pgStatArchiverDescription` из карты → `Test_describeReport` с `actual: "unknown description requested"` (команда при этом по-прежнему выходит с нулём — красный тест здесь единственный детектор)
+  - M2 удаление строки `- last_archived` → `Test_describeArchiverColumnOrder` на ассерции присутствия, не на порядке
+  - M3a удаление строки `- fpi,KiB` → `Test_describeWALColumnOrder` на присутствии
+  - M3b перенос `fpi,KiB` перед `fpi` → `Test_describeWALColumnOrder` на порядке («272 is not greater than 358»)
+  - M4 `wal_fpi_bytes` → `wal_fpi_BOGUS` → `Test_describeWALColumnOrder`, «row "fpi,KiB" documents the wrong origin»
+  - M5 `pg_ls_archive_statusdir` → `pg_ls_waldir` → `Test_describeArchiverColumnOrder`, «row "ready" documents the wrong origin»
+  - M6 снятие `(PG 19+)` → `Test_describeWALFPIVersionNote`
+  - M7 добавление лишней строки и M8 дублирование строки `- failed` → ассерция точного числа строк (`expected 9, actual 10`)
+  - M9 подмена якоря URL на `#PG-STAT-BGWRITER-VIEW` → `Test_describeArchiverDetailsURL`
+  - M10 удаление оговорки про пустую ячейку только из строки `last_archived` → красным становится ровно подтест `Test_describeArchiverBlankCells/last_archived`
+  - M11 обрезание строки `- failed` до имени и origin → `require.Greater(len(fields), 3)`, «3 is not greater than 3»
+  - M12 подмена литерала `'Archiver'` на `'WAL'` в строке `source` → `Test_describeArchiverColumnOrder`
+  - Дополнительно оба ревьюера round 2 независимо прогнали свои мутации на изолированных копиях дерева (перевод карты на `pgStatWALDescription`, замена табов пробелами, перестановки строк и origin'ов, строка после URL) — все красные на названных тестах
+- Коммит сделан явным pathspec'ом по трём своим файлам; параллельные правки соседних агентов в `top/`, `report/report_record_*_test.go` и `report/testdata/*.golden` в коммит не попали (`git show --stat` → ровно 3 файла)
