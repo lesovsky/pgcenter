@@ -1,0 +1,38 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "feature_id": "018",
+    "feature_name": "018-feat-tables-autovacuum-area",
+    "feature_base": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area",
+    "project": "pgcenter",
+    "feature_size": "L",
+    "model": "claude-opus-5[1m]",
+    "date_started": "2026-08-06",
+    "date_completed": ""
+  },
+  "phases": {
+    "user_spec": {
+      "started": "2026-08-06 21:53:05",
+      "ended": null,
+      "human_wait_time_min": 0
+    },
+    "tech_spec": null,
+    "task_decomposition": null,
+    "feature_execution": null,
+    "done": null
+  },
+  "quality": {
+    "validation_rounds": {},
+    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_rounds": {},
+    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "first_pass_rate_pct": null
+  },
+  "volume": {
+    "interview_questions": 4,
+    "tasks_count": 0,
+    "waves_count": 0,
+    "agents_spawned": 0,
+    "commits_count": 0
+  }
+}
