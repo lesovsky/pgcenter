@@ -669,3 +669,877 @@ rather than producing a silently wrong screen.
 8. Whether `sizes` (which also uses `pg_stat_{{.ViewType}}_tables`, `internal/query/sizes.go:17`)
    gets `stats_age` too. The roadmap names three screens, not four — an explicit scope boundary
    worth stating rather than leaving implicit.
+
+---
+
+# Updated: 2026-08-10 — second pass, implementation depth
+
+**Branch:** `develop` (HEAD `49f9f90`). **Authority on scope:** the approved user-spec
+`018-feat-tables-autovacuum-area.md`.
+
+**Scope corrections that invalidate parts of the first pass.** Read these before using anything
+above:
+
+- `functions` is **out of scope** (user-spec "Технические решения", and the negative acceptance
+  criterion "экран `functions` не изменился"). Every mention of `functions` in §2 / §4 / §5 above
+  is stale. `sizes` is out of scope too, with its own negative criterion.
+- The scale-of-work column is **`dead_total`**, not `dead` (user-spec: `dead` on `tables` is the
+  diffed per-interval value; one name for two quantities is registered debt [023]). Potential
+  Problem #5 above is therefore **resolved by the spec**, not open.
+- The new screen's column order is fixed by the spec and is **not** the interview's order:
+  `relation, score, do_vacuum, do_analyze, for_wraparound, dead_total, xid_score, mxid_score,
+  vacuum_score, vacuum_insert_score, analyze_score`. §"Open decisions" item 6 and the interview's
+  ordering (`…-interview.yml:616-618`) are superseded.
+- `OrderKey: 1` / `OrderDesc: true`, `DiffIntvl {0,0}`, `NotRecordable: true`,
+  `MinRequiredVersion: query.PostgresV19`. Open decisions 2, 3 and 5 are settled.
+- Precision is settled at 2 decimals (Potential Problem #2 above is closed as a product decision),
+  but its *sorting* consequence is not — see the `ORDER BY` alias trap in §12.4 below, which is a
+  real defect in the acceptance criterion as written.
+- Terminal width is explicitly **not** a design constraint (user-spec "Дизайн и интерфейс").
+
+---
+
+## U1. Query selectors for `tables` and `indexes`
+
+### What exists today
+
+Both views are the "no selector at all" tier:
+
+| | file:line | today |
+|---|---|---|
+| `tables` template | `internal/query/tables.go:5-20` | one const `PgStatTablesDefault`, 19 cols |
+| `tables` registry | `internal/view/view.go:85-95` | `Ncols: 19`, `DiffIntvl: [2]int{1,18}`, `OrderKey: 0`, `UniqueKey` default 0 |
+| `indexes` template | `internal/query/indexes.go:5-11` | one const `PgStatIndexesDefault`, 6 cols |
+| `indexes` registry | `internal/view/view.go:96-106` | `Ncols: 6`, `DiffIntvl: [2]int{1,5}`, `OrderKey: 0`, `UniqueKey` default 0 |
+| `Configure()` | `internal/view/view.go:379-433` | **no `case "tables"`, no `case "indexes"`** |
+
+### The selector signature: 3-tuple, not 4-tuple
+
+```go
+func SelectStatTablesQuery(version int) (string, int, [2]int)
+func SelectStatIndexesQuery(version int) (string, int, [2]int)
+```
+
+Returned values:
+
+| version | tables | indexes |
+|---|---|---|
+| `>= PostgresV19` | `PgStatTablesPG19, 20, [2]int{1,18}` | `PgStatIndexesPG19, 7, [2]int{1,5}` |
+| below | `PgStatTablesDefault, 19, [2]int{1,18}` | `PgStatIndexesDefault, 6, [2]int{1,5}` |
+
+**Why 3-tuple and not the 4-tuple `(query, Ncols, DiffIntvl, UniqueKey)` form.** The 4-tuple exists
+in exactly one place — `SelectStatStatementsJITQuery` (`internal/query/statements.go`, wired at
+`internal/view/view.go:398-400`) — and only because `statements_jit`'s `UniqueKey` points at a
+*trailing* md5 `queryid` whose index moves when `Ncols` moves (`patterns.md:37-41`). Here the row
+identity is column **0** (`relation` / `index`) in both layouts, so `UniqueKey` stays 0 and must
+**not** be in the selector. Compare `SelectStatWALQuery` (`internal/query/wal.go:38-49`) and
+`SelectStatIOQuery` — both 3-tuple, both leave `UniqueKey` alone.
+
+**Why `DiffIntvl` is still returned even though it is constant across versions.** Two reasons:
+`SelectStatArchiverQuery` (`internal/query/archiver.go:57-59`) and
+`SelectStatReplicationSlotsQuery` set the precedent that a version-independent value is still
+returned for signature symmetry; and `Configure` assigns all three in one statement, so dropping
+one would make this the only selector shape in the package. The constancy is the *point* and should
+be asserted: `stats_age` appended at the tail keeps `{1,18}` / `{1,5}` valid on both versions,
+which is what avoids ADR [012]'s version-aware-`DiffIntvl` class entirely
+(`docs/decisions-log.md:801`).
+
+### `Configure()` wiring — byte-for-byte the `wal` shape
+
+Insert into the switch at `internal/view/view.go:384-432`, alongside `case "wal":` at `:401-403`:
+
+```go
+case "tables":
+    view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatTablesQuery(opts.Version)
+    v[k] = view
+case "indexes":
+    view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatIndexesQuery(opts.Version)
+    v[k] = view
+```
+
+**Fields patched in lockstep: `QueryTmpl`, `Ncols`, `DiffIntvl`. Nothing else.** Explicitly *not*
+`UniqueKey` (stays 0), *not* `OrderKey` (stays 0), *not* `Cols`/`ColsWidth` (render-path state).
+
+The static `New()` entries at `:85-95` / `:96-106` must keep the **PG ≤ 18** values, because every
+consumer that does not call `Configure` sees them: `report.newApp` (`report/report.go:83-92`) seeds
+`app.view` from a raw `view.New()` and only `processData` Configures it (`report/report.go:282-292`).
+
+### The Configure case is load-bearing here, unlike `archiver`'s
+
+Correcting the first pass: `TestViews_Configure`'s `assert.NotEqual(t, "", v.Query)`
+(`internal/view/view_test.go:304`) does **not** force a Configure case — `New()` already seeds a
+non-empty `QueryTmpl`, and the second loop at `internal/view/view.go:436-443` formats it. The
+`archiver` case is documented in-code as a pure drift guard (`internal/view/view.go:405-408`, and
+the test comment at `internal/view/view_test.go:230-235` says the same).
+
+For `tables`/`indexes` the case **is** load-bearing, and the failure mode is precise: without it,
+`view.Ncols` stays 19/6 while the PG 19 query returns 20/7 columns. `visibleColumns` reads
+`s.Result.Ncols` (`top/stat.go:839`) so the *render* is fine — but `orderKeyRight`
+(`top/config_view.go:48`) wraps on `config.view.Ncols`, so the `Right` arrow could never select the
+new last column, and `orderKeyLeft` (`:26`) would land on index 18/5 as "the last one". A silent,
+render-invisible defect. Say this in the tech-spec so the case is not later "simplified" away.
+
+---
+
+## U2. The ViewType conditional
+
+### A template conditional is already used in `internal/query` — twice
+
+- `internal/query/activity.go:27, 41, 54, 67` — `"{{ if .ShowNoIdle }} AND state != 'idle' {{ end }} ORDER BY pid DESC"`
+- `internal/query/procpidstat.go:35` — `{{ if .ShowNoIdle }}AND state != 'idle'{{ end }}`, with the
+  contract spelled out in the doc comment at `:17-19`.
+
+So `{{if}}` in a query template is established, not novel. What is new is `ne` on a **string**
+field. `query.Format` (`internal/query/query.go:91-104`) is `template.New("query").Parse(tmpl)` with
+**no `Funcs()` call**, so only text/template builtins are available — `eq`, `ne`, `and`, `or`, `not`
+all are. `{{if ne .ViewType "all"}}…{{end}}` needs no new plumbing.
+
+### How it composes with the existing substitution — it does not have to
+
+`pg_stat_{{.ViewType}}_tables` is a *name splice* and lives only in `tables.go:19`, `indexes.go:10`,
+`sizes.go:17`. `pg_stat_autovacuum_scores` has **no** `user`/`sys`/`all` variants
+(`…-interview.yml:795`), so the new screen never splices a name — the conditional stands alone in
+its own `WHERE` clause and the two constructs never meet in one template. On `tables`/`indexes` the
+splice is untouched by this feature.
+
+Recommended form (a block conditional, matching the `ShowNoIdle` precedent):
+
+```
+{{if ne .ViewType "all"}}WHERE (s.schemaname NOT IN ('pg_catalog','pg_toast','information_schema') OR s.for_wraparound){{end}}
+```
+
+Note the escape hatch is inside the conditional, not outside it: in `all` mode there is no
+predicate at all, so `for_wraparound` needs no special mention there.
+
+### Where `ViewType` is populated, and every value it can hold
+
+| path | value | file:line |
+|---|---|---|
+| seed | `"user"` | `query.NewOptions`, `internal/query/query.go:47` |
+| `top` stores opts | `"user"` initially | `top/top.go:67` → `:81` (`app.config.queryOptions = opts`) |
+| `,` toggle | flips `"user"` ↔ `"all"` | `top/config_view.go:458-462` |
+| `record` | `"user"` | `record/record.go:84` |
+| **`report` replay** | **`""`** | `report/report.go:285-287` — `views.Configure(query.Options{Version: d.meta.version})`, no `ViewType` |
+
+The `""` case matters for Format-safety only. With `ne .ViewType "all"` an empty value evaluates
+true → the filter is ON, which is the safe degradation. (The existing name-splice degrades to the
+nonexistent `pg_stat__tables` on that same path; it survives only because `report` never executes
+the query. Pre-existing, not widened here.)
+
+### Wiring the `,` toggle onto the new screen — three separate literals
+
+`toggleSysTables` (`top/config_view.go:450-493`) has the name in **three** places:
+
+1. `:453` — the guard `if name != "tables" && name != "indexes" && name != "sizes" { return nil }`
+2. `:466` — `for i, t := range []string{"tables", "indexes", "sizes"}` (reformat loop, and
+   `queries := make([]string, 3)` at `:465` is a fourth literal — the **length**)
+3. `:475` — the same literal slice again (write-back loop)
+
+A partial edit compiles, passes today's `Test_toggleSysTables`, and produces a screen where `,`
+flips the indicator and the header but not the rows. The `make([]string, 3)` at `:465` is the
+sharpest of the four: leaving it at 3 while the range list has 4 entries is an index-out-of-range
+panic inside a key handler, which gocui does not recover.
+
+`Test_toggleSysTables` (`top/config_view_test.go:749-794`) asserts on the substrings
+`"pg_stat_all"` / `"pg_stat_user"`. Neither appears in the new screen's query, so a new row needs a
+different marker (presence/absence of `'pg_catalog'`) — the table's **shape** changes, not just its
+length.
+
+---
+
+## U3. Version plumbing into the TUI
+
+### Where the version number lives at each site
+
+One number, two homes, both written in `app.setup()` (`top/top.go:57-84`):
+
+- `app.postgresProps.VersionNum` — field declared `top/top.go:44` (`postgresProps stat.PostgresProperties`),
+  assigned at `:81` from `stat.GetPostgresProperties(app.db)` (`:60`).
+- `app.config.queryOptions.Version` — field `top/config.go:21`, assigned at `top/top.go:80` from
+  `query.NewOptions(props.VersionNum, …)` built at `:67`.
+
+Reachability at each site:
+
+| site | file:line | has | version reachable today? |
+|---|---|---|---|
+| `switchViewTo` | `top/config_view.go:232-265` | `app *app` | **yes**, both homes, no signature change |
+| `menuOpen` | `top/menu.go:116-147` | `config *config` | **yes**, `config.queryOptions.Version` |
+| `selectMenuStyle` | `top/menu.go:37-113` | `menuType` only | **no** |
+| `menuSelect` | `top/menu.go:150-251` | `app *app` | **yes**, both homes |
+
+So exactly **one** function needs a new parameter for the menu half.
+
+### Minimal signature changes
+
+```go
+func tablesNextView(current string, version int) string      // top/config_view.go
+func selectMenuStyle(t menuType, version int) menuStyle      // top/menu.go:37
+```
+
+`tablesNextView` stays a pure, table-testable function — the `walNextView` shape
+(`top/config_view.go:298-310`) plus a guard:
+
+```go
+case "tables":
+    if version >= query.PostgresV19 { next = "autovacuum_scores" } else { next = "tables" }
+```
+
+Call site: `switchViewTo`'s new `case "tables":` (the direct analogue of `case "wal":` at
+`top/config_view.go:256-257`, comment at `:250-255` included verbatim — `"tables"` collides with the
+`report -T` type at `cmd/report/report.go:66,146`, the `describeReport` key at
+`report/report.go:671`, and the tar entry prefix).
+
+`selectMenuStyle` call sites — only **three** in production, all trivially fixable:
+
+- `top/menu.go:118` — inside `menuOpen`, which already has `config` → `config.queryOptions.Version`
+- `top/menu.go:248` — the `selectMenuStyle(menuNone)` reset at the end of `menuSelect`; `menuNone`
+  falls to the `default` arm at `:106-109`, so any version argument works (pass `0`, or the real
+  one for readability)
+- tests: `top/menu_test.go:28`, `:76`
+
+The version only changes the **label** of item 1 in `menuTables` (`" pg_stat_autovacuum_scores"` vs
+`" pg_stat_autovacuum_scores — requires PostgreSQL 19"`). It must **not** filter the item out: the
+user-spec keeps the item present, which is what preserves the `cy` → view mapping `menuSelect`
+hardcodes and keeps `Test_menuSelectTables` a straight copy of `Test_menuSelectWAL`.
+
+### The test that breaks silently
+
+`Test_switchViewTo` (`top/config_view_test.go:588-661`) builds `app := &app{config: newConfig()}`
+and sets only `app.postgresProps.ExtPGSSSchema` per row (`:638`). **`VersionNum` is zero**, and
+`newConfig()` (`top/config.go:52-59`) leaves `queryOptions` zero-valued too. So *whichever* home
+`tablesNextView` reads, the load-bearing row `{current:"tables", to:"tables", want:"autovacuum_scores"}`
+fails until the table gains a version dimension. Same for `Test_keybindingsWALCycles`'s analogue
+(`top/keybindings_test.go:128-145`), which builds the app the same way.
+
+Prefer `app.postgresProps.VersionNum` over `app.config.queryOptions.Version`: it is the field the
+other version-dependent handler already uses (`showPgLog(app.db, app.postgresProps.VersionNum, …)`,
+`top/keybindings.go:67`).
+
+---
+
+## U4. The menu refusal path
+
+### Composition with the pinned `cy` → view mapping
+
+`menuSelect` (`top/menu.go:150-251`) is a `switch app.config.menu.menuType` whose arms are
+`switch cy` with a `default` fall-back. The `menuWAL` arm (`:214-223`) is the template. Because the
+spec keeps the marked item **present**, `cy` is untouched:
+
+```go
+case menuTables:
+    switch cy {
+    case 0:
+        viewSwitchHandler(app.config, "tables")
+        printCmdline(app.ui, "%s", app.config.view.Msg)
+    case 1:
+        if app.postgresProps.VersionNum >= query.PostgresV19 {
+            viewSwitchHandler(app.config, "autovacuum_scores")
+            printCmdline(app.ui, "%s", app.config.view.Msg)
+        } else {
+            printCmdline(app.ui, "NOTICE: pg_stat_autovacuum_scores requires PostgreSQL 19")
+        }
+    default:
+        viewSwitchHandler(app.config, "tables")
+        printCmdline(app.ui, "%s", app.config.view.Msg)
+    }
+```
+
+**The shape is deliberate and the naive version is wrong.** Every existing arm ends with one
+shared `printCmdline(app.ui, "%s", app.config.view.Msg)` *after* the inner switch (`:213`, `:223`,
+`:203`, `:185`, `:165`). Keeping that shared line and adding a refusal message inside `case 1`
+produces **two** `printCmdline` calls on one path — the exact defect class recorded at
+`patterns.md:323-330`: `g.Update` enqueues each write from its own goroutine, order is not
+guaranteed, so only one survives and which one is a coin flip. The refusal message would
+intermittently vanish, which is precisely the acceptance criterion "не закрывает меню молча". Hence
+the shared write must be pushed **into** each branch (the 4-branch `switch` idiom
+`switchViewToProcPidStat` uses at `top/config_view.go:435-444`).
+
+### What the `menuOpen` NOTICE path gives, and what it does not
+
+`top/menu.go:120-124`:
+
+```go
+if pgssSchema == "" && s.menuType == menuPgss {
+    printCmdline(g, "NOTICE: pg_stat_statements not found")
+    return nil
+}
+```
+
+**Reusable:** the message *shape* (`NOTICE: ` prefix, one `printCmdline`, no `viewCh` push, no state
+mutation) and the principle that a refusal changes nothing.
+
+**Not reusable:** the placement and the `return nil`. That guard runs *before* the menu window is
+built, so returning early is correct there. In `menuSelect` the menu window already exists and has
+focus; an early `return nil` would skip `app.config.menu = selectMenuStyle(menuNone)` (`:248`) and
+`menuClose(g, v)` (`:249`), leaving the menu drawn and the cursor trapped in it. The refusal branch
+must **fall through** to both.
+
+Also note the receiver differs: `menuOpen` writes via `g`, `menuSelect` via `app.ui`. Same `*gocui.Gui`
+in production; in `Test_menuSelectWAL` (`top/menu_test.go:52-99`) `app.ui` is the zero-value Gui that
+`printCmdline`'s `g.Update` goroutine parks on forever — the documented intentional leak
+(`top/menu_test.go:44-47`). A refusal test inherits that leak; do not "fix" it.
+
+`viewSwitchHandler` (`top/config_view.go:370-379`) also calls `liftPause`. The refusal skips it,
+which is correct and matches the convention documented at `:367-369` ("callers with an early return
+of their own keep it ABOVE their call to this helper").
+
+---
+
+## U5. CRITICAL — the diff path across a recorded version change
+
+**Answer: no. `diff()` cannot see a PG-18-width `prev` paired with a PG-19-width `curr` through the
+version-change path. The mechanism that prevents it is not [021]'s layout-state reset — it is
+older and separate, and it is not a leftover.** But this feature is the first to exercise that
+mechanism on a screen with a non-empty `DiffIntvl`, and that is worth stating as such.
+
+### End-to-end trace of `report/report.go: processData`
+
+1. **Every tick carries its own version.** `tarRecorder.collect` (`record/recorder.go:113-146`)
+   re-runs `query.SelectCommonProperties` per tick (`:120-126`) and stores it as `stats["meta"]`;
+   `write()` emits `meta.<ts>.json` beside `<screen>.<ts>.json`. So a mid-archive version change is
+   representable and `readTar` reads it: `report/report.go:182-193` decodes `meta.*` into
+   `metadata.version`, and `:233-235` refuses to send a `data` until **both** `metaOK` and `statOK`
+   are set, resetting both after each send (`:240`).
+2. **The boundary detector.** `report/report.go:276` —
+   `versionChanged := prevStat.Valid && prevMeta.version != d.meta.version`.
+3. **The drop.** `:277-320` — `if !prevStat.Valid || versionChanged { prevMeta = d.meta;
+   prevStat = d.res; prevTs = d.ts; … Configure(…); … continue }`. The **previous snapshot is
+   replaced by the first sample of the new version, and that sample is `continue`d — never diffed,
+   never printed.** The next sample is therefore PG-19-width `curr` against PG-19-width `prev`.
+4. **`prevMeta` is updated only inside that branch.** The normal path at `:381-383` swaps `prevStat`
+   and `prevTs` and deliberately leaves `prevMeta` alone — correct, because the version cannot
+   change without taking the branch.
+5. `countDiff` (`report/report.go:502-511`) → `stat.Compare` → `calculateDelta`
+   (`internal/stat/postgres.go:581-603`) → `diff` (`:606-661`). The unguarded index is
+   `prev.Values[j][l]` at `:639`, walked over `l < curr.Ncols` (`:633`) — reachable only with a
+   mixed-width pair, which step 3 prevents for a version change.
+
+### The single-process upgrade case, checked separately
+
+`record` calls `views.Configure(opts)` **once**, in `app.setup()` (`record/record.go:129`), while
+`collect()` opens a **fresh connection every tick** (`record/recorder.go:114`). So a `record -a`
+process running across an in-place major upgrade keeps emitting the *PG-18-shaped query text* while
+`meta.version` flips to 19. Result: the recorded widths stay constant, `versionChanged` still fires,
+one sample is dropped. Safe, at the cost of one tick — the pre-existing behaviour ADR
+`[017] The report always discards the first sample` already documents
+(`docs/decisions-log.md:1180`).
+
+### What remains open, and it is genuinely [020]
+
+The guarantee is **version-keyed, not width-keyed**. A pair whose widths differ while
+`meta.version` is *equal* still reaches `diff()`. Debt [020] (`docs/tech-debt.md:268-292`) records
+that both malformed shapes were **reproduced** during 013's audit. This feature does not create
+that shape — `Configure` is deterministic per version — but it does make `tables` the first
+non-empty-`DiffIntvl` screen whose width is version-dependent, so the class becomes reachable on a
+screen where it was previously impossible.
+
+Directly relevant evidence already in the repo:
+`Test_app_doReport_errorPathDoesNotHang` (`report/report_test.go:1882-1908`) builds an archive that
+widens between two samples of the **same** version and asserts the command returns rather than
+hangs — i.e. a same-version width change today produces an *aborted report*, not a crash, because
+`printStatSample`'s zero-width guard fires first. That is `activity` (`DiffIntvl{0,0}`); on
+`tables` the same archive would reach `diff()` at `internal/stat/postgres.go:639` first.
+
+**Recommendation for the tech-spec:** do **not** carry a `diff()` bounds fix inside this feature —
+it is shared code across every screen and [020] explicitly notes `align.SetAlign` is a third unsafe
+consumer, so fixing `diff` alone would not close the class. Do carry:
+
+- the 18 → 19 `tables` replay test the acceptance criteria already require (see §U6f) — it is the
+  **first** exercise of the version-change branch on a diffed screen, and it is the honest proof
+  that the drop works there;
+- an update to [020]'s "why deferred" note recording that its reachability now includes
+  `tables`/`indexes`.
+
+### The TUI live path — not affected
+
+`Collector` holds one `c.config.VersionNum` for the session
+(`internal/stat/stat.go:316`), `Reset()` (`:186-188`) blanks `prevPgStat`/`currPgStat` on a view
+switch, and `calculateDelta` is called with the same view's `DiffIntvl` on both snapshots
+(`:440`). The version cannot change under a live `top` session.
+
+---
+
+## U6. Test inventory — exact literals
+
+### (a) View registry counts
+
+| file:line | assertion | old → new |
+|---|---|---|
+| `internal/view/view_test.go:11` | `assert.Equal(t, 28, len(v))` | **28 → 29** |
+| `internal/view/view_test.go:314` | `{version: 190000, total: 28}` | **28 → 29** |
+| `internal/view/view_test.go:315` | `{version: 160000, total: 28}` | unchanged |
+| `internal/view/view_test.go:316` | `{version: 140000, total: 25}` | unchanged |
+| `internal/view/view_test.go:317` | `{version: 130000, total: 19}` | unchanged |
+| `internal/view/view_test.go:318` | `{version: 120000, total: 16}` | unchanged |
+| `internal/view/view_test.go:319` | `{version: 110000, total: 14}` | unchanged |
+| `internal/view/view_test.go:320` | `{version: 100000, total: 14}` | unchanged |
+
+Only the `190000` row moves — `MinRequiredVersion: PostgresV19`. Same shape as feature 007's PG15+
+view bumping only the `160000` row (`patterns.md:181`).
+
+Also add, per `patterns.md:186-190`, a `TestNew_AutovacuumScoresView` in the shape of
+`TestNew_ArchiverView` (`internal/view/view_test.go:102-129`) pinning `key == v.Name`, non-nil
+`ColsWidth`/`Filters`, `NotRecordable: true`, `MinRequiredVersion == query.PostgresV19`,
+`Ncols == 11`, `DiffIntvl == [2]int{0,0}`, `OrderKey == 1`, `OrderDesc == true`.
+
+### (b) Record filter rows — `record/record_test.go`, all seven
+
+`NotRecordable: true` is dropped unconditionally (`record/record.go:205-212`) **before** the
+version gate, so `wantN` rises by one on every row and `wantV` never moves:
+
+| file:line | old | new |
+|---|---|---|
+| `:142` | `{version: 190000, pgssSchema: "public", wantN: 0, wantV: 28, wantArchiver: true}` | `wantN: 1` |
+| `:143` | `{version: 140000, pgssSchema: "", wantN: 9, wantV: 19, …}` | `wantN: 10` |
+| `:144` | `{version: 140000, pgssSchema: "public", wantN: 3, wantV: 25, …}` | `wantN: 4` |
+| `:145` | `{version: 130000, pgssSchema: "public", wantN: 9, wantV: 19, …}` | `wantN: 10` |
+| `:146` | `{version: 120000, pgssSchema: "public", wantN: 12, wantV: 16, …}` | `wantN: 13` |
+| `:147` | `{version: 110000, pgssSchema: "public", wantN: 14, wantV: 14, …}` | `wantN: 15` |
+| `:148` | `{version: 100000, pgssSchema: "public", wantN: 14, wantV: 14, …}` | `wantN: 15` |
+
+017 added a per-row `wantArchiver bool` because counts alone can be satisfied by an arithmetic
+coincidence (`patterns.md:184-186`). Add the same for this feature: a `wantAutovacuumScores bool`
+that is **false on every row** — the whole point is that it is never kept. `Test_filterViews` runs
+without Postgres.
+
+### (c) `tables` / `indexes` Ncols assertions — there are none today
+
+Grep result: nothing in the repo pins `views["tables"].Ncols` or `views["indexes"].Ncols`, and
+`internal/query/tables_test.go` / `indexes_test.go` assert only that `Format` succeeds and
+`conn.Exec(q)` does not error (they discard the result set entirely and do not `defer conn.Close()`,
+`tables_test.go:29`). **The column change is currently unguarded — assertions must be added, not
+updated.** Natural home: the `case 190000:` and `case 140000:` arms of `TestViews_Configure`
+(`internal/view/view_test.go:214-256`), where the per-version `Ncols`+`DiffIntvl` pins for
+`wal`/`archiver`/`progress_*` already live:
+
+```
+190000 arm:  views["tables"].QueryTmpl == query.PgStatTablesPG19,   Ncols 20, DiffIntvl {1,18}
+             views["indexes"].QueryTmpl == query.PgStatIndexesPG19, Ncols  7, DiffIntvl {1,5}
+140000 arm:  views["tables"].QueryTmpl == query.PgStatTablesDefault,   Ncols 19, DiffIntvl {1,18}
+             views["indexes"].QueryTmpl == query.PgStatIndexesDefault, Ncols  6, DiffIntvl {1,5}
+```
+
+Unlike the `archiver` asserts in the same arms, these **can** redden on a deleted `Configure` case
+(the static entry carries the PG ≤ 18 values), so they are a genuine wiring gate, not a drift guard.
+Write that boundary next to the assertion — `patterns.md:98-104` records that mislabelling it is a
+repeat mistake.
+
+Negative criteria "`functions` не изменился" / "`sizes` не изменился" have the same home: assert
+`views["functions"].Ncols == 8` / `views["sizes"].Ncols == 12` and
+`QueryTmpl == query.PgStatFunctionsDefault` / `query.PgTablesSizesDefault` in the `190000` arm.
+Today nothing pins them, so the negative criteria are currently untestable as written.
+
+### (d) Menu and view-switch tests
+
+| file:line | what it pins | change |
+|---|---|---|
+| `top/menu_test.go:13-30` | `Test_selectMenuStyle` — `{menuNone 0, menuDatabases 2, menuPgss 7, menuProgress 6, menuConf 4, menuStatIO 2, menuWAL 2}` | add `{menuTables, 2}`; **all 7 existing rows change call shape** if `selectMenuStyle` gains the version parameter (`:28`) |
+| `top/menu_test.go:52-99` | `Test_menuSelectWAL` — `{cy 0 → "wal"}, {cy 1 → "archiver"}, {cy 5 → "wal"}` + `menuNone` reset | copy to `Test_menuSelectTables` with `{0 → tables}, {1 → autovacuum_scores}, {5 → tables}`; needs a **version dimension** and a refusal row (`version 180000, cy 1` → nothing on `viewCh`, view unchanged, menu still closed) |
+| `top/menu_test.go:76` | `app.config.menu = selectMenuStyle(menuWAL)` | call-shape change |
+| `top/config_view_test.go:588-661` | `Test_switchViewTo`, 30 rows | add 3: `{tables → tables ⇒ autovacuum_scores}` (the only load-bearing one, per the comment at `:625-627`), `{autovacuum_scores → tables ⇒ tables}`, `{activity → tables ⇒ tables}`; **add a version column and set `app.postgresProps.VersionNum` per row** (see §U3) |
+| `top/config_view_test.go:695-708` | `Test_walNextView` | shape to copy for `Test_tablesNextView(current, version)`; include out-of-range version probes (`200000`, `180000`, `0`) the way `archiver_test.go:48-52` does |
+| `top/config_view_test.go:749-794` | `Test_toggleSysTables`, 6 rows + `activity` no-op | markers `"pg_stat_all"`/`"pg_stat_user"` do not exist in the new query — new rows need `'pg_catalog'` presence/absence |
+
+### (e) Keybinding and help tests
+
+| file:line | what it pins | change |
+|---|---|---|
+| `top/keybindings.go:50` | `{"sysstat", 't', switchViewTo(app, "tables")}` | unchanged bytes, changed meaning (the `case "tables"` in `switchViewTo`) — exactly 017's `'w'` situation |
+| `top/keybindings.go` (new row) | `{"sysstat", 'T', menuOpen(menuTables, app.config, "")}` | `'T'` is free — verified: `keybindingsList` (`:33-103`) has no `'T'` row |
+| `top/keybindings_test.go:50-84` | `Test_keybindingsWAL` — double-`DeleteKeybinding` uniqueness for `'W'`, `'w'`, plus `"", "menu", "dialog", "help"` non-claim | copy as `Test_keybindingsTables` for `'T'` / `'t'` |
+| `top/keybindings_test.go:99-115` | `Test_keybindingsWALOpensMenu` — runs the bound handler, asserts `menuType`, title string, items slice, and `mv.Buffer()` contains each item | copy; the **items slice literal is version-dependent** now, so this test needs a version too |
+| `top/keybindings_test.go:128-145` | `Test_keybindingsWALCycles` | copy; needs `app.postgresProps.VersionNum = query.PostgresV19` |
+| `top/help.go:15` | `    s,t,i             's' tables sizes, 't' tables, 'i' indexes.` | `'t' tables,` must be **removed** here — otherwise the marker `"'t' "` matches two lines and `helpEntryLine` (`top/help_test.go:14-30`) fails on ambiguity |
+| `top/help.go:20` | `    w,W               'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.` | the new `t,T` row must go **after** this line — `Test_helpTemplate_walEntry` (`top/help_test.go:118-131`) asserts `entryIdx == statioIdx+1`, i.e. `w,W` sits directly after `j,J` |
+| `top/help_test.go:52-82` | `Test_helpTemplate_pauseEntry` — `scrollIdx+1 == entryIdx`, `entryIdx+1 == contIdx`, `lines[contIdx+1]` starts with `"    C,E,R"` | the new row must not land between `[,]` and `C,E,R`; the slot between `w,W` (`:20`) and `S` (`:21`) is free |
+| `top/help_test.go:136-143` | `Test_helpTemplate_replicationEntry` uses `helpEntryLine(t, "'s' tables sizes")` for the description column | still resolves after the `'t' tables,` removal |
+| `top/help_test.go:161-170` | `strings.Count(helpTemplate, "%") == 1` | no literal `%` in the new row |
+| `top/help_test.go:149-153` | `Test_helpTemplate_resetCaveat` — `"pg_stat_io, bgwriter, wal, archiver"` | **unchanged**: `pg_stat_autovacuum_scores` has no counters to reset, and `Q` *does* affect `stats_age` on `tables`/`indexes`, which is the feature's point, not an exception |
+
+Add a `Test_helpTemplate_tablesEntry` in the `Test_helpTemplate_walEntry` shape (marker `"'t' "`,
+prefix `"    t,T"`, description pinned word for word, `descColumn` equality with its neighbour).
+
+Untested and therefore a silent doc gap, unchanged from the first pass: `cmd/help.go:163-178`
+(report flag documentation). No new report flag here, so nothing to add.
+
+### (f) Report / replay
+
+- **`report/report_test.go:1172-1205` `Test_describeReport`** — no change required. It compares by
+  identity, so editing `pgStatTablesDescription` / `pgStatIndexesDescription` stays consistent
+  automatically, and `autovacuum_scores` gets no describe entry (`NotRecordable`).
+- **Goldens** — `report/testdata/report_tables.golden`, `report_indexes.golden` and the legacy
+  `pgcenter.stat.golden.tar` are unaffected: `report` renders from recorded data, never reads
+  `view.Ncols` (only two `.Ncols` reads exist in the package, `report/report.go:412` and `:447`,
+  both procpidstat/meta-specific), and `DiffIntvl` does not change.
+- **The 18 → 19 replay test the AC demands** needs the existing harness generalized. Today
+  `buildActivityTar` (`report/report_test.go:1602-1655`) hardcodes the entry name
+  `"activity."+ts+".json"` (`:1649`) and `activityReplayConfig` (`report/report_test.go:1705-1713`)
+  hardcodes `ReportType: "activity"`. Both need a screen-name parameter. Everything else transfers:
+  `runProcessDataOnTar` (`:1660-1702`) drives `processData` **directly** rather than through
+  `doReport`, because `doReport` runs it in a goroutine where a panic kills the whole test binary
+  (`patterns.md:228-230`); ticks are one second apart so `itv == 1`; **two ticks per version are
+  mandatory** because the first of each version is consumed by the version-change branch.
+  The three existing version-change tests (`report/report_test.go:1725`, `:1791`, `:1837`) are all
+  `activity`, i.e. `DiffIntvl{0,0}` — this feature's test is the first to put a diffed screen
+  through that branch.
+
+---
+
+## U7. The `record/recorder_test.go:30` trap — exact mechanism and fix
+
+**Mechanism, step by step:**
+
+1. `Test_tarRecorder` (`record/recorder_test.go:30-57`) connects via `postgres.NewTestConnect()`
+   (`:35`), which is `NewTestConnectVersion(170000)` → port 21917 → **PostgreSQL 17**
+   (`internal/postgres/testing.go:20-22`, port map `:28-42`).
+2. It builds `views := view.New()` at `:39` — the **unfiltered** registry. `filterViews` is never
+   called; the test does not mirror `record/record.go: setup()`, which calls it at `record.go:86`
+   *before* `Configure` at `:129`.
+3. `views.Configure(opts)` at `:41` with `opts.Version == 170000`. The new
+   `case "autovacuum_scores"` returns the single PG 19 query text regardless of version (the
+   selector is version-independent, like `SelectStatArchiverQuery`), and the format loop at
+   `internal/view/view.go:436-443` writes it into `view.Query`.
+4. `tc.collect(dbConfig, views)` at `:47` → `tarRecorder.collect` (`record/recorder.go:113-146`)
+   loops `for k, v := range views` (`:128`) and does `stat.NewPGresultQuery(db, v.Query)`, returning
+   `nil, err` on the **first** failure (`:130-132`). There is no version gate and no per-view error
+   tolerance — that is by design (`architecture.md:93-94`: a failing view aborts the whole
+   recording).
+5. On PG 17 `pg_stat_autovacuum_scores` does not exist → `assert.NoError(t, err)` at `:48` fails
+   with a bare `relation "pg_stat_autovacuum_scores" does not exist` that **names no view**, and
+   `assert.NotNil(t, stats)` at `:49` fails too. Map iteration order is random, so which other
+   views were collected first varies run to run.
+
+**Minimal correct fix — make the test mirror production:**
+
+```go
+views := view.New()
+_, views = filterViews(props.VersionNum, "public", views)
+```
+
+placed at `recorder_test.go:39`, before `views.Configure(opts)`. This is the same call
+`record/record.go:86` makes, in the same order, and it drops `autovacuum_scores` twice over
+(`NotRecordable` first at `record.go:208`, and the version gate at `:214` would too). The test's
+subject is `tarRecorder.collect`, not the registry, so nothing is weakened.
+
+**Rejected alternatives:**
+
+- `t.Skip` — hides a real regression in `collect` for every PG version.
+- Filtering by `VersionOK` only — leaves the view in on a PG 19 fixture, where `collect` would then
+  record a screen the spec says must never be recorded. `filterViews` is the one function that
+  encodes both rules.
+- Adding a version gate inside `tarRecorder.collect` — a behaviour change for `pgcenter record`
+  (today a failing view aborts the whole recording, deliberately) and needs its own ADR. Do not do
+  this inside 018.
+
+Note the sibling test `TestFilterViews_dropsExplicitNotRecordable` (`record/record_test.go`, the
+synthetic guard `architecture.md:182` mentions) keeps working, and `architecture.md:182` itself
+becomes stale at `/done` time — this feature reintroduces the first production `NotRecordable` view
+since feature 008 cleared them.
+
+---
+
+## U8. Locked column-name test — the pattern to copy
+
+Source: `internal/query/archiver_test.go`. Four pieces, all directly transferable:
+
+1. **Package-level version list with a rationale comment** — `:15-18`
+   (`archiverVersions = []int{140000, …, 190000}`). Here the list is `[]int{190000}` only, with the
+   comment saying why: `MinRequiredVersion: PostgresV19`, the view does not exist below it.
+2. **The locked column slice** — `:20-26`:
+   ```go
+   var archiverColumns = []string{"source", "ready", …, "stats_age"}
+   ```
+   Comment states *why by name and not by length*: a column inserted mid-layout keeps the count
+   right while shifting every index the view/record/report layers depend on.
+3. **The server-free structure test** — `Test_StatArchiverQuery_Structure`, `:69-108`. Walks the
+   locked slice building the needle `" AS " + col + ","`, with the last element switched to
+   `" AS " + col + " FROM"` (`:84-87`), asserts `strings.Index != -1` **first** (presence, because
+   `-1` is less than everything and an ordering-only assertion passes on a missing row, `:89-90`)
+   and then `assert.Greater(idx, prev)`. Plus targeted `assert.Contains` on the query's one piece of
+   real logic and an `assert.NotContains(…, "coalesce")` tied to `DiffIntvl{0,0}`.
+   **Adaptation for 018:** the tail needle `" AS analyze_score FROM"` still works if
+   `analyze_score` is the last SELECT item and `FROM` follows it — check that when the LEFT JOIN is
+   written. The `NotContains "coalesce"` assertion transfers verbatim (nothing is diffed, so nothing
+   may be coalesced). Add `assert.Contains(q, "ORDER BY")` for the explicit ordering criterion and
+   `assert.NotContains(PgStatAutovacuumScoresDefault, " AS relid")` for "relid отсутствует".
+4. **The live assertion** — `Test_StatArchiverQueries`, `:107-129`:
+   `assert.Len(descs, wantNcols)` **and** `assert.Equal(t, archiverColumns, descs, "live column
+   names must match the locked order")`. Fed by two file-local helpers:
+   - `connectArchiverFixture` (`:371-382`) — the hardened skip that **fails** rather than skips when
+     the version is missing from the port map (`assert.NotContains(err.Error(), "no test cluster
+     port mapping")`), then `t.Skipf`;
+   - `runArchiverQuery` (`:388-407`) — returns names + row count + `rows.Err()`, because a server
+     error may surface only on drain.
+
+   There is no shared exported "run a query, return column names" helper in the repo; every test
+   file carries its own. Follow that — a file-local `runAutovacuumScoresQuery`.
+
+Also copy `assert.NotContains(t, q, "{{", "formatted query must carry no template artifacts")`
+(`:117`) — with a `{{if}}` in the template that assertion becomes load-bearing rather than
+decorative, and it should be run for **both** `ViewType` values.
+
+---
+
+## U9. The wraparound fixture
+
+### Where it should live: file-local, not `internal/postgres/testing.go`
+
+`internal/postgres/testing.go` carries **no build tag** and links into the released binary
+(`architecture.md:237`, and the doc comment at `testing.go:60-63`), which is why `SetupTestRole`
+returns an `error` and takes no `*testing.T`. A helper that burns 120 000 transactions would be
+compiled into the shipped `pgcenter` — technically harmless, semantically wrong.
+
+`SetupTestRole` is shared because **two** test files need it. The wraparound fixture is needed by
+exactly one (`internal/query/autovacuum_scores_test.go`), and the dominant precedent for
+single-file fixtures is file-local with a `defer` cleanup:
+
+`internal/query/sizes_test.go:44-54`
+```go
+_, err = conn.Exec(`CREATE SCHEMA IF NOT EXISTS test_dbo`)
+_, err = conn.Exec(`CREATE TABLE IF NOT EXISTS test_dbo.t1hlog (id int)`)
+defer func() {
+    _, _ = conn.Exec(`DROP TABLE IF EXISTS test_dbo.t1hlog`)
+    _, _ = conn.Exec(`DROP SCHEMA IF EXISTS test_dbo`)
+}()
+```
+
+Note it uses `CREATE … IF NOT EXISTS` (idempotent, like `SetupTestRole`) and ignores cleanup errors.
+`testing/fixtures.sql` (193 lines) creates only the databases, extensions and the PL/Perl `pgcenter`
+schema — **no tables at all** — so the image is not the place for this either.
+
+### The fixture itself, and what it costs
+
+Measured and recorded in the interview (`…-interview.yml:909-926`): `ALTER TABLE toast_probe SET
+(toast.autovacuum_freeze_max_age = 100000)` + a procedure with `COMMIT` in a loop burning 120 000
+transactions — 262 ms, yielding **exactly one** flagged row, and it lives in `pg_toast`, i.e. a
+system schema. Deleting `OR for_wraparound` from the `WHERE` reddens it. That is a test that can
+fail, which is the acceptance criterion the user-spec's risk section demands.
+
+Constraints to write into the tech-spec:
+
+- **`autovacuum_freeze_max_age`'s minimum is 100000** (`pg_settings.min_val`,
+  `…-interview.yml:905-907`), so 120 000 burned XIDs is the floor, not a round number.
+- **Burning XIDs is not reversible and is cluster-global.** It raises `age(relfrozenxid)` for every
+  relation on the PG 19 fixture cluster (port 21919). `DROP TABLE` in the defer removes the probe
+  table; the XID consumption stays. On an ephemeral CI container that is fine — the same argument
+  `SetupTestRole`'s doc comment makes about never dropping roles (`testing.go:60-63`). On a
+  long-lived local cluster it accumulates across runs. Say so.
+- **Only `internal/query` tests touch port 21919** in the current suite; `record`/`report`/`stat`
+  go through `NewTestConnect()` → 21917. Go runs tests within a package sequentially unless
+  `t.Parallel()` is called, and none of these do — but say it, because a future `t.Parallel()` would
+  make the burn race with the column-name assertions.
+- The procedure with `COMMIT` in a loop requires PG 11+; the test is PG 19-only anyway.
+- Use the hardened skip (`connectArchiverFixture` shape) so a missing `190000` port mapping
+  **fails** instead of quietly skipping — tech debt [024] (`docs/tech-debt.md:194`) is exactly this
+  trap, and `patterns.md:22-26` records that a skip is honest but still green in CI.
+
+---
+
+## U10. Rendering
+
+No Go-side numeric formatting exists for main-table cells: every value arrives as a string produced
+by SQL. Path: `alignViewToResult` (`top/stat.go:779-790`) → `align.SetAlign(r, 1000, false)` →
+`printDataCell` (`top/stat.go:1222-1239`).
+
+**The width floor.** `align.SetAlign` (`internal/align/align.go:14-79`):
+
+- `valuelen = math.Max(len(value), 1)` (`:32`) — an **empty cell counts as 1**, never 0.
+- `colnamelen = math.Max(len(colname), 8)` (`:35`) — the 8-char floor.
+- `aligningIsLessThanColname(vlen, cnlen, width)` = `vlen > 0 && vlen <= cnlen && vlen >= width`
+  (`:82-84`) → `widthes[colidx] = colnamelen`.
+
+So a column whose values are all shorter than its name is exactly `max(len(name), 8)` wide, and an
+all-empty column is exactly that too.
+
+**Applied to the new screen** — every header is already ≥ 8, so the 8-floor never binds:
+
+| column | header len | widest realistic value | fits? |
+|---|---|---|---|
+| `relation` | 8 | `pg_toast.pg_toast_16532` (23) | widens to 23 |
+| `score` | 8 | `12.47` (5) | 8 |
+| `do_vacuum` | 9 | `false` (5) | 9 |
+| `do_analyze` | 10 | `false` | 10 |
+| `for_wraparound` | 14 | `false` | 14 |
+| `dead_total` | 10 | 9 digits | 10 |
+| `xid_score` … `analyze_score` | 9–13 | `1234.56` | header width |
+| `vacuum_insert_score` | 19 | — | 19 |
+
+`round(x, 2)::text` and `bool::text` both produce values that fit inside the header width in every
+realistic case; nothing special is needed. `printDataCell` prints `%-*s` at `ColsWidth[i]+2` and
+truncates with `~` only when `len(value) > ColsWidth[i]`, returning an error when the width is
+`<= 0` (`:1225-1233`).
+
+**Tech debt [035] does *not* bite the new screen.** `alignViewToResult` early-returns once
+`Aligned && len(ColsWidth) == r.Ncols` (`top/stat.go:780-782`), so widths freeze on the first frame.
+On `autovacuum_scores` every column has a value on the first frame — the six scores and the three
+booleans are never NULL, and `dead_total`'s row set coincides with the scores view's
+(`…-interview.yml:838`: 119 vs 119), so the outer join in practice never misses.
+
+**It does bite `stats_age`, and worse than on `archiver`.** Entering `tables`/`indexes` on a cluster
+that has never reset statistics freezes `stats_age` at `max(len("stats_age"), 8) = 9`. `00:05:12`
+(8 chars) fits; `1 day 00:05:12` (14) renders as `1 day 0~`. That is exactly the risk the user-spec
+accepts and asks to fold into [035]'s scope — "Проявление: нужен вход на экран при пустой колонке
+**и** больше суток на нём" is literally the `> 9 chars` boundary.
+
+**Sorting interaction.** ADR `[013] Empty cells sort last in every comparator mode`
+(`docs/decisions-log.md:898`, implemented at `internal/stat/postgres.go:679-700`): the comparator
+mode is chosen from the first **non-empty** cell, and a blank orders last in both directions. A
+blank `stats_age` therefore sorts last whichever way the user flips it — intended, and worth
+naming in the acceptance criteria so it is not filed as a bug.
+
+---
+
+## U11. `report/describe.go`
+
+The two constants and their exact tab geometry (verified with `cat -A`):
+
+**`pgStatTablesDescription`** (`report/describe.go:82-107`). Header
+`  column\t\torigin\t\t\tdescription`; origin starts at column 24, description at column 48. The
+existing `- heap_hit\t\theap_blks_hit\t\t…` row has the same name length class as `stats_age`, so
+copy its tabbing exactly. The new last row, inserted after `- tidx_hit` and before the blank line
+preceding `Details:`:
+
+```
+- stats_age<TAB><TAB>stats_reset<TAB><TAB>Age of collected statistics in the moment when stats are taken (PG 19+)
+```
+
+(`- stats_age` = 11 chars → 2 tabs → col 24; `stats_reset` = 11 chars → 2 tabs → col 48.)
+
+**`pgStatIndexesDescription`** (`report/describe.go:109-122`). Header
+`  column\torigin\t\t\t\tdescription`; origin starts at column **16**, description at column 48.
+Copy `- read,KiB\tidx_blks_read\t\t\t…`:
+
+```
+- stats_age<TAB>stats_reset<TAB><TAB><TAB>Age of collected statistics in the moment when stats are taken (PG 19+)
+```
+
+(`- stats_age` = 11 chars → 1 tab → col 16; `stats_reset` = 11 chars, 16→27 → 3 tabs → col 48.)
+
+**The `(PG 19+)` suffix is the established convention** for a version-gated row, not an invention:
+`pgStatWALDescription` (`report/describe.go:149`) carries
+`- fpi,KiB\twal_fpi_bytes\t\tAmount of WAL generated by full page images, in KiB (PG 19+)`.
+`describe` is version-blind — it prints the same text whatever the archive's recorded version — so
+the suffix is the only honest way to say "this row is not in every layout".
+
+The wording `Age of collected statistics in the moment when stats are taken` is the project's
+verbatim `stats_age` sentence; it appears on seven screens (`describe.go:28, 155, 172, 489, 515,
+540, 560`). Do not reword it.
+
+**No `describeReport` map change** (`report/report.go:665-690`) and **no `Test_describeReport` row
+change** (`report/report_test.go:1172-1205`): `tables` and `indexes` are already registered and the
+test compares by identity. What is missing is a `Test_describeTablesColumnOrder` /
+`…IndexesColumnOrder` in the `Test_describeProgressColumnOrder` shape
+(`report/report_test.go:1217-1256`) — presence-then-order over `"\n- " + col + "\t"` markers — which
+is the only mechanism in the repo that would catch `stats_age` landing anywhere but last.
+`autovacuum_scores` needs **no** describe entry at all (`NotRecordable`, no report flag).
+
+---
+
+## U12. Acceptance criteria the code cannot currently deliver
+
+Adversarial pass over the user-spec's "Критерии приёмки".
+
+### 12.1 "Подпись экрана печатается ровно один раз на каждом из двух путей входа"
+
+This is in the **agent-checked** "Навигация" block, but it is not automatable with the current
+seams. `printCmdline` writes through `g.Update`, and on the zero-value `&gocui.Gui{}` the spawned
+goroutine parks forever on a nil `userEvents` channel (documented at `top/menu_test.go:44-47`), so a
+test can neither count calls nor observe the buffer. There is no `io.Writer` seam and no counter.
+`patterns.md:295-330` says the invariant is "exactly one `printCmdline` per code path" and treats it
+as a **review + stand** rule. The spec's own "Пользователь проверяет" section already lists this
+check — the duplicate in the agent block should be moved or restated as "code review + stand", or a
+counting seam has to be built (out of scope for this feature).
+
+### 12.2 "После сброса статистики … эта длительность растёт от обновления к обновлению"
+
+Requires calling `pg_stat_reset()` on the shared PG 19 fixture cluster and sleeping ≥ 1 s between
+two samples. `pg_stat_reset()` is database-wide and irreversible; the `internal/query` package has
+no test isolation from it, and the PG 19 cluster is the one that the new locked-column and
+wraparound tests also read. Automating it means either accepting cross-test contamination or
+serialising the whole PG 19 subtree. Realistically a stand check — which the spec's user section
+already lists. Flag it in the tech-spec rather than letting decomposition discover it.
+
+### 12.3 The `for_wraparound` fixture as an *agent-checked* criterion
+
+Proven to work (§U9), but it is a 120 000-transaction, cluster-mutating fixture on a shared server,
+and the spec's own risk section requires it be **shown red** before it counts. That is fine — but
+note the second-order trap `patterns.md:93-104` records: name the mutation *and* check **which**
+assertion goes red. Deleting `OR for_wraparound` from the `WHERE` must redden the "flagged row is
+present in user mode" assertion, not the fixture setup. Reddening because the burn failed or the
+probe table was not created proves nothing.
+
+### 12.4 "Запрос содержит явный `ORDER BY score DESC`, так что порядок … детерминирован" — **this one is wrong as written**
+
+If the SELECT list contains `round(s.score, 2) AS score` and the query ends `ORDER BY score DESC`,
+PostgreSQL resolves a **bare** `ORDER BY` identifier against the **output** column list first. So
+`ORDER BY score DESC` sorts by the *rounded* value — which is exactly the tie set the criterion
+exists to break. The stated intent ("десятки неинтересных отношений схлопываются в `0.00`, и их
+порядок не должен зависеть от того, как их вернул планировщик") is not achieved.
+
+The fix is one character class: a **qualified** reference is always an input column, so
+`ORDER BY s.score DESC` sorts by the raw `double precision`. Then the client-side re-sort —
+`PGresult.sort` (`internal/stat/postgres.go:679+`) with `sort.SliceStable`
+(`patterns.md:200-202`) — parses the rendered `"0.00"`, finds a hundred exact ties, and preserves
+the SQL order inside them. Precedent for an explicit SQL order on a multi-row screen:
+`internal/query/replication_slots.go:31` (`ORDER BY "retained,KiB" DESC NULLS LAST` — note *that*
+one deliberately orders by the output alias, because the alias is the value).
+
+The acceptance criterion should say "`ORDER BY` on the **unrounded** score", and the locked
+structure test should assert the qualified form specifically. Without this the criterion passes
+while the behaviour it names does not happen.
+
+### 12.5 "`dead_total` … соединение внешнее, так что ни одна строка очереди не может пропасть"
+
+Correct as long as the **left** side is `pg_stat_autovacuum_scores` *and* `schemaname` in the
+`WHERE` clause comes from the left side too. If `schemaname` is taken from the joined
+`pg_stat_all_tables`, an unmatched row yields `schemaname IS NULL`, `NOT IN (…)` evaluates to NULL,
+and the row is filtered out — the outer join would then silently do the opposite of what the
+criterion promises. Per `…-interview.yml:791-793` the scores view carries `relid, schemaname,
+relname` itself, so this is achievable; it needs to be stated as a constraint, and the structure
+test should assert `FROM pg_stat_autovacuum_scores` is the **outer** relation (the archiver test's
+`assert.True(strings.HasSuffix(…, "FROM pg_stat_archiver"))` at `archiver_test.go:104-105` is the
+same idea inverted).
+
+### 12.6 Negative criteria "`functions` не изменился" / "`sizes` не изменился"
+
+Nothing in the repo pins either view's `Ncols` or `QueryTmpl` today (§U6c). As written these
+criteria are unfalsifiable — a test has to be **added** for them to mean anything. Cheap: two lines
+each in the `case 190000:` arm of `TestViews_Configure`.
+
+### 12.7 "На версиях ниже PG 19 колонки `stats_age` на этих экранах нет, и число колонок прежнее"
+
+Testable, and worth noting *how*: `Test_StatTablesQueries` /
+`Test_StatIndexesQueries` (`internal/query/tables_test.go:10-31`, `indexes_test.go:10-31`) currently
+`conn.Exec(q)` and discard the result set, so they cannot see column counts at all. Both need to be
+rewritten to the `runArchiverQuery` tier (`FieldDescriptions()` → names). While rewriting, fix the
+two pre-existing defects in place: no `defer conn.Close()` (a failed assertion leaks the connection,
+`tables_test.go:29`) and the legacy 12-version list `{90500 … 190000}` where six versions always
+skip (tech debt [024]). Use the hardened skip.
+
+### 12.8 "`stats_age` не участвует в вычислении разниц между выборками ни на одной версии"
+
+Testable as an assertion that `DiffIntvl[1] < Ncols-1` on both versions — but note the assertion
+that *looks* right and is not: asserting `DiffIntvl == [2]int{1,18}` on PG 19 passes even if
+`stats_age` were inserted mid-layout at index 5, because the interval literal would be unchanged.
+The load-bearing assertion is on the **column order** (last name is `stats_age`) combined with
+`DiffIntvl[1] == Ncols-2`. Say which one is the proof.
+
+### 12.9 "Экран не диффует ни одну колонку, поэтому пустое значение в `dead_total` не может прервать выборку"
+
+Provable directly: `calculateDelta` short-circuits at `internal/stat/postgres.go:591-598` when
+`interval == [2]int{0,0}` and returns `curr` untouched, so `diffPair`/`strconv.ParseInt` are never
+reached. A unit test that feeds a `PGresult` with an empty `dead_total` cell through
+`stat.Compare(curr, prev, 1, [2]int{0,0}, 1, true, 0)` and asserts no error is the honest form —
+and it must be shown to **fail** when the interval is changed to a non-zero pair, or it proves
+nothing about the screen.
+
+### 12.10 Not in the criteria but required by the design
+
+- The `,` toggle on the new screen (§U2) — four literals in `toggleSysTables`, one of which is a
+  slice length that panics if missed. The spec says the toggle works there; no criterion covers it.
+- The `Configure` case for `tables`/`indexes` being load-bearing for the `Right`-arrow sort wrap
+  (§U1) — invisible to every existing test and to the render path.
+- `architecture.md:182` ("no production view sets `NotRecordable` anymore") becomes false with this
+  feature and must be corrected at `/done`.
+- Tech debt [020]'s "why deferred" note needs updating: its reachability now includes
+  `tables`/`indexes`, the first diffed screens whose width is version-dependent (§U5).
