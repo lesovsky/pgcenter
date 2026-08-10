@@ -13,7 +13,7 @@
   "phases": {
     "user_spec": {
       "started": "2026-08-06 21:53:05",
-      "ended": null,
+      "ended": "2026-08-07 00:55:00",
       "human_wait_time_min": 0
     },
     "tech_spec": null,
@@ -22,17 +22,27 @@
     "done": null
   },
   "quality": {
-    "validation_rounds": {},
-    "validation_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "validation_rounds": {
+      "user_spec": 1
+    },
+    "validation_findings": {
+      "critical": 0,
+      "major": 7,
+      "minor": 6
+    },
     "review_rounds": {},
-    "review_findings": { "critical": 0, "major": 0, "minor": 0 },
+    "review_findings": {
+      "critical": 0,
+      "major": 0,
+      "minor": 0
+    },
     "first_pass_rate_pct": null
   },
   "volume": {
-    "interview_questions": 4,
+    "interview_questions": 22,
     "tasks_count": 0,
     "waves_count": 0,
-    "agents_spawned": 0,
-    "commits_count": 0
+    "agents_spawned": 4,
+    "commits_count": 2
   }
 }
