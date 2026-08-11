@@ -245,6 +245,21 @@ No database schema, no new Go types beyond the query constants and selector func
 Column layout, in order: `relation`, `score`, `do_vacuum`, `do_analyze`, `for_wraparound`,
 `dead_total`, `xid_score`, `mxid_score`, `vacuum_score`, `vacuum_insert_score`, `analyze_score`.
 
+### Value contract of the new query
+
+Each of these is a user-spec acceptance criterion, and none of them is observable from the column
+list alone — an implementation can produce all eleven columns in the right order and still get every
+one of these wrong.
+
+| column(s) | contract |
+|---|---|
+| `relation` | `schemaname \|\| '.' \|\| relname`, both taken from the **outer** relation, matching the `tables` idiom |
+| all **six** scores — `score`, `xid_score`, `mxid_score`, `vacuum_score`, `vacuum_insert_score`, `analyze_score` | `round(…::numeric, 2)`, in SQL, not in Go. Decision 3 names the rounding only for `score` because that is where it interacts with `ORDER BY`; the other five round identically |
+| `do_vacuum`, `do_analyze`, `for_wraparound` | `::text`, yielding `true`/`false` — the `replslots.active` idiom, not `t`/`f` |
+| `dead_total` | `n_dead_tup` from `pg_stat_all_tables`, joined on `relid`, rendered as-is with no unit suffix |
+| join | `LEFT JOIN` with `pg_stat_autovacuum_scores` on the **outer** side; the `WHERE` clause's `schemaname` also comes from the outer side (Decision 4) |
+| ordering | `ORDER BY` the **unrounded** score by qualified reference (Decision 3) |
+
 Selector return values:
 
 | version | `tables` | `indexes` | `autovacuum_scores` |
@@ -297,10 +312,16 @@ None.
 - Keybinding registration for `'T'` and `'t'` via `keybindingsList` — the only seam that makes
   *which handler a key carries* assertable.
 - Registry invariants for the new view (`key == v.Name`, non-nil maps, `NotRecordable`,
-  `MinRequiredVersion`, `Ncols`, `DiffIntvl`, `OrderKey`, `OrderDesc`).
+  `MinRequiredVersion`, `Ncols`, `DiffIntvl`, `OrderKey`, `OrderDesc`, **and `Msg` pinned word for
+  word** — `view_test.go` has no blanket `Msg` check, and the archiver entry is the precedent for
+  pinning it on a single view).
 - `calculateDelta` short-circuit: a `PGresult` with an empty `dead_total` cell through
   `DiffIntvl{0,0}` produces no error. **Must be shown to fail** when the interval is changed to a
-  non-zero pair, otherwise it proves nothing about the screen.
+  non-zero pair, otherwise it proves nothing about the screen. The same test covers the empty
+  `stats_age` cell, which reaches the render path by the same route.
+- The menu refusal writes exactly one cmdline message: assert on the composed line rather than on
+  the number of calls, since the call itself is unobservable (Decision 7 explains why two writes on
+  one path is the hazard).
 
 ### Integration tests
 - `tables`/`indexes` query execution against PG 14–19 fixtures, rewritten from the current
@@ -318,12 +339,16 @@ None.
     `for_wraparound` within one `autovacuum_naptime`, and `autovacuum_enabled = false` does not
     protect it — wraparound-prevention vacuums ignore that reloption by design. So the test runs with
     `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`),
-    and restores it afterwards. Without this, a run where the flag was already cleared is
+    and restores it through `t.Cleanup` — not a trailing statement. This mutates a cluster shared by
+    packages that run in parallel, so a failure before an unguarded restore would leave autovacuum
+    off for the remainder of the run. Without this, a run where the flag was already cleared is
     indistinguishable from the mutation run that is supposed to be red.
   - Discriminating assertion: user mode returns the flagged row; deleting `OR s.for_wraparound` from
     the `WHERE` must redden *that* assertion, not the fixture setup.
 - **Privilege behaviour of the new view, in both directions**, following `archiver_test.go`: run the
-  query through `SetupTestRole(…, true)` and `SetupTestRole(…, false)`. The measurement that the view
+  query through `SetupTestRole(…, true)` and `SetupTestRole(…, false)`. Its name must match the
+  `AutovacuumScores` filter that Task 1's verify uses, or it silently never runs — `go test -run` is
+  case-sensitive and a filter matching nothing looks exactly like a clean pass. The measurement that the view
   needs no privileges was taken on beta2; the locked column-name test is blind to an ACL change,
   which is the likeliest axis to move for a brand-new per-relation view between beta and GA. Every
   other test connects as `postgres` over `trust` and would never notice.
@@ -359,7 +384,7 @@ are stated as such:
 |------|---------|--------------|
 | 1 | bash | `go test ./internal/query/ -run AutovacuumScores` — column names, order, outer relation, selector branches |
 | 2 | bash | `go test ./internal/query/ -run 'StatTables\|StatIndexes'` — 19/20 and 6/7 per version |
-| 3 | bash | `go test ./internal/view/ ./record/` — registry counts, Configure arms, filter rows, recorder trap fixed |
+| 3 | bash | `go test ./internal/view/ ./record/ ./internal/stat/` — registry counts, Configure arms, filter rows, recorder trap fixed, empty-cell short-circuit |
 | 4 | bash | `go test ./top/ -run 'Tables\|Menu\|Keybindings'` — cycle, menu suffix, refusal, bindings |
 | 5 | bash | `go test ./record/ ./report/` — describe entries, 18→19 replay of `tables` and `indexes` |
 | 6 | bash | `go test ./top/ -run 'ToggleSysTables\|help'` — four literals, help adjacency |
@@ -447,9 +472,10 @@ production parsing. The omission is a choice, not an oversight.
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/ -run AutovacuumScores` in the CI image
 - **Files to modify:** `internal/query/autovacuum_scores.go`, `internal/query/autovacuum_scores_test.go`
-- **Files to read:** `internal/query/archiver.go`, `internal/query/archiver_test.go`,
-  `internal/query/replication_slots.go`, `internal/query/activity.go`, `internal/query/query.go`,
-  `internal/postgres/testing.go`
+- **Files to read:** `docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md`
+  (the acceptance criteria the value contract comes from), `internal/query/archiver.go`,
+  `internal/query/archiver_test.go`, `internal/query/replication_slots.go`,
+  `internal/query/activity.go`, `internal/query/query.go`, `internal/postgres/testing.go`
 
 #### Task 2: `stats_age` on `tables` and `indexes`
 - **Description:** Add a PG 19 constant to each of `internal/query/tables.go` and `indexes.go` with
@@ -474,13 +500,14 @@ production parsing. The omission is a choice, not an oversight.
   `tables`/`indexes` plus the negative ones for `functions`/`sizes` — none of these exist today, so
   they must be written, not edited. Includes the one-line recorder-test fix: registering a PG 19-only
   view breaks a test that hands an unfiltered view map to the recorder against a PG 17 fixture, so
-  the fix belongs in the same task that breaks it, not a wave later. Record in-code that the
-  `tables`/`indexes` cases are load-bearing rather than drift guards.
+  the fix belongs in the same task that breaks it, not a wave later. Also owns the `calculateDelta`
+  short-circuit test, which proves an empty cell cannot abort a sample on a screen that diffs
+  nothing. Record in-code that the `tables`/`indexes` cases are load-bearing rather than drift guards.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
-- **Verify:** bash — `go test ./internal/view/ ./record/`
+- **Verify:** bash — `go test ./internal/view/ ./record/ ./internal/stat/`
 - **Files to modify:** `internal/view/view.go`, `internal/view/view_test.go`, `record/record_test.go`,
-  `record/recorder_test.go`
+  `record/recorder_test.go`, `internal/stat/postgres_test.go`
 - **Files to read:** `internal/query/autovacuum_scores.go`, `internal/query/tables.go`,
   `internal/query/indexes.go`, `record/record.go`, `top/config_view.go`
 
