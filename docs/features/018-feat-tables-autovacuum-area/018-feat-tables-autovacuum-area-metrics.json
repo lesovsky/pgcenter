@@ -18,7 +18,7 @@
     },
     "tech_spec": {
       "started": "2026-08-07 01:05:00",
-      "ended": null,
+      "ended": "2026-08-11 00:00:00",
       "human_wait_time_min": 0
     },
     "task_decomposition": null,
@@ -27,12 +27,13 @@
   },
   "quality": {
     "validation_rounds": {
-      "user_spec": 1
+      "user_spec": 1,
+      "tech_spec": 2
     },
     "validation_findings": {
       "critical": 0,
-      "major": 7,
-      "minor": 6
+      "major": 16,
+      "minor": 21
     },
     "review_rounds": {},
     "review_findings": {
@@ -46,7 +47,7 @@
     "interview_questions": 22,
     "tasks_count": 0,
     "waves_count": 0,
-    "agents_spawned": 4,
-    "commits_count": 2
+    "agents_spawned": 12,
+    "commits_count": 6
   }
 }

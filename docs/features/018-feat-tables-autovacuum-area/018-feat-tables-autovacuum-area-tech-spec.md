@@ -75,7 +75,8 @@ a defect being introduced.
 
 Unchanged data flow — `query → stat → view → gocui`. The only new edge is the version number
 reaching two places it did not reach before: `tablesNextView` (via `switchViewTo`, which already
-holds `app.postgresProps.VersionNum` for its `ExtPGSSSchema` guard) and the menu construction.
+receives the whole `app` and reads `app.postgresProps.ExtPGSSSchema` from it, so
+`app.postgresProps.VersionNum` is in hand with no new plumbing) and the menu construction.
 
 The `,` toggle reaches the new screen through the same `queryOptions.ViewType` field the other three
 screens use; the difference is that `pg_stat_autovacuum_scores` has no `user`/`sys`/`all` name
@@ -96,15 +97,22 @@ not apply: all seven existing `stats_age` columns in the codebase are last, so t
 reader already looks for it. Taking the tail keeps the interval literal valid on both versions and
 avoids that entire class.
 **This decision is load-bearing for memory safety, not only for tidiness** — surfaced by the security
-review and not visible in the original rationale. `record -a` can append to an archive across a
-*pgcenter* upgrade, producing two samples of the **same** PostgreSQL version with different widths;
-`versionChanged` watches only the server version, so that pair reaches `diff()`. It does not panic,
-and the margin is exactly zero: `diff`'s interval is inclusive, so the highest index it passes to
-`prev.Values[j]` is `DiffIntvl[1]` = 18, against a 19-column PG ≤ 18 row — the last valid index.
-`indexes` is the same shape, 5 against 6. Tail-appending is the only thing keeping that loop in
-bounds. Mid-layout insertion would have pushed the interval to `{1,19}` and made the pair a panic.
-The invariant must therefore be asserted, not assumed: **`DiffIntvl[1] < min(Ncols)` across every
-version** of both screens.
+review, sharpened by the skeptic, and not visible in the original rationale.
+
+`record -a` appends to an existing archive with no shape check, and `versionChanged` compares only
+the recorded **server** version. So a width mismatch survives into `diff()` whenever two samples
+carry the same server version and different widths — and this feature creates exactly one such pair:
+**two PG 19 samples**, one recorded by a pre-feature pgcenter (19 columns, because there was no PG 19
+branch) and one by this feature (20 columns). A PG ≤ 18 pair cannot form: that layout is 19 columns
+under both old and new pgcenter, since the branch is gated at `>= 190000`.
+
+That pair does not panic, and the margin is exactly zero. `diff`'s interval is inclusive and indexes
+`prev` by the *current* width, so the highest index it passes to `prev.Values[j]` is `DiffIntvl[1]`
+= 18 — against a 19-column previous row, the last valid index. `indexes` is the same shape, 5
+against 6. Tail-appending is the only thing keeping that loop in bounds; mid-layout insertion would
+have pushed the interval to `{1,19}` and turned the pair into an out-of-range read. The invariant
+must therefore be asserted, not assumed: **`DiffIntvl[1] < min(Ncols)` across every version** of both
+screens.
 
 **Alternatives considered:** mid-layout insertion next to the other timestamps (rejected — buys
 nothing, costs a version-dependent interval, and as above turns a benign width mismatch into an
@@ -171,8 +179,8 @@ exists in the codebase **twice**, and both times it was left version-blind.
 
 | cycle | member requiring a newer server | cycle function |
 |---|---|---|
-| `x` — `statementsNextView` | `statements_jit`, `MinRequiredVersion: PostgresV15` (`view.go:240`) | `config_view.go:313` — takes `current string` only |
-| `p` — `progressNextView` | `progress_copy`, `MinRequiredVersion: PostgresV14` (`view.go:314`) | `config_view.go:338` — takes `current string` only |
+| `x` — `statementsNextView` | `statements_jit`, `MinRequiredVersion: PostgresV15` (`view.go:241`) | `config_view.go:313` — takes `current string` only |
+| `p` — `progressNextView` | `progress_copy`, `MinRequiredVersion: PostgresV14` (`view.go:315`) | `config_view.go:338` — takes `current string` only |
 
 `VersionOK` is consulted in exactly two places, `record/record.go:214` and
 `internal/stat/stat.go:317` — never in a cycle — so on a server below the member's minimum both
@@ -239,7 +247,7 @@ No database schema, no new Go types beyond the query constants and selector func
 | `UniqueKey` | `0` (default — relation) |
 | `NotRecordable` | `true` |
 | `MinRequiredVersion` | `query.PostgresV19` |
-| `ColsWidth` | `map[int]int{}` (non-nil — two writers mutate it in place; a nil map is a panic on the first column-width change, not a wrong number) |
+| `ColsWidth` | `map[int]int{}` (non-nil — two writers mutate it in place; `alignViewToResult` replaces the map before the first frame, so a nil value is a narrower hazard than "any column-width change", but the registry invariant is pinned for every view and this one is no exception) |
 | `Filters` | `map[int]*regexp.Regexp{}` (same) |
 
 Column layout, in order: `relation`, `score`, `do_vacuum`, `do_analyze`, `for_wraparound`,
@@ -338,8 +346,10 @@ None.
   - The flag **must be made stable for the duration of the assertion**. Autovacuum clears
     `for_wraparound` within one `autovacuum_naptime`, and `autovacuum_enabled = false` does not
     protect it — wraparound-prevention vacuums ignore that reloption by design. So the test runs with
-    `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`),
-    and restores it through `t.Cleanup` — not a trailing statement. This mutates a cluster shared by
+    `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`)
+    — and that is what makes the fixture safe, because the emergency wraparound launcher is armed
+    from the **global** `autovacuum_freeze_max_age`, not from the per-table reloption the fixture
+    lowers — and restores it through `t.Cleanup` — not a trailing statement. This mutates a cluster shared by
     packages that run in parallel, so a failure before an unguarded restore would leave autovacuum
     off for the remainder of the run. Without this, a run where the flag was already cleared is
     indistinguishable from the mutation run that is supposed to be red.
