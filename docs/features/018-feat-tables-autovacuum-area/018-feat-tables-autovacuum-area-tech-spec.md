@@ -359,11 +359,11 @@ are stated as such:
 |------|---------|--------------|
 | 1 | bash | `go test ./internal/query/ -run AutovacuumScores` — column names, order, outer relation, selector branches |
 | 2 | bash | `go test ./internal/query/ -run 'StatTables\|StatIndexes'` — 19/20 and 6/7 per version |
-| 3 | bash | `go test ./internal/view/ ./record/` — registry counts, Configure arms, filter rows |
+| 3 | bash | `go test ./internal/view/ ./record/` — registry counts, Configure arms, filter rows, recorder trap fixed |
 | 4 | bash | `go test ./top/ -run 'Tables\|Menu\|Keybindings'` — cycle, menu suffix, refusal, bindings |
-| 5 | bash | `go test ./record/ ./report/` — recorder trap fixed, 18→19 replay of `tables` |
+| 5 | bash | `go test ./record/ ./report/` — describe entries, 18→19 replay of `tables` and `indexes` |
 | 6 | bash | `go test ./top/ -run 'ToggleSysTables\|help'` — four literals, help adjacency |
-| 7 | bash | `grep` over the four changed documents for the new screen name, the two new columns, and the updated debt entries |
+| 7 | bash | `grep` over all five changed documents — including the architecture note — for the new screen name, the two new columns, the extended [035] entry and the new cycle-debt entry |
 | 8 | bash + user | `make test` in the CI image, `make lint`, `make vuln`; then the stand run per the user-spec checklist |
 
 ### Tools required
@@ -390,7 +390,7 @@ versions below PG 19 even that is invisible.
   simultaneously all three, so the view cannot be renamed. Same collision the `wal` group carries;
   the same in-code comment applies.
 - `architecture.md`'s statement that no production view sets `NotRecordable` any more becomes false
-  and must be corrected at feature finalization.
+  and is corrected by Task 7, not deferred to finalization.
 
 ## Risks
 
@@ -402,7 +402,7 @@ versions below PG 19 even that is invisible.
 | Help-screen edits break the pinned adjacency tests | `'t' tables,` must be removed from the `s,t,i` line or the entry-lookup helper fails on marker ambiguity; the new `t,T` row cannot sit between `j,J` and `w,W`. The free slot is after `w,W`. |
 | `Test_switchViewTo` builds the app with `VersionNum` zero, so the load-bearing cycle row fails once the cycle is version-aware | The test table gains a version column; this is expected churn, not a regression, and it is called out in the task so it is not "fixed" by weakening the assertion. |
 | The full suite breaks with an error naming no view, because `recorder_test` passes an unfiltered view map against a PG 17 fixture | Explicit task item; the minimal fix mirrors `record/record.go`'s own call: filter the map before handing it to the recorder. |
-| Tech debt [020] becomes reachable on a diffed screen for the first time | Recorded, not fixed — see Decision 8. The legitimate version-change path is safe (traced in Solution); what widens is the malformed-archive class, which needs a fix in `validate()` covering three consumers. |
+| A same-pgcenter-version width mismatch reaches `diff()` via `record -a` across a pgcenter upgrade | Survives only because the tail append keeps `DiffIntvl[1]` at the last valid index — zero margin, see Decision 1. Guarded by an explicit `DiffIntvl[1] < min(Ncols)` invariant test rather than left implicit. Tech debt [020] itself is untouched: its reachability is unchanged by this feature, since diffed screens with version-dependent widths already exist. |
 
 ## Acceptance Criteria
 
@@ -421,8 +421,9 @@ versions below PG 19 even that is invisible.
 - [ ] Тест на `DiffIntvl{0,0}` показан красным при ненулевом интервале.
 - [ ] Тест escape-hatch показан красным при удалении `OR s.for_wraparound`, и красной становится
       именно проверка присутствия строки, а не установка фикстуры.
-- [ ] Записи техдолга [020] и [035] обновлены: у [020] расширена область достижимости,
-      у [035] — область действия на `stats_age`.
+- [ ] Запись техдолга [035] обновлена: область действия расширена на `stats_age`.
+      Запись [020] НЕ трогаем — её достижимость этой фичей не меняется, потому что диффуемые
+      экраны с версионно-зависимой шириной уже существуют (`wal`, `bgwriter`, `databases_general`).
 - [ ] Заведена новая запись техдолга на version-blind циклы `x` и `p`: `statements_jit` (PG 15+)
       и `progress_copy` (PG 14+) достижимы циклом на серверах, где их нет, и экран отдаёт ошибку
       каждый тик. Эта фича их не чинит — она чинит только собственную группу `t`.
@@ -430,9 +431,10 @@ versions below PG 19 even that is invisible.
 ## Implementation Tasks
 
 **Reviewer note.** Tasks 1, 2 and 5 carry `dev-security-auditor` because they touch SQL
-construction or the recorded-archive path, which is this project's only untrusted input. Tasks 3, 4
-and 6 omit it deliberately: they wire registry entries, keybindings and help text, and introduce no
-new data path. The omission is a choice, not an oversight.
+construction or the recorded-archive replay path, which is this project's only untrusted input.
+Tasks 3, 4 and 6 omit it deliberately: they wire registry entries, test literals, keybindings and
+help text, and introduce no new data path — Task 3's `record` edits are test-only and change no
+production parsing. The omission is a choice, not an oversight.
 
 ### Wave 1 (независимые)
 
@@ -528,7 +530,7 @@ new data path. The omission is a choice, not an oversight.
 
 #### Task 7: Documentation and registers
 - **Description:** Update the user-facing documentation for the new screen and the two new columns,
-  correct the two tech-debt entries whose reachability this feature changes, fix the architecture
+  extend the scope of debt entry [035] to cover `stats_age` — and leave [020] alone — fix the architecture
   note claiming no production view sets `NotRecordable` any more — this feature makes that false —
   and register a new debt item for the two version-blind cycles (`x` and `p`) that this feature
   deliberately does not fix. Release notes are required: a new screen is user-visible even though no
