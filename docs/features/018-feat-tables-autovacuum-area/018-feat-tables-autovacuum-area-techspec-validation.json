@@ -1,0 +1,53 @@
+{
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "verification",
+      "issue": "Per-task verification table row 7 says `bash | make lint && make vuln`, but Task 7 is \"Documentation and registers\" and its own **Verify** field says `git diff --stat` and manual read-through. The two statements of the same task's verification contradict each other, and no task in the document owns `make lint`/`make vuln` even though the Acceptance Criteria require both to be clean. Rows 1-6 and 8 match their tasks exactly, so row 7 looks like a leftover from an earlier task layout.",
+      "fix": "Make row 7 of the Per-task verification table match Task 7's actual Verify, and place `make lint && make vuln` where it is really executed — either as an explicit item of Task 8 (Pre-deploy QA) or as its own row referencing that task."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Backward Compatibility states that `architecture.md`'s claim \"no production view sets NotRecordable any more\" (`.claude/skills/project-knowledge/architecture.md:182`) becomes false and \"must be corrected at feature finalization\". Task 7 is the documentation task and already modifies another Project Knowledge file (`.claude/skills/project-knowledge/overview.md`), but `architecture.md` is not in any task's **Files to modify**. The required correction has no owner in the task list.",
+      "fix": "Add `.claude/skills/project-knowledge/architecture.md` to Task 7's Files to modify, or state explicitly in Backward Compatibility that this edit is deferred to the `/done` finalization step and is deliberately out of the task list."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Task 1's Description drops to HOW level and restates decisions that already live in the Decisions section: \"rounds the six scores to 2 decimals, renders booleans via `::text`, and orders by the unrounded score through a qualified reference\". The ordering clause is Decision 3 verbatim in compressed form, and the schema-filter mention overlaps Decision 4. Per the template, task descriptions answer WHAT and WHY; the query's internal construction belongs in Decisions and in the task file produced during decomposition.",
+      "fix": "Trim Task 1's second sentence to scope only — e.g. \"the query exposes the six autovacuum scores plus dead-tuple totals and honours the `,` view-type toggle\" — and let Decisions 3 and 4 carry the ordering and schema-filter reasoning."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "Three more descriptions carry rationale or risk detail that is already recorded elsewhere: Task 4 \"This is a new pattern in the codebase and is deliberately confined to this group\" (Decision 6), Task 6 \"four literals, one of them a slice length whose omission panics inside a key handler\" and \"The toggle test's table changes shape, not just length\" (both are Risks-table rows), Task 7 \"Release notes are required — a new screen is a visible user-facing change even though no CLI flag moved\". None trips the sentence-count limit, and none introduces a decision that exists nowhere else, so this is duplication rather than misplacement.",
+      "fix": "Optional. If tightened, drop the justifying clauses and rely on Decisions 6 and the Risks table; keep only the scope statement in each description."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Tasks 3, 4, 5 and 6 use skill `code-writing` but list only `dev-code-reviewer, dev-test-reviewer`, omitting `dev-security-auditor` from the default reviewer set for that skill in `~/.claude/skills/tech-spec-planning/references/skills-and-reviewers.md`. Tasks 1 and 2, which touch SQL, do include it. The omission is plausible — tasks 3-6 touch registry, TUI and report wiring with no SQL or user input — but it is not stated as deliberate.",
+      "fix": "Either restore `dev-security-auditor` on the four tasks for consistency with the catalog default, or add a one-line note that it is intentionally skipped because those tasks touch no query construction or external input."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Task 7's Verify — \"bash — `git diff --stat` and manual read-through\" — is not a pass/fail check: `git diff --stat` proves only that bytes changed, and \"manual read-through\" is not agent-executable. Verification steps are required to be concrete and executable.",
+      "fix": "Replace with a checkable step (e.g. grep for the new screen name in `docs/features-catalog.md`, `doc/release-notes/v0.12.0.md` and for the [020]/[035] entries in `docs/tech-debt.md`), or change the verify channel to `user` as row 8 already does for the stand run."
+    }
+  ],
+  "summary": "Template compliance is clean: frontmatter is valid (created 2026-08-10, status draft, branch feature/018-feat-tables-autovacuum-area, size L), every template section is present and filled with no placeholder residue, all 8 Decisions carry Decision + Rationale + Alternatives, the Risks table is specific with a mitigation per row, Acceptance Criteria are non-empty, and 8 tasks across 5 waves plus a Final Wave with Pre-deploy QA sit well under the 15-task limit. Every task carries all six required fields (Task 8 correctly uses the template's reduced QA form), all skills and reviewers exist in the catalog, all 38 referenced source paths exist except the two files Task 1 creates, naming matches the Version-Specific Query Pattern in patterns.md, and the document is free of time-based estimates and line-number references in task descriptions. No wave conflicts: `top/config_view.go` is modified by Task 4 (Wave 3) and Task 6 (Wave 4) — different waves, so no parallel-edit collision; no other file is touched twice in one wave, and no dependency runs backwards against wave order. Zero critical findings, so the spec is approved. Six informational findings remain, the two most substantive being a self-contradiction in Task 7's verification (the per-task table says `make lint && make vuln`, the task says `git diff --stat`) and an unowned edit to `architecture.md:182`, whose NotRecordable claim the spec itself declares stale.",
+  "checks": {
+    "frontmatter": "pass",
+    "structure": "pass",
+    "standards": "pass",
+    "risks": "pass",
+    "verification": "2 findings",
+    "tasks": "2 findings",
+    "time_estimates": "pass",
+    "task_quality": "2 findings",
+    "wave_conflict": "pass"
+  }
+}

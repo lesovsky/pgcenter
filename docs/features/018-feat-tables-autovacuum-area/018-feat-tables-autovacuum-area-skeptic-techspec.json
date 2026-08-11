@@ -1,0 +1,105 @@
+{
+  "status": "approved",
+  "summary": "Checked 52 claims against the codebase, found 9 mirages (0 critical, 2 major, 7 minor). Every high-value structural claim the design rests on was verified true: report.go:276-320 version-change branch, absent Configure() cases for tables/indexes, orderKeyRight/Left wrapping on config.view.Ncols vs visibleColumns reading s.Result.Ncols, the four toggleSysTables literals including make([]string, 3), the help marker ambiguity and the pinned w,W adjacency, the unfiltered view map in recorder_test against the PG 17 fixture, the 28-view registry and the filter/menu count literals, the {{ if }} conditionals with no Funcs() on query.Format, and SelectStatStatementsJITQuery as the only 4-tuple selector. The two major findings are a false 'first of its kind' assertion that Decision 8's rationale rests on, and a wave-ordering inconsistency that makes Task 3's own verify command fail.",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "tech-spec says (Solution): 'What *is* new is that `tables` and `indexes` become the first screens with a non-empty `DiffIntvl` whose width is version-dependent, so tech debt [020] ... becomes reachable on a diffed screen where it previously could not be.' Repeated in Decision 8 ('[020]'s reachability widens because tables/indexes become the first diffed screens with a version-dependent width') and in the Risks table ('Tech debt [020] becomes reachable on a diffed screen for the first time').",
+      "reality": "Several already-registered screens are diffed AND version-dependent in width, and all of them are recordable (record/record.go:205-207: 'No production view sets NotRecordable=true currently'). internal/query/wal.go:38-49 returns 8/{2,6}, 7/{2,5}, 11/{2,9}. internal/query/bgwriter.go:41-52 returns 14/{6,12}, 13/{6,11}, 12/{3,10}. internal/query/databases.go:45-51 returns 19/{2,17} and 18/{2,16}. internal/query/progress_vacuum.go and progress_basebackup.go do the same (15/{12,13} vs 13/{10,11}; 12/{10,10} vs 11/{9,9}, per ADR 012-feat-pg19-compatibility-baseline). statements_jit likewise. So `tables`/`indexes` are not the first, and [020] was already reachable on a diffed screen before this feature. The narrower claim in Testing Strategy — 'the three existing version-change tests are all `activity` with `DiffIntvl{0,0}`' — IS true (report/report_test.go:1725, 1791, 1837; view.go activity DiffIntvl {0,0}), but that is a statement about test coverage, not about reachability.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, sections Solution, Decision 8, Risks",
+      "fix": "Restate as a test-coverage claim, not a reachability claim: 'this is the first time a diffed screen is exercised through the version-change branch in the replay tests — the three existing ones are all `activity` with DiffIntvl{0,0}'. Drop 'first screens with a version-dependent width' and drop the assertion that [020] becomes reachable where it previously could not be; wal/bgwriter/databases_general/progress_* already carry that shape. If [020]'s note is updated at finalization, it should say the class was already reachable on those screens, not that this feature opens it."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "tech-spec assigns the recorder_test fix to Task 5 (Wave 3) and states Task 3's verification is 'bash — `go test ./internal/view/ ./record/`' (Wave 2, Per-task verification table row 3).",
+      "reality": "Task 3 is what registers `autovacuum_scores` in `view.New()`. record/recorder_test.go:35-41 (`Test_tarRecorder`) connects with `postgres.NewTestConnect()` — internal/postgres/testing.go:20-22 hardcodes 170000 — and passes an unfiltered `view.New()` to `tc.collect`, which runs every view's query and returns the first error verbatim (record/recorder.go:135-142: `return nil, err`, no view name). The moment the PG 19 view is registered in Task 3, `go test ./record/` fails; the fix does not land until Task 5 in the next wave. The spec itself names this trap in the Risks table but schedules the fix after the task whose verify command trips it.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Implementation Tasks Wave 2 Task 3 / Wave 3 Task 5, Agent Verification Plan rows 3 and 5",
+      "fix": "Move the `record/recorder_test.go` filter fix into Task 3 (it is a one-line mirror of record/record.go:86 `filterViews(props.VersionNum, props.ExtPGSSSchema, view.New())`), or narrow Task 3's verify to `go test ./internal/view/` and move `./record/` to Task 5. Task 3's 'Files to modify' list already omits recorder_test.go while its verify command runs that package."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "tech-spec cites 'ADR [012]' twice (Decision 1 rationale, Decision 2 alternatives).",
+      "reality": "docs/decisions-log.md has no entry numbered [012]. Entries are keyed by feature slug, and feature 012 contributed four of them (lines 750, 778, 801, 828). The content the spec attributes to '[012]' matches '## [012-feat-pg19-compatibility-baseline] Progress screens: new columns mid-layout, version-aware DiffIntvl' (line 801) — including the 'stale interval ... parses as numbers ... plausible nonsense' hazard and the rejected '2-tuple for analyze, whose interval never changes' alternative. The substance is right; only the citation key does not exist. Note the tech-debt register DOES use bare numeric keys ([020], [024], [035]), which is what makes '[012]' read as a register key.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Decision 1 and Decision 2",
+      "fix": "Cite as ADR [012-feat-pg19-compatibility-baseline] 'Progress screens: new columns mid-layout, version-aware DiffIntvl' so the reference resolves against docs/decisions-log.md."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 6 alternatives: 'letting the screen error as `archiver` does on PG ≤ 11 (rejected — there the affected versions are EOL, here they are the majority of supported ones)'.",
+      "reality": "internal/view/view.go:141-143 sets `archiver` MinRequiredVersion = query.PostgresV14, so `archiver` errors on PG ≤ 13, not PG ≤ 11. The `wal` view (line 129-131) is also V14. The rationale still holds — PG 12 and 13 are both EOL as of 2026-08 — but the version quoted is wrong by two majors.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Decision 6, Alternatives considered",
+      "fix": "Change 'PG ≤ 11' to 'PG ≤ 13' (archiver's MinRequiredVersion is query.PostgresV14)."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Data Models table: '`ColsWidth` | `map[int]int{}` (non-nil — three writers mutate it in place)' and '`Filters` | `map[int]*regexp.Regexp{}` (same)'.",
+      "reality": "Exactly two writers mutate ColsWidth in place: top/config_view.go:100 (increaseWidth) and top/config_view.go:124 (decreaseWidth). The other two assignments replace the map wholesale rather than mutating it — report/report.go:535 `view.ColsWidth = widthes` and top/stat.go:788 `config.view.ColsWidth = widthes`, both fed by align.SetAlign's returned map. Filters has a single in-place writer, top/config_view.go:166 `view.Filters[view.OrderKey] = re`. The non-nil requirement itself is real (an in-place write to a nil map panics); only the count is wrong.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Data Models, view.View fields table",
+      "fix": "Say 'two writers mutate it in place (top/config_view.go:100,124); the render paths replace the map wholesale'. For Filters, 'one in-place writer (top/config_view.go:166)'."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Dependencies: '`internal/query` — `Format` (plain `text/template`, no `Funcs()`, so `ne`/`if` builtins are available and already used by `activity.go` and `procpidstat.go` for `ShowNoIdle`).'",
+      "reality": "The load-bearing half is confirmed: internal/query/query.go:91-104 `Format` is plain `template.New(\"query\").Parse(tmpl)` with no `Funcs()` call anywhere in internal/query. But only `if` is 'already used' — internal/query/activity.go:27,41,54,67 and procpidstat.go:35 all use `{{ if .ShowNoIdle }}...{{ end }}`. The string `ne` appears in no template in the package; the new `{{if ne .ViewType \"all\"}}` block would be its first use.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Dependencies / Using existing",
+      "fix": "Reword to '`if` is already used by activity.go and procpidstat.go; `ne` is a text/template builtin available for the same reason (no Funcs() on Format) and would be first used here'. Worth stating plainly so the first `ne` usage gets a template-render assertion rather than being assumed proven by precedent."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Testing Strategy / Task 2: 'fix two pre-existing defects in place: the missing `defer conn.Close()` and the legacy 12-version list where six versions always skip (tech debt [024])'.",
+      "reality": "The version-list half is exact: internal/query/tables_test.go:11 and indexes_test.go:11 both list 12 versions (90500…190000) and internal/postgres/testing.go maps only 140000-190000 to running clusters, so six subtests always `t.Skipf` — matching tech-debt [024] (docs/tech-debt.md:194). The `defer conn.Close()` half overstates: both tests DO call `conn.Close()` (tables_test.go:29, indexes_test.go:29). It is not deferred, but the only early exit is the `t.Skipf` that happens before `conn` is assigned, and `assert.NoError` does not abort the subtest, so no connection actually leaks today. The defect is stylistic, not live.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Testing Strategy / Integration tests and Task 2",
+      "fix": "Say 'convert the trailing conn.Close() to a defer while rewriting' rather than 'the missing defer conn.Close()', so nobody goes looking for a leak that is not there."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Backward Compatibility / Consumer impact: '`architecture.md`'s statement that no production view sets `NotRecordable` any more becomes false and must be corrected at feature finalization.'",
+      "reality": "True — .claude/skills/project-knowledge/architecture.md:182 says exactly that. But the identical statement lives in at least three more places the spec does not list: record/record.go:205-207 (in-code comment on the drop branch: 'No production view sets NotRecordable=true currently'), record/record_test.go:118-121 (the Test_filterViews comment block: 'After feature 008 no production view sets NotRecordable=true, so every view now reaches the version gate') plus the 'On PG 19 nothing is filtered' comment at line 139, and record/record_test.go:187-189 ('After task 03 no production view sets NotRecordable=true, so the mechanism would otherwise be...'). Test_filterViews' wantN/wantV numbers move on every row, which the spec does cover under 'filter rows'.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Backward Compatibility / Consumer impact",
+      "fix": "Extend the consumer-impact bullet (and Task 3's scope) to the in-code comments at record/record.go:205-207 and record/record_test.go:118-121, 139, 187-189, not architecture.md alone."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Architecture / How it works: 'the version number reaching two places it did not reach before: `tablesNextView` (via `switchViewTo`, which already holds `app.postgresProps.VersionNum` for its `ExtPGSSSchema` guard)'.",
+      "reality": "top/config_view.go:232-238 — switchViewTo's early guard reads `app.postgresProps.ExtPGSSSchema`, not VersionNum. VersionNum is a sibling field on the same struct (internal/stat/postgres.go:384) and is therefore reachable from the `*app` the closure captures, but nothing in switchViewTo holds or uses it today. The keybinding table does pass VersionNum to other handlers (top/keybindings.go:66 `showPgLog(app.db, app.postgresProps.VersionNum, ...)`), which may be the source of the conflation.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Architecture / How it works",
+      "fix": "Reword to 'switchViewTo already receives `*app`, so `app.postgresProps.VersionNum` is in reach — the same struct its `ExtPGSSSchema` guard reads'."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 52,
+    "confirmed": 43,
+    "mirages_found": 9,
+    "verified_claims": [
+      "report/report.go:276-320 — versionChanged := prevStat.Valid && prevMeta.version != d.meta.version; sets prevStat = d.res and continue; diff() never sees a mixed-width pair on a legitimate version change",
+      "internal/view/view.go Configure() has NO case for \"tables\" or \"indexes\" (cases: activity, replication, databases_general, statements_timings, statements_jit, wal, archiver, bgwriter, replslots, stat_io, stat_io_time, progress_vacuum, progress_analyze, progress_basebackup)",
+      "top/config_view.go:26,48 — orderKeyLeft/orderKeyRight wrap on config.view.Ncols; top/stat.go:839 — visibleColumns(s.Result.Ncols, ...) — Decision 5's defect is real",
+      "config.view.Ncols is read ONLY by the two sort handlers (grep .Ncols across top/, report/, internal/stat/, internal/align/)",
+      "top/config_view.go:449-479 toggleSysTables — exactly four literals: the name guard (453), make([]string, 3) (465), and two []string{\"tables\",\"indexes\",\"sizes\"} loops (466, 475)",
+      "top/config_view_test.go:749-794 Test_toggleSysTables asserts on markers pg_stat_all / pg_stat_user, which will not appear in the new query — the table's shape does change, not just its length",
+      "top/help.go:15 carries \"'t' tables,\" — marker \"'t' \" would be ambiguous for helpEntryLine (top/help_test.go:14-30 fails on ambiguity)",
+      "top/help_test.go:118-131 Test_helpTemplate_walEntry pins statioIdx+1 == entryIdx, so a new row cannot sit between j,J and w,W; the slot after w,W (the 'S' line, line 21) is unpinned",
+      "record/recorder_test.go:35,39 — postgres.NewTestConnect() (internal/postgres/testing.go:21 → 170000) with an unfiltered view.New(); record/record.go:86 filterViews(props.VersionNum, props.ExtPGSSSchema, view.New()) is the mirror fix",
+      "record/recorder.go:135-142 collect() returns the raw query error with no view name",
+      "internal/view/view_test.go:11 — assert.Equal(t, 28, len(v)); record/record_test.go:109-159 Test_filterViews carries wantN/wantV per version; top/menu_test.go:29 asserts len(got.items)",
+      "internal/view/view_test.go has NO assertions for \"tables\", \"indexes\", \"functions\" or \"sizes\" — the spec's 'сегодня их нет вообще' is correct",
+      "internal/query/query.go:91-104 Format uses plain text/template with no Funcs(); activity.go:27,41,54,67 and procpidstat.go:35 use {{ if .ShowNoIdle }}",
+      "internal/query/statements.go:347 SelectStatStatementsJITQuery is the only selector returning a 4-tuple (string, int, [2]int, int); archiver.go:57 and replication_slots.go:39 return version-independent 3-tuples with an _ version parameter",
+      "internal/view/view.go:85-105 — tables Ncols 19 / DiffIntvl {1,18}; indexes Ncols 6 / DiffIntvl {1,5}; both maps non-nil; query/tables.go and indexes.go confirm 19 and 6 columns",
+      "All seven existing stats_age columns are the last SELECT column: databases_general, wal, archiver, bgwriter, replslots, stat_io, stat_io_time",
+      "internal/query/replication_slots.go:31 — ORDER BY \"retained,KiB\" DESC NULLS LAST (ordering by the output alias, exactly as Decision 3 cites)",
+      "internal/stat/postgres.go:581-603 calculateDelta short-circuits on interval == [2]int{0,0}; :738 sort uses sort.SliceStable over rendered strings with a ParseFloat-based less",
+      "report/report_test.go:1602 buildActivityTar and :1706 activityReplayConfig exist and are activity-hardcoded; exactly three Test_processData_versionChange_* tests; 'Two ticks per version' is documented at :1723",
+      "top/keybindings.go:33-102 keybindingsList — 't' is switchViewTo(app, \"tables\") and 'T' is unbound; top/config_view.go:232-265 switchViewTo has no case \"tables\" today"
+    ]
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 40,
+  "requirements_covered": 33,
+  "requirements_partial": 7,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "US-17: Подпись экрана печатается ровно один раз на каждом из двух путей входа",
+      "detail": "The Data Models table claims to enumerate the `view.View` fields set for the new screen (Name, QueryTmpl, Ncols, DiffIntvl, OrderKey, OrderDesc, UniqueKey, NotRecordable, MinRequiredVersion, ColsWidth, Filters) and omits `Msg`. `Msg` is what both entry paths print: `switchViewTo` ends with `printCmdline(g, \"%s\", app.config.view.Msg)` (top/config_view.go:262) and every `menuSelect` arm does the same. Every one of the 28 views in `view.New()` sets it. The registry-invariant assertions listed in Testing Strategy (key == v.Name, non-nil maps, NotRecordable, MinRequiredVersion, Ncols, DiffIntvl, OrderKey, OrderDesc) also omit Msg, so an empty caption passes the whole automated suite and surfaces only on the stand run — which is exactly the path this criterion was already delegated to. Add `Msg: \"Show autovacuum scores statistics\"` (or similar) to the table and a non-empty-Msg assertion to the registry invariants.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-33: Отчёт по архиву экранов `tables` и `indexes`, записанному через смену версии PostgreSQL (18 → 19), воспроизводится без искажений",
+      "detail": "The criterion names two screens and states why both ('у них меняется число колонок'). Tech-spec Testing Strategy and Task 5 cover only `tables`: 'The PG 18 → PG 19 replay of `tables`, requiring buildActivityTar and activityReplayConfig to take a screen-name parameter'. `indexes` is never mentioned in the replay context. The code path is identical (report/report.go:276-320) and the harness is being parameterized by screen name anyway, so the missing half is one more table row — but as written the tech-spec leaves half a named acceptance criterion uncovered, and the implementer has no instruction to add it.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-20: На версиях ниже PG 19 выбор помеченного пункта ... печатает в строке состояния пояснение, почему экран недоступен",
+      "detail": "The refusal branch is designed (Decision 7) and the negative half is testable — Testing Strategy asserts 'nothing is pushed on viewCh and the view is unchanged'. The positive half (an explanation is actually written to the cmdline) is neither asserted nor listed among the non-agent-verifiable criteria, even though it hits the identical limitation the Agent Verification Plan cites for US-17: on a zero-value `&gocui.Gui{}` the `g.Update` goroutine parks forever (confirmed in the comment on top/menu_test.go:Test_menuSelectWAL). Either add it to the declared non-verifiable list with the stand-run checklist, or state the seam that makes it assertable. Silently leaving a third criterion in the unverified bucket is how it gets forgotten.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-5 / US-8: Колонка `relation` содержит `schemaname.relname`; `dead_total` получен соединением с `pg_stat_all_tables` по идентификатору отношения",
+      "detail": "Architecture says 'Left outer join from pg_stat_autovacuum_scores to pg_stat_all_tables for dead_total' without naming the join key, and nothing anywhere states that column 0 is `s.schemaname || '.' || s.relname AS relation`. The locked column-name test pins the alias `relation` and the outer relation, not the value composition or the join predicate — so both criteria are carried entirely by the implementer reading the user-spec. Cheap fix: one clause in Task 1's description ('joined on `relid`', 'relation is the schemaname/relname concatenation, `tables` idiom').",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-25: Значение `stats_age` берётся из `pg_stat_*`-половины запроса, а не из `pg_statio_*`",
+      "detail": "Task 2's description states the requirement ('sourced from the pg_stat_* half of the join') but no assertion in Testing Strategy pins it. Both halves are aliased in the existing queries (`t`/`i` in tables.go, `s`/`i` in indexes.go), so the wrong half compiles, runs, and returns a plausible value — a defect with no symptom. This is directly assertable on the query text (`strings.Contains(q, \"t.stats_reset\")`), the same technique archiver_test.go already uses for query structure.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-26 / US-28: Пустая ячейка `stats_age`, когда статистика не сбрасывалась и когда к отношению не обращались",
+      "detail": "Neither criterion appears in Testing Strategy nor in the two declared non-agent-verifiable exceptions. They follow from NULL rendering and are cheap on a fresh PG 19 fixture (no reset needed — the fixture never resets, so every cell is empty), but as written they are simply unassigned. US-27 (the growing-duration half) is correctly declared non-verifiable; its two siblings were dropped with it.",
+      "severity": "minor"
+    },
+    {
+      "type": "gap",
+      "source": "tech-spec",
+      "requirement": "Decision 2 / Data Models: selector contract for `autovacuum_scores`",
+      "detail": "The 'Selector return values' table covers `tables` and `indexes` only. `SelectStatAutovacuumScoresQuery` has a single query constant, so what it returns below PG 19 is undefined by the spec — yet Testing Strategy demands 'boundary and out-of-range probes (0, 180000, 190000, 200000)' for all three selectors. `SelectStatArchiverQuery` sets the precedent (version-independent, same triple for any argument, with an explicit test comment saying the invariant is 'any argument'), and `view.Configure()` runs the selector and formats the query on every version regardless of the VersionOK gate — so the below-19 return value has to be a valid template, not a zero value. One row in the table settles it.",
+      "severity": "minor"
+    },
+    {
+      "type": "gap",
+      "source": "tech-spec",
+      "requirement": "Documentation / knowledge-base artifacts identified by the tech-spec but owned by no task",
+      "detail": "Three items the tech-spec itself names as needing correction are absent from Task 7's files-to-modify list (`docs/features-catalog.md`, `overview.md`, `doc/release-notes/v0.12.0.md`, `docs/tech-debt.md`): (1) `.claude/skills/project-knowledge/architecture.md:182` states 'no production view sets [NotRecordable] anymore (feature 008 cleared the last of them)' — Backward Compatibility flags this as becoming false but defers it to 'feature finalization'; (2) the same claim is repeated as an in-code comment at `record/record.go:203-205` ('No production view sets NotRecordable=true currently'), which no task touches and no `/done` step would catch; (3) `docs/decisions-log.md` gets no ADR for the version-aware navigation pattern, though the tech-spec calls it the feature's only genuinely new pattern and Task 4 reads that file. Items 1 and 3 are arguably covered by the `/done` finalization skill; item 2 is a stale code comment inside a file this feature's behaviour invalidates.",
+      "severity": "minor"
+    },
+    {
+      "type": "scope_creep",
+      "source": "tech-spec",
+      "requirement": "Task 2: rewrite of `tables_test.go`/`indexes_test.go` to the FieldDescriptions tier, plus two pre-existing defect fixes",
+      "detail": "Justified infrastructure, not functionality — the current tier is `conn.Exec`-and-discard with a 12-version list of which six always skip (tech debt [024]), so the per-version column count US-23 demands is literally unobservable without the rewrite. Flagged only for placement: Decision 8 presents the feature's tech-debt policy as '[020] and [035] are recorded, not fixed', and a reader of the Decisions section alone would not learn that the same feature cleans two of [024]'s consumers in place. The rationale lives in Testing Strategy, so it is not invisible — but Decision 8 should carry one sentence distinguishing shared production code (deferred) from the test file being rewritten anyway (fixed), or the two reads contradict each other.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "33/40 user-spec criteria fully covered, 7 partial, 0 missing; no scope creep in functionality and no over- or under-engineering worth a finding. Two majors: `Msg` is missing from the new view's field table and from the registry invariants (empty screen caption would pass every automated gate and lands on the one criterion already delegated to the stand run), and the 18→19 replay criterion names `tables` and `indexes` while the tech-spec covers only `tables`. Five minors are unassigned verification for criteria that are cheaply assertable (relation composition, join key, pg_stat_* half, empty-cell behaviour, refusal cmdline write), plus an undefined below-19 selector contract and three doc/comment artifacts owned by no task. Wave ordering is sound: no two tasks in one wave share a file, and the `top/config_view.go` double-touch (Task 4 cycle in Wave 3, Task 6 toggle+help in Wave 4) is serialized precisely to avoid it. The version-aware cycle and menu are proportionate, not overengineered — the user-spec mandates them, `internal/stat/stat.go:317` confirms the alternative renders a per-tick error banner on the majority of supported versions, and Decision 6 confines the pattern to the one group that needs it."
+}

@@ -31,12 +31,19 @@ feed `diff()` a narrow previous snapshot against a wide current one — was trac
 answered: **no**. `report/report.go:276-320` computes
 `versionChanged := prevStat.Valid && prevMeta.version != d.meta.version` and, on that branch, sets
 `prevStat = d.res` and `continue`s. The first sample of the new version replaces the previous
-snapshot and is never diffed. No crash, no design work needed. What *is* new is that `tables` and
-`indexes` become the first screens with a non-empty `DiffIntvl` whose width is version-dependent, so
-tech debt **[020]** (same-version malformed-width archives) becomes reachable on a diffed screen
-where it previously could not be. We do **not** fix [020] here — its own note records that
-`align.SetAlign` is a third unsafe consumer, so fixing `diff` alone would not close the class. We
-update its "why deferred" note instead.
+snapshot and is never diffed. No crash, no design work needed.
+
+A first draft of this spec claimed that `tables`/`indexes` become the first diffed screens with a
+version-dependent width, and that tech debt **[020]** therefore becomes newly reachable. **That is
+false** and was corrected in review: `wal` already returns 8/7/11 columns with `DiffIntvl`
+`{2,6}`/`{2,5}`/`{2,9}`, `bgwriter` 14/13/12, and `databases_general` 19/18 — all diffed, all
+recordable. [020]'s reachability is unchanged by this feature and its note needs no edit on that
+account.
+
+The true, narrower statement is about **test coverage**: the three existing version-change replay
+tests are all `activity`, which runs `DiffIntvl{0,0}`, so the replay test this feature adds is the
+first to drive a *diffed* screen through the version-change branch. That is a gap worth closing, not
+a defect being introduced.
 
 ## Architecture
 
@@ -57,7 +64,10 @@ update its "why deferred" note instead.
 - **`top/keybindings.go`** — one new row for `'T'`; the `'t'` row is unchanged in bytes and changed
   in meaning.
 - **`top/help.go`** — the `t,T` row; `'t' tables,` must be removed from the existing `s,t,i` line.
-- **`record/recorder_test.go`** — the unfiltered-view-map trap.
+- **`record/recorder_test.go`** — the unfiltered-view-map trap; fixed in the same task that registers
+  the view, because that registration is what breaks it.
+- **`record/record.go`** — the in-code comment claiming no production view sets `NotRecordable` any
+  more, which this feature makes false.
 - **`report/describe.go`** — `stats_age` lines for the two screens.
 - **`report/report_test.go`** — the replay harness generalized from `activity` to any screen name.
 
@@ -77,16 +87,28 @@ and off.
 ### Decision 1: `stats_age` appended at the tail, so `DiffIntvl` does not become version-dependent
 **Decision:** append `stats_age` as the last column on both screens. `tables` goes 19 → 20 columns
 with `DiffIntvl` staying `[2]int{1,18}`; `indexes` goes 6 → 7 with `[2]int{1,5}` unchanged.
-**Rationale:** ADR [012] chose the opposite for the progress screens — inserting new columns
+**Rationale:** ADR [012-feat-pg19-compatibility-baseline] ("Progress screens: new columns
+ mid-layout, version-aware DiffIntvl") chose the opposite for the progress screens — inserting new columns
 mid-layout for readability and paying with a version-dependent `DiffIntvl` — and recorded the hazard
 plainly: a stale interval on the newer layout lands on columns whose values still parse as numbers,
 so the wrong diff succeeds silently and prints plausible nonsense. Here the readability argument does
 not apply: all seven existing `stats_age` columns in the codebase are last, so the tail is where a
 reader already looks for it. Taking the tail keeps the interval literal valid on both versions and
 avoids that entire class.
+**This decision is load-bearing for memory safety, not only for tidiness** — surfaced by the security
+review and not visible in the original rationale. `record -a` can append to an archive across a
+*pgcenter* upgrade, producing two samples of the **same** PostgreSQL version with different widths;
+`versionChanged` watches only the server version, so that pair reaches `diff()`. It does not panic,
+and the margin is exactly zero: `diff`'s interval is inclusive, so the highest index it passes to
+`prev.Values[j]` is `DiffIntvl[1]` = 18, against a 19-column PG ≤ 18 row — the last valid index.
+`indexes` is the same shape, 5 against 6. Tail-appending is the only thing keeping that loop in
+bounds. Mid-layout insertion would have pushed the interval to `{1,19}` and made the pair a panic.
+The invariant must therefore be asserted, not assumed: **`DiffIntvl[1] < min(Ncols)` across every
+version** of both screens.
+
 **Alternatives considered:** mid-layout insertion next to the other timestamps (rejected — buys
-nothing, costs a version-dependent interval); no selector at all, letting `Ncols` stay static
-(rejected — see Decision 5).
+nothing, costs a version-dependent interval, and as above turns a benign width mismatch into an
+out-of-range read); no selector at all, letting `Ncols` stay static (rejected — see Decision 5).
 
 ### Decision 2: 3-tuple selectors, `UniqueKey` deliberately excluded
 **Decision:** `SelectStatTablesQuery(version) (string, int, [2]int)` and the same for `indexes` and
@@ -99,7 +121,7 @@ returned although constant, matching `SelectStatArchiverQuery` and
 `SelectStatReplicationSlotsQuery`, which return version-independent values for signature symmetry —
 and the constancy is the point of Decision 1, so it should be visible at the call site.
 **Alternatives considered:** a 2-tuple for the two screens whose interval never changes (rejected —
-ADR [012] already rejected sibling selectors differing for a reason invisible at the call site).
+ADR [012-feat-pg19-compatibility-baseline] already rejected sibling selectors differing for a reason invisible at the call site).
 
 ### Decision 3: `ORDER BY` on the unrounded score, by qualified reference
 **Decision:** the query ends `ORDER BY s.score DESC`, referencing the input column, while the SELECT
@@ -139,18 +161,42 @@ entries must keep the PG ≤ 18 values, because `report.newApp` seeds from a raw
 `processData` calls `Configure`.
 **Alternatives considered:** relying on the static entry (rejected — produces the defect above).
 
-### Decision 6: version-aware navigation is a new pattern, and it is confined to the `t` group
+### Decision 6: version-aware navigation, confined to the `t` group — and it is *not* the first of its kind
 **Decision:** `tablesNextView(current string, version int)` and a version parameter reaching
-`selectMenuStyle`; no other cycle or menu is touched.
-**Rationale:** this is the first case where the anchor screen of a cycle (`tables`) is available on
-every supported version while the second member requires PG 19. The existing precedents do not
-cover it — `j`/`J` and `w`/`W` gate the whole group. Leaving it version-blind would send the reflex
-key `t` into a screen that renders `ERROR: selected statistics is not supported by current version
-of Postgres` in place of the whole table, every tick, on every version below 19. Generalizing the
-pattern to the other cycles is explicitly out of scope: they have no unavailable members.
-**Alternatives considered:** letting the screen error as `archiver` does on PG ≤ 11 (rejected — there
-the affected versions are EOL, here they are the majority of supported ones); hiding the menu item
-below PG 19 (rejected during the user-spec interview — explicit beats implicit).
+`selectMenuStyle`; no other cycle or menu is touched. The gap in the other two cycles is registered
+as tech debt rather than fixed here.
+
+**Rationale.** The honest starting point, corrected during architecture review: this shape already
+exists in the codebase **twice**, and both times it was left version-blind.
+
+| cycle | member requiring a newer server | cycle function |
+|---|---|---|
+| `x` — `statementsNextView` | `statements_jit`, `MinRequiredVersion: PostgresV15` (`view.go:240`) | `config_view.go:313` — takes `current string` only |
+| `p` — `progressNextView` | `progress_copy`, `MinRequiredVersion: PostgresV14` (`view.go:314`) | `config_view.go:338` — takes `current string` only |
+
+`VersionOK` is consulted in exactly two places, `record/record.go:214` and
+`internal/stat/stat.go:317` — never in a cycle — so on a server below the member's minimum both
+cycles walk the operator onto a screen that renders `ERROR: selected statistics is not supported by
+current version of Postgres` in place of the whole table, every tick. So the claim that the existing
+precedents "do not cover this case" is wrong: they cover it and answer it the other way.
+
+What justifies answering differently here is **the size of the affected version span**, not novelty.
+Active support is PG 14–19. `progress_copy` is unavailable only below PG 14, i.e. on EOL servers
+alone; `statements_jit` is unavailable on exactly one supported version, PG 14. `autovacuum_scores`
+would be unavailable on **five of the six supported versions**. The second difference is authorship:
+`t` has no cycle today, so a version-blind cycle here is a defect this feature *introduces*, whereas
+the other two are inherited.
+
+**Why not retrofit `p` and `x` in the same pass.** Their gap fires on EOL servers and on one
+supported version, they are not the area this feature entered, and generalizing would put three
+cycles and two more menus into a feature that already carries the only new pattern in it. That is the
+opposite of the release's "enter each code area exactly once" principle — the `p`/`x` area is not
+this feature's area. Registered in the debt register so it is not rediscovered as a surprise.
+
+**Alternatives considered:** leaving `t` version-blind for consistency with `p`/`x` (rejected — it
+makes the reflex key useless on five of six supported versions, and consistency with a known defect
+is not a virtue); fixing all three cycles here (rejected — see above); hiding the menu item below
+PG 19 (rejected during the user-spec interview — explicit beats implicit).
 
 ### Decision 7: `menuSelect`'s cmdline write moves inside each branch
 **Decision:** when adding the refusal branch, push the shared
@@ -163,16 +209,17 @@ Two known defects in the codebase are exactly this shape.
 **Alternatives considered:** returning early from the refusal arm before the shared call (rejected —
 works, but leaves the trap armed for the next person adding an arm).
 
-### Decision 8: tech debt [020] and [035] are recorded, not fixed
-**Decision:** update the register entries for both; change no shared code.
-**Rationale:** [035] (column widths frozen from the first batch) now also affects `stats_age`, which
-is empty on entry for most clusters — but the fix lives in the shared alignment path and would change
-behaviour on every screen. [020]'s reachability widens because `tables`/`indexes` become the first
-diffed screens with a version-dependent width; fixing `diff` alone would not close the class, since
-`align.SetAlign` is a third unsafe consumer. Both were weighed by the roadmap owner during the
-user-spec interview, and the decision was to keep the feature's blast radius inside its own area.
-**Alternatives considered:** fixing [035] here (rejected explicitly by the roadmap owner —
-"боюсь расширять скоуп фиксом в общем коде").
+### Decision 8: tech debt [035] is recorded, not fixed; [020] needs no edit
+**Decision:** extend the scope note of [035]; leave [020] alone; change no shared code.
+**Rationale:** [035] (column widths frozen from the first batch and never recomputed while a screen
+stays open) now also affects `stats_age`, which is empty on entry for most clusters — so the column
+freezes at header width and truncates once values pass a day. The fix lives in the shared alignment
+path and would change behaviour on every screen, which the roadmap owner explicitly refused:
+"боюсь расширять скоуп фиксом в общем коде". [020] gets no edit: its reachability is **not** widened
+by this feature, because diffed screens with version-dependent widths already exist (`wal`,
+`bgwriter`, `databases_general`) — an earlier draft of this spec claimed otherwise and was wrong.
+**Alternatives considered:** fixing [035] here (rejected by the roadmap owner); amending [020]
+(rejected — the amendment would have recorded something untrue).
 
 ## Data Models
 
@@ -183,6 +230,7 @@ No database schema, no new Go types beyond the query constants and selector func
 | field | value |
 |---|---|
 | `Name` | `"autovacuum_scores"` |
+| `Msg` | `"Show autovacuum scores"` — **not optional**: this is the string both entry paths print, all 28 existing views set it, and an empty one passes the whole automated suite and surfaces only on the stand run |
 | `QueryTmpl` | `query.PgStatAutovacuumScoresDefault` |
 | `Ncols` | `11` |
 | `DiffIntvl` | `[2]int{0,0}` |
@@ -191,7 +239,7 @@ No database schema, no new Go types beyond the query constants and selector func
 | `UniqueKey` | `0` (default — relation) |
 | `NotRecordable` | `true` |
 | `MinRequiredVersion` | `query.PostgresV19` |
-| `ColsWidth` | `map[int]int{}` (non-nil — three writers mutate it in place) |
+| `ColsWidth` | `map[int]int{}` (non-nil — two writers mutate it in place; a nil map is a panic on the first column-width change, not a wrong number) |
 | `Filters` | `map[int]*regexp.Regexp{}` (same) |
 
 Column layout, in order: `relation`, `score`, `do_vacuum`, `do_analyze`, `for_wraparound`,
@@ -199,10 +247,17 @@ Column layout, in order: `relation`, `score`, `do_vacuum`, `do_analyze`, `for_wr
 
 Selector return values:
 
-| version | `tables` | `indexes` |
-|---|---|---|
-| `>= PostgresV19` | `PgStatTablesPG19`, 20, `{1,18}` | `PgStatIndexesPG19`, 7, `{1,5}` |
-| below | `PgStatTablesDefault`, 19, `{1,18}` | `PgStatIndexesDefault`, 6, `{1,5}` |
+| version | `tables` | `indexes` | `autovacuum_scores` |
+|---|---|---|---|
+| `>= PostgresV19` | `PgStatTablesPG19`, 20, `{1,18}` | `PgStatIndexesPG19`, 7, `{1,5}` | `PgStatAutovacuumScoresDefault`, 11, `{0,0}` |
+| below | `PgStatTablesDefault`, 19, `{1,18}` | `PgStatIndexesDefault`, 6, `{1,5}` | same — see below |
+
+`SelectStatAutovacuumScoresQuery` has **one branch, not two**: the screen is gated by
+`MinRequiredVersion` before its query is ever run, so there is no older layout to return. It returns
+the single constant unconditionally and keeps the `version` parameter for signature symmetry with the
+rest of the selector family — exactly what `SelectStatArchiverQuery(_ int)` and
+`SelectStatReplicationSlotsQuery(_ int)` already do. Leaving the below-19 return undefined would be a
+gap; returning a fabricated older layout would be worse.
 
 ## Dependencies
 
@@ -211,7 +266,8 @@ None.
 
 ### Using existing (from project)
 - `internal/query` — `Format` (plain `text/template`, no `Funcs()`, so `ne`/`if` builtins are
-  available and already used by `activity.go` and `procpidstat.go` for `ShowNoIdle`).
+  available. `activity.go` and `procpidstat.go` already use `{{if}}` for `ShowNoIdle`; `ne` itself is
+  new to the package, though it is a plain text/template builtin needing no registration).
 - `internal/view` — registry and `Configure()`.
 - `internal/postgres/testing.go` — `NewTestConnectVersion` for the PG 19 fixture.
 - `top/` — cycle, menu, keybinding and help machinery established by the `w`/`W` group.
@@ -229,6 +285,12 @@ None.
 - `stats_age` is the last column on both PG 19 layouts. The load-bearing assertion is the **column
   order** combined with `DiffIntvl[1] == Ncols-2`; asserting `DiffIntvl == {1,18}` alone passes even
   if `stats_age` were inserted mid-layout, so it proves nothing on its own.
+- The bounds invariant from Decision 1: `DiffIntvl[1] < min(Ncols)` over every version of both
+  screens. This is what keeps a same-pgcenter-version width mismatch a benign mismatch rather than an
+  out-of-range read.
+- `stats_age` is sourced from the `pg_stat_*` half of the join, not `pg_statio_*`. Both halves carry
+  the column on PG 19 and the wrong one returns a plausible value, so this needs an assertion on the
+  query text — nothing else would ever catch it.
 - `tablesNextView(current, version)` table test.
 - Menu: item count, the version-dependent suffix, and a refusal row that asserts nothing is pushed
   on `viewCh` and the view is unchanged.
@@ -248,15 +310,29 @@ None.
 - The new query against PG 19, asserting the 11 column names in order.
 - **The `for_wraparound` escape hatch**, with the fixture proven during the user-spec phase:
   `ALTER TABLE … SET (toast.autovacuum_freeze_max_age = 100000)` plus ~120k committed transactions
-  through a procedure with `COMMIT` inside the loop (262 ms measured). The flagged relation **must**
-  be in a system schema — a table in `public` is visible in user mode with or without the escape
-  hatch, so a test built on one passes either way. Discriminating assertion: user mode returns the
-  flagged row; deleting `OR s.for_wraparound` from the `WHERE` must redden *that* assertion, not the
-  fixture setup.
-- The PG 18 → PG 19 replay of `tables`, requiring `buildActivityTar` and `activityReplayConfig` to
-  take a screen-name parameter. Two ticks per version are mandatory — the first of each version is
-  consumed by the version-change branch. This is the first time a diffed screen goes through that
-  branch; the three existing version-change tests are all `activity` with `DiffIntvl{0,0}`.
+  through a procedure with `COMMIT` inside the loop (262 ms measured). Three constraints, each of
+  which the test is worthless without:
+  - The flagged relation **must** be in a system schema. A table in `public` is visible in user mode
+    with or without the escape hatch, so a test built on one passes either way.
+  - The flag **must be made stable for the duration of the assertion**. Autovacuum clears
+    `for_wraparound` within one `autovacuum_naptime`, and `autovacuum_enabled = false` does not
+    protect it — wraparound-prevention vacuums ignore that reloption by design. So the test runs with
+    `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`),
+    and restores it afterwards. Without this, a run where the flag was already cleared is
+    indistinguishable from the mutation run that is supposed to be red.
+  - Discriminating assertion: user mode returns the flagged row; deleting `OR s.for_wraparound` from
+    the `WHERE` must redden *that* assertion, not the fixture setup.
+- **Privilege behaviour of the new view, in both directions**, following `archiver_test.go`: run the
+  query through `SetupTestRole(…, true)` and `SetupTestRole(…, false)`. The measurement that the view
+  needs no privileges was taken on beta2; the locked column-name test is blind to an ACL change,
+  which is the likeliest axis to move for a brand-new per-relation view between beta and GA. Every
+  other test connects as `postgres` over `trust` and would never notice.
+- The PG 18 → PG 19 replay of **both** `tables` and `indexes` — the user-spec names both, and both
+  change width. Requires `buildActivityTar` and `activityReplayConfig` to take a screen-name
+  parameter; once parameterized, the second screen is one more table row. Two ticks per version are
+  mandatory — the first of each version is consumed by the version-change branch. This is the first
+  time a diffed screen goes through that branch; the three existing version-change tests are all
+  `activity` with `DiffIntvl{0,0}`.
 
 ### E2E tests
 No automated E2E. Interactive TUI behaviour is verified by hand on a stand, with a second binary
@@ -287,8 +363,8 @@ are stated as such:
 | 4 | bash | `go test ./top/ -run 'Tables\|Menu\|Keybindings'` — cycle, menu suffix, refusal, bindings |
 | 5 | bash | `go test ./record/ ./report/` — recorder trap fixed, 18→19 replay of `tables` |
 | 6 | bash | `go test ./top/ -run 'ToggleSysTables\|help'` — four literals, help adjacency |
-| 7 | bash | `make lint && make vuln` |
-| 8 | user | stand run per the user-spec checklist |
+| 7 | bash | `grep` over the four changed documents for the new screen name, the two new columns, and the updated debt entries |
+| 8 | bash + user | `make test` in the CI image, `make lint`, `make vuln`; then the stand run per the user-spec checklist |
 
 ### Tools required
 bash (project CI image for the PG-backed suite), git. No MCP tools, no deploy.
@@ -347,18 +423,24 @@ versions below PG 19 even that is invisible.
       именно проверка присутствия строки, а не установка фикстуры.
 - [ ] Записи техдолга [020] и [035] обновлены: у [020] расширена область достижимости,
       у [035] — область действия на `stats_age`.
+- [ ] Заведена новая запись техдолга на version-blind циклы `x` и `p`: `statements_jit` (PG 15+)
+      и `progress_copy` (PG 14+) достижимы циклом на серверах, где их нет, и экран отдаёт ошибку
+      каждый тик. Эта фича их не чинит — она чинит только собственную группу `t`.
 
 ## Implementation Tasks
+
+**Reviewer note.** Tasks 1, 2 and 5 carry `dev-security-auditor` because they touch SQL
+construction or the recorded-archive path, which is this project's only untrusted input. Tasks 3, 4
+and 6 omit it deliberately: they wire registry entries, keybindings and help text, and introduce no
+new data path. The omission is a choice, not an oversight.
 
 ### Wave 1 (независимые)
 
 #### Task 1: New `autovacuum_scores` query and selector
 - **Description:** Create `internal/query/autovacuum_scores.go` with the 11-column query over
-  `pg_stat_autovacuum_scores` left-joined to `pg_stat_all_tables`, and its version selector. The
-  query carries the schema filter and the `for_wraparound` escape hatch in a `{{if ne .ViewType
-  "all"}}` block, rounds the six scores to 2 decimals, renders booleans via `::text`, and orders by
-  the unrounded score through a qualified reference. Includes the locked column-name test and the
-  wraparound fixture test.
+  `pg_stat_autovacuum_scores` left-joined to `pg_stat_all_tables`, and its version selector, per
+  Decisions 2, 3 and 4. Includes the locked column-name test that guards against PG 19 catalog drift
+  and the wraparound escape-hatch test with its system-schema fixture.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/ -run AutovacuumScores` in the CI image
@@ -372,7 +454,8 @@ versions below PG 19 even that is invisible.
   `stats_age` as the tail column sourced from the `pg_stat_*` half of the join, plus a 3-tuple
   selector each. Rewrite both query tests from the `conn.Exec`-and-discard tier to the
   `FieldDescriptions()` tier so column counts become observable, fixing the missing
-  `defer conn.Close()` and the legacy version list in place.
+  connection close — it is called but not deferred, so a failed assertion leaks it — and the legacy
+  version list where six versions always skip.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/query/ -run 'StatTables|StatIndexes'` in the CI image
@@ -387,12 +470,15 @@ versions below PG 19 even that is invisible.
 - **Description:** Register `autovacuum_scores` in `view.New()` and add the three `Configure()` cases.
   Update every count-based test literal that moves, and add the `Ncols` assertions for
   `tables`/`indexes` plus the negative ones for `functions`/`sizes` — none of these exist today, so
-  they must be written, not edited. Record in-code that the `tables`/`indexes` cases are load-bearing
-  rather than drift guards.
+  they must be written, not edited. Includes the one-line recorder-test fix: registering a PG 19-only
+  view breaks a test that hands an unfiltered view map to the recorder against a PG 17 fixture, so
+  the fix belongs in the same task that breaks it, not a wave later. Record in-code that the
+  `tables`/`indexes` cases are load-bearing rather than drift guards.
 - **Skill:** code-writing
 - **Reviewers:** dev-code-reviewer, dev-test-reviewer
 - **Verify:** bash — `go test ./internal/view/ ./record/`
-- **Files to modify:** `internal/view/view.go`, `internal/view/view_test.go`, `record/record_test.go`
+- **Files to modify:** `internal/view/view.go`, `internal/view/view_test.go`, `record/record_test.go`,
+  `record/recorder_test.go`
 - **Files to read:** `internal/query/autovacuum_scores.go`, `internal/query/tables.go`,
   `internal/query/indexes.go`, `record/record.go`, `top/config_view.go`
 
@@ -412,15 +498,16 @@ versions below PG 19 even that is invisible.
   `docs/decisions-log.md`
 
 #### Task 5: Record and report side
-- **Description:** Fix the recorder test that feeds an unfiltered view map to the recorder against a
-  PG 17 fixture, add the `stats_age` lines to the per-column descriptions of both widened screens,
+- **Description:** Add the `stats_age` lines to the per-column descriptions of both widened screens,
   and generalize the replay test harness from a hardcoded `activity` screen name so the PG 18 → PG 19
-  replay of `tables` can be exercised — the first time a diffed screen goes through that branch.
+  replay of `tables` and `indexes` can be exercised — the first time a diffed screen goes through
+  that branch. Also refresh the stale in-code comments claiming no production view sets
+  `NotRecordable` any more.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
 - **Verify:** bash — `go test ./record/ ./report/`
-- **Files to modify:** `record/recorder_test.go`, `report/describe.go`, `report/report_test.go`
-- **Files to read:** `record/record.go`, `report/report.go`, `internal/view/view.go`
+- **Files to modify:** `report/describe.go`, `report/report_test.go`, `record/record.go`
+- **Files to read:** `record/record_test.go`, `report/report.go`, `internal/view/view.go`
 
 ### Wave 4 (зависит от Wave 3)
 
@@ -441,22 +528,27 @@ versions below PG 19 even that is invisible.
 
 #### Task 7: Documentation and registers
 - **Description:** Update the user-facing documentation for the new screen and the two new columns,
-  and correct the two tech-debt entries this feature changes the reachability of. Release notes are
-  required — a new screen is a visible user-facing change even though no CLI flag moved.
+  correct the two tech-debt entries whose reachability this feature changes, fix the architecture
+  note claiming no production view sets `NotRecordable` any more — this feature makes that false —
+  and register a new debt item for the two version-blind cycles (`x` and `p`) that this feature
+  deliberately does not fix. Release notes are required: a new screen is user-visible even though no
+  CLI flag moved.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
-- **Verify:** bash — `git diff --stat` and manual read-through
+- **Verify:** bash — `grep` the four documents for the new screen name, the two new columns and the
+  updated debt entries; each must be present
 - **Files to modify:** `docs/features-catalog.md`, `.claude/skills/project-knowledge/overview.md`,
-  `doc/release-notes/v0.12.0.md`, `docs/tech-debt.md`
+  `.claude/skills/project-knowledge/architecture.md`, `doc/release-notes/v0.12.0.md`,
+  `docs/tech-debt.md`
 - **Files to read:** `docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md`,
   `docs/roadmap-0.12.0.md`
 
 ### Final Wave
 
 #### Task 8: Pre-deploy QA
-- **Description:** Acceptance testing: full suite in the CI image against PG 14–19, lint and
-  vulnerability checks, and verification of every acceptance criterion from user-spec and tech-spec.
-  The interactive TUI criteria are handed to the stand run, including the A/B comparison against a
-  `master`-built binary.
+- **Description:** Acceptance testing: `make test` in the CI image against PG 14–19, plus `make lint`
+  and `make vuln` — this task owns all three, no earlier task runs them. Verification of every
+  acceptance criterion from user-spec and tech-spec. The interactive TUI criteria are handed to the
+  stand run, including the A/B comparison against a `master`-built binary.
 - **Skill:** pre-deploy-qa
 - **Reviewers:** none
