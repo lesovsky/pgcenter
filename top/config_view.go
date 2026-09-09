@@ -30,6 +30,7 @@ func orderKeyLeft(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 		// itself is not computed here: column widths are known only after alignment against real
 		// data, which happens on the render path.
 		config.autoScrollToOrderKey = true
+		config.verticalOffset = 0
 
 		config.viewCh <- config.view
 		return nil
@@ -46,6 +47,7 @@ func orderKeyRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 
 		// See orderKeyLeft: the scroll is deferred to the next render, which knows the widths.
 		config.autoScrollToOrderKey = true
+		config.verticalOffset = 0
 
 		config.viewCh <- config.view
 		return nil
@@ -83,6 +85,52 @@ func scrollRight(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 	}
 }
 
+// scrollPage moves the vertical origin of the main statistics view by one visible page.
+// The upper bound is applied during rendering, when the filtered row count is available.
+func scrollPage(config *config, direction int) func(g *gocui.Gui, _ *gocui.View) error {
+	return func(g *gocui.Gui, _ *gocui.View) error {
+		v, err := g.View("dbstat")
+		if err != nil {
+			return err
+		}
+		_, height := v.Size()
+		config.verticalOffset = pageOffset(config.verticalOffset, direction, scrollPageSize(height))
+		requestRedraw(config)
+		return nil
+	}
+}
+
+func requestRedraw(config *config) {
+	config.redrawCh <- struct{}{}
+}
+
+// scrollPageSize reserves one row for the fixed header and keeps the scroll step positive.
+func scrollPageSize(height int) int {
+	if height <= 1 {
+		return 1
+	}
+	return height - 1
+}
+
+func pageOffset(current, direction, pageSize int) int {
+	if pageSize < 1 {
+		pageSize = 1
+	}
+	next := current + direction*pageSize
+	if next < 0 {
+		return 0
+	}
+	return next
+}
+
+func scrollPageUp(config *config) func(*gocui.Gui, *gocui.View) error {
+	return scrollPage(config, -1)
+}
+
+func scrollPageDown(config *config) func(*gocui.Gui, *gocui.View) error {
+	return scrollPage(config, 1)
+}
+
 // increaseWidth increases visible width of current column.
 func increaseWidth(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 	return func(_ *gocui.Gui, _ *gocui.View) error {
@@ -113,6 +161,7 @@ func decreaseWidth(config *config) func(_ *gocui.Gui, _ *gocui.View) error {
 func switchSortOrder(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		config.view.OrderDesc = !config.view.OrderDesc
+		config.verticalOffset = 0
 		printCmdline(g, "Switch sort order")
 
 		config.viewCh <- config.view
@@ -197,6 +246,7 @@ func clearFilters(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		// Notify the stats goroutine only when something has been removed. viewCh is
 		// unbuffered and nobody is expected to read an update that changes nothing.
 		if n > 0 {
+			config.verticalOffset = 0
 			config.viewCh <- config.view
 		}
 
@@ -316,6 +366,7 @@ func viewSwitchHandler(config *config, c string) {
 	config.views[config.view.Name] = config.view
 	config.view = config.views[c]
 	config.scrollOffset = 0             // horizontal scroll is ephemeral; reset on view switch
+	config.verticalOffset = 0           // vertical scroll is ephemeral; reset on view switch
 	config.autoScrollToOrderKey = false // a pending auto-scroll must not fire on the new screen
 	config.viewCh <- config.view
 }
@@ -331,6 +382,7 @@ func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 		// Horizontal scroll is ephemeral; reset it when entering the per-process
 		// screen. This path bypasses viewSwitchHandler, so the reset is done here.
 		app.config.scrollOffset = 0
+		app.config.verticalOffset = 0
 
 		// Same for a pending auto-scroll request: it belongs to the outgoing screen's sort
 		// column. Reset before the local-mode guard below, so the switch cannot leave it armed.

@@ -15,16 +15,18 @@ const defaultRefresh = time.Second
 
 // config defines 'top' program runtime configuration.
 type config struct {
-	view         view.View      // Current active view.
-	views        view.Views     // List of all available views.
-	queryOptions query.Options  // Queries' settings that might depend on Postgres version.
-	viewCh       chan view.View // Channel used for passing view settings to stats goroutine.
-	logtail      stat.Logfile   // Logfile used for working with Postgres log file.
-	dialog       dialogType     // Remember current user-started dialog, used for selecting needed dialog handler.
-	menu         menuStyle      // When working with menus, keep properties of the menu.
-	procMask     int            // Process mask used for selecting group of process.
-	scrollOffset int            // Horizontal scroll position: index into scrollable columns (1..Ncols-1); 0 means no scroll. Ephemeral, reset on view switch.
-	verbose      bool           // Verbose display mode for the top summary panels. Persistent: unlike scrollOffset, it is NOT reset on view switch (mirrored into every views entry).
+	view           view.View      // Current active view.
+	views          view.Views     // List of all available views.
+	queryOptions   query.Options  // Queries' settings that might depend on Postgres version.
+	viewCh         chan view.View // Channel used for passing view settings to stats goroutine.
+	redrawCh       chan struct{}  // Channel used for requesting a redraw without changing collector settings.
+	logtail        stat.Logfile   // Logfile used for working with Postgres log file.
+	dialog         dialogType     // Remember current user-started dialog, used for selecting needed dialog handler.
+	menu           menuStyle      // When working with menus, keep properties of the menu.
+	procMask       int            // Process mask used for selecting group of process.
+	scrollOffset   int            // Horizontal scroll position: index into scrollable columns (1..Ncols-1); 0 means no scroll. Ephemeral, reset on view switch.
+	verticalOffset int            // Vertical scroll position in dbstat rows. Ephemeral, reset on view switch.
+	verbose        bool           // Verbose display mode for the top summary panels. Persistent: unlike scrollOffset, it is NOT reset on view switch (mirrored into every views entry).
 	// autoScrollToOrderKey is a one-shot request to bring the sort column into the visible window.
 	// It is set by the sort handlers (orderKeyLeft/orderKeyRight) and consumed — and cleared — by
 	// renderDbstat on the next frame, so manual [ / ] scrolling afterwards is never undone by the
@@ -45,7 +47,8 @@ func newConfig() *config {
 	views := view.New()
 
 	return &config{
-		views:  views,
-		viewCh: make(chan view.View),
+		views:    views,
+		viewCh:   make(chan view.View),
+		redrawCh: make(chan struct{}),
 	}
 }
