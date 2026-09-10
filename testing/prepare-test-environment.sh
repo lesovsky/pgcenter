@@ -36,7 +36,7 @@ EOF
   cat > "/etc/postgresql/${v}/main/pg_hba.conf" << EOF
 local all all              trust
 host all all 0.0.0.0/0 trust
-# pg_basebackup opens a physical replication connection, which the `all` database
+# pg_basebackup opens a physical replication connection, which the 'all' database
 # keyword above does not match; without these lines the basebackup progress screen
 # cannot be exercised at all.
 local replication all              trust
