@@ -106,6 +106,8 @@ func mainLoop(ctx context.Context, app *app) error {
 func doWork(ctx context.Context, app *app) {
 	var wg sync.WaitGroup
 	statCh := make(chan stat.Stat)
+	var latest stat.Stat
+	haveLatest := false
 
 	wg.Add(1)
 	go func() {
@@ -126,7 +128,13 @@ func doWork(ctx context.Context, app *app) {
 			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
 			return
 		case s := <-statCh:
+			latest = s
+			haveLatest = true
 			printStat(app, s, app.postgresProps)
+		case <-app.config.redrawCh:
+			if haveLatest {
+				printStat(app, latest, app.postgresProps)
+			}
 		case <-ctx.Done():
 			wg.Wait()
 			return

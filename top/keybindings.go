@@ -23,6 +23,8 @@ func keybindings(app *app) error {
 		{"sysstat", gocui.KeyArrowRight, orderKeyRight(app.config)},
 		{"sysstat", gocui.KeyArrowUp, increaseWidth(app.config)},
 		{"sysstat", gocui.KeyArrowDown, decreaseWidth(app.config)},
+		{"sysstat", gocui.KeyPgup, scrollPageUp(app.config)},
+		{"sysstat", gocui.KeyPgdn, scrollPageDown(app.config)},
 		{"sysstat", '[', scrollLeft(app.config)},
 		{"sysstat", ']', scrollRight(app.config)},
 		{"sysstat", '<', switchSortOrder(app.config)},

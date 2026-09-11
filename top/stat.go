@@ -694,9 +694,57 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 
 	// Terminal width drives the visible-column window. dbstat is created with
 	// Frame=false, so Size() returns the true drawing width.
-	termWidth, _ := v.Size()
+	termWidth, termHeight := v.Size()
+	config.verticalOffset = clampVerticalOffset(config.verticalOffset, renderedDbstatRows(s, config.view.Filters), termHeight)
+	ox, _ := v.Origin()
+	if err := v.SetOrigin(ox, 0); err != nil {
+		return fmt.Errorf("set dbstat vertical origin failed: %w", err)
+	}
 
-	return renderDbstat(v, config, s, termWidth)
+	return renderDbstatWindow(v, config, s, termWidth, config.verticalOffset, termHeight-1)
+}
+
+// renderedDbstatRows returns the number of data rows that printStatData will emit after
+// filtering. The header is accounted for by clampVerticalOffset separately.
+func renderedDbstatRows(s stat.Stat, filters map[int]*regexp.Regexp) int {
+	rows := 0
+	for rownum := 0; rownum < s.Result.Nrows; rownum++ {
+		if dbstatRowMatchesFilters(s, rownum, filters) {
+			rows++
+		}
+	}
+	return rows
+}
+
+// dbstatRowMatchesFilters reports whether a row passes the active filters. Filter indexes
+// that do not exist in the current result are ignored, as they are during rendering of a
+// transition frame after a view switch.
+func dbstatRowMatchesFilters(s stat.Stat, rownum int, filters map[int]*regexp.Regexp) bool {
+	active := false
+	for i, re := range filters {
+		if re == nil || i < 0 || i >= s.Result.Ncols {
+			continue
+		}
+		active = true
+		if re.MatchString(s.Result.Values[rownum][i].String) {
+			return true
+		}
+	}
+	return !active
+}
+
+func clampVerticalOffset(offset, dataRows, visibleRows int) int {
+	if offset < 0 {
+		offset = 0
+	}
+	maxOffset := dataRows + 1 - visibleRows // one header row precedes the data
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if offset > maxOffset {
+		return maxOffset
+	}
+	return offset
 }
 
 // renderDbstat is the writer-based core of printDbstat: it clamps the scroll offset,
@@ -704,6 +752,12 @@ func printDbstat(v *gocui.View, config *config, s stat.Stat) error {
 // resolves the terminal width from the gocui view) so the render can be unit-tested
 // without a live terminal.
 func renderDbstat(w io.Writer, config *config, s stat.Stat, termWidth int) error {
+	return renderDbstatWindow(w, config, s, termWidth, 0, -1)
+}
+
+// renderDbstatWindow renders the header and a window of filtered data rows. startRow and
+// rowLimit apply only to data rows, so the header remains visible while paging.
+func renderDbstatWindow(w io.Writer, config *config, s stat.Stat, termWidth, startRow, rowLimit int) error {
 	// One-shot auto-scroll: a sort-column change asked for that column to be brought into the
 	// window. It is consumed here rather than in the key handler because column widths are known
 	// only after alignViewToResult has run against real data (printDbstat). The flag is cleared
@@ -740,7 +794,7 @@ func renderDbstat(w io.Writer, config *config, s stat.Stat, termWidth int) error
 	}
 
 	// Print data.
-	return printStatData(w, s, config, isFilterRequired(config.view.Filters), win)
+	return printStatDataRange(w, s, config, isFilterRequired(config.view.Filters), win, startRow, rowLimit)
 }
 
 // formatError returns formatted error string depending on its type.
@@ -1029,6 +1083,10 @@ func printHeaderCell(w io.Writer, s stat.Stat, config *config, i int) error {
 // colnum counter is removed) so windowed rendering keeps each value aligned with its
 // column.
 func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, win columnWindow) error {
+	return printStatDataRange(w, s, config, filter, win, 0, -1)
+}
+
+func printStatDataRange(w io.Writer, s stat.Stat, config *config, filter bool, win columnWindow, startRow, rowLimit int) error {
 	// Blank fillers mirroring the header's edge markers: the header prints a marker rune on
 	// each hidden side, so each data row prints markerWidth spaces in the same place. This is
 	// the alignment invariant — the visible width of the header row equals that of every data
@@ -1042,27 +1100,19 @@ func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, win co
 		rightMarker = strings.Repeat(" ", markerWidth)
 	}
 
-	var doPrint bool
+	renderedRows := 0
 	for rownum := 0; rownum < s.Result.Nrows; rownum++ {
-		// be optimistic, we want to print the row.
-		doPrint = true
-
-		// apply filters using regexp
-		if filter {
-			for i := 0; i < s.Result.Ncols; i++ {
-				if config.view.Filters[i] != nil {
-					if config.view.Filters[i].MatchString(s.Result.Values[rownum][i].String) {
-						doPrint = true
-						break
-					}
-					doPrint = false
-				}
-			}
-		}
-
-		if !doPrint {
+		if filter && !dbstatRowMatchesFilters(s, rownum, config.view.Filters) {
 			continue
 		}
+		if renderedRows < startRow {
+			renderedRows++
+			continue
+		}
+		if rowLimit >= 0 && renderedRows >= startRow+rowLimit {
+			break
+		}
+		renderedRows++
 
 		// print frozen column 0 value first, then the windowed columns.
 		if err := printDataCell(w, s, config, rownum, 0); err != nil {
@@ -1101,8 +1151,10 @@ func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, win co
 // than the column width (replacing the last character with '~') and padding to the column
 // width plus the +2 gap. Returns an error for a zero or negative column width.
 func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	value := s.Result.Values[rownum][i].String
+
 	// truncate values that are longer than column width
-	valuelen := len(s.Result.Values[rownum][i].String)
+	valuelen := len(value)
 	if valuelen > config.view.ColsWidth[i] {
 		width := config.view.ColsWidth[i]
 		if width <= 0 {
@@ -1110,11 +1162,11 @@ func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) erro
 		}
 
 		// truncate value up to column width and replace last character with '~' symbol
-		s.Result.Values[rownum][i].String = s.Result.Values[rownum][i].String[:width-1] + "~"
+		value = value[:width-1] + "~"
 	}
 
 	// print value
-	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][i].String)
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, value)
 	return err
 }
 

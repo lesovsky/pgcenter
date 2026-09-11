@@ -215,6 +215,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 			message = doReload(answer, app.db)
 		case dialogFilter:
 			message = setFilter(answer, app.config.view)
+			app.config.verticalOffset = 0
 		case dialogCancelQuery:
 			message = killSingle(app.db, "cancel", answer)
 		case dialogTerminateBackend:
