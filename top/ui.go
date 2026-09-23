@@ -286,7 +286,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 		}
 
 		// Postgres main stats view.
-		v, err = app.ui.SetView("dbstat", -1, dbstatY0, maxX, maxY-1)
+		v, err = app.ui.SetView("dbstat", -1, dbstatY0, maxX, maxY)
 		if err != nil {
 			if err != gocui.ErrUnknownView {
 				return fmt.Errorf("set dbstat view on layout failed: %w", err)
@@ -310,7 +310,7 @@ func layout(app *app) func(g *gocui.Gui) error {
 
 		// Extra stats view.
 		if app.config.view.ShowExtra > stat.CollectNone {
-			v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY-1)
+			v, err := app.ui.SetView("extra", -1, 3*maxY/5-1, maxX, maxY)
 			if err != nil {
 				if err != gocui.ErrUnknownView {
 					return fmt.Errorf("set extra view on layout failed: %w", err)
