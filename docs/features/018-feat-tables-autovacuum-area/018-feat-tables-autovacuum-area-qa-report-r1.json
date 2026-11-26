@@ -1,0 +1,178 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "branch": "feature/018-feat-tables-autovacuum-area",
+  "headCommit": "85beb6e0267f5410fa74e83dca5c4be18320fc5c",
+  "date": "2026-11-26",
+  "status": "failed",
+  "statusReason": "The fresh frozen acceptance run and all manual SC-5–SC-8 checks passed, and build, race-enabled tests, lint, E2E, and the dedicated wraparound test passed. The mandatory make vuln gate failed with three reachable vulnerabilities. The same three findings reproduce on master, so this is not a feature regression, but AC-32 still fails and Gate 3 is not opened.",
+  "environment": {
+    "status": "healthy",
+    "services": [
+      "lesovsky/pgcenter-testing:0.0.11: fresh disposable container, PG14–PG19 healthy on ports 21914–21919 after bounded SELECT 1 polling",
+      "feature binary: rebuilt from HEAD 85beb6e0267f5410fa74e83dca5c4be18320fc5c inside the disposable container",
+      "master A/B binary: rebuilt from master d2e0ffa56bae61e50e114ec4eda1e4dfe11d3c3f",
+      "manual TUI: local Docker as explicitly authorized by the owner, tmux 190x52 and 100x40 for horizontal scrolling",
+      "SC-6: separate disposable PG19 with verified system_identifier and global freeze-age margin; destroyed after the check",
+      "cleanup: quality and dedicated containers removed, tmux sessions killed, raw captures deleted, temporary master vulnerability source removed"
+    ],
+    "rebuildAttempts": 3,
+    "setupNotes": [
+      "Attempt 1 stopped before PostgreSQL setup because Git rejected the copied repository ownership; safe.directory was set only inside the disposable container.",
+      "Attempt 2 used the wrong prepare script path; the Dockerfile-confirmed /usr/local/bin/prepare-test-environment.sh path succeeded on attempt 3.",
+      "The known pre-existing prepare-test-environment.sh line 36 'all: command not found' diagnostic occurred, after which all six clusters passed health checks."
+    ],
+    "fixCommits": []
+  },
+  "testSuite": {
+    "status": "failed",
+    "details": "make build exit=0. make test exit=0 in the fresh PG14–19 container: go test -race -p 1 -timeout 300s -coverprofile=.test_coverage.txt ./... covered 19 packages, 15 packages with test results, total coverage 73.2%, and zero DATA RACE/FAIL/panic matches. make lint exit=0: golangci-lint 0 issues and gosec quiet. testing/e2e.sh exit=0: six real recordings and 114 report invocations, 120 expected artifacts. testing/run-autovacuum-wraparound-test.sh exit=0 with exactly one targeted test-level PASS and verified external destruction. make vuln exited 2 (govulncheck exit 3): GO-2026-6809, GO-2026-6629 and GO-2026-6607 are reachable. A separate master run reproduced the same three IDs and versions.",
+    "logs": [
+      "logs/working/qa-018/environment-startup.log",
+      "logs/working/qa-018/environment-startup-r2.log",
+      "logs/working/qa-018/environment-startup-r3.log",
+      "logs/working/qa-018/make-build.log",
+      "logs/working/qa-018/make-test.log",
+      "logs/working/qa-018/make-lint.log",
+      "logs/working/qa-018/make-vuln.log",
+      "logs/working/qa-018/make-vuln-master.log",
+      "logs/working/qa-018/e2e.log",
+      "logs/working/qa-018/wraparound-targeted.log",
+      "logs/working/qa-018/quality-summary.txt"
+    ]
+  },
+  "freeze": "docs/features/018-feat-tables-autovacuum-area/acceptance/freeze.json",
+  "acceptanceRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/feature-r1/result.json",
+  "triageReport": null,
+  "acceptanceEvidence": {
+    "status": "passed",
+    "details": "feature-r1 ran at the requested HEAD with dirty=false and manifestValid=true. SC-1, SC-2, SC-3, SC-4 and SC-10 each have exactly one ACC_RESULT origin=pass checkpoint=complete marker, exit=0 and contractValid=true. All five logs pass sanitize.py check. No acceptance scenario failed, so batch triage was not required.",
+    "incrementalRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/result.json",
+    "baseRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json"
+  },
+  "manualEvidence": {
+    "status": "passed",
+    "scenarios": [
+      "SC-5: logs/working/qa-018/manual-sc5.log",
+      "SC-6: logs/working/qa-018/manual-sc6.log",
+      "SC-7: logs/working/qa-018/manual-sc7.log",
+      "SC-8: logs/working/qa-018/manual-sc8.log",
+      "SC-9: previously passed in Task 06 and confirmed by whole-feature review round 2"
+    ],
+    "sanitization": "All 32 raw captures were sanitized and checked before extracting minimized observations. The four published observation logs also pass sanitize.py. Raw captures, container addresses and SQL transcripts were deleted; no raw archive or terminal transcript was added to Git."
+  },
+  "acceptanceCriteria": [
+    {"requirement":"AC-1","criterion":"PG19 autovacuum_scores has exactly the contracted 11 columns and no relid.","status":"passed","evidence":"Fresh make test locked/live field descriptions; manual SC-5 exact header assertion."},
+    {"requirement":"AC-2","criterion":"Decision booleans follow score and component scores follow dead_total.","status":"passed","evidence":"SC-5 header relation, score, do_vacuum, do_analyze, for_wraparound, dead_total, xid_score, mxid_score, vacuum_score, vacuum_insert_score, analyze_score."},
+    {"requirement":"AC-3","criterion":"All six scores render with two decimal places.","status":"passed","evidence":"SC-5 live values 38.00, 18.00, 1.00 and 3.20; structural/live query tests in make test."},
+    {"requirement":"AC-4","criterion":"Boolean values render as true/false.","status":"passed","evidence":"SC-5 false values and SC-6 true values in the live TUI."},
+    {"requirement":"AC-5","criterion":"relation contains schemaname.relname.","status":"passed","evidence":"SC-5 public.qa018_active/public.qa018_small and SC-6 pg_toast.pg_toast_16532."},
+    {"requirement":"AC-6","criterion":"Default sorting is score descending.","status":"passed","evidence":"SC-5 live rows ordered 38.00 then 3.20; registry assertions in make test."},
+    {"requirement":"AC-7","criterion":"SQL orders by the qualified unrounded score.","status":"passed","evidence":"Locked query and rounded-tie integration tests passed in make test; prior named mutation evidence remains approved."},
+    {"requirement":"AC-8","criterion":"dead_total is absolute n_dead_tup from an outer join.","status":"passed","evidence":"SC-5 values 900 and 60; structural/live LEFT JOIN assertions in make test."},
+    {"requirement":"AC-9","criterion":"Schema filtering uses the outer scores relation.","status":"passed","evidence":"Structural and live tests passed; SC-6 user/all observations confirm behavior."},
+    {"requirement":"AC-10","criterion":"System schemas follow the existing user/all toggle.","status":"passed","evidence":"SC-6: pg_catalog hidden in user mode, present after comma, hidden again after the second toggle."},
+    {"requirement":"AC-11","criterion":"A system-schema for_wraparound row remains visible in user mode.","status":"passed","evidence":"Fresh dedicated wraparound test PASS and SC-6 pg_toast.pg_toast_16532 with for_wraparound=true in both user-mode captures."},
+    {"requirement":"AC-12","criterion":"No column is diffed and blank dead_total cannot abort a sample.","status":"passed","evidence":"make test passed the DiffIntvl{0,0} and mutation-checked empty-cell tests."},
+    {"requirement":"AC-13","criterion":"On PG19, t switches tables to autovacuum_scores.","status":"passed","evidence":"Manual SC-5 hotkey capture."},
+    {"requirement":"AC-14","criterion":"On PG19, t returns autovacuum_scores to tables.","status":"passed","evidence":"Manual SC-5 cycle captures."},
+    {"requirement":"AC-15","criterion":"t from another screen opens tables.","status":"passed","evidence":"SC-5 databases-to-tables capture; SC-7 legacy behavior also passed."},
+    {"requirement":"AC-16","criterion":"T opens two enabled PG19 items and both selections work.","status":"passed","evidence":"SC-5 menu has two items without a disabled suffix; both tables and autovacuum_scores selections passed."},
+    {"requirement":"AC-17","criterion":"Each entry path prints its screen message exactly once.","status":"passed","evidence":"SC-5 hotkey count=1, autovacuum menu count=1, tables menu count=1."},
+    {"requirement":"AC-18","criterion":"Below PG19, t never enters autovacuum_scores.","status":"passed","evidence":"SC-7 second and third t remain tables; master second-t A/B also remains tables."},
+    {"requirement":"AC-19","criterion":"Below PG19, the menu item carries the exact PostgreSQL 19 suffix.","status":"passed","evidence":"SC-7 menu literal 'pg_stat_autovacuum_scores — requires PostgreSQL 19'."},
+    {"requirement":"AC-20","criterion":"Disabled selection stays on the current screen and prints one explanation.","status":"passed","evidence":"SC-7 controlled capture at 0.2s and 1.0s: view remains tables, NOTICE count=1, unsupported-statistics error absent."},
+    {"requirement":"AC-21","criterion":"PG19 tables shows trailing stats_age.","status":"passed","evidence":"feature-r1 SC-1 report assertion and SC-8 live tables tail column."},
+    {"requirement":"AC-22","criterion":"PG19 indexes shows trailing stats_age.","status":"passed","evidence":"feature-r1 SC-1 report assertion and SC-8 live indexes tail column."},
+    {"requirement":"AC-23","criterion":"Below PG19, stats_age is absent and legacy column counts remain unchanged.","status":"passed","evidence":"feature-r1 SC-4 PG17/PG18 byte-for-byte A/B reports and structural tests."},
+    {"requirement":"AC-24","criterion":"stats_age is outside diff calculations.","status":"passed","evidence":"make test selector/DiffIntvl/replay tests and feature-r1 SC-2/SC-10 replay checks."},
+    {"requirement":"AC-25","criterion":"stats_age comes from the pg_stat half of each query.","status":"passed","evidence":"Source-selector tests and previously recorded wrong-source mutations; full query package passed."},
+    {"requirement":"AC-26","criterion":"Never-reset relation statistics render a blank age.","status":"passed","evidence":"feature-r1 SC-1 and SC-8 untouched table/index cells are blank with SQL stats_reset=NULL."},
+    {"requirement":"AC-27","criterion":"After reset, active relations show second-precision growing ages.","status":"passed","evidence":"SC-1 DB-derived age checks; SC-8 tables 00:00:02→00:00:06 and indexes 00:00:09→00:00:14."},
+    {"requirement":"AC-28","criterion":"Untouched relations remain blank after reset.","status":"passed","evidence":"SC-1 active/untouched archive controls and SC-8 direct SQL plus TUI confirmation."},
+    {"requirement":"AC-29","criterion":"functions is unchanged.","status":"passed","evidence":"feature-r1 SC-4 functions PG17/PG18 semantic and byte comparisons."},
+    {"requirement":"AC-30","criterion":"sizes is unchanged.","status":"passed","evidence":"feature-r1 SC-4 sizes PG17/PG18 semantic and byte comparisons."},
+    {"requirement":"AC-31","criterion":"autovacuum_scores is excluded from record with truthful live-TUI-only INFO.","status":"passed","evidence":"feature-r1 SC-1: archive_ticks=3, autovacuum_scores_members=0, record_info=live_tui_only, false_version_reason=false."},
+    {"requirement":"AC-32","criterion":"Full tests, build, E2E, lint, vulnerability checks, zero races and dedicated wraparound PASS.","status":"failed","evidence":"Build, make test, lint, E2E and wraparound passed; make vuln failed with GO-2026-6809, GO-2026-6629 and GO-2026-6607. Master reproduces the same findings, but the required gate remains failed."},
+    {"requirement":"AC-33","criterion":"Mixed PG18→PG19 tables/indexes archives replay with version-correct layouts.","status":"passed","evidence":"feature-r1 SC-2: both new-layout samples=2 and entries_read=true."},
+    {"requirement":"AC-34","criterion":"Locked column-name tests guard PG19 catalog drift.","status":"passed","evidence":"Fresh make test passed structural and live FieldDescriptions assertions."},
+    {"requirement":"AC-35","criterion":"Built-in help documents t and T.","status":"passed","evidence":"SC-5 live help line: 't' tables/autovacuum scores switch, 'T' tables menu."},
+    {"requirement":"AC-36","criterion":"describe documents stats_age for tables and indexes.","status":"passed","evidence":"feature-r1 SC-3 production report -d -T and -d -I outputs passed."},
+    {"requirement":"AC-37","criterion":"features-catalog describes the new screen.","status":"passed","evidence":"Task 06 manual SC-9 PASS and whole-feature code review round 2."},
+    {"requirement":"AC-38","criterion":"Project Knowledge project/architecture references match the feature.","status":"passed","evidence":"Task 06 manual SC-9 PASS and whole-feature code review round 2."},
+    {"requirement":"AC-39","criterion":"v0.12.0 release notes describe the new screen.","status":"passed","evidence":"Task 06 manual SC-9 PASS and whole-feature code review round 2."},
+    {"requirement":"AC-40","criterion":"Debt [035]/[029] include stats_age/autovacuum_scores and [020] is unchanged.","status":"passed","evidence":"Task 06 manual SC-9 PASS and whole-feature code/security review round 2."},
+    {"requirement":"AC-41","criterion":"Same-PG19 old/new recording layouts form safe replay boundaries in both directions.","status":"passed","evidence":"feature-r1 SC-10: eight controls and eight layout cases passed, every boundary=1 with known deltas 30,40 and correct age/sort behavior."},
+    {"requirement":"TS-1","criterion":"make test passes in the PG14–19 CI image with no races.","status":"passed","evidence":"logs/working/qa-018/make-test.log: exit=0, 73.2% coverage, zero race/FAIL/panic markers."},
+    {"requirement":"TS-2","criterion":"make lint and make vuln are clean.","status":"failed","evidence":"make lint passed; make vuln failed with three reachable vulnerabilities on feature and master."},
+    {"requirement":"TS-3","criterion":"Existing tests and count-based literals are consistent and not weakened.","status":"passed","evidence":"Whole-feature code review round 2 approved; fresh full suite passed."},
+    {"requirement":"TS-4","criterion":"Selectors return 3-tuples without patching UniqueKey/OrderKey.","status":"passed","evidence":"Query/view tests passed and whole-feature code review round 2 approved."},
+    {"requirement":"TS-5","criterion":"Static tables/indexes entries retain pre-PG19 layouts.","status":"passed","evidence":"View tests and feature-r1 SC-4 legacy replay passed."},
+    {"requirement":"TS-6","criterion":"Ncols and negative functions/sizes assertions are present.","status":"passed","evidence":"Fresh internal/view tests and feature-r1 SC-4 passed."},
+    {"requirement":"TS-7","criterion":"The no-diff test is mutation-checked against a non-zero interval.","status":"passed","evidence":"Task 03 named mutation evidence and fresh internal/stat suite passed."},
+    {"requirement":"TS-8","criterion":"The wraparound exception test is mutation-checked at the row-presence assertion.","status":"passed","evidence":"Task 01 named mutation evidence and fresh dedicated targeted PASS."},
+    {"requirement":"TS-9","criterion":"Debt [035]/[029] are extended and [020] is not changed.","status":"passed","evidence":"SC-9 and documentation diff approved in whole-feature review round 2."},
+    {"requirement":"TS-10","criterion":"Version-blind x/p cycles are registered as debt rather than fixed here.","status":"passed","evidence":"Debt [037] verified by Task 06 SC-9 and whole-feature review."},
+    {"requirement":"TS-11","criterion":"Same-PG19 layout changes reset renderer and sort state.","status":"passed","evidence":"Fresh report suite and feature-r1 SC-10 complete matrix passed."},
+    {"requirement":"TS-12","criterion":"SQL structure/order and rounded-tie tests discriminate the required behavior.","status":"passed","evidence":"Fresh internal/query suite passed; approved named mutation and concurrent fixture evidence remains valid."},
+    {"requirement":"TS-13","criterion":"PG19 recording INFO gives the deliberate exclusion reason without a false version reason.","status":"passed","evidence":"feature-r1 SC-1 record_info=live_tui_only and false_version_reason=false."},
+    {"requirement":"TS-14","criterion":"Dedicated wraparound execution has a separate non-skip PASS and external cleanup.","status":"passed","evidence":"logs/working/qa-018/wraparound-targeted.log: one test-level PASS and external supervisor destruction PASS."},
+    {"requirement":"TS-15","criterion":"Acceptance evidence is minimized and sanitized without raw archives/transcripts or secrets.","status":"passed","evidence":"5/5 feature-r1 logs, 32/32 sanitized manual captures and 4/4 minimized manual logs passed sanitize.py; raw files were deleted."},
+    {"requirement":"TS-16","criterion":"All scriptable SC have approved frozen base/final evidence and manual SC remain explicit.","status":"passed","evidence":"Approved base-reFreeze-3 and independent review; fresh feature-r1 5/5; explicit manual SC-5–SC-8 logs and prior SC-9 PASS."}
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "out_of_scope",
+      "title": "Baseline dependencies/toolchain fail the mandatory vulnerability gate",
+      "expected": "make vuln exits successfully with no reachable vulnerabilities.",
+      "actual": "govulncheck reports reachable GO-2026-6809 in crypto/x509@go1.25.13, GO-2026-6629 in golang.org/x/text@v0.39.0 and GO-2026-6607 in crypto/tls@go1.25.13. Fixes are identified as go1.26.10, x/text v0.41.0 and go1.26.9 respectively. Master produces the same three findings, so the feature diff did not introduce them.",
+      "reproduction": "PATH=$(go env GOPATH)/bin:$PATH make vuln; compare logs/working/qa-018/make-vuln.log and logs/working/qa-018/make-vuln-master.log. This remains a failed required criterion despite its baseline origin."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing fixture preparation emits a harmless command-not-found diagnostic",
+      "expected": "Fixture preparation has no shell diagnostic.",
+      "actual": "prepare-test-environment.sh line 36 reports 'all: command not found' once per cluster, after which PG14–19 all pass SELECT 1 health checks. This was already recorded during feature execution and is unrelated to the feature diff.",
+      "reproduction": "logs/working/qa-018/environment-startup-r3.log; run /usr/local/bin/prepare-test-environment.sh in a fresh lesovsky/pgcenter-testing:0.0.11 container."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [020]: malformed archive Ncols can still panic replay",
+      "expected": "Malformed untrusted archives produce a clean validation error.",
+      "actual": "The valid-layout replay boundary does not validate attacker-declared inconsistent Ncols/Cols dimensions. Whole-feature security review round 2 confirmed this unchanged existing debt.",
+      "reproduction": "See docs/tech-debt.md [020] and docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-feature-dev-security-auditor-round2.json."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [029]: server-controlled terminal cells remain unsanitized",
+      "expected": "Server/archive values cannot inject terminal controls.",
+      "actual": "The shared TUI cell printer still emits raw cell strings; autovacuum_scores relation is another recorded reachable surface. No shared sanitizer change belongs to this feature.",
+      "reproduction": "See docs/tech-debt.md [029] and the whole-feature security review round 2 data-flow evidence."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [035]: open-screen column widths can remain frozen",
+      "expected": "Long values appearing after the first frame are fully visible without manual widening.",
+      "actual": "The shared alignment behavior is unchanged; stats_age is explicitly included in this debt. Manual QA used the existing Up-arrow widening to inspect full relation names and did not treat the known behavior as a feature regression.",
+      "reproduction": "See docs/tech-debt.md [035]; enter a screen with NULL/short initial values and later render a longer value."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [037]: x/p cycles remain version-blind",
+      "expected": "Cycles skip screens unavailable on the connected PostgreSQL version.",
+      "actual": "statements_jit and progress_copy retain their pre-existing version-blind cycles. Only the new t group was made version-aware, as contracted.",
+      "reproduction": "See docs/tech-debt.md [037] and tech-spec Decision 6."
+    }
+  ],
+  "deferredToPostDeploy": [],
+  "gate3": {
+    "status": "not_opened",
+    "reason": "The skill permits the user acceptance gate only after passing QA. AC-32/TS-2 failed, so no acceptance request or Gate 3 sampling is presented."
+  },
+  "nextAction": "Owner decision: approve a separate dependency/toolchain remediation for the three baseline govulncheck findings, then rerun the complete freeze-qa phase at a new reviewed HEAD. Do not run /skill:done and do not treat the green acceptance/manual evidence as overriding the failed mandatory vulnerability gate."
+}

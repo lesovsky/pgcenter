@@ -129,3 +129,12 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 **Tech debt:** Scope updates for existing [029] and [035] are required by AC-40. Existing feature decisions about [020] and the version-blind `x`/`p` cycles are unchanged.
 **Proposed follow-ups:** In a fresh session on `feature/018-feat-tables-autovacuum-area`, run `/skill:decompose-tech-spec docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area`; then complete independent plan/harness review and acceptance freeze before implementation.
 **Verification:** Project `project-knowledge` skill loaded from `.kimi-code`; `git diff --check` and JSON/JSONL parsing passed. Final independent reports are approved: user-spec round 4, tech-spec round 3, security round 3, and skeptic round 3 (74/52/56 factual claims checked across skeptic rounds, zero mismatches). Earlier reports are preserved. Runtime implementation, mutation, acceptance, and stand evidence remain future execution gates and are not claimed here.
+
+---
+
+## Phase: Freeze QA — failed mandatory vulnerability gate
+
+**Summary:** Fresh `feature-r1` passed all five frozen scenarios with valid markers, `dirty=false` and `manifestValid=true`. Manual SC-5–SC-8 also passed in owner-authorized local Docker/tmux runs with master A/B and sanitized minimized evidence; SC-9 remained passed. Build, race-enabled PG 14–19 tests, lint, E2E and the dedicated wraparound test passed. The mandatory `make vuln` gate failed on GO-2026-6809, GO-2026-6629 and GO-2026-6607, so QA is failed and Gate 3 was not opened.
+**Evidence:** `018-feat-tables-autovacuum-area-qa-report-r1.json`; `acceptance/runs/feature-r1/result.json`; `logs/working/qa-018/quality-summary.txt`, `make-vuln.log`, `make-vuln-master.log`, and `manual-sc5.log` through `manual-sc8.log`.
+**Triage/deferred:** No acceptance scenario failed, so no acceptance triage report was required. No criterion was deferred to post-deploy. The three vulnerabilities reproduce identically on master, but their baseline origin does not convert AC-32/TS-2 to a pass.
+**Next action:** The owner must decide on separate dependency/toolchain remediation and then rerun fresh freeze-qa at a reviewed HEAD. No product, dependency or harness fix was made by this phase; `/skill:done`, push, merge and release were not invoked.
