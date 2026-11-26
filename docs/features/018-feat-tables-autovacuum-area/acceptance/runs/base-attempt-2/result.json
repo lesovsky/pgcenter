@@ -1,0 +1,14 @@
+{
+  "label": "base-attempt-2",
+  "sha": "b92e9a89c59387433f5fa0333ef10281b1317028",
+  "dirty": false,
+  "manifestValid": true,
+  "started": "2026-11-26T06:03:30Z",
+  "scenarios": [
+    {"id": "SC-10", "kind": "new", "regressionBaseline": "", "covers": "AC-41", "exit": 1, "origin": "feature_missing", "checkpoint": "same_pg19_layout_change_unsupported", "contractValid": true, "seconds": 4, "log": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/SC-10.log"},
+    {"id": "SC-1", "kind": "new", "regressionBaseline": "", "covers": "AC-21, AC-22, AC-26, AC-27, AC-28, AC-31", "exit": 1, "origin": "feature_missing", "checkpoint": "pg19_stats_age_report_unavailable", "contractValid": true, "seconds": 8, "log": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/SC-1.log"},
+    {"id": "SC-2", "kind": "regression", "regressionBaseline": "", "covers": "AC-33", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true, "seconds": 2, "log": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/SC-2.log"},
+    {"id": "SC-3", "kind": "new", "regressionBaseline": "", "covers": "AC-36", "exit": 1, "origin": "feature_missing", "checkpoint": "relation_stats_age_descriptions_missing", "contractValid": true, "seconds": 1, "log": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/SC-3.log"},
+    {"id": "SC-4", "kind": "regression", "regressionBaseline": "", "covers": "AC-23, AC-29, AC-30", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true, "seconds": 4, "log": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/SC-4.log"}
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "run": "base",
+  "sha": "44c953532a043de5de847f679df27b65c019a408",
+  "created": "2026-11-26T06:20:48Z",
+  "verdict": "ready",
+  "dirty": false,
+  "manifest": {
+    "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+    "valid": true,
+    "entries": 9,
+    "sha256": "94bf65bf1fb2a1a92de6d1722a1feb15b4af9a57a2e8c26588921544b08d3e6d"
+  },
+  "scenarios": [
+    {"id": "SC-1", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "pg19_stats_age_report_unavailable", "contractValid": true},
+    {"id": "SC-2", "kind": "regression", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true},
+    {"id": "SC-3", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "relation_stats_age_descriptions_missing", "contractValid": true},
+    {"id": "SC-4", "kind": "regression", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true},
+    {"id": "SC-10", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "same_pg19_layout_change_unsupported", "contractValid": true}
+  ],
+  "positiveControls": {
+    "status": "pass",
+    "productionCli": "All scenarios build and exercise the real ./cmd binary; SC-4 independently builds HEAD and master from git archive.",
+    "fixtures": "All synthetic archives are reopened and validated; SC-1 proves fresh PG19 identity, stable active stats_reset, NULL untouched stats_reset, three ticks, and readable reports before classification.",
+    "replay": "SC-2 proves mixed-version readability and known deltas; SC-10 validates all layout fixtures and same-layout controls before boundary assertions.",
+    "providers": "Not applicable: no external providers, DTOs, or recorded provider baselines.",
+    "sanitization": "Final logs pass sanitize.py; raw archives/transcripts/build logs are trap-deleted from restrictive external temporary directories."
+  },
+  "recorded_baselines": [],
+  "repairAttempts": [
+    "acceptance/runs/base-attempt-1/result.json",
+    "acceptance/runs/base-attempt-2/result.json",
+    "acceptance/runs/base-attempt-3-dirty/result.json"
+  ],
+  "reviewerReport": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-freeze-review.json",
+  "reviewerVerdict": "approved"
+}

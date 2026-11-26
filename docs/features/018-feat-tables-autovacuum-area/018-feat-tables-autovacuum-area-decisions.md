@@ -4,6 +4,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Acceptance harness freeze
+
+**Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
+**Deviations:** No recorded baselines or external providers apply. The first run labelled `base` was preserved as `base-attempt-3-dirty` after Python bytecode made its tree dirty; bytecode generation was disabled and the final `base` rerun passed cleanly.
+**Tech debt:** None added by the harness. Existing report exit-code debt [034] is handled by output assertions rather than misclassified as feature absence.
+**Verification:** `acceptance/runs/base/result.json`, `acceptance/runs/base/readiness.json`, `acceptance/freeze.json`, manifest digest `94bf65bf1fb2a1a92de6d1722a1feb15b4af9a57a2e8c26588921544b08d3e6d`, and `018-feat-tables-autovacuum-area-acceptance-freeze-review.json`. Earlier attempts and sanitized repair evidence are preserved under `acceptance/runs/`.
+
+---
+
 ## Phase: Decomposition
 
 **Summary:** Approved six implementation/documentation tasks in four waves. Tasks 01/02 build independent query layers; Task 03 registers views and truthful recording exclusions; Tasks 04/05 independently cover replay and TUI; Task 06 reconciles documentation. The Acceptance Execution Map covers SC-1–SC-4 and SC-10, with SC-5–SC-9 explicitly manual. This decomposition phase owns harness creation and freeze; freeze-qa owns the post-implementation `feature-r1` execution.

@@ -1,0 +1,2 @@
+assertion=failed reason=untouched fixture untouched_table_stats_reset became populated
+ACC_RESULT origin=expectation checkpoint=live_recording_contract_violation

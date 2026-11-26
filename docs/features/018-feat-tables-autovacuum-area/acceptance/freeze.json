@@ -1,0 +1,13 @@
+{
+  "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/result.json",
+  "sha": "44c953532a043de5de847f679df27b65c019a408",
+  "manifest": {
+    "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+    "sha256": "94bf65bf1fb2a1a92de6d1722a1feb15b4af9a57a2e8c26588921544b08d3e6d"
+  },
+  "readiness": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/readiness.json",
+  "recorded_baselines": [],
+  "reviewer_report": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-freeze-review.json",
+  "verdict": "ready",
+  "created": "2026-11-26T06:20:48Z"
+}

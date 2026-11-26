@@ -1,0 +1,260 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "mode": "freeze",
+  "reviewDepth": "strong",
+  "status": "approved",
+  "verdict": "approved",
+  "freezeAllowed": true,
+  "summary": "The complete scripted harness is semantically ready to freeze. All five scenarios use the production CLI, their feature-mode assertions are reachable and discriminating, the two regressions pass on the clean base, and all three new scenarios reach exactly their approved feature-missing checkpoints only after their fixture and positive-control checks pass. No unresolved semantic, readiness, integrity, or sanitization finding remains.",
+  "base": {
+    "sha": "44c953532a043de5de847f679df27b65c019a408",
+    "dirty": false,
+    "manifestValid": true,
+    "scenarioCount": 5,
+    "expectedFailureCount": 3,
+    "regressionPassCount": 2,
+    "result": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/result.json"
+  },
+  "findingCounts": {
+    "total": 0,
+    "blocker": 0,
+    "major": 0,
+    "minor": 0
+  },
+  "findings": [],
+  "readinessChecks": [
+    {
+      "id": "approved-contract-and-coverage",
+      "status": "pass",
+      "summary": "The approved user spec, tech spec, decomposition, and Decisions 9-12 agree on the scripted SC-1/SC-2/SC-3/SC-4/SC-10 scope, AC ownership, base outcomes, manual SC-5-SC-9 boundary, and independent AC-32 quality gate. No manual or structural-only criterion is misrepresented as scripted coverage.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-tech-spec.md",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decisions.md"
+      ]
+    },
+    {
+      "id": "manifest-completeness-and-integrity",
+      "status": "pass",
+      "summary": "The manifest contains exactly all five scenario scripts and all four shared libraries, including fixture generation, report assertions, common process/result handling, and sanitization. LC_ALL=C sha256sum -c validated all nine entries; bash -n accepted all six Bash files; Python AST parsing accepted all three Python files. No __pycache__ is present.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/manifest.log"
+      ]
+    },
+    {
+      "id": "production-cli-and-process-contract",
+      "status": "pass",
+      "summary": "SC-1/SC-2/SC-3/SC-10 build ./cmd and invoke its real record/report/describe commands. SC-4 independently archives and builds HEAD and the validated master ref into separate source trees and binaries, with -buildvcs=false. Commands and builds are bounded by timeout; setup readiness is bounded; traps normalize missing results and unexpected exits; final exit codes, origins, checkpoints, and result.json records agree.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-4.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/result.json"
+      ]
+    },
+    {
+      "id": "fixture-schema-and-public-identifiers",
+      "status": "pass",
+      "summary": "Synthetic PGresult JSON uses the production Values/Cols/Ncols/Nrows/Valid shape and sql.NullString-compatible String/Valid cells. Generators independently reopen and validate every member, reject malformed/duplicate/ragged entries, and check declared dimensions and readable rows. Public row identities use schemaname.relation and schemaname.relation.index; no internal relid is confused with a public identity. Metadata and filename timestamps are valid and bounds bracket every sample.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/fixtures.py",
+        "internal/stat/postgres.go",
+        "report/report.go"
+      ]
+    },
+    {
+      "id": "base-checkpoints-and-error-transparency",
+      "status": "pass",
+      "summary": "The final base emits exactly pg19_stats_age_report_unavailable, relation_stats_age_descriptions_missing, and same_pg19_layout_change_unsupported for SC-1/SC-3/SC-10, each with exit=1, origin=feature_missing, and contractValid=true. SC-2 and SC-4 end 0/pass/complete. Archive validation, live-fixture validation, readable legacy/mixed reports, and same-layout controls run before the corresponding checkpoint. Final logs contain no traceback, panic, parser/diff failure, SQL/connection/DNS/TLS/tooling signature, unexpected_exit, or missing_scenario_result. Assertion/helper failures have non-pass outcomes and cannot be converted into an approved base checkpoint.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-2.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-3.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-4.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-10.log"
+      ]
+    },
+    {
+      "id": "decision-12-evidence-and-cleanup",
+      "status": "pass",
+      "summary": "Raw archives, transcripts, command output, and build logs remain in a mode-0700 mktemp directory outside Git and are removed by the EXIT trap; containers are also removed. Published logs contain only minimized assertions, observations/hashes, and markers. Every final base log passed sanitize.py check, and no /tmp/pgcenter-acc018-* artifact remained at review time. Credential-like values and unsafe controls are rejected. No raw archive, environment dump, unredacted SQL capture, credential, or session transcript is present in acceptance/runs.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/sanitize.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base"
+      ]
+    },
+    {
+      "id": "provider-and-polling-applicability",
+      "status": "pass",
+      "summary": "There are no external providers, recorded provider baselines, or provider DTOs to validate. Direct production CLI conformance is therefore the correct and complete protocol. PostgreSQL readiness and recording are deterministic and bounded; exactly three recorded ticks are required. No asynchronous terminal provider state is left unclassified.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh"
+      ]
+    },
+    {
+      "id": "repair-history-not-hidden",
+      "status": "pass",
+      "summary": "Attempt 1 remains visibly invalid: SC-1 rejected a populated untouched fixture and SC-4 failed the archived build. The committed repair creates untouched relations only after pg_stat_reset and never reads/writes them, and adds -buildvcs=false plus sanitized build diagnostics. Attempt 2 is clean and semantically valid but is not the final evidence label. The b92e... run labelled base with dirty=true is preserved only as base-attempt-3-dirty and is not accepted. The final 44c953... change adds PYTHONDONTWRITEBYTECODE=1 and reruns all scenarios clean with a valid manifest. Thus neither earlier defects nor the dirty run are hidden behind the final result.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-1/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-1/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-1/SC-4.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-3-dirty/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/result.json",
+        "git diff 3279fe6657b5230cf3be43257be9da7fd406b5b8..b92e9a89c59387433f5fa0333ef10281b1317028",
+        "git diff b92e9a89c59387433f5fa0333ef10281b1317028..44c953532a043de5de847f679df27b65c019a408"
+      ]
+    }
+  ],
+  "scenarioSemantics": [
+    {
+      "id": "SC-1",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-21", "AC-22", "AC-26", "AC-27", "AC-28", "AC-31"],
+      "featurePathReachable": true,
+      "semanticVerdict": "pass",
+      "summary": "A dedicated disposable PG19 container and fresh acc018 database contain chosen active and untouched tables/indexes. The active relations are exercised after pg_stat_reset; untouched relations are created only afterwards. Pre/post DB JSON proves PG19, database identity, stable active stats_reset values, and NULL untouched values. Host-before/host-after readings bracket each DB clock. Feature mode requires exact trailing NEW layouts, two diffed samples from exactly three real record ticks, non-empty second-precision active durations within DB-derived +/-1 second bounds, growth matching elapsed report time within one second, and blank untouched cells. The tar assertion rejects every autovacuum_scores member. Sanitized record INFO must name autovacuum_scores and contain both not recordable and live TUI only, while version/unsupported explanations for that exclusion are rejected. Base mode first proves the same fixture and readable old reports, then emits only the approved checkpoint.",
+      "positiveControls": [
+        "Real PG19 and fresh-database identity checks",
+        "Active/untouched stats_reset stability and NULL checks before classification",
+        "Exactly three tables/indexes/meta/sysinfo ticks and zero autovacuum_scores members",
+        "Two readable old-layout reports on base before feature_missing"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-1.log"
+      ]
+    },
+    {
+      "id": "SC-2",
+      "kind": "regression",
+      "acceptanceCriteria": ["AC-33"],
+      "featurePathReachable": true,
+      "semanticVerdict": "pass",
+      "summary": "Both tables and indexes archives contain two PG18 ticks followed by two PG19 ticks. The base uses the old PG19 layout and must pass; the feature capability discriminator selects the new PG19 layout only when both exact describe capabilities are present, rejects a one-sided capability state, and validates the full descriptions. Thus the intended feature path exercises NEW PG19 fixtures rather than weakening AC-33 to old-only replay. Assertions require exactly two readable diffed samples at ticks 1 and 3, exact version-specific headers, known seq_scan/scan deltas, requested descending row order, recomputed metric widths, no truncation, and—for the new layout—trailing populated stats_age values and width. Nonzero report status and panic/parser/diff/zero-width diagnostics fail the regression.",
+      "positiveControls": [
+        "Independent fixture generation and revalidation for both screens",
+        "Exact describe validation and consistent two-screen capability check",
+        "Base old-PG19 replay proves archive readability and version-boundary handling",
+        "Known metric deltas, row order, widths, and timestamps make entries_read claims substantive"
+      ],
+      "baseExpected": "exit=0 origin=pass checkpoint=complete",
+      "baseObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-2.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-2.log"
+      ]
+    },
+    {
+      "id": "SC-3",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-36"],
+      "featurePathReachable": true,
+      "semanticVerdict": "pass",
+      "summary": "The actual built binary runs report -d -T and report -d -I. Feature assertions require exactly one correctly tab-separated stats_age line per screen, stats_reset origin, exact PG19+ wording, adjacency after the previous final legacy column, and a following blank line proving it is the final description. One-sided descriptions fail as inconsistent. On base, both legacy tails must still be readable and both stats_age lines absent before the approved feature-missing marker.",
+      "positiveControls": [
+        "Both describe commands must exit zero and pass sanitization",
+        "Legacy description tails are asserted on base",
+        "Feature mode checks exact content and placement, not substring presence alone"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-3.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-3.log"
+      ]
+    },
+    {
+      "id": "SC-4",
+      "kind": "regression",
+      "acceptanceCriteria": ["AC-23", "AC-29", "AC-30"],
+      "featurePathReachable": true,
+      "semanticVerdict": "pass",
+      "summary": "HEAD and master are independently exported with git archive and built in separate source directories, avoiding working-tree and VCS-metadata coupling. Identical validated PG17 and PG18 archives are replayed through report -T/-I/-F/-S by both binaries. Every output must independently satisfy exact legacy headers, known metric deltas, two rows, and clean status before cmp requires byte equality. This detects common wrong output as well as A/B drift; structural query/Ncols checks correctly remain implementation-test responsibilities rather than being claimed here.",
+      "positiveControls": [
+        "Two independently built archived refs",
+        "Sixteen current and sixteen master report positive controls across two versions and four screens",
+        "Known tables/indexes/functions/sizes deltas and legacy headers",
+        "Byte-for-byte cmp after both sides pass semantic controls"
+      ],
+      "baseExpected": "exit=0 origin=pass checkpoint=complete",
+      "baseObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-4.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-4.log"
+      ]
+    },
+    {
+      "id": "SC-10",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-41"],
+      "featurePathReachable": true,
+      "semanticVerdict": "pass",
+      "summary": "The scenario generates, validates, and executes the complete 2 screens x 2 directions x blank/populated matrix, with four ticks per archive (two per layout) and -o stats_age --desc. Feature assertions require exactly two diffed samples at ticks 1 and 3, proving the first sample after the tick-2 layout boundary is not diffed. Both samples have exact layout-specific headers and known 10/20 then 30/40 metric deltas. New-layout segments assert blank or populated ages and recomputed trailing widths; old-layout segments exclude stats_age. Old-to-new ordering proves the requested key resolves at its new index; new-to-old ordering proves removal restores seed/default relation-descending order. No-truncation and width checks cover stale renderer state. Eight same-layout controls run in feature mode; four old-layout controls prove base readability. Base classification separately recognizes the precise known old-to-new populated zero-width stop and the other stale-layout behaviors, rejecting any deviation before the single approved checkpoint.",
+      "positiveControls": [
+        "Eight layout fixtures plus eight control fixtures generated and independently validated",
+        "Feature mode runs old/new x blank/populated same-layout controls for both screens",
+        "Base runs readable old-layout blank/populated controls for both screens",
+        "Exact timestamps, no-diff boundary, metric deltas, headers, widths, age visibility, and sort-sensitive order"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-10.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/fixtures.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-10.log"
+      ]
+    }
+  ],
+  "staticVerification": [
+    "git rev-parse HEAD => 44c953532a043de5de847f679df27b65c019a408",
+    "LC_ALL=C sha256sum -c scenario-manifest.sha256 => 9/9 OK",
+    "bash -n SC-1.sh SC-2.sh SC-3.sh SC-4.sh SC-10.sh lib/common.sh => pass",
+    "ast.parse fixtures.py reports.py sanitize.py => pass",
+    "JSON parsing and five-unique-scenario checks for all four result.json files => pass",
+    "sanitize.py check over every final base log => pass",
+    "Search for panic/traceback/parser/SQL/connection/DNS/TLS/unexpected-exit signatures across all attempt and final logs => no matches",
+    "No acceptance __pycache__ and no remaining /tmp/pgcenter-acc018-* temporary artifact",
+    "No product code or acceptance harness file was edited during this review"
+  ],
+  "evidencePaths": {
+    "harness": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-2.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-3.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-4.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-10.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/fixtures.py",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/sanitize.py",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256"
+    ],
+    "finalBase": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/result.json",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/manifest.log",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-1.log",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-2.log",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-3.log",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-4.log",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-10.log"
+    ],
+    "priorAttempts": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-1",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-2",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-attempt-3-dirty"
+    ]
+  },
+  "blockingActions": []
+}

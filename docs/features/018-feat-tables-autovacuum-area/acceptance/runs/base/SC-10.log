@@ -1,0 +1,45 @@
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+assertion=pass control=tables/old/blank samples=1
+assertion=pass control=tables/old/populated samples=1
+assertion=pass control=indexes/old/blank samples=1
+assertion=pass control=indexes/old/populated samples=1
+ACC_OBSERVATION name=layout_tables_old-to-new_blank sha256=3817af1d78538b50fdf69e7c20b0fb2c6a3ec8f34433b86e00e94c4e9280c1d7
+ACC_OBSERVATION name=layout_tables_old-to-new_populated sha256=74620f398bad1af8aa8230e80fe578a957451dbe0b31d312b1d0314647659abf
+ACC_OBSERVATION name=layout_tables_new-to-old_blank sha256=7ae960dc3b699c5167fb258301109ed57bd0a7aa4464b4d2ab74bcada57ce099
+ACC_OBSERVATION name=layout_tables_new-to-old_populated sha256=9b8c5f48cf989db17ceab93ab36339f1112a06c941842a4d41114301b4de8b47
+ACC_OBSERVATION name=layout_indexes_old-to-new_blank sha256=621773f217ec1033e2e5f2a297fac8c6d28fbd332eb75302024db96dd23824bf
+ACC_OBSERVATION name=layout_indexes_old-to-new_populated sha256=39140e748d31439f4eba4a75906b8aaa3ad583cb5dfa9ad7dd1dd6366db2303f
+ACC_OBSERVATION name=layout_indexes_new-to-old_blank sha256=043126f90fb07379a960b6bdd020a14a22508d76ce25b6682d1b963dccff2428
+ACC_OBSERVATION name=layout_indexes_new-to-old_populated sha256=dada27634a6399098fbbd314ee1edfbb990a5d4c6c4cb0684e7625ef21ed234d
+ACC_RESULT origin=feature_missing checkpoint=same_pg19_layout_change_unsupported
