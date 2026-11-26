@@ -48,6 +48,7 @@ func keybindingsList(app *app) []key {
 		{"sysstat", 'r', switchViewTo(app, "replication")},
 		{"sysstat", 'o', switchViewTo(app, "replslots")},
 		{"sysstat", 't', switchViewTo(app, "tables")},
+		{"sysstat", 'T', menuOpen(menuTables, app.config, "")},
 		{"sysstat", 'i', switchViewTo(app, "indexes")},
 		{"sysstat", 's', switchViewTo(app, "sizes")},
 		{"sysstat", 'f', switchViewTo(app, "functions")},

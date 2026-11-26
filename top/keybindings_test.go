@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -139,5 +140,101 @@ func Test_keybindingsWALCycles(t *testing.T) {
 		assert.Equal(t, "archiver", v.Name)
 	case <-time.After(time.Second):
 		t.Fatal("'w' did not send the next view on viewCh")
+	}
+}
+
+func Test_keybindingsTables(t *testing.T) {
+	for _, k := range []rune{'T', 't'} {
+		t.Run("registered on sysstat exactly once: "+string(k), func(t *testing.T) {
+			app := newKeybindingsApp(t)
+
+			assert.NoError(t, app.ui.DeleteKeybinding("sysstat", k, gocui.ModNone))
+
+			err := app.ui.DeleteKeybinding("sysstat", k, gocui.ModNone)
+			require.Error(t, err)
+			assert.Equal(t, "keybinding not found", err.Error())
+		})
+
+		t.Run("not claimed by any other view: "+string(k), func(t *testing.T) {
+			for _, viewname := range []string{"", "menu", "dialog", "help"} {
+				app := newKeybindingsApp(t)
+
+				err := app.ui.DeleteKeybinding(viewname, k, gocui.ModNone)
+				require.Error(t, err, "view %q must not bind %q", viewname, k)
+				assert.Equal(t, "keybinding not found", err.Error())
+			}
+		})
+	}
+}
+
+func Test_keybindingsTablesOpensMenu(t *testing.T) {
+	testcases := []struct {
+		name    string
+		version int
+		items   []string
+	}{
+		{
+			name:    "below PG 19",
+			version: query.PostgresV18,
+			items:   []string{" pg_stat_user_tables", " pg_stat_autovacuum_scores — requires PostgreSQL 19"},
+		},
+		{
+			name:    "PG 19",
+			version: query.PostgresV19,
+			items:   []string{" pg_stat_user_tables", " pg_stat_autovacuum_scores"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &app{config: newConfig(), ui: &gocui.Gui{}}
+			app.postgresProps.VersionNum = tc.version
+			app.config.queryOptions.Version = tc.version
+
+			require.NoError(t, boundHandler(t, app, "sysstat", 'T')(app.ui, nil))
+
+			assert.Equal(t, menuTables, app.config.menu.menuType)
+			assert.Equal(t, " Choose tables mode (Enter to choose, Esc to exit): ", app.config.menu.title)
+			assert.Equal(t, tc.items, app.config.menu.items)
+
+			mv, err := app.ui.View("menu")
+			require.NoError(t, err)
+			assert.Equal(t, app.config.menu.title, mv.Title)
+			for _, item := range app.config.menu.items {
+				assert.Contains(t, mv.Buffer(), item)
+			}
+		})
+	}
+}
+
+func Test_keybindingsTablesCycles(t *testing.T) {
+	testcases := []struct {
+		name    string
+		current string
+		version int
+		want    string
+	}{
+		{name: "PG 19 tables to scores", current: "tables", version: query.PostgresV19, want: "autovacuum_scores"},
+		{name: "PG 19 scores to tables", current: "autovacuum_scores", version: query.PostgresV19, want: "tables"},
+		{name: "PG 18 tables stays on tables", current: "tables", version: query.PostgresV18, want: "tables"},
+		{name: "unrelated view opens tables", current: "activity", version: query.PostgresV19, want: "tables"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &app{config: newConfig(), ui: &gocui.Gui{}}
+			app.config.viewCh = make(chan view.View, 1)
+			app.config.view = app.config.views[tc.current]
+			app.postgresProps.VersionNum = tc.version
+
+			require.NoError(t, boundHandler(t, app, "sysstat", 't')(app.ui, nil))
+
+			select {
+			case got := <-app.config.viewCh:
+				assert.Equal(t, tc.want, got.Name)
+			default:
+				t.Fatal("'t' did not send the next view on viewCh")
+			}
+		})
 	}
 }

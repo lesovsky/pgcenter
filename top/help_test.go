@@ -168,3 +168,17 @@ func Test_helpTemplate_formatVerbs(t *testing.T) {
 	assert.NotContains(t, rendered, "(MISSING)")
 	assert.NotContains(t, rendered, "(EXTRA")
 }
+
+func Test_helpTemplate_tablesEntry(t *testing.T) {
+	entryIdx, entry := helpEntryLine(t, "'t' ")
+	walIdx, wal := helpEntryLine(t, "'w' ")
+	procIdx, _ := helpEntryLine(t, "'S' per-process system stats")
+	_, sizes := helpEntryLine(t, "'s' tables sizes")
+
+	assert.True(t, strings.HasPrefix(entry, "    t,T"), "entry line is %q", entry)
+	assert.Equal(t, "'t' tables/autovacuum scores switch, 'T' tables menu.", entry[descColumn(entry):])
+	assert.Equal(t, walIdx+1, entryIdx)
+	assert.Equal(t, entryIdx+1, procIdx)
+	assert.Equal(t, descColumn(wal), descColumn(entry))
+	assert.NotContains(t, sizes, "'t' tables,")
+}

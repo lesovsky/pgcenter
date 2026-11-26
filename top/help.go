@@ -12,12 +12,13 @@ const (
 general actions:
     a,b,f,o     mode: 'a' activity, 'b' bgwriter/checkpointer, 'f' functions, 'o' replication slots,
     r                 'r' replication,
-    s,t,i             's' tables sizes, 't' tables, 'i' indexes.
+    s,t,i             's' tables sizes, 'i' indexes.
     d,D               'd' pg_stat_database switch, 'D' pg_stat_database menu.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
     p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
     j,J               'j' pg_stat_io switch (operations/timings), 'J' pg_stat_io menu.
     w,W               'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.
+    t,T               't' tables/autovacuum scores switch, 'T' tables menu.
     S                 'S' per-process system stats (local mode only; Shift+S).
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     \                 '\' clear all filters of the current screen.

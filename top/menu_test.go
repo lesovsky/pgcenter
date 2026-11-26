@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,11 +23,44 @@ func Test_selectMenuStyle(t *testing.T) {
 		{menu: menuConf, want: 4},
 		{menu: menuStatIO, want: 2},
 		{menu: menuWAL, want: 2},
+		{menu: menuTables, want: 2},
 	}
 
 	for _, tc := range testcases {
-		got := selectMenuStyle(tc.menu)
+		got := selectMenuStyle(tc.menu, 0)
 		assert.Equal(t, tc.want, len(got.items))
+	}
+}
+
+func Test_menuTablesVersionLabels(t *testing.T) {
+	testcases := []struct {
+		name    string
+		version int
+		want    []string
+	}{
+		{
+			name:    "below PG 19",
+			version: query.PostgresV18,
+			want:    []string{" pg_stat_user_tables", " pg_stat_autovacuum_scores — requires PostgreSQL 19"},
+		},
+		{
+			name:    "PG 19",
+			version: query.PostgresV19,
+			want:    []string{" pg_stat_user_tables", " pg_stat_autovacuum_scores"},
+		},
+		{
+			name:    "above PG 19",
+			version: 200000,
+			want:    []string{" pg_stat_user_tables", " pg_stat_autovacuum_scores"},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := selectMenuStyle(menuTables, tc.version)
+			assert.Equal(t, menuTables, got.menuType)
+			assert.Equal(t, tc.want, got.items)
+		})
 	}
 }
 
@@ -73,7 +107,7 @@ func Test_menuSelectWAL(t *testing.T) {
 
 			app := &app{config: newConfig(), ui: g}
 			app.config.view = app.config.views["activity"]
-			app.config.menu = selectMenuStyle(menuWAL)
+			app.config.menu = selectMenuStyle(menuWAL, 0)
 
 			received := make(chan view.View, 1)
 			go func() { received <- <-app.config.viewCh }()
@@ -92,3 +126,59 @@ func Test_menuSelectWAL(t *testing.T) {
 		})
 	}
 }
+
+func Test_menuSelectTables(t *testing.T) {
+	testcases := []struct {
+		name     string
+		version  int
+		cy       int
+		want     string
+		wantSend bool
+	}{
+		{name: "PG 19 first item", version: query.PostgresV19, cy: 0, want: "tables", wantSend: true},
+		{name: "PG 19 second item", version: query.PostgresV19, cy: 1, want: "autovacuum_scores", wantSend: true},
+		{name: "PG 19 out of range", version: query.PostgresV19, cy: 5, want: "tables", wantSend: true},
+		{name: "PG 18 disabled second item", version: query.PostgresV18, cy: 1, want: "activity"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			g := &gocui.Gui{}
+
+			_, err := g.SetView("sysstat", 0, 0, 20, 20)
+			require.Equal(t, gocui.ErrUnknownView, err)
+
+			mv, err := g.SetView("menu", 0, 5, 72, 20)
+			require.Equal(t, gocui.ErrUnknownView, err)
+			require.NoError(t, mv.SetCursor(0, tc.cy))
+
+			app := &app{config: newConfig(), ui: g}
+			app.config.viewCh = make(chan view.View, 1)
+			app.config.view = app.config.views["activity"]
+			app.config.menu = selectMenuStyle(menuTables, tc.version)
+			app.postgresProps.VersionNum = tc.version
+			original := app.config.view
+
+			assert.NoError(t, menuSelect(app)(g, mv))
+
+			select {
+			case got := <-app.config.viewCh:
+				assert.True(t, tc.wantSend, "disabled menu item sent a view change")
+				assert.Equal(t, tc.want, got.Name)
+			default:
+				assert.False(t, tc.wantSend, "enabled menu item did not send a view change")
+			}
+
+			assert.Equal(t, tc.want, app.config.view.Name)
+			if !tc.wantSend {
+				assert.Equal(t, original, app.config.view)
+			}
+			assert.Equal(t, menuNone, app.config.menu.menuType)
+			_, err = g.View("menu")
+			assert.Equal(t, gocui.ErrUnknownView, err, "selected menu must be closed")
+		})
+	}
+}
+
+// The refusal NOTICE and exactly-once rendering are not observable through printCmdline's g.Update
+// seam in this unit test. They remain branch-review and manual SC-5/SC-7 checks.
