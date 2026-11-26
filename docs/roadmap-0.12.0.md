@@ -341,8 +341,9 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [018] Tables and autovacuum area — one pass
 
-- **Status:** user-spec and tech-spec approved for the Kimi SDLC; ready for decomposition in a fresh
-  session. No product implementation, task decomposition, or acceptance freeze has started.
+- **Status:** implementation and acceptance-harness freeze are complete; all six tasks are integrated.
+  The post-wave-4 `feature-r1` scripted run and manual SC-5–SC-8 remain pending, so final acceptance
+  is not claimed.
 - **Value:** `pg_stat_autovacuum_scores` is **the most valuable new view in PG 19** for this
   audience — per-table autovacuum detail: why autovacuum is not visiting a table and what its
   priority is. DBAs currently reconstruct this by hand from `n_dead_tup`, `reltuples` and the
@@ -350,20 +351,21 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 - **Scope:**
   - New `autovacuum_scores` view (PG 19+), column set settled in the spec against the **actual
     catalog**, not the release notes.
-  - **PG 19:** `stats_reset` → a `stats_age` column on the `tables`, `indexes` and `functions`
-    screens, reusing the established `stats_age` pattern (not diffed, excluded from `DiffIntvl`).
+  - **PG 19:** `stats_reset` → a `stats_age` column on the `tables` and `indexes` screens, reusing
+    the established `stats_age` pattern (not diffed, excluded from `DiffIntvl`). The `functions`
+    screen is explicitly unchanged.
   - `NotRecordable: true` for `autovacuum_scores` per the cross-cutting policy.
-- **Why these are together:** both touch the tables/indexes/functions screen family. If
-  `autovacuum_scores` hangs off a `t`-group cycle (the option preferred below), it is literally the
-  same hotkey group as the screens gaining `stats_age`.
-- **Product decisions for the spec:**
-  - Hotkey: prefer a **cycle off the existing `t`** (`tables → autovacuum_scores`) with `T` as the
-    menu, by the [006] `j`/`J` precedent, rather than burning one of the few free letters (`e`, `g`,
-    `u`, `y`).
-  - `MinRequiredVersion PostgresV19`; older versions report "not supported" via the existing runtime
-    version guard.
+- **Why these are together:** both touch the tables/indexes screen family. `autovacuum_scores` shares
+  the `t` hotkey group with `tables`, one of the screens gaining `stats_age`.
+- **Product decisions:**
+  - On PG 19+, `t` cycles `tables ↔ autovacuum_scores` and `T` opens the two-item menu, following the
+    [006] `j`/`J` precedent. From another screen, `t` opens `tables` as before.
+  - `MinRequiredVersion PostgresV19` gates the view. Below PG 19, `t` preserves the legacy `tables`
+    behavior; the `T` menu keeps the new item visible with `— requires PostgreSQL 19`, and selecting
+    the disabled item prints an explanation without switching screens or emitting the old
+    unsupported-statistics error.
 - **Plumbing:** new `internal/query/autovacuum_scores.go`; multi-row view model shared with `tables`.
-  `stats_age` additions touch `tables.go`, `indexes.go`, `functions.go` and their report layouts.
+  `stats_age` additions touch `tables.go`, `indexes.go` and their report layouts.
 
 ### [019] Replication and recovery area — one pass
 
