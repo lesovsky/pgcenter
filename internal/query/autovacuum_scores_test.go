@@ -59,6 +59,13 @@ func Test_StatAutovacuumScoresQuery_Structure(t *testing.T) {
 		assert.NotContains(t, PgStatAutovacuumScoresDefault, " AS relid", "relid is internal join evidence only")
 	})
 
+	t.Run("outer relation expression", func(t *testing.T) {
+		assert.Contains(t, PgStatAutovacuumScoresDefault,
+			"SELECT s.schemaname || '.' || s.relname AS relation")
+		assert.NotContains(t, PgStatAutovacuumScoresDefault,
+			"SELECT a.schemaname || '.' || a.relname AS relation")
+	})
+
 	t.Run("outer left join", func(t *testing.T) {
 		assert.Contains(t, PgStatAutovacuumScoresDefault,
 			"FROM pg_stat_autovacuum_scores s LEFT JOIN pg_stat_all_tables a ON s.relid = a.relid ")
@@ -356,6 +363,9 @@ func connectAutovacuumScoresFixture(t *testing.T) *postgres.DB {
 	conn, err := postgres.NewTestConnectVersion(PostgresV19)
 	if err != nil {
 		assert.NotContains(t, err.Error(), "no test cluster port mapping")
+		if os.Getenv(autovacuumWraparoundDedicatedEnv) == "1" {
+			t.Fatalf("dedicated postgres 19 connection failed: %s", err)
+		}
 		t.Skipf("postgres 19 not available in test environment: %s", err)
 	}
 	return conn
