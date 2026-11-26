@@ -104,6 +104,19 @@ func New() Views {
 			Msg:       "Show indexes statistics",
 			Filters:   map[int]*regexp.Regexp{},
 		},
+		"autovacuum_scores": {
+			Name:               "autovacuum_scores",
+			MinRequiredVersion: query.PostgresV19,
+			QueryTmpl:          query.PgStatAutovacuumScoresDefault,
+			DiffIntvl:          [2]int{0, 0},
+			Ncols:              11,
+			OrderKey:           1,
+			OrderDesc:          true,
+			ColsWidth:          map[int]int{},
+			Msg:                "Show autovacuum scores",
+			Filters:            map[int]*regexp.Regexp{},
+			NotRecordable:      true,
+		},
 		"sizes": {
 			Name:      "sizes",
 			QueryTmpl: query.PgTablesSizesDefault,
@@ -391,6 +404,18 @@ func (v Views) Configure(opts query.Options) error {
 			v[k] = view
 		case "databases_general":
 			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatDatabaseGeneralQuery(opts.Version)
+			v[k] = view
+		case "tables":
+			// Load-bearing on PG 19: the static entry intentionally keeps the PG 18-and-older
+			// layout, while the selector widens Ncols so the trailing stats_age stays sortable.
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatTablesQuery(opts.Version)
+			v[k] = view
+		case "indexes":
+			// Load-bearing for the same PG 19 layout change as tables, not a drift-only guard.
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatIndexesQuery(opts.Version)
+			v[k] = view
+		case "autovacuum_scores":
+			view.QueryTmpl, view.Ncols, view.DiffIntvl = query.SelectStatAutovacuumScoresQuery(opts.Version)
 			v[k] = view
 		case "statements_timings":
 			view.QueryTmpl = query.SelectStatStatementsTimingQuery(opts.Version)

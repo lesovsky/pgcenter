@@ -1,6 +1,7 @@
 package view
 
 import (
+	"fmt"
 	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/stretchr/testify/assert"
 	"testing"
@@ -8,7 +9,90 @@ import (
 
 func TestNew(t *testing.T) {
 	v := New()
-	assert.Equal(t, 28, len(v)) // 28 is the total number of views have to be returned
+	assert.Equal(t, 29, len(v)) // 29 is the total number of views have to be returned
+}
+
+func TestNew_AutovacuumScoresView(t *testing.T) {
+	views := New()
+	autovacuum, ok := views["autovacuum_scores"]
+	assert.True(t, ok)
+	assert.Equal(t, "autovacuum_scores", autovacuum.Name)
+	assert.Equal(t, "Show autovacuum scores", autovacuum.Msg)
+	assert.Equal(t, query.PgStatAutovacuumScoresDefault, autovacuum.QueryTmpl)
+	assert.Equal(t, 11, autovacuum.Ncols)
+	assert.Equal(t, [2]int{0, 0}, autovacuum.DiffIntvl)
+	assert.Equal(t, 1, autovacuum.OrderKey)
+	assert.True(t, autovacuum.OrderDesc)
+	assert.Equal(t, 0, autovacuum.UniqueKey)
+	assert.True(t, autovacuum.NotRecordable)
+	assert.Equal(t, query.PostgresV19, autovacuum.MinRequiredVersion)
+	assert.NotNil(t, autovacuum.ColsWidth)
+	assert.NotNil(t, autovacuum.Filters)
+	assert.False(t, autovacuum.VersionOK(query.PostgresV18))
+	assert.True(t, autovacuum.VersionOK(query.PostgresV19))
+}
+
+func TestNew_TablesIndexesAndNegativeScreens(t *testing.T) {
+	views := New()
+	assert.Equal(t, query.PgStatTablesDefault, views["tables"].QueryTmpl)
+	assert.Equal(t, 19, views["tables"].Ncols)
+	assert.Equal(t, [2]int{1, 18}, views["tables"].DiffIntvl)
+	assert.Equal(t, query.PgStatIndexesDefault, views["indexes"].QueryTmpl)
+	assert.Equal(t, 6, views["indexes"].Ncols)
+	assert.Equal(t, [2]int{1, 5}, views["indexes"].DiffIntvl)
+	assertNegativeScreensUnchanged(t, views)
+}
+
+func TestViews_ConfigureTablesIndexesAutovacuum(t *testing.T) {
+	for _, version := range []int{query.PostgresV18, query.PostgresV19} {
+		t.Run(fmt.Sprintf("PG%d", version/10000), func(t *testing.T) {
+			views := New()
+			opts := query.NewOptions(version, "f", "off", 0, "public")
+			assert.NoError(t, views.Configure(opts))
+
+			autovacuum := views["autovacuum_scores"]
+			assert.Equal(t, query.PgStatAutovacuumScoresDefault, autovacuum.QueryTmpl)
+			assert.Equal(t, 11, autovacuum.Ncols)
+			assert.Equal(t, [2]int{0, 0}, autovacuum.DiffIntvl)
+			assert.Equal(t, 1, autovacuum.OrderKey)
+			assert.True(t, autovacuum.OrderDesc)
+			assert.Equal(t, query.PostgresV19, autovacuum.MinRequiredVersion)
+			assert.Equal(t, "Show autovacuum scores", autovacuum.Msg)
+			assert.NotNil(t, autovacuum.ColsWidth)
+			assert.NotNil(t, autovacuum.Filters)
+
+			tables := views["tables"]
+			indexes := views["indexes"]
+			if version >= query.PostgresV19 {
+				assert.Equal(t, query.PgStatTablesPG19, tables.QueryTmpl)
+				assert.Equal(t, 20, tables.Ncols)
+				assert.Equal(t, query.PgStatIndexesPG19, indexes.QueryTmpl)
+				assert.Equal(t, 7, indexes.Ncols)
+			} else {
+				assert.Equal(t, query.PgStatTablesDefault, tables.QueryTmpl)
+				assert.Equal(t, 19, tables.Ncols)
+				assert.Equal(t, query.PgStatIndexesDefault, indexes.QueryTmpl)
+				assert.Equal(t, 6, indexes.Ncols)
+			}
+			assert.Equal(t, [2]int{1, 18}, tables.DiffIntvl)
+			assert.Equal(t, [2]int{1, 5}, indexes.DiffIntvl)
+			assert.Less(t, tables.DiffIntvl[1], 19)
+			assert.Less(t, indexes.DiffIntvl[1], 6)
+			assertNegativeScreensUnchanged(t, views)
+		})
+	}
+}
+
+func assertNegativeScreensUnchanged(t *testing.T, views Views) {
+	t.Helper()
+	functions := views["functions"]
+	assert.Equal(t, query.PgStatFunctionsDefault, functions.QueryTmpl)
+	assert.Equal(t, 8, functions.Ncols)
+	assert.Equal(t, [2]int{3, 3}, functions.DiffIntvl)
+	sizes := views["sizes"]
+	assert.Equal(t, query.PgTablesSizesDefault, sizes.QueryTmpl)
+	assert.Equal(t, 12, sizes.Ncols)
+	assert.Equal(t, [2]int{7, 11}, sizes.DiffIntvl)
 }
 
 // TestNew_StatementsJITView guards the statements_jit view wiring: it must be registered,
@@ -311,7 +395,7 @@ func TestView_VersionOK(t *testing.T) {
 		version int
 		total   int
 	}{
-		{version: 190000, total: 28},
+		{version: 190000, total: 29},
 		{version: 160000, total: 28},
 		{version: 140000, total: 25},
 		{version: 130000, total: 19},

@@ -591,6 +591,29 @@ func Test_calculateDelta(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestCompare_NoDiffAllowsEmptyCells(t *testing.T) {
+	prev := PGresult{
+		Valid: true, Ncols: 4, Nrows: 1,
+		Cols: []string{"relation", "score", "dead_total", "stats_age"},
+		Values: [][]sql.NullString{{
+			{String: "public.example", Valid: true},
+			{String: "0.00", Valid: true},
+			{String: "", Valid: false},
+			{String: "", Valid: false},
+		}},
+	}
+	curr := prev
+	interval := [2]int{0, 0}
+
+	got, err := calculateDelta(curr, prev, 1, interval, 0, true, 0)
+	assert.NoError(t, err, "empty dead_total and stats_age must not reach diff parsing")
+	assert.Equal(t, curr, got, "zero diff interval must pass the sample through unchanged")
+
+	got, err = Compare(curr, prev, 1, interval, 0, true, 0)
+	assert.NoError(t, err, "Compare must preserve the same empty-cell no-diff contract")
+	assert.Equal(t, curr, got, "Compare must pass the sample through unchanged")
+}
+
 func Test_diff(t *testing.T) {
 	prev := PGresult{
 		Valid: true, Ncols: 4, Nrows: 4, Cols: []string{"unique", "col2", "col3", "col4"},
