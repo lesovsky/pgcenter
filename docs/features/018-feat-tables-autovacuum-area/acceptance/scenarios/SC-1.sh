@@ -14,12 +14,21 @@ cd "$ACC_REPO_ROOT"
 acc_build_current "$ACC_TMP/pgcenter-current"
 
 container_name="acc018-${RANDOM}-$$"
-if ! docker run --detach --name "$container_name" --publish 127.0.0.1::21919 \
+if ! docker run --detach --name "$container_name" --network none \
+    --mount "type=bind,source=$ACC_TMP/pgcenter-current,target=/opt/pgcenter-current,readonly" \
+    --mount "type=bind,source=$ACC_TMP,target=$ACC_TMP" \
     --entrypoint /bin/bash lesovsky/pgcenter-testing:0.0.11 -c 'sleep infinity' \
     >"$ACC_TMP/container-id" 2>"$ACC_TMP/docker-run.log"; then
     acc_finish 2 environment disposable_pg19_start_failed
 fi
 ACC_CONTAINER="$container_name"
+
+if ! network_mode="$(timeout 15 docker inspect --format '{{.HostConfig.NetworkMode}}' "$ACC_CONTAINER")"; then
+    acc_finish 2 environment disposable_pg19_network_inspect_failed
+fi
+if [ "$network_mode" != none ]; then
+    acc_finish 2 harness disposable_pg19_network_not_isolated
+fi
 
 if ! timeout 180 docker exec -i "$ACC_CONTAINER" bash -s >"$ACC_TMP/cluster-setup.log" 2>&1 <<'CONTAINER_SETUP'
 set -euo pipefail
@@ -54,12 +63,6 @@ then
     acc_finish 2 environment disposable_pg19_setup_failed
 fi
 acc_assert_sanitized "$ACC_TMP/cluster-setup.log"
-
-mapping="$(docker port "$ACC_CONTAINER" 21919/tcp | awk 'NR==1 {print $NF}')"
-port="${mapping##*:}"
-if ! [[ "$port" =~ ^[0-9]+$ ]] || [ -z "$mapping" ]; then
-    acc_finish 2 environment disposable_pg19_port_unavailable
-fi
 
 if ! timeout 30 docker exec "$ACC_CONTAINER" psql -h 127.0.0.1 -p 21919 -U postgres -d postgres \
     -X -v ON_ERROR_STOP=1 -qAtc 'CREATE DATABASE acc018' >"$ACC_TMP/create-db.log" 2>&1; then
@@ -103,8 +106,8 @@ capture_bounds() {
 report_start="$(date -d '1 minute ago' '+%Y-%m-%d %H:%M:%S')"
 capture_bounds pre
 archive="$ACC_TMP/live.tar"
-if acc_run "$ACC_TMP/record.raw" 75 "$ACC_TMP/pgcenter-current" record -i 1s -c 3 \
-    -h 127.0.0.1 -p "$port" -U postgres -d acc018 -f "$archive"; then :; else :; fi
+if acc_run "$ACC_TMP/record.raw" 75 docker exec "$ACC_CONTAINER" /opt/pgcenter-current record -i 1s -c 3 \
+    -h 127.0.0.1 -p 21919 -U postgres -d acc018 -f "$archive"; then :; else :; fi
 record_status=$ACC_RUN_STATUS
 capture_bounds post
 report_end="$(date -d '1 minute' '+%Y-%m-%d %H:%M:%S')"
