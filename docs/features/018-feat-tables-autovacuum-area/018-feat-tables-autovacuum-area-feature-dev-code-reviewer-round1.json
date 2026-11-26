@@ -1,0 +1,406 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "changes_required",
+  "range": "2dbd6267515f552d9660894d1b05fd3fb69e9bee..0e17eb4f943908f5ffccaff32bc95c04bde54906",
+  "summary": "The product changes form a coherent cross-task implementation: the PG19 query/value contract, registry and recording exclusion, version-aware TUI navigation, and replay layout boundaries agree across files, and the focused tests exercise real state and behavior. Acceptance is nevertheless blocked by a destructive fixed-name shared-fixture test and by an invalid exact freeze-qa invocation in the approved decomposition. The roadmap also retains stale pre-implementation status and rejected scope/navigation statements. No scripted feature-r1 scenario and no manual SC-5 through SC-8 result is claimed; SC-9 passed for its five designated documentation/register areas, while the stale roadmap is outside that checklist.",
+  "finding_counts": {
+    "total": 3,
+    "critical": 0,
+    "major": 2,
+    "minor": 1,
+    "in_scope": 3,
+    "out_of_scope": 0
+  },
+  "blocking_themes": [
+    "Remove fixed-name persistent DROP/CREATE operations from the ordinary shared-PG19 rounded-order integration fixture.",
+    "Correct the duplicated acceptance directory in the exact post-wave-4 freeze-qa command before using it to produce feature-r1 evidence."
+  ],
+  "findings": [
+    {
+      "id": "F-01",
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "tests",
+      "file": "internal/query/autovacuum_scores_test.go",
+      "line": 201,
+      "issue": "Test_StatAutovacuumScoresQuery_RoundedTieRawOrder runs in the ordinary shared PG19 fixture but starts with DROP TABLE IF EXISTS over three fixed persistent public-schema names, then recreates them and drops them again during cleanup. A pre-existing object with one of those names is deleted without an ownership check, and concurrent runs can drop or replace each other's fixtures, causing cross-run data loss and nondeterministic failures. This is the same shared-fixture hazard that Task 02's security round 1 required removing; Task 01's dedicated-cluster isolation protects only the wraparound test, not this mutating test.",
+      "verified": false,
+      "evidence": "Source inspection at lines 187-243 shows connectAutovacuumScoresFixture selecting the ordinary PG19 endpoint whenever the dedicated marker is absent, followed by unconditional fixed-name DROP TABLE IF EXISTS at lines 201-203 and 204-207, persistent CREATE TABLE statements at lines 210-217, and cleanup DROP at lines 204-207. Unlike Test_StatAutovacuumScoresQuery_WraparoundException, this test has no dedicated marker, expected system_identifier, or external supervisor. I did not execute this destructive test. A disposable shared-fixture control with a precreated sentinel of the same name, plus two concurrent invocations, would confirm the deletion/interference dynamically; the unsafe operations themselves are directly visible in the supplied source.",
+      "recommendation": "Remove all anticipatory and fixed-name persistent DROP statements from the shared-fixture path. Use per-session temporary relations if the autovacuum catalog supports the required fixture, or a uniquely generated per-run schema whose identifier is safely quoted and whose cleanup drops only objects owned by that run; alternatively move this mutating fixture under the same fail-closed disposable-cluster supervisor. Register cleanup immediately after successful connection and add a concurrency/ownership control. Re-run the named rounded-order test and the ORDER BY alias mutation after the fixture change."
+    },
+    {
+      "id": "F-02",
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "requirements",
+      "file": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md",
+      "line": 53,
+      "issue": "The approved Acceptance Execution Map's exact post-wave-4 freeze-qa command repeats the feature directory: docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area/acceptance. That directory does not exist; the frozen harness is at docs/features/018-feat-tables-autovacuum-area/acceptance. Tasks 04 and 05 defer to this recorded invocation, so using the approved command verbatim cannot start the required five-scenario feature-r1 run or produce its evidence.",
+      "verified": true,
+      "evidence": "Read-only path check from the repository root: test -e docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area/acceptance was false, while test -d docs/features/018-feat-tables-autovacuum-area/acceptance was true. Output: 'confirmed: decomposition invocation names a nonexistent duplicated path; actual acceptance directory exists at the single-component path'. No acceptance command was run.",
+      "recommendation": "Change only the acceptance argument in the documented invocation to docs/features/018-feat-tables-autovacuum-area/acceptance, retaining feature-r1 and the 900-second timeout. Have the freeze-qa owner use the corrected path; do not infer any feature-r1 result from the frozen base evidence."
+    },
+    {
+      "id": "F-03",
+      "severity": "minor",
+      "scope": "in_scope",
+      "category": "requirements",
+      "file": "docs/roadmap-0.12.0.md",
+      "line": 344,
+      "issue": "The changed feature-018 roadmap section is internally stale at the reviewed head. Its status says the feature is ready for decomposition and that no implementation, decomposition, or acceptance freeze has started, although all six tasks are integrated and the harness is frozen. The scope at lines 353-354 still assigns stats_age to functions despite AC-29 explicitly excluding it, the product decision at lines 363-364 still promises the old unsupported-screen runtime guard instead of version-aware t/T behavior, and the plumbing at line 366 still names functions.go. These statements contradict both the approved specification and shipped code.",
+      "verified": true,
+      "evidence": "git diff 2dbd6267515f552d9660894d1b05fd3fb69e9bee..0e17eb4f943908f5ffccaff32bc95c04bde54906 -- docs/roadmap-0.12.0.md shows that this range changed the status from 'planned' to 'ready for decomposition ... No product implementation, task decomposition, or acceptance freeze has started.' Current lines 342-366 retain functions and the runtime-guard wording. The decisions log and telemetry instead record waves 1-4 integrated, freeze ready at 44c9535, AC-29 functions unchanged, and Task 05 version-aware navigation.",
+      "recommendation": "Reconcile the complete feature-018 roadmap section with the reviewed head: state that implementation and freeze are complete while feature-r1 and manual SC-5 through SC-8 remain pending; limit stats_age to tables/indexes; describe the disabled T menu item and legacy t behavior below PG19; and remove functions.go from the implementation file list. Keep final acceptance claims pending until freeze-qa actually records them."
+    }
+  ],
+  "requirement_coverage": {
+    "interpretation": "Covered means implementation and the cited lower-level evidence exist; it does not mean final acceptance passed. Pending scenario and quality-gate ownership is stated explicitly for each affected requirement.",
+    "user_stories": [
+      {
+        "id": "US-1",
+        "status": "implemented_and_tested_pending_SC5",
+        "evidence": "internal/query/autovacuum_scores.go selects score, component scores and do_vacuum/do_analyze; internal/view/view.go registers the contracted layout; Task 01 round-2 reports live PG19 value/order tests and named mutations. Final visual reading of the threshold-plus-verdict pair remains manual SC-5."
+      },
+      {
+        "id": "US-2",
+        "status": "implemented_and_tested_pending_SC5",
+        "evidence": "OrderKey=1/OrderDesc=true and qualified ORDER BY s.score DESC provide priority; the outer pg_stat_all_tables join supplies absolute dead_total. Task 01's rounded-tie live test and alias mutation discriminate raw ordering. SC-5 remains pending."
+      },
+      {
+        "id": "US-3",
+        "status": "implemented_and_tested_pending_SC1_SC8",
+        "evidence": "internal/query/tables.go and indexes.go append nullable stats_age outside the unchanged diff intervals; selectors are wired in internal/view/view.go; report/report.go handles version and same-version layout boundaries. Task 02 live PG14-19 and current replay tests pass. External age/reset/growth evidence remains SC-1/SC-8."
+      },
+      {
+        "id": "US-4",
+        "status": "implemented_targeted_PASS_pending_SC6",
+        "evidence": "The user-mode predicate uses outer s.schemaname with OR s.for_wraparound. Task 01 round-2 records a real dedicated pg_toast wraparound PASS and a named red mutation when the exception is removed. Final TUI observation remains SC-6."
+      },
+      {
+        "id": "US-5",
+        "status": "implemented_and_unit_tested_pending_SC7",
+        "evidence": "tablesNextView, menuTables labels, disabled selection, unchanged view/no channel send, and real keybindings passed focused tests in this review. Exact visible NOTICE and legacy A/B behavior remain manual SC-7."
+      }
+    ],
+    "acceptance_criteria": [
+      {
+        "id": "AC-1",
+        "status": "covered_pending_SC5",
+        "evidence": "Locked eleven-name order in Test_StatAutovacuumScoresQuery_Structure and live FieldDescriptions evidence in Task 01 round 2; registry Ncols=11. Final screen observation is pending."
+      },
+      {
+        "id": "AC-2",
+        "status": "covered_pending_SC5",
+        "evidence": "Locked query and live field order place do_vacuum/do_analyze/for_wraparound after score and the five component scores after dead_total. Visual confirmation is pending SC-5."
+      },
+      {
+        "id": "AC-3",
+        "status": "covered_pending_SC5",
+        "evidence": "All six round(s.<score>::numeric, 2) expressions are structurally pinned; Task 01 live values require exactly two decimal places. SC-5 remains pending."
+      },
+      {
+        "id": "AC-4",
+        "status": "covered_pending_SC5",
+        "evidence": "All three booleans use ::text and Task 01 live assertions accept only true/false. SC-5 remains pending."
+      },
+      {
+        "id": "AC-5",
+        "status": "covered_pending_SC5",
+        "evidence": "The named outer_relation_expression assertion pins s.schemaname || '.' || s.relname; Task 01 round 2 observed the joined-alias mutation red and live values valid."
+      },
+      {
+        "id": "AC-6",
+        "status": "covered_pending_SC5",
+        "evidence": "Registry OrderKey=1 and OrderDesc=true are pinned; SQL and live raw-order tests agree. Default visual ordering remains SC-5."
+      },
+      {
+        "id": "AC-7",
+        "status": "covered_by_live_test_and_mutation",
+        "evidence": "Qualified ORDER BY s.score DESC and the three-way rounded-tie fixture are present. Task 01 rounds 1/2 record high/medium/low PASS and a named expected red when changed to ORDER BY score DESC."
+      },
+      {
+        "id": "AC-8",
+        "status": "covered",
+        "evidence": "The query selects a.n_dead_tup AS dead_total without coalesce and uses LEFT JOIN pg_stat_all_tables a ON s.relid=a.relid; structural assertions and live integer/blank handling are present."
+      },
+      {
+        "id": "AC-9",
+        "status": "covered",
+        "evidence": "The predicate explicitly uses s.schemaname, with structural negative coverage against a.schemaname; outer relation expression and join are independently pinned."
+      },
+      {
+        "id": "AC-10",
+        "status": "covered_pending_SC6",
+        "evidence": "Live user/all query tests and current Test_toggleSysTables cover schema filtering and toggle wiring. Final interactive system-relation behavior remains SC-6."
+      },
+      {
+        "id": "AC-11",
+        "status": "targeted_PASS_pending_SC6",
+        "evidence": "Task 01 round 2 records real test-level PASS for the flagged pg_toast relation and expected red on removal of OR s.for_wraparound after successful fixture setup. Manual visibility remains pending."
+      },
+      {
+      "id": "AC-12",
+        "status": "covered_and_reverified",
+        "evidence": "The new view uses DiffIntvl{0,0}; go test ./internal/stat/ -run '^TestCompare_NoDiffAllowsEmptyCells$' -count=1 -v passed in this review. Task 03 records both assertions red under a non-zero interval mutation."
+      },
+      {
+        "id": "AC-13",
+        "status": "covered_pending_SC5",
+        "evidence": "Current tablesNextView, switchViewTo and bound-t handler tests pass tables to autovacuum_scores on PG19. Manual entry remains pending."
+      },
+      {
+        "id": "AC-14",
+        "status": "covered_pending_SC5",
+        "evidence": "The same focused tests pass autovacuum_scores back to tables on PG19. Manual return behavior remains pending."
+      },
+      {
+        "id": "AC-15",
+        "status": "covered_pending_SC5_SC7",
+        "evidence": "tablesNextView defaults every unrelated current screen to tables, and the real bound handler test passes. Manual PG19/PG18 checks remain pending."
+      },
+      {
+        "id": "AC-16",
+        "status": "covered_pending_SC5",
+        "evidence": "Two labels, absence of the suffix on PG19+, real menu opening and both enabled selections are covered by current passing menu/keybinding tests. Visual menu behavior remains SC-5."
+      },
+      {
+        "id": "AC-17",
+        "status": "code_review_covered_pending_SC5",
+        "evidence": "The t path has one trailing printCmdline; each enabled menuTables arm has exactly one printCmdline and no shared trailing write. No unobservable unit count is claimed; exactly-once visible output remains manual SC-5."
+      },
+      {
+        "id": "AC-18",
+        "status": "covered_pending_SC7",
+        "evidence": "Current cycle tests keep tables on tables below PG19, including zero/out-of-range version handling; only tablesNextView can select the new view from the t binding. Manual repeated-key behavior remains SC-7."
+      },
+      {
+        "id": "AC-19",
+        "status": "covered_pending_SC7",
+        "evidence": "Current menu construction and real T-handler rendering tests pin the exact '— requires PostgreSQL 19' suffix below PG19 and its absence at/above PG19. Visual check remains pending."
+      },
+      {
+        "id": "AC-20",
+        "status": "covered_pending_SC7",
+        "evidence": "Current disabled-selection test proves unchanged view, no viewCh send, menu reset and closure. Branch review shows one NOTICE and no unsupported-statistics path; visible text/count remains SC-7."
+      },
+      {
+        "id": "AC-21",
+        "status": "covered_pending_SC1_SC8",
+        "evidence": "SelectStatTablesQuery returns 20 columns with trailing stats_age on PG19 and Configure patches Ncols; Task 02 live FieldDescriptions passed. External report and TUI age observations remain pending."
+      },
+      {
+        "id": "AC-22",
+        "status": "covered_pending_SC1_SC8",
+        "evidence": "SelectStatIndexesQuery returns seven columns with trailing stats_age on PG19 and Configure patches Ncols; Task 02 live FieldDescriptions passed. External report and TUI age observations remain pending."
+      },
+      {
+        "id": "AC-23",
+        "status": "covered_pending_feature_SC4",
+        "evidence": "Selector/static registry tests retain 19/6-column legacy layouts and unchanged diff intervals; current query tests passed. Base SC-4 passed, but feature-r1 SC-4 was not run and is not claimed."
+      },
+      {
+        "id": "AC-24",
+        "status": "covered",
+        "evidence": "stats_age is tail index 19/6 above inclusive diff bounds 18/5; selector tests pin Ncols-2 and narrow-layout bounds. The 12 relation replay leaves passed in this review."
+      },
+      {
+        "id": "AC-25",
+        "status": "covered_by_tests_and_prior_mutations",
+        "evidence": "Tables sources now()-t.stats_reset and indexes now()-s.stats_reset, with wrong-i-source negative assertions. Task 02 final review records both named source mutations red."
+      },
+      {
+        "id": "AC-26",
+        "status": "covered_pending_SC1_SC8",
+        "evidence": "Task 02 TEMP probes observed SQL NULL and blank sql.NullString values for previously untouched relations. Acceptance reset/display confirmation remains pending."
+      },
+      {
+        "id": "AC-27",
+        "status": "pending_final_acceptance",
+        "evidence": "The query computes second-precision now()-stats_reset and the frozen SC-1/SC-8 controls are designed to check DB-derived bounds and growth. No feature-r1 or manual SC-8 growth result exists in the supplied evidence, so this is not marked passed."
+      },
+      {
+        "id": "AC-28",
+        "status": "partially_tested_pending_SC1_SC8",
+        "evidence": "Task 02 proves untouched temporary relations have NULL stats_reset/blank stats_age. The after-reset active-versus-untouched external matrix remains pending SC-1/SC-8 and is not inferred from the unit fixture."
+      },
+      {
+        "id": "AC-29",
+        "status": "covered_pending_feature_SC4",
+        "evidence": "The full range has no internal/query/functions.go change; view tests pin query/Ncols/DiffIntvl and describeReport retains the functions description. Byte-identical feature A/B evidence remains pending feature-r1 SC-4."
+      },
+      {
+        "id": "AC-30",
+        "status": "covered_pending_feature_SC4",
+        "evidence": "The full range has no internal/query/sizes.go change; view tests pin its layout and descriptions remain unchanged. Byte-identical feature A/B evidence remains pending feature-r1 SC-4."
+      },
+      {
+        "id": "AC-31",
+        "status": "covered_pending_SC1",
+        "evidence": "NotRecordable filtering excludes autovacuum_scores before version checks and emits sorted named live-TUI-only INFO. Current filter tests passed; Task 03 recorded live PG19 setup evidence. Real tar/stdout acceptance remains SC-1."
+      },
+      {
+        "id": "AC-32",
+        "status": "pending_final_quality_gate",
+        "evidence": "Task reports record live PG14-19 query/view/record/stat/top suites, dedicated wraparound PASS and race checks. This review passed focused tests, report race, go vet and gofmt checks. The mandated final make test, E2E, build, lint and vuln gates were not run as final QA and are not marked passed here."
+      },
+      {
+        "id": "AC-33",
+        "status": "covered_by_replay_tests_pending_SC2",
+        "evidence": "Current Test_processData_relationLayoutBoundaries passed mixed PG18-to-PG19 cases for both screens with two ticks per layout, including blank/populated stats_age; report race passed. Frozen external SC-2 remains pending."
+      },
+      {
+        "id": "AC-34",
+        "status": "covered",
+        "evidence": "Locked names/order are asserted structurally and against live PG19 FieldDescriptions in Task 01, so catalog/query drift reddens execution or named structure checks."
+      },
+      {
+        "id": "AC-35",
+        "status": "covered_pending_SC5",
+        "evidence": "Current Test_helpTemplate_tablesEntry passes exact t/T text, placement, formatting and removal of the old ambiguous fragment. Manual help-screen observation remains SC-5."
+      },
+      {
+        "id": "AC-36",
+        "status": "covered_pending_SC3",
+        "evidence": "Both describe constants append stats_reset-backed stats_age with (PG 19+); current order/description tests passed. Built-binary SC-3 remains pending feature-r1."
+      },
+      {
+        "id": "AC-37",
+        "status": "SC9_passed",
+        "evidence": "docs/features-catalog.md lines 485-524 describe the PG19 screen, navigation, stats_age, filtering, recording exclusion, replay and width limitation. Task 06 round 1 records explicit SC-9 PASS."
+      },
+      {
+        "id": "AC-38",
+        "status": "SC9_passed",
+        "evidence": "Project Knowledge project.md names pg_stat_autovacuum_scores and both stats_age additions; architecture.md records selectors, navigation and the production NotRecordable exclusion. Task 06 round 1 records SC-9 PASS."
+      },
+      {
+        "id": "AC-39",
+        "status": "SC9_passed",
+        "evidence": "doc/release-notes/v0.12.0.md lines 57-101 describe the screen, columns, navigation, recording exclusion, replay boundaries and accepted stats_age width limitation. Task 06 round 1 records SC-9 PASS."
+      },
+      {
+        "id": "AC-40",
+        "status": "SC9_passed",
+        "evidence": "docs/tech-debt.md extends [035] to stats_age and [029] to autovacuum_scores, registers [037], and leaves [020] unchanged per Task 06 byte comparison. Task 06 round 1 records SC-9 PASS. Finding F-03 concerns the separate roadmap, not this SC-9 checklist."
+      },
+      {
+        "id": "AC-41",
+        "status": "covered_by_replay_tests_pending_SC10",
+        "evidence": "All 12 current replay leaves passed: mixed-version plus same-PG19 old-to-new/new-to-old for tables/indexes and blank/populated stats_age. Task 04 reports named mutations for layout detection, alignment, header cadence and seed key/direction. External SC-10 remains pending."
+      }
+    ],
+    "scenarios": [
+      {
+        "id": "SC-1",
+        "status": "pending_freeze_qa_feature_r1",
+        "evidence": "Frozen harness/base fixture and feature-missing checkpoint are valid; no feature result was produced or claimed."
+      },
+      {
+        "id": "SC-2",
+        "status": "pending_freeze_qa_feature_r1",
+        "evidence": "Regression base passed; replay unit/integration matrix passed. No feature-r1 result is claimed."
+      },
+      {
+        "id": "SC-3",
+        "status": "pending_freeze_qa_feature_r1",
+        "evidence": "Frozen base reached relation_stats_age_descriptions_missing; description tests pass. No feature-r1 result is claimed."
+      },
+      {
+        "id": "SC-4",
+        "status": "pending_freeze_qa_feature_r1",
+        "evidence": "Continuous regression base passed; the post-wave-4 feature run was deliberately not performed and is not treated as a hidden pass."
+      },
+      {
+        "id": "SC-5",
+        "status": "pending_manual",
+        "evidence": "PG19 visual layout, values/order, both navigation paths, exactly-once messages, help and frozen-column scrolling remain unexecuted."
+      },
+      {
+        "id": "SC-6",
+        "status": "pending_manual",
+        "evidence": "Dedicated query-level wraparound evidence passed, but interactive user/all and persistent system-row observations remain pending."
+      },
+      {
+        "id": "SC-7",
+        "status": "pending_manual",
+        "evidence": "PG18 master A/B legacy t behavior and visible exactly-once disabled NOTICE remain pending."
+      },
+      {
+        "id": "SC-8",
+        "status": "pending_manual",
+        "evidence": "Active/untouched reset cycle and growth on both TUI screens remain pending."
+      },
+      {
+        "id": "SC-9",
+        "status": "passed_with_separate_roadmap_finding",
+        "evidence": "Task 06 dev-code-reviewer round 1 explicitly passed AC-37 through AC-40. F-03 is an additional whole-feature consistency finding in docs/roadmap-0.12.0.md, outside the five-file SC-9 checklist."
+      },
+      {
+        "id": "SC-10",
+        "status": "pending_freeze_qa_feature_r1",
+        "evidence": "Frozen base reached same_pg19_layout_change_unsupported; all corresponding implementation tests pass. No feature-r1 result is claimed."
+      }
+    ]
+  },
+  "verification": [
+    {
+      "command": "git diff --check 2dbd6267515f552d9660894d1b05fd3fb69e9bee..0e17eb4f943908f5ffccaff32bc95c04bde54906",
+      "verified": true,
+      "result": "PASS; no whitespace errors."
+    },
+    {
+      "command": "go test ./internal/query/ -run '^(Test_SelectStatAutovacuumScoresQuery|Test_StatAutovacuumScoresQuery_Structure|Test_SelectStatTablesQuery|Test_StatTablesQuery_StatsAgeSource|Test_SelectStatIndexesQuery|Test_StatIndexesQuery_StatsAgeSource)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS; every selected named test/subtest ran. No live integration test or destructive fixture was selected."
+    },
+    {
+      "command": "go test ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS; eight cycle cases, 33 switch cases, both toggle directions, disabled/enabled menu behavior, real key handlers and help assertions ran."
+    },
+    {
+      "command": "go test ./report/ -run '^(Test_processData_relationLayoutBoundaries|Test_processData_versionChange.*|Test_describeRelationColumnOrder|Test_app_doReport_errorPathDoesNotHang)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS; all 12 relation replay leaves ran without skips, description and existing version-change tests passed, and the malformed-counter error path returned promptly."
+    },
+    {
+      "command": "go test -race ./report/ -count=1",
+      "verified": true,
+      "result": "PASS (8.505s)."
+    },
+    {
+      "command": "go test ./internal/stat/ -run '^TestCompare_NoDiffAllowsEmptyCells$' -count=1 -v && go test ./record/ -run '^(Test_filterViews|TestFilterViews.*)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS; no-diff empty cells and named/sorted recording exclusions passed, with the expected autovacuum_scores live-TUI-only INFO observed."
+    },
+    {
+      "command": "go vet ./internal/query/ ./internal/view/ ./internal/stat/ ./record/ ./report/ ./top/ && test -z \"$(gofmt -l <all changed Go product/test files>)\"",
+      "verified": true,
+      "result": "PASS; vet and formatting checks completed successfully."
+    },
+    {
+      "command": "git diff --exit-code 44c953532a043de5de847f679df27b65c019a408..0e17eb4f943908f5ffccaff32bc95c04bde54906 -- docs/features/018-feat-tables-autovacuum-area/acceptance && LC_ALL=C sha256sum -c scenario-manifest.sha256 && bash -n <five scenario scripts and common.sh>",
+      "verified": true,
+      "result": "PASS; the frozen acceptance tree is unchanged since freeze, all nine manifest entries are OK, and shell syntax is valid. This is integrity verification, not feature acceptance."
+    },
+    {
+      "command": "go test ./report/ ./top/ ./internal/view/ -count=1",
+      "verified": true,
+      "result": "report and internal/view passed. The full top package was environmentally unusable on the host: pre-existing Test_getQueryReport could not connect to PG17 at the fixture endpoint and then hit the existing nil-connection panic. Focused feature top tests were therefore run separately and passed; this host failure is not attributed to the feature and is not counted as live-fixture evidence."
+    },
+    {
+      "command": "Read-only existence checks for the decomposition's duplicated acceptance path and the actual acceptance directory",
+      "verified": true,
+      "result": "CONFIRMED F-02: duplicated path absent; actual single-component acceptance directory present. No acceptance runner was invoked."
+    }
+  ],
+  "verification_limits": [
+    "The complete five-scenario feature-r1 acceptance run was not executed, as instructed; base/freeze evidence is not a feature pass.",
+    "Manual SC-5 through SC-8 remain pending. No terminal-visible behavior, message count, A/B result or age-growth observation is inferred from unit tests.",
+    "Final make test, testing/e2e.sh, make build, make lint and make vuln were not run as the final AC-32 quality gate. Prior task reports supply their recorded integration evidence; this review's host checks do not replace the PG14-19 CI gate.",
+    "Known out-of-scope debts remain unchanged: malformed-Ncols archive handling [020], first-sample width freezing [035], unsanitized terminal cells [029], and version-blind x/p cycles [037]."
+  ],
+  "workspace": "No product, documentation, frozen, shared or test file was edited. No agents were spawned, no final QA/acceptance was run, and no temporary reproduction files were created. The only requested repository addition is this JSON report."
+}
