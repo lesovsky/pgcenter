@@ -75,6 +75,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Acceptance harness — owner-approved batch re-freeze approved
+
+**Summary:** The explicitly reauthorized cohesive UTC correction completed the single SC-1 batch re-freeze. Harness-only commits `fcea62e`, `f1660ea` and `e36af86` isolate PostgreSQL with network-none, retain restrictive host-owned archive access and align recorder/report timestamps in UTC without weakening assertions.
+**Evidence:** Accepted `base-reFreeze-3` at `affb927` is clean and manifest-valid: SC-2/SC-4 pass and SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Feature validation `reFreeze-3-feature` at `e36af86` is clean with all five scenarios `0/pass/complete`. Failed `base-reFreeze-1` and `base-reFreeze-2` remain preserved.
+**Review:** Independent `dev-acceptance-reviewer` approved the complete repair history and both final runs with zero findings. `freeze.json` now points to `base-reFreeze-3` readiness and manifest digest `f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195`.
+**Boundary:** This is harness revalidation, not final QA. Freeze-qa must still run its fresh `feature-r1`; manual SC-5–SC-8 and final quality gates remain pending.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.

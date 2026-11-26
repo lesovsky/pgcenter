@@ -1,0 +1,48 @@
+{
+  "run": "base-reFreeze-3",
+  "sha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+  "created": "2026-11-26T13:38:23Z",
+  "verdict": "ready",
+  "dirty": false,
+  "manifest": {
+    "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+    "valid": true,
+    "entries": 9,
+    "sha256": "f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195"
+  },
+  "scenarios": [
+    {"id": "SC-1", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "pg19_stats_age_report_unavailable", "contractValid": true},
+    {"id": "SC-2", "kind": "regression", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true},
+    {"id": "SC-3", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "relation_stats_age_descriptions_missing", "contractValid": true},
+    {"id": "SC-4", "kind": "regression", "exit": 0, "origin": "pass", "checkpoint": "complete", "contractValid": true},
+    {"id": "SC-10", "kind": "new", "exit": 1, "origin": "feature_missing", "checkpoint": "same_pg19_layout_change_unsupported", "contractValid": true}
+  ],
+  "positiveControls": {
+    "status": "pass",
+    "productionCli": "All scenarios build and exercise the real production CLI; SC-1 records through bounded docker exec in the isolated PG19 namespace and reports through the host binary.",
+    "fixtures": "All synthetic archives are reopened and validated. SC-1 proves fresh PG19 identity, stable active stats_reset, NULL untouched stats_reset, three ticks and readable reports before classification.",
+    "isolation": "SC-1 requires HostConfig.NetworkMode=none, publishes no host port, writes the archive as the host uid/gid, and aligns recorder filenames, host bounds and report parsing in explicit UTC.",
+    "replay": "SC-2 proves mixed-version readability and known deltas; SC-10 validates all layout fixtures and same-layout controls before boundary assertions.",
+    "providers": "Not applicable: no external providers, DTOs, or recorded provider baselines.",
+    "sanitization": "Final logs pass sanitize.py; raw archives/transcripts/build logs are trap-deleted from restrictive external temporary directories."
+  },
+  "featureValidation": {
+    "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/result.json",
+    "sha": "e36af86cdc8df7232c00144007b90f9d004868e0",
+    "dirty": false,
+    "manifestValid": true,
+    "scenarios": "SC-1, SC-2, SC-3, SC-4 and SC-10 all 0/pass/complete"
+  },
+  "recorded_baselines": [],
+  "repairAttempts": [
+    "acceptance/runs/base-reFreeze-1/result.json",
+    "acceptance/runs/base-reFreeze-2/result.json"
+  ],
+  "ownerApprovals": [
+    "Initial SC-1 network-isolation batch re-freeze",
+    "Narrow archive-ownership repair after triage round 1",
+    "Explicit reauthorization of one cohesive UTC correction after the second comparable harness failure"
+  ],
+  "reviewerReport": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-refreeze-review.json",
+  "reviewerVerdict": "approved"
+}
