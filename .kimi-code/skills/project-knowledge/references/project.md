@@ -17,7 +17,8 @@ It reads PostgreSQL internal statistics views and presents them in a top-like in
 - `pg_stat_activity` — active connections and their state; on PG 13+ also `leader` (which parallel group a backend belongs to), `backend_xid` (has the transaction written) and `horizon_xacts` (how far back it holds the xmin horizon), so "who is blocking vacuum and is killing them cheap" is answerable without leaving pgcenter
 - `pg_stat_database` — per-database metrics (commits, rollbacks, tuples, deadlocks, temp files)
 - `pg_stat_replication` — connected standbys and replication lag
-- `pg_stat_user_tables`, `pg_stat_user_indexes` — table/index access stats
+- `pg_stat_user_tables`, `pg_stat_user_indexes` — table/index access stats; on PG 19+ both screens end with `stats_age`, derived from the relation's `stats_reset` and blank when PostgreSQL has no reset timestamp for that relation
+- `pg_stat_autovacuum_scores` — per-relation autovacuum thresholds, scores, decisions and dead-tuple backlog (PG 19+; `t` cycles `tables` ↔ `autovacuum_scores`, `T` opens the tables menu; sorted by score descending; live TUI only, deliberately excluded from `record`/`report`)
 - `pg_stat_bgwriter` (+ `pg_stat_checkpointer` on PG 17+) — background writer / checkpointer screen (hotkey `b`; PG 14–19; recordable via `record`/`report -B`)
 - `pg_replication_slots` (+ `pg_stat_replication_slots`) — replication slots screen (hotkey `o`; PG 14–19; multi-row, all slots; retained WAL + wal_status + spill/stream; recordable via `record`/`report -L`)
 - `pg_stat_io` — unified IO breakdown by backend_type × object × context (hotkey `j` toggles count↔time sub-screens, `J` opens the mode menu; PG 16+; multi-row; this is where `buffers_backend`/`buffers_backend_fsync` went on PG 17+ and WAL IO timings on PG 18; recordable via `record`/`report -J c|t`)

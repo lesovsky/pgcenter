@@ -479,3 +479,46 @@ is what `-W w|a` copies. [006-feat-pg-stat-io] — the `j`/`J` cycle-plus-menu m
 `w`/`W`. [012-feat-pg19-compatibility-baseline] — the PG 19 catch-up column deliberately left to this
 feature so the WAL area was entered once. [009-feat-horizontal-scroll] — the `source` column stays
 frozen while the two 24-character WAL names are reached by scrolling on a narrow terminal.
+
+---
+
+### [018-feat-tables-autovacuum-area] Autovacuum Scores and Relation Statistics Age
+
+**What it does:** Adds a PostgreSQL 19+ `autovacuum_scores` screen over
+`pg_stat_autovacuum_scores`, showing which relations are closest to their autovacuum thresholds, how
+much dead-tuple work is waiting, and whether vacuum or analyze is actually scheduled. The `t` hotkey
+now cycles `tables` ↔ `autovacuum_scores`, and `T` opens a two-item tables menu. On PostgreSQL 19 the
+existing `tables` and `indexes` screens also gain a trailing `stats_age` column derived from the
+relation's `stats_reset`.
+
+**Key scenarios:**
+- Press `t` twice to open `autovacuum_scores`, sorted by unrounded `score` descending. Compare the
+  displayed two-decimal `score` and `vacuum_score` with `do_vacuum`, and use absolute `dead_total` to
+  distinguish a large backlog from a small relation near the same threshold.
+- Press `,` to show or hide system schemas. A system relation with `for_wraparound=true` remains
+  visible even in user mode; ordinary system relations follow the toggle.
+- On PostgreSQL 19, read `stats_age` on `tables` and `indexes` to see how long relation counters have
+  accumulated. A blank cell means PostgreSQL has no `stats_reset` value for that relation, including
+  an untouched relation after a reset.
+- Replay `tables` or `indexes` across a recorded version or old/new pgcenter layout change: the first
+  sample of the new layout is a no-diff boundary, and the following sample uses recomputed headers,
+  widths and version-appropriate sort state.
+
+**Limitations:**
+- PostgreSQL 19+ only. Below PG 19, `t` preserves the legacy `tables` behavior; the `T` menu still
+  lists the screen with `— requires PostgreSQL 19`, and selecting it prints an explanation without
+  changing views.
+- **Live TUI only.** `autovacuum_scores` is deliberately excluded from `record` and has no `report`
+  mode. Recording prints a named `not recordable (live TUI only)` INFO rather than attributing the
+  exclusion to an unsupported server version.
+- `stats_age` is added only to `tables` and `indexes` on PG 19+; pre-PG 19 layouts and the `sizes` and
+  `functions` screens are unchanged. The column remains sortable and is outside the diffed interval.
+- Scores are rounded to two decimals for display, so quiet clusters can show many `0.00` values;
+  ordering still uses the unrounded score.
+- The existing first-sample width limitation [035] also applies to `stats_age`: if the screen opens
+  while the column is empty, values of one day or more can be truncated while that screen stays open.
+
+**Touches:** [012-feat-pg19-compatibility-baseline] — exposes the PG 19 autovacuum and per-relation
+reset data. [009-feat-horizontal-scroll] — the new wide screen keeps `relation` frozen while its
+remaining columns scroll. Record/report replay handles valid relation-layout boundaries without
+claiming to fix malformed-archive validation [020] or the shared renderer/sanitizer debts [035]/[029].

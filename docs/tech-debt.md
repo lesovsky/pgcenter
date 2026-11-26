@@ -25,10 +25,10 @@ Not fixed inside the feature because the exit code is shared by every report typ
 subcommand error path — changing it is a behaviour change for all of them and needs its own review.
 Called out in `doc/release-notes/v0.12.0.md` so users are not the ones to discover it.
 
-### [035] WAL segment names truncate to header width when the screen is opened before any value exists
+### [035] First-sample widths truncate WAL segment names and `stats_age` when values arrive later
 
 **Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver, stand run)
-**Severity:** Low — needs the screen opened on a cluster that has archived nothing yet
+**Severity:** Low — needs a value to arrive after the first sample established a narrower width
 **Area:** `internal/align/align.go`, `top/stat.go` (`printDataCell`, `alignViewToResult`)
 
 Column widths are computed from the first batch and `view.Aligned` is never reset while a screen
@@ -41,6 +41,26 @@ Pre-existing, confirmed by A/B against a `master`-built binary — the feature's
 because WAL segment names differ only in their tail, so truncating from the right removes exactly the
 part that identifies the segment — the reason the column is on the screen at all.
 
+**Extended by 018-feat-tables-autovacuum-area (2026-11-26):** the new `stats_age` column on `tables`
+and `indexes` has the same failure mode. If the screen opens while the column is empty, its width
+stays at the header width; once the age reaches one day, the longer interval text is truncated while
+the screen stays open. The shared alignment/rendering behavior is intentionally unchanged by 018.
+
+### [037] Version-blind `x`/`p` cycles enter screens unsupported by the connected PostgreSQL version
+
+**Added:** 2026-11-26 (registered during feature: 018-feat-tables-autovacuum-area)
+**Severity:** Low — an unsupported-screen error replaces the table on every refresh
+**Area:** `top/config_view.go` (`statementsNextView`, `progressNextView`), `internal/stat/stat.go`
+
+The `x` cycle always includes `statements_jit` (PG 15+), so it can select that screen on PG 14. The
+`p` cycle always includes `progress_copy` (PG 14+), so it can select that screen on PG 13 and older.
+Neither cycle receives the server version; the collector's `VersionOK` check then reports
+`selected statistics is not supported by current version of Postgres` on every tick. On actively
+supported PG 14–19 this affects `x` on PG 14; the `p` case affects only EOL servers.
+
+This is inherited behavior and is explicitly not fixed by 018. That feature makes only its own `t`
+cycle and `T` menu version-aware; changing the statements/progress cycles belongs to a separate
+change in that navigation area.
 
 ### [027] Messages printed after a dialog closes are never visible
 
@@ -98,6 +118,10 @@ the pager or editor, instead of being overwritten on the next tick. The same app
 logtail buffer (`frameStore.logBuf`), which retains raw log content — including query text — for the
 duration of the pause. Neither is a new sink (nothing is written to disk or logged), but the exposure
 window is no longer one refresh interval.
+
+**Extended by 018-feat-tables-autovacuum-area (2026-11-26):** `autovacuum_scores` adds another
+reachable surface through its server-derived `relation` values. The feature deliberately changes
+neither `printDataCell` nor a shared TUI/report sanitizer, so this exposure remains open.
 
 ### [030] `profile.Test_profileLoop` is flaky
 
