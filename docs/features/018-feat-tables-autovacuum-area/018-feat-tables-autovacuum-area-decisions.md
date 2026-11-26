@@ -4,6 +4,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — wave 1 started
+
+**Summary:** Approved standalone execution resumed under the current inherited-model policy. Tasks 01 and 02 are in progress in isolated worktrees; requested tiers remain `strong` and `standard` respectively, but no runtime model alias is exposed.
+**Deviations:** The earlier pause pending a secondary model pool is superseded by the current feature-execution contract, which explicitly permits inherited selection. Scripted feature acceptance other than continuous SC-4 remains owned by freeze-qa after wave 4.
+**Tech debt:** None added.
+**Verification:** Clean feature branch, ready freeze `44c953532a043de5de847f679df27b65c019a408`, valid manifest and approved specifications/decomposition confirmed before task dispatch.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
