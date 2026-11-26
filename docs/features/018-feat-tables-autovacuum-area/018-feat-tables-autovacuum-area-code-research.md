@@ -624,7 +624,7 @@ but the argument for a version-aware `tablesNextView`.
 - **`NotRecordable` mechanism** — `internal/view/view.go:31` + `record/record.go:204-212`. As of
   [008] **no production view sets it**; `architecture.md:182` says the mechanism survives only for
   a synthetic test. This feature reintroduces the first real user, so that architecture note needs
-  updating at `/done` time.
+  updating at `/skill:done` time.
 - **Manual QA** — `make build` first, always (`patterns.md:237-243`); remote-stand regimen with
   tmux `-x 190 -y 52` and `capture-pane -p -e` for colour, plus a second binary built from `master`
   for A/B (`patterns.md:245-293`). The `stats_age` truncation (#3) and the score rendering (#2) are
@@ -1233,7 +1233,7 @@ subject is `tarRecorder.collect`, not the registry, so nothing is weakened.
 
 Note the sibling test `TestFilterViews_dropsExplicitNotRecordable` (`record/record_test.go`, the
 synthetic guard `architecture.md:182` mentions) keeps working, and `architecture.md:182` itself
-becomes stale at `/done` time — this feature reintroduces the first production `NotRecordable` view
+becomes stale at `/skill:done` time — this feature reintroduces the first production `NotRecordable` view
 since feature 008 cleared them.
 
 ---
@@ -1540,6 +1540,6 @@ nothing about the screen.
 - The `Configure` case for `tables`/`indexes` being load-bearing for the `Right`-arrow sort wrap
   (§U1) — invisible to every existing test and to the render path.
 - `architecture.md:182` ("no production view sets `NotRecordable` anymore") becomes false with this
-  feature and must be corrected at `/done`.
+  feature and must be corrected at `/skill:done`.
 - Tech debt [020]'s "why deferred" note needs updating: its reachability now includes
   `tables`/`indexes`, the first diffed screens whose width is version-dependent (§U5).

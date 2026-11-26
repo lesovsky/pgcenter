@@ -1,6 +1,6 @@
 ---
 created: 2026-08-10
-status: draft
+status: approved
 branch: feature/018-feat-tables-autovacuum-area
 size: L
 ---
@@ -67,9 +67,11 @@ a defect being introduced.
 - **`record/recorder_test.go`** — the unfiltered-view-map trap; fixed in the same task that registers
   the view, because that registration is what breaks it.
 - **`record/record.go`** — the in-code comment claiming no production view sets `NotRecordable` any
-  more, which this feature makes false.
+  more, plus the deterministic named live-TUI-only INFO from Decision 11.
 - **`report/describe.go`** — `stats_age` lines for the two screens.
-- **`report/report_test.go`** — the replay harness generalized from `activity` to any screen name.
+- **`report/report.go`** — recorded column-layout boundary detection and state reset from Decision 9.
+- **`report/report_test.go`** — the replay harness generalized from `activity` to any screen name,
+  including same-version layout changes in both directions.
 
 ### How it works
 
@@ -96,27 +98,21 @@ so the wrong diff succeeds silently and prints plausible nonsense. Here the read
 not apply: all seven existing `stats_age` columns in the codebase are last, so the tail is where a
 reader already looks for it. Taking the tail keeps the interval literal valid on both versions and
 avoids that entire class.
-**This decision is load-bearing for memory safety, not only for tidiness** — surfaced by the security
-review, sharpened by the skeptic, and not visible in the original rationale.
+**This decision is also a defence-in-depth memory-safety boundary, not a complete replay fix.**
 
-`record -a` appends to an existing archive with no shape check, and `versionChanged` compares only
-the recorded **server** version. So a width mismatch survives into `diff()` whenever two samples
-carry the same server version and different widths — and this feature creates exactly one such pair:
-**two PG 19 samples**, one recorded by a pre-feature pgcenter (19 columns, because there was no PG 19
-branch) and one by this feature (20 columns). A PG ≤ 18 pair cannot form: that layout is 19 columns
-under both old and new pgcenter, since the branch is gated at `>= 190000`.
+`record -a` can append pre-feature and feature samples while both declare PG 19. With tail placement,
+the highest diff index remains valid against the narrower previous row (`18` against 19 columns for
+`tables`, `5` against 6 for `indexes`); mid-layout insertion would remove that margin. Assert
+**`DiffIntvl[1] < min(Ncols)` across every version** of both screens.
 
-That pair does not panic, and the margin is exactly zero. `diff`'s interval is inclusive and indexes
-`prev` by the *current* width, so the highest index it passes to `prev.Values[j]` is `DiffIntvl[1]`
-= 18 — against a 19-column previous row, the last valid index. `indexes` is the same shape, 5
-against 6. Tail-appending is the only thing keeping that loop in bounds; mid-layout insertion would
-have pushed the interval to `{1,19}` and turned the pair into an out-of-range read. The invariant
-must therefore be asserted, not assumed: **`DiffIntvl[1] < min(Ncols)` across every version** of both
-screens.
+Staying in bounds is not sufficient: the replay renderer also retains `Aligned`/`ColsWidth` across a
+same-server-version width change. Decision 9 therefore makes any column-layout change a replay boundary;
+no incompatible pair reaches diff or stale rendering merely because the arithmetic happens to fit.
 
 **Alternatives considered:** mid-layout insertion next to the other timestamps (rejected — buys
-nothing, costs a version-dependent interval, and as above turns a benign width mismatch into an
-out-of-range read); no selector at all, letting `Ncols` stay static (rejected — see Decision 5).
+nothing, costs a version-dependent interval, and removes the defensive bounds margin); no selector at
+all, letting `Ncols` stay static (rejected — see Decision 5); relying on tail placement alone for replay
+safety (rejected — it does not reset renderer/layout state).
 
 ### Decision 2: 3-tuple selectors, `UniqueKey` deliberately excluded
 **Decision:** `SelectStatTablesQuery(version) (string, int, [2]int)` and the same for `indexes` and
@@ -217,17 +213,76 @@ Two known defects in the codebase are exactly this shape.
 **Alternatives considered:** returning early from the refusal arm before the shared call (rejected —
 works, but leaves the trap armed for the next person adding an arm).
 
-### Decision 8: tech debt [035] is recorded, not fixed; [020] needs no edit
-**Decision:** extend the scope note of [035]; leave [020] alone; change no shared code.
-**Rationale:** [035] (column widths frozen from the first batch and never recomputed while a screen
-stays open) now also affects `stats_age`, which is empty on entry for most clusters — so the column
+### Decision 8: tech debt [035] and [029] are recorded, not fixed; [020] needs no edit
+**Decision:** extend the scope notes of [035] and [029]; leave [020] alone; change no shared TUI
+alignment/rendering or cell-sanitisation code.
+**Rationale:** [035] now also affects `stats_age`, which is empty on entry for most clusters — so the column
 freezes at header width and truncates once values pass a day. The fix lives in the shared alignment
-path and would change behaviour on every screen, which the roadmap owner explicitly refused:
-"боюсь расширять скоуп фиксом в общем коде". [020] gets no edit: its reachability is **not** widened
-by this feature, because diffed screens with version-dependent widths already exist (`wal`,
-`bgwriter`, `databases_general`) — an earlier draft of this spec claimed otherwise and was wrong.
-**Alternatives considered:** fixing [035] here (rejected by the roadmap owner); amending [020]
-(rejected — the amendment would have recorded something untrue).
+path and would change behaviour on every screen, which the roadmap owner explicitly refused.
+[029]'s existing unsanitised server-to-terminal weakness gains one reachable surface through
+`relation`; the feature deliberately records that exposure rather than expanding into a shared TUI and
+report sanitiser. [020] gets no edit: its reachability is **not** widened by this feature, because
+diffed screens with version-dependent widths already exist (`wal`, `bgwriter`, `databases_general`).
+Decision 9 handles valid adjacent layouts, not attacker-declared malformed `Ncols`.
+**Alternatives considered:** fixing [035] or [029] here (rejected — shared behaviour outside this area
+pass); amending [020] (rejected — the valid-layout boundary does not close or widen the malformed-shape
+class); silently inheriting the new terminal surface without a debt update (rejected).
+
+### Decision 9: any recorded column-layout change is a replay boundary
+**Decision:** in `report.processData`, compare the previous and incoming result column names/layout in
+addition to recorded server version. When either changes, replace `prevStat`/`prevMeta`, skip diffing
+that first sample, rerun `Configure`, clear `Aligned` and stale `Cols`/`ColsWidth`, reset header cadence,
+and restore/re-resolve the requested sort key exactly as for a version change. This applies in both
+width-change directions and to blank as well as populated `stats_age`.
+**Rationale:** a same-PG19 archive appended across the pgcenter upgrade is ordinary valid input, but the
+existing version-only branch reuses stale renderer state and can omit the new column or fail on zero
+width. Treating layout identity as the boundary prevents both cross-layout deltas and stale output.
+**Alternatives considered:** reject mixed pgcenter layouts with a validation error and release-note
+workaround (rejected while a deterministic replay boundary is available); keep version-only reset plus
+the `DiffIntvl` bounds assertion (rejected — confirmed not to cover rendering).
+
+### Decision 10: the wraparound fixture runs only in a dedicated single-use PG 19 cluster
+**Decision:** the targeted integration test is skipped in the ordinary shared suite unless the external
+harness explicitly supplies a dedicated-cluster marker and expected server identity. The entire targeted
+`go test` process runs inside the dedicated disposable container/network namespace, so the existing
+connector's `127.0.0.1:21919` is necessarily the single-use PG 19 and no shared fixture is reachable at
+that endpoint. Immediately before any mutation, the test fails closed unless `pg_control_system()`'s
+`system_identifier` equals the harness-supplied value for this container. No test-only endpoint override
+is added. An external supervisor owns the cluster lifetime, runs no concurrent package against it, and
+destroys the container after completion, timeout, or test-process SIGKILL; in-test cleanup is never the
+last line of defence. The test still captures/restores and verifies the original autovacuum setting,
+registers cleanup immediately, removes feature-owned probe/procedure objects, starts idempotently,
+identifies the toast relation through `reltoastrelid`, and asserts a safe margin below the global freeze
+threshold before burning XIDs.
+**Rationale:** `t.Cleanup` alone cannot recover from runner loss, and package-parallel tests share port
+21919. External cluster ownership makes the irreversible XID and persistent-configuration operations
+safe; targeted PASS evidence is mandatory and an ordinary-suite skip is not a pass.
+**Alternatives considered:** cross-package locking and shared-cluster execution (rejected — still not
+interruption-safe); manual-only verification (rejected — the discriminating integration assertion must
+remain executable and mutation-checked).
+
+### Decision 11: recording exclusions must not lie about version support
+**Decision:** keep version/extension filtering aggregate, but emit a deterministic separate INFO for each
+deliberate `NotRecordable` exclusion. On PG 19 the sanitized line for this feature contains
+`autovacuum_scores`, `not recordable`, and `live TUI only`; it must not attribute that exclusion to the
+server version. Recording selection rules are unchanged. Add PG 19 setup/CLI evidence for both the named
+reason and absence of a false version-unsupported explanation.
+**Rationale:** on an otherwise fully available PG 19 setup, one shared "unsupported by version" counter
+would misdescribe the intentionally unsettled recording format, while silence would hide the exclusion.
+**Alternatives considered:** one generic reworded aggregate without view names (rejected — does not tell
+the operator what was omitted); separate public counters/messages for every version/extension reason
+(rejected as more surface than needed); leave the misleading message (rejected).
+
+### Decision 12: acceptance evidence is synthetic, minimised, and sanitized
+**Decision:** use a newly created no-secret database and synthetic workload. Keep raw full archives and
+terminal/session transcripts outside the repository with restrictive local permissions and trap-based
+deletion. Commit only required sanitized report output, tar member listings, and hashes; redact and
+secret-scan commands, environment output, SQL text, hostnames, and captures before publication.
+`--strlimit` is not a redactor, and credential values are prohibited in evidence.
+**Rationale:** full recordings may contain activity/statements query text and client metadata unrelated
+to the tables/indexes assertion.
+**Alternatives considered:** retaining complete raw archives as feature evidence (rejected — unnecessary
+sensitive-data exposure); relying on fixture convention without an explicit gate (rejected).
 
 ## Data Models
 
@@ -295,6 +350,23 @@ None.
 - `internal/postgres/testing.go` — `NewTestConnectVersion` for the PG 19 fixture.
 - `top/` — cycle, menu, keybinding and help machinery established by the `w`/`W` group.
 
+## Test Data and Identifier Map
+
+| Concern | Contract / Evidence |
+|---------|---------------------|
+| Relation identity | `relid` is internal join evidence only and is not displayed. Public row identity is `schemaname.relname` from the outer scores view; `UniqueKey` remains column 0. |
+| Score values | PostgreSQL exposes raw `double precision` scores. SQL renders all six as `round(...::numeric, 2)`; default ordering uses qualified unrounded `s.score`, while stable client-side sorting preserves that order for rounded ties. |
+| `dead_total` evidence | Absolute `n_dead_tup` comes from the outer join to `pg_stat_all_tables` on `relid`; a missing partner renders NULL/blank and must not drop the scores row. |
+| `stats_reset` evidence | PG 19 `stats_reset` comes from the `pg_stat_*` side of each relation query. NULL renders blank; a populated value is truncated to seconds and lies outside `DiffIntvl`. |
+| Wraparound fixture | The targeted test runs wholly inside the dedicated disposable container/network namespace; fixed `127.0.0.1:21919` cannot reach the shared fixture. Marker plus expected `system_identifier` are mandatory and checked fail-closed immediately before mutation. An external supervisor destroys the container after test completion/timeout/SIGKILL; no concurrent packages share it. The probe uses `reltoastrelid`, feature-owned idempotent objects, freeze-age margin, and config/object cleanup. Ordinary-suite skip is not PASS. |
+| Privilege fixtures | `SetupTestRole` creates named NOLOGIN roles with and without `pg_monitor`; callers prove the restricted session and always `RESET ROLE`. The scores query is expected to remain readable in both sessions. |
+| Replay fixtures | Synthetic `tables` and `indexes` archives contain at least two ticks on each side of recorded versions 180000 and 190000, plus same-190000 old/new pgcenter layouts in both directions × blank/populated `stats_age`, always with `-o stats_age`. New→old must restore seed/default sort after the requested column disappears; old→new resolves its new index. Filenames and report time bounds bracket every sample. |
+| Acceptance reset | SC-1 uses a fresh no-secret PG 19 container and chosen active/untouched relations. DB `stats_reset` and clock readings immediately around recording define expected age bounds with ±1 second truncation tolerance; shared integration tests do not perform this reset. |
+| Evidence handling | Decision 12: synthetic no-secret workload; raw full archives/transcripts stay outside Git and are deleted; only minimized sanitized output, member listings, and hashes survive after redaction/secret-scan. |
+| PostgreSQL fixtures | Active clusters use ports 21914–21919, database `pgcenter_fixtures`, user `postgres`. Unavailable clusters skip only where the established fixture contract permits it; an unmapped version is a failure. |
+| Manual terminal fixtures | PG 19 and PG 18 stand runs use deterministic tmux geometry (190×52, plus a narrow pass where relevant) and a second `master` binary for A/B classification. |
+| External providers | None. There are no provider DTOs, host credentials, asynchronous provider states, or polling contracts beyond bounded PostgreSQL/TUI refresh observation. |
+
 ## Testing Strategy
 
 **Feature size:** L
@@ -303,14 +375,16 @@ None.
 - Selector branch coverage for all three selectors across the version list, including boundary and
   out-of-range probes (`0`, `180000`, `190000`, `200000`), in the `archiver_test.go` shape.
 - Locked column-name list for the new query — the guard against PG 19 catalog drift in beta3/RC.
-  Assert the names *and* the order, and assert `FROM pg_stat_autovacuum_scores` is the outer
-  relation.
+  Assert names and order, outer `FROM pg_stat_autovacuum_scores`, all six `round(...::numeric, 2)`
+  expressions, all three boolean `::text` casts, outer `schemaname||'.'||relname`, `LEFT JOIN
+  pg_stat_all_tables` on `relid`, outer `s.schemaname` in the filter, and qualified `ORDER BY s.score
+  DESC`. Mutations to INNER JOIN, joined-side schema, rounded alias ordering, or dropped casts must
+  redden the corresponding named assertion.
 - `stats_age` is the last column on both PG 19 layouts. The load-bearing assertion is the **column
   order** combined with `DiffIntvl[1] == Ncols-2`; asserting `DiffIntvl == {1,18}` alone passes even
   if `stats_age` were inserted mid-layout, so it proves nothing on its own.
 - The bounds invariant from Decision 1: `DiffIntvl[1] < min(Ncols)` over every version of both
-  screens. This is what keeps a same-pgcenter-version width mismatch a benign mismatch rather than an
-  out-of-range read.
+  screens. This is defence in depth only; Decision 9 owns successful same-version layout replay.
 - `stats_age` is sourced from the `pg_stat_*` half of the join, not `pg_statio_*`. Both halves carry
   the column on PG 19 and the wrong one returns a plausible value, so this needs an assertion on the
   query text — nothing else would ever catch it.
@@ -327,34 +401,31 @@ None.
   `DiffIntvl{0,0}` produces no error. **Must be shown to fail** when the interval is changed to a
   non-zero pair, otherwise it proves nothing about the screen. The same test covers the empty
   `stats_age` cell, which reaches the render path by the same route.
-- The menu refusal writes exactly one cmdline message: assert on the composed line rather than on
-  the number of calls, since the call itself is unobservable (Decision 7 explains why two writes on
-  one path is the hazard).
+- The menu refusal test proves no `viewCh` send, unchanged current view, and closed menu. Exact notice
+  text and exactly-one-write behaviour are code-review plus manual SC-7 checks because `printCmdline`
+  through `g.Update` is not observable in this unit seam; do not claim a composed-line unit assertion.
 
 ### Integration tests
 - `tables`/`indexes` query execution against PG 14–19 fixtures, rewritten from the current
   `conn.Exec`-and-discard tier to the `FieldDescriptions()` tier so column counts are actually
   observable. While rewriting, fix two pre-existing defects in place: the missing `defer
   conn.Close()` and the legacy 12-version list where six versions always skip (tech debt [024]).
-- The new query against PG 19, asserting the 11 column names in order.
-- **The `for_wraparound` escape hatch**, with the fixture proven during the user-spec phase:
-  `ALTER TABLE … SET (toast.autovacuum_freeze_max_age = 100000)` plus ~120k committed transactions
-  through a procedure with `COMMIT` inside the loop (262 ms measured). Three constraints, each of
-  which the test is worthless without:
-  - The flagged relation **must** be in a system schema. A table in `public` is visible in user mode
-    with or without the escape hatch, so a test built on one passes either way.
-  - The flag **must be made stable for the duration of the assertion**. Autovacuum clears
-    `for_wraparound` within one `autovacuum_naptime`, and `autovacuum_enabled = false` does not
-    protect it — wraparound-prevention vacuums ignore that reloption by design. So the test runs with
-    `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`)
-    — and that is what makes the fixture safe, because the emergency wraparound launcher is armed
-    from the **global** `autovacuum_freeze_max_age`, not from the per-table reloption the fixture
-    lowers — and restores it through `t.Cleanup` — not a trailing statement. This mutates a cluster shared by
-    packages that run in parallel, so a failure before an unguarded restore would leave autovacuum
-    off for the remainder of the run. Without this, a run where the flag was already cleared is
-    indistinguishable from the mutation run that is supposed to be red.
-  - Discriminating assertion: user mode returns the flagged row; deleting `OR s.for_wraparound` from
-    the `WHERE` must redden *that* assertion, not the fixture setup.
+- The new query against PG 19, asserting the 11 column names in order. Port the measured three-relation
+  rounded-tie fixture (raw scores approximately 0.00299850, 0.00199900, and 0.00099950, all rendered
+  `0.00`) and assert the exact raw-score descending row order; replacing qualified `s.score` with the
+  rounded output alias must redden that order assertion. Unmatched LEFT JOIN behavior is pinned by the
+  structural assertions rather than assumed to occur naturally in a live catalog.
+- PG 19 recording filter/setup: `autovacuum_scores` is absent while deterministic sanitized INFO contains
+  `autovacuum_scores`, `not recordable`, and `live TUI only`, with no false version-unsupported reason.
+- **The `for_wraparound` escape hatch** follows Decision 10. The flagged relation must be in `pg_toast`
+  and identified through the probe's `reltoastrelid`; user mode must return that row, and deleting `OR
+  s.for_wraparound` must redden exactly that assertion rather than fixture setup. The entire test process
+  runs inside the dedicated container/network namespace and verifies marker plus expected
+  `system_identifier` before mutation; fixed port 21919 therefore cannot address the shared fixture.
+  The external supervisor destroys the container after completion, timeout, or test SIGKILL. Within that
+  disposable cluster the fixture uses the measured toast reloption and committed
+  XID burn, checks the global freeze-age safety margin, restores/verifies the prior autovacuum setting,
+  and cleans feature-owned objects idempotently. Ordinary shared-suite skip is not PASS evidence.
 - **Privilege behaviour of the new view, in both directions**, following `archiver_test.go`: run the
   query through `SetupTestRole(…, true)` and `SetupTestRole(…, false)`. Its name must match the
   `AutovacuumScores` filter that Task 1's verify uses, or it silently never runs — `go test -run` is
@@ -368,41 +439,46 @@ None.
   mandatory — the first of each version is consumed by the version-change branch. This is the first
   time a diffed screen goes through that branch; the three existing version-change tests are all
   `activity` with `DiffIntvl{0,0}`.
+- Same-recorded-version 190000 replay for both screens, both width-change directions, and both blank and
+  populated `stats_age` in every direction, per Decision 9. Use at least two ticks per layout and `-o
+  stats_age`: old→new resolves the requested column at its new index; new→old removes it and restores the
+  view's seed/default sort. For every boundary, the first new-layout sample is not diffed against the old
+  one, the second same-layout sample yields correct metric deltas, widths/headers recompute, blank ages
+  stay blank, and populated ages appear only in new-layout segments.
 
-### E2E tests
-No automated E2E. Interactive TUI behaviour is verified by hand on a stand, with a second binary
-built from `master` for A/B — without it, long-standing defects get filed against this feature.
+### Acceptance and E2E tests
+SC-1–SC-4 and SC-10 run as black-box CLI and regression scenarios in the feature acceptance harness. Interactive
+TUI behaviour in SC-5–SC-8 and the documentation review in SC-9 remain manual; the terminal scenarios
+use a second binary built from `master` for A/B.
+Unit and integration tests support these contracts but are not presented as external acceptance evidence.
 
-## Agent Verification Plan
+## Acceptance Design
 
-**Source:** user-spec "Как проверить" section.
+| SC | AC | Type | Setup/provider/fixture checkpoints | Expected base checkpoint | Final observable assertion |
+|----|----|------|------------------------------------|--------------------------|----------------------------|
+| SC-1 | AC-21, AC-22, AC-26–AC-28, AC-31 | new | Fresh no-secret PG 19 acceptance container; chosen active/untouched relations; capture `stats_reset` and DB clock bounds immediately before/after recording; at least three ticks; sanitized record stdout | `pg19_stats_age_report_unavailable` | Active-row ages meet DB-derived bounds ±1 second and untouched rows are blank; tar omits the view; INFO contains `autovacuum_scores`, `not recordable`, `live TUI only` and no false version reason |
+| SC-2 | AC-33 | regression | Synthetic archives for both screens, two ticks per recorded version, valid time bounds and metadata | N/A — must pass before and after the feature | Replay preserves each version's headers, widths, deltas, and requested sort column |
+| SC-3 | AC-36 | new | Build the current pgcenter binary | `relation_stats_age_descriptions_missing` | `report -d -T` and `report -d -I` include trailing `stats_age` descriptions marked PG 19+ |
+| SC-4 | AC-23, AC-29, AC-30 | regression | Identical PG 17/18 archives plus `master` and feature binaries; structural query/Ncols assertions remain separate | N/A — must pass before and after the feature | `report -T`, `-I`, `-F`, and `-S` output is byte-identical between binaries for each archive |
+| SC-5 | AC-1–AC-6, AC-13–AC-17, AC-35 | new, manual | PG 19 stand with representative relations, deterministic terminal, feature and `master` binaries | `autovacuum_screen_unavailable` | Both `t` and `T` paths show the contracted screen once, with correct observable values/order/help and working frozen-column scrolling |
+| SC-6 | AC-10, AC-11 | new, manual | PG 19 system-schema wraparound fixture, stable for the observation window | `wraparound_exception_unavailable` | The flagged system row is visible in user mode; ordinary system relations still follow the `,` toggle |
+| SC-7 | AC-15, AC-18–AC-20 | new + regression, manual | PG 18 stand and a `master` comparison binary | `version_aware_tables_menu_unavailable` | `t` preserves legacy behaviour; the marked menu item refuses selection with exactly one explanatory message |
+| SC-8 | AC-21, AC-22, AC-26–AC-28 | new, manual | PG 19 stand with chosen active/untouched relations and direct `stats_reset`/DB-clock evidence | `pg19_stats_age_display_unavailable` | Active values match DB-derived ages within one refresh ±1 second and grow between captures; untouched relations remain blank on both screens |
+| SC-9 | AC-37–AC-40 | new, manual documentation review | Final feature behaviour and all five affected documentation/register files | `feature_documentation_missing` | Feature catalog, both Project Knowledge references, release notes, and debts [035]/[029] match the shipped behaviour |
+| SC-10 | AC-41 | new | For each screen: both directions × blank/populated `stats_age`, two ticks per layout, `-o stats_age` | `same_pg19_layout_change_unsupported` | First new-layout sample is a no-diff boundary and second yields metric deltas; old→new resolves the new sort index and shows ages, new→old hides ages and restores seed/default sort; blank stays blank and populated ages occur only in new-layout segments |
 
-### Verification approach
-Everything except the interactive TUI paths is covered by the test suite run against the project's
-CI image, which carries PG 14–19 clusters. Two user-spec criteria are **not** agent-verifiable and
-are stated as such:
+Only SC-1–SC-4 and SC-10 enter `acceptance/scenarios/` and the freeze manifest. SC-5–SC-9 require terminal,
+timing, or documentation judgement and remain owner checklist items. AC-32 is an independent mandatory
+quality gate: full tests, build, E2E, lint, vulnerability checks, zero races, and separate targeted PASS
+evidence from the dedicated wraparound cluster; a shared-suite skip is not a pass. No failed, unobserved,
+or tooling-error result may be relabelled as a pass.
 
-- *"the screen caption prints exactly once on each entry path"* — `printCmdline` writes through
-  `g.Update`, and on a zero-value `&gocui.Gui{}` the spawned goroutine parks forever on a nil
-  channel, so a test can neither count calls nor read the buffer. Code review plus stand run.
-- *"`stats_age` grows between refreshes"* — requires `pg_stat_reset()` on the shared PG 19 fixture,
-  which is database-wide and irreversible, plus a ≥ 1 s sleep between samples. Automating it means
-  either cross-test contamination or serialising the whole PG 19 subtree. Stand run.
+## Verification Environment
 
-### Per-task verification
-| Task | verify: | What to check |
-|------|---------|--------------|
-| 1 | bash | `go test ./internal/query/ -run AutovacuumScores` — column names, order, outer relation, selector branches |
-| 2 | bash | `go test ./internal/query/ -run 'StatTables\|StatIndexes'` — 19/20 and 6/7 per version |
-| 3 | bash | `go test ./internal/view/ ./record/ ./internal/stat/` — registry counts, Configure arms, filter rows, recorder trap fixed, empty-cell short-circuit |
-| 4 | bash | `go test ./top/ -run 'Tables\|Menu\|Keybindings'` — cycle, menu suffix, refusal, bindings |
-| 5 | bash | `go test ./record/ ./report/` — describe entries, 18→19 replay of `tables` and `indexes` |
-| 6 | bash | `go test ./top/ -run 'ToggleSysTables\|help'` — four literals, help adjacency |
-| 7 | bash | `grep` over all five changed documents — including the architecture note — for the new screen name, the two new columns, the extended [035] entry and the new cycle-debt entry |
-| 8 | bash + user | `make test` in the CI image, `make lint`, `make vuln`; then the stand run per the user-spec checklist |
-
-### Tools required
-bash (project CI image for the PG-backed suite), git. No MCP tools, no deploy.
+The automated gate is the project CI image with live PG 14–19 fixtures. Required commands are
+`make test`, `make lint`, `make vuln`, `make build`, and `testing/e2e.sh`, plus the frozen acceptance
+runner. Host-only runs with skipped PostgreSQL tests are compile checks, not final evidence. The stand
+run owns the manual SC table and leaves server configuration, files, and tmux sessions as they were.
 
 ## Backward Compatibility
 
@@ -418,14 +494,14 @@ versions below PG 19 even that is invisible.
 **DB migration compatibility:** N/A — pgcenter owns no schema.
 
 **Consumer impact:**
-- Recorded archives: unaffected. `autovacuum_scores` is `NotRecordable`, and the two widened screens
-  render from recorded data — `report` never reads `view.Ncols` for them, and `DiffIntvl` is
-  unchanged, so old archives replay exactly as before.
+- Recorded archives: old single-layout archives replay as before. Mixed PG 19 layouts created by
+  `record -a` across a pgcenter upgrade are supported through Decision 9's layout boundary; they do not
+  reuse stale alignment or produce cross-layout deltas. `autovacuum_scores` remains `NotRecordable`.
 - `report -T` / the `tables` tar prefix / the `describeReport` key: the group name `"tables"` is
   simultaneously all three, so the view cannot be renamed. Same collision the `wal` group carries;
   the same in-code comment applies.
 - `architecture.md`'s statement that no production view sets `NotRecordable` any more becomes false
-  and is corrected by Task 7, not deferred to finalization.
+  and is corrected in the feature's documentation work, not deferred to release finalization.
 
 ## Risks
 
@@ -437,7 +513,7 @@ versions below PG 19 even that is invisible.
 | Help-screen edits break the pinned adjacency tests | `'t' tables,` must be removed from the `s,t,i` line or the entry-lookup helper fails on marker ambiguity; the new `t,T` row cannot sit between `j,J` and `w,W`. The free slot is after `w,W`. |
 | `Test_switchViewTo` builds the app with `VersionNum` zero, so the load-bearing cycle row fails once the cycle is version-aware | The test table gains a version column; this is expected churn, not a regression, and it is called out in the task so it is not "fixed" by weakening the assertion. |
 | The full suite breaks with an error naming no view, because `recorder_test` passes an unfiltered view map against a PG 17 fixture | Explicit task item; the minimal fix mirrors `record/record.go`'s own call: filter the map before handing it to the recorder. |
-| A same-pgcenter-version width mismatch reaches `diff()` via `record -a` across a pgcenter upgrade | Survives only because the tail append keeps `DiffIntvl[1]` at the last valid index — zero margin, see Decision 1. Guarded by an explicit `DiffIntvl[1] < min(Ncols)` invariant test rather than left implicit. Tech debt [020] itself is untouched: its reachability is unchanged by this feature, since diffed screens with version-dependent widths already exist. |
+| A same-pgcenter-version width mismatch reaches replay via `record -a` across a pgcenter upgrade | Decision 9 treats any recorded column-layout change as a boundary and resets all derived render/sort state before the next sample. Decision 1's bounds invariant remains defence in depth. Same-version tests cover both directions and blank/populated `stats_age`; tech debt [020] remains a separate malformed-archive issue. |
 
 ## Acceptance Criteria
 
@@ -456,14 +532,85 @@ versions below PG 19 even that is invisible.
 - [ ] Тест на `DiffIntvl{0,0}` показан красным при ненулевом интервале.
 - [ ] Тест escape-hatch показан красным при удалении `OR s.for_wraparound`, и красной становится
       именно проверка присутствия строки, а не установка фикстуры.
-- [ ] Запись техдолга [035] обновлена: область действия расширена на `stats_age`.
-      Запись [020] НЕ трогаем — её достижимость этой фичей не меняется, потому что диффуемые
-      экраны с версионно-зависимой шириной уже существуют (`wal`, `bgwriter`, `databases_general`).
+- [ ] Записи техдолга [035] и [029] обновлены: области действия расширены на `stats_age` и
+      `autovacuum_scores` соответственно. Запись [020] НЕ трогаем — её достижимость этой фичей
+      не меняется, потому что диффуемые экраны с версионно-зависимой шириной уже существуют
+      (`wal`, `bgwriter`, `databases_general`).
 - [ ] Заведена новая запись техдолга на version-blind циклы `x` и `p`: `statements_jit` (PG 15+)
       и `progress_copy` (PG 14+) достижимы циклом на серверах, где их нет, и экран отдаёт ошибку
       каждый тик. Эта фича их не чинит — она чинит только собственную группу `t`.
+- [ ] Same-PG19 replay обрабатывает обе смены pgcenter-layout как boundary: нет cross-layout delta,
+      stale widths/headers или потери blank/populated `stats_age`; sort key пересчитывается (Decision 9).
+- [ ] SQL structure/order tests различают qualified unrounded ordering, LEFT JOIN/relid, outer
+      `schemaname`, все rounding/boolean casts; rounded-tie integration fixture падает при ORDER BY alias.
+- [ ] PG 19 recording INFO содержит `autovacuum_scores`, `not recordable`, `live TUI only` и не содержит
+      ложного version-unsupported объяснения для deliberate exclusion.
+- [ ] Wraparound targeted test имеет отдельный PASS внутри одноразового PG 19 network namespace с
+      fail-closed `system_identifier` preflight и external supervisor cleanup; skip в общем наборе не
+      засчитывается (Decision 10).
+- [ ] Acceptance evidence минимизировано, sanitized и не содержит raw full archives/transcripts или
+      секретов; временные сырые артефакты удалены (Decision 12).
+- [ ] Все scriptable SC имеют одобренный готовый acceptance harness и проходят с сохранёнными
+      base/freeze/final evidence; ручные SC явно отмечены и не выдаются за автоматические.
 
-## Implementation Tasks
+## Proposed Follow-ups
+
+| Proposal | Why out of current scope | Rough cost |
+|----------|--------------------------|------------|
+| Record/report support for `autovacuum_scores` | The recorded layout is deliberately allowed to settle through use; the 0.13.0 roadmap owns the retrofit | M |
+| Version-aware `x` and `p` cycles | They belong to other screen groups and would expand this area pass; register the debt instead | M |
+| Recompute frozen column widths while a screen remains open | Shared rendering behaviour affects every screen; extend debt [035], do not fix it here | M |
+
+## Requirements Coverage
+
+| Requirement | Design elements |
+|-------------|-----------------|
+| US-1: threshold and actual autovacuum verdict | New view and query; Data Models value contract; Decisions 2–4 |
+| US-2: queue priority and absolute work | `OrderKey=1`, unrounded SQL ordering, `dead_total` outer join; Decision 3 |
+| US-3: accumulation period on relation screens | PG 19 selectors and trailing `stats_age`; Decisions 1, 2, and 5 |
+| US-4: visible wraparound pressure | ViewType schema predicate with `for_wraparound` exception; Decision 4 and fixture contract |
+| US-5: honest behaviour below PG 19 | Version-aware cycle/menu and refusal path; Decisions 6 and 7 |
+| AC-1, AC-2, AC-5 | Eleven-column Data Models contract and locked live column-name assertions |
+| AC-3, AC-4 | SQL rounding and boolean text value contract |
+| AC-6, AC-7 | Registry ordering plus qualified unrounded SQL `ORDER BY`; Decision 3 |
+| AC-8, AC-9 | Outer relation/join and outer `schemaname` predicate; Decision 4 |
+| AC-10, AC-11 | ViewType conditional and system-schema wraparound fixture |
+| AC-12 | `DiffIntvl{0,0}` short-circuit and mutation-checked empty-cell test |
+| AC-13–AC-17 | `tablesNextView`, two-item menu, keybindings, single cmdline write; Decisions 6 and 7 |
+| AC-18–AC-20 | Version-labelled menu item and refusal without view/channel mutation; Decisions 6 and 7 |
+| AC-21, AC-22, AC-25, AC-26 | PG 19 tail-column selectors, `pg_stat_*` source, nullable rendering; Decisions 1 and 2 |
+| AC-23, AC-29, AC-30 | Static legacy layouts and negative `functions`/`sizes` assertions; Decision 5 |
+| AC-24 | Tail placement outside unchanged `DiffIntvl`, including bounds invariant; Decision 1 |
+| AC-27, AC-28 | Disposable acceptance reset plus manual growth/untouched-row observation |
+| AC-31 | `NotRecordable: true` registry entry, record filtering, deterministic named live-TUI-only INFO; Decision 11 |
+| AC-32 | PG 14–19 integration matrix, filtered recorder fixture, dedicated wraparound PASS, full quality gate |
+| AC-33 | Version-aware replay fixtures and layout-state reset; Backward Compatibility |
+| AC-34 | Locked query column list and live `FieldDescriptions()` order assertion |
+| AC-35 | `t`/`T` keybinding and help contracts |
+| AC-36 | `report/describe.go` trailing PG 19+ rows and column-order tests |
+| AC-37–AC-40 | Feature catalog, both Project Knowledge references, release notes, and debts [035]/[029] documentation contracts |
+| AC-41 | Recorded layout-change boundary, renderer/sort reset, and same-version bidirectional replay tests; Decision 9 |
+| SC-1 | Disposable PG 19 acceptance reset, live record/report, and tar-entry observation |
+| SC-2 | Synthetic mixed-version replay fixtures and report layout-state contract |
+| SC-3 | Built-binary `describe` observation for both relation report types |
+| SC-4 | Byte-identical A/B CLI replay on identical legacy archives; structural assertions remain separate |
+| SC-5 | Observable PG 19 view/navigation/help manual contract; Decisions 6 and 7 |
+| SC-6 | System-schema filter and stable wraparound fixture; Decision 4 |
+| SC-7 | PG 18 A/B legacy cycle and new disabled-menu behaviour; Decisions 6 and 7 |
+| SC-8 | Manual reset/growth observation on both relation screens; tail-column selectors |
+| SC-9 | Documentation/register review covering AC-37–AC-40 |
+| SC-10 | Same-version bidirectional pgcenter-layout replay boundary; Decision 9 |
+
+## Appendix: Unapproved Legacy Task Draft
+
+The remainder predates the current Kimi decomposition phase. It is retained only as input for the
+next session, is not part of the approved technical contract, and must not be executed as written.
+The next phase must produce reviewed decomposition/task artifacts, model tiers, an Acceptance
+Execution Map, and a ready frozen harness. Legacy Task 8 maps to the separate `freeze-qa` phase.
+Review rounds added Decisions 9–12 and SC-10 after this draft was written: decomposition must explicitly
+own `report/report.go` layout-boundary work, the dedicated wraparound cluster harness, honest recording
+INFO, discriminating SQL/DB-time assertions, and sanitized evidence. The legacy file lists are therefore
+input, not complete coverage.
 
 **Reviewer note.** Tasks 1, 2 and 5 carry `dev-security-auditor` because they touch SQL
 construction or the recorded-archive replay path, which is this project's only untrusted input.
@@ -479,7 +626,7 @@ production parsing. The omission is a choice, not an oversight.
   Decisions 2, 3 and 4. Includes the locked column-name test that guards against PG 19 catalog drift
   and the wraparound escape-hatch test with its system-schema fixture.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor
 - **Verify:** bash — `go test ./internal/query/ -run AutovacuumScores` in the CI image
 - **Files to modify:** `internal/query/autovacuum_scores.go`, `internal/query/autovacuum_scores_test.go`
 - **Files to read:** `docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md`
@@ -495,7 +642,7 @@ production parsing. The omission is a choice, not an oversight.
   connection close — it is called but not deferred, so a failed assertion leaks it — and the legacy
   version list where six versions always skip.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor
 - **Verify:** bash — `go test ./internal/query/ -run 'StatTables|StatIndexes'` in the CI image
 - **Files to modify:** `internal/query/tables.go`, `internal/query/indexes.go`,
   `internal/query/tables_test.go`, `internal/query/indexes_test.go`
@@ -514,7 +661,7 @@ production parsing. The omission is a choice, not an oversight.
   short-circuit test, which proves an empty cell cannot abort a sample on a screen that diffs
   nothing. Record in-code that the `tables`/`indexes` cases are load-bearing rather than drift guards.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer
 - **Verify:** bash — `go test ./internal/view/ ./record/ ./internal/stat/`
 - **Files to modify:** `internal/view/view.go`, `internal/view/view_test.go`, `record/record_test.go`,
   `record/recorder_test.go`, `internal/stat/postgres_test.go`
@@ -529,7 +676,7 @@ production parsing. The omission is a choice, not an oversight.
   entry carries the availability suffix below PG 19 and refuses selection there. This is a new
   pattern in the codebase and is deliberately confined to this group.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer
 - **Verify:** bash — `go test ./top/ -run 'Tables|Menu|Keybindings'`
 - **Files to modify:** `top/config_view.go`, `top/menu.go`, `top/keybindings.go`,
   `top/config_view_test.go`, `top/menu_test.go`, `top/keybindings_test.go`
@@ -543,9 +690,9 @@ production parsing. The omission is a choice, not an oversight.
   that branch. Also refresh the stale in-code comments claiming no production view sets
   `NotRecordable` any more.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-security-auditor, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer, dev-security-auditor
 - **Verify:** bash — `go test ./record/ ./report/`
-- **Files to modify:** `report/describe.go`, `report/report_test.go`, `record/record.go`
+- **Files to modify:** `report/describe.go`, `report/report.go`, `report/report_test.go`, `record/record.go`
 - **Files to read:** `record/record_test.go`, `report/report.go`, `internal/view/view.go`
 
 ### Wave 4 (зависит от Wave 3)
@@ -557,7 +704,7 @@ production parsing. The omission is a choice, not an oversight.
   toggle test's table changes shape, not just length: its current markers do not appear in the new
   query.
 - **Skill:** code-writing
-- **Reviewers:** dev-code-reviewer, dev-test-reviewer
+- **Reviewers:** dev-code-reviewer
 - **Verify:** bash — `go test ./top/ -run 'ToggleSysTables|help'`
 - **Files to modify:** `top/config_view.go`, `top/help.go`, `top/config_view_test.go`,
   `top/help_test.go`
@@ -574,10 +721,11 @@ production parsing. The omission is a choice, not an oversight.
   CLI flag moved.
 - **Skill:** documentation-writing
 - **Reviewers:** dev-code-reviewer
-- **Verify:** bash — `grep` the four documents for the new screen name, the two new columns and the
+- **Verify:** bash — `grep` the five documents for the new screen name, the two new columns and the
   updated debt entries; each must be present
-- **Files to modify:** `docs/features-catalog.md`, `.claude/skills/project-knowledge/overview.md`,
-  `.claude/skills/project-knowledge/architecture.md`, `doc/release-notes/v0.12.0.md`,
+- **Files to modify:** `docs/features-catalog.md`,
+  `.kimi-code/skills/project-knowledge/references/project.md`,
+  `.kimi-code/skills/project-knowledge/references/architecture.md`, `doc/release-notes/v0.12.0.md`,
   `docs/tech-debt.md`
 - **Files to read:** `docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md`,
   `docs/roadmap-0.12.0.md`
@@ -589,5 +737,5 @@ production parsing. The omission is a choice, not an oversight.
   and `make vuln` — this task owns all three, no earlier task runs them. Verification of every
   acceptance criterion from user-spec and tech-spec. The interactive TUI criteria are handed to the
   stand run, including the A/B comparison against a `master`-built binary.
-- **Skill:** pre-deploy-qa
+- **Skill:** freeze-qa
 - **Reviewers:** none

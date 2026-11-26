@@ -341,7 +341,8 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [018] Tables and autovacuum area — one pass
 
-- **Status:** planned
+- **Status:** user-spec and tech-spec approved for the Kimi SDLC; ready for decomposition in a fresh
+  session. No product implementation, task decomposition, or acceptance freeze has started.
 - **Value:** `pg_stat_autovacuum_scores` is **the most valuable new view in PG 19** for this
   audience — per-table autovacuum detail: why autovacuum is not visiting a table and what its
   priority is. DBAs currently reconstruct this by hand from `n_dead_tup`, `reltuples` and the

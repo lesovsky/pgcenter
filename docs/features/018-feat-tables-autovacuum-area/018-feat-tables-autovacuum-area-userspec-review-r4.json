@@ -1,0 +1,26 @@
+{
+  "reviewer": "dev-userspec-reviewer",
+  "status": "approved",
+  "summary": "Оба замечания третьего раунда устранены. AC-31/SC-1 теперь задают и проверяют наблюдаемый sanitized INFO с именем autovacuum_scores, причинами not recordable и live TUI only и без ложной версионной причины. AC-41/SC-10 задают полную матрицу для tables/indexes, оба направления смены layout, пустой и непустой stats_age, два тика на layout и различающую сортировку -o stats_age с проверкой new-index resolution и seed/default fallback. Граница diff и второй same-layout metric delta проверяемы. Изоляция wraparound-теста fail-closed: test process и endpoint находятся внутри одноразового container/network namespace, system_identifier сверяется до мутаций, а внешний supervisor гарантирует уничтожение среды. US/AC/SC согласованы, скоуп остаётся в пределах фичи и необходимой replay safety; новых замечаний и блокирующих вопросов нет.",
+  "findings": [],
+  "interview_coverage": {
+    "covered": [
+      "Скоуп: новый экран PG 19+, stats_age только на tables/indexes, functions и sizes исключены",
+      "Одиннадцать колонок, их порядок, два знака для шести score, true/false и dead_total вместо dead_tuples_ratio",
+      "Сортировка score DESC по неокруглённому значению и фильтрация системных схем существующим тумблером ,",
+      "Исключение for_wraparound=true для системной схемы и различающая фикстура, способная упасть без escape-hatch",
+      "Version-aware t/T, постоянный пункт меню с текстовой пометкой и объяснением отказа на PG ниже 19",
+      "Источник stats_reset из pg_stat_*, пустые ячейки и DB-derived проверка возраста active/untouched отношений",
+      "Replay tables/indexes через PG 18→19 и полная same-PG19 layout-matrix с проверкой delta, stats_age и sort reset",
+      "Отказ от записи autovacuum_scores, ловушка recorder-теста на PG 17 и явный честный INFO на PG 19",
+      "Locked-тест каталога, общий quality gate и обязательный targeted PASS wraparound",
+      "Fail-closed изоляция wraparound: одноразовый container/network namespace, system_identifier перед мутациями и внешний supervisor cleanup",
+      "Ручной TUI-прогон с A/B против основной ветки, tmux-геометрией и проверкой горизонтальной прокрутки",
+      "Help, describe, features catalog, оба Project Knowledge reference, release notes и расширение техдолгов [035]/[029] без изменения общего renderer/санитайзера",
+      "Synthetic/minimized/sanitized acceptance evidence без коммита сырых tar-архивов и transcripts",
+      "Ошибки и границы: пустой экран, исчезнувшее отношение, партиционирование, reltuples=-1, длинные имена и существующее поведение ошибок"
+    ],
+    "missing": []
+  },
+  "questions": []
+}
