@@ -247,6 +247,11 @@ func switchViewTo(app *app, c string) func(g *gocui.Gui, _ *gocui.View) error {
 			viewSwitchHandler(app.config, progressNextView(app.config.view.Name))
 		case "statio":
 			viewSwitchHandler(app.config, statioNextView(app.config.view.Name))
+		// Like "wal", "tables" is simultaneously the group name, the first view's name, the
+		// 'report -T' report type and the tar entry prefix. Keep the cycle at this dispatch point
+		// rather than inventing a separate group name.
+		case "tables":
+			viewSwitchHandler(app.config, tablesNextView(app.config.view.Name, app.postgresProps.VersionNum))
 		// Unlike every other cycle here, "wal" is simultaneously the name of the group and the name
 		// of its first view - the view cannot be renamed, it is the 'report -W wal' report type and
 		// the tar entry prefix in recorded archives. This is the group's single dispatch point, and
@@ -305,6 +310,25 @@ func walNextView(current string) string {
 		next = "wal"
 	default:
 		next = "wal"
+	}
+	return next
+}
+
+// tablesNextView depending on current tables view and Postgres version returns next view.
+func tablesNextView(current string, version int) string {
+	var next string
+
+	switch current {
+	case "tables":
+		if version >= query.PostgresV19 {
+			next = "autovacuum_scores"
+		} else {
+			next = "tables"
+		}
+	case "autovacuum_scores":
+		next = "tables"
+	default:
+		next = "tables"
 	}
 	return next
 }
@@ -450,7 +474,7 @@ func switchViewToProcPidStat(app *app) func(g *gocui.Gui, _ *gocui.View) error {
 func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
 		name := config.view.Name
-		if name != "tables" && name != "indexes" && name != "sizes" {
+		if name != "tables" && name != "indexes" && name != "sizes" && name != "autovacuum_scores" {
 			return nil
 		}
 
@@ -462,8 +486,8 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		// Format new queries depending on requested view type.
-		queries := make([]string, 3)
-		for i, t := range []string{"tables", "indexes", "sizes"} {
+		queries := make([]string, 4)
+		for i, t := range []string{"tables", "indexes", "sizes", "autovacuum_scores"} {
 			q, err := query.Format(config.views[t].QueryTmpl, config.queryOptions)
 			if err != nil {
 				return err
@@ -472,7 +496,7 @@ func toggleSysTables(config *config) func(g *gocui.Gui, _ *gocui.View) error {
 		}
 
 		// Update queries in view.
-		for i, t := range []string{"tables", "indexes", "sizes"} {
+		for i, t := range []string{"tables", "indexes", "sizes", "autovacuum_scores"} {
 			v := config.views[t]
 			v.Query = queries[i]
 			config.views[t] = v

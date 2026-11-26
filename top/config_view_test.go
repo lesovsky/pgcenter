@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jroimartin/gocui"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
 	"regexp"
@@ -593,11 +594,16 @@ func Test_switchViewTo(t *testing.T) {
 		current   string
 		to        string
 		want      string
+		version   int
 		pgssAvail bool
 	}{
 		{current: "activity", to: "databases_general", want: "databases_general"},
 		{current: "databases_general", to: "databases_sessions", want: "databases_sessions"},
 		{current: "databases_sessions", to: "tables", want: "tables"},
+		{current: "tables", to: "tables", version: query.PostgresV19, want: "autovacuum_scores"},
+		{current: "autovacuum_scores", to: "tables", version: query.PostgresV19, want: "tables"},
+		{current: "tables", to: "tables", version: query.PostgresV18, want: "tables"},
+		{current: "activity", to: "tables", version: query.PostgresV19, want: "tables"},
 		{current: "tables", to: "indexes", want: "indexes"},
 		{current: "indexes", to: "sizes", want: "sizes"},
 		{current: "sizes", to: "functions", want: "functions"},
@@ -634,6 +640,7 @@ func Test_switchViewTo(t *testing.T) {
 		t.Run(fmt.Sprintln(i), func(t *testing.T) {
 			app.config.view = app.config.views[tc.current]
 			app.postgresProps.ExtPGSSSchema = "public"
+			app.postgresProps.VersionNum = tc.version
 
 			wg.Add(1)
 			go func() {
@@ -707,6 +714,30 @@ func Test_walNextView(t *testing.T) {
 	}
 }
 
+func Test_tablesNextView(t *testing.T) {
+	testcases := []struct {
+		name    string
+		current string
+		version int
+		want    string
+	}{
+		{name: "PG 19 tables to scores", current: "tables", version: query.PostgresV19, want: "autovacuum_scores"},
+		{name: "PG 19 scores to tables", current: "autovacuum_scores", version: query.PostgresV19, want: "tables"},
+		{name: "PG 19 unrelated to tables", current: "activity", version: query.PostgresV19, want: "tables"},
+		{name: "PG 18 tables stays on tables", current: "tables", version: query.PostgresV18, want: "tables"},
+		{name: "PG 18 scores returns to tables", current: "autovacuum_scores", version: query.PostgresV18, want: "tables"},
+		{name: "PG 18 unrelated to tables", current: "activity", version: query.PostgresV18, want: "tables"},
+		{name: "above PG 19", current: "tables", version: 200000, want: "autovacuum_scores"},
+		{name: "zero version", current: "tables", version: 0, want: "tables"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, tablesNextView(tc.current, tc.version))
+		})
+	}
+}
+
 func Test_statementsNextView(t *testing.T) {
 	testcases := []struct {
 		current string
@@ -747,6 +778,8 @@ func Test_progressNextView(t *testing.T) {
 }
 
 func Test_toggleSysTables(t *testing.T) {
+	const scoresSchemaFilter = "s.schemaname NOT IN ('pg_catalog', 'pg_toast', 'information_schema')"
+
 	testcases := []struct {
 		name    string
 		current string
@@ -756,41 +789,47 @@ func Test_toggleSysTables(t *testing.T) {
 		{name: "tables", current: "user", want: "pg_stat_all", nowant: "pg_stat_user"},
 		{name: "indexes", current: "user", want: "pg_stat_all", nowant: "pg_stat_user"},
 		{name: "sizes", current: "user", want: "pg_stat_all", nowant: "pg_stat_user"},
+		{name: "autovacuum_scores", current: "user", nowant: scoresSchemaFilter},
 		{name: "tables", current: "all", want: "pg_stat_user", nowant: "pg_stat_all"},
 		{name: "indexes", current: "all", want: "pg_stat_user", nowant: "pg_stat_all"},
 		{name: "sizes", current: "all", want: "pg_stat_user", nowant: "pg_stat_all"},
+		{name: "autovacuum_scores", current: "all", want: scoresSchemaFilter},
 	}
 
-	config := newConfig()
-	wg := sync.WaitGroup{}
-
-	for i, tc := range testcases {
-		t.Run(fmt.Sprintln(i), func(t *testing.T) {
+	for _, tc := range testcases {
+		t.Run(tc.name+" from "+tc.current, func(t *testing.T) {
+			config := newConfig()
+			config.viewCh = make(chan view.View, 1)
 			config.view = config.views[tc.name]
 			config.queryOptions.ViewType = tc.current
 
-			wg.Add(1)
-			go func() {
-				v := <-config.viewCh
-				assert.Contains(t, v.Query, tc.want)
-				assert.NotContains(t, v.Query, tc.nowant)
-				wg.Done()
-			}()
+			assert.NoError(t, toggleSysTables(config)(nil, nil))
 
-			fn := toggleSysTables(config)
-			assert.NoError(t, fn(nil, nil))
+			select {
+			case v := <-config.viewCh:
+				assert.NotEmpty(t, v.Query)
+				if tc.want != "" {
+					assert.Contains(t, v.Query, tc.want)
+				}
+				if tc.nowant != "" {
+					assert.NotContains(t, v.Query, tc.nowant)
+				}
+			default:
+				t.Fatal("system-relations toggle did not send the formatted view")
+			}
 		})
-		wg.Wait()
 	}
 
-	// when current view is not in ('tables','indexes','sizes') nothing changed.
-	config.queryOptions.ViewType = "user"
-	config.view = config.views["activity"]
-	fn := toggleSysTables(config)
-	assert.NoError(t, fn(nil, nil))
-	assert.Equal(t, "user", config.queryOptions.ViewType)
+	t.Run("activity remains a no-op", func(t *testing.T) {
+		config := newConfig()
+		config.viewCh = make(chan view.View, 1)
+		config.queryOptions.ViewType = "user"
+		config.view = config.views["activity"]
 
-	close(config.viewCh)
+		assert.NoError(t, toggleSysTables(config)(nil, nil))
+		assert.Equal(t, "user", config.queryOptions.ViewType)
+		assert.Empty(t, config.viewCh)
+	})
 }
 
 func Test_changeQueryAge(t *testing.T) {
