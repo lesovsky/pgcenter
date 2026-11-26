@@ -1,0 +1,125 @@
+{
+  "reviewer": "dev-security-auditor",
+  "mode": "whole-feature",
+  "round": 2,
+  "status": "approved",
+  "range": {
+    "base": "2dbd6267515f552d9660894d1b05fd3fb69e9bee",
+    "head": "0003ff431b77106238d23b7a75b7450c3582428e",
+    "round_1_head": "0e17eb4f943908f5ffccaff32bc95c04bde54906"
+  },
+  "summary": "Both round-1 in-scope security findings are closed. The rounded-tie fixture now creates a cryptographically random, safely quoted schema, fails without adopting a collision, cleans only that schema, and contains no fixed-name persistent table DROP. Two real concurrent PG19 executions passed while all three legacy-name sentinel tables remained present and no generated schemas remained. SC-1 now enforces NetworkMode=none, runs the recorder as the host UID:GID without relaxing restrictive artifact permissions, and applies explicit UTC to both recorder and host report context without changing assertion libraries or expected checkpoints. Accepted base-reFreeze-3 and reFreeze-3-feature evidence is clean, manifest-valid, sanitized, and independently approved. Product/test and harness repairs are in separate commits. These results close the review findings but are harness revalidation, not final QA.",
+  "finding_counts": {
+    "total": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2,
+    "in_scope": 0,
+    "out_of_scope": 2
+  },
+  "blocking_risks": [],
+  "findings": [
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "category": "Untrusted deserialization / malformed archive bounds safety (existing debt [020])",
+      "title": "Malformed Ncols panic remains an unchanged out-of-scope debt",
+      "description": "An untrusted archive can still declare an excessive Ncols while keeping Cols and row widths internally consistent, reaching the shared diff loop's attacker-controlled indexing and panicking report replay. Attack vector: an operator replays a crafted downloaded or replaced tar archive. The valid-layout boundary work and SC-1 re-freeze do not claim to fix this malformed-shape class, and round 2 did not widen it.",
+      "location": "internal/stat/postgres.go:558-572,606-656; report/report.go:271-319; docs/tech-debt.md [020]",
+      "verified": true,
+      "evidence": "Read-only source inspection still finds no Ncols == len(Cols) validation. `git diff --exit-code 0e17eb4..0003ff4 -- docs/tech-debt.md internal/stat/postgres.go top/stat.go` passed, so round-2 fixes did not alter the shared parser, renderer, or debt boundary. Task 04's earlier sanitized reproduction remains the dynamic evidence; no new malformed-archive reproduction was needed or performed.",
+      "recommendation": "Resolve separately under debt [020] by requiring consistent Ncols/Nrows/Cols dimensions, validating consumer indices, and adding malformed-archive tests that require a clean error rather than a panic. Do not cite valid-layout replay or this approval as closing [020]."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "category": "Terminal escape injection / server-controlled output (existing debt [029])",
+      "title": "Unsanitised terminal cell output remains an unchanged out-of-scope debt",
+      "description": "Server-derived relation values, including the new autovacuum_scores relation column, still reach printDataCell without terminal-control sanitization. A principal able to create a hostile object name can manipulate terminal output when a DBA renders the screen, with pause extending the display window. Attack vector: a hostile or compromised database object name is rendered by an operator's terminal. This remains the explicitly recorded shared debt rather than a round-2 regression.",
+      "location": "internal/query/autovacuum_scores.go:6; top/stat.go:1212-1238; docs/tech-debt.md [029]",
+      "verified": true,
+      "evidence": "Read-only data-flow inspection confirms the raw cell string is still passed to fmt.Fprintf. The round-1-to-round-2 diff leaves top/stat.go and docs/tech-debt.md unchanged; debt [029] continues to name the autovacuum_scores surface and does not claim a shared sanitizer fix.",
+      "recommendation": "Handle in a separate shared-output change that removes terminal control characters at the server/archive-to-terminal boundary while preserving intended formatting and multibyte text, with hostile-name tests for live and paused rendering."
+    }
+  ],
+  "evidence": {
+    "round_1_finding_closure": {
+      "rounded_tie_destructive_fixture": {
+        "status": "closed",
+        "commit": "b5af8f253cf0d2cb23247f3cfabb8696b80cdceb",
+        "ownership": "newAutovacuumScoresFixtureSchema reads 16 bytes from crypto/rand and hex-encodes them, producing a 128-bit random suffix. pgx.Identifier.Sanitize quotes the schema and qualified table identifiers. Plain CREATE SCHEMA, without IF NOT EXISTS, fails on collision before cleanup registration, so the test cannot adopt or drop a pre-existing schema. Cleanup drops only the successfully created generated schema.",
+        "static_verification": "Read-only assertions returned random_128_bit_schema=True, plain_create_schema_fails_on_collision=True, cleanup_registered_after_successful_create=True, only_generated_schema_cleanup=True, identifier_quoting=True, no_fixed_name_persistent_table_drop=True, and unique_schema_used_for_identity_and_lookup=True. The former fixed public-schema DROP TABLE statements are absent from the rounded-tie test.",
+        "unit_verification": "Test_AutovacuumScoresRoundedTieSchemaUniqueness generated and checked 64 names and passed, along with the query selector and structural tests.",
+        "concurrency_and_sentinel_verification": "In a fresh network-none lesovsky/pgcenter-testing:0.0.11 PG19 container, three public tables bearing all three former fixed fixture names were created and counted before testing. Two isolated runner containers then executed Test_StatAutovacuumScoresQuery_RoundedTieRawOrder concurrently against the same PG19 namespace. Both commands exited 0 and each emitted exactly one target-level PASS with no target SKIP/FAIL. Afterward, sentinel count remained 3 and residual pgcenter_autovacuum_scores_% schema count was 0. The external wrapper destroyed the PG19 container and verified absence. No raw database rows or credentials were published.",
+        "control_attempt_history": "Two initial wrapper attempts were not counted as complete sentinel evidence. Their product tests emitted PASS, but the post-check exposed that the auditor's sentinel setup used docker exec without -i and therefore created no sentinels. The corrected attempt explicitly required a pre-test count of 3 before launching the concurrent tests and is the only attempt used for the sentinel-preservation conclusion. No failed control was relabelled as a product failure or a passing ownership control."
+      },
+      "sc1_default_bridge": {
+        "status": "closed",
+        "commits": [
+          "fcea62e09788806dedbf6ef2cc2beb102bbe94db",
+          "f1660eac14119e2f4f9bc5806455d96237c99a37",
+          "e36af86cdc8df7232c00144007b90f9d004868e0"
+        ],
+        "network": "SC-1 uses docker run --network none, has no --publish or docker port discovery, and performs a bounded docker inspect that must return exactly HostConfig.NetworkMode=none before any cluster setup or reset. PostgreSQL, psql, and the production pgcenter recorder communicate only over container loopback. The production binary is bind-mounted read-only.",
+        "host_ownership_and_permissions": "The recorder runs through docker exec --user $(id -u):$(id -g), so the archive on the identical-path ACC_TMP bind mount is host-owned. common.sh retains umask 077 and ACC_TMP mode 0700 with trap deletion; recorder archive creation remains mode 0600. No chmod, chown, world-readable mode, ACL relaxation, or recorder product change was introduced. archive_ticks=3 in both accepted SC-1 logs proves the host assertion process could read the restrictive archive.",
+        "utc": "export TZ=UTC covers host date bound generation, host production report execution, and Python assertion parsing. docker exec --env TZ=UTC independently covers recorder archive filenames. Epoch host-clock captures and offset-aware PostgreSQL timestamps remain unchanged, so filename filtering, rendered timestamps, age bounds, and growth checks share one explicit timezone.",
+        "assertion_preservation": "From the original freeze, only SC-1.sh and its manifest entry changed. SC-2/SC-3/SC-4/SC-10 and every assertion/helper library, including reports.py and sanitize.py, are byte-identical. SC-1 retains the real record/report CLI, fixture SQL, three-tick/archive exclusion checks, active/untouched identities, trailing layouts, DB-derived +/-1 second bounds, growth checks, truthful recording INFO, inconsistent-layout rejection, hashes, and base checkpoint. No assertion was removed or relaxed."
+      }
+    },
+    "commit_separation": {
+      "status": "pass",
+      "product_test_commit": "b5af8f2 changes only internal/query/autovacuum_scores_test.go and contains no harness file.",
+      "harness_commits": "fcea62e, f1660ea, e36af86, and accepted-base affb927 each change only acceptance/scenarios/SC-1.sh and acceptance/scenario-manifest.sha256. None contains product/test source.",
+      "accepted_harness_identity": "git diff --exit-code affb927..e36af86 and e36af86..0003ff4 over scenario/manifest files passed. Accepted base, feature revalidation, and current HEAD therefore use byte-identical harness bytes."
+    },
+    "accepted_refreeze": {
+      "independent_approval": "018-feat-tables-autovacuum-area-acceptance-refreeze-review.json is approved/approved with zero findings, freezeAllowed=true, contractChange=false, and no blocking actions.",
+      "base": "base-reFreeze-3 at affb927 is dirty=false and manifestValid=true. SC-2/SC-4 are 0/pass/complete; SC-1/SC-3/SC-10 reach exactly pg19_stats_age_report_unavailable, relation_stats_age_descriptions_missing, and same_pg19_layout_change_unsupported with contractValid=true.",
+      "feature_revalidation": "reFreeze-3-feature at e36af86 is dirty=false and manifestValid=true. SC-1, SC-2, SC-3, SC-4, and SC-10 are each 0/pass/complete with contractValid=true. SC-1 additionally records archive_ticks=3, autovacuum_scores_members=0, both live reports, and record_info=live_tui_only false_version_reason=false.",
+      "integrity_and_sanitization": "Current manifest validation passes all nine entries and its SHA-256 is f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195, matching freeze.json, readiness, and independent approval. All ten accepted base/feature scenario logs passed sanitize.py check in this audit. Failed base-reFreeze-1/base-reFreeze-2 and both triage reports remain preserved.",
+      "boundary": "reFreeze-3-feature is accepted harness revalidation, not the fresh freeze-qa feature-r1 run and not final QA."
+    },
+    "sensitive_data": "A configured credential-assignment, credentialed-URI, and private-key pattern scan over round-1-to-round-2 changed paths found no matches; values were designed to be withheld if present. No raw archive, terminal transcript, environment dump, or secret is reproduced here."
+  },
+  "verification": {
+    "commands": [
+      {
+        "command": "go test ./internal/query/ -run '^(Test_AutovacuumScoresRoundedTieSchemaUniqueness|Test_SelectStatAutovacuumScoresQuery|Test_StatAutovacuumScoresQuery_Structure)$' -count=1 -v",
+        "result": "PASS. The 64-name uniqueness control and all selected selector/structural subtests ran and passed."
+      },
+      {
+        "command": "Fresh disposable network-none PG19; precreate and count three legacy-name sentinels; run two concurrent exact rounded-tie go test -json targets in separate containers sharing only that namespace; require two test-level PASS events; query sentinel/generated-schema counts; externally destroy and verify container absence",
+        "result": "PASS. pre_test_legacy_name_sentinel_tables=3; concurrent_run_1_target_pass=1 and concurrent_run_2_target_pass=1 with zero target skip/fail; both runner exits 0; legacy_name_sentinel_tables_remaining=3; residual_unique_fixture_schemas=0; disposable_pg19_destroyed=true."
+      },
+      {
+        "command": "LC_ALL=C sha256sum -c scenario-manifest.sha256; bash -n SC-1.sh; sanitize.py check --input <each accepted base/feature SC log>",
+        "result": "PASS. Nine manifest entries were OK, SC-1 syntax was valid, and every accepted scenario log in both runs passed sanitization."
+      },
+      {
+        "command": "Read-only JSON validator for base-reFreeze-3/result.json, reFreeze-3-feature/result.json, readiness/freeze metadata, and independent acceptance approval",
+        "result": "PASS. Both runs are clean and manifest-valid with all five expected contract-valid outcomes; independent review is approved with zero findings and no contract change."
+      },
+      {
+        "command": "Read-only commit file-list validator for b5af8f2/fcea62e/f1660ea/e36af86/affb927 plus accepted-base/feature/current harness diffs",
+        "result": "PASS. Product/test and harness commits are disjoint; accepted and current harness bytes are identical."
+      },
+      {
+        "command": "go vet ./internal/query/ && test -z \"$(gofmt -l internal/query/autovacuum_scores_test.go)\"; git diff --check 2dbd6267..0003ff43",
+        "result": "PASS. Vet, formatting, and complete-range whitespace checks passed."
+      },
+      {
+        "command": "docker ps -a --filter name=pgcenter-sec-r2- --format '{{.Names}}'",
+        "result": "No auditor containers remained after the successful control and external cleanup verification."
+      }
+    ],
+    "not_performed_or_pending": [
+      "No acceptance runner or final QA was executed by this security audit. Accepted reFreeze-3-feature evidence was inspected, not rerun or relabelled feature-r1.",
+      "The fresh freeze-qa feature-r1 run remains required.",
+      "Manual SC-5, SC-6, SC-7, and SC-8 remain pending; no terminal-visible result is inferred.",
+      "Final AC-32 make test, testing/e2e.sh, make build, make lint, and make vuln gates remain pending.",
+      "No XID-burning wraparound test was rerun; its previously approved targeted evidence is unchanged by these fixes.",
+      "No dependency manifests changed in this repair delta; no new dependency-vulnerability claim is made."
+    ],
+    "workspace": "No product, documentation, frozen, shared, or harness file was edited by this audit. No agents were spawned. Temporary Docker logs and the sentinel workload lived only in restrictive external temporary storage/disposable containers and were deleted. The only file written by this audit is the requested round-2 JSON report."
+  }
+}

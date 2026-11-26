@@ -75,6 +75,17 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — complete and ready for freeze-qa
+
+**Summary:** All four waves and six tasks are implemented, reviewed and integrated. Requirements coverage is complete at implementation/test level for US-1–US-5 and AC-1–AC-41; SC-9 passed. Scripted SC-1/SC-2/SC-3/SC-4/SC-10 passed the re-freeze feature validation, but fresh freeze-qa `feature-r1`, manual SC-5–SC-8 and the final AC-32 quality gate remain pending and are not claimed here.
+**Whole-feature review:** Round 1 findings were fixed in separate product/test and docs commits. Round 2 code review approved with zero findings. Round 2 security review approved with zero in-scope findings; only existing out-of-scope [020] and [029] remain recorded.
+**Acceptance:** One owner-approved SC-1 batch re-freeze completed after two preserved failed attempts and explicit reauthorization. Accepted freeze SHA is `affb927d2fd536172e31a3efb3e6146d0ba3b57d`; independent freeze review approved with zero findings. Feature revalidation `reFreeze-3-feature` passed all five scenarios and does not replace fresh `feature-r1`.
+**Selection mode:** `inherited` throughout. Requested strong/standard tiers were planning metadata only; the runtime exposed no model aliases.
+**Deviations/follow-ups:** No product dependencies or shared renderer/parser/sanitizer changes were added. Existing [020]/[029]/[035] and new [037] remain follow-ups, as does planned record/report support for autovacuum_scores. No push, integration-branch merge, deployment or feature-branch deletion occurred.
+**Next phase:** Start a new session and run `/skill:freeze-qa docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area`. Provide PG 19 and PG 18 stands for manual SC-5–SC-8 and A/B comparison.
+
+---
+
 ## Phase: Acceptance harness — owner-approved batch re-freeze approved
 
 **Summary:** The explicitly reauthorized cohesive UTC correction completed the single SC-1 batch re-freeze. Harness-only commits `fcea62e`, `f1660ea` and `e36af86` isolate PostgreSQL with network-none, retain restrictive host-owned archive access and align recorder/report timestamps in UTC without weakening assertions.
