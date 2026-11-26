@@ -2,6 +2,8 @@
 
 # Shared process, evidence, and result handling for the black-box scenarios.
 
+export PYTHONDONTWRITEBYTECODE=1
+
 ACC_SCENARIO="${ACC_SCENARIO:-unknown}"
 ACC_ACCEPTANCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ACC_REPO_ROOT="$(cd "$ACC_ACCEPTANCE_DIR/../../../.." && pwd)"
