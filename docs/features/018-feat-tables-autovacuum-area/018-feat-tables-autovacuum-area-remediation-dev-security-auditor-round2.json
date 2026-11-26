@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "The round-2 delta is a necessary, build-stage-only installation of git and make. It restores Docker builds and correct version metadata without adding either tool, its dependencies, or any other new package to the final runtime image. No security, deployment-consistency, secret-exposure, or unintended-scope finding was identified.",
+  "branch": "feature/018-feat-tables-autovacuum-area",
+  "reviewRound": 2,
+  "findingCounts": {
+    "critical": 0,
+    "major": 0,
+    "minor": 0,
+    "in_scope": 0,
+    "out_of_scope": 0
+  },
+  "blockingRisks": [],
+  "findings": [],
+  "verification": {
+    "delta_review": {
+      "command": "git diff -- Dockerfile && git diff --check",
+      "result": "The only reviewed source delta is RUN apk --no-cache add git make immediately before RUN make build in the golang:1.26.10-alpine build stage. Diff check exited 0. No product or acceptance-harness source was edited."
+    },
+    "build_requirement_trace": {
+      "location": "Makefile:5-9,38-40",
+      "result": "The build target requires make and embeds Git-derived tag, commit, and branch values through Go ldflags. Installing make satisfies the build orchestration requirement; installing git prevents missing or incorrect version metadata."
+    },
+    "stage_isolation": {
+      "location": "Dockerfile:2-13",
+      "result": "git, make, and git's transitive Alpine dependencies are installed only in the intermediate build stage. The final stage remains alpine:3.21 with ca-certificates and copies only /app/bin/pgcenter from the builder. No final-stage package, command, port, user, environment variable, or startup behavior was added or changed."
+    },
+    "independent_image_verification": {
+      "commands": [
+        "docker build --tag pgcenter-security-audit:round2 .",
+        "docker run --rm --entrypoint sh pgcenter-security-audit:round2 -c '<assert git/make absent and execute pgcenter --version>'"
+      ],
+      "result": "The image built successfully. The final-image assertion confirmed that both git and make are absent and /bin/pgcenter is executable. The version smoke printed v0.11.0, commit 65f42d8, and the feature branch, matching the expected metadata. The temporary audit image tag was removed by the command's cleanup trap."
+    },
+    "security_and_scope": "The new instruction contains no credential, remote script execution, unsafe archive extraction, or runtime trust-boundary change. It uses Alpine's package manager with --no-cache and does not persist package indexes. Build-time package installation slightly enlarges only the disposable builder, not the shipped attack surface. No unrelated dependency or deployment behavior was introduced.",
+    "quality_context": "The supplied full-quality and vulnerability-check passes are consistent with this Docker-only delta. This focused review independently reran the Docker build and final-image smoke/assertions; it did not rerun the full Go quality suite."
+  }
+}

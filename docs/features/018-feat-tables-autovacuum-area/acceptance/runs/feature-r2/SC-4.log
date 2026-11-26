@@ -1,0 +1,29 @@
+fixture=valid kind=legacy ticks=2 members=12
+fixture=valid kind=legacy ticks=2 members=12
+assertion=pass legacy=tables rows=2 entries_read=true
+assertion=pass legacy=tables rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_170000_tables sha256=25f60f780f85106ba7a8451cbce96b527a733855df2a1726d478197965ed9b72
+assertion=pass legacy=indexes rows=2 entries_read=true
+assertion=pass legacy=indexes rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_170000_indexes sha256=ec7504ba392b999932bbfc0194325521943391fc9ef5c42e9280b0994205cdba
+assertion=pass legacy=functions rows=2 entries_read=true
+assertion=pass legacy=functions rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_170000_functions sha256=d88d7695d8355a293dff916d77a96528de77ce53b808ea22471ccb4896f3f869
+assertion=pass legacy=sizes rows=2 entries_read=true
+assertion=pass legacy=sizes rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_170000_sizes sha256=d7aae94ed95a662970601ec07d0d74264000dc04a600543f04c05dfe586318d1
+fixture=valid kind=legacy ticks=2 members=12
+fixture=valid kind=legacy ticks=2 members=12
+assertion=pass legacy=tables rows=2 entries_read=true
+assertion=pass legacy=tables rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_180000_tables sha256=1d7274166083dfeb3e0bb317998488dd5661f58ea1ea22f9cc582b04af889e13
+assertion=pass legacy=indexes rows=2 entries_read=true
+assertion=pass legacy=indexes rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_180000_indexes sha256=3482e668039a20944624465e3abf6fdcceb7e4a117e35f555bda07c8cb947379
+assertion=pass legacy=functions rows=2 entries_read=true
+assertion=pass legacy=functions rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_180000_functions sha256=0e5cf3a20d2ab9bf12ac1a83b069161c6c37db730ee8fe5dc479a7e27f0fc684
+assertion=pass legacy=sizes rows=2 entries_read=true
+assertion=pass legacy=sizes rows=2 entries_read=true
+ACC_OBSERVATION name=legacy_180000_sizes sha256=f8d6d689dcad146dca16da3ab314cabdfdcf8cf7b7a787617bf95dcf302e141b
+ACC_RESULT origin=pass checkpoint=complete
