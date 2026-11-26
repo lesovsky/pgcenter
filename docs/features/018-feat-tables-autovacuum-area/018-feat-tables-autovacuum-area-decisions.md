@@ -56,6 +56,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — wave 4 integrated
+
+**Summary:** Task 06 is integrated at `539364a`. Feature catalog, Project Knowledge, release notes and debt registers match the implemented behavior. Debt [037] records the deliberately unfixed version-blind `x`/`p` cycles.
+**Deviations:** None. Existing [020] is byte-unchanged; no shared renderer, parser or sanitizer fix is claimed.
+**Review/fix rounds:** One code-review round with zero findings and no fix round. Manual SC-9 explicitly passed AC-37, AC-38, AC-39 and AC-40.
+**Verification:** Documentation consistency checks and `git diff --check` passed. Only the five approved documentation/register files changed in the task commit. All scripted feature acceptance remains assigned to freeze-qa.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
