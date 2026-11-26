@@ -1,7 +1,9 @@
 package query
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"math"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -184,6 +187,16 @@ func testAutovacuumScoresPrivileges(t *testing.T, role string, pgMonitor bool) {
 	assert.Equal(t, autovacuumScoresColumns, names)
 }
 
+func Test_AutovacuumScoresRoundedTieSchemaUniqueness(t *testing.T) {
+	seen := make(map[string]struct{})
+	for range 64 {
+		schema := newAutovacuumScoresFixtureSchema(t)
+		require.Regexp(t, `^pgcenter_autovacuum_scores_[0-9a-f]{32}$`, schema)
+		require.NotContains(t, seen, schema, "concurrent runs must not share fixture objects")
+		seen[schema] = struct{}{}
+	}
+}
+
 func Test_StatAutovacuumScoresQuery_RoundedTieRawOrder(t *testing.T) {
 	conn := connectAutovacuumScoresFixture(t)
 	t.Cleanup(conn.Close)
@@ -198,27 +211,28 @@ func Test_StatAutovacuumScoresQuery_RoundedTieRawOrder(t *testing.T) {
 		{name: "pgcenter_test_autovacuum_score_high", rows: 29985, score: 0.00299850},
 	}
 
-	_, err := conn.Exec("DROP TABLE IF EXISTS public.pgcenter_test_autovacuum_score_low, " +
-		"public.pgcenter_test_autovacuum_score_medium, public.pgcenter_test_autovacuum_score_high")
-	require.NoError(t, err)
+	schema := newAutovacuumScoresFixtureSchema(t)
+	quotedSchema := pgx.Identifier{schema}.Sanitize()
+	_, err := conn.Exec("CREATE SCHEMA " + quotedSchema)
+	require.NoError(t, err, "a schema collision must fail without taking ownership of existing objects")
 	t.Cleanup(func() {
-		_, cleanupErr := conn.Exec("DROP TABLE IF EXISTS public.pgcenter_test_autovacuum_score_low, " +
-			"public.pgcenter_test_autovacuum_score_medium, public.pgcenter_test_autovacuum_score_high")
+		_, cleanupErr := conn.Exec("DROP SCHEMA " + quotedSchema + " CASCADE")
 		assert.NoError(t, cleanupErr)
 	})
 
 	for _, fixture := range fixtures {
-		_, err = conn.Exec("CREATE TABLE public." + fixture.name + " (id integer) WITH (" +
+		qualifiedName := pgx.Identifier{schema, fixture.name}.Sanitize()
+		_, err = conn.Exec("CREATE TABLE " + qualifiedName + " (id integer) WITH (" +
 			"autovacuum_enabled=false, autovacuum_analyze_threshold=10000000, " +
 			"autovacuum_analyze_scale_factor=0, autovacuum_vacuum_insert_threshold=2147483647, " +
 			"autovacuum_vacuum_insert_scale_factor=0)")
 		require.NoError(t, err)
-		_, err = conn.Exec(fmt.Sprintf("INSERT INTO public.%s SELECT generate_series(1, %d)", fixture.name, fixture.rows))
+		_, err = conn.Exec(fmt.Sprintf("INSERT INTO %s SELECT generate_series(1, %d)", qualifiedName, fixture.rows))
 		require.NoError(t, err)
 	}
 
 	for _, fixture := range fixtures {
-		waitForAutovacuumScore(t, conn, fixture.name, fixture.score)
+		waitForAutovacuumScore(t, conn, schema, fixture.name, fixture.score)
 	}
 
 	t.Run("raw descending score order survives rounded ties", func(t *testing.T) {
@@ -226,7 +240,7 @@ func Test_StatAutovacuumScoresQuery_RoundedTieRawOrder(t *testing.T) {
 		var gotOrder []string
 		for _, row := range rows {
 			for _, fixture := range fixtures {
-				if row[0].String == "public."+fixture.name {
+				if row[0].String == schema+"."+fixture.name {
 					gotOrder = append(gotOrder, fixture.name)
 					assert.Equal(t, "0.00", row[1].String, "all three raw scores must form a rounded tie")
 					assert.Equal(t, "false", row[3].String)
@@ -407,13 +421,22 @@ func runAutovacuumScoresQuery(t *testing.T, conn *postgres.DB, query string) ([]
 	return names, result
 }
 
-func waitForAutovacuumScore(t *testing.T, conn *postgres.DB, relation string, expected float64) {
+func newAutovacuumScoresFixtureSchema(t *testing.T) string {
+	t.Helper()
+	var random [16]byte
+	_, err := rand.Read(random[:])
+	require.NoError(t, err)
+	return "pgcenter_autovacuum_scores_" + hex.EncodeToString(random[:])
+}
+
+func waitForAutovacuumScore(t *testing.T, conn *postgres.DB, schema, relation string, expected float64) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
+	qualifiedName := pgx.Identifier{schema, relation}.Sanitize()
 	var last float64
 	for time.Now().Before(deadline) {
 		err := conn.QueryRow("SELECT score FROM pg_stat_autovacuum_scores WHERE relid = $1::regclass",
-			"public."+relation).Scan(&last)
+			qualifiedName).Scan(&last)
 		require.NoError(t, err)
 		if math.Abs(last-expected) < 0.000000001 {
 			return
