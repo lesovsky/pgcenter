@@ -5,6 +5,7 @@
 # Record a fresh PG19 fixture and verify relation stats_age plus the deliberate live-TUI-only exclusion.
 
 set -euo pipefail
+export TZ=UTC
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 acc_init SC-1
 trap 'acc_on_exit $?' EXIT
@@ -106,7 +107,7 @@ capture_bounds() {
 report_start="$(date -d '1 minute ago' '+%Y-%m-%d %H:%M:%S')"
 capture_bounds pre
 archive="$ACC_TMP/live.tar"
-if acc_run "$ACC_TMP/record.raw" 75 docker exec --user "$(id -u):$(id -g)" "$ACC_CONTAINER" /opt/pgcenter-current record -i 1s -c 3 \
+if acc_run "$ACC_TMP/record.raw" 75 docker exec --env TZ=UTC --user "$(id -u):$(id -g)" "$ACC_CONTAINER" /opt/pgcenter-current record -i 1s -c 3 \
     -h 127.0.0.1 -p 21919 -U postgres -d acc018 -f "$archive"; then :; else :; fi
 record_status=$ACC_RUN_STATUS
 capture_bounds post
