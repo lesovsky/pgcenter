@@ -12,7 +12,7 @@
 Triggered by push to `release` branch. Two jobs:
 
 **test** — runs full test suite in `lesovsky/pgcenter-testing:0.0.11` container:
-- Go 1.25.13 (cached), module cache, lint tools cache
+- Go 1.26.10 (cached), module cache, lint tools cache
 - `make lint` + `govulncheck ./...` + `make test` + `make build` + e2e tests
 
 **release** — runs after test passes:
@@ -54,7 +54,7 @@ Then update container tag in both `default.yml` and `release.yml`.
 
 ## Docker Image (lesovsky/pgcenter)
 
-Built from `Dockerfile` (two-stage: `golang:1.25-alpine` → `alpine:3.21`).
+Built from `Dockerfile` (two-stage: `golang:1.26.10-alpine` → `alpine:3.21`).
 Published on release to DockerHub as `lesovsky/pgcenter:vX.Y.Z` and `:latest`.
 
 Usage:

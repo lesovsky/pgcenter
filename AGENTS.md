@@ -10,7 +10,7 @@ Repository: https://github.com/lesovsky/pgcenter
 
 ## Technology
 
-- Go 1.25+
+- Go 1.26+
 - Cobra and pflag for the CLI
 - pgx/v5, including pgx/v5/pgconn for PostgreSQL errors
 - gocui for the interactive TUI

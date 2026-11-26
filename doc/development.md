@@ -13,7 +13,7 @@ $ git clone https://github.com/lesovsky/pgcenter
 $ cd pgcenter
 ```
 
-Before running tests or building, use Go 1.25 or newer. The `go.mod` toolchain directive selects Go 1.25.13.
+Before running tests or building, use Go 1.26 or newer. The `go.mod` toolchain directive selects Go 1.26.10.
 
 Run checks.
 ```shell
