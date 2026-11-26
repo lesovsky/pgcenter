@@ -101,6 +101,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-R
 - toast_hit		toast_blks_hit		Number of buffer hits in this table's TOAST table (if any)
 - tidx_read,KiB		tidx_blks_read		Amount of data have been read from this table's TOAST table indexes (if any), in KiB
 - tidx_hit		tidx_blks_hit		Number of buffer hits in this table's TOAST table indexes (if any)
+- stats_age		stats_reset		Age of collected statistics in the moment when stats are taken (PG 19+)
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-TABLES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-TABLES-VIEW
@@ -116,6 +117,7 @@ Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-A
 - tuples_fetch	idx_tup_fetch			Number of live table rows fetched by simple index scans using this index
 - hit		idx_blks_hit			Number of buffer hits in this index
 - read,KiB	idx_blks_read			Amount of data have been read from this index, in KiB
+- stats_age	stats_reset			Age of collected statistics in the moment when stats are taken (PG 19+)
 
 Details: https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ALL-INDEXES-VIEW
          https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STATIO-ALL-INDEXES-VIEW
