@@ -4,6 +4,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Decomposition
+
+**Summary:** Approved six implementation/documentation tasks in four waves. Tasks 01/02 build independent query layers; Task 03 registers views and truthful recording exclusions; Tasks 04/05 independently cover replay and TUI; Task 06 reconciles documentation. The Acceptance Execution Map covers SC-1–SC-4 and SC-10, with SC-5–SC-9 explicitly manual. This decomposition phase owns harness creation and freeze; freeze-qa owns the post-implementation `feature-r1` execution.
+**Deviations:** No separate implementation task owns acceptance harness production or final QA; those belong to the decomposition and freeze-qa phases respectively. Task 01 has a concrete disposable-PG19 supervisor contract, and Decision 12 sanitization applies to scripted and manual evidence.
+**Tech debt:** Implementation retains the approved [035]/[029] updates, leaves [020] unchanged, and registers the version-blind x/p cycles in Task 06.
+**Verification:** Independent decomposition review round 2 approved with zero findings; independent skeptic review approved after checking 124 factual claims with zero mismatches. DAG is acyclic and same-wave product file ownership is disjoint.
+
+---
+
 ## Phase: Claude-to-Kimi process migration
 
 **Summary:** Migrated active feature artifacts to the six-phase Kimi SDLC without changing the approved product scope. Added stable US/AC/SC identifiers, explicit scriptable/manual acceptance ownership, current Project Knowledge paths, and the required technical coverage maps. The pre-existing task/wave draft is retained only as an unapproved appendix for the next decomposition session.
