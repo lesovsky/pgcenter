@@ -22,6 +22,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — paused before wave 1
+
+**Summary:** Execution planning completed and validated: branch `feature/018-feat-tables-autovacuum-area` clean at `e4d54e9`, base `2dbd626`, freeze `ready` at SHA `44c9535`, six tasks all `planned`, DAG acyclic, waves and reviewers confirmed. No task was started.
+**Deviations:** Execution is paused by owner decision because the runtime Agent tool exposes no `model` parameter and no `[secondary_model]` pool is configured, so the required strong/standard tier routing cannot be performed or honestly recorded. The owner will configure the pool in a separate session, then rerun `/skill:feature-execution docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area`.
+**Tech debt:** None added.
+**Verification:** `git status` clean; freeze.json verdict `ready`; telemetry event `paused_pending_model_pool`.
+
+---
+
 ## Phase: Claude-to-Kimi process migration
 
 **Summary:** Migrated active feature artifacts to the six-phase Kimi SDLC without changing the approved product scope. Added stable US/AC/SC identifiers, explicit scriptable/manual acceptance ownership, current Project Knowledge paths, and the required technical coverage maps. The pre-existing task/wave draft is retained only as an unapproved appendix for the next decomposition session.
