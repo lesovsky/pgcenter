@@ -38,6 +38,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — wave 2 integrated
+
+**Summary:** Task 03 is integrated at `e3efd93`. The registry and load-bearing selectors are wired, deliberate recording exclusions now emit deterministic truthful INFO, the PG 17 recorder uses filtered views, and no-diff empty-cell behavior is mutation-checked.
+**Deviations:** None from the task contract. Incremental acceptance remains deferred to the approved post-wave-4 freeze-qa run; no result is claimed.
+**Review/fix rounds:** One code-review round, zero findings and no fix round.
+**Verification:** Integrated `go test ./internal/view/ ./record/ ./internal/stat/ -count=1` and `go test ./internal/query/ -count=1` passed in the PG 14–19 image. The non-zero-interval mutation reddened both named empty-cell assertions. Frozen acceptance files remain unchanged.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
