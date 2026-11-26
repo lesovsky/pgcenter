@@ -1,0 +1,40 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "changes_required",
+  "summary": "The SQL/template contract, raw-score ordering, outer join/filter, restricted and pg_monitor execution, and fail-closed system-identity check were verified against real PG 19. Normal targeted wraparound execution and sequential timeout/SIGKILL self-tests passed, and no hardcoded secrets or injectable SQL inputs were found. Two fail-open supervisor paths must be fixed; the disposable cluster also has a verified default-bridge isolation exposure.",
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "External cleanup and shell supervisor safety",
+      "title": "Docker daemon errors are accepted as proof that dangerous fixture containers were destroyed",
+      "description": "destroy_containers discards every docker rm failure, while assert_containers_destroyed treats every docker inspect failure as absence. A Docker daemon restart, authorization failure, or malicious/failing Docker endpoint after ALTER SYSTEM and XID-burning operations can therefore leave the runner and PostgreSQL containers alive while the supervisor exits successfully and claims destruction. This defeats Decision 10's external last line of defence and can preserve mutated cluster state.",
+      "location": "testing/run-autovacuum-wraparound-test.sh:28-45,134-139,153-155,169-171",
+      "verified": true,
+      "evidence": "Executed testing/run-autovacuum-wraparound-test.sh with an exported docker stub that returned daemon errors for both rm and inspect and used no real containers. The script exited 0 and printed both 'PASS: external supervisor destroyed...' and the targeted-test PASS line. Normal real-Docker cleanup passed separately, so the defect is specifically the error-path fail-open behavior.",
+      "recommendation": "Track the exact created container IDs and make explicit cleanup failures fatal. Verify absence with a successful Docker query whose empty result means not found (for example, docker container ls using full-ID filters); do not equate an arbitrary inspect error with absence. Keep trap cleanup best-effort, but never emit destruction PASS or return success unless both containers are confirmed absent."
+    },
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "Fail-closed integration evidence",
+      "title": "A dedicated-marker connection failure becomes SKIP and is accepted as targeted PASS",
+      "description": "connectAutovacuumScoresFixture calls t.Skipf for every PostgreSQL connection failure even when the dedicated marker is set. go test then exits 0, and the supervisor checks only that status before printing targeted PASS. If the disposable server stops or its listener is disrupted after the supervisor discovers its identity but before the test connects, the required identity check and mutation assertions never run, yet AC-32 receives false success evidence.",
+      "location": "internal/query/autovacuum_scores_test.go:354-361; testing/run-autovacuum-wraparound-test.sh:127-139",
+      "verified": true,
+      "evidence": "Ran the exact target with the dedicated marker and an invalid expected identity while no PG 19 listener existed. The test reported SKIP at the connection helper, the package reported PASS, and go test exited 0. Source inspection confirms the supervisor converts that status into its targeted PASS message. Separately, the real supervised target produced an explicit test PASS, and a mismatched identity against live PG 19 failed before mutation with autovacuum unchanged and fixture objects absent.",
+      "recommendation": "When the dedicated marker is present, make every connection error fatal rather than a skip; retain skips only for ordinary shared-suite runs. As defence in depth, have the supervisor require a test-level pass event for Test_StatAutovacuumScoresQuery_WraparoundException (for example via go test -json) and reject skip, missing-test, and package-only PASS results before emitting its own PASS."
+    },
+    {
+      "severity": "minor",
+      "scope": "in_scope",
+      "category": "Dedicated-cluster isolation and insecure defaults",
+      "title": "Trust-authenticated disposable PostgreSQL is exposed to unrelated default-bridge containers",
+      "description": "The supervisor starts the fixture without a network option, so Docker attaches it to the default bridge. The invoked fixture setup listens on all addresses and permits host connections from 0.0.0.0/0 with trust authentication. Any unrelated or compromised container on that bridge can connect as postgres without credentials, mutate or interrupt the supposedly isolated fixture, and invalidate test evidence while it is running. The synthetic no-secret data limits confidentiality impact but does not remove the integrity/isolation violation.",
+      "location": "testing/run-autovacuum-wraparound-test.sh:48-51; testing/prepare-test-environment.sh:19,35-44 (invoked existing fixture configuration)",
+      "verified": true,
+      "evidence": "Started the same fixture using the supervisor's default network configuration, then connected from a separate default-bridge container. Docker reported network mode 'bridge', and psql authenticated without a password and returned current_user=postgres. A separate auditor run with the PG container on --network none successfully executed the live columns/values, both privilege tests, and rounded-tie ordering tests; fixed-loopback identity preflight also remained reachable from the runner sharing that namespace.",
+      "recommendation": "Start the PG container with --network none; continue starting the runner with --network container:<pg-name>, which preserves 127.0.0.1:21919 while removing bridge and outbound network access. If a named dedicated network is used instead, ensure no unrelated containers can join it."
+    }
+  ]
+}

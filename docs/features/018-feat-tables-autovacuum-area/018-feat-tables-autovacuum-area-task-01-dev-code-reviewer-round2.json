@@ -1,0 +1,52 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 2,
+  "status": "approved",
+  "summary": "Approved. The round-1 outer-relation finding is closed by the named `outer relation expression` structural subtest, and the joined-side mutation now reddens exactly that subtest. The full diff preserves the contracted eleven-column PG 19 query and passes live PG 14-19 package verification, real targeted wraparound execution, both required behavioral mutations, and the hardened supervisor controls. No substantive findings remain.",
+  "round_1_finding_closed": true,
+  "findings": [],
+  "security_fixes_reviewed": [
+    "The dedicated PG container now starts with `--network none`; the test runner alone joins that container's network namespace, preventing access to a shared fixture endpoint.",
+    "The dedicated-marker connection path now fails instead of skipping when PG 19 is unavailable.",
+    "Both containers carry the dedicated label and are tracked by validated full Docker container IDs rather than shell process IDs or name-only cleanup.",
+    "Detached runners are bounded with `timeout ... docker wait`; normal, timeout, and SIGKILL paths finalize cleanup before reporting success.",
+    "Docker removal and absence-verification failures are fatal and cannot produce destruction or targeted PASS messages.",
+    "The normal path parses `go test -json` and requires exactly one test-level PASS for Test_StatAutovacuumScoresQuery_WraparoundException; package-level output alone is insufficient.",
+    "The daemon-error control exercises cleanup failures and uses the real Docker client to remove and verify its control containers."
+  ],
+  "verification_performed": [
+    {
+      "command": "git diff --check 6dd550e1916c2b9e6710057afae3cd18370d06e2..7afce7cd001c32c7463af033c416849678517a7a && bash -n testing/run-autovacuum-wraparound-test.sh && go test ./internal/query/ -run AutovacuumScores -count=1 -v",
+      "result": "Diff and shell syntax checks passed. HEAD matched 7afce7cd001c32c7463af033c416849678517a7a and the supplied worktree was clean. Host structural/selector tests passed, including outer_relation_expression; host integration tests skipped because port 21919 was unavailable and were not used as live evidence."
+    },
+    {
+      "command": "Disposable-worktree mutation at 7afce7c: replace `SELECT s.schemaname || '.' || s.relname AS relation` with the joined-side `a` aliases; go test ./internal/query/ -run '^Test_StatAutovacuumScoresQuery_Structure$/^outer_relation_expression$' -count=1 -v",
+      "result": "Expected named red observed: Test_StatAutovacuumScoresQuery_Structure/outer_relation_expression failed at lines 63 and 65. The package compiled and ran; this was not a build or empty-filter failure. Exit 1. The temporary worktree was removed."
+    },
+    {
+      "command": "testing/run-autovacuum-wraparound-test.sh",
+      "result": "Real targeted PASS against the fresh isolated PG 19 fixture. JSON events contained exactly one test-level pass for Test_StatAutovacuumScoresQuery_WraparoundException and a pass for system_row_presence_assertion. The supervisor verified external destruction and printed the targeted dedicated-namespace PASS."
+    },
+    {
+      "command": "testing/run-autovacuum-wraparound-test.sh --self-test timeout; testing/run-autovacuum-wraparound-test.sh --self-test sigkill; testing/run-autovacuum-wraparound-test.sh --self-test daemon-error",
+      "result": "Timeout and SIGKILL controls passed with verified external destruction. The isolated daemon-error run also passed: simulated rm/container-ls failures were fatal, no destruction or targeted PASS was printed, and the outer control removed both real containers. An earlier chained daemon-error attempt exceeded the tool timeout and was not counted as evidence; its children completed and cleaned up before the successful isolated rerun."
+    },
+    {
+      "command": "Fresh lesovsky/pgcenter-testing:0.0.11 all-version namespace: go test ./internal/query/ -count=1",
+      "result": "Passed without regressions against prepared PG 14-19 clusters: ok github.com/lesovsky/pgcenter/internal/query 4.186s. PG 19 reported 19beta2. This includes live field descriptions/values, both privilege levels, and rounded-tie raw ordering."
+    },
+    {
+      "command": "Fresh disposable-worktree mutation at 7afce7c: delete ` OR s.for_wraparound`; testing/run-autovacuum-wraparound-test.sh",
+      "result": "Expected red remained effective under the new JSON supervisor: fixture setup succeeded, then the named `wraparound system-row presence assertion` failed for pg_toast.pg_toast_16532 and test-level fail events were emitted. No targeted PASS was printed; external container destruction passed. Exit 1; temporary worktree removed."
+    },
+    {
+      "command": "PGCENTER_AUTOVACUUM_WRAPAROUND_DEDICATED=1 PGCENTER_AUTOVACUUM_WRAPAROUND_SYSTEM_IDENTIFIER=review-invalid go test ./internal/query/ -run '^Test_StatAutovacuumScoresQuery_WraparoundException$' -count=1 -v",
+      "result": "With no host PG 19 listener, the dedicated path failed at `dedicated postgres 19 connection failed` rather than skipping. Exit 1, confirming the fail-closed regression fix."
+    },
+    {
+      "command": "Final git status/worktree, Docker container, and process artifact checks",
+      "result": "The task worktree remained unchanged; no review worktrees, task-specific containers, or supervisor processes remained. Only the requested round-2 JSON report was created outside the task worktree."
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 ---
-status: in_progress
+status: done
 depends_on: []
 wave: 1
 model_tier: standard

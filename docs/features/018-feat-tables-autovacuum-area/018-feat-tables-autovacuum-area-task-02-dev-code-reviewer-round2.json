@@ -1,0 +1,36 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 2,
+  "status": "approved",
+  "base": "6dd550e1916c2b9e6710057afae3cd18370d06e2",
+  "head": "0ea45609269db10011b637e8ca8c80ef7b3976ff",
+  "findings": [],
+  "verification": [
+    {
+      "command": "docker run --rm [read-only source and Go toolchain mounts] lesovsky/pgcenter-testing:0.0.11 ... go test -v ./internal/query/ -run 'StatTables|StatIndexes' -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "At head 0ea4560, Test_StatTablesQueries and Test_StatIndexesQueries each passed every PG14, PG15, PG16, PG17, PG18, and PG19 subtest with no skips. Both TEMP-based Test_*_NullStatsAge tests passed on PG19, as did all selector-boundary, layout, diff-bound, template-residue, and source assertions."
+    },
+    {
+      "command": "docker run --rm [same prepared PG14-PG19 container] ... go test ./internal/query/ -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "ok github.com/lesovsky/pgcenter/internal/query 12.812s. This ran immediately after the targeted verbose suite in the same disposable test container."
+    },
+    {
+      "command": "go test -v -overlay <temporary-overlay> ./internal/query/ -run '^Test_StatTablesQuery_StatsAgeSource$' -count=1; equivalent indexes mutation",
+      "verified": true,
+      "result": "EXPECTED_FAIL",
+      "evidence": "Fresh overlay-only mutations from the pg_stat aliases to pg_statio alias i exited 1 at this head. Test_StatTablesQuery_StatsAgeSource reddened at tables_test.go:69 and :71; Test_StatIndexesQuery_StatsAgeSource reddened at indexes_test.go:62 and :64. No product file was edited and all temporary overlays were removed."
+    },
+    {
+      "command": "git diff 54a6473..0ea4560; gofmt -d <four changed files>; git diff --check <base..head>; git status --short --untracked-files=all",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "The round-2 delta changes only the two NULL-probe tests; production tables.go and indexes.go are byte-identical to round 1. TEMP probes no longer issue DROP TABLE IF EXISTS against persistent fixtures. They resolve the session's actual schema through pg_my_temp_schema(), preserve the exact row match and sql.NullString assertions, and rely on the pre-existing deferred connection close for session-local cleanup. Formatting, diff checks, functions/sizes non-modification, and final clean-tree checks passed."
+    }
+  ],
+  "summary": "Approved; the round-1 approval remains valid. The TEMP probes improve shared-fixture isolation without weakening NULL evidence: each test creates its relation on a dedicated connection, observes that relation through the real PG19 user-statistics query, resolves the temporary schema rather than assuming public, and still requires the row to be found with stats_age SQL NULL and a blank sql.NullString. Temporary indexes follow the table's temporary schema and cannot collide with persistent or other-session objects. All previously reviewed selector boundaries, exact layouts, tail placement, pg_stat_* sourcing, unchanged DiffIntvl values, and narrowest-layout bounds remain intact and were revalidated with real PG14-PG19 execution. Configure() wiring remains correctly assigned to Task 03."
+}

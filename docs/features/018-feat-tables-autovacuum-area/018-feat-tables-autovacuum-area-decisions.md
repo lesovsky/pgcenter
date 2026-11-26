@@ -13,6 +13,31 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — wave 1 integrated
+
+**Summary:** Tasks 01 and 02 passed two review rounds each and are integrated at `0fe1b53`. Task 01 delivers the locked autovacuum query, real PG 19 privilege/order/catalog tests, and a fail-closed disposable wraparound supervisor. Task 02 delivers PG 19 trailing `stats_age` selectors with live PG 14–19 layouts and safe temporary NULL probes.
+**Deviations:** Round 1 required outer-relation test coverage, fail-closed Docker/test evidence, network isolation, and removal of destructive persistent probes; all findings were fixed and both reviewers approved round 2. No incremental feature acceptance run was performed: the installed runner executes all five frozen scenarios, while the approved decomposition assigns feature acceptance, including the continuous SC-4 rerun, to freeze-qa after wave 4. No acceptance result is claimed here.
+**Tech debt:** None added. The pre-existing `prepare-test-environment.sh: line 36: all: command not found` diagnostic remains outside this feature; all clusters and tests nevertheless became available and passed.
+**Verification:** Integrated `go test ./internal/query/ -count=1` and `go test -race ./internal/query/ -count=1` passed in the PG 14–19 image using the host Go 1.25.13 toolchain mounted read-only. Integrated `testing/run-autovacuum-wraparound-test.sh` produced a test-level PASS and verified external destruction. Frozen acceptance files are unchanged. The first integration-container attempt could not start Go because the testing image does not bundle it; the corrected standard run supplied the toolchain explicitly.
+
+---
+
+## Task 01: Autovacuum scores query and isolated integration proof
+
+**Summary:** Implemented the eleven-column PG 19 query, absolute dead tuples, outer-side schema filtering, wraparound exception and raw-score ordering. Added structural/live/privilege tests and the isolated supervisor with identity, network and cleanup controls.
+**Review/fix rounds:** Two code and two security rounds; one fix commit. Final reports contain zero findings.
+**Verification:** Real PG 19 tests, targeted wraparound PASS, timeout/SIGKILL/daemon-error controls, full query package and race runs passed. Outer-relation, rounded-alias and removed-wraparound mutations reddened their named assertions.
+
+---
+
+## Task 02: Version-aware stats_age queries
+
+**Summary:** Added PG 19 tables/indexes selectors with trailing nullable `stats_age`, preserving legacy layouts and diff intervals. Live tests pin PG 14–19 field descriptions and NULL rendering using per-session temporary relations.
+**Review/fix rounds:** Two code and two security rounds; one fix commit replaced unsafe persistent probes. Final reports contain zero findings.
+**Verification:** Targeted and full query package tests passed on PG 14–19 without skipped live subtests; both source mutations reddened the named assertions. Integrated race testing passed.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
