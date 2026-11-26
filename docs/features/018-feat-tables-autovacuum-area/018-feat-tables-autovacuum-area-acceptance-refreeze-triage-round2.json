@@ -1,0 +1,144 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "mode": "triage",
+  "round": 2,
+  "status": "harness_approval_required",
+  "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2/result.json",
+  "baseWorktree": "/home/lesovsky/Git/github.com/lesovsky/pgcenter/.worktrees/018-base-refreeze-1",
+  "baseSha": "a1764e0985fced8493d1cf10dcb1799534505abd",
+  "summary": "SC-1 remains the only failed scenario, but round 1's PermissionError is fixed: base-reFreeze-2 opens the archive and proves three ticks. The new failure is a distinct harness timezone defect introduced by moving recording into the Ubuntu/UTC container. Archive filenames contain container-local UTC wall-clock timestamps, while SC-1 constructs report bounds with host local time (+0500) and the host report binary interprets both the bounds and archive filename timestamps in the host location. The report therefore filters the recorded entries as outside its requested interval, exits cleanly with fewer than two diffed samples, and reports.py raises the observed expectation failure. This is not an implementation, environment, or contract failure.",
+  "executionBoundary": {
+    "secondComparableHarnessFailure": true,
+    "featureStopRequired": true,
+    "automaticRepairAllowed": false,
+    "reason": "acceptance-triage.md requires a feature stop and owner escalation for a second comparable harness failure. base-reFreeze-1 was the archive-ownership harness failure; base-reFreeze-2 is the second comparable SC-1 network-isolation harness failure, now involving record/report timezone semantics. Although the root causes are distinct, the second-comparable-failure clause applies independently of the repeated-root-cause clause.",
+    "requiredEscalation": "Stop feature/re-freeze execution and escalate to the owner before any third correction or rerun."
+  },
+  "batch": {
+    "failedScenarioCount": 1,
+    "failedScenarios": ["SC-1"],
+    "groupCount": 1,
+    "validOtherOutcomes": [
+      {
+        "scenario": "SC-10",
+        "observed": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported contractValid=true"
+      },
+      {
+        "scenario": "SC-2",
+        "observed": "exit=0 origin=pass checkpoint=complete contractValid=true"
+      },
+      {
+        "scenario": "SC-3",
+        "observed": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing contractValid=true"
+      },
+      {
+        "scenario": "SC-4",
+        "observed": "exit=0 origin=pass checkpoint=complete contractValid=true"
+      }
+    ],
+    "manifestValid": true,
+    "dirty": false
+  },
+  "comparisonWithRound1": {
+    "previousRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/result.json",
+    "previousFailure": "exit=2 origin=fixture checkpoint=assertion_tool_failed; PermissionError before archive validation",
+    "currentFailure": "exit=1 origin=expectation checkpoint=live_recording_contract_violation; archive validation passes, then live tables has fewer than two diffed samples",
+    "round1RepairObserved": "The a1764e0 delta adds docker exec --user $(id -u):$(id -g). The current archive_ticks=3 assertion proves that the host can now open and read the archive, so the round-1 ownership defect is resolved.",
+    "newFailureExposed": "With archive access repaired, assertion execution reaches the host-generated reports and exposes the UTC-container versus host-local timestamp mismatch. This is not a continuation of PermissionError and not a report-parser recognition failure.",
+    "positiveControlImpact": "Exactly three tables/indexes/meta/sysinfo ticks and zero autovacuum_scores members are now proven. Live tables/indexes report controls and the approved pg19_stats_age_report_unavailable checkpoint are not reached, so SC-1 remains contract-invalid."
+  },
+  "groups": [
+    {
+      "id": "HARNESS-2",
+      "class": "harness",
+      "verified": true,
+      "rootCause": "SC-1 runs pgcenter record inside lesovsky/pgcenter-testing:0.0.11, whose Dockerfile is based on Ubuntu 22.04 and configures no non-UTC timezone. recorder.write obtains time.Now in that container and newFilenameString formats wall-clock timestamps without an offset into tar member names. On the +0500 host, SC-1 uses date to produce naive local report_start/report_end strings. cmd/report parses those strings using time.Now().Location(), and report.isFilenameTimestampOK independently parses each naive tar filename timestamp in that same host location. Consequently a filename such as 13:17 UTC is misinterpreted as 13:17+0500 (08:17 UTC), five hours before the approximately 13:16-13:18 UTC report window. readTar silently skips every out-of-window table entry. The archive still physically contains three ticks, explaining why validate_live_archive passes while len(samples) != 2. The assertion is correctly detecting absent rendered samples after product report filtering; it is not failing to recognize samples that were emitted.",
+      "scenarios": ["SC-1"],
+      "acceptanceCriteria": ["AC-21", "AC-22", "AC-26", "AC-27", "AC-28", "AC-31"],
+      "observedFailure": {
+        "exit": 1,
+        "origin": "expectation",
+        "checkpoint": "live_recording_contract_violation",
+        "contractValid": false,
+        "assertion": "live tables report must contain two diffed samples from three ticks",
+        "passedBeforeFailure": "archive_ticks=3 autovacuum_scores_members=0"
+      },
+      "expectedBaseOutcome": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable contractValid=true",
+      "evidence": [
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2/SC-1.log:1-3",
+          "detail": "The archive positive control passes, followed by the tables two-sample assertion failure. There is no PermissionError, panic, parser diagnostic, or report nonzero-exit diagnostic."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2/result.json:8-12",
+          "detail": "Only SC-1 is invalid; the other four scenarios have their expected valid outcomes and the manifest is valid on a clean tree."
+        },
+        {
+          "path": "git diff 327c4c5388a7a971bb313d39e00a6c33f93306f6..a1764e0985fced8493d1cf10dcb1799534505abd",
+          "detail": "The only scenario-code change is adding --user $(id -u):$(id -g) to docker exec record, plus its manifest hash. reports.py is byte-identical between the two runs."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:106-110,120-127",
+          "detail": "report_start is made by host date, recording occurs in the container, and report runs as a host binary with those naive strings. No TZ is supplied to align the two execution contexts."
+        },
+        {
+          "path": "testing/Dockerfile:4-16",
+          "detail": "The testing image is Ubuntu 22.04 and does not configure a host-matching timezone. Read-only docker image inspect also showed no TZ environment setting. Ubuntu's default container timezone is UTC."
+        },
+        {
+          "path": "record/recorder.go:237-246,289-292",
+          "detail": "Tar member names are formatted from recorder time.Now using 20060102T150405.000, with no numeric timezone offset."
+        },
+        {
+          "path": "cmd/report/report.go:215-241,244-267",
+          "detail": "Explicit start/end strings are parsed with time.Now().Location() on the report host."
+        },
+        {
+          "path": "report/report.go:154-180,478-498",
+          "detail": "readTar calls isFilenameTimestampOK before decoding entries; filename timestamps are parsed in the report host's location and out-of-range entries are silently skipped."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py:350-359,374-386",
+          "detail": "Archive member counting has no report-time-window filtering, so three ticks pass independently. assert_live subsequently requires exactly two parsed diff samples and raises ProductMismatch when report filtering leaves fewer."
+        },
+        {
+          "path": "read-only host date and Docker image inspection",
+          "detail": "Host inspection returned host_zone=+05 host_offset=+0500. Image inspection returned no TZ setting and configured_user=\"\". base-reFreeze-2 started at 13:17:17Z, corresponding to 18:17:17+0500 on the host."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-1.log:1-8",
+          "detail": "The original host-side recorder passed both live report controls and reached pg19_stats_age_report_unavailable. This supports the regression being caused by the new cross-timezone execution arrangement, not by the approved base product behavior."
+        }
+      ],
+      "implementationAssessment": "No independently verified implementation defect is present. The product is being asked to replay naive timestamps produced in a different timezone; the harness must align its recording and reporting timezone context. Product behavior must not be changed to accommodate this harness defect.",
+      "environmentAssessment": "Docker, PostgreSQL, recording, archive creation, and host archive reading all succeeded. The timezone difference is deterministically mishandled by the harness rather than an unavailable dependency or environmental outage.",
+      "contractAssessment": "The approved SC-1 observable contract and AC expectations are unchanged and unambiguous. No contract change is needed or permitted by this triage.",
+      "allowedAction": "No automatic action. The owner must first decide whether the stopped re-freeze may continue. If continuation is explicitly approved, use one cohesive harness-only correction that preserves host-readable restrictive archive ownership and establishes a single explicit timezone for recorder filenames, host date bounds, and host report parsing (for example, UTC consistently across all three), then refresh the manifest, preserve both failed runs, rerun the clean base batch, and obtain fresh independent QA.",
+      "repairConstraintsIfOwnerReauthorizes": {
+        "productChangesAllowed": false,
+        "assertionWeakeningAllowed": false,
+        "networkIsolationWeakeningAllowed": false,
+        "archivePermissionWeakeningAllowed": false,
+        "requiredBaseOutcome": "SC-1 archive and both live old-layout report controls must pass before pg19_stats_age_report_unavailable; all four other scenarios must retain their approved outcomes.",
+        "postRepairReview": "A third run is not proof by itself; fresh independent QA/freeze review remains mandatory."
+      },
+      "contractChange": false
+    }
+  ],
+  "recommendedOwnerDecision": {
+    "decision": "stop_and_review_before_any_third_attempt",
+    "recommendation": "Stop feature execution now, as mandated by the second comparable harness failure. Do not authorize another isolated one-line patch automatically. Review the SC-1 isolation design as a whole. If the owner elects to continue, explicitly approve one bounded harness redesign covering both archive ownership and end-to-end UTC timestamp alignment, followed by a clean full base re-freeze and independent review. Otherwise keep the re-freeze stopped and return the harness design to the owner; neither path permits a product change.",
+    "priorApprovalSufficientForAnotherAttempt": false,
+    "rationale": "The prior approvals covered the network-isolation change and the host-UID correction. They do not override the mandatory stop triggered by a second comparable harness failure."
+  },
+  "blockingActions": [
+    "Stop feature/re-freeze automation and escalate HARNESS-2 to the owner; no third fix or rerun is allowed automatically.",
+    "If the owner explicitly reauthorizes continuation, approve a cohesive harness-only ownership-plus-timezone correction, manifest refresh, clean base batch rerun, and renewed independent QA. Preserve base-reFreeze-1 and base-reFreeze-2."
+  ],
+  "triageExecution": {
+    "scenariosRerun": false,
+    "productOrHarnessFilesModified": false,
+    "historicalEvidenceModified": false,
+    "note": "Diagnosis used only read-only result/log, source, Dockerfile, diff, host clock, and Docker image-configuration inspection."
+  }
+}

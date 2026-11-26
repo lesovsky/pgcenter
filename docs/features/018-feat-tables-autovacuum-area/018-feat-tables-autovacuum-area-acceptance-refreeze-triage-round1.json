@@ -1,0 +1,122 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "mode": "triage",
+  "round": 1,
+  "status": "harness_approval_required",
+  "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/result.json",
+  "baseWorktree": "/home/lesovsky/Git/github.com/lesovsky/pgcenter/.worktrees/018-base-refreeze-1",
+  "baseSha": "327c4c5388a7a971bb313d39e00a6c33f93306f6",
+  "summary": "SC-1 is the only failed scenario. Its network-isolation change moved pgcenter record into the default-root container while leaving the archive on a host bind mount. The recorder creates live.tar as root with mode 0600; the subsequent host-side reports.py process cannot open it and raises PermissionError. This is a verified harness artifact-ownership defect, not an implementation, environment, or contract failure. The failed run does not establish SC-1's approved feature-missing checkpoint.",
+  "batch": {
+    "failedScenarioCount": 1,
+    "failedScenarios": ["SC-1"],
+    "validOtherOutcomes": [
+      {
+        "scenario": "SC-10",
+        "observed": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported contractValid=true"
+      },
+      {
+        "scenario": "SC-2",
+        "observed": "exit=0 origin=pass checkpoint=complete contractValid=true"
+      },
+      {
+        "scenario": "SC-3",
+        "observed": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing contractValid=true"
+      },
+      {
+        "scenario": "SC-4",
+        "observed": "exit=0 origin=pass checkpoint=complete contractValid=true"
+      }
+    ],
+    "manifestValid": true,
+    "dirty": false
+  },
+  "groups": [
+    {
+      "id": "HARNESS-1",
+      "class": "harness",
+      "verified": true,
+      "rootCause": "The 327c4c5 SC-1 change executes /opt/pgcenter-current record through docker exec in lesovsky/pgcenter-testing:0.0.11. The image has no configured USER, so docker exec runs as root. record/recorder.go opens a new archive with mode 0600. Because ACC_TMP is bind-mounted and archive is $ACC_TMP/live.tar, the resulting archive is owned by container root and unreadable by the host user. reports.py assert_live reaches validate_live_archive and tarfile.open(path, \"r:*\") raises PermissionError before archive/report positive controls can run. reports.py catches that OSError and exits 2; common.sh acc_check normalizes every assertion-tool status greater than 1 to origin=fixture checkpoint=assertion_tool_failed. Thus the result's fixture origin is a consequence of generic result mapping, while the actual root cause is harness-created cross-user file ownership.",
+      "scenarios": ["SC-1"],
+      "acceptanceCriteria": ["AC-21", "AC-22", "AC-26", "AC-27", "AC-28", "AC-31"],
+      "observedFailure": {
+        "exit": 2,
+        "origin": "fixture",
+        "checkpoint": "assertion_tool_failed",
+        "contractValid": false,
+        "sanitizedLog": "fixture/harness parsing failed: PermissionError"
+      },
+      "expectedBaseOutcome": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable contractValid=true",
+      "evidence": [
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/result.json",
+          "detail": "SC-1 alone has exit=2, origin=fixture, checkpoint=assertion_tool_failed, contractValid=false; the other four outcomes are valid."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/SC-1.log:1-2",
+          "detail": "The only assertion diagnostic is PermissionError, followed by assertion_tool_failed. There are no archive_ticks or live report assertion-pass lines."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:17-20,109-115",
+          "detail": "SC-1 bind-mounts ACC_TMP at the identical container path, runs record inside the container writing $ACC_TMP/live.tar, and proceeds past record_status only when recording returned zero."
+        },
+        {
+          "path": "record/recorder.go:62-79",
+          "detail": "A non-append recording uses O_CREATE|O_RDWR|O_TRUNC and os.OpenFile(..., 0600)."
+        },
+        {
+          "path": "docker image inspect lesovsky/pgcenter-testing:0.0.11 --format '{{json .Config.User}}'",
+          "detail": "Read-only inspection returned configured_user=\"\"; Docker's default exec user is therefore root."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py:350-359,374-379,492-494",
+          "detail": "validate_live_archive is the first operation after capture validation and opens the archive using tarfile.open; PermissionError is caught through OSError and emitted as fixture/harness parsing failed with exit 2."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh:147-158",
+          "detail": "acc_check maps assertion exit 1 to expectation and every other nonzero status to exit=2 origin=fixture checkpoint=assertion_tool_failed."
+        },
+        {
+          "path": "git show 327c4c5388a7a971bb313d39e00a6c33f93306f6 -- docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+          "detail": "The owner-approved network-isolation delta replaces host-side recording with docker exec recording and adds the ACC_TMP bind mount. The current SC-1.sh and reports.py hashes exactly match that commit and its manifest."
+        },
+        {
+          "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base/SC-1.log:1-8",
+          "detail": "Before the network-isolation delta, host-side recording passed archive and both live-report controls and reached pg19_stats_age_report_unavailable; this is historical supporting evidence, not a substitute for a corrected re-freeze run."
+        }
+      ],
+      "positiveControlImpact": "Current SC-1 fails at archive opening before archive_ticks=3, autovacuum_scores_members=0, or either live report assertion can be emitted. No SC-1 semantic acceptance or feature-missing conclusion may be drawn from base-reFreeze-1.",
+      "implementationAssessment": "No independently verified product defect is present. The 0600 recorder mode is existing product behavior and must not be relaxed to satisfy this harness failure.",
+      "allowedAction": "After explicit owner approval, make a narrow harness-only SC-1 repair that transfers the completed archive to host-user ownership while retaining restrictive permissions (for example, a bounded docker exec chown to the host UID:GID after successful recording and before host-side assertions), or equivalently copy it out to a host-owned restrictive file. Update scenario-manifest.sha256 in the harness-only change, preserve this failed run, rerun the clean base acceptance batch, and obtain fresh independent QA/freeze review.",
+      "repairBoundary": {
+        "harnessFilesAllowedAfterApproval": [
+          "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+          "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256"
+        ],
+        "productChangesAllowed": false,
+        "assertionWeakeningAllowed": false,
+        "networkIsolationWeakeningAllowed": false,
+        "permissionRequirement": "Keep the archive non-world-readable and ACC_TMP mode 0700; do not change recorder.go's 0600 creation mode.",
+        "requiredOutcome": "SC-1 must pass fixture/archive/old-layout positive controls and then reach pg19_stats_age_report_unavailable; all other scenarios must retain their approved base outcomes.",
+        "postRepairReview": "Fresh independent QA is mandatory; triage and source inspection do not prove that the repair works."
+      },
+      "contractChange": false
+    }
+  ],
+  "ownerApproval": {
+    "priorApprovalScope": "The failed 327c4c5 re-freeze corrected SC-1 network isolation by using --network none and in-container recording.",
+    "coversNeededCorrection": false,
+    "reason": "That approval authorized and tested the network-isolation delta, but its base proof failed. A new archive-ownership repair is another frozen-harness change and is not automatically approved by the failed re-freeze. The acceptance-triage procedure requires harness groups to use the single owner-approved batch re-freeze boundary.",
+    "requiredApproval": "Owner approval for the narrow SC-1 archive-ownership correction, manifest refresh, clean base batch rerun, and renewed independent freeze review."
+  },
+  "blockingActions": [
+    "Obtain explicit owner approval for the HARNESS-1 correction and batch re-freeze; do not edit product code.",
+    "After approval and the harness-only repair, refresh the manifest, preserve base-reFreeze-1, rerun the clean base batch, and obtain fresh independent QA before restoring frozen/ready status."
+  ],
+  "triageExecution": {
+    "scenariosRerun": false,
+    "productOrHarnessFilesModified": false,
+    "historicalEvidenceModified": false,
+    "note": "Diagnosis used read-only source, diff, result/log, and Docker image-configuration inspection only."
+  }
+}

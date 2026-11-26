@@ -65,6 +65,16 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — stopped for owner review after SC-1 re-freeze
+
+**Summary:** Whole-feature review round 1 found a destructive rounded-tie fixture, an invalid freeze-qa path and stale roadmap text. Separate product/test commit `b5af8f2` and docs commit `191cc07` address those findings; final re-review remains pending. The owner approved one SC-1 network-isolation re-freeze and, after the first triage, a narrow archive-ownership correction. Harness-only commits `fcea62e` and `f1660ea` preserve all assertions and are separate from product changes.
+**Stop condition:** Clean `base-reFreeze-1` failed on root-owned archive readability; triage classified it as harness-only. After ownership repair, clean `base-reFreeze-2` reached report assertions but failed because container UTC archive filenames and host `+0500` report bounds exclude valid ticks. Triage round 2 classified this as a new harness timezone defect and a second comparable harness failure. The execution contract therefore requires an immediate feature stop before any third automatic fix or rerun.
+**Current state:** All six implementation tasks remain done and integrated. No feature-r1 result or final QA is claimed. Both re-freeze base runs are preserved with `dirty=false`; the other four scenarios retained valid base outcomes in each run. `acceptance/freeze.json` still points to the original `44c9535` freeze and has not been relabelled ready for the modified harness. Whole-feature code/security re-review after the fixes is pending.
+**Next decision:** The owner must either stop for manual handling or explicitly reauthorize one cohesive harness-only UTC correction, manifest refresh, clean full base re-freeze, feature validation and independent acceptance/code/security reviews. Product code must not change in that harness commit.
+**Verification:** Read-only triage reports round 1/2 and sanitized `base-reFreeze-1`/`base-reFreeze-2` evidence are committed. No raw archive, transcript or credential evidence is included.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
