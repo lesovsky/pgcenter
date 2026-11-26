@@ -1,0 +1,57 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "Approved for the scoped valid-layout replay fix. Column-name and recorded-version boundaries discard the prior sample, rerun configuration, clear rendering state, reset header cadence, and restore or re-resolve sort state. The tables/indexes boundary matrix and description checks pass, race testing is clean, and a source mutation confirms the same-version tests are discriminating. No in-scope security blocker was found. The separately documented malformed-Ncols debt [020] remains reproducible and is neither fixed nor claimed closed by this diff.",
+  "blocking_risks": [],
+  "findings": [
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "category": "Untrusted deserialization / malformed archive bounds safety (existing debt [020])",
+      "title": "Dishonest Ncols still causes an index-out-of-range panic outside the valid-layout contract",
+      "description": "An attacker supplying a recorded archive can keep version, Cols, row widths, and Nrows consistent between two tables samples while declaring an excessive Ncols. PGresult.validate does not compare Ncols with len(Cols), so the new slices.Equal layout check does not identify a boundary. On the second sample, stat.diff allocates and iterates using the attacker-declared current width and indexes past the previous row, crashing report replay. This is the already registered [020] malformed-shape class; Task 04 explicitly limits Decision 9 to valid adjacent layouts and does not modify the shared parser or claim to close this debt.",
+      "location": "internal/stat/postgres.go:558-572,619-645 (pre-existing shared parser/diff); report/report.go:274 (layout comparison in the supplied diff)",
+      "verified": true,
+      "evidence": "Generated a temporary synthetic two-tick tables tar whose rows and Cols were internally consistent but whose declared Ncols was excessive, then ran `go run ./cmd report -T -f <temporary-archive>` with a bounded time range. The command exited nonzero with a sanitized classification of runtime panic, index out of range, and a stack frame in internal/stat.diff. Source inspection confirms validate checks row width against Cols and Nrows against Values, but not Ncols against Cols. The temporary archive was deleted; no raw payload is included here.",
+      "recommendation": "Handle [020] in its separately scoped shared-validation change: reject negative or inconsistent Ncols/Nrows/Cols shapes at PGresult validation, including Ncols == len(Cols), and retain defensive index checks in diff/alignment consumers. Add malformed same-column-name replay tests that require a clean error rather than a panic. Do not represent Decision 9 or this Task 04 report as closing [020]."
+    }
+  ],
+  "verification": {
+    "scope": {
+      "command": "git diff --stat/--name-status and source inspection for 1bd94300ba483e526a73a5c148ce579cdc9f5a33..3984b227d974578a3c534d3b7d396a20a9f91e64; Task 04 and tech-spec Decisions 8-9 reviewed.",
+      "result": "The supplied range changes only report/describe.go, report/report.go, and report/report_test.go. No product, frozen, shared, dependency, or debt-register artifact was edited by this audit. go.mod, go.sum, internal/stat/postgres.go, internal/align/, top/stat.go, and docs/tech-debt.md are unchanged in the reviewed range."
+    },
+    "targeted_replay_and_descriptions": {
+      "command": "go test ./report/ -run 'Test_processData_(relationLayoutBoundaries|versionChange)|Test_describeRelationColumnOrder|Test_app_doReport_errorPathDoesNotHang' -count=1 -v",
+      "result": "PASS. All 12 relation boundary leaves ran and passed: mixed PG18-to-PG19, same-PG19 old-to-new, and same-PG19 new-to-old, across tables/indexes and blank/populated stats_age. Existing activity version-boundary sort/width tests, description order tests, and the malformed-counter no-hang test also passed. The assertions cover first-sample suppression, second-sample deltas, current-layout headers/widths, stats_age visibility, requested sort resolution, and seed restoration."
+    },
+    "full_report_and_race": {
+      "command": "go test ./report/ -count=1; go test -race ./report/ -count=1; go vet ./report/",
+      "result": "PASS. Full report tests, race-enabled report tests, and vet completed successfully. Legacy golden/report coverage therefore passes locally; the separate frozen A/B acceptance scenario was not run or claimed."
+    },
+    "discriminating_mutation": {
+      "command": "go test -overlay <temporary-layout-comparison-removal> ./report/ -run '^Test_processData_relationLayoutBoundaries$/^same_pg19_old_to_new$' -count=1 -v",
+      "result": "EXPECTED_FAIL, observed. The overlay removed only the Cols equality disjunct and its now-unused import, without editing repository source. The instrumented mutant compiled and ran the named parent and all four same-version old-to-new leaves, exited 1, produced two first-new-layout-sample/no-diff assertion failures and two stale-width errors. The original test passes, so these assertions distinguish the fix from version-only boundary detection. Temporary overlay files were removed."
+    },
+    "state_and_sort_analysis": {
+      "command": "Traced readTar -> processData -> view.Configure -> stat.Compare/diff/sort -> formatStatSample/printStatSample for both boundary directions and requested stats_age ordering.",
+      "result": "prevStat, prevMeta, and prevTs are replaced before continue, preventing a cross-layout delta. On every version-or-Cols boundary, Aligned/Cols/ColsWidth and header cadence are reset, orderConfigured is re-armed, and the originally captured seed key/direction are restored before the next sample resolves -o by name. Existing PGresult.sort rejects a key outside the current first row. No stale sort index or old-layout value was observed in the valid-layout matrix."
+    },
+    "resource_error_and_data_exposure": {
+      "command": "Source inspection plus Test_app_doReport_errorPathDoesNotHang and race-enabled report suite; reviewed changed fixtures and output paths for sensitive data.",
+      "result": "processData errors are drained by app.doReport so the unbuffered reader does not remain blocked; the targeted malformed-counter test returns instead of hanging. Layout detection adds bounded slice/string comparisons over already size-capped decoded entries and no new allocation, file, network, command, credential, cryptographic, or logging surface. New test values are synthetic and no hardcoded credentials, private keys, tokens, or real acceptance recordings were found. Existing unsanitized terminal-cell and zero-exit-code debts are unchanged and outside this diff."
+    },
+    "debt_020_boundary": {
+      "command": "Inspected docs/tech-debt.md [020], Task 04 line 26, and tech-spec Decisions 8-9; executed the malformed-Ncols reproduction described in the finding.",
+      "result": "The implementation and planning artifacts consistently distinguish valid column-layout changes from attacker-declared malformed Ncols. They do not claim to close [020]. The reproduction confirms that debt remains open; it is reported only as out_of_scope and does not block this valid-layout task."
+    },
+    "format_and_workspace": {
+      "command": "git diff --check <base>..<head>; gofmt -d report/describe.go report/report.go report/report_test.go; git status --short",
+      "result": "PASS. No whitespace errors or gofmt diff; the review worktree was clean after temporary checks and before this requested report was written."
+    },
+    "environmental_limitation": {
+      "command": "go test ./report/ ./record/ -count=1",
+      "result": "report passed. record could not run its PostgreSQL-backed tests because the local PG17 fixture listener was unavailable (connection refused), followed by the existing test's nil-connection panic. No connection or secret value is reproduced. This is an unverified environmental integration gate, not an in-scope code finding; no record source changed in the supplied range."
+    }
+  }
+}

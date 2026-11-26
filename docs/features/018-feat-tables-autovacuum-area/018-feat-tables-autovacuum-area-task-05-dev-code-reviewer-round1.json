@@ -1,0 +1,49 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "approved",
+  "base": "1bd94300ba483e526a73a5c148ce579cdc9f5a33",
+  "head": "c6d4acd123905a0f04d8ccf153441c2299e689b6",
+  "scope": "Task 05: version-aware tables cycle/menu, disabled refusal and reset, cmdline branch structure, system-relation toggle, keybindings, help, and their tests",
+  "summary": "Approved with zero findings. The t cycle and T menu implement the PG19 boundary and legacy behavior; the disabled item sends nothing, preserves the current view, emits one NOTICE branch, and closes/resets the menu. Every enabled menuTables arm and the shared hotkey path have exactly one printCmdline call by branch inspection. All four toggle literals are consistent, the lowercase t binding is unchanged, T is bound once on sysstat, and help has one t description in the required w,W/S adjacency with one formatting placeholder. Tests exercise real state, rendered menu/help content, channel behavior, and bound handlers rather than mocks or implementation strings. Visible cmdline counts are intentionally not claimed from the unobservable g.Update unit seam; SC-5 through SC-8 remain manual acceptance work.",
+  "findings": [],
+  "verification": [
+    {
+      "command": "go test ./top/ -run 'Tables|Menu|Keybindings|ToggleSysTables|help' -count=1 -v",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "The requested filter passed with named toggle/menu/keybinding/help subtests. Because Go test filters are case-sensitive, this filter did not select Test_tablesNextView, Test_switchViewTo, or lowercase Test_toggleSysTables; those were run explicitly in the next check rather than inferred from this green run."
+    },
+    {
+      "command": "go test ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1 -v && go test -race ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "All eight tablesNextView version/current-view cases, all 33 switchViewTo cases, both toggle directions plus activity no-op, enabled/disabled/out-of-range menu selections, both keybindings and their real handlers, and help adjacency passed. The same focused set passed under the race detector (ok top 1.034s)."
+    },
+    {
+      "command": "docker run --rm --network none [read-only worktree, host Go 1.25.13 toolchain, and read-only module cache mounts] lesovsky/pgcenter-testing:0.0.11 sh -lc 'prepare-test-environment.sh && go test ./top/ -count=1'",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Fresh PG14, PG15, PG16, PG17, PG18, and PG19 clusters all reported accepting connections; the complete top package passed (ok github.com/lesovsky/pgcenter/top 8.194s). The container was disposable and removed. The known pre-existing prepare-test-environment.sh line-36 'all: command not found' diagnostic appeared but did not prevent fixture readiness or the passing test run."
+    },
+    {
+      "command": "go vet ./top/ && test -z \"$(gofmt -l top/config_view.go top/config_view_test.go top/help.go top/help_test.go top/keybindings.go top/keybindings_test.go top/menu.go top/menu_test.go)\"",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Vet passed and gofmt reported no changed file. A separate regression selection covering menuWAL, selectMenuStyle, existing WAL/replication help adjacency, and help formatting also passed (ok top 0.005s)."
+    },
+    {
+      "command": "git diff --check 1bd94300ba483e526a73a5c148ce579cdc9f5a33..c6d4acd123905a0f04d8ccf153441c2299e689b6; git status --short",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "No whitespace errors; the worktree remained clean with no scratch artifacts. The supplied range contains exactly the eight reviewed top product/test files."
+    },
+    {
+      "command": "Cross-file branch review of top/config_view.go, top/menu.go, top/top.go, and top/keybindings.go",
+      "verified": true,
+      "result": "PASS; manual message visibility remains pending",
+      "evidence": "switchViewTo has one trailing cmdline write after its tables dispatch. menuTables first-item, enabled second-item, disabled second-item, and default arms each contain one write and no shared trailing write. Disabled selection still reaches menu reset/menuClose. app.setup initializes both queryOptions.Version and postgresProps.VersionNum from the same server properties, so menu labeling and selection use consistent runtime versions. No visible-message count or NOTICE rendering was inferred from unit tests; SC-5/SC-7 must observe it manually."
+    }
+  ]
+}

@@ -47,6 +47,15 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 
 ---
 
+## Phase: Feature execution — wave 3 integrated
+
+**Summary:** Tasks 04 and 05 are integrated at `092912a`. Recorded relation layout changes now form safe replay boundaries with complete renderer/sort reset; PG 19 navigation, disabled-menu refusal, system toggle and help are wired.
+**Deviations:** Task 04's existing error-path fixture now uses a malformed numeric counter because a same-version column-list change is intentionally valid. Security review reproduced the pre-existing malformed-`Ncols` panic and classified it as out-of-scope debt [020]; it remains open and is not claimed fixed. Scripted SC-2/SC-3/SC-4/SC-10 remain assigned to the post-wave-4 freeze-qa run.
+**Review/fix rounds:** Tasks 04 and 05 each passed one code-review round with zero findings; Task 04 passed security review with no in-scope finding. No fix rounds.
+**Verification:** Integrated report/record/top/view/query/stat tests passed in the PG 14–19 image. All 12 replay matrix variants passed without skips, and layout-comparison and seed-sort mutations produced named red assertions. Frozen acceptance files remain unchanged.
+
+---
+
 ## Phase: Acceptance harness freeze
 
 **Summary:** Froze the five-scenario black-box harness at SHA `44c953532a043de5de847f679df27b65c019a408`. Final `base` is clean and manifest-valid: SC-2/SC-4 pass; SC-1/SC-3/SC-10 emit exactly their approved feature-missing checkpoints. Independent semantic freeze review approved with zero findings.
