@@ -65,15 +65,17 @@ if ! timeout 30 docker exec "$ACC_CONTAINER" psql -h 127.0.0.1 -p 21919 -U postg
     -X -v ON_ERROR_STOP=1 -qAtc 'CREATE DATABASE acc018' >"$ACC_TMP/create-db.log" 2>&1; then
     acc_finish 2 environment fixture_database_create_failed
 fi
+# PG19 retains a populated stats_reset for relations that had stats before the reset.
+# Create untouched relations only afterwards and never read/write them: the complete
+# recording, including sizes, must leave both untouched stats_reset entries NULL.
 if ! timeout 30 docker exec -i "$ACC_CONTAINER" psql -h 127.0.0.1 -p 21919 -U postgres -d acc018 \
     -X -v ON_ERROR_STOP=1 -qAt >"$ACC_TMP/fixture.log" 2>&1 <<'FIXTURE_SQL'
 CREATE TABLE public.acc018_active (id integer, payload text);
-CREATE TABLE public.acc018_untouched (id integer, payload text);
 CREATE INDEX acc018_active_idx ON public.acc018_active (id);
-CREATE INDEX acc018_untouched_idx ON public.acc018_untouched (id);
 INSERT INTO public.acc018_active SELECT i, 'synthetic' FROM generate_series(1, 100) AS i;
-INSERT INTO public.acc018_untouched SELECT i, 'synthetic' FROM generate_series(1, 100) AS i;
 SELECT pg_stat_reset();
+CREATE TABLE public.acc018_untouched (id integer, payload text);
+CREATE INDEX acc018_untouched_idx ON public.acc018_untouched (id);
 SELECT count(*) FROM public.acc018_active;
 BEGIN;
 SET LOCAL enable_seqscan = off;

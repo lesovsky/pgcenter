@@ -77,6 +77,7 @@ acc_require_tools() {
 acc_build_current() {
     local output="$1"
     if ! timeout 240 go build -o "$output" ./cmd >"$ACC_TMP/build-current.log" 2>&1; then
+        acc_emit_sanitized_log build-current "$ACC_TMP/build-current.log"
         acc_finish 2 environment current_binary_build_failed
     fi
     assert_sanitized "$ACC_TMP/build-current.log" || acc_finish 2 harness build_log_sanitization_failed
@@ -127,6 +128,20 @@ acc_assert_sanitized() {
     fi
 }
 
+acc_emit_sanitized_log() {
+    local name="$1"
+    local input="$2"
+    local output="$ACC_TMP/$name.sanitized"
+    local line
+    if ! sanitize_file "$input" "$output"; then
+        printf 'ACC_DIAGNOSTIC name=%s text=redaction_failed\n' "$name"
+        return
+    fi
+    while IFS= read -r line || [ -n "$line" ]; do
+        printf 'ACC_DIAGNOSTIC name=%s text=%s\n' "$name" "$line"
+    done <"$output"
+}
+
 acc_check() {
     local checkpoint="$1"
     shift
@@ -168,7 +183,8 @@ acc_build_archived_ref() {
     if ! tar -xf "$archive" -C "$source"; then
         acc_finish 2 harness source_extract_failed
     fi
-    if ! (cd "$source" && timeout 240 go build -o "$ACC_TMP/pgcenter-$name" ./cmd) >"$ACC_TMP/build-$name.log" 2>&1; then
+    if ! (cd "$source" && timeout 240 go build -buildvcs=false -o "$ACC_TMP/pgcenter-$name" ./cmd) >"$ACC_TMP/build-$name.log" 2>&1; then
+        acc_emit_sanitized_log "build-$name" "$ACC_TMP/build-$name.log"
         acc_finish 2 environment "${name}_binary_build_failed"
     fi
     assert_sanitized "$ACC_TMP/build-$name.log" || acc_finish 2 harness build_log_sanitization_failed
