@@ -106,7 +106,7 @@ capture_bounds() {
 report_start="$(date -d '1 minute ago' '+%Y-%m-%d %H:%M:%S')"
 capture_bounds pre
 archive="$ACC_TMP/live.tar"
-if acc_run "$ACC_TMP/record.raw" 75 docker exec "$ACC_CONTAINER" /opt/pgcenter-current record -i 1s -c 3 \
+if acc_run "$ACC_TMP/record.raw" 75 docker exec --user "$(id -u):$(id -g)" "$ACC_CONTAINER" /opt/pgcenter-current record -i 1s -c 3 \
     -h 127.0.0.1 -p 21919 -U postgres -d acc018 -f "$archive"; then :; else :; fi
 record_status=$ACC_RUN_STATUS
 capture_bounds post
