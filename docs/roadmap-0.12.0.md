@@ -50,9 +50,9 @@ revisit each of them. This is a known, accepted cost of the deferral, recorded h
 rediscovered as a surprise. Rule 1 is unaffected: [013] shipped, so the activity column layout is
 already final for whatever colour work follows.
 
-Each feature goes through the full SDD pipeline (user-spec → tech-spec → decompose → implement →
-review) **one at a time**, in the order below. Numbering continues from the archive (last
-archived: `011`).
+Each feature goes through the full SDLC pipeline (user-spec → tech-spec → decomposition → execution →
+freeze QA → finalization) **one at a time**, in the order below. Numbering continues from the archive
+(last archived: `017`).
 
 ## Cross-cutting policy: record/report per view, by design risk
 
@@ -486,7 +486,7 @@ PG 19 view in [018], [019] and [020].
 ## Finalization
 
 - [ ] PG 19 re-verification pass at RC/GA (CI matrix) — does not block the release
-- [ ] Update `overview.md` (PG 19 in supported versions, new screens, new activity columns, color mode)
+- [ ] Update `.kimi-code/skills/project-knowledge/references/project.md` (PG 19 in supported versions, new screens, new activity columns, color mode)
 - [ ] Update `features-catalog.md` per feature
 - [ ] Update `docs/decisions-log.md`; close tech debt [006] and [010] if [019]'s standby fixture
       retires them

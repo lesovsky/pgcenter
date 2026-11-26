@@ -36,7 +36,7 @@ PostgreSQL DBAs who need to monitor and troubleshoot Postgres in production with
 Active support: PG 14, 15, 16, 17, 18, 19.
 EOL versions (9.5–13) are no longer tested but code paths remain for reference.
 
-## Current Status (May 2026)
+## Development Priorities
 
-Active development resumed with v0.10.0 after 5 years.
-Priorities: stability, PG version compatibility, community contributions.
+Priorities: stability, PostgreSQL version compatibility, and community contributions.
+Current release scope and feature status live in `docs/roadmap-0.12.0.md`.

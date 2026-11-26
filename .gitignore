@@ -2,5 +2,7 @@
 /bin/
 .test_coverage.txt
 
-# QA artifacts: kept locally during feature work, not part of the repository
+# QA and orchestration artifacts: kept locally during feature work, not part of the repository
 logs/
+.worktrees/
+.feature-orchestration.md

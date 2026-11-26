@@ -12,7 +12,7 @@
 Triggered by push to `release` branch. Two jobs:
 
 **test** — runs full test suite in `lesovsky/pgcenter-testing:0.0.11` container:
-- Go 1.25.10 (cached), module cache, lint tools cache
+- Go 1.25.13 (cached), module cache, lint tools cache
 - `make lint` + `govulncheck ./...` + `make test` + `make build` + e2e tests
 
 **release** — runs after test passes:
