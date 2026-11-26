@@ -118,14 +118,12 @@ func Test_StatTablesQuery_NullStatsAge(t *testing.T) {
 	conn := connectStatRelationFixture(t, PostgresV19)
 	defer conn.Close()
 
-	_, err := conn.Exec("DROP TABLE IF EXISTS " + relation)
+	_, err := conn.Exec("CREATE TEMP TABLE " + relation + " (id integer)")
 	require.NoError(t, err)
-	_, err = conn.Exec("CREATE TABLE " + relation + " (id integer)")
+
+	var schema string
+	err = conn.QueryRow("SELECT n.nspname FROM pg_namespace n WHERE n.oid = pg_my_temp_schema()").Scan(&schema)
 	require.NoError(t, err)
-	defer func() {
-		_, err := conn.Exec("DROP TABLE IF EXISTS " + relation)
-		assert.NoError(t, err)
-	}()
 
 	tmpl, ncols, _ := SelectStatTablesQuery(PostgresV19)
 	q, err := Format(tmpl, NewOptions(PostgresV19, "f", "off", 256, "public"))
@@ -144,7 +142,7 @@ func Test_StatTablesQuery_NullStatsAge(t *testing.T) {
 		}
 		require.NoError(t, rows.Scan(dest...))
 
-		if values[0].String == "public."+relation {
+		if values[0].String == schema+"."+relation {
 			found = true
 			assert.False(t, values[ncols-1].Valid, "an untouched relation must have NULL stats_reset")
 			assert.Empty(t, values[ncols-1].String, "NULL stats_age must render as a blank cell")
@@ -152,7 +150,7 @@ func Test_StatTablesQuery_NullStatsAge(t *testing.T) {
 	}
 	rows.Close()
 	require.NoError(t, rows.Err())
-	assert.True(t, found, "the newly created relation must be present in pg_stat_user_tables")
+	assert.True(t, found, "the temporary relation must be present in pg_stat_user_tables")
 }
 
 func connectStatRelationFixture(t *testing.T, version int) *postgres.DB {

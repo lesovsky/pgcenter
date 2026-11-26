@@ -114,15 +114,13 @@ func Test_StatIndexesQuery_NullStatsAge(t *testing.T) {
 	conn := connectStatRelationFixture(t, PostgresV19)
 	defer conn.Close()
 
-	_, err := conn.Exec("DROP TABLE IF EXISTS " + relation)
+	_, err := conn.Exec("CREATE TEMP TABLE " + relation + " (id integer)")
 	require.NoError(t, err)
-	_, err = conn.Exec("CREATE TABLE " + relation + " (id integer)")
-	require.NoError(t, err)
-	defer func() {
-		_, err := conn.Exec("DROP TABLE IF EXISTS " + relation)
-		assert.NoError(t, err)
-	}()
 	_, err = conn.Exec("CREATE INDEX " + index + " ON " + relation + " (id)")
+	require.NoError(t, err)
+
+	var schema string
+	err = conn.QueryRow("SELECT n.nspname FROM pg_namespace n WHERE n.oid = pg_my_temp_schema()").Scan(&schema)
 	require.NoError(t, err)
 
 	tmpl, ncols, _ := SelectStatIndexesQuery(PostgresV19)
@@ -142,7 +140,7 @@ func Test_StatIndexesQuery_NullStatsAge(t *testing.T) {
 		}
 		require.NoError(t, rows.Scan(dest...))
 
-		if values[0].String == "public."+relation+"."+index {
+		if values[0].String == schema+"."+relation+"."+index {
 			found = true
 			assert.False(t, values[ncols-1].Valid, "an untouched index must have NULL stats_reset")
 			assert.Empty(t, values[ncols-1].String, "NULL stats_age must render as a blank cell")
@@ -150,5 +148,5 @@ func Test_StatIndexesQuery_NullStatsAge(t *testing.T) {
 	}
 	rows.Close()
 	require.NoError(t, rows.Err())
-	assert.True(t, found, "the newly created index must be present in pg_stat_user_indexes")
+	assert.True(t, found, "the temporary index must be present in pg_stat_user_indexes")
 }
