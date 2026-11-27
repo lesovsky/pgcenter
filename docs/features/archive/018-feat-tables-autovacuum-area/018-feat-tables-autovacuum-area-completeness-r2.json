@@ -1,0 +1,78 @@
+{
+  "status": "fail",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 40,
+  "requirements_covered": 32,
+  "requirements_partial": 8,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "structural_gap",
+      "source": "tech-spec",
+      "requirement": "Decision 8: тech debt [020] gets no edit",
+      "detail": "The Decision-8 rewrite landed in exactly one place. Three others still assert the claim it retracted, and two of them are the operative instructions: (1) Acceptance Criteria line 424-425 — 'Записи техдолга [020] и [035] обновлены: у [020] расширена область достижимости'; (2) the Risks table row title (line 405) — 'Tech debt [020] becomes reachable on a diffed screen for the first time' (only its mitigation text was corrected); (3) Task 7's description — 'correct the two tech-debt entries whose reachability this feature changes', when after the rewrite exactly one existing entry is edited ([035], a scope change, not reachability) plus one new entry. An executor following the AC and Task 7 will write into docs/tech-debt.md [020] a reachability claim that Decision 8 and the Solution section both declare false ('the amendment would have recorded something untrue'), and Task 8 will verify that false edit as an acceptance criterion. Same class of leftover as the false claim round 1 caught in Solution — permanent register, so it is the expensive kind. Related Task 7 staleness from the same change set: 'Files to modify' now lists five documents while both the task's Verify line and Agent Verification Plan row 7 still say 'the four documents'.",
+      "severity": "critical"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Agent Verification Plan / per-task table, after moving the recorder fix from Task 5 to Task 3",
+      "detail": "The move is correct where it counts — Task 3's description owns the fix, record/recorder_test.go is in its 'Files to modify', Task 3 is Wave 2 and Task 5 is Wave 3, so `go test ./record/ ./report/` is satisfiable when Task 5 runs and no new wave conflict is created (Task 5 touches report/* and record/record.go; Task 4, its wave-mate, touches only top/*). But the per-task verification table was not updated with it: row 5 still reads 'recorder trap fixed, 18→19 replay of `tables`' — wrong owner and the pre-fix single screen — while row 3 reads only 'registry counts, Configure arms, filter rows' and never names the trap. As written, Task 5's declared verification includes work its file list forbids it from doing (recorder_test.go is no longer among its files), and Task 3's declared verification does not include the work it owns. Rows 3 and 5 need to be swapped in content: row 3 gains 'recorder trap fixed', row 5 becomes '18→19 replay of `tables` and `indexes`, describe rows'.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-3 / US-4 / US-5 / US-8: округление всех шести скоров до 2 знаков; do_vacuum/do_analyze/for_wraparound как true/false; relation = schemaname.relname; dead_total = n_dead_tup соединением по идентификатору отношения",
+      "detail": "Four value-format acceptance criteria still have no statement anywhere in the tech-spec. Decision 3 pins `round(s.score::numeric, 2) AS score` for the ordering argument — for one column, incidentally; the other five scores are never mentioned as rounded. Nothing states the three booleans are rendered `::text` (the user-spec's `replslots.active` idiom). Nothing states column 0 is the schemaname/relname concatenation. Architecture line 54 says 'Left outer join ... for `dead_total`' without naming the join key (`relid`) or the source column (`n_dead_tup`); Decision 4 mentions relid only in passing, as proof that the scores view carries its own schemaname. The locked column-name test pins names, order and the outer relation — none of the value composition. Round 1 raised the relation/join half of this as a minor; it was not applied, and re-reading shows the gap is wider than that. Task 1's 'Files to read' is six Go files — the user-spec is not among them, so the contract for the SELECT list is in no document the implementer of Task 1 is pointed at. Two clauses in Task 1's description settle all four.",
+      "severity": "major"
+    },
+    {
+      "type": "gap",
+      "source": "tech-spec",
+      "requirement": "Testing Strategy: `calculateDelta` short-circuit test; tech-spec AC 'Тест на DiffIntvl{0,0} показан красным при ненулевом интервале'",
+      "detail": "`calculateDelta` lives in internal/stat/postgres.go:581. No task modifies anything under internal/stat/ — Task 4 lists internal/stat/stat.go as read-only, and no task lists internal/stat/postgres_test.go. So a test that Testing Strategy demands, that carries an explicit mutation requirement ('Must be shown to fail when the interval is changed to a non-zero pair'), and that has its own line in the tech-spec's Acceptance Criteria has no owning task and no file to be written into. The underlying user-spec criterion ('экран не диффует ни одну колонку, поэтому пустое значение в dead_total не может прервать выборку') is satisfied architecturally by DiffIntvl{0,0}, set in Task 3 — it is the proof that is homeless. Give internal/stat/postgres_test.go to Task 3 (which already owns the DiffIntvl value) and extend its Verify to `go test ./internal/view/ ./internal/stat/ ./record/`.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "US-17 / Data Models: `Msg` for the new view",
+      "detail": "Half applied. The field table now carries `Msg: \"Show autovacuum scores\"` with the right rationale (line 233), which is the substantive half. The registry-invariant list in Testing Strategy (line 300) is unchanged and still reads '(key == v.Name, non-nil maps, NotRecordable, MinRequiredVersion, Ncols, DiffIntvl, OrderKey, OrderDesc)' — no Msg. That list is what Task 3 turns into assertions, and internal/view/view_test.go has no cross-view Msg invariant to fall back on (TestNew only counts 28 views), so an empty or drifted caption still passes the whole automated suite and surfaces only on the stand run — the exact path US-17 is already delegated to. The project's own precedent is to pin it verbatim: view_test.go:128 asserts archiver's Msg string exactly, with a comment saying it is load-bearing. Add Msg to the invariant list.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-26 / US-28: пустая ячейка `stats_age`, когда статистику не сбрасывали и когда к отношению не обращались",
+      "detail": "Unchanged from round 1 — still absent from Testing Strategy and still not among the two criteria the Agent Verification Plan declares non-agent-verifiable. Both are cheap on the existing PG 19 fixture precisely because it never resets statistics: every cell is empty there, so 'all stats_age cells are empty on a never-reset cluster' is an assertion the current integration tier already supports. US-27 (the growing-duration half) is correctly declared non-verifiable; its two siblings were dropped alongside it rather than assigned.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-20: на версиях ниже PG 19 выбор помеченного пункта печатает в строке состояния пояснение",
+      "detail": "Unchanged from round 1. Decision 7 designs the refusal arm's own printCmdline call, and Testing Strategy asserts the negative half only ('nothing is pushed on viewCh and the view is unchanged'). The positive half — that an explanation is actually written — is neither asserted nor listed among the declared non-agent-verifiable criteria, though it hits the identical g.Update limitation the plan cites for the caption criterion. Either add it to the non-verifiable list with a line in the stand checklist, or name the seam. Three criteria in the unverified bucket with only two declared is how the third goes missing.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "Testing Strategy: wraparound fixture runs with cluster-level `autovacuum` off and restores it",
+      "detail": "The addition is right and closes a real hole (the flag clears within one naptime, and autovacuum_enabled=false does not protect it). What is not stated is how the restore is guaranteed: `ALTER SYSTEM SET autovacuum = off` + pg_reload_conf() mutates shared state on the PG 19 cluster that every other test package connects to, and `go test ./...` runs package binaries concurrently. If the assertion fails or the fixture panics before the restore statement, the cluster keeps autovacuum off for the remainder of the run and for every subsequent run against the same container — a failure mode that outlives the failing test. One clause: restore via t.Cleanup/defer, registered immediately after the ALTER SYSTEM, not at the end of the test body.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Ownership of the four newly added testing requirements",
+      "detail": "All four land in a file some task already owns, so none is homeless like the calculateDelta test — but none is named in a task description either, and the task descriptions are what an executing agent reads first. Privilege test in both directions via SetupTestRole → internal/query/autovacuum_scores_test.go (Task 1, whose description names only the locked column-name test and the escape hatch; note also that Task 1's Verify is `-run AutovacuumScores`, so the new test's name must match that pattern or it silently never runs). Wraparound fixture's autovacuum-off/restore → Task 1 (described only as 'its system-schema fixture'). `DiffIntvl[1] < min(Ncols)` across every version → ambiguous between Task 2 (selectors return both values) and Task 3 (registry); either is defensible, which is the problem. `stats_age` sourced from the pg_stat_* half → Task 2, whose description states the requirement but not the assertion on query text. One clause each.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "Round 2. Both round-1 majors are substantively fixed (indexes added to the 18→19 replay in Testing Strategy and Task 5; Msg added to the Data Models table) and two round-1 minors are closed (the below-PG-19 selector return is now defined as a single branch; architecture.md and record/record.go's stale NotRecordable claims now have owning tasks 7 and 5). The recorder-fix move is sound where it matters: Task 3 (Wave 2) owns both the breakage and the fix, Task 5 (Wave 3) can satisfy `go test ./record/ ./report/`, and no new wave conflict exists. Status flips to fail on one thing: the Decision-8 rewrite was applied in Decision 8 only, while the Acceptance Criteria, the Risks table row title and Task 7's description still instruct an edit to tech debt [020] that the same document calls untrue — a false entry in a permanent register, verified as an acceptance criterion by Task 8. Three majors besides: the per-task verification table still attributes the recorder trap to Task 5, whose file list no longer permits touching it; the new query's value-format contract (rounding of all six scores, ::text booleans, relation composition, dead_total's join key and source column — four user-spec criteria) is stated nowhere in the tech-spec and Task 1 is pointed at no document carrying it; and the calculateDelta DiffIntvl{0,0} test, which has its own tech-spec acceptance criterion, lives in internal/stat, which no task modifies. Minors: Msg reached the field table but not the registry-invariant list that Task 3 turns into assertions; the two empty-cell criteria and the refusal cmdline write remain unassigned from round 1; the cluster-wide autovacuum-off fixture needs a stated deferred restore; the four new testing requirements have owning files but no owning task description. No scope creep in functionality, no overengineering — the version-aware cycle stays confined to the t group and Decision 6's rewrite now reads honestly against the x/p precedents."
+}

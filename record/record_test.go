@@ -3,8 +3,10 @@ package record
 import (
 	"archive/tar"
 	"github.com/lesovsky/pgcenter/internal/postgres"
+	"github.com/lesovsky/pgcenter/internal/query"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"io"
 	"os"
 	"os/signal"
@@ -26,6 +28,27 @@ func Test_app_setup(t *testing.T) {
 	for _, v := range app.views {
 		assert.NotEqual(t, "", v.Query) // view's queries must not be empty (must be created using templates)
 	}
+	assert.NotNil(t, app.recorder)
+}
+
+func Test_app_setupPG19AutovacuumScoresExclusion(t *testing.T) {
+	conn, err := postgres.NewTestConnectVersion(query.PostgresV19)
+	if err != nil {
+		t.Skipf("skip: PostgreSQL 19 is not available: %v", err)
+	}
+	conn.Close()
+
+	dbconfig, err := postgres.NewConfig("127.0.0.1", 21919, "postgres", "pgcenter_fixtures")
+	require.NoError(t, err)
+	app := newApp(Config{OutputFile: filepath.Join(t.TempDir(), "record.tar")}, dbconfig)
+	output := captureStdout(t, func() {
+		require.NoError(t, app.setup())
+	})
+
+	assert.NotContains(t, app.views, "autovacuum_scores")
+	t.Logf("sanitized PG 19 record setup output:\n%s", output)
+	assert.Contains(t, output, "INFO: autovacuum_scores is not recordable (live TUI only), skip recording it")
+	assert.NotContains(t, output, "not supported by the current version")
 	assert.NotNil(t, app.recorder)
 }
 
@@ -108,51 +131,42 @@ func Test_app_record(t *testing.T) {
 
 func Test_filterViews(t *testing.T) {
 	testcases := []struct {
-		version    int
-		pgssSchema string
-		wantN      int
-		wantV      int
+		version      int
+		pgssSchema   string
+		wantN        int
+		wantV        int
+		wantArchiver bool
 	}{
-		// wantN counts filtered views (version-incompatible + statements_* without pgss);
-		// wantV counts remaining views after filtering. After feature 008 no production
-		// view sets NotRecordable=true, so every view now reaches the version gate (and,
-		// for statements_*, the pgss gate); whether a view is dropped is decided purely by
-		// version compatibility and pgss availability.
-		// The bgwriter and replslots views (both MinRequiredVersion=PostgresV14) are now
-		// recordable, so on PG14 they pass both gates and join wantV: relative to the
-		// pre-008 NotRecordable baseline this moves 2 views from filtered to remaining on
-		// the PG14 rows only (wantN -2, wantV +2).
-		// stat_io + stat_io_time (PostgresV16) and statements_jit (PostgresV15) are also
-		// recordable now, but on PG14 they are still dropped — by the version gate (and, for
-		// statements_jit, by the pgss gate when pgssSchema=="") instead of NotRecordable —
-		// so they stay counted in wantN; only the reason for dropping them changed.
-		// On PG13 and below all five views are version-incompatible and dropped by the
-		// version gate regardless of NotRecordable, so those rows are unchanged from the
-		// pre-008 baseline.
-		// On PG 19 nothing is filtered: the highest MinRequiredVersion in the registry is
-		// PostgresV16, and with a pgss schema supplied no statements_* view is dropped either —
-		// so all 27 registered views survive. Copying the PG14 row here would be wrong.
-		{version: 190000, pgssSchema: "public", wantN: 0, wantV: 27},
-		{version: 140000, pgssSchema: "", wantN: 9, wantV: 18},
-		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 24},
-		{version: 130000, pgssSchema: "public", wantN: 8, wantV: 19},
-		{version: 120000, pgssSchema: "public", wantN: 11, wantV: 16},
-		{version: 110000, pgssSchema: "public", wantN: 13, wantV: 14},
-		{version: 100000, pgssSchema: "public", wantN: 13, wantV: 14},
+		// wantN counts only version/extension exclusions reported by the aggregate INFO.
+		// autovacuum_scores is always excluded by name as live-TUI-only and is deliberately
+		// absent from that count, so it cannot be misreported as a server-version exclusion.
+		// wantArchiver and the explicit autovacuum_scores assertion below pin membership by
+		// name; equal counts alone could hide one view replacing another in the kept set.
+		{version: 190000, pgssSchema: "public", wantN: 0, wantV: 28, wantArchiver: true},
+		{version: 140000, pgssSchema: "", wantN: 9, wantV: 19, wantArchiver: true},
+		{version: 140000, pgssSchema: "public", wantN: 3, wantV: 25, wantArchiver: true},
+		{version: 130000, pgssSchema: "public", wantN: 9, wantV: 19, wantArchiver: false},
+		{version: 120000, pgssSchema: "public", wantN: 12, wantV: 16, wantArchiver: false},
+		{version: 110000, pgssSchema: "public", wantN: 14, wantV: 14, wantArchiver: false},
+		{version: 100000, pgssSchema: "public", wantN: 14, wantV: 14, wantArchiver: false},
 	}
 
 	for _, tc := range testcases {
 		n, v := filterViews(tc.version, tc.pgssSchema, view.New())
-		assert.Equal(t, tc.wantN, n)
-		assert.Equal(t, tc.wantV, len(v))
+		assert.Equal(t, tc.wantN, n, "version=%d pgss=%q", tc.version, tc.pgssSchema)
+		assert.Equal(t, tc.wantV, len(v), "version=%d pgss=%q", tc.version, tc.pgssSchema)
+		// Membership by lookup rather than assert.Contains: a failing Contains on a view map
+		// dumps all 28 View structs, which buries the one bit of information needed here.
+		_, gotArchiver := v["archiver"]
+		assert.Equal(t, tc.wantArchiver, gotArchiver, "archiver kept? version=%d pgss=%q", tc.version, tc.pgssSchema)
+		_, gotAutovacuum := v["autovacuum_scores"]
+		assert.False(t, gotAutovacuum, "autovacuum_scores must always be excluded by name; version=%d pgss=%q", tc.version, tc.pgssSchema)
 	}
 }
 
 func TestFilterViews_NotRecordable(t *testing.T) {
-	// After task 03 procpidstat is registered with NotRecordable=false (the
-	// local/remote gate moved to app.setup()), so filterViews must keep it.
-	// The NotRecordable=true drop branch is covered by
-	// TestFilterViews_dropsExplicitNotRecordable below.
+	// procpidstat uses the runtime local/remote gate in app.setup(), not the
+	// static NotRecordable filter, so filterViews must keep it.
 	views := view.Views{
 		"procpidstat": {
 			Name:          "procpidstat",
@@ -173,10 +187,8 @@ func TestFilterViews_NotRecordable(t *testing.T) {
 	assert.Equal(t, 19, pp.Ncols)
 }
 
-// TestFilterViews_dropsExplicitNotRecordable pins the NotRecordable=true
-// drop branch in filterViews() (record.go:210). After task 03 no production
-// view sets NotRecordable=true, so the mechanism would otherwise be
-// untested; this test guards against accidental removal of the check.
+// TestFilterViews_dropsExplicitNotRecordable pins the generic drop branch
+// independently of the production autovacuum_scores registry entry.
 func TestFilterViews_dropsExplicitNotRecordable(t *testing.T) {
 	views := view.Views{
 		"explicit_not_recordable": {
@@ -186,9 +198,29 @@ func TestFilterViews_dropsExplicitNotRecordable(t *testing.T) {
 	}
 
 	n, v := filterViews(0, "", views)
-	assert.Equal(t, 1, n)
+	assert.Equal(t, 0, n)
 	assert.Equal(t, 0, len(v))
 	assert.NotContains(t, v, "explicit_not_recordable")
+}
+
+func TestFilterViews_NotRecordableInfoIsNamedAndSorted(t *testing.T) {
+	views := view.Views{
+		"zeta":  {Name: "zeta", NotRecordable: true},
+		"alpha": {Name: "alpha", NotRecordable: true},
+	}
+
+	var (
+		n        int
+		filtered view.Views
+	)
+	output := captureStdout(t, func() {
+		n, filtered = filterViews(query.PostgresV19, "public", views)
+	})
+
+	assert.Equal(t, 0, n, "deliberate live-only exclusions must not increment the unsupported-version count")
+	assert.Empty(t, filtered)
+	assert.Equal(t, "INFO: alpha is not recordable (live TUI only), skip recording it\n"+
+		"INFO: zeta is not recordable (live TUI only), skip recording it\n", output)
 }
 
 func TestFilterViews_Recordable(t *testing.T) {
@@ -204,6 +236,25 @@ func TestFilterViews_Recordable(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.Equal(t, 1, len(v))
 	assert.Contains(t, v, "sample")
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	defer func() {
+		os.Stdout = old
+	}()
+
+	fn()
+	require.NoError(t, w.Close())
+	os.Stdout = old
+	output, err := io.ReadAll(r)
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+	return string(output)
 }
 
 // countRecordable returns the number of views that filterViews will keep,

@@ -1,0 +1,35 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The help-screen entry accurately documents the pause-lifting set implemented in commit d0bc90d (task 05): all 11 liftPause/liftPauseRefresh call sites across top/config_view.go, top/extra.go and top/verbose.go are covered by the documented list, and no undocumented action lifts the pause. Placement, alignment, width, and format-verb integrity all verify correctly and tests are solid. One minor pre-existing risk (help view has no Wrap/Autoscroll and grew to 41 lines) is worth a follow-up ticket but is not a defect introduced by this diff.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/help.go",
+      "line": 56,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The 'help' gocui view is created with SetView(\"help\", -1, -1, maxX-1, maxY-1) and has neither Wrap nor Autoscroll set, and no scroll key bindings target it. The template now renders 41 lines (up from 39). On a terminal shorter than ~41-43 rows (view chrome + content), the bottom of the screen — including the 'Type 'q' or 'Esc' to continue.' line — will be silently clipped with no way to scroll down to see it. This is a pre-existing limitation of the help view (not introduced by this task, and the task's own edge-case notes acknowledge there is no hard line-count limit in the project), but growing the template widens an already-present risk. Worth a follow-up ticket to add Wrap/Autoscroll or a scroll binding to the help view rather than growing content into an unbounded viewport indefinitely.",
+      "benefit": "Prevents future help-text additions from silently pushing the closing instruction off-screen on small terminals.",
+      "optional": true,
+      "tech_debt": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  },
+  "verification": {
+    "accuracyVerdict": "MATCHES — the documented lifting set is complete and correct against task 05's implementation",
+    "accuracyDetail": "Enumerated all 11 liftPause/liftPauseRefresh call sites from commit d0bc90d via grep across top/*.go (excluding tests): config_view.go has 8 (orderKeyLeft/orderKeyRight via Left/Right arrows -> 'sort'; switchSortOrder via '<' -> 'sort'; viewSwitchHandler, called from switchViewTo for letter keys a,b,d,f,i,j,o,p,r,s,t,w,x and from menu.go's menuSelect for all D/X/P/J menu picks -> 'screen switch'; switchViewToProcPidStat via 'S' -> folded into 'screen switch' per the task's explicit sanction; toggleSysTables via ',' ; changeQueryAge via 'A' dialog; toggleIdleConns via 'I'), verbose.go has 1 (toggleVerbose via 'v'), extra.go has 2 (showExtra opening path for B/N/F/L, and closing path). Cross-checked keybindings.go and menu.go to confirm every letter key and every D/X/P/J menu case routes through viewSwitchHandler, and confirmed menuConf (E, editor path) does NOT lift, matching the user-spec's explicit exception and the help text's silence on E. The help text's abbreviation of 'S' and D/X/P/J menu picks into the single phrase 'screen switch' is not a documentation gap: the task's own edge-case notes explicitly authorize this folding as a width/completeness tradeoff agreed in the user-spec interview, and it does not misstate behavior — S and menu picks do lift, and 'screen switch' does not claim they don't.",
+    "placementAndAlignment": "Correct. The two-line entry sits at helpTemplate lines 25-26, immediately after the '[,]' row (line 24) and immediately before 'C,E,R config:' (line 27), matching the acceptance criteria exactly. Column check: 'Space' key starts at column 5, description (the leading apostrophe of ''Space'') starts at column 23, matching the '[,]' row's description column exactly (verified both by the shipped test's computed-index comparison and independently by manual byte counting). The continuation line starts at column 23 with 22 leading spaces and repeats no key, as specified.",
+    "widthCheck": "Both new lines are exactly 80 columns (verified with awk length()), matching the task's stated limit. Existing unrelated lines in the file are longer (~101 chars), so no project-wide convention is violated by this constraint choice.",
+    "formatVerbCheck": "helpTemplate contains exactly one '%' and exactly one '%s', both pre-existing and unrelated to the new lines (the new lines contain literal parentheses, commas and apostrophes but no percent signs). fmt.Sprintf(helpTemplate, \"pgcenter\") produces no %!, (MISSING) or (EXTRA artifacts. Confirmed independently by running go test ./top/ -run Test_helpTemplate -v (3/3 pass) in addition to reading the test code.",
+    "lineCountCheck": "Rendered helpTemplate grew from 39 to 41 lines exactly as the commit message claims, confirmed by extracting and counting the raw-string literal before and after the commit.",
+    "scopeCheck": "git show cd542da --stat confirms exactly two files touched: top/help.go (+2) and top/help_test.go (new, +119). top/pause.go and top/stat.go (owned by tasks 05 and 04 in the same wave) are untouched.",
+    "lintAndFormat": "gofmt -l reports no issues on either file. golangci-lint run ./top/... (the whole package, matching how the project actually lints) reports 0 issues. Running golangci-lint against the two files in isolation falsely flags showHelp/closeHelp as 'unused' — this is a single-file-mode artifact (missing package context, e.g. keybindings.go which references them), not a real defect; the whole-package run is authoritative and clean."
+  }
+}

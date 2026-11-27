@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -1182,6 +1183,7 @@ func Test_describeReport(t *testing.T) {
 		{report: "indexes", want: pgStatIndexesDescription},
 		{report: "functions", want: pgStatFunctionsDescription},
 		{report: "wal", want: pgStatWALDescription},
+		{report: "archiver", want: pgStatArchiverDescription},
 		{report: "sizes", want: pgStatSizesDescription},
 		{report: "progress_vacuum", want: pgStatProgressVacuumDescription},
 		{report: "progress_cluster", want: pgStatProgressClusterDescription},
@@ -1278,6 +1280,200 @@ func Test_describeActivityColumnOrder(t *testing.T) {
 		assert.Greater(t, pos, prev, "row %q is out of order", c)
 		prev = pos
 	}
+}
+
+// describeRow locates the row documenting column c in a describe constant and returns its offset
+// together with the whole row text. The marker is anchored on both sides: "\n- " keeps it off words
+// inside the prose, and the trailing tab keeps a short name off a longer row - without it
+// "\n- archived" matches the "- archived_age" row, "\n- fpi" matches "- fpi,KiB" and "\n- write"
+// matches "- write,ms", so the offsets compared by the callers would not be the ones being checked.
+// Presence is required here rather than asserted by the caller: strings.Index returns -1 for a
+// missing marker, and -1 is less than anything, so an ordering-only assertion would pass on a row
+// that is not there at all.
+func describeRow(t *testing.T, text string, c string) (int, string) {
+	t.Helper()
+
+	pos := strings.Index(text, "\n- "+c+"\t")
+	require.NotEqual(t, -1, pos, "description must contain a row for %q", c)
+
+	row := text[pos+1:]
+	if i := strings.Index(row, "\n"); i != -1 {
+		row = row[:i]
+	}
+
+	return pos, row
+}
+
+// assertDescribeColumns checks that text documents exactly the given columns, in the given order,
+// each with the given origin. Fields are split on whitespace, which collapses the alignment tabs:
+// no column name and no origin contains a space, so the row always reads "-", name, origin, prose.
+func assertDescribeColumns(t *testing.T, text string, columns []struct{ name, origin string }) {
+	t.Helper()
+
+	prev := -1
+	for _, c := range columns {
+		pos, row := describeRow(t, text, c.name)
+		assert.Greater(t, pos, prev, "row %q is out of order", c.name)
+		prev = pos
+
+		// Strictly greater than 3: a row of exactly name, origin and nothing else documents nothing,
+		// which is malformed too.
+		fields := strings.Fields(row)
+		require.Greater(t, len(fields), 3, "row %q is malformed: %q", c.name, row)
+		assert.Equal(t, c.origin, fields[2], "row %q documents the wrong origin", c.name)
+	}
+
+	// The loop above is bounded from below only - it cannot see a row that should not be there, and
+	// strings.Index reports the first hit, so a duplicated row is invisible to it as well.
+	assert.Equal(t, len(columns), strings.Count(text, "\n- "),
+		"description documents a row that is not in the column list")
+}
+
+func Test_describeRelationColumnOrder(t *testing.T) {
+	testcases := []struct {
+		name    string
+		text    string
+		columns []struct{ name, origin string }
+	}{
+		{
+			name: "tables",
+			text: pgStatTablesDescription,
+			columns: []struct{ name, origin string }{
+				{"relation", "schemaname,relname"},
+				{"seq_scan", "seq_scan"},
+				{"seq_read", "seq_tup_read"},
+				{"idx_scan", "idx_scan"},
+				{"idx_fetch", "idx_tup_fetch"},
+				{"inserts", "n_tup_ins"},
+				{"updates", "n_tup_upd"},
+				{"deletes", "n_tup_del"},
+				{"hot_updates", "n_tup_hot_upd"},
+				{"live", "n_live_tup"},
+				{"dead", "n_dead_tup"},
+				{"heap_read,KiB", "heap_blks_read"},
+				{"heap_hit", "heap_blks_hit"},
+				{"idx_read,KiB", "idx_blks_read"},
+				{"idx_hit", "idx_blks_hit"},
+				{"toast_read,KiB", "toast_blks_read"},
+				{"toast_hit", "toast_blks_hit"},
+				{"tidx_read,KiB", "tidx_blks_read"},
+				{"tidx_hit", "tidx_blks_hit"},
+				{"stats_age", "stats_reset"},
+			},
+		},
+		{
+			name: "indexes",
+			text: pgStatIndexesDescription,
+			columns: []struct{ name, origin string }{
+				{"index", "schemaname,relname,indexrelname"},
+				{"scan", "idx_scan"},
+				{"tuples_read", "idx_tup_read"},
+				{"tuples_fetch", "idx_tup_fetch"},
+				{"hit", "idx_blks_hit"},
+				{"read,KiB", "idx_blks_read"},
+				{"stats_age", "stats_reset"},
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertDescribeColumns(t, tc.text, tc.columns)
+			_, row := describeRow(t, tc.text, "stats_age")
+			assert.Contains(t, row, "Age of collected statistics in the moment when stats are taken")
+			assert.True(t, strings.HasSuffix(row, "(PG 19+)"), "stats_age must carry its version origin")
+		})
+	}
+}
+
+func Test_describeArchiverColumnOrder(t *testing.T) {
+	// Same reason as Test_describeActivityColumnOrder: Test_describeReport compares descriptions by
+	// identity and cannot notice a row that landed in the wrong slot. The list below is a copy of the
+	// column order of query.PgStatArchiverDefault (internal/query/archiver.go) and must be kept in
+	// sync with archiverColumns in internal/query/archiver_test.go - it is the layout that
+	// `report -d -W a` claims to document.
+	columns := []struct{ name, origin string }{
+		{"source", "-"},
+		{"ready", "pg_ls_archive_statusdir"},
+		{"archived", "archived_count"},
+		{"last_archived", "last_archived_wal"},
+		{"archived_age", "last_archived_time"},
+		{"failed", "failed_count"},
+		{"last_failed", "last_failed_wal"},
+		{"failed_age", "last_failed_time"},
+		{"stats_age", "stats_reset"},
+	}
+
+	assertDescribeColumns(t, pgStatArchiverDescription, columns)
+
+	// The source column is a literal in the query, and this constant sits next to
+	// pgStatWALDescription whose source row says 'WAL' - exactly the value a copy-paste gets wrong.
+	_, row := describeRow(t, pgStatArchiverDescription, "source")
+	assert.Contains(t, row, "'Archiver'", "the source row must name the literal the query emits")
+}
+
+func Test_describeArchiverDetailsURL(t *testing.T) {
+	// Decision 13 keeps `pgcenter report` out of the README, so this line is the only pointer a user
+	// gets to the upstream documentation of the screen. HasSuffix rather than Contains, so a URL that
+	// survives but is no longer the closing line is caught too.
+	assert.True(t,
+		strings.HasSuffix(strings.TrimRight(pgStatArchiverDescription, "\n"),
+			"https://www.postgresql.org/docs/current/monitoring-stats.html#PG-STAT-ARCHIVER-VIEW"),
+		"description must end with the pg_stat_archiver docs URL")
+}
+
+func Test_describeArchiverBlankCells(t *testing.T) {
+	// The four NULL-able columns render as blank cells by design (Decision 3, nothing is diffed and
+	// no coalesce is applied), and describe is the only place a user finds out a blank is not an
+	// error. Each row is asserted on its own, so deleting the clause from one row still reddens.
+	testcases := []struct {
+		column string
+		clause string
+	}{
+		{column: "last_archived", clause: "empty if nothing has been archived yet"},
+		{column: "archived_age", clause: "empty if nothing has been archived yet"},
+		{column: "last_failed", clause: "empty if there were no failures"},
+		{column: "failed_age", clause: "empty if there were no failures"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.column, func(t *testing.T) {
+			_, row := describeRow(t, pgStatArchiverDescription, tc.column)
+			assert.Contains(t, row, tc.clause, "row %q must say what a blank cell means", tc.column)
+		})
+	}
+}
+
+func Test_describeWALColumnOrder(t *testing.T) {
+	// Same reason as Test_describeActivityColumnOrder. The list below is the PG 14 superset layout
+	// the constant documents (it keeps write/sync, removed from pg_stat_wal in PG 18, and includes
+	// the PG 19 fpi,KiB) - describe has no version awareness, see the constant's comment. The point
+	// here is that fpi,KiB exists and sits between fpi and write.
+	columns := []struct{ name, origin string }{
+		{"source", "-"},
+		{"waldir_size", "-"},
+		{"wal,KiB", "wal_bytes"},
+		{"records", "wal_records"},
+		{"fpi", "wal_fpi"},
+		{"fpi,KiB", "wal_fpi_bytes"},
+		{"write", "wal_write"},
+		{"sync", "wal_sync"},
+		{"write,ms", "wal_write_time"},
+		{"sync,ms", "wal_sync_time"},
+		{"buffers_full", "wal_buffers_full"},
+		{"stats_age", "stats_reset"},
+	}
+
+	assertDescribeColumns(t, pgStatWALDescription, columns)
+}
+
+func Test_describeWALFPIVersionNote(t *testing.T) {
+	// wal_fpi_bytes exists only on PG 19+, while the constant is static and version-unaware, so the
+	// row is printed when describing a PG 14-18 archive as well. The annotation is what keeps that
+	// honest; without it the row silently claims a column those versions do not have.
+	_, row := describeRow(t, pgStatWALDescription, "fpi,KiB")
+	assert.True(t, strings.HasSuffix(row, "(PG 19+)"),
+		"the fpi,KiB row must be annotated with the version that introduced wal_fpi_bytes")
 }
 
 func Test_describeActivityCaveats(t *testing.T) {
@@ -1445,23 +1641,23 @@ var activityColsPG13 = []string{
 	"xact_age", "query_age", "change_age", "query",
 }
 
-// activityTick is one recorded sample: the PostgreSQL version stored in the
-// meta.* entry plus the activity result stored next to it.
-type activityTick struct {
+// replayTick is one recorded sample: the PostgreSQL version stored in the
+// meta.* entry plus the screen result stored next to it.
+type replayTick struct {
 	version int
 	cols    []string
 	rows    [][]string
 }
 
-// activityTarBase is the timestamp of the first tick written by buildActivityTar.
-var activityTarBase = time.Date(2026, 5, 19, 10, 0, 0, 0, time.Now().Location())
+// replayTarBase is the timestamp of the first tick written by buildReplayTar.
+var replayTarBase = time.Date(2026, 5, 19, 10, 0, 0, 0, time.Now().Location())
 
-// buildActivityTar composes an in-memory recording in the tarRecorder.write()
-// layout — meta.* + activity.* + sysinfo.* per tick, filenames in the recorder's
+// buildReplayTar composes an in-memory recording in the tarRecorder.write()
+// layout — meta.* + screen.* + sysinfo.* per tick, filenames in the recorder's
 // 20060102T150405.000 format, ticks one second apart so itv == 1. Each tick
 // carries its own recorded version, which is what lets a single archive span a
 // major-version boundary the way `pgcenter record -a` across an upgrade does.
-func buildActivityTar(t *testing.T, ticks []activityTick) *bytes.Buffer {
+func buildReplayTar(t *testing.T, screen string, ticks []replayTick) *bytes.Buffer {
 	t.Helper()
 
 	metaCols := []string{"version", "version_num", "track_commit_timestamp", "max_connections", "autovacuum_max_workers", "recovery", "start_time_unix"}
@@ -1478,7 +1674,7 @@ func buildActivityTar(t *testing.T, ticks []activityTick) *bytes.Buffer {
 	}
 
 	for i, tick := range ticks {
-		ts := activityTarBase.Add(time.Duration(i) * time.Second).Format("20060102T150405.000")
+		ts := replayTarBase.Add(time.Duration(i) * time.Second).Format("20060102T150405.000")
 
 		// readMeta consumes only column index 1 (version_num); the rest mirrors
 		// SelectCommonProperties so the entry has a realistic shape.
@@ -1508,7 +1704,7 @@ func buildActivityTar(t *testing.T, ticks []activityTick) *bytes.Buffer {
 		require.NoError(t, err)
 
 		writeEntry("meta."+ts+".json", metaBytes)
-		writeEntry("activity."+ts+".json", statBytes)
+		writeEntry(screen+"."+ts+".json", statBytes)
 		writeEntry("sysinfo."+ts+".json", sysinfoBytes)
 	}
 	require.NoError(t, tw.Close())
@@ -1564,13 +1760,13 @@ func runProcessDataOnTar(t *testing.T, config Config, tarBuf *bytes.Buffer) (str
 	return buf.String(), err
 }
 
-// activityReplayConfig is the report config shared by the version-change tests.
-func activityReplayConfig() Config {
+// replayConfig is the report config shared by the version-change tests.
+func replayConfig(screen string) Config {
 	return Config{
-		ReportType: "activity",
+		ReportType: screen,
 		TruncLimit: 32,
-		TsStart:    activityTarBase.Add(-time.Hour),
-		TsEnd:      activityTarBase.Add(time.Hour),
+		TsStart:    replayTarBase.Add(-time.Hour),
+		TsEnd:      replayTarBase.Add(time.Hour),
 	}
 }
 
@@ -1598,14 +1794,14 @@ func Test_processData_versionChange_recomputesLayout(t *testing.T) {
 		{"4004", "", "10.0.0.4", "5432", "very_long_database_name", "ann", "psql", "client backend", "Client", "ClientRead", "idle", "", "0", "00:00:04", "00:00:04", "00:00:04", "select 4"},
 	}
 
-	tarBuf := buildActivityTar(t, []activityTick{
+	tarBuf := buildReplayTar(t, "activity", []replayTick{
 		{version: 120000, cols: activityColsPG12, rows: oldRows},
 		{version: 120000, cols: activityColsPG12, rows: oldRows},
 		{version: 130000, cols: activityColsPG13, rows: newRows},
 		{version: 130000, cols: activityColsPG13, rows: newRows},
 	})
 
-	out, err := runProcessDataOnTar(t, activityReplayConfig(), tarBuf)
+	out, err := runProcessDataOnTar(t, replayConfig("activity"), tarBuf)
 	require.NoError(t, err)
 
 	normalized := stripANSI(out)
@@ -1660,14 +1856,14 @@ func Test_processData_versionChange_reresolvesOrderColumn(t *testing.T) {
 		{"4004", "", "10.0.0.4", "5432", "newdb", "ann", "psql", "client backend", "Client", "ClientRead", "active", "", "0", "00:00:04", "00:00:04", "00:00:04", "select 4"},
 	}
 
-	tarBuf := buildActivityTar(t, []activityTick{
+	tarBuf := buildReplayTar(t, "activity", []replayTick{
 		{version: 120000, cols: activityColsPG12, rows: oldRows},
 		{version: 120000, cols: activityColsPG12, rows: oldRows},
 		{version: 130000, cols: activityColsPG13, rows: newRows},
 		{version: 130000, cols: activityColsPG13, rows: newRows},
 	})
 
-	config := activityReplayConfig()
+	config := replayConfig("activity")
 	config.OrderColName = "state"
 	config.OrderDesc = true
 
@@ -1708,14 +1904,14 @@ func Test_processData_versionChange_orderColumnMissing(t *testing.T) {
 		{"4004", "10.0.0.4", "5432", "newdb", "ann", "psql", "client backend", "Client", "ClientRead", "idle", "00:00:04", "00:00:04", "00:00:09", "select 4"},
 	}
 
-	tarBuf := buildActivityTar(t, []activityTick{
+	tarBuf := buildReplayTar(t, "activity", []replayTick{
 		{version: 130000, cols: activityColsPG13, rows: beforeBoundaryRows},
 		{version: 130000, cols: activityColsPG13, rows: beforeBoundaryRows},
 		{version: 120000, cols: activityColsPG12, rows: afterBoundaryRows},
 		{version: 120000, cols: activityColsPG12, rows: afterBoundaryRows},
 	})
 
-	config := activityReplayConfig()
+	config := replayConfig("activity")
 	config.OrderColName = "horizon_xacts"
 	config.OrderDesc = false
 
@@ -1730,31 +1926,241 @@ func Test_processData_versionChange_orderColumnMissing(t *testing.T) {
 	assert.Less(t, posHigh, posLow, "after the boundary the screen default sort key must be restored")
 }
 
+type relationReplayRow struct {
+	name     string
+	metric   int
+	statsAge string
+}
+
+var relationReplayLayouts = map[string]struct {
+	oldCols []string
+	newCols []string
+}{
+	"tables": {
+		oldCols: []string{
+			"relation", "seq_scan", "seq_read", "idx_scan", "idx_fetch", "inserts", "updates", "deletes",
+			"hot_updates", "live", "dead", "heap_read,KiB", "heap_hit", "idx_read,KiB", "idx_hit",
+			"toast_read,KiB", "toast_hit", "tidx_read,KiB", "tidx_hit",
+		},
+		newCols: []string{
+			"relation", "seq_scan", "seq_read", "idx_scan", "idx_fetch", "inserts", "updates", "deletes",
+			"hot_updates", "live", "dead", "heap_read,KiB", "heap_hit", "idx_read,KiB", "idx_hit",
+			"toast_read,KiB", "toast_hit", "tidx_read,KiB", "tidx_hit", "stats_age",
+		},
+	},
+	"indexes": {
+		oldCols: []string{"index", "scan", "tuples_read", "tuples_fetch", "hit", "read,KiB"},
+		newCols: []string{"index", "scan", "tuples_read", "tuples_fetch", "hit", "read,KiB", "stats_age"},
+	},
+}
+
+func makeRelationReplayRows(cols []string, rows ...relationReplayRow) [][]string {
+	result := make([][]string, len(rows))
+	for i, input := range rows {
+		row := make([]string, len(cols))
+		for col := range row {
+			row[col] = "0"
+		}
+		row[0] = input.name
+		row[1] = strconv.Itoa(input.metric)
+		if cols[len(cols)-1] == "stats_age" {
+			row[len(cols)-1] = input.statsAge
+		}
+		result[i] = row
+	}
+	return result
+}
+
+func Test_processData_relationLayoutBoundaries(t *testing.T) {
+	boundaries := []struct {
+		name          string
+		beforeVersion int
+		afterVersion  int
+		beforeNew     bool
+		afterNew      bool
+	}{
+		{name: "mixed_version_pg18_to_pg19", beforeVersion: 180000, afterVersion: 190000, afterNew: true},
+		{name: "same_pg19_old_to_new", beforeVersion: 190000, afterVersion: 190000, afterNew: true},
+		{name: "same_pg19_new_to_old", beforeVersion: 190000, afterVersion: 190000, beforeNew: true},
+	}
+	values := []struct {
+		name      string
+		populated bool
+	}{
+		{name: "blank"},
+		{name: "populated", populated: true},
+	}
+
+	for _, boundary := range boundaries {
+		t.Run(boundary.name, func(t *testing.T) {
+			for _, screen := range []string{"tables", "indexes"} {
+				t.Run(screen, func(t *testing.T) {
+					for _, value := range values {
+						t.Run(value.name, func(t *testing.T) {
+							layout := relationReplayLayouts[screen]
+							beforeCols, afterCols := layout.oldCols, layout.newCols
+							if boundary.beforeNew {
+								beforeCols = layout.newCols
+							}
+							if !boundary.afterNew {
+								afterCols = layout.oldCols
+							}
+
+							beforeZAge, beforeAAge := "", ""
+							afterZAge, afterAAge := "", ""
+							if value.populated {
+								beforeZAge, beforeAAge = "00:00:10", "00:00:02"
+								afterZAge, afterAAge = "00:00:10", "00:00:02"
+							}
+							beforeRows := []relationReplayRow{
+								{name: "before-z", statsAge: beforeZAge},
+								{name: "before-a", statsAge: beforeAAge},
+							}
+							afterRows := []relationReplayRow{
+								{name: "after-z-with-a-much-longer-relation-name", statsAge: afterZAge},
+								{name: "after-a-with-a-much-longer-relation-name", statsAge: afterAAge},
+							}
+							beforeFirst := makeRelationReplayRows(beforeCols,
+								relationReplayRow{name: beforeRows[0].name, metric: 100, statsAge: beforeRows[0].statsAge},
+								relationReplayRow{name: beforeRows[1].name, metric: 200, statsAge: beforeRows[1].statsAge})
+							beforeSecond := makeRelationReplayRows(beforeCols,
+								relationReplayRow{name: beforeRows[0].name, metric: 107, statsAge: beforeRows[0].statsAge},
+								relationReplayRow{name: beforeRows[1].name, metric: 209, statsAge: beforeRows[1].statsAge})
+							afterFirst := makeRelationReplayRows(afterCols,
+								relationReplayRow{name: afterRows[0].name, metric: 1000, statsAge: afterRows[0].statsAge},
+								relationReplayRow{name: afterRows[1].name, metric: 2000, statsAge: afterRows[1].statsAge})
+							afterSecond := makeRelationReplayRows(afterCols,
+								relationReplayRow{name: afterRows[0].name, metric: 1011, statsAge: afterRows[0].statsAge},
+								relationReplayRow{name: afterRows[1].name, metric: 2020, statsAge: afterRows[1].statsAge})
+
+							afterDeltas := []string{"11", "20"}
+							afterOrder := []int{0, 1}
+							if boundary.afterNew && value.populated {
+								afterOrder = []int{1, 0}
+							}
+							if boundary.beforeNew && !boundary.afterNew {
+								afterFirst[0], afterFirst[1] = afterFirst[1], afterFirst[0]
+								afterSecond[0], afterSecond[1] = afterSecond[1], afterSecond[0]
+								afterRows[0], afterRows[1] = afterRows[1], afterRows[0]
+								afterDeltas = []string{"20", "11"}
+								afterOrder = []int{1, 0}
+							}
+
+							tarBuf := buildReplayTar(t, screen, []replayTick{
+								{version: boundary.beforeVersion, cols: beforeCols, rows: beforeFirst},
+								{version: boundary.beforeVersion, cols: beforeCols, rows: beforeSecond},
+								{version: boundary.afterVersion, cols: afterCols, rows: afterFirst},
+								{version: boundary.afterVersion, cols: afterCols, rows: afterSecond},
+							})
+							config := replayConfig(screen)
+							config.TruncLimit = 128
+							config.OrderColName = "stats_age"
+							config.OrderDesc = false
+
+							out, err := runProcessDataOnTar(t, config, tarBuf)
+							require.NoError(t, err)
+							normalized := stripANSI(out)
+							require.Equal(t, 2, strings.Count(normalized, ", rate: "),
+								"the first sample of each layout seeds state and must not be printed")
+							before, after := relationReplaySegments(t, normalized)
+							beforeOrder := []int{0, 1}
+							if boundary.beforeNew && value.populated {
+								beforeOrder = []int{1, 0}
+							}
+							assertRelationReplaySegment(t, before, beforeCols, beforeRows, []string{"7", "9"}, beforeOrder)
+							assertRelationReplaySegment(t, after, afterCols, afterRows, afterDeltas, afterOrder)
+						})
+					}
+				})
+			}
+		})
+	}
+}
+
+func relationReplaySegments(t *testing.T, out string) (string, string) {
+	t.Helper()
+
+	secondTS := replayTarBase.Add(time.Second).Format("2006/01/02 15:04:05") + ", rate: "
+	fourthTS := replayTarBase.Add(3*time.Second).Format("2006/01/02 15:04:05") + ", rate: "
+	secondPos := strings.Index(out, secondTS)
+	fourthPos := strings.Index(out, fourthTS)
+	require.NotEqual(t, -1, secondPos, "second sample is missing")
+	require.NotEqual(t, -1, fourthPos, "fourth sample is missing")
+	require.Less(t, secondPos, fourthPos)
+	require.Greater(t, fourthPos, 1)
+	headerStart := strings.LastIndex(out[:fourthPos-1], "\n") + 1
+	return out[:headerStart], out[headerStart:]
+}
+
+func assertRelationReplaySegment(t *testing.T, segment string, cols []string, rows []relationReplayRow, deltas []string, order []int) {
+	t.Helper()
+
+	lines := strings.Split(segment, "\n")
+	require.NotEmpty(t, lines)
+	assert.Equal(t, cols, strings.Fields(lines[0]), "header must be recomputed for this layout")
+	assert.NotContains(t, segment, "~", "a value was truncated by a stale width")
+
+	positions := make([]int, len(rows))
+	for i, row := range rows {
+		fields := relationReplayDataRow(t, segment, row.name)
+		require.Greater(t, len(fields), 1, "metric column is missing")
+		assert.Equal(t, deltas[i], fields[1], "wrong same-layout metric delta")
+		positions[i] = strings.Index(segment, row.name)
+
+		if cols[len(cols)-1] != "stats_age" {
+			assert.Len(t, fields, len(cols))
+			continue
+		}
+		if row.statsAge == "" {
+			assert.Len(t, fields, len(cols)-1, "blank stats_age must remain blank")
+		} else {
+			require.Len(t, fields, len(cols))
+			assert.Equal(t, row.statsAge, fields[len(fields)-1])
+		}
+	}
+
+	require.Len(t, positions, 2)
+	require.Len(t, order, 2)
+	assert.Less(t, positions[order[0]], positions[order[1]],
+		"rows must use requested stats_age sort, blank-key stability, or restored seed sort")
+}
+
+func relationReplayDataRow(t *testing.T, segment, name string) []string {
+	t.Helper()
+
+	for _, line := range strings.Split(segment, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) > 0 && fields[0] == name {
+			return fields
+		}
+	}
+	t.Fatalf("row %q is missing from segment:\n%s", name, segment)
+	return nil
+}
+
 // Test_app_doReport_errorPathDoesNotHang drives the real app.doReport, which the other
 // tests in this file deliberately bypass — and that bypass is exactly why the hang went
 // unnoticed: runProcessDataOnTar drains the channels itself, so it never reproduces what
 // production does.
 //
-// The archive widens between two samples of the SAME version, so the alignment computed
-// for the narrow layout leaves the extra columns without a width. The zero-width guard in
-// printStatSample turns what used to be a `[:-1]` panic into a returned error — and an
-// error out of processData leaves readTar blocked on two unbuffered channels with no
-// receiver, so before the drain was added the command hung forever instead of exiting.
-// A silent hang is worse than a crash for a CLI in a pipe.
+// The second sample has a malformed diffed counter in an unchanged layout, so countDiff
+// returns an error. An error out of processData leaves readTar blocked on two unbuffered
+// channels with no receiver, so before the drain was added the command hung forever instead
+// of exiting. A silent hang is worse than a crash for a CLI in a pipe.
 func Test_app_doReport_errorPathDoesNotHang(t *testing.T) {
-	narrow := []string{"pid", "datname"}
-	wide := []string{"pid", "datname", "usename", "state"}
+	cols := relationReplayLayouts["tables"].oldCols
+	first := makeRelationReplayRows(cols, relationReplayRow{name: "public.test", metric: 100})
+	second := makeRelationReplayRows(cols, relationReplayRow{name: "public.test", metric: 100})
+	second[0][1] = "malformed"
 
-	tarBuf := buildActivityTar(t, []activityTick{
-		{version: 170000, cols: narrow, rows: [][]string{{"100", "postgres"}}},
-		{version: 170000, cols: narrow, rows: [][]string{{"100", "postgres"}}},
-		{version: 170000, cols: wide, rows: [][]string{{"100", "a_database_name_wider_than_the_column", "postgres", "active"}}},
-		{version: 170000, cols: wide, rows: [][]string{{"100", "a_database_name_wider_than_the_column", "postgres", "active"}}},
+	tarBuf := buildReplayTar(t, "tables", []replayTick{
+		{version: 180000, cols: cols, rows: first},
+		{version: 180000, cols: cols, rows: second},
 	})
 
 	app := &app{
-		config: Config{ReportType: "activity", TsStart: time.Unix(0, 0), TsEnd: time.Now().Add(time.Hour), TruncLimit: 32},
-		view:   view.New()["activity"],
+		config: Config{ReportType: "tables", TsStart: time.Unix(0, 0), TsEnd: time.Now().Add(time.Hour), TruncLimit: 32},
+		view:   view.New()["tables"],
 		writer: io.Discard,
 	}
 

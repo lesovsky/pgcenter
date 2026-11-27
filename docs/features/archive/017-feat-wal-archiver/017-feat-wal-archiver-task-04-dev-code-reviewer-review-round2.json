@@ -1,0 +1,44 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "status": "approved",
+  "summary": "Round-1 finding 1 (assert.NotNil -> require.NotNil) is applied correctly. Round-1 finding 2 was declined, and the decline is right: the implemented alternative — pinning NoOptDefVal directly in Test_walFlagDefinition — is strictly stronger than what I proposed, because a Lookup-derived mirror built with fs.StringP() always carries NoOptDefVal == \"\" regardless of the real flag and would therefore have hidden exactly the cobra shim Decision 7 rejects. cmd/report/report.go is byte-identical to round 1; all round-2 changes are in the test file. Seven mutations were run against the new assertions on a scratch copy and every one turned the suite red, each killed by precisely the test that claims to guard that property. No findings.",
+  "criticalIssues": [],
+  "suggestions": [],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 0,
+    "testCoverageAssessment": "excellent"
+  },
+  "round1FindingsDisposition": [
+    {
+      "finding": "Test_walFlagDefinition dereferenced f after assert.NotNil, so a renamed flag panicked and took the whole package binary down.",
+      "disposition": "applied",
+      "verdict": "resolved",
+      "evidence": "cmd/report/report_test.go:151 is now require.NotNil(t, f), with a comment at :149-150 stating the reason (stop this test rather than panic and take the rest of the package down). testify/require is imported at :7 and used nowhere else in the file, so the import is justified and minimal."
+    },
+    {
+      "finding": "Build the pflag mirror in Test_walFlagPflagFailureShapes from CommandDefinition.Flags().Lookup(\"wal\") fields instead of hardcoded literals.",
+      "disposition": "declined",
+      "verdict": "decline accepted — the reasoning is correct and my round-1 suggestion was the weaker option",
+      "evidence": "Three independent reasons, checked rather than assumed. (1) The suggestion would not have improved fidelity where it matters: fs.StringP(f.Name, f.Shorthand, f.DefValue, f.Usage) sets NoOptDefVal to \"\" unconditionally, so a derived mirror reproduces an empty NoOptDefVal even when the real flag has a shim installed — Parse([]string{\"-W\"}) would keep returning 'flag needs an argument' in the test while the real CLI silently accepted bare -W. The derived mirror would have been a lie precisely in the dimension the task cares about. (2) The direct assertion that replaced it is load-bearing: mutation A below installs NoOptDefVal = \"w\" on the real flag and Test_walFlagDefinition goes red — the derived-mirror variant would not have caught it. (3) The task file prescribes the hardcoded mirror explicitly (task-04.md:246-249, 'build a local pflag.FlagSet mirroring the definitions instead, and let Test_walFlagDefinition guard that the mirror still matches reality'), and the independence argument stands on its own: two tests hardcoding the same literal fail separately, whereas a derived mirror cannot contradict the definition it is derived from. I withdraw the suggestion; it should not be re-raised."
+    }
+  ],
+  "verifiedProperties": [
+    "Production code unchanged since round 1. git diff -- cmd/report/report.go is identical to the round-1 diff (three edits: struct field :25 bool->string, flag definition :70 BoolVarP->StringVarP, selectReport arm :151-160 guarded outer case + inner switch with no default). The round-1 verification of the closed-whitelist mechanism therefore still holds and was not re-derived from scratch, only re-confirmed by mutation.",
+    "Mutation A (the rejected Decision 7 shim): CommandDefinition.Flags().Lookup(\"wal\").NoOptDefVal = \"w\" appended to init() -> Test_walFlagDefinition FAILS. This is the new assertion at :159 and it is genuinely load-bearing; before this round no test in the package reacted to that mutation.",
+    "The behavioural claim in the new comment at :156-158 is accurate, verified by driving pflag directly rather than by reading: with NoOptDefVal = \"w\", Parse([\"-W\"]) returns nil with value \"w\" (bare -W keeps working) and Parse([\"-W\", \"a\"]) returns nil with value \"w\" and \"a\" pushed into positional Args (the 'a' is silently dropped and the user gets the wal report). The comment describes the real failure mode, not a plausible-sounding one.",
+    "Mutation B (arm hoisted above showFunctions) -> Test_selectReport_WALPrecedence FAILS. Mutation C (arm hoisted above showDatabases) -> FAILS. Mutation D (arm sunk below showBgwriter) -> FAILS. The 4-row table pins both neighbours as it claims; under the round-1 single-row version, mutations B and D both survived, so the widening closed a real hole rather than adding decoration.",
+    "Mutation E (switch strings.TrimSpace(opts.showWAL)) -> Test_selectReport_WALWhitelistIsClosed FAILS on the new 'w ' row. Trimming is a normalisation Decision 17 prohibits, and it was the one prohibited normalisation with no test behind it in round 1 (case-folding was already covered by the 'W' row). Mutation G (strings.ToLower, the round-1 mutation) re-run and still killed.",
+    "Mutation F (a stray alias between selectReport and report.Config: 'if r == \"archiver\" { r = \"wal\" }' inserted in validate() at :93) -> Test_selectReport_WALWhitelistIsClosed FAILS while Test_selectReport stays GREEN. This is the exact scenario the new end-to-end assertions at :115-121 were added for, and the split result proves they cover ground the selectReport-level table cannot reach: ReportType is what keys the view map and filters tar entries, so a rewrite in validate() is the same silently-wrong-report failure the whitelist exists to prevent.",
+    "The corrected comment at :182-183 is accurate: Parse([\"-W\", \"-f\", \"dump.tar\"]) yields value \"-f\" and Args [\"dump.tar\"] whether or not -f is defined in the FlagSet — confirmed by running both variants. A string flag consumes the next token unconditionally, so the outcome genuinely does not depend on -f existing, and the comment now says so instead of implying otherwise.",
+    "The mirror-honesty chain is now complete. Every property of the mirror that can affect parsing — name, shorthand, value type, default, and NoOptDefVal — is asserted against the real flag in Test_walFlagDefinition (:152-159). Usage is also pinned there; it cannot affect parsing, so its duplication in the mirror is inert rather than misleading.",
+    "Tests are order-independent and state-free: go test ./cmd/report/... -race -shuffle=1|2|3 all pass. The new validate() calls at :108-121 operate on options literals, and validate/selectReport/setReportInterval/parseFilterString are pure with value receivers, so nothing touches the package-level opts var that CommandDefinition's flags are bound to. The task's order-dependence prohibition (task-04.md:246-249) is honoured by the added end-to-end assertions too, not just by the pflag test.",
+    "Containment unchanged: grep -rn showWAL --include=*.go . hits only cmd/report/report.go (4) and cmd/report/report_test.go (12). No production file outside cmd/report mentions it.",
+    "Gates: gofmt -l cmd/report empty; go vet ./cmd/report/... clean; go test ./cmd/report/... -v green with all six -W-related test functions named in the output. make lint could not be run — golangci-lint is not installed in this environment (make lint dies with 'golangci-lint: No such file or directory'), which is an environment gap, not a property of this change; the code introduces no construct golangci-lint's default set would flag.",
+    "All mutation work was done on a full copy of the tree at scratchpad/r2. The repository working tree was not modified: git diff -- cmd/report/ is unchanged and the parallel edits in internal/query/ and internal/postgres/ from other agents were left untouched.",
+    "Out of scope per the task and deliberately not reported: -W a maps to \"archiver\" while the archiver view (Task 5) and the describeReport entry (Task 7) land in later waves. No temporary alias or guard is wanted here — task-04.md:211-216 rules one out explicitly, and adding one would be the silently-wrong-report failure Decision 17 exists to prevent."
+  ]
+}

@@ -1,0 +1,125 @@
+{
+  "reviewer": "dev-security-auditor",
+  "mode": "whole-feature",
+  "round": 1,
+  "status": "changes_required",
+  "range": {
+    "base": "2dbd6267515f552d9660894d1b05fd3fb69e9bee",
+    "head": "0e17eb4f943908f5ffccaff32bc95c04bde54906"
+  },
+  "summary": "The final SQL/template wiring, named recording exclusion, valid-layout replay reset, and dedicated wraparound supervisor preserve their intended trust boundaries. However, the rounded-tie integration test still performs unconditional fixed-name DROP TABLE operations as postgres on the ordinary shared PG19 fixture, creating a blocking data-loss and cross-run interference risk. SC-1 also exposes its trust-authenticated synthetic cluster to the default Docker bridge, which permits evidence tampering by unrelated containers. Existing malformed-Ncols and terminal-control debts remain out of scope and are not represented as fixed. Scripted acceptance remains assigned to freeze-qa and manual SC-5 through SC-8 remain pending.",
+  "finding_counts": {
+    "total": 4,
+    "critical": 0,
+    "major": 1,
+    "minor": 3,
+    "in_scope": 2,
+    "out_of_scope": 2
+  },
+  "blocking_risks": [
+    {
+      "finding": "Rounded-tie integration test can delete unrelated shared-PG19 tables",
+      "severity": "major",
+      "required_action": "Remove fixed-name destructive probes from the shared fixture or move the complete test into an externally supervised, identity-checked disposable cluster before running the ordinary query suite or final QA."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "Privileged integration-test isolation / destructive database operation",
+      "title": "Rounded-tie integration test can delete unrelated shared-PG19 tables",
+      "description": "Test_StatAutovacuumScoresQuery_RoundedTieRawOrder uses the general PG19 connector and, without the dedicated marker or system-identity guard, executes DROP TABLE IF EXISTS on three fixed public-schema names before creating its probes and again during cleanup. NewTestConnectVersion maps this connection to the ordinary pgcenter_fixtures database as postgres on the standard PG19 endpoint. An operator or CI job running the documented AutovacuumScores/query test selection against a reused fixture therefore deletes any pre-existing relations with those names; concurrent runs can also drop each other's fixtures, including during cleanup after a failed CREATE. This is the same destructive shared-fixture class removed from Task 02, but Task 01's wraparound-only isolation does not cover this separate test. Attack vector: a local test/CI invocation against a shared or reused PG19 fixture causes irreversible data loss or cross-run integrity failures without any explicit destructive-test opt-in.",
+      "location": "internal/query/autovacuum_scores_test.go:187-218,361-371; internal/postgres/testing.go:27-55",
+      "verified": true,
+      "evidence": "Read-only Python source assertions returned rounded_tie_uses_general_pg19_connector=True, unconditional_fixed_name_drop_before_create=True, no_dedicated_marker_guard_in_test=True, and connector_targets_shared_pg19_endpoint=True. Git history shows the test file is newly added in this feature. The destructive test was deliberately not executed; no database object name or payload is sensitive evidence.",
+      "recommendation": "Do not issue anticipatory or fixed-name DROP statements on the shared fixture. Prefer running the rounded-tie fixture in the existing disposable, network-isolated, identity-checked supervisor with external destruction and a required test-level PASS. If it must remain in the ordinary suite, create a cryptographically unique per-run schema, safely quote its identifier, create only objects owned by that run, and clean up only that schema; add a regression guard proving an unmarked shared-suite run cannot perform persistent destructive SQL. Re-run the rounded-order mutation after the isolation change to retain behavioral evidence."
+    },
+    {
+      "severity": "minor",
+      "scope": "in_scope",
+      "category": "Insecure acceptance-fixture deployment / test-evidence integrity",
+      "title": "SC-1 trust-authenticated PostgreSQL remains reachable from the default Docker bridge",
+      "description": "SC-1 starts its disposable PG19 container without a network restriction, configures PostgreSQL to listen on all addresses, and permits trust authentication for all IPv4 hosts. Loopback-only host port publishing does not remove access from other containers attached to the default bridge. An unrelated compromised container, or another local actor able to discover the ephemeral host port, can connect as postgres during recording, alter or drop the synthetic relations, reset statistics, or otherwise falsify the SC-1 evidence. The fresh no-secret workload limits confidentiality impact, but does not protect test integrity or isolate the destructive pg_stat_reset operation.",
+      "location": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:16-19,24-52,64-88,103-112",
+      "verified": true,
+      "evidence": "Read-only Python checks over the frozen script returned acceptance_container_uses_default_bridge=True, acceptance_container_publishes_loopback=True, acceptance_postgres_listens_all=True, and acceptance_trusts_all_ipv4_hosts=True. This audit did not start the acceptance container or execute its reset workload.",
+      "recommendation": "Isolate SC-1 from the default bridge: either run PostgreSQL with --network none and execute the pgcenter client in that container's network namespace, as the wraparound supervisor does, or use a dedicated single-use network that unrelated containers cannot join while retaining only necessary loopback access. Keep the workload synthetic and verify external container destruction. Because this harness is frozen, route the correction through freeze-qa with a manifest refresh, clean base rerun, and renewed freeze review rather than editing the frozen artifact ad hoc."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "category": "Untrusted deserialization / malformed archive bounds safety (existing debt [020])",
+      "title": "Malformed Ncols panic remains open but is not widened into a new feature blocker",
+      "description": "An untrusted archive can declare an excessive Ncols while keeping Cols and row widths internally consistent. PGresult.validate does not require Ncols == len(Cols), and the shared diff loop allocates and indexes using the declared width, so a second same-layout sample can panic report replay. The new slices.Equal check correctly handles valid adjacent layouts but does not validate dishonest dimensions. Attack vector: an operator replays a downloaded or replaced crafted tar archive and terminates pgcenter with an index-out-of-range panic. This is Task 04's previously reproduced debt [020], not a new in-scope regression; this feature neither fixes nor widens that malformed-shape class.",
+      "location": "internal/stat/postgres.go:558-572,606-656; report/report.go:271-319; docs/tech-debt.md [020]",
+      "verified": true,
+      "evidence": "Read-only source inspection confirms the missing Ncols/Cols equality check and the current-width diff loop. `git diff --exit-code <base>..<head> -- internal/stat/postgres.go internal/align/ top/stat.go` passed, proving those shared surfaces are unchanged. A read-only Python section comparison confirmed debt [020] is byte-identical across the feature range. Task 04's approved security report contains the earlier temporary-archive panic reproduction; it was not repeated or relabelled here.",
+      "recommendation": "Handle separately under debt [020]: reject negative or inconsistent Ncols/Nrows/Cols shapes, require Ncols == len(Cols), validate all consumer indices, and add malformed same-column-name replay tests requiring a clean error rather than a panic. Do not cite Decision 9 or SC-10 as a fix for this class."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "category": "Terminal escape injection / server-controlled output (existing debt [029])",
+      "title": "New relation surface retains the documented unsanitised terminal-value debt",
+      "description": "The autovacuum_scores relation column concatenates server-derived schema and relation names, and the shared TUI printDataCell writes cell strings without removing terminal control sequences. A database principal able to create a hostile object name can therefore inject terminal controls when a DBA opens the new screen; pausing can prolong the crafted frame. Attack vector: a hostile or compromised database object name is rendered by an operator's terminal, potentially manipulating displayed content or terminal features. This is the explicitly extended pre-existing debt [029], not a new shared-renderer regression or blocker for this feature.",
+      "location": "internal/query/autovacuum_scores.go:6; top/stat.go:1212-1238; docs/tech-debt.md [029]",
+      "verified": true,
+      "evidence": "Read-only data-flow inspection traces s.schemaname/s.relname through the PGresult value to fmt.Fprintf in printDataCell with no control-character sanitization. The feature-range diff leaves top/stat.go unchanged, and debt [029] explicitly records the new autovacuum_scores surface and the absence of a shared sanitizer fix.",
+      "recommendation": "Resolve in a separately scoped shared-output change: sanitize terminal control characters at the server/archive-to-terminal boundary while preserving intended SGR formatting and multibyte text, and add hostile relation-name tests for live and paused rendering. Continue to record the exposure until that shared fix lands; do not claim this feature closed it."
+    }
+  ],
+  "evidence": {
+    "reviewed_planning_artifacts": [
+      "Approved user spec and tech spec, including Decisions 1-12 and acceptance ownership",
+      "Approved decomposition and feature decisions log",
+      "All Task 01-06 task contracts and all supplied task code/security review reports",
+      "Acceptance freeze review, freeze metadata, base result/readiness, and sanitized base logs"
+    ],
+    "final_product_review": "Inspected the final query, selector, registry, recording, replay, navigation, help, destructive-test, supervisor, acceptance-harness, sanitizer, fixture, and documentation diffs/sources for the complete requested range. The range contains 112 changed paths and no go.mod/go.sum changes. No dependency vulnerability claim is made from an unexecuted scanner.",
+    "sensitive_data": "A read-only scan of all 112 changed paths for configured credential assignments, credentialed URIs, and private-key markers found no matches; matched values were configured to be withheld if present. Reviewed acceptance evidence contains minimized synthetic assertions and hashes, not raw archives or terminal transcripts. No secret value is reproduced in this report.",
+    "debt_boundaries": "Debt [020] is byte-unchanged and remains open. Debt [029] accurately includes the new terminal surface. Debt [035] accurately retains first-sample stats_age width truncation, and new debt [037] accurately leaves version-blind x/p cycles unfixed. No shared renderer, parser, or sanitizer fix is inferred."
+  },
+  "verification": {
+    "commands": [
+      {
+        "command": "go test ./internal/query/ -run '^(Test_SelectStatAutovacuumScoresQuery|Test_StatAutovacuumScoresQuery_Structure|Test_SelectStatTablesQuery|Test_SelectStatIndexesQuery|Test_StatTablesQuery_StatsAgeSource|Test_StatIndexesQuery_StatsAgeSource)$' -count=1 -v",
+        "result": "PASS. All selected pure selector/structural/source tests and version subtests passed. Live and destructive tests were intentionally excluded."
+      },
+      {
+        "command": "go test ./report/ -count=1 && go test -race ./report/ -count=1",
+        "result": "PASS. Full synthetic report suite and race-enabled report suite passed, including valid relation layout boundaries and error-path coverage."
+      },
+      {
+        "command": "go test ./record/ -run '^(Test_filterViews|TestFilterViews.*)$' -count=1 -v && go test ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1",
+        "result": "PASS. Named sorted live-TUI-only INFO, exclusion behavior, navigation/refusal, toggle, keybinding, and help tests passed. This does not claim visible cmdline counts or live PostgreSQL coverage."
+      },
+      {
+        "command": "bash -n <supervisor and all six acceptance Bash files> && (cd docs/features/018-feat-tables-autovacuum-area/acceptance && LC_ALL=C sha256sum -c scenario-manifest.sha256)",
+        "result": "PASS. Shell syntax was valid and all nine frozen manifest entries returned OK."
+      },
+      {
+        "command": "git diff --check <base>..<head>; git diff --name-only <base>..<head> -- go.mod go.sum",
+        "result": "PASS. No whitespace errors and no dependency-file changes."
+      },
+      {
+        "command": "git status --short --untracked-files=all",
+        "result": "The worktree was clean before this requested report was written. No product, documentation, frozen, or shared artifact was edited by the audit."
+      }
+    ],
+    "trust_boundaries": {
+      "sql_templates": "ViewType remains initialized to user and toggled only between user/all. The new template contributes a static predicate and receives no archive-, relation-name-, or terminal-derived SQL fragment. Outer join/schema selection and raw-score ordering match the approved contract.",
+      "recording_messages": "NotRecordable filtering happens before version/extension accounting, emits deterministic sorted per-view INFO, excludes autovacuum_scores by name, and does not add query text, credentials, or row values to the message.",
+      "archive_replay": "Version or column-list changes replace previous sample/metadata/timestamp before diffing, rerun Configure, clear alignment/width/header state, and restore/re-resolve sort state. Existing entry-size caps and row/Cols validation remain in place; malformed Ncols is explicitly outside this valid-layout contract.",
+      "wraparound_supervisor": "Read-only inspection confirms network-none PostgreSQL, a runner sharing only that namespace, full container-ID tracking, fatal cleanup/absence-query errors, dedicated-marker connection failure rather than skip, and exactly one required test-level PASS. The approved Task 01 round-2 report supplies the prior normal, timeout, SIGKILL, daemon-error, skip, and package-only-PASS controls; this audit did not rerun Docker or any XID-burning test.",
+      "other_privileged_tests": "Task 02's NULL probes are session-local TEMP relations with no persistent DROP. Task 01 privilege roles use constrained constant identifiers and reset the session role. These controls do not mitigate the separate rounded-tie destructive test finding."
+    },
+    "not_performed_or_pending": [
+      "No destructive, persistent-mutating, XID-burning, or shared-fixture test was executed by this audit.",
+      "No scripted feature acceptance or final QA was run; those remain assigned to freeze-qa. Existing base results are not final feature PASS evidence.",
+      "Manual SC-5, SC-6, SC-7, and SC-8 remain pending and are not treated as passes. SC-9 was passed by Task 06 review.",
+      "No final make test/lint/vuln/build/e2e quality-gate claim is made by this audit.",
+      "No dependency scanner was run because the feature changes no dependency manifests; known-vulnerability status is therefore unverified rather than asserted clean."
+    ]
+  }
+}

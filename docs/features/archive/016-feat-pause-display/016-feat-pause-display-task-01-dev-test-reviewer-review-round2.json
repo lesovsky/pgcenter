@@ -1,0 +1,96 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "round": 2,
+  "status": "passed",
+  "summary": "All six round-1 findings are genuinely closed, verified by execution rather than inspection. I re-verified independently in a throwaway worktree checked out at HEAD with only task01.diff applied, so task 02's WIP (top/pause.go, top/pause_test.go, top/ui.go, top/config.go, top/keybindings.go, top/ui_test.go) never entered the build — no overlay needed and no chance of cross-task contamination. Confirmed: the diff is byte-identical to the real working tree; all 9 tests matching the task's verify command pass; with top/stat.go reverted to HEAD and top/stat_test.go kept, exactly Test_printDataCell_doesNotMutateSource and Test_printDataCell_widenAfterTruncation fail while the four new edge-case tests pass on BOTH old and new code — precisely the byte-identity proof the task's safety property demands. I went further than round 1 and ran a 9-mutant analysis against every test that can reach printDataCell (the 6 new tests plus Test_printStatData_truncation, Test_printStatData_windowed_midOffset, Test_printStatData_emptyResult, the three printStatHeader tests and the two render_ tests). 8 of 9 mutants were killed, and three of the new tests are the UNIQUE killer of a mutant no other test in the package catches: exactWidthNotTruncated is the only test that catches '>' becoming '>=', multiByteIsByteSliced is the only test that catches a switch to rune-based slicing, and zeroOrNegativeWidth is the only test that catches the error return being dropped. That is direct evidence these tests earn their place rather than padding the count. The round-1 major is fully resolved: the width<=0 branch now has a direct, behaviour-asserting test, which also gives the Test_printDataCell_* name prefix real direct coverage. The premise guards now use the file's non-fatal guard idiom correctly and no require import was added. Two minor residuals remain, both about doc comments claiming more than the tests deliver — neither blocks. One mutant survived: hoisting the width guard out of the overflow branch is undetected by the entire package, which is exactly the evaluation order the task file's Edge cases section says must be preserved. Both residuals are one-test / one-comment fixes applicable in the current context.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go — Test_printDataCell_zeroOrNegativeWidth (doc comment and loop body); task file Edge cases, line 158-160",
+      "issue": "The test's doc comment claims 'this test pins that evaluation order, which the rewrite had to preserve'. It does not. I verified by mutation: hoisting the guard to the top of the function (`if config.view.ColsWidth[i] <= 0 { return fmt.Errorf(...) }` before the overflow check) leaves the ENTIRE package green — it was the only survivor of 9 mutants. The reason is that both loop cases use the 5-byte value \"r0-c0\", where len(value) > width holds, so both orderings return the error. The distinguishing case is the one the task file names explicitly at line 160 — 'so a short value in a zero-width column behaves as it does now': with width 0 and a value no longer than it, today's code prints two spaces and returns nil, whereas the hoisted version returns an error. That difference is not cosmetic, because printStatData propagates the error and aborts the whole data render (top/stat.go, both printDataCell call sites `return err`), so the hoisted version would turn an empty cell in a zero-width column into a blank screen. This is a declared spec edge case with no test, and a comment that tells a future reader it is covered — the comment is the more harmful half, since it discourages anyone from adding the missing case.",
+      "recommendation": "Add the short-value case to the existing test (verified: passes on the current implementation, and it is the only thing that kills the hoist mutant):\n\n// A value no longer than the width must still render: the guard lives INSIDE the overflow\n// branch, so width 0 is only an error when the value actually overflows it. This case is what\n// pins the evaluation order the rewrite had to preserve.\nfunc Test_printDataCell_zeroWidthShortValueDoesNotError(t *testing.T) {\n\tcfg := makeRenderConfig(6, 5)\n\tcfg.view.ColsWidth[0] = 0\n\ts := makeRenderResult(6, 1)\n\ts.Result.Values[0][0] = sql.NullString{String: \"\", Valid: true}\n\n\tvar buf bytes.Buffer\n\tassert.NoError(t, printDataCell(&buf, s, cfg, 0, 0),\n\t\t\"width 0 errors only when the value overflows it; a short value must still render\")\n\tassert.Equal(t, \"  \", buf.String(), \"a short value in a zero-width column renders as the bare +2 gap\")\n}\n\nThis also covers the task file's 'sql.NullString with Valid: false -> .String is \"\"' edge case, which is otherwise unexercised. Either add this test or delete the evaluation-order sentence from Test_printDataCell_zeroOrNegativeWidth's comment — do not leave the claim standing without the case. No mock changes; this suite has no mocks.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/stat_test.go — Test_printDataCell_truncatedCellExactBytes (doc comment)",
+      "issue": "Correcting my own round-1 reasoning: the comment states that a padding regression on the truncating path 'would be invisible' to the Contains-based tests, and that claim is false in both directions. First, padding to len(value)+2 instead of ColsWidth[i]+2 is NOT a regression on the truncating path at all — a truncated value is by construction exactly `width` bytes (width-1 plus '~'), so the two expressions are equal there; I verified that mutant is caught only by Test_render_alignmentInvariant, via the NON-truncating path. Second, across all 9 mutants I ran, this test was never the unique killer: the off-by-one cut, the marker change and the dropped +2 gap are each also caught by Test_printStatData_truncation, Test_printDataCell_exactWidthNotTruncated, Test_printDataCell_multiByteIsByteSliced or Test_render_alignmentInvariant. Strictly by the 'every test earns its place' rule it is the one new test that does not catch a failure no other test catches. I am NOT recommending deletion — it is eight lines, it localises a failure to the cell level where the other killers report at the whole-line or alignment level, and it makes the byte-identity contract explicit for a task whose declared safety property is exactly that. The defect is only the justification written into the comment, which will mislead the next person deciding whether the test still matters.",
+      "recommendation": "Keep the test; replace the second sentence of its doc comment with an accurate rationale, e.g.: 'The other truncation tests assert with Contains at the whole-line level; this one pins the exact cell bytes so a truncation regression reports at the cell rather than as a line-level or alignment failure. Byte-identical output is the declared safety property of this change.' Do not claim it is the only guard against a padding regression — Test_render_alignmentInvariant covers the padding width, on the non-truncating path where the two formulas actually differ.",
+      "litmusTestFailed": false
+    }
+  ],
+  "round1Resolution": [
+    {
+      "round1Severity": "major",
+      "issue": "width <= 0 branch untested",
+      "resolved": true,
+      "evidence": "Test_printDataCell_zeroOrNegativeWidth added as a direct printDataCell call. Verified it is the UNIQUE killer of the mutant that replaces the error return with `width = 1` — no other test in top/ detects a dropped error return. Implementer improved on my suggestion by constructing cfg and s inside the loop, so the two iterations share no state. Residual: the evaluation-order half of the claim is not pinned (see finding 1)."
+    },
+    {
+      "round1Severity": "minor",
+      "issue": "len == width boundary untested",
+      "resolved": true,
+      "evidence": "Test_printDataCell_exactWidthNotTruncated asserts exactly \"r0-c0  \". Verified it is the UNIQUE killer of the '>' -> '>=' mutant; the whole rest of the package stays green on that mutant."
+    },
+    {
+      "round1Severity": "minor",
+      "issue": "exact bytes of a truncated cell unpinned",
+      "resolved": true,
+      "evidence": "Test_printDataCell_truncatedCellExactBytes asserts exactly \"abcd~  \" and passes on both HEAD and the new code, contributing to the byte-identity proof. Kills the off-by-one, marker-change and dropped-gap mutants, though not uniquely (see finding 2)."
+    },
+    {
+      "round1Severity": "minor",
+      "issue": "multi-byte byte-slicing unpinned",
+      "resolved": true,
+      "evidence": "Test_printDataCell_multiByteIsByteSliced asserts exactly \"\\u03b1\\xce~   \". Verified it is the UNIQUE killer of the rune-based-slicing mutant — the single most tempting future 'fix' to this function, and nothing else in top/ would notice it. The implementer used \"\\u03b1\\u03b2\\u03b3\\u03b4\\u03b5\" rather than my \"\\u03b1\\u03b1\\u03b1\\u03b1\\u03b1\"; still 10 bytes / 5 runes, and the dangling 0xce is the lead byte of \\u03b2, so the expected bytes are right. The comment correctly frames it as a characterization test to be updated deliberately, not silently broken."
+    },
+    {
+      "round1Severity": "minor",
+      "issue": "Test_printDataCell_* names had no direct call behind them",
+      "resolved": true,
+      "evidence": "Four of the six tests now call printDataCell directly. The two printStatData-level tests were correctly left in their mandated TDD-Anchor form and their names unchanged."
+    },
+    {
+      "round1Severity": "minor",
+      "issue": "non-fatal premise assertions",
+      "resolved": true,
+      "evidence": "Both premises now use the file's established guard idiom (`if assert.Contains(...) { ... }` at the mutation test, `if !assert.Contains(...) { return }` at the widen test). No testify/require import was added, matching the file's conventions. The added NotContains(\"abcd~\") in the widen test is a genuine extra signal: it fires independently on HEAD."
+    }
+  ],
+  "verification": {
+    "method": "Independent re-verification in a throwaway git worktree checked out at HEAD with only task01.diff applied; task 02's WIP files were absent from the build entirely, so the supplied overlay was unnecessary.",
+    "diffMatchesWorkingTree": true,
+    "allTestsPassOnNewCode": "9/9 for `go test ./top/ -run 'printDataCell|printStatData' -count=1 -v`",
+    "regressionProof": "With top/stat.go reverted to HEAD and top/stat_test.go kept: exactly Test_printDataCell_doesNotMutateSource and Test_printDataCell_widenAfterTruncation fail; the four new edge-case tests pass on both HEAD and the new code, proving rendered output is unchanged.",
+    "raceDetector": "clean for the render-related suite (`-race`)",
+    "mutationTesting": {
+      "runAgainst": "every test that can reach printDataCell (printDataCell|printStatData|printStatHeader|Test_render_)",
+      "killed": 8,
+      "total": 9,
+      "uniqueKills": {
+        "Test_printDataCell_exactWidthNotTruncated": "'>' -> '>=' boundary",
+        "Test_printDataCell_multiByteIsByteSliced": "byte slicing -> rune slicing",
+        "Test_printDataCell_zeroOrNegativeWidth": "error return dropped"
+      },
+      "survivor": "width guard hoisted out of the overflow branch — see finding 1"
+    },
+    "preExistingFailuresUnrelatedToThisTask": "Test_getQueryReport, Test_resetStat and Test_killGroup panic on a nil connection without the fixture clusters on ports 21914-21919. Reproduced identically on a clean HEAD checkout, and the task file anticipates this at Acceptance Criteria line 90."
+  },
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 6,
+      "passed": 6,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 6,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

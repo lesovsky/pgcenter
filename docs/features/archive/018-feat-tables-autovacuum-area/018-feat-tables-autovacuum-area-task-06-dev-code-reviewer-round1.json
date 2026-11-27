@@ -1,0 +1,107 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "approved",
+  "base": "ccc74c3202fb0f90e62cb322c6933fd481a78c18",
+  "scope": "CURRENT UNCOMMITTED five-file documentation diff",
+  "summary": "Approved. Manual SC-9 passes AC-37, AC-38, AC-39 and AC-40 separately. The five documents match the final query, registry, recording, replay and TUI behavior; the recording INFO is exact, replay claims are limited to valid relation layouts, the new x/p debt is explicitly unfixed, and [020] is byte-identical. No substantive findings remain.",
+  "findings": [],
+  "review_inputs": {
+    "task": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-task-06.md",
+    "user_spec": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area.md, especially AC-37–AC-40 and SC-9",
+    "tech_spec": "Decisions 8 and 9 and the SC-9 acceptance design",
+    "approved_reports": [
+      "Task 01 dev-code-reviewer round 2 and dev-security-auditor round 2",
+      "Task 02 dev-code-reviewer round 2 and dev-security-auditor round 2",
+      "Task 03 dev-code-reviewer round 1",
+      "Task 04 dev-code-reviewer round 1 and dev-security-auditor round 1",
+      "Task 05 dev-code-reviewer round 1"
+    ],
+    "final_product_code": [
+      "internal/query/autovacuum_scores.go",
+      "internal/query/tables.go",
+      "internal/query/indexes.go",
+      "internal/view/view.go",
+      "record/record.go",
+      "report/report.go",
+      "report/describe.go",
+      "top/config_view.go",
+      "top/menu.go",
+      "top/keybindings.go",
+      "top/help.go",
+      "top/stat.go",
+      "internal/stat/stat.go"
+    ]
+  },
+  "verification": [
+    {
+      "command": "git diff --check ccc74c3202fb0f90e62cb322c6933fd481a78c18; git diff --name-only ccc74c3202fb0f90e62cb322c6933fd481a78c18",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "No whitespace errors. Exactly the five supplied documentation files changed: architecture.md, project.md, v0.12.0.md, features-catalog.md and tech-debt.md. No product, frozen or other shared artifact is in the current diff."
+    },
+    {
+      "command": "Python byte comparison of the complete ### [020] section between git show ccc74c3202fb0f90e62cb322c6933fd481a78c18:docs/tech-debt.md and the worktree",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "[020] byte-identical: True. Both copies have SHA-256 c804a328d5ba16a9ba65b8d1170cc1c5081b8c73cce52c80bc4200a961cc70fc. The valid-layout replay language elsewhere does not claim to close [020]'s malformed-Ncols class."
+    },
+    {
+      "command": "Deterministic Python content assertions over all five documents",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "All eight groups passed: catalog screen/navigation/live-only contracts; project pg_stat_autovacuum_scores and stats_age; architecture production NotRecordable correction; exact release INFO; valid-version and same-version replay wording; [035] and [029] extensions; and [037] statements_jit/progress_copy debt with explicit non-fix. Source inspection matched these statements to the final code, including tablesNextView, menuTables, toggleSysTables, filterViews and processData."
+    },
+    {
+      "command": "go test ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "ok github.com/lesovsky/pgcenter/top 0.009s. All eight tablesNextView cases, 33 switchViewTo cases, both toggle directions, disabled/enabled menu selection, version labels, real key handlers and help passed. This confirms the documented PG19 tables↔autovacuum_scores cycle, entry to tables from other screens, legacy sub-PG19 behavior, exact menu suffix and refusal without a view change."
+    },
+    {
+      "command": "go test ./record/ -run '^(Test_filterViews|TestFilterViews.*)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "ok github.com/lesovsky/pgcenter/record 0.005s. The observed line was exactly 'INFO: autovacuum_scores is not recordable (live TUI only), skip recording it'. Named/sorted INFO and explicit NotRecordable drop tests passed; the exclusion is independent of unsupported-version accounting."
+    },
+    {
+      "command": "go test ./report/ -run '^Test_processData_relationLayoutBoundaries$' -count=1 -v",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "ok github.com/lesovsky/pgcenter/report 0.011s. All 12 leaves ran and passed: PG18→PG19, same-PG19 old→new and new→old, for tables/indexes and blank/populated stats_age. This supports the documented first-sample no-diff boundary and subsequent current-layout headers, widths and sort behavior. No malformed-archive fix is inferred."
+    },
+    {
+      "command": "go test ./internal/query/ -run '^(Test_StatAutovacuumScoresQuery_Structure|Test_StatTablesQueries|Test_StatIndexesQueries)$' -count=1 -v",
+      "verified": true,
+      "result": "PASS WITH HOST INTEGRATION SKIPS",
+      "evidence": "The autovacuum structural test passed all locked column order, outer relation/LEFT JOIN, wraparound filter, raw-score ordering, six-way rounding, boolean and absolute-dead-tuple assertions. Host tables/indexes integration subtests skipped PG14–PG19 because local listeners were unavailable; those skips are not counted as live evidence. The approved Task 01/02 final reports supply the previously executed live PG14–PG19 evidence."
+    },
+    {
+      "command": "Cross-file manual review of final code against every added documentation statement",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "The 11-column no-diff screen uses raw ORDER BY s.score DESC with stable display sorting and two-decimal SQL values; dead_total is absolute and outer-joined. stats_age is a nullable trailing date_trunc('seconds', now()-stats_reset) value outside {1,18}/{1,5}. T refuses below PG19 with NOTICE and no viewCh send. [035] matches first-sample alignment/truncation, [029] matches unsanitised relation output, and [037] matches version-blind statementsNextView/progressNextView plus the collector's exact VersionOK error. The documentation does not claim shared renderer, sanitizer, archive-validator, functions or sizes changes."
+    }
+  ],
+  "sc9_verdict": {
+    "overall": "PASS",
+    "AC-37": {
+      "verdict": "PASS",
+      "evidence": "docs/features-catalog.md describes the PG19+ screen, its purpose, raw-score ordering, rounded display, dead_total, wraparound exception, t/T navigation, live-TUI-only exclusion, stats_age and valid replay behavior. The two-press catalog scenario agrees with entry from another screen; the precise tables↔scores transitions are also stated in Project Knowledge and release notes."
+    },
+    "AC-38": {
+      "verdict": "PASS",
+      "evidence": "project.md names pg_stat_autovacuum_scores and both new stats_age columns with their PG19/null/live-only behavior. architecture.md records the actual selector layouts and navigation and replaces the obsolete no-production-NotRecordable claim with autovacuum_scores' production exclusion and exact named INFO."
+    },
+    "AC-39": {
+      "verdict": "PASS",
+      "evidence": "doc/release-notes/v0.12.0.md describes the new screen and relation columns, exact recording exclusion, absent report mode, version-aware t/T behavior, score formatting/order, stats_age precision/nullability, valid replay boundaries and the accepted [035] width limitation without claiming a shared fix."
+    },
+    "AC-40": {
+      "verdict": "PASS",
+      "evidence": "docs/tech-debt.md extends [035] to stats_age and [029] to autovacuum_scores relation values, accurately retaining both shared debts. New [037] covers version-blind x to statements_jit on PG14 and p to progress_copy on PG13 and older, explicitly outside 018. [020] is byte-unchanged and no malformed-archive closure is claimed."
+    }
+  },
+  "workspace": "No documentation, product, frozen or shared artifact was edited by this review. No agents were spawned and no scratch files were created; only this requested report is added."
+}

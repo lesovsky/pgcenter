@@ -1,0 +1,54 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Strong, behaviour-driven test set: Test_walNextView, Test_menuSelectWAL and the three help tests all assert on real results (view name arriving on viewCh, exact help description strings, menu reset), and the zero-value &gocui.Gui{} seam is used correctly rather than mocked around. One real hole remains: nothing in the suite ties the 'W' key to menuWAL. Test_keybindingsWAL probes only key uniqueness via DeleteKeybinding, and menuOpen is deliberately left unexercised, so rebinding 'W' to menuOpen(menuStatIO, ...) leaves the whole filtered suite green — verified empirically during this review. That is a user-spec acceptance criterion with no regression guard, and menuOpen turns out to be fully drivable with the same zero-value Gui idiom the task already established. Three minor items: menu title/items text unpinned, two redundant Test_switchViewTo rows, and the surviving 'w' binding itself untested.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:28 (Test_keybindingsWAL) + top/menu_test.go:52 (Test_menuSelectWAL)",
+      "issue": "No test connects the 'W' key to the WAL menu. Test_keybindingsWAL asserts only that exactly one binding claims 'W' on \"sysstat\" and that no other view claims it — the handler behind the binding is never exercised. Test_menuSelectWAL bypasses the binding entirely by hand-building app.config.menu = selectMenuStyle(menuWAL). Verified by mutation during this review: replacing the row with {\"sysstat\", 'W', menuOpen(menuStatIO, app.config, \"\")} keeps the entire filtered suite green (`go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate'` → ok). The user-spec AC \"'W' opens the WAL statistics menu\" therefore has no regression guard. The task file's justification (\"menuOpen is still not exercised … covered by Test_selectMenuStyle plus the stand run\") does not hold: menuOpen IS drivable with the very zero-value Gui idiom this task introduced — a throwaway probe run during this review passed, asserting config.menu.menuType == menuWAL, the exact items slice, the title, the created \"menu\" view's Title and its rendered buffer.",
+      "recommendation": "Preferred (closes both the binding edge and menuOpen in one test): apply the project's own 'extract the decision out of the unreachable closure' pattern — split the keys table out of keybindings() into `func keybindingsList(app *app) []key`, with keybindings() iterating the returned slice (no behaviour change). Then in Test_keybindingsWAL: locate the single entry with viewname \"sysstat\" and key 'W', register a \"sysstat\" view on a zero-value &gocui.Gui{}, call `require.NoError(t, entry.handler(g, nil))`, and assert `app.config.menu.menuType == menuWAL`, `app.config.menu.items == []string{\" pg_stat_wal\", \" pg_stat_archiver\"}`, `app.config.menu.title == \" Choose WAL / archiver mode (Enter to choose, Esc to exit): \"`, plus `v, err := g.View(\"menu\")` → `v.Title` equals the same title and `v.Buffer()` contains \"pg_stat_archiver\". Cheaper half-fix if the production refactor is unwanted: add Test_menuOpenWAL driving `menuOpen(menuWAL, config, \"\")(&gocui.Gui{}, nil)` with the same assertions — that pins the menu window and its text, leaving only the key→handler edge unguarded, and it also removes the now-inaccurate claim in Test_menuSelectWAL's comment.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/menu_test.go:24 (Test_selectMenuStyle, {menu: menuWAL, want: 2})",
+      "issue": "The only assertion on selectMenuStyle(menuWAL) is len(items) == 2. The menu title and the two item strings are user-facing text, and a typo in \" pg_stat_archiver\" or in the title ships silently. This is inconsistent with the standard the task sets for the other user-facing text in the same change, where help lines are pinned word for word. Test_menuSelectWAL catches only a wrong menuType field (it would route into the menuStatIO branch), not the strings.",
+      "recommendation": "Either fold the string assertions into the menuOpen test recommended above, or extend Test_selectMenuStyle with a dedicated case for menuWAL: `s := selectMenuStyle(menuWAL)`; `assert.Equal(t, menuWAL, s.menuType)`; `assert.Equal(t, \" Choose WAL / archiver mode (Enter to choose, Esc to exit): \", s.title)`; `assert.Equal(t, []string{\" pg_stat_wal\", \" pg_stat_archiver\"}, s.items)`. Keep the existing count row — it is what catches an item being dropped.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/config_view_test.go:628-629",
+      "issue": "Two of the three new Test_switchViewTo rows catch nothing that is not already caught elsewhere. {current: \"activity\", to: \"wal\", want: \"wal\"} is behaviourally identical to the pre-existing row :604 {current: \"sizes\", to: \"wal\", want: \"wal\"} — same default arm, same dispatch, only a different irrelevant starting screen. {current: \"archiver\", to: \"wal\", want: \"wal\"} passes unchanged when the `case \"wal\":` arm is deleted (walNextView's default returns \"wal\"), so relative to Test_walNextView's archiver→wal case it adds no failure mode. The in-file comment states this honestly, which is good practice, but a test row that documents its own vacuity is still a row to maintain.",
+      "recommendation": "Drop {current: \"activity\", to: \"wal\", want: \"wal\"} — :604 already covers the default arm through switchViewTo. Keep {current: \"wal\", to: \"wal\", want: \"archiver\"} (the only row that proves the dispatch case exists) and, if the cycle-back is wanted at integration level, keep the archiver row but shorten the comment to say it is table symmetry rather than a guard.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:28 (Test_keybindingsWAL)",
+      "issue": "The task's acceptance criteria require the existing {\"sysstat\", 'w', switchViewTo(app, \"wal\")} row to stay byte-identical, but no test observes it. Deleting that row makes the WAL screen unreachable by hotkey and every test in the package still passes — Test_switchViewTo calls switchViewTo directly, never through the binding. The new keybindings_test.go is the first place in the package where this is cheap to assert.",
+      "recommendation": "Add a sub-test to Test_keybindingsWAL, mirroring the existing uniqueness probe on a fresh app: `assert.NoError(t, app.ui.DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone))`, then a second delete returning the \"keybinding not found\" error — the lowercase 'w' cycle entry point is registered exactly once. If the keybindingsList refactor from the major finding is applied, assert instead that the 'w' entry's handler sends \"archiver\" on viewCh when app.config.view is the wal view.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 5,
+    "litmusTest": {
+      "checked": 15,
+      "passed": 13,
+      "failed": 2
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 15,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

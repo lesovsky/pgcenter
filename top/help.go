@@ -11,17 +11,21 @@ const (
 
 general actions:
     a,b,f,o     mode: 'a' activity, 'b' bgwriter/checkpointer, 'f' functions, 'o' replication slots,
-    r,w               'r' replication, 'w' WAL,
-    s,t,i             's' tables sizes, 't' tables, 'i' indexes.
+    r                 'r' replication,
+    s,t,i             's' tables sizes, 'i' indexes.
     d,D               'd' pg_stat_database switch, 'D' pg_stat_database menu.
     x,X               'x' pg_stat_statements switch, 'X' pg_stat_statements menu.
     p,P               'p' pg_stat_progress_* switch, 'P' pg_stat_progress_* menu.
     j,J               'j' pg_stat_io switch (operations/timings), 'J' pg_stat_io menu.
+    w,W               'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.
+    t,T               't' tables/autovacuum scores switch, 'T' tables menu.
     S                 'S' per-process system stats (local mode only; Shift+S).
     Left,Right,<,/    'Left,Right' change column sort, '<' desc/asc sort toggle, '/' set filter.
     \                 '\' clear all filters of the current screen.
     Up,Down           'Up' increase column width, 'Down' decrease column width.
     [,]               '[' scroll columns left, ']' scroll columns right.
+    Space             'Space' pause/resume display; actions that need fresh data
+                      (sort, screen switch, ',', I, A, v, B, N, F, L) resume it.
     C,E,R       config: 'C' show config, 'E' edit configs, 'R' reload config.
     ~                 start psql session.
     l                 open log file with pager.
@@ -40,7 +44,7 @@ activity actions:
 
 other actions:
     , Q         ',' show system tables on/off, 'Q' reset postgresql statistics counters
-                      ('Q' does not reset shared stats: pg_stat_io, bgwriter, wal).
+                      ('Q' does not reset shared stats: pg_stat_io, bgwriter, wal, archiver).
     z           'z' set refresh interval.
     h,F1        show this tab.
     q,Ctrl+Q    quit.

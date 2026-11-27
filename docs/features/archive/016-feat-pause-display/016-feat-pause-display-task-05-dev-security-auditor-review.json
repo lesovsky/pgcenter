@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Pre-existing logtail descriptor leak on cross-panel switch is untouched by this diff",
+      "description": "showExtra's closing branch (`if app.config.view.ShowExtra == extra`) only calls `app.config.logtail.Close()` when the user presses the SAME key that opened the logtail panel. If the logtail panel is open (ShowExtra == CollectLogtail, a real *os.File held in app.config.logtail.File) and the user switches directly to a different extra panel (e.g. presses the diskstats/netdev/fsstats key) without first closing the logtail view, the switch statement's other cases never call logtail.Close(); the old *os.File is silently dropped and its descriptor leaks until process exit. Verified this predates task 05: `git show d0bc90d~1:top/extra.go` has the identical gap (no Close() call anywhere in the non-logtail switch cases). Task 05 only restructured the open-path (local `stat.Logfile` value, single commit-on-success assignment) and added the pause-lift calls; it did not touch the switch-between-extras path, so this is not a regression introduced by this commit.",
+      "location": "top/extra.go:35-80 (showExtra, cases CollectDiskstats/CollectNetdev/CollectFsstats)",
+      "impact": "One leaked file descriptor per direct panel-to-panel switch away from an open logtail view. Low severity for a local, operator-driven TUI (bounded by how many times a human can press keys in a session, and the process is typically short-lived), but worth closing since task 05 already touched the surrounding logic.",
+      "recommendation": "Before entering the switch statement (or at its top), close app.config.logtail whenever app.config.view.ShowExtra == stat.CollectLogtail and the new `extra` differs from it, mirroring the close already done for the same-key case. Suggested as a follow-up task, not a blocker for this commit.",
+      "cwe": "CWE-775"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "TOCTOU between os.Stat and Open on the logtail path (pattern preserved, not introduced)",
+      "description": "The refactored logtail branch still does `os.Stat(logtail.Path)` followed by `logtail.Open()` as two separate syscalls with a window in between where the file could be rotated, deleted, or replaced by Postgres' log rotation. This is the same sequence the pre-existing code used (`app.config.logtail.Path`/`.Open()`), just now against a local `stat.Logfile` value instead of the field directly — task 05 did not add or remove the race, it only changed which variable holds the path in between.",
+      "location": "top/extra.go:63-73 (showExtra, CollectLogtail case)",
+      "impact": "Worst case is a stat-succeeds/open-fails race producing the existing 'Failed to open %s' cmdline message instead of the more specific stat error — a UX inconsistency, not a security boundary. The path comes from stat.GetPostgresCurrentLogfile (Postgres' own current_logfiles reporting for a database the operator already has admin access to), not from untrusted external input, and pgcenter is a local admin tool rather than a network service, so this does not cross a privilege boundary.",
+      "recommendation": "No action required for this commit. If ever hardened, replace stat-then-open with open-then-fstat (open first, check the resulting file's size, roll back only the local value on a zero-size result) to remove the window entirely. Optional, low priority.",
+      "cwe": "CWE-367"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Transient test failures observed only under concurrent go test invocations (likely sandbox artifact, flagged for transparency)",
+      "description": "Running the requested filtered suite (`go test ./top/... -run 'Pause|lift|Width|Verbose|Extra' -race`) while a second go command was executing concurrently in this sandbox produced two different spurious assertion failures on two separate occasions: Test_liftingHandlers/viewSwitchHandler ('the handler must lift the pause') and Test_noOpHandlersKeepPause/changeQueryAge_unparsable ('an action that changed nothing must not lift the pause'). Neither run reported a -race data-race diagnostic (no 'DATA RACE' banner), and both failing subtests exercise plain synchronous function calls with no shared global state across subtests (each builds a fresh config/app via newConfig()/newPausedApp()). 12 subsequent strictly-sequential -race runs of the same filter (including 6 with -vet=off and 6 with default vet) all passed cleanly with no data race reported.",
+      "location": "top/pause_test.go (Test_liftingHandlers, Test_noOpHandlersKeepPause)",
+      "impact": "No production impact identified: the failures did not reproduce under normal (sequential) execution and -race never flagged a genuine data race, pointing to a build/test-cache artifact from overlapping concurrent `go test` invocations in the review sandbox rather than a defect in top/pause.go or the handlers. Recording this rather than silently discarding it, per review transparency norms.",
+      "recommendation": "No fix required based on current evidence. If this recurs in CI (which runs tests sequentially per package, unlike this ad hoc concurrent sandbox probing), treat it as a real flake and re-open: check for goroutine leakage across subtests via the viewCh-draining goroutines in Test_liftingHandlers/Test_noOpHandlersKeepPause.",
+      "cwe": null
+    }
+  ]
+}

@@ -214,7 +214,7 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		case dialogPgReload:
 			message = doReload(answer, app.db)
 		case dialogFilter:
-			message = setFilter(answer, app.config.view)
+			message = applyFilter(answer, app.config, func() { repaintStored(app) })
 		case dialogCancelQuery:
 			message = killSingle(app.db, "cancel", answer)
 		case dialogTerminateBackend:
@@ -243,6 +243,36 @@ func dialogFinish(app *app) func(g *gocui.Gui, v *gocui.View) error {
 
 		return dialogClose(g, v)
 	}
+}
+
+// applyFilter applies the filter dialog's answer to the current view and, while the display is
+// paused, asks for a repaint of the frozen frame. It returns setFilter's message unchanged - the
+// caller prints it, and a second cmdline write here would be defect class [027].
+//
+// Why this one branch needs a repaint when its five render-only neighbours ('[', ']', the arrows,
+// '\') do not: those handlers push the view on viewCh solely to trigger an immediate redraw, the
+// collector answers with a frame, and the pause gate repaints the stored frame from the frame it
+// discards. setFilter pushes nothing - not even in live mode, where the predicate is simply
+// evaluated by the next tick's render. Under pause that tick renders nothing, so without this call
+// pressing Enter on the filter dialog would appear to do nothing at all. Giving setFilter a push
+// instead would reset the collector and show one near-zero-rate frame in LIVE mode, where filtering
+// is used far more often than under pause (Decision 4).
+//
+// The repaint arrives as a bare func() rather than as the store or the app: it is what keeps the
+// frame store unreachable from this call site (Decision 1). Nothing here may read frame data - not
+// even the store's valid flag, which is a normal state handled inside the repaint itself. The pause
+// flag alone is the guard.
+func applyFilter(answer string, config *config, repaint func()) string {
+	message := setFilter(answer, config.view)
+
+	// Unconditional while paused, including on an invalid pattern or an answer that cleared
+	// nothing: the redraw is a local one with no collector round-trip, and skipping it would mean
+	// interpreting setFilter's message here.
+	if config.paused.Load() {
+		repaint()
+	}
+
+	return message
 }
 
 // dialogCancel reset dialog state when user cancels input.

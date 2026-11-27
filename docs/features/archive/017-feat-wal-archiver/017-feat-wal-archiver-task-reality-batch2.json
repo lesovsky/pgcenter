@@ -1,0 +1,65 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
+  "tasks_checked": ["02", "04", "05", "08"],
+  "status": "approved",
+  "round": 2,
+  "note": "Round-2 re-validation of revised tasks. All round-1 criticals and majors in scope are resolved and re-verified against the tree (see 'resolved' below). Remaining findings are minor: two are round-1 minors that the revision did not pick up, two are new imprecisions introduced or left by the revision.",
+  "resolved": [
+    "task 02 — the Task 05 handoff is now coherent: Task 02 says Task 05 OWNS the TestViews_Configure wal assertion, Task 05 step 4b adds it. Verified `grep -in 'wal|archiver' internal/view/view_test.go` returns nothing, so the gap is real and is closed exactly once, by Task 05.",
+    "task 04 — the impossible 'grep returns four hits' AC is gone. The containment form is satisfiable: today `grep -rn showWAL --include=*.go .` returns exactly the four named sites (cmd/report/report.go:25, :70, :151; cmd/report/report_test.go:46) and nothing outside cmd/report/; after the change all hits stay inside those two files. All four anchors verified exact, as are :157-163 (the showStatIO shape to copy), :132 (selectReport), :91/:95 (validate and the literal), report_test.go :34-73 / :46 / :65-66 / :10-32.",
+    "task 04 — `go run ./cmd report -W` is the working form: verified today it reaches report.RunMain (prints 'open pgcenter.stat.tar: no such file or directory' under the current bool flag). The repository root has no Go files, so `go run .` would fail.",
+    "task 04 — the gofmt-churn hint and the Test_options_validate message-field instruction are both corrected and now match the tree (the options struct already carries string fields; the validate table has only valid/opts/want).",
+    "task 05 (a) — the NotRecordable mutation claim is mechanically correct. record/record.go filterViews: the NotRecordable branch and the version-gate branch both `delete(views, k)` and `filtered++`, so on the four <=PG13 rows swapping the reason leaves wantN and wantV identical (green), while the three >=PG14 rows move wantV -1 / wantN +1 (red). Current tree values match every before-number the task quotes: wantV 27/18/24 and wantN 8/11/13/13.",
+    "task 05 (b) — the host commands are correctly scoped. `go test ./internal/view/...` and `go test ./record/... -run Test_filterViews` both run green on this host (executed); the frontmatter verify:, the AC and the Verification Steps all carry the scoped form plus the Test_tarRecorder panic caveat.",
+    "task 05 (c) — the TestViews_Configure arms accommodate the assertions as described. `case 190000:` is at view_test.go:183 and `case 140000:` at :193, each already a flat list of assert.Equal calls on views[...] after `views.Configure(opts)`; adding wal/archiver asserts needs no restructuring. Configure does not filter by version, so views['wal'] and views['archiver'] exist in both arms. Constants and values are consistent across tasks: PgStatWALPG14/11/{2,9} is what SelectStatWALQuery returns today; PgStatWALPG19/8/{2,6} is exactly what Task 02 adds; PgStatArchiverDefault/9/{0,0} is exactly what Task 01 defines. The `case \"wal\":` delegation is at view.go:389-391 and the map-key switch at :372-373, as cited.",
+    "task 08 — dropping A5 is correct and the argument checks out line-for-line: processData builds `views := view.Views{config.ReportType: v}` at report/report.go:282-284, Views.Configure switches on the map key at internal/view/view.go:372-373, newApp returns a zero-value view.View without error at report/report.go:83-85, and formatStatSample REPLACES view.ColsWidth/Cols wholesale (report.go:528-538) so the nil maps of a zero-value View never panic. PGresult.sort returns early / is stable on a single row, so OrderKey/OrderDesc/UniqueKey really are inert. Removing the registry entry would indeed leave the output byte-identical.",
+    "task 08 — B4 can genuinely fire: with source='Archiver', ready/archived/failed='0', four NULL cells and stats_age='02:00:00', strings.Fields of the ANSI-stripped data line yields exactly 5 tokens; replacing the four NULLs with '0' yields 9. printStatSample prints the 'ts, rate: ...' header on its own line (report.go:607-613), so the data row is never mixed into the count.",
+    "task 08 — B5 can genuinely fire: readTar only emits a sample when both meta and stat entries are present, so a meta+sysinfo-only tar prints nothing; adding the two archiver.* ticks yields one printed row (first sample discarded, Decision 12), making the buffer non-empty.",
+    "task 08 — the unfalsifiable assertions are gone and correctly justified. doReport really does end in an unconditional `return nil` after wg.Wait() (report/report.go:109-151, return at :151) and prints processData's error with fmt.Println, not to app.writer. naLiteral='n/a' is at top/stat.go:430 in package top and appears nowhere in report/, so the NotContains would have been vacuous.",
+    "task 08 — the markdown links now resolve from the task file's own directory: ../../decisions-log.md -> docs/decisions-log.md and ../../../<path> -> repo root all exist (checked on disk). The bgwriter anchors (:141-151 meta, :155-161 mkRow, :188-202 tar, :204-216 drive, :218-228 invariants, :230-237 -update) and report_test.go:24 / :73-77 are all exact.",
+    "task 08 — the A1-A4 mutations were re-checked against the diff/render code and each does redden its named subcase: A1 turns archived into the delta 3, A2/A3 push buffers_full out of the diffed range on pg19, A4 pulls the pg18 stats_age string into DiffIntvl{2,9} so diffPair -> ParseInt fails and the buffer stays empty (assert.NotEmpty fails). Ncols on the view is not consulted by diff(), which loops on curr.Ncols, so none of these panic instead of failing cleanly."
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "02",
+      "issue": "Round-1 minor not picked up by the revision: Details still says '`internal/query/wal.go` (33 lines today)'. The file is 32 lines (`wc -l internal/query/wal.go`). Every other anchor in Task 02 re-verified exact this round: PgStatWALPG14 :5-11, PgStatWALDefault :15-21, SelectStatWALQuery :25-32, wal_test.go 56 lines with Test_SelectStatWALQuery :10-31 and the 190000 row at :21 reading `{version: 190000, wantNcols: 7, wantDiffIntvl: [2]int{2, 5}}`, Test_StatWALQueries :34-56 with the version list at :35, SelectStatBgwriterQuery bgwriter.go:41-52, PostgresV19 query.go:22, view.go `case \"wal\":` :389-391.",
+      "fix": "Change '33 lines today' to '32 lines today', or drop the count."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_file",
+      "task": "04",
+      "issue": "Task 04's markdown links are repo-root-relative but the file lives at docs/features/017-feat-wal-archiver/, so none of them resolve. Verified from the task's own directory: docs/features/017-feat-wal-archiver/017-feat-wal-archiver.md, cmd/report/report.go, .claude/skills/project-knowledge/overview.md and docs/decisions-log.md are all MISSING as written; the same targets resolve fine as `017-feat-wal-archiver.md`, `../../../cmd/report/report.go`, `../../../.claude/...`, `../../decisions-log.md` — which is precisely the form Tasks 02, 05 and 08 use, and the form Task 08 was fixed to this round. This affects the whole Context Files section plus the Post-completion decisions-log link.",
+      "fix": "Rewrite Task 04's links in the same relative form the other three tasks use: bare filenames for feature artifacts, `../../decisions-log.md` for the ADR log, `../../../<path>` for code and project-knowledge files."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "05",
+      "issue": "The new step 4b brings a red-first claim that cannot hold for its wal half. The TDD Anchor says of TestViews_Configure: 'Red today on two counts: no `archiver` key exists ... and nothing pins the wal layout at all.' The second count is only true against a tree without Task 02. Task 05 declares depends_on ['01','02'] and sits in Wave 2, so by the time it runs SelectStatWALQuery already returns PgStatWALPG19/8/{2,6} at 190000 and PgStatWALPG14/11/{2,9} at 140000 — both new wal assertions pass the moment they are written, and the executor following the section's own instruction ('the tests must be written and observed failing against the current tree') will see green and may conclude the assertion is wrong or the wiring is missing. Only the archiver assertions can be observed red. The task does supply the correct compensation (the AC mutation 'reverting task 02's PG 19 branch ... turns TestViews_Configure red'), so the guard is real — the framing is what is off.",
+      "fix": "Say it explicitly in the TDD Anchor: 'the archiver assertions are red today; the wal assertions are green on first write because Task 02 has already landed — their red-first evidence is the AC mutation that reverts Task 02's PG 19 branch, which must be run and observed.'"
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "08",
+      "issue": "Round-1 minor (the 'two internal/source inconsistencies' item) was not picked up by the revision, and both halves are still wrong. (a) Verification Step 7 still calls the legacy fixture 'the legacy PG13-era tar' and says 'the PG 19 branch must not reach a ~PG13 recording', contradicting the Description's 'a 2021 PG14beta1 recording'. The Description is right: report/testdata/pgcenter.stat.golden.tar carries meta version_num '140000' / version '14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)' (read out of the tar this round). (b) The report_record_statio_test.go anchors still drift: statIOAnsiRE/statIOStripANSI are at :42-47 (var at :44, func at :47), not ':43-46'; the version-independent single-golden precedent Test_app_doReport_StatIOTime starts at :185 with its doc comment at :176-184, not ':177-206'. The bgwriter anchors, by contrast, are all exact.",
+      "fix": "Say 'the legacy 2021 PG14-beta fixture' in Step 7 as well as in the Description, and refresh the two statio anchors (or name the symbols without line numbers — they do not drift)."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "08",
+      "issue": "New imprecision in the text that replaced A5: 'the empty-archive subcase never reaches `processData` at all'. processData is always started (report/report.go:130-148 launches it as a goroutine before any tar entry is read); on an archive with no archiver.* entries it simply never enters the data branch and exits through `case <-doneCh`. What the argument needs — that the subcase never reaches the `views.Configure` call inside the first-sample branch — is true, but as written the sentence is a claim about the code that is false, in a paragraph whose whole purpose is to model the report path accurately. The A5 conclusion itself is unaffected and correct.",
+      "fix": "Reword to 'the empty-archive subcase never reaches the Configure call inside processData's first-sample branch — no sample is ever delivered, so processData exits through its doneCh arm'."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 4,
+    "claims_verified": 78,
+    "issues_found": 5
+  }
+}

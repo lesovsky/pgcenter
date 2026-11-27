@@ -120,18 +120,106 @@ func doWork(ctx context.Context, app *app) {
 	// Reset refresh interval, it should not be saved as per-view setting.
 	app.config.view.Refresh = 0
 
+	// Wait for the collector ONLY on the ctx exit. On the uiExit (pager/editor) path ctx is not
+	// cancelled, so collectStat may still be parked on its statCh send with nobody receiving -
+	// waiting there would hang the pager path. mainLoop cancels and waits on every path that
+	// needs it (top/ui.go:99-102), so the uiExit branch needs no wait of its own.
+	if statLoop(ctx, app.uiExit, statCh, &app.config.paused,
+		func(s stat.Stat) { printStat(app, s, app.postgresProps) },
+		func() { repaintStored(app) },
+	) == exitCtx {
+		wg.Wait()
+	}
+}
+
+// statLoopExit tells doWork WHY the loop returned. The distinction is load-bearing: it is what
+// keeps wg.Wait() off the pager path - see doWork.
+type statLoopExit int
+
+const (
+	exitUI  statLoopExit = iota // app.uiExit - the pager/editor path.
+	exitCtx                     // ctx.Done() - shutdown or UI rebuild.
+)
+
+// statLoop is doWork's receive loop with the pause gate, lifted out of doWork so it can be driven
+// by a unit test: statCh and uiExit are plain channels and the two render steps are function
+// values, so no *gocui.Gui is reachable from here (printStat's app.ui.Update panics on a nil one).
+//
+// The parameter list is the feature's ONE structural guarantee and must not be widened. render and
+// repaint are opaque function values and neither *app nor the frame store is passed in, so from
+// inside the gate there is physically nothing to read the store from - the worker goroutine cannot
+// touch a structure the gocui goroutine owns (Decision 1), because it has no way to name it.
+//
+// The receive is unconditional by design. collectStat reaches its viewCh receive only after a
+// successful statCh send (top/stat.go:72-84) and ~17 key handlers push on the unbuffered viewCh, so
+// a gate that stopped receiving while paused would park the collector, the first keypress would
+// block MainLoop forever, and Space itself could not recover it. Drain-and-discard is the only
+// non-hanging shape: the frame is received, dropped, and answered with a repaint of the store.
+func statLoop(
+	ctx context.Context,
+	uiExit <-chan int,
+	statCh <-chan stat.Stat,
+	paused *atomic.Bool,
+	render func(stat.Stat),
+	repaint func(),
+) statLoopExit {
 	for {
 		select {
-		case <-app.uiExit:
+		case <-uiExit:
 			// used for exit from UI (not the program) in case when need to open $PAGER or $EDITOR programs.
-			return
+			return exitUI
 		case s := <-statCh:
-			printStat(app, s, app.postgresProps)
+			if paused.Load() {
+				// The frame is DROPPED - never stored, never rendered. A frame carrying
+				// Stat.Error is discarded like any other; it surfaces on the first frame
+				// after the pause is lifted.
+				repaint()
+				continue
+			}
+			render(s)
 		case <-ctx.Done():
-			wg.Wait()
-			return
+			return exitCtx
 		}
 	}
+}
+
+// resizeDetector remembers the terminal size of the previous layout pass and answers, once per
+// pass, whether the frozen frame has to be repainted for a new geometry. Three facts a reader
+// cannot recover from the code:
+//
+//  1. This is the ONLY place in the program that ever learns the terminal was resized. gocui
+//     delivers no resize event: handleEvent (gocui/gui.go:410-419) dispatches EventKey, EventMouse
+//     and EventError, and termbox.EventResize falls into its default branch. The new size becomes
+//     visible only through flush() (gui.go:422-432), which reads termbox.Size() and only then calls
+//     the managers' Layout - so layout's app.ui.Size() is guaranteed to be the new size.
+//  2. The state is per-Gui. It lives in layout's enclosing closure, which mainLoop recreates for
+//     every Gui it builds (top/ui.go:62), so its zero value makes the first pass of a new Gui count
+//     as a change. That is what puts the frozen frame back on screen after a return from the pager,
+//     the editor or psql - a separate acceptance criterion, satisfied here at no extra cost.
+//  3. observe records the new size BEFORE it answers true. That is the termination argument: a
+//     repaint does not change the terminal size, so the pass that follows it sees the size already
+//     recorded and asks for nothing. One resize, one repaint.
+//
+// It touches neither app nor gocui, which is what lets a table test drive the decision without a
+// terminal - the same seam as topBandLayout (top/layout.go).
+type resizeDetector struct {
+	lastX, lastY int
+}
+
+// observe records the size this layout pass saw and reports whether the stored frame must be
+// repainted for it.
+//
+// The size is recorded on every change regardless of paused: in live mode gocui redraws each tick
+// anyway, but a size seen only while paused would turn the next Space press into a phantom resize
+// of a screen that never changed.
+func (d *resizeDetector) observe(paused bool, x, y int) bool {
+	if x == d.lastX && y == d.lastY {
+		return false
+	}
+
+	d.lastX, d.lastY = x, y
+
+	return paused
 }
 
 // layout defines UI layout - set of screen areas and their locations.
@@ -139,6 +227,9 @@ func layout(app *app) func(g *gocui.Gui) error {
 	// Remembers whether the previous frame already showed the "terminal too short" hint, so the
 	// height-guard hint is emitted only when the guard state flips — not on every redraw frame.
 	var verboseTooShortShown bool
+
+	// Per-Gui state, deliberately reset on a UI rebuild - see resizeDetector.
+	var resize resizeDetector
 
 	return func(_ *gocui.Gui) error {
 		maxX, maxY := app.ui.Size()
@@ -232,6 +323,16 @@ func layout(app *app) func(g *gocui.Gui) error {
 			if v != nil {
 				v.Frame = false
 			}
+		}
+
+		// While paused nothing else draws, so a resize would leave the frozen text with a
+		// visible-column window computed for the old width. Ask for one repaint of the stored
+		// frame; repaintStored enters g.Update itself, so the redraw lands in the next flush
+		// instead of this pass - drawing here would make an error abort flush and rebuild the UI.
+		// Last thing in the pass, after every SetView, and below the zero-geometry guard: a 0x0
+		// size is neither recorded nor repainted into.
+		if resize.observe(app.config.paused.Load(), maxX, maxY) {
+			repaintStored(app)
 		}
 
 		return nil
@@ -409,6 +510,11 @@ func cmdlineTokens(config *config) []cmdlineToken {
 	}
 
 	var tokens []cmdlineToken
+	// The pause marker goes first: the composer degrades and drops tokens from the RIGHT, so a
+	// leftmost single-variant token is the last thing to go on a narrow terminal.
+	if t, ok := pauseToken(config); ok {
+		tokens = append(tokens, t)
+	}
 	if t, ok := filterToken(config.view.Filters, config.view.Cols); ok {
 		tokens = append(tokens, t)
 	}

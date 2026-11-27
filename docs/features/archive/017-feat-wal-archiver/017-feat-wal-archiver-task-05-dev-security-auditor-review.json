@@ -1,0 +1,31 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "A04: Insecure Design",
+      "title": "Recordable view backed by a privileged function makes an under-privileged `pgcenter record` run abort entirely",
+      "description": "The new entry registers `archiver` with `NotRecordable` left at its zero value `false`, so `record/record.go:filterViews()` keeps it on every PG >= 14 target and `tarRecorder.collect()` executes its query on every tick. The query (task 01, out of scope) calls `pg_ls_archive_statusdir()`, whose EXECUTE privilege is `{postgres, pg_monitor}`. In `record/recorder.go` the per-view loop does `res, err := stat.NewPGresultQuery(db, v.Query); if err != nil { return nil, err }`, and `record/record.go:172-175` propagates that error out of the sampling loop — so a single permission-denied view terminates the whole recording session, discarding the other 24+ screens the operator asked for. This is a documented design choice (tech-spec Decision 4: privilege failure takes down the whole screen) and it is not a regression: the already-recordable `wal` view calls `pg_ls_waldir()` unconditionally at the same PG14 floor and the same privilege class, so a role without `pg_monitor` already loses the whole recording today. Flagged as availability-by-design rather than a defect introduced here: this task widens the number of screens that can trigger the all-or-nothing abort by one.",
+      "location": "internal/view/view.go:141-152 (archiver entry, NotRecordable omitted); consequence at record/recorder.go:135-141 and record/record.go:172-175",
+      "impact": "An operator collecting a diagnostic capture with a role that has neither superuser nor pg_monitor gets no capture at all instead of a partial one — the failure mode is loss of troubleshooting data at the moment it is needed, not disclosure. No confidentiality or integrity impact; the privilege check itself is enforced correctly by PostgreSQL.",
+      "recommendation": "No change required in this task — `NotRecordable: false` is mandated by the tech-spec and matches `wal`. The durable fix belongs in the recorder, not the registry: make the per-view loop in `tarRecorder.collect()` tolerant of a single view's query error (record the view as empty/skipped and continue, printing an INFO line like the existing `pg_stat_statements not found` path) instead of returning the error. Worth raising as a tech-debt entry so the all-or-nothing behaviour stays a decision rather than an oversight.",
+      "cwe": "CWE-703"
+    },
+    {
+      "severity": "minor",
+      "category": "A03: Injection",
+      "title": "Two server-supplied WAL-name columns reach the terminal unsanitised (pre-existing tech-debt [029], not widened)",
+      "description": "The registered view renders 9 columns, two of which — `last_archived_wal` (col 3) and `last_failed_wal` (col 6) — are strings supplied by the server and printed by `top/stat.go:printDataCell` without an SGR wrapper. Decision 16 argues no sanitisation is needed because PostgreSQL only records names that passed its own `VALID_XFN_CHARS` filter (hex digits plus `.history`/`.backup`/`.partial`), a set with no ESC and no control characters. That reasoning was verified and holds for a genuine PostgreSQL server; it does not hold if pgcenter is pointed at a hostile or spoofed endpoint that merely speaks the wire protocol and returns arbitrary text for those columns. This is exactly the trust boundary already recorded as tech-debt [029] (`docs/tech-debt.md:47`), which covers every text column on every existing screen; the archiver view neither widens nor closes it. Note also that `DiffIntvl{0,0}` on this entry is correct and load-bearing for robustness: it keeps the `'Archiver'` literal at column 0 and the four NULL-able columns out of `diff()`/`strconv.ParseInt`.",
+      "location": "internal/view/view.go:141-152 (registration); rendering sink at top/stat.go printDataCell; tech-debt docs/tech-debt.md:47",
+      "impact": "With a trusted PostgreSQL server: none — the server-side character filter makes escape injection unreachable. With an attacker-controlled endpoint the operator chose to connect to: terminal escape sequences in a row value could corrupt the display, and under the 016 pause feature the corrupted frame persists for the length of the freeze instead of self-healing on the next tick. No disk or log sink is involved.",
+      "recommendation": "No action in this task. If tech-debt [029] is ever addressed, fix it once in the shared write path (`printDataCell`), not per-view — a per-column sanitiser here would create an inconsistent precedent against every other screen, which is precisely what Decision 16 rejected.",
+      "cwe": "CWE-150"
+    }
+  ]
+}

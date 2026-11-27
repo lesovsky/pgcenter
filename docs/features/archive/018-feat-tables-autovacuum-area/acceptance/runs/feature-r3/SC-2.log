@@ -1,0 +1,9 @@
+fixture=valid kind=mixed ticks=4 members=12
+fixture=valid kind=mixed ticks=4 members=12
+assertion=pass mixed=tables/new samples=2 entries_read=true
+ACC_OBSERVATION name=mixed_tables_new sha256=4eb33a87be08092e5c4b0eaf77e7667d39c9ce05d195e79d41179fcdf178e301
+fixture=valid kind=mixed ticks=4 members=12
+fixture=valid kind=mixed ticks=4 members=12
+assertion=pass mixed=indexes/new samples=2 entries_read=true
+ACC_OBSERVATION name=mixed_indexes_new sha256=28a3179ba9d36005869c8849e131f95962fda47d086fdc9aa992f5493671a4f3
+ACC_RESULT origin=pass checkpoint=complete

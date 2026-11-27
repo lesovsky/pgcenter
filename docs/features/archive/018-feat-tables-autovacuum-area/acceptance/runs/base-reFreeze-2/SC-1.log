@@ -1,0 +1,3 @@
+assertion=failed reason=live tables report must contain two diffed samples from three ticks
+assertion=pass archive_ticks=3 autovacuum_scores_members=0
+ACC_RESULT origin=expectation checkpoint=live_recording_contract_violation

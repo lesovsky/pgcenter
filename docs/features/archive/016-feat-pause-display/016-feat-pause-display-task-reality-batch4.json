@@ -1,0 +1,115 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["10"],
+  "status": "approved",
+  "verified_claims": [
+    "Makefile targets build/test/lint/vuln exist and match the task's description: test = 'go test -race -p 1 -timeout 300s -coverprofile=.test_coverage.txt ./...' (Makefile:33-36), lint = golangci-lint run + gosec -quiet ./... (Makefile:26-28), vuln = govulncheck ./... (Makefile:30-31), build -> ./bin/pgcenter (Makefile:38-40).",
+    "make test genuinely requires a live PostgreSQL: top/top_test.go:10,19 and top/report_test.go:11 call postgres.NewTestConnect(); ports 21914-21919 in internal/postgres/testing.go:19-26; container lesovsky/pgcenter-testing:0.0.11 per deployment.md:31,38. report_test.go:11-16 uses assert.NoError and then dereferences conn, so a missing cluster panics rather than fails cleanly. The task correctly classifies a missing cluster as an environment blocker, not a criterion FAIL.",
+    "Criterion counts are exact: user-spec «Критерии приёмки» has 21 '- [ ]' items (016-feat-pause-display.md:234-278); tech-spec «Acceptance Criteria» has 8 (016-feat-pause-display-tech-spec.md:610-622).",
+    "The «Как проверить» table has 16 rows: 1, 2, 3, 3a, 4, 5, 6, 7, 7a, 7b, 7c, 7d, 8, 9, 10, 11. Row 1 is the local make test/lint/vuln run, so exactly 15 rows are stand steps.",
+    "X / pg_stat_statements claim is correct: top/keybindings.go:47 binds 'X' to menuOpen(menuPgss, app.config, app.postgresProps.ExtPGSSSchema); top/menu.go:111-114 early-returns with 'NOTICE: pg_stat_statements not found' when the schema is empty; internal/stat/postgres.go:425-426 sets ExtPGSSSchema only when GucSharedPreLibraries contains pg_stat_statements. Marking X NOT VERIFIABLE instead of PASS-by-analogy is the correct call.",
+    "The stand regimen reproduced in the task matches patterns.md:180-228 point by point: ask the owner for the address every run and never store it; inventory first (tmux, PostgreSQL flavour, preloaded libraries, with the Ubuntu 24.04 / Debian 12 + Postgres Pro examples); second binary built from master; the binary under test shipped and invoked by explicit path; tmux -x 190 -y 52 plus the -x 60 narrow pass; capture-pane -p vs -p -e; the sed ANSI strip; leave the stand as found with GUC reset verified by SHOW and tmux kill-session. The only addition (restart the cluster if step 7b stopped it) is feature-specific and consistent.",
+    "Tech debt [030] exists at docs/tech-debt.md:54 and the re-run rule is stated correctly: 'Fails intermittently with `canceling statement due to user request` and passes on an immediate re-run', in profile/, a package the feature never touches. [029] exists at docs/tech-debt.md:41 as described.",
+    "The TDD Anchor section is deleted, not left as an empty stub, and reviewers: [] matches the tech-spec Final Wave entry ('Reviewers: none'). This conforms to dev-task-creator.md:95 ('For non-code tasks: delete TDD Anchor section entirely') and dev-task-validator.md:79,111.",
+    "The five renderSysstat call sites are exactly where the task says: top/stat_test.go:60, :97, :192, :440, :441; the production caller is top/stat.go:259. top/stat.go:308 is a renderSysstatVerbose call, a different function.",
+    "The claim that the keybinding table has no unit-test coverage is true: there is no top/keybindings_test.go.",
+    "The S / L early-return handlers exist as described: top/config_view.go:339-342 (switchViewToProcPidStat, 'Per-process stats available in local mode only') and top/extra.go:36-51 (showExtra/CollectLogtail: remote host, empty logfile).",
+    "logs/ is gitignored (.gitignore:6), so the qa-report.json deliverable path is consistent with the skill (pre-deploy-qa/SKILL.md:118).",
+    "Task 10 is wave 6, the last wave; tasks 01-09 occupy waves 1-5, so the ordering the task depends on is enforced by the wave scheme."
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The S / L exception is pre-authorised on an assumption about the stand that is probably false. The task says 'S on a remote connection and L with an unreachable log file return early and therefore do not lift the pause ... on most stands both will trigger. Record them as expected, not as FAIL.' But db.Local is isLocalhost(config.Host) (internal/postgres/postgres.go:101,147), and on the stand pgcenter is normally run against the local cluster — so Local is true, top/config_view.go:339 and top/extra.go:36 do NOT early-return, and both keys MUST lift the pause. As written, the task hands the QA agent a ready-made excuse for classifying a real FAIL as 'expected behaviour'.",
+      "fix": "Require positive evidence of the early return before allowing the 'expected' classification: the cmdline notice must be in the capture ('Per-process stats available in local mode only', 'Log tail is not supported for remote hosts', 'Empty logfile'). Without that notice, the key must lift the pause or the step is a FAIL. Also record whether the connection is local as part of the stand inventory."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The consequence of an unavailable L is not propagated. If showExtra/CollectLogtail early-returns (remote host, empty or unreadable logfile — top/extra.go:36-51), then stand step 7d cannot run and user-spec criterion 10 (the log panel does not grow while paused and restores after the pager) becomes unverifiable. The task treats the L early return only as a lifting exception; for X it correctly derives the NOT VERIFIABLE consequence, but for L it does not — leaving criterion 10 open to a PASS by inference from the task 9 unit test.",
+      "fix": "Add the same rule as for X: if L is unavailable on the stand, step 7d and user-spec criterion 10 are NOT VERIFIABLE with the reason recorded, and the task 9 unit test is noted as partial evidence only — never a PASS."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "10",
+      "issue": "User-spec criterion 7 carries an exception — 'выбор пункта в меню конфигов E ведёт в редактор и пауза сохраняется' — that has no row in the stand table and no terminal-level check anywhere in the feature. The only coverage is the handler-level unit test from task 5 ('menuConf does not lift'), which says nothing about the editor round trip: pause still on, frozen frame repainted, [PAUSED] restored. The task then instructs 'Menu E is deliberately excluded from the lifting set ... Do not file it as a missing lift', which makes a no-evidence PASS the path of least resistance. The same gap covers the 'или редактора' half of criteria 12 and 16: steps 4 and 8 exercise the pager (l) only, never $EDITOR. Mechanically both go through the same uiExit path (top/ui.go:126, top/pgconfig.go:96-105), which is why the risk is moderate rather than critical.",
+      "fix": "Add one stand row: E -> select a config -> exit the editor -> capture. Expected: the pause survives, the frozen frame is repainted and [PAUSED] is back. If the stand cannot run an editor (no EDITOR, remote host — top/pgconfig.go:72), mark it NOT VERIFIABLE with the reason and record the task 5 unit test as partial evidence, never as a PASS."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "10",
+      "issue": "The 15 / 16 reconciliation is stated in a way that discards a number that is actually right. The table has 16 rows, but row 1 is the local make test/lint/vuln run, so the tech-spec's 'the 15-step stand run' (tech-spec:570, :769) is correct as a count of stand steps. The task's implementation hint ('the table in the user-spec actually has steps 1-11 plus sub-steps 3a and 7a-7d ... do not trust either number') and its acceptance criterion ('the stand-run table walked in full — steps 1-11 with sub-steps 3a and 7a-7d') both fold row 1 into 'the stand run'.",
+      "fix": "State it plainly: 16 table rows, of which row 1 is the local automated run and the remaining 15 are stand steps — which is what the tech-spec means by '15-step stand run'. No spec edit needed."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "10",
+      "issue": "User-spec criterion 18 (during a pause the dialog prompt is ~8 columns shorter and truncates earlier on a narrow terminal) has no row in the stand table. Step 6, the -x 60 pass, only checks [PAUSED] and the filter indicator. The task mentions the criterion in Edge cases as an accepted trade-off, but never says where its evidence comes from — the only real source is the task 8 unit test ('the dialog prompt still fits with the marker present', tech-spec:526-527, :566).",
+      "fix": "Either extend the narrow pass — open the filter dialog at -x 60 while paused and capture the truncated prompt — or state explicitly that criterion 18's evidence is the task 8 unit test plus the narrow capture, so it is not marked PASS by inference."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "10",
+      "issue": "User-spec criterion 14 (a second Space returns live updating and the first frame after resume is an ordinary one, without a burst of values) has no dedicated table row. It is implied by step 7b (which ends with Space) and by step 11 including Space, but the task never names the source of evidence — and 'the first frame is ordinary, no burst' is exactly the part step 11 does not check.",
+      "fix": "Name the evidence: the second Space in step 7b or a dedicated toggle in step 7, with two consecutive captures after resume to show the first live frame carries no value burst."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "There is no BLOCKED verdict. The task correctly calls a missing test cluster an environment blocker rather than a criterion FAIL, but its verdict vocabulary is only 'GO or NEEDS WORK', and acceptance criterion 2 demands 'make test green with the race detector'. If the clusters on ports 21914-21919 are not up, make test cannot be green, and the agent is left choosing between a wrong NEEDS WORK and an unwarranted GO.",
+      "fix": "Add a third outcome — BLOCKED (environment) — with the rule that the cluster availability check runs before anything else, and that a blocked run reports what could not be checked instead of issuing a verdict on the feature."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "10",
+      "issue": "Phase 4 of the pre-deploy-qa skill (Coverage Verification, SKILL.md:99-106) is not reflected in the task: for every file in the feature's scope a corresponding test must exist, and every edge case named in the user-spec must have one. The task covers the neighbouring rule well ('read the test body' — a test existing under the expected name is not evidence), but not the per-file sweep. Phase 1 is explicitly and correctly adapted (a CLI has nothing to rebuild; the skill itself says to skip the phase, SKILL.md:32); Phase 4 is silently dropped.",
+      "fix": "Add one line: walk the tech-spec's file list and confirm each touched file under top/ has a test that exercises the new behaviour — top/pause.go, stat.go, ui.go, config.go, config_view.go, keybindings.go, dialog.go, extra.go, help.go."
+    },
+    {
+      "severity": "minor",
+      "category": "missing_file",
+      "task": "10",
+      "issue": "Context Files links 016-feat-pause-display-decisions.md, which does not exist in the feature directory. It is created during execution by tasks 1-9, so this is expected at planning time, but the task tells the agent to 'read it before judging a criterion — a documented, accepted deviation is not a FAIL', which is a hard prerequisite phrased as if the file were already there.",
+      "fix": "Note that the file is produced by tasks 1-9 during execution, and that an absent or empty decisions log means the earlier tasks did not close their review cycles — a reason to stop, not to proceed."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "depends_on: [\"09\"] does not transitively cover tasks 01, 04 and 06, yet task 10 verifies criteria those tasks own (non-mutating printDataCell, the frozen header clock, the help entry). The chain is 10 <- 09 <- 07,08 <- 05 <- 03 <- 02; 01 has no dependents and 04/06 are leaves off 03. In practice the ordering holds because task 10 is wave 6 and the Details section states 'Tasks 1-9 must be done', so this is a bookkeeping gap rather than an execution risk.",
+      "fix": "depends_on: [\"01\", \"04\", \"06\", \"09\"] — or a one-line note that the wave number, not depends_on, is what sequences this task after the whole feature."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "10",
+      "issue": "The frontmatter comment next to reviewers reads 'Пусто = fallback на defaults', while the value is []. An orchestrator that follows the comment literally would attach the default reviewers (dev-code-reviewer, dev-test-reviewer) to a task whose own body says 'None — a QA task carries no reviewers by the catalogue'. The tech-spec ('Reviewers: none') and the task body agree; only the inherited template comment disagrees.",
+      "fix": "Drop or amend the inherited comment on that line so the empty array is unambiguous for a QA task."
+    }
+  ],
+  "coverage_of_user_spec_criteria": {
+    "total": 21,
+    "fully_covered": 16,
+    "notes": [
+      "Covered by a named stand step: 1 (step 2), 3 (step 3a), 4 (step 11), 5 (step 3), 6 (step 7), 8 (step 7b), 9 (step 7c), 10 (step 7d, subject to L being available), 12 pager half (steps 4, 8), 13 (step 5), 15 (step 8), 16 pager half (steps 4, 8), 17 (step 9), 19 (step 6), 20 (step 7c).",
+      "Covered by the automated half: 2 (statLoop drain test, tech-spec AC 3), 21 (step 1 / make test, lint, vuln).",
+      "Covered by a unit test only, with no terminal step: 11 (the help text contains the Space entry — task 6, tech-spec:566), 18 (dialog prompt geometry — task 8).",
+      "Gaps: criterion 7's E-exception (editor round trip) has no step anywhere; the 'или редактора' half of criteria 12 and 16 is never exercised; criterion 14 has no named evidence source; criterion 10 loses its only evidence if L early-returns on the stand."
+    ]
+  },
+  "stats": {
+    "tasks_checked": 1,
+    "claims_verified": 27,
+    "issues_found": 11
+  }
+}

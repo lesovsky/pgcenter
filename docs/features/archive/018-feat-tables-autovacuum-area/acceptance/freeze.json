@@ -1,0 +1,13 @@
+{
+  "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json",
+  "sha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+  "manifest": {
+    "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+    "sha256": "f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195"
+  },
+  "readiness": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/readiness.json",
+  "recorded_baselines": [],
+  "reviewer_report": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-refreeze-review.json",
+  "verdict": "ready",
+  "created": "2026-11-26T13:38:23Z"
+}

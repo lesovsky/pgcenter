@@ -1,0 +1,91 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "Commit 8ae86f3 implements the gate, frame store and shared render core exactly to the Decision 1/2/6/12 contracts: statLoop has the prescribed signature and touches neither *app nor the store, doWork waits only on the ctx exit, publishFrame is unreachable from the repaint path, and the bare send at stat.go:130 is now guarded. All task-specific invariants verified by inspection and by running the targeted -race suite five times (green). No files outside the allowed set were touched and no downstream seam (tasks 04/05/07/08/09) was implemented ahead of schedule.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/pause.go",
+      "line": 76,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The EXTENSION POINT comment on renderParams has an awkward mid-sentence line break (\"Both seams\\nare cut here deliberately\"), left over from wrapping. Purely cosmetic.",
+      "benefit": "Slightly cleaner doc comment; no functional impact.",
+      "optional": true
+    },
+    {
+      "file": "top/ui_test.go",
+      "line": 605,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_statLoop_exitOnUIExit leaves a goroutine parked on a send to h.statCh that is only unblocked by the deferred close(stop); since stop is unbuffered and the goroutine's select races stop vs the channel send, in the rare case the send actually completes before uiExit fires there is no receiver reading further sends. Not a bug given the test's actual assertions (it only checks the exit reason), but worth a one-line comment noting the goroutine is intentionally abandoned to be reaped by process exit / test binary teardown, since this is the one place in the new tests that does not explicitly join its helper goroutine.",
+      "benefit": "Removes a moment of reviewer doubt about goroutine leakage in the test suite; no effect on production code.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  },
+  "taskInvariantChecks": [
+    {
+      "invariant": "statLoop signature matches Decision 12 exactly; neither *app nor frameStore reachable inside it",
+      "result": "pass",
+      "evidence": "top/ui.go:158-166: func statLoop(ctx context.Context, uiExit <-chan int, statCh <-chan stat.Stat, paused *atomic.Bool, render func(stat.Stat), repaint func()) statLoopExit. grep '\\.frame\\b' top/*.go (excluding tests) shows hits only in top/stat.go:304 (publishFrame call inside renderFrame, gocui-goroutine-only) and top/pause.go:147,151,152 (inside repaintStoredFrame closure). No hit inside statLoop or doWork's closures passed to it."
+    },
+    {
+      "invariant": "doWork calls wg.Wait() only on the ctx exit reason, never on uiExit",
+      "result": "pass",
+      "evidence": "top/ui.go:127-131: `if statLoop(...) == exitCtx { wg.Wait() }` — single conditional, no wg.Wait() elsewhere in doWork."
+    },
+    {
+      "invariant": "Frame store touched only on the gocui goroutine; no synchronisation primitive added",
+      "result": "pass",
+      "evidence": "frameStore (top/pause.go:36-46) has no mutex/atomic fields beyond the pre-existing config.paused (owned by task 02). All read/write sites are inside repaintStoredFrame (closure run via g.Update) or publishFrame (called from renderFrame, itself only invoked from printStat's g.Update closure and repaintStoredFrame)."
+    },
+    {
+      "invariant": "repaintStored extracts nothing from the store before entering g.Update; valid check inside the closure; closure returns nil unconditionally",
+      "result": "pass",
+      "evidence": "top/pause.go:125-127 repaintStored does nothing but app.ui.Update(repaintStoredFrame(app)) — no store read before the call. repaintStoredFrame (top/pause.go:138-158): the `if !app.frame.valid { return nil }` check is inside the returned closure; both branches (valid and invalid) end in `return nil`, no other return statement in the closure."
+    },
+    {
+      "invariant": "Store published ONLY on the live path; no publish statement reachable from repaint path",
+      "result": "pass",
+      "evidence": "publishFrame (top/pause.go:112-118) is the sole writer of f.stats/f.at/f.valid and returns immediately when !p.publish. liveRender sets publish:true; storedRender (used exclusively by the repaint closure) never sets publish, leaving it false. Test_frameStore_publishOnlyOnLivePath (top/pause_test.go:97-119) exercises both halves and passes."
+    },
+    {
+      "invariant": "renderFrame takes both render timestamp and logtail source; publish helper called at the TAIL of renderFrame",
+      "result": "pass",
+      "evidence": "renderFrame(g *gocui.Gui, app *app, s stat.Stat, props stat.PostgresProperties, p renderParams) error — p carries at, fromFile, logBuf, logPath, publish. publishFrame(&app.frame, p, s) is the last statement of renderFrame (top/stat.go:304-305), after the extra-panel/logtail block and before the final `return nil`."
+    },
+    {
+      "invariant": "Exactly one time.Now() added on the live path, reaching both store and renderFrame; renderSysstat signature unchanged",
+      "result": "pass",
+      "evidence": "printStat's g.Update closure captures `now := time.Now()` once (top/stat.go, single statement) and passes it via liveRender(now) into renderFrame's p.at, which publishFrame writes into f.at. renderSysstat's signature (top/stat.go:323) is untouched — func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration) error — and still calls time.Now() internally at its line1 Fprintf."
+    },
+    {
+      "invariant": "top/stat.go's previously bare send is guarded by select on ctx.Done()",
+      "result": "pass",
+      "evidence": "top/stat.go:127-140 wraps `statCh <- stat.Stat{Error: err}` in a select with a `case <-ctx.Done(): close(statCh); return` branch, mirroring the guarded send earlier in collectStat. grep 'statCh <-' top/stat.go shows both sends now inside select statements."
+    },
+    {
+      "invariant": "No file outside the task's allowed set was modified",
+      "result": "pass",
+      "evidence": "git show --stat 8ae86f3: top/pause.go, top/pause_test.go, top/stat.go, top/top.go, top/ui.go, top/ui_test.go only — exactly the task's Files to modify list."
+    },
+    {
+      "invariant": "No downstream seam (tasks 04, 05, 07, 08, 09) implemented ahead of time",
+      "result": "pass",
+      "evidence": "top/pause.go contains no liftPause/liftPauseRefresh helpers (task 05), no resize/sizeChanged detector (task 07), no dialog wiring (task 08), and the logtail buffer field is left nil-only (task 09 fills it); renderSysstat is untouched (task 04). The renderParams/publishFrame seam exists exactly as the two parameters the task specifies, with no premature consumer wiring."
+    }
+  ],
+  "verification": {
+    "targetedRaceTests": "go test ./top/ -run 'statLoop|frameStore|repaint|renderFrame|Latch' -race -count=5 -v: all 8 tests x 5 repetitions PASS, no races.",
+    "build": "go build ./... clean.",
+    "vet": "go vet ./... clean.",
+    "gofmt": "gofmt -l on all 6 changed files: no output (already formatted)."
+  }
+}

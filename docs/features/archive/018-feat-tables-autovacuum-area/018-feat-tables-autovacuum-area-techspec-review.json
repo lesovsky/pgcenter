@@ -1,0 +1,312 @@
+{
+  "reviewer": "dev-techspec-reviewer",
+  "mode": "design",
+  "status": "changes_required",
+  "summary": "The design has broad forward coverage and generally fits the real query/view/TUI architecture, with no material scope creep found. Approval is blocked by an unhandled, ordinary record -a archive boundary across pgcenter upgrades and by acceptance proofs that do not discriminate several load-bearing SQL contracts. This was a static source/artifact review; no live PG 19 stand or mutation run was executed.",
+  "coverage": [
+    {
+      "requirement": "US-1",
+      "status": "covered",
+      "designOrTasks": ["New autovacuum_scores query and view", "Data Models value contract", "Decisions 2-4", "SC-5"]
+    },
+    {
+      "requirement": "US-2",
+      "status": "covered",
+      "designOrTasks": ["OrderKey=1 and OrderDesc=true", "Unrounded SQL ordering", "dead_total outer join", "Decision 3"]
+    },
+    {
+      "requirement": "US-3",
+      "status": "covered",
+      "designOrTasks": ["PG 19 tables/indexes selectors", "Trailing stats_age", "Decisions 1, 2 and 5", "SC-1 and SC-8"]
+    },
+    {
+      "requirement": "US-4",
+      "status": "covered",
+      "designOrTasks": ["ViewType schema predicate", "for_wraparound exception", "System-schema fixture", "SC-6"]
+    },
+    {
+      "requirement": "US-5",
+      "status": "covered",
+      "designOrTasks": ["Version-aware tablesNextView", "Version-labelled two-item menu", "Refusal path", "Decisions 6 and 7", "SC-7"]
+    },
+    {
+      "requirement": "AC-1",
+      "status": "covered",
+      "designOrTasks": ["Eleven-column Data Models contract", "Locked live column-name assertion", "SC-5"]
+    },
+    {
+      "requirement": "AC-2",
+      "status": "covered",
+      "designOrTasks": ["Explicit column layout in Data Models", "SC-5"]
+    },
+    {
+      "requirement": "AC-3",
+      "status": "covered",
+      "designOrTasks": ["Six-score SQL rounding value contract", "SC-5"]
+    },
+    {
+      "requirement": "AC-4",
+      "status": "covered",
+      "designOrTasks": ["Boolean ::text value contract", "SC-5"]
+    },
+    {
+      "requirement": "AC-5",
+      "status": "covered",
+      "designOrTasks": ["Outer schemaname.relname value contract", "SC-5"]
+    },
+    {
+      "requirement": "AC-6",
+      "status": "covered",
+      "designOrTasks": ["OrderKey=1 and OrderDesc=true", "SC-5"]
+    },
+    {
+      "requirement": "AC-7",
+      "status": "partial",
+      "designOrTasks": ["Decision 3 specifies ORDER BY s.score DESC", "No discriminating rounded-tie fixture or explicit automated assertion is scheduled"]
+    },
+    {
+      "requirement": "AC-8",
+      "status": "partial",
+      "designOrTasks": ["Data Models specifies n_dead_tup and a LEFT JOIN on relid", "The listed tests do not pin the join type/key or missing-partner behavior"]
+    },
+    {
+      "requirement": "AC-9",
+      "status": "partial",
+      "designOrTasks": ["Decision 4 requires outer s.schemaname", "The listed tests do not distinguish it from the joined-side schema"]
+    },
+    {
+      "requirement": "AC-10",
+      "status": "covered",
+      "designOrTasks": ["ViewType conditional query design", "toggleSysTables wiring", "SC-6"]
+    },
+    {
+      "requirement": "AC-11",
+      "status": "covered",
+      "designOrTasks": ["System-schema wraparound fixture", "Named mutation assertion", "SC-6"]
+    },
+    {
+      "requirement": "AC-12",
+      "status": "covered",
+      "designOrTasks": ["DiffIntvl{0,0}", "Mutation-checked calculateDelta empty-cell test"]
+    },
+    {
+      "requirement": "AC-13",
+      "status": "covered",
+      "designOrTasks": ["tablesNextView current/version table", "switchViewTo tables case", "SC-5"]
+    },
+    {
+      "requirement": "AC-14",
+      "status": "covered",
+      "designOrTasks": ["Two-member tablesNextView cycle", "SC-5"]
+    },
+    {
+      "requirement": "AC-15",
+      "status": "covered",
+      "designOrTasks": ["tablesNextView default returns tables", "SC-5 and SC-7"]
+    },
+    {
+      "requirement": "AC-16",
+      "status": "covered",
+      "designOrTasks": ["menuTables and T keybinding", "Version-dependent menu tests", "SC-5"]
+    },
+    {
+      "requirement": "AC-17",
+      "status": "covered",
+      "designOrTasks": ["Decision 7 single-write branches", "Manual SC-5 code-review/stand checkpoint"]
+    },
+    {
+      "requirement": "AC-18",
+      "status": "covered",
+      "designOrTasks": ["Version-aware tablesNextView", "SC-7"]
+    },
+    {
+      "requirement": "AC-19",
+      "status": "covered",
+      "designOrTasks": ["Version parameter to selectMenuStyle", "Exact requires PostgreSQL 19 suffix", "SC-7"]
+    },
+    {
+      "requirement": "AC-20",
+      "status": "covered",
+      "designOrTasks": ["Refusal without viewCh mutation", "One explanatory cmdline message", "SC-7"]
+    },
+    {
+      "requirement": "AC-21",
+      "status": "covered",
+      "designOrTasks": ["PgStatTablesPG19 with trailing stats_age", "SC-1 and SC-8"]
+    },
+    {
+      "requirement": "AC-22",
+      "status": "covered",
+      "designOrTasks": ["PgStatIndexesPG19 with trailing stats_age", "SC-1 and SC-8"]
+    },
+    {
+      "requirement": "AC-23",
+      "status": "covered",
+      "designOrTasks": ["Static legacy New entries", "Legacy selector branches", "SC-4 byte-identical replay"]
+    },
+    {
+      "requirement": "AC-24",
+      "status": "covered",
+      "designOrTasks": ["Tail placement outside unchanged DiffIntvl", "Column-order and bounds invariant tests"]
+    },
+    {
+      "requirement": "AC-25",
+      "status": "covered",
+      "designOrTasks": ["pg_stat_* source contract", "Query-text source assertion"]
+    },
+    {
+      "requirement": "AC-26",
+      "status": "covered",
+      "designOrTasks": ["Nullable stats_reset rendering", "SC-1 and SC-8"]
+    },
+    {
+      "requirement": "AC-27",
+      "status": "partial",
+      "designOrTasks": ["SC-1 and SC-8 require growing values", "Expected values are only described as consistent with reset, without a direct DB-to-report comparison or timing tolerance"]
+    },
+    {
+      "requirement": "AC-28",
+      "status": "covered",
+      "designOrTasks": ["SC-8 explicitly requires untouched relations to remain blank"]
+    },
+    {
+      "requirement": "AC-29",
+      "status": "covered",
+      "designOrTasks": ["Negative functions query/Ncols assertions", "SC-4 byte-identical report"]
+    },
+    {
+      "requirement": "AC-30",
+      "status": "covered",
+      "designOrTasks": ["Negative sizes query/Ncols assertions", "SC-4 byte-identical report"]
+    },
+    {
+      "requirement": "AC-31",
+      "status": "covered",
+      "designOrTasks": ["NotRecordable registry entry", "record.filterViews", "SC-1 tar-entry assertion"]
+    },
+    {
+      "requirement": "AC-32",
+      "status": "covered",
+      "designOrTasks": ["PG 14-19 integration matrix", "Filtered recorder fixture", "Independent full quality gate"]
+    },
+    {
+      "requirement": "AC-33",
+      "status": "covered",
+      "designOrTasks": ["Two-tick-per-version tables/indexes replay fixtures", "Existing layout-state reset", "SC-2"]
+    },
+    {
+      "requirement": "AC-34",
+      "status": "covered",
+      "designOrTasks": ["Locked query column list", "Live FieldDescriptions order assertion"]
+    },
+    {
+      "requirement": "AC-35",
+      "status": "covered",
+      "designOrTasks": ["top/help.go t,T row", "Help adjacency/marker tests", "SC-5"]
+    },
+    {
+      "requirement": "AC-36",
+      "status": "covered",
+      "designOrTasks": ["report/describe.go trailing PG 19+ rows", "Column-order tests", "SC-3"]
+    },
+    {
+      "requirement": "AC-37",
+      "status": "covered",
+      "designOrTasks": ["docs/features-catalog.md documentation contract", "SC-9"]
+    },
+    {
+      "requirement": "AC-38",
+      "status": "covered",
+      "designOrTasks": ["project.md and architecture.md documentation contracts", "SC-9"]
+    },
+    {
+      "requirement": "AC-39",
+      "status": "covered",
+      "designOrTasks": ["doc/release-notes/v0.12.0.md contract", "SC-9"]
+    },
+    {
+      "requirement": "AC-40",
+      "status": "covered",
+      "designOrTasks": ["Tech debt [035] scope extension", "SC-9"]
+    },
+    {
+      "requirement": "SC-1",
+      "status": "partial",
+      "designOrTasks": ["Fresh disposable PG 19 container and pg19_stats_age_report_unavailable base checkpoint", "Final DB-to-report expected-value evidence and timing tolerance are not specified"]
+    },
+    {
+      "requirement": "SC-2",
+      "status": "covered",
+      "designOrTasks": ["Synthetic tables/indexes archives", "Two ticks per recorded version", "Regression base and final replay assertions"]
+    },
+    {
+      "requirement": "SC-3",
+      "status": "covered",
+      "designOrTasks": ["relation_stats_age_descriptions_missing base checkpoint", "Black-box describe assertions"]
+    },
+    {
+      "requirement": "SC-4",
+      "status": "covered",
+      "designOrTasks": ["PG 17/18 identical archives", "master/feature byte comparison", "Separate structural assertions"]
+    },
+    {
+      "requirement": "SC-5",
+      "status": "covered",
+      "designOrTasks": ["autovacuum_screen_unavailable base checkpoint", "PG 19 deterministic manual terminal run"]
+    },
+    {
+      "requirement": "SC-6",
+      "status": "covered",
+      "designOrTasks": ["wraparound_exception_unavailable base checkpoint", "Stable system-schema fixture", "Manual toggle assertions"]
+    },
+    {
+      "requirement": "SC-7",
+      "status": "covered",
+      "designOrTasks": ["version_aware_tables_menu_unavailable base checkpoint", "PG 18 A/B manual run"]
+    },
+    {
+      "requirement": "SC-8",
+      "status": "covered",
+      "designOrTasks": ["pg19_stats_age_display_unavailable base checkpoint", "Manual active/untouched relation observations"]
+    },
+    {
+      "requirement": "SC-9",
+      "status": "covered",
+      "designOrTasks": ["feature_documentation_missing base checkpoint", "Five-file documentation/register review"]
+    }
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "lens": "release-safety",
+      "issue": "The record -a pgcenter-upgrade path is not benign end to end. Decision 1 and the Risks table prove only that diff() remains in bounds when two PG 19 samples have different widths. report.formatStatSample returns early whenever view.Aligned is true, and only a recorded server-version change clears that state. A narrow pre-feature PG 19 archive appended by the feature binary therefore reuses the old 19/6-entry ColsWidth map for a 20/7-column result. With populated stats_age, printStatSample returns 'zero or negative width, skip'; with NULL stats_age it can instead retain the old header/layout. This contradicts the 'benign mismatch', 'Recorded archives: unaffected', and 'Breaking changes: no' claims.",
+      "location": "Tech spec Decision 1, Testing Strategy bounds invariant, Backward Compatibility, and final Risks row; report/report.go:276-320 and 527-538, 616-640; record/recorder.go:64-99",
+      "fix": "Handle a result-layout change as a replay boundary, not only a server-version change: compare the incoming and previous column layouts, drop the previous snapshot, and reset Aligned/Cols/ColsWidth, header cadence, and requested-sort state exactly as the version-change branch does. Add same-190000 narrow-to-wide tables and indexes fixtures with at least two ticks per pgcenter layout, populated stats_age, and a requested sort column. If mixed pgcenter-layout archives are deliberately unsupported instead, remove the benign/unaffected claims and add an explicit validation error plus release-note workaround; do not leave the current silent/erroring behavior undocumented."
+    },
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "lens": "acceptance-design",
+      "issue": "Several core SQL and stats_age checks have contracts but no discriminating evidence plan. The new-query unit test is specified to pin names/order and only the outer FROM relation; it does not pin ORDER BY s.score, the LEFT JOIN and relid key, or outer-side s.schemaname. An implementation using the rounded ORDER BY alias, an INNER JOIN, or joined-side schemaname could satisfy all listed automated checks. SC-5's generic representative relations do not guarantee the three raw scores that collapse to 0.00, and an unmatched join partner cannot be relied on in a live catalog. SC-1 likewise says only 'consistent with the reset', without naming DB evidence, active/untouched relation selection, or an elapsed-time tolerance.",
+      "location": "Tech spec Test Data and Identifier Map rows Score values/dead_total/Acceptance reset, Unit tests, Integration tests, Acceptance Design SC-1 and SC-5; user spec AC-7-AC-9 and AC-27",
+      "fix": "Extend the query structure test with explicit assertions for all six round expressions, boolean casts, outer relation concatenation, LEFT JOIN pg_stat_all_tables on relid, outer s.schemaname in the predicate, and qualified unrounded ORDER BY. Port the already measured three-relation rounded-tie fixture into an integration assertion whose expected row order distinguishes raw-score sorting, and use structural evidence for the unmatched LEFT JOIN case. For SC-1/SC-8, capture direct DB stats_reset evidence for chosen active and untouched tables/indexes and compare public report/TUI values with a stated seconds/tick tolerance. Keep the existing feature-missing base checkpoints."
+    },
+    {
+      "severity": "minor",
+      "scope": "in_scope",
+      "lens": "acceptance-design",
+      "issue": "The unit-test plan requires asserting the refusal's composed cmdline line while also acknowledging that printCmdline is unobservable. The proposed architecture leaves the write inside menuSelect and introduces no decision/message seam. Testing composeCmdline with a literal notice would not prove that menuSelect selected that notice or avoided a second write.",
+      "location": "Tech spec Unit tests final bullet and Decision 7; top/menu.go:149-250; top/ui.go printCmdline/composeCmdline path",
+      "fix": "Either extract a pure tables-menu selection result used by menuSelect (target, whether to switch, and exact message), so the branch and one-write construction are testable, or remove the claimed composed-line unit assertion and retain exact-message/exactly-once verification as code review plus manual SC-7."
+    },
+    {
+      "severity": "minor",
+      "scope": "in_scope",
+      "lens": "release-safety",
+      "issue": "Registering the first production NotRecordable view creates a misleading PG 19 record message. filterViews increments one shared filtered counter for both NotRecordable and version failures; on PG 19 with pg_stat_statements present, autovacuum_scores can be the only dropped view, causing setup to print that statistics are unsupported by the current PostgreSQL version even though the screen is supported and deliberately excluded from recording.",
+      "location": "Tech spec NotRecordable/AC-31 design; record/record.go:83-89 and 199-232",
+      "fix": "Separate unsupported-version and deliberately-not-recordable skip reasons, or reword the aggregate INFO so it covers both. Add a PG 19 filter/setup test that proves the new view is absent without claiming it is unsupported."
+    }
+  ]
+}

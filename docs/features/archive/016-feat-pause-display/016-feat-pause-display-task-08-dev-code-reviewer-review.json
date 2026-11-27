@@ -1,0 +1,83 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "applyFilter has exactly the shape the task demands: calls setFilter, repaints only while paused, returns setFilter's message unchanged, no second cmdline write. Only dialogFilter's branch changed; the other nine branches and setFilter/pause.go/ui.go/config_view.go are byte-for-byte untouched. All 9 pre-existing dialog tests plus 5 new ones pass, build and golangci-lint are clean. Two pre-flagged deviations were assessed: both are acceptable, one worth a cosmetic tidy-up.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/dialog.go",
+      "line": 253,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The task's Verification Steps expect `grep -n \"viewCh\" top/dialog.go` to return nothing; it now returns one hit at line 253, inside applyFilter's doc comment, which names viewCh to explain why this branch needs a repaint while its five neighbours do not. This is not a defect: the same task's 'What to do' section requires exactly that explanation, and the comment adds no code path, no import and no behavioral coupling to config_view.go's push mechanism - it is prose, not a reference. Judged on substance the deviation is acceptable and the explanation is worth keeping. If the verification script's grep is ever run literally (e.g. in CI) it will now false-positive on this one line; consider rewording to 'the collector channel' or 'the view channel' instead of the literal identifier so the comment keeps its point without matching the grep pattern. Optional - the current wording is clear and correct.",
+      "benefit": "Keeps the literal verification command usable as an automated regression check without weakening the comment's explanatory value.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  },
+  "verifiedInvariants": [
+    {
+      "invariant": "applyFilter's shape: calls setFilter, repaints only when config.paused.Load() is true, returns setFilter's message unchanged, no message rewriting.",
+      "result": "confirmed. top/dialog.go:265-276. No second printCmdline write is added anywhere - grep -n \"printCmdline\" top/dialog.go still shows the same 8 call sites as the branch structure requires, dialogFinish's single printCmdline(g, \"%s\", message) at line 242 is the only write on this path."
+    },
+    {
+      "invariant": "dialogFilter is the only changed branch; the other nine dialogFinish branches are unchanged.",
+      "result": "confirmed. git show 32d557a's diff touches only the one case line (setFilter(...) -> applyFilter(...)) inside the switch; every other case (dialogPgReload, dialogCancelQuery, dialogTerminateBackend, dialogSetMask, dialogCancelGroup, dialogTerminateGroup, dialogChangeAge, dialogQueryReport, dialogChangeRefresh, dialogNone) is byte-identical to the pre-commit version."
+    },
+    {
+      "invariant": "The pause is not lifted; the frame is repainted, not resumed.",
+      "result": "confirmed. applyFilter never touches config.paused except to read it via Load(); no liftPause/liftPauseRefresh call appears anywhere in the diff or in the resulting dialog.go. repaintStored(app) (top/pause.go:124) only calls app.ui.Update(repaintStoredFrame(app)), which redraws app.frame.stats without publishing a new frame or clearing the flag - verified by reading top/pause.go in full."
+    },
+    {
+      "invariant": "An invalid regexp must not repaint a broken state or swallow the error message.",
+      "result": "confirmed. setFilter on invalid regexp returns \"Filters: <compile error>\" and mutates nothing (regexp.Compile fails before the map write). applyFilter still calls repaint() while paused (per task's explicit edge-case instruction: the redraw is a local, cheap, no-round-trip operation and skipping it would require interpreting setFilter's message inside dialog.go). The message returned by applyFilter is passed through unchanged and printed once by dialogFinish - Test_applyFilter_repaintsOnUnchangedFilter/invalid_regexp asserts exactly this and passes."
+    },
+    {
+      "invariant": "top/dialog_test.go was extended, not overwritten; nine pre-existing tests intact, zero deletions.",
+      "result": "confirmed. git diff 32d557a^ 32d557a -- top/dialog_test.go shows '1 file changed, 206 insertions(+)' with zero deletions (the only '-' line in the raw diff output is the '--- a/top/dialog_test.go' diff header itself, not a removed line). All nine original test functions (Test_dialogInputX0, Test_dialogInputX0AlwaysLeftOfX1, Test_dialogInputX0DegenerateGeometry, Test_dialogPromptNeverOverlappedByInput, Test_dialogSetMaskOpensAt80Columns, Test_dialogInputX0CountsRunes, Test_dialogYCoordsFromLayout, Test_dialogPromptFit, Test_dialogPromptFitMarksTruncation) are present with their original subtests, plus five new ones. Ran `go test ./top/ -run 'Test_applyFilter|Test_dialog' -v`: all 14 top-level tests and their subtests pass."
+    },
+    {
+      "invariant": "Only top/dialog.go and top/dialog_test.go modified; top/pause.go, top/ui.go, top/stat.go, top/config_view.go untouched by this commit.",
+      "result": "confirmed. `git show 32d557a --stat` lists exactly two files (top/dialog.go +31/-1, top/dialog_test.go +206/-0). No other file appears in the commit's diff."
+    },
+    {
+      "invariant": "No task 09 seam implemented ahead of time.",
+      "result": "confirmed. The diff touches only applyFilter and its tests; no logtail/logBuf/logPath code, no changes to frameStore or renderParams, nothing that reaches into task 09's territory in top/pause.go (which this commit does not modify at all)."
+    }
+  ],
+  "assessedDeviations": [
+    {
+      "deviation": "(a) grep -n viewCh top/dialog.go now returns one hit, inside applyFilter's doc comment.",
+      "verdict": "acceptable",
+      "reasoning": "The hit is prose explaining the render-only neighbours' push mechanism, required by the task's own instruction to document why this branch differs. It introduces no viewCh push and no coupling to config_view.go. Flagged above as an optional minor suggestion to reword away from the literal identifier so the verification grep stays mechanically accurate, but this does not block approval."
+    },
+    {
+      "deviation": "(b) Test_applyFilter_repaintsWhenPaused uses one valid pattern ('^pgcenter') for both table rows, varying only the pause flag, rather than varying the answer per row.",
+      "verdict": "acceptable, matches task spec, and is sound test design",
+      "reasoning": "The task's TDD Anchor explicitly specifies this exact shape: 'table over {paused, live}... In both rows the returned message and the resulting view.Filters are exactly what setFilter alone produces (a valid pattern lands in the map and returns \"Filters: ok\")'. This is not an implementer shortcut - it is the prescribed design. It is also good isolation: this test's purpose is to prove the repaint count depends solely on the pause flag, not on setFilter's outcome; varying the answer too would conflate two independent variables into one table. The answer-varying cases (invalid regexp, empty-answer-no-op) are covered separately and correctly by the sibling Test_applyFilter_repaintsOnUnchangedFilter, which does vary the answer while holding pause=true constant. Together the two tests cover the 2x2 space (pause x answer-kind) without redundancy."
+    }
+  ],
+  "crossFileConsistency": {
+    "applyFilter_signature": "func applyFilter(answer string, config *config, repaint func()) string - matches task spec exactly and matches the call site `applyFilter(answer, app.config, func() { repaintStored(app) })` in dialogFinish.",
+    "setFilter_signature": "func setFilter(answer string, view view.View) string (top/config_view.go:147) - matches applyFilter's call `setFilter(answer, config.view)`; setFilter's own diff against master is empty.",
+    "repaintStored_signature": "func repaintStored(app *app) (top/pause.go:124) - matches the closure `func() { repaintStored(app) }` passed at the dialogFinish call site.",
+    "config_paused_field": "config.paused is atomic.Bool (top/config.go:40) - matches config.paused.Load() in applyFilter and c.paused.Store(...) in the new tests.",
+    "view_View_fields": "Cols, Filters (map[int]*regexp.Regexp), OrderKey all exist on view.View (internal/view/view.go) and are used correctly by newFilterConfig and pausedCmdlineTokens in the test file."
+  },
+  "buildAndTest": {
+    "go_build": "clean, no errors",
+    "targeted_test_run": "go test ./top/ -run 'Test_applyFilter|Test_dialog' -v : PASS, 14/14 top-level tests, 0.029s",
+    "full_package_test": "not run, per task instruction (top/report_test.go requires a live PostgreSQL fixture cluster not available in this environment; the targeted -run above is the specified primary verify command)",
+    "lint": "golangci-lint run ./top/... : 0 issues"
+  },
+  "tech_debt": true,
+  "techDebtNotes": [
+    "None introduced by this commit. The applyFilter/setFilter asymmetry (one path pushes on viewCh, the other doesn't) is pre-existing and documented at length in both the task file and the new code comments, with an explicit rationale for not unifying it (Decision 4: unifying would import a near-zero-rate frame into live mode). Not a new debt item, and not something this task was asked to resolve."
+  ]
+}

@@ -127,7 +127,17 @@ func collectStat(ctx context.Context, db *postgres.DB, statCh chan<- stat.Stat, 
 			c.Reset()
 			_, err = c.Update(db, v, refresh)
 			if err != nil {
-				statCh <- stat.Stat{Error: err}
+				// Guarded exactly like the send at the top of the loop: this is the only send in
+				// collectStat that used to be bare. A collector parked here makes mainLoop's
+				// wg.Wait() on the UI-rebuild path (top/ui.go:99-102) eternal.
+				select {
+				case statCh <- stat.Stat{Error: err}:
+					// ok, error received.
+				case <-ctx.Done():
+					// quit received, close channel and return.
+					close(statCh)
+					return
+				}
 			}
 
 			continue
@@ -167,67 +177,114 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 	}
 
 	app.ui.Update(func(g *gocui.Gui) error {
-		v, err := g.View("sysstat")
+		// The ONE stamp of this live frame: "when it was rendered", which is what the store's at
+		// field documents. It is captured once here and fed to both consumers - the store now, and
+		// the header clock once task 04 threads it into renderSysstat. Do not add a second
+		// time.Now() call on this path.
+		now := time.Now()
+
+		return renderFrame(g, app, s, props, liveRender(now))
+	})
+}
+
+// renderFrame is the render core shared by the live path (printStat) and the repaint path
+// (repaintStoredFrame, top/pause.go). The two differ only in p: the error policy is the caller's
+// (this function propagates, and the repaint closure swallows), while p carries the render
+// timestamp, the logtail source and whether the result is published into the store.
+//
+// It exists because the repaint cannot go through printStat unchanged: this body returns errors at
+// thirteen points, and an error out of a g.Update closure tears down MainLoop -> UI rebuild ->
+// fresh repaint -> the same error, bounded only by the errorRate guard that kills the process.
+//
+// MUST be called on the gocui MainLoop goroutine only - it draws into views and publishes the
+// gocui-owned frame store.
+func renderFrame(g *gocui.Gui, app *app, s stat.Stat, props stat.PostgresProperties, p renderParams) error {
+	v, err := g.View("sysstat")
+	if err != nil {
+		return fmt.Errorf("set focus on sysstat view failed: %w", err)
+	}
+	v.Clear()
+	err = printSysstat(v, s, app.config.verbose, app.db.Local, props.DataDirectory, app.config.refresh, p.at)
+	if err != nil {
+		return fmt.Errorf("print sysstat failed: %w", err)
+	}
+
+	v, err = g.View("pgstat")
+	if err != nil {
+		return fmt.Errorf("set focus on pgstat view failed: %w", err)
+	}
+	v.Clear()
+	err = printPgstat(v, s, props, app.db, app.config.verbose)
+	if err != nil {
+		return fmt.Errorf("print summary postgres stat failed: %w", err)
+	}
+
+	v, err = g.View("dbstat")
+	if err != nil {
+		return fmt.Errorf("set focus on dbstat view failed: %w", err)
+	}
+	v.Clear()
+
+	err = printDbstat(v, app.config, s)
+	if err != nil {
+		return fmt.Errorf("print main postgres stat failed: %w", err)
+	}
+
+	// The logtail pair this frame actually drew, filled in by the live logtail case below and left
+	// zero by every other panel. Declared HERE, before the extra block, because the block is skipped
+	// entirely when the panel is closed (ShowExtra == stat.CollectNone) - and a closed panel is
+	// precisely the case the store's drop rule exists for.
+	var logPath string
+	var logBuf []byte
+
+	if app.config.view.ShowExtra > stat.CollectNone {
+		v, err := g.View("extra")
 		if err != nil {
-			return fmt.Errorf("set focus on sysstat view failed: %w", err)
-		}
-		v.Clear()
-		err = printSysstat(v, s, app.config.verbose, app.db.Local, props.DataDirectory, app.config.refresh)
-		if err != nil {
-			return fmt.Errorf("print sysstat failed: %w", err)
+			return fmt.Errorf("set focus on extra view failed: %w", err)
 		}
 
-		v, err = g.View("pgstat")
-		if err != nil {
-			return fmt.Errorf("set focus on pgstat view failed: %w", err)
-		}
-		v.Clear()
-		err = printPgstat(v, s, props, app.db, app.config.verbose)
-		if err != nil {
-			return fmt.Errorf("print summary postgres stat failed: %w", err)
-		}
-
-		v, err = g.View("dbstat")
-		if err != nil {
-			return fmt.Errorf("set focus on dbstat view failed: %w", err)
-		}
-		v.Clear()
-
-		err = printDbstat(v, app.config, s)
-		if err != nil {
-			return fmt.Errorf("print main postgres stat failed: %w", err)
-		}
-
-		if app.config.view.ShowExtra > stat.CollectNone {
-			v, err := g.View("extra")
+		switch app.config.view.ShowExtra {
+		case stat.CollectDiskstats:
+			v.Clear()
+			err := printIostat(v, s.Diskstats)
 			if err != nil {
-				return fmt.Errorf("set focus on extra view failed: %w", err)
+				return err
 			}
-
-			switch app.config.view.ShowExtra {
-			case stat.CollectDiskstats:
-				v.Clear()
-				err := printIostat(v, s.Diskstats)
-				if err != nil {
-					return err
-				}
-			case stat.CollectNetdev:
-				v.Clear()
-				err := printNetdev(v, s.Netdevs)
-				if err != nil {
-					return err
-				}
-			case stat.CollectFsstats:
-				v.Clear()
-				err := printFsstats(v, s.Fsstats)
-				if err != nil {
-					return err
-				}
-			case stat.CollectLogtail:
+		case stat.CollectNetdev:
+			v.Clear()
+			err := printNetdev(v, s.Netdevs)
+			if err != nil {
+				return err
+			}
+		case stat.CollectFsstats:
+			v.Clear()
+			err := printFsstats(v, s.Fsstats)
+			if err != nil {
+				return err
+			}
+		case stat.CollectLogtail:
+			// The logtail source is a render parameter (Decision 6), and selectLogtail is where that
+			// parameter is honoured: on the repaint path the thunk below is NOT ENTERED, so there is
+			// no os.Stat, no Read, no Reopen and no Size bookkeeping while paused. That is what keeps
+			// the rotation machinery out of the paused state, where a Reopen would close the current
+			// file before querying a database that may be exactly the thing that broke.
+			//
+			// The selection is a separate function rather than an if here because this switch needs a
+			// live *gocui.Gui/*gocui.View, which cannot be constructed outside the gocui package - so
+			// a routing regression written here would be caught by no test at all. Everything that
+			// needs g or v stays inside the thunk; only the choice between the two sources moved out.
+			//
+			// ACCEPTED RESIDUAL, pre-existing and merely widened here: the descriptor is held for the
+			// whole pause, so a rotated-away file keeps its inode pinned, and if the new file outgrows
+			// the frozen logtail.Size before the pause is lifted the size-based rotation detector below
+			// does not fire and the panel shows stale lines. The window is one refresh interval wide
+			// today; closing it needs an identity check (os.SameFile/mtime) instead of a size
+			// comparison, which is a separate change.
+			path, buf, err := selectLogtail(p, func() (string, []byte, error) {
 				size, buf, err := readLogfileRecent(v, app.config.logtail)
 				if err != nil {
 					printCmdline(g, "Tail Postgres log failed: %s", err)
-					return err
+					return "", nil, err
 				}
 
 				if size < app.config.logtail.Size {
@@ -235,28 +292,77 @@ func printStat(app *app, s stat.Stat, props stat.PostgresProperties) {
 					err := app.config.logtail.Reopen(app.db, app.postgresProps.VersionNum)
 					if err != nil {
 						printCmdline(g, "Tail Postgres log failed: %s", err)
-						return err
+						return "", nil, err
 					}
 				}
 
 				// Update info about logfile size.
 				app.config.logtail.Size = size
 
-				err = printLogtail(v, app.config.logtail.Path, buf)
-				if err != nil {
-					return err
-				}
+				// The path is read AFTER the rotation branch: Reopen re-resolves it, and it is what
+				// printLogtail puts in the panel's header line.
+				return app.config.logtail.Path, buf, nil
+			})
+			if err != nil {
+				return err
+			}
+
+			// Hand the drawn pair to the sync call below. Whether it is stored is one decision, made
+			// once, at the tail of this function - and only on the live path, since publishFrame
+			// returns before the capture when the params describe a repaint.
+			logPath, logBuf = path, buf
+
+			err = printLogtail(v, path, buf)
+			if err != nil {
+				return err
 			}
 		}
-		return nil
-	})
+	}
+
+	// Publish what was just rendered into the store - at the TAIL, after the panels and the extra
+	// block, so the stored frame is by construction the frame that reached the screen. p decides
+	// whether this writes at all: only the live path publishes (Decision 2).
+	//
+	// Keep this a call to the named helper, in this position: the logtail capture rides on the live
+	// side of exactly this step. ShowExtra is passed explicitly and the call is unconditional, so the
+	// capture/drop decision is reached for EVERY ShowExtra value - including stat.CollectNone, whose
+	// whole extra block above is skipped.
+	publishFrame(&app.frame, p, s, app.config.view.ShowExtra, logPath, logBuf)
+
+	return nil
+}
+
+// logtailReader produces the pair the log panel draws by reading the log file: the header path and
+// the recent lines. It is a function value so that WHICH source is used can be decided separately
+// from the read itself - the read needs a *gocui.View for its geometry and a *gocui.Gui for its
+// error message, neither of which can be constructed outside the gocui package.
+type logtailReader func() (string, []byte, error)
+
+// selectLogtail chooses where the log panel's content comes from, and is the single place that
+// decision is made.
+//
+// On the repaint path (p.fromFile == false) it returns the pair captured with the frozen frame and
+// NEVER invokes read: while paused the log file is not touched at all - no os.Stat, no Logfile.Read,
+// no Reopen, no logtail.Size write (Decision 7). On the live path it returns whatever read produced,
+// propagating its error so renderFrame can surface an unreadable log.
+//
+// It exists as its own function purely so that property is testable: renderFrame's switch is
+// unreachable from a unit test, so the same check written inline there could regress - be deleted,
+// inverted, short-circuited - with every test in the package still green. Here a test can hand it a
+// read that fails the test the moment it is called.
+func selectLogtail(p renderParams, read logtailReader) (string, []byte, error) {
+	if !p.fromFile {
+		return p.logPath, p.logBuf, nil
+	}
+
+	return read()
 }
 
 // printSysstat prints system stats on UI. It is a thin wrapper that delegates to the
 // writer-based renderSysstat (*gocui.View implements io.Writer), so the render core can be
 // unit-tested without a live terminal — mirroring the printDbstat → renderDbstat precedent.
-func printSysstat(v *gocui.View, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration) error {
-	return renderSysstat(v, s, verbose, local, dataDir, refresh)
+func printSysstat(v *gocui.View, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration, at time.Time) error {
+	return renderSysstat(v, s, verbose, local, dataDir, refresh, at)
 }
 
 // renderSysstat is the writer-based core of printSysstat: it prints the system stats to w.
@@ -266,7 +372,13 @@ func printSysstat(v *gocui.View, s stat.Stat, verbose bool, local bool, dataDir 
 // filesystem. local/dataDir drive the filesyst mount-prefix match (data_directory symlinks are
 // resolved only when local). refresh is the current refresh interval, shown on line 1 so the value
 // set through the 'z' dialog stays visible after the dialog closes.
-func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration) error {
+//
+// at is the frame's RENDER TIME, supplied by the caller — it is deliberately not time.Now() here.
+// The repaint path (repaintStoredFrame, top/pause.go) draws a frozen frame with its stored stamp,
+// so a clock read inside this function would print the current time above statistics that are
+// minutes old — the incoherence the pause feature exists to avoid. It is passed through as-is: the
+// layout carries no zone and Format does not convert, so a local stamp renders as local time.
+func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration, at time.Time) error {
 	var err error
 
 	/* line1: current time, refresh interval and load average */
@@ -274,7 +386,7 @@ func renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir s
 	// "1m0s" and 300s (the validated maximum) as "5m0s". The conversion lives here, not at the call
 	// site, so there is exactly one of it.
 	_, err = fmt.Fprintf(w, "pgcenter: %s, refresh: %ds, load average: %.2f, %.2f, %.2f\n",
-		time.Now().Format("2006-01-02 15:04:05"), int(refresh/time.Second),
+		at.Format("2006-01-02 15:04:05"), int(refresh/time.Second),
 		s.LoadAvg.One, s.LoadAvg.Five, s.LoadAvg.Fifteen)
 	if err != nil {
 		return err
@@ -1100,21 +1212,29 @@ func printStatData(w io.Writer, s stat.Stat, config *config, filter bool, win co
 // printDataCell prints the value of column i for the given row, truncating values longer
 // than the column width (replacing the last character with '~') and padding to the column
 // width plus the +2 gap. Returns an error for a zero or negative column width.
+//
+// The printer FORMATS the result set and never edits it: the value is read into a local and
+// truncated there. Editing in place would make a stored frame lose its original text on the
+// first render — a column widened afterwards could never show it again, since there is no
+// fresh frame to restore it — and, for views with DiffIntvl == [0,0], the values array is the
+// collector's own snapshot (calculateDelta returns curr unchanged), so the write would reach
+// back into data the collector still holds.
 func printDataCell(w io.Writer, s stat.Stat, config *config, rownum, i int) error {
+	value := s.Result.Values[rownum][i].String
+
 	// truncate values that are longer than column width
-	valuelen := len(s.Result.Values[rownum][i].String)
-	if valuelen > config.view.ColsWidth[i] {
+	if len(value) > config.view.ColsWidth[i] {
 		width := config.view.ColsWidth[i]
 		if width <= 0 {
 			return fmt.Errorf("zero or negative width, skip")
 		}
 
 		// truncate value up to column width and replace last character with '~' symbol
-		s.Result.Values[rownum][i].String = s.Result.Values[rownum][i].String[:width-1] + "~"
+		value = value[:width-1] + "~"
 	}
 
 	// print value
-	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, s.Result.Values[rownum][i].String)
+	_, err := fmt.Fprintf(w, "%-*s", config.view.ColsWidth[i]+2, value)
 	return err
 }
 
@@ -1225,23 +1345,45 @@ func readLogfileRecent(v *gocui.View, logfile stat.Logfile) (int64, []byte, erro
 	return info.Size(), buf, nil
 }
 
-// printLogtail prints 'logtail' - last lines of Postgres log.
+// printLogtail prints 'logtail' - last lines of Postgres log. It is the thin *gocui.View wrapper of
+// renderLogtail (the printSysstat -> renderSysstat precedent) and owns the one thing a writer cannot
+// express: whether the view is cleared at all.
+//
+// The Clear stays INSIDE the emptiness guard, exactly as before. That is what makes an empty buffer
+// a true no-op on both paths: on the live path a quiet log leaves the previous lines on screen, and
+// on the repaint path an empty store leaves the view as it is - blank after a UI rebuild ("nothing
+// to show"), intact after an overlay closed over it. Both are correct; moving the Clear out would
+// blank the panel on every quiet interval.
 func printLogtail(v *gocui.View, path string, buf []byte) error {
-	if len(string(buf)) > 0 {
-		// clear view's content and read the log
-		v.Clear()
-
-		_, err := fmt.Fprintf(v, "\033[30;47m%s:\033[0m\n", path)
-		if err != nil {
-			return err
-		}
-		_, err = fmt.Fprintf(v, "%s", string(buf))
-		if err != nil {
-			return err
-		}
+	if len(buf) == 0 {
+		return nil
 	}
 
-	return nil
+	// clear view's content and read the log
+	v.Clear()
+
+	return renderLogtail(v, path, buf)
+}
+
+// renderLogtail is the writer-based core of printLogtail: the highlighted path header followed by
+// the raw buffer, and nothing else.
+//
+// It is also the logtail source of the REPAINT path - renderFrame calls it through printLogtail with
+// the pair captured alongside the frozen frame, and performs no file access whatsoever while paused.
+// The io.Writer sink is what makes that reachable from a test with a *bytes.Buffer; the *gocui.View
+// is adapted at the wrapper boundary above.
+func renderLogtail(w io.Writer, path string, buf []byte) error {
+	if len(buf) == 0 {
+		return nil
+	}
+
+	_, err := fmt.Fprintf(w, "\033[30;47m%s:\033[0m\n", path)
+	if err != nil {
+		return err
+	}
+
+	_, err = fmt.Fprintf(w, "%s", string(buf))
+	return err
 }
 
 // isFilterRequired returns true if at least one filter regexp is specified.

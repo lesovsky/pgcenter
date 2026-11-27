@@ -1,0 +1,81 @@
+{
+  "status": "approved",
+  "summary": "Round 2: checked 61 claims in the rewritten sections, found 6 mirages (0 critical, 2 major, 4 minor). Every load-bearing number in the rewrite is true: wal 8/7/11 with {2,6}/{2,5}/{2,9}, bgwriter 14/13/12, databases_general 19/18, all with non-empty DiffIntvl and none marked NotRecordable; diff()'s interval is inclusive and its top prev index is DiffIntvl[1]; versionChanged compares only metadata.version (a PG version, the struct has no pgcenter field); record -a really appends without a shape check; statements_jit/PostgresV15 and progress_copy/PostgresV14 sit in cycles that take only `current string`; VersionOK has exactly two production call sites (record/record.go:214, internal/stat/stat.go:317); active support is PG 14-19 (overview.md:36); 28 views, 28 Msg values; SelectStatArchiverQuery(_ int) and SelectStatReplicationSlotsQuery(_ int) exist verbatim; record/recorder_test.go and the stale record/record.go:205-207 comment both exist. The two major findings are a row provenance that contradicts its own premise in Decision 1, and a Risks row left over from the pre-correction draft that asserts the opposite of Decision 8.",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 1: '`record -a` can append to an archive across a *pgcenter* upgrade, producing two samples of the **same** PostgreSQL version with different widths; ... the highest index it passes to `prev.Values[j]` is `DiffIntvl[1]` = 18, against a 19-column PG ≤ 18 row — the last valid index.'",
+      "reality": "The narrow row cannot be a PG ≤ 18 row. report/report.go:276 compares only the server version (report/report.go:95-99: metadata carries version/ticks/cpuCount, no pgcenter field), so the pair that reaches diff() must be two samples of the SAME server version. On PG ≤ 18 both the old and the new pgcenter return PgStatTablesDefault at 19 columns — the PG19 branch is gated at >= 190000 — so a pgcenter upgrade produces no width difference there and such a pair never forms. The only pair that reaches diff() is two PG **19** samples: the pre-feature pgcenter's 19-column row as prev against this feature's 20-column row as curr. The arithmetic is unaffected (prev is 19 columns either way, index 18 is its last valid one, verified at internal/stat/postgres.go:633-639 where the loop bound is curr.Ncols and `l > interval[1]` makes the interval inclusive), but the sentence contradicts its own premise one clause earlier.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Decision 1, paragraph 'This decision is load-bearing for memory safety'",
+      "fix": "Replace 'against a 19-column PG ≤ 18 row' with 'against the old pgcenter's 19-column PG 19 row' (and, for indexes, its 6-column PG 19 row). The zero-margin conclusion and the `DiffIntvl[1] < min(Ncols)` invariant stand unchanged."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Risks table, last row: 'Tech debt [020] becomes reachable on a diffed screen for the first time | Recorded, not fixed — see Decision 8. ... what widens is the malformed-archive class'.",
+      "reality": "Contradicts the corrected Solution and Decision 8 of the same document, and the code agrees with them, not with the risk row. internal/query/wal.go:38-48 (8/7/11 cols, DiffIntvl {2,6}/{2,5}/{2,9}), bgwriter.go:41-51 (14/13/12) and databases.go:45-52 (19/18) are all diffed with version-dependent widths and none is NotRecordable (the field is set nowhere in production — record/record.go:205-207 says so in code). docs/tech-debt.md:268-292 states [020] reaches 'any screen with a non-empty DiffIntvl' and was reproduced on two same-version samples of differing width. So neither 'for the first time' nor 'what widens' is true — nothing widens. The row's own mitigation text points at Decision 8, which says the opposite of the row's title.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Risks, final row",
+      "fix": "Rewrite the row to match Decision 8: the risk is that a same-server-version width mismatch (old pgcenter's PG 19 archive appended to by the new one) reaches diff() with exactly zero margin; the mitigation is the tail-append of Decision 1 plus the `DiffIntvl[1] < min(Ncols)` assertion. Or drop the row — the leftover claim is the one review already rejected twice."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 6 table: '`statements_jit`, `MinRequiredVersion: PostgresV15` (`view.go:240`)' and '`progress_copy`, `MinRequiredVersion: PostgresV14` (`view.go:314`)'.",
+      "reality": "Both citations are off by one. internal/view/view.go:239 is the map key `\"statements_jit\"`, :240 is `Name:`, and `MinRequiredVersion: query.PostgresV15` is :241. Same shape for progress_copy: :313 key, :314 `Name:`, `MinRequiredVersion: query.PostgresV14` at :315. The values themselves are correct, as are the cycle-function citations `config_view.go:313` (statementsNextView) and `config_view.go:338` (progressNextView), both of which take only `current string`.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Decision 6, precedent table",
+      "fix": "Cite view.go:241 and view.go:315, or drop the line numbers and cite the registry entries by key."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Testing Strategy, for_wraparound escape hatch: 'the test runs with `autovacuum` off at the cluster level (a SIGHUP-level GUC: `ALTER SYSTEM` + `pg_reload_conf()`), and restores it afterwards' — offered as the protection against autovacuum clearing the flag mid-assertion, right after rejecting `autovacuum_enabled = false` because 'wraparound-prevention vacuums ignore that reloption by design'.",
+      "reality": "The GUC-context half is right: `autovacuum` is PGC_SIGHUP, so ALTER SYSTEM + pg_reload_conf() takes effect. The protection half is stated more strongly than PostgreSQL guarantees: the documentation for `autovacuum` says that even when the parameter is disabled the system launches autovacuum processes if necessary to prevent transaction ID wraparound — the same class of vacuum the rejection sentence invokes against the reloption. It does not bite this fixture, but only for a reason the spec does not state: the emergency launch is armed from the cluster's oldest datfrozenxid against the **global** autovacuum_freeze_max_age (200M by default), while the fixture arms `for_wraparound` through a per-table `toast.autovacuum_freeze_max_age = 100000` and ~120k transactions — three orders of magnitude short of the global limit. Anyone who later raises the transaction count, or lowers the global GUC in the CI image, silently loses the protection this bullet promises.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Testing Strategy, Integration tests, second constraint of the for_wraparound bullet",
+      "fix": "Add the missing qualifier: cluster-level `autovacuum = off` holds the flag only while the cluster's datfrozenxid age stays below the global autovacuum_freeze_max_age; the fixture satisfies that by burning ~120k xids against a 200M default. Otherwise the same 'wraparound vacuums ignore it' argument used against the reloption applies to the GUC as well."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Data Models: '`ColsWidth` | `map[int]int{}` (non-nil — two writers mutate it in place; a nil map is a panic on the first column-width change, not a wrong number)'.",
+      "reality": "'Two writers mutate it in place' is now exact — top/config_view.go:100 (increaseWidth) and :124 (decreaseWidth) are the only in-place assignments; top/stat.go:788 and report/report.go:535 replace the map wholesale. The panic claim is narrower than stated: top/stat.go:782-789 (alignViewToResult) replaces ColsWidth on every render whose `len(ColsWidth) != r.Ncols`, so the registry's map is gone before the screen is ever drawn. A nil literal panics only in the window between the view switch and the next rendered frame, where a '>' keypress finds the freshly assigned registry map. The conclusion (set it non-nil) is right; the reachability is not 'the first column-width change'. `Filters` has a single in-place writer (top/config_view.go:166), not two, though the same non-nil rationale holds for it.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Data Models, view.View fields table",
+      "fix": "Soften to 'a nil map panics on a width keypress taken before the first render of the screen (alignViewToResult replaces it thereafter)'; keep the requirement."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Architecture / How it works: 'the version number reaching two places it did not reach before: `tablesNextView` (via `switchViewTo`, which already holds `app.postgresProps.VersionNum` for its `ExtPGSSSchema` guard)'.",
+      "reality": "Unchanged from round 1 and apparently not applied. top/config_view.go:232-238: switchViewTo's early guard reads `app.postgresProps.ExtPGSSSchema`; VersionNum is a sibling field on the same struct and is never read there. The conclusion (VersionNum is already in scope in switchViewTo) is true — it arrives via `app`, not via the guard.",
+      "source": "018-feat-tables-autovacuum-area-tech-spec.md, Architecture, How it works",
+      "fix": "'via `switchViewTo`, which already holds `app.postgresProps` for its `ExtPGSSSchema` guard, so `VersionNum` is in scope'."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 61,
+    "confirmed": 55,
+    "mirages_found": 6,
+    "verified_claims": [
+      "SelectStatWALQuery returns 8/{2,6}, 7/{2,5}, 11/{2,9} (internal/query/wal.go:38-48)",
+      "SelectStatBgwriterQuery returns 14/13/12 (internal/query/bgwriter.go:41-51)",
+      "SelectStatDatabaseGeneralQuery returns 19/18 (internal/query/databases.go:45-52)",
+      "no production view sets NotRecordable (grep --include=*.go, only field decl view.go:31 and the record.go guard)",
+      "diff() interval is inclusive: `l > interval[1]` at internal/stat/postgres.go:634, prev.Values[j][l] at :639",
+      "diff() loop bound is curr.Ncols (internal/stat/postgres.go:633), so prev is indexed by the current width",
+      "calculateDelta skips diff() entirely on DiffIntvl {0,0} (internal/stat/postgres.go:591)",
+      "report.go:276 versionChanged := prevStat.Valid && prevMeta.version != d.meta.version; continue at :319",
+      "metadata struct carries version/ticks/cpuCount only (report/report.go:95-99)",
+      "record -a append path: os.O_CREATE|os.O_RDWR without O_TRUNC, seek -1024 (record/recorder.go:64-99)",
+      "tables 19 cols / DiffIntvl {1,18}; indexes 6 / {1,5} (internal/view/view.go:85-106)",
+      "statements_jit MinRequiredVersion PostgresV15 (view.go:241); progress_copy PostgresV14 (view.go:315)",
+      "statementsNextView(current string) at top/config_view.go:313; progressNextView(current string) at :338",
+      "VersionOK production call sites: record/record.go:214, internal/stat/stat.go:317 — neither in a cycle",
+      "error text 'selected statistics is not supported by current version of Postgres' (stat.go:318) + 'ERROR: ' prefix (top/stat.go:869)",
+      "Active support PG 14-19 (.claude/skills/project-knowledge/overview.md:36)",
+      "28 registry entries, 28 Msg values (internal/view/view.go)",
+      "SelectStatArchiverQuery(_ int) (archiver.go:57) and SelectStatReplicationSlotsQuery(_ int) (replication_slots.go:39)",
+      "SelectStatStatementsJITQuery is the only 4-tuple selector, UniqueKey 13/11 moves with Ncols (statements.go:347)",
+      "record/recorder_test.go:39 hands an unfiltered view.New() to the recorder; record/record.go:205-207 carries the stale NotRecordable comment"
+    ]
+  }
+}

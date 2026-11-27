@@ -1,0 +1,47 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The -W bool -> string conversion is implemented exactly as Decision 7/17 prescribe: three surgical edits in cmd/report/report.go, the inner switch copied verbatim from the -J arm with no default, and selectReport remains the single producer of ReportType, gated by validate()'s r == \"\" check. The closed-whitelist property was verified empirically, not by reading: seven mutations (default: return \"wal\", unconditional outer return, swapped a->wal, strings.ToLower normalisation, widened case \"w\",\"W\", help-text char edit, arm moved above showActivity) were each applied to a scratch copy of the tree and each turned the suite red. Only two minor test-robustness nits remain; nothing blocks.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "cmd/report/report_test.go",
+      "line": 121,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Test_walFlagDefinition uses assert.NotNil(t, f) and then dereferences f on the next line. assert only records the failure and continues, so if Lookup(\"wal\") ever returns nil the test panics with a nil pointer dereference at f.Value.Type() instead of failing cleanly. Verified by renaming the flag to \"walx\" in a scratch copy: the run ends in 'panic: runtime error: invalid memory address or nil pointer dereference' and the panic takes down the whole test binary, so the other nine tests in the package never report. Use require.NotNil(t, f) (testify/require is already used in this repo, e.g. report/report_test.go:1249,1362) so the failure is a clean, localised FAIL.",
+      "benefit": "A renamed or dropped -W flag produces one readable failure naming the flag, instead of a package-wide binary crash whose stack trace hides which assertion tripped.",
+      "optional": true
+    },
+    {
+      "file": "cmd/report/report_test.go",
+      "line": 137,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The mirror FlagSet in Test_walFlagPflagFailureShapes re-types the -W definition as literals (\"wal\", \"W\", \"\", and the full usage string), and the comment says Test_walFlagDefinition is what keeps the mirror honest — which is true only indirectly, since both tests happen to hardcode the same literals. The mirror can be made structurally honest without parsing through CommandDefinition (the constraint the task rightly imposes): f := CommandDefinition.Flags().Lookup(\"wal\"); wal := fs.StringP(f.Name, f.Shorthand, f.DefValue, f.Usage). Lookup is read-only and does not touch the package-level opts var, so the order-independence property the comment protects is preserved.",
+      "benefit": "Removes a duplicated user-visible literal and makes the mirror track the real flag by construction rather than by two tests agreeing on the same copy-pasted string.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  },
+  "verifiedProperties": [
+    "Closed whitelist is genuinely enforced. selectReport (cmd/report/report.go:132-211) is the only producer of the r value passed to report.Config.ReportType, and validate() (:93-96) rejects r == \"\" before the struct at :117 is built. grep for 'report.Config{' outside the report package returns only cmd/report/report.go's three zero-value error returns plus that one populated literal, so no unmapped -W value can reach ReportType by any path.",
+    "Go semantics of the nested switch are correct: an unmatched inner switch has no implicit fallthrough and no default, so control leaves the outer switch entirely and reaches the final 'return \"\"' at :210. Confirmed by running every value in the whitelist table.",
+    "Mutation 1 (default: return \"wal\" inside the inner switch) -> Test_options_validate, Test_selectReport_WALWhitelistIsClosed and Test_walFlagPflagFailureShapes all FAIL. Mutation 1b (outer arm replaced by an unconditional return \"wal\") -> same three plus Test_selectReport FAIL.",
+    "Mutation 2 (case \"a\" returns \"wal\") -> Test_selectReport FAILs. Mutation 3 (one character changed in the help text: 'archiver' -> 'archivers') -> Test_walFlagDefinition FAILs.",
+    "Extra mutations beyond the acceptance criteria, all killed: switch strings.ToLower(opts.showWAL) -> WALWhitelistIsClosed FAILs on the 'W' row; case \"w\", \"W\" -> same; hoisting a 'case opts.showWAL == \"a\": return \"archiver\"' arm above showActivity -> Test_selectReport_WALPrecedence FAILs. The normalisation and precedence prohibitions in Decision 17 are therefore load-bearing tests, not decorative ones.",
+    "All eight whitelist rows required by the acceptance criteria are present and each carries a why-string explaining the danger, not just the invalidity: c, t, g, W, wal, archiver, x, -f (cmd/report/report_test.go:89-96).",
+    "Flag precedence unchanged: the showWAL arm sits between showFunctions (:149) and showBgwriter (:161), exactly where the boolean arm was.",
+    "Containment: grep -rn showWAL --include=*.go . hits only cmd/report/report.go (4) and cmd/report/report_test.go (7). No production file outside cmd/report mentions it; nothing else consumes options.",
+    "Style conformance: the arm is a byte-for-byte shape match with the showStatIO arm at :165-171 (guarded outer case, inner switch, no default), which is the precedent the task names. gofmt -l cmd/report is empty, go vet ./cmd/report/... is clean, go test ./cmd/report/... passes with all six -W-related test functions named in -v output.",
+    "Comment quality: the four-line comment at :152-154 explains why the default arm is absent (the zero-value view / silently empty report failure mode) rather than restating what the code does — this is the 'answer a linter with a comment, not a default' instruction from the task, honoured.",
+    "Behavioural side effect checked and found acceptable: because the outer case matches on showWAL != \"\", an invalid combination such as -W x -B now yields \"\" rather than falling through to \"bgwriter\". This is identical to the pre-existing behaviour of the -D, -J, -X and -P arms and is the fail-closed outcome Decision 17 wants; it is not a regression.",
+    "Out of scope per the task and deliberately not reported as defects: the archiver view (Task 5) and its describeReport entry (Task 7) do not exist yet, so -W a maps correctly but has nothing behind it inside the feature branch."
+  ]
+}

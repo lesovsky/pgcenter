@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "The store-level truth table for syncLogtail (drop/keep/commit-together/capture-only-for-logtail) is thoroughly and correctly tested — all four properties were independently confirmed to redden a real test under live mutation. Test_frameStore_publishOnlyOnLivePath is genuinely strengthened (offers a different logtail pair on the repaint call and pins that the store is untouched) and this was also confirmed by mutation. pause_test.go and stat_test.go were extended, not overwritten: the only deletions in pause_test.go are the four publishFrame call sites whose arity changed, and stat_test.go has zero deletions. top/extra.go is untouched. However, the flagship 'no file access on repaint' test (Test_repaintLogtail_noFileAccess) does not exercise the production repaint branch at all — it calls renderLogtail directly, a function whose signature never receives config.logtail, so the elaborate adversary file/descriptor/sentinel-size setup is dead weight: no implementation of renderLogtail could ever reach that file regardless of correctness. A live mutation that deletes the routing check in renderFrame's case stat.CollectLogtail (making the repaint always take the live file-read branch) was applied and the full targeted test suite still passed, proving this regression class is currently uncaught by any test. This is a real, confirmed gap in a task whose written acceptance criteria claim it is closed.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:1796 (Test_repaintLogtail_noFileAccess)",
+      "issue": "This test is described as 'the adversarial test' and is meant to fail if the repaint path ever reads config.logtail. It builds a real, opened, readable adversary file with a deliberately-undersized Size sentinel so neither the readLogfileRecent early-return nor the Reopen/rotation branch would mask a file-touching implementation. But the test never drives renderFrame (or repaintStoredFrame) at all — it calls `renderLogtail(&out, p.logPath, p.logBuf)` directly, and renderLogtail's signature is `(w io.Writer, path string, buf []byte)`. It has no parameter through which it could ever reach app.config.logtail or the adversary file, regardless of implementation. The self-reported weakness ('assertion 4 on config.logtail.Size is structural') understates the problem: assertions 1-3 do not discriminate either, because the function under test was never given the means to read the adversary in the first place — they are a near-duplicate of Test_renderLogtail_outputUnchanged with an unused fixture bolted on. The actual production risk this task exists to close — that renderFrame's `case stat.CollectLogtail: if !p.fromFile { printLogtail(...); break }` routing correctly skips readLogfileRecent/Reopen/os.Stat during a repaint — is exercised by no test in the suite (confirmed: no test in top/stat_test.go or top/pause_test.go calls renderFrame or repaintStoredFrame with ShowExtra == stat.CollectLogtail). I verified this by mutation: replacing `if !p.fromFile {` with `if false {` in top/stat.go (routing the repaint unconditionally into the live file-read branch, the exact regression class Decision 7 and this task's AC exist to prevent) and running `go test ./top/ -run 'Logtail|logtail|frameStore|publishFrame' -race` — the entire targeted suite still passed. The mutation was reverted; the tree is clean (git status confirms no diff). The acceptance criterion 'the no-file-access test uses a real, readable, opened file as the adversary, so it fails if the repaint reads the file — including when the read succeeds' is therefore not actually met: it would fail only if renderLogtail itself were rewritten to accept and read a path parameter from the filesystem, not if renderFrame's branch selection regresses.",
+      "recommendation": "Either (a) make the branch-selection logic itself unit-testable independent of gocui, e.g. extract it as `func logtailSource(p renderParams, read func() (string, []byte, error)) (string, []byte, error) { if !p.fromFile { return p.logPath, p.logBuf, nil }; return read() }`, call it from renderFrame's case, and write a test that passes a `read` closure which calls `t.Fatal(\"read invoked during repaint\")` — this would have caught the mutation above, or (b) if that refactor is out of scope for this task, be honest in the test's doc comment and in the task's acceptance criteria that the branch-selection guarantee is a review-by-inspection item (same treatment already given elsewhere in this task to the wrapper's no-Clear half — 'stays a review-by-inspection item. Do not fake it with a nil view'), and either delete the now-misleading adversary fixture from Test_repaintLogtail_noFileAccess or rename/rescope the test to state plainly that it only pins renderLogtail's pure output, not the repaint routing. Do not leave the current framing, which reads as if the property is enforced by a red test when it is not.",
+      "litmusTestFailed": true,
+      "tech_debt": true
+    },
+    {
+      "severity": "minor",
+      "category": "redundant_testing",
+      "location": "top/stat_test.go:1796 (Test_repaintLogtail_noFileAccess) vs top/stat_test.go:1758 (Test_renderLogtail_outputUnchanged)",
+      "issue": "Once the adversary fixture is discounted (see the major finding above), Test_repaintLogtail_noFileAccess's assertions 1-2 (byte-exact output, no adversary content) duplicate Test_renderLogtail_outputUnchanged's coverage of renderLogtail's byte-exact rendering with different input data. The only assertion in this test that is not already covered elsewhere is `assert.NotPanics`, which is a low-value addition given renderLogtail has no branch that could plausibly panic on this input.",
+      "recommendation": "Fold this into the recommendation above: once the test is rescoped to what it actually verifies (renderLogtail called via storedRender's field passthrough), either merge it into Test_renderLogtail_outputUnchanged as a table case, or keep it separate only if it is repurposed to actually drive the branch-selection seam recommended above.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 8,
+      "passed": 7,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 8,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

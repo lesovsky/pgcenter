@@ -1,0 +1,394 @@
+{
+  "reviewer": "dev-techspec-reviewer",
+  "mode": "decomposition",
+  "status": "changes_required",
+  "summary": "The six-task product DAG is acyclic, same-wave production file ownership is disjoint, model tiers are risk-based, and all US/AC requirements have implementation owners. Decisions 9, 10, and 11 and the full SC-10 replay matrix survive decomposition. Approval is blocked because the five scripted acceptance scenarios have no concrete harness implementation owner, SC-1 has no scheduled executing task, the mandatory Decision 10 supervisor verification is not reproducible as written, and Decision 12 is incomplete for manual evidence.",
+  "coverage_summary": {
+    "user_stories": {
+      "total": 5,
+      "covered": 5,
+      "partial": 0,
+      "missing": 0
+    },
+    "acceptance_criteria": {
+      "total": 41,
+      "covered": 40,
+      "partial": 1,
+      "missing": 0
+    },
+    "scenarios": {
+      "total": 10,
+      "covered": 5,
+      "partial": 5,
+      "missing": 0
+    },
+    "mandatory_decisions_9_to_12": {
+      "total": 4,
+      "covered": 3,
+      "partial": 1,
+      "missing": 0
+    },
+    "dag": {
+      "valid": true,
+      "acyclic": true,
+      "same_wave_worktree_independence": true,
+      "notes": "Tasks 01/02 and Tasks 04/05 have disjoint stated production/test ownership. The remaining scheduling defect concerns acceptance execution, not a cycle or shared same-wave product file."
+    }
+  },
+  "coverage": [
+    {
+      "requirement": "US-1",
+      "status": "covered",
+      "designOrTasks": ["Task 01 score/verdict query contract", "Task 03 view registration", "Task 05 navigation and SC-5"]
+    },
+    {
+      "requirement": "US-2",
+      "status": "covered",
+      "designOrTasks": ["Task 01 unrounded score ordering and dead_total outer join", "Task 03 score-descending registry defaults", "Task 05 SC-5"]
+    },
+    {
+      "requirement": "US-3",
+      "status": "covered",
+      "designOrTasks": ["Task 02 PG 19 stats_age selectors", "Task 03 Configure wiring", "Task 04 replay and descriptions", "Task 05 SC-8"]
+    },
+    {
+      "requirement": "US-4",
+      "status": "covered",
+      "designOrTasks": ["Task 01 system-schema wraparound fixture and predicate", "Task 03 registration", "Task 05 existing system toggle and SC-6"]
+    },
+    {
+      "requirement": "US-5",
+      "status": "covered",
+      "designOrTasks": ["Task 03 PG 19 availability gate", "Task 05 version-aware cycle, marked disabled menu item, refusal notice, and SC-7"]
+    },
+    {
+      "requirement": "AC-1",
+      "status": "covered",
+      "designOrTasks": ["Task 01 locked eleven-column query", "Task 03 Ncols=11 registration"]
+    },
+    {
+      "requirement": "AC-2",
+      "status": "covered",
+      "designOrTasks": ["Task 01 exact public column order", "Task 05 SC-5 visual check"]
+    },
+    {
+      "requirement": "AC-3",
+      "status": "covered",
+      "designOrTasks": ["Task 01 SQL rounding for all six scores and mutation-checked structural tests"]
+    },
+    {
+      "requirement": "AC-4",
+      "status": "covered",
+      "designOrTasks": ["Task 01 boolean ::text rendering and structural tests"]
+    },
+    {
+      "requirement": "AC-5",
+      "status": "covered",
+      "designOrTasks": ["Task 01 outer schemaname.relname relation expression"]
+    },
+    {
+      "requirement": "AC-6",
+      "status": "covered",
+      "designOrTasks": ["Task 01 ORDER BY s.score DESC", "Task 03 OrderKey=1 and OrderDesc=true"]
+    },
+    {
+      "requirement": "AC-7",
+      "status": "covered",
+      "designOrTasks": ["Task 01 qualified unrounded ordering and rounded-tie live fixture with named red mutation"]
+    },
+    {
+      "requirement": "AC-8",
+      "status": "covered",
+      "designOrTasks": ["Task 01 LEFT JOIN pg_stat_all_tables on relid and absolute n_dead_tup"]
+    },
+    {
+      "requirement": "AC-9",
+      "status": "covered",
+      "designOrTasks": ["Task 01 outer s.schemaname predicate and joined-side-schema mutation"]
+    },
+    {
+      "requirement": "AC-10",
+      "status": "covered",
+      "designOrTasks": ["Task 01 ViewType predicate", "Task 05 toggleSysTables wiring and SC-6"]
+    },
+    {
+      "requirement": "AC-11",
+      "status": "covered",
+      "designOrTasks": ["Task 01 pg_toast for_wraparound exception with discriminating mutation", "Task 05 toggle connection and SC-6"]
+    },
+    {
+      "requirement": "AC-12",
+      "status": "covered",
+      "designOrTasks": ["Task 03 DiffIntvl {0,0}, empty-cell pass-through proof, and non-zero-interval red mutation"]
+    },
+    {
+      "requirement": "AC-13",
+      "status": "covered",
+      "designOrTasks": ["Task 05 tablesNextView and SC-5"]
+    },
+    {
+      "requirement": "AC-14",
+      "status": "covered",
+      "designOrTasks": ["Task 05 reverse cycle and SC-5"]
+    },
+    {
+      "requirement": "AC-15",
+      "status": "covered",
+      "designOrTasks": ["Task 05 default cycle target and PG 18/master SC-7 comparison"]
+    },
+    {
+      "requirement": "AC-16",
+      "status": "covered",
+      "designOrTasks": ["Task 05 two-item menu, enabled selections, and stable cursor mapping"]
+    },
+    {
+      "requirement": "AC-17",
+      "status": "covered",
+      "designOrTasks": ["Task 05 Decision 7 branch-local writes plus mandatory manual SC-5/SC-7 observation"]
+    },
+    {
+      "requirement": "AC-18",
+      "status": "covered",
+      "designOrTasks": ["Task 05 below-PG19 cycle tests and SC-7"]
+    },
+    {
+      "requirement": "AC-19",
+      "status": "covered",
+      "designOrTasks": ["Task 05 exact requires-PostgreSQL-19 suffix and menu construction tests"]
+    },
+    {
+      "requirement": "AC-20",
+      "status": "covered",
+      "designOrTasks": ["Task 05 no-view-change refusal, menu reset, one NOTICE, and SC-7"]
+    },
+    {
+      "requirement": "AC-21",
+      "status": "covered",
+      "designOrTasks": ["Task 02 trailing tables stats_age", "Task 03 Configure", "Task 04 replay preservation", "SC-1/SC-8"]
+    },
+    {
+      "requirement": "AC-22",
+      "status": "covered",
+      "designOrTasks": ["Task 02 trailing indexes stats_age", "Task 03 Configure", "Task 04 replay preservation", "SC-1/SC-8"]
+    },
+    {
+      "requirement": "AC-23",
+      "status": "covered",
+      "designOrTasks": ["Task 02 legacy selector layouts", "Task 03 static legacy registry and Ncols assertions", "SC-4"]
+    },
+    {
+      "requirement": "AC-24",
+      "status": "covered",
+      "designOrTasks": ["Task 02 unchanged DiffIntvl and bounds invariant", "Task 03 no-diff/blank-cell proof", "Task 04 replay checks"]
+    },
+    {
+      "requirement": "AC-25",
+      "status": "covered",
+      "designOrTasks": ["Task 02 pg_stat_* source and named pg_statio_* source mutation"]
+    },
+    {
+      "requirement": "AC-26",
+      "status": "covered",
+      "designOrTasks": ["Task 02 nullable stats_reset rendering", "SC-1/SC-8 untouched and never-reset observations"]
+    },
+    {
+      "requirement": "AC-27",
+      "status": "covered",
+      "designOrTasks": ["Task 02 enables DB-time evidence", "SC-1 active-row bounds and SC-8 growth checks"]
+    },
+    {
+      "requirement": "AC-28",
+      "status": "covered",
+      "designOrTasks": ["Task 02 prohibits shared-fixture reset", "SC-1/SC-8 untouched-row checks"]
+    },
+    {
+      "requirement": "AC-29",
+      "status": "covered",
+      "designOrTasks": ["Task 03 negative functions assertions and source-diff check", "SC-4 byte-identical functions report"]
+    },
+    {
+      "requirement": "AC-30",
+      "status": "covered",
+      "designOrTasks": ["Task 03 negative sizes assertions and source-diff check", "SC-4 byte-identical sizes report"]
+    },
+    {
+      "requirement": "AC-31",
+      "status": "covered",
+      "designOrTasks": ["Task 03 NotRecordable filtering and deterministic named live-TUI-only INFO", "SC-1 tar/stdout observation"]
+    },
+    {
+      "requirement": "AC-32",
+      "status": "partial",
+      "designOrTasks": ["Task 01 targeted wraparound PASS requirement", "Task 03 filtered PG 17 recorder fixture", "Decomposition full make test/e2e/build/lint/vuln gate"],
+      "note": "The gate is named, but Task 01 does not provide a concrete supervisor path/invocation and the final full gate has no task-level execution owner."
+    },
+    {
+      "requirement": "AC-33",
+      "status": "covered",
+      "designOrTasks": ["Task 04 two-tick PG18/PG19 tables and indexes replay with layout state reset"]
+    },
+    {
+      "requirement": "AC-34",
+      "status": "covered",
+      "designOrTasks": ["Task 01 locked SQL names and live PG 19 FieldDescriptions assertion"]
+    },
+    {
+      "requirement": "AC-35",
+      "status": "covered",
+      "designOrTasks": ["Task 05 T/t help edits, marker/adjacency tests, and SC-5"]
+    },
+    {
+      "requirement": "AC-36",
+      "status": "covered",
+      "designOrTasks": ["Task 04 trailing PG19+ describe rows and order tests", "SC-3 production CLI observation"]
+    },
+    {
+      "requirement": "AC-37",
+      "status": "covered",
+      "designOrTasks": ["Task 06 docs/features-catalog.md and SC-9"]
+    },
+    {
+      "requirement": "AC-38",
+      "status": "covered",
+      "designOrTasks": ["Task 06 Project Knowledge project.md and architecture.md updates"]
+    },
+    {
+      "requirement": "AC-39",
+      "status": "covered",
+      "designOrTasks": ["Task 06 doc/release-notes/v0.12.0.md and SC-9"]
+    },
+    {
+      "requirement": "AC-40",
+      "status": "covered",
+      "designOrTasks": ["Task 06 debts [035]/[029], unchanged [020], and no shared renderer/sanitizer claims"]
+    },
+    {
+      "requirement": "AC-41",
+      "status": "covered",
+      "designOrTasks": ["Task 04 Decision 9 implementation and complete same-PG19 bidirectional blank/populated replay matrix"]
+    },
+    {
+      "requirement": "SC-1",
+      "status": "partial",
+      "designOrTasks": ["Acceptance Execution Map: Tasks 01/02/03, wave 3", "Task 02 fixture enablement", "Task 03 recording INFO"],
+      "note": "No task creates or runs the frozen SC-1 production CLI scenario."
+    },
+    {
+      "requirement": "SC-2",
+      "status": "partial",
+      "designOrTasks": ["Task 04 replay implementation and frozen-run requirement", "Acceptance Execution Map wave 4"],
+      "note": "The scenario producer, concrete runner command, and harness files are unassigned."
+    },
+    {
+      "requirement": "SC-3",
+      "status": "partial",
+      "designOrTasks": ["Task 04 describe implementation and frozen-run requirement", "Acceptance Execution Map wave 4"],
+      "note": "The production CLI assertion is specified but its acceptance scenario implementation is unassigned."
+    },
+    {
+      "requirement": "SC-4",
+      "status": "partial",
+      "designOrTasks": ["Base and continuous regression in Acceptance Execution Map", "Task 04 A/B requirement"],
+      "note": "No task owns the base/feature binary harness, scenario file, or manifest entry."
+    },
+    {
+      "requirement": "SC-5",
+      "status": "covered",
+      "designOrTasks": ["Tasks 01/03/05", "Manual Acceptance Map PG19 stand and Task 05 final stand QA"]
+    },
+    {
+      "requirement": "SC-6",
+      "status": "covered",
+      "designOrTasks": ["Tasks 01/03/05", "Manual Acceptance Map stable system-schema wraparound observation"]
+    },
+    {
+      "requirement": "SC-7",
+      "status": "covered",
+      "designOrTasks": ["Tasks 03/05", "Manual Acceptance Map PG18 and master A/B"]
+    },
+    {
+      "requirement": "SC-8",
+      "status": "covered",
+      "designOrTasks": ["Tasks 02/03/05", "Manual Acceptance Map active/untouched relations, DB-time evidence, and growth"]
+    },
+    {
+      "requirement": "SC-9",
+      "status": "covered",
+      "designOrTasks": ["Task 06 documentation outcome and explicit manual verdict"]
+    },
+    {
+      "requirement": "SC-10",
+      "status": "partial",
+      "designOrTasks": ["Task 04 complete Decision 9 matrix and frozen-run requirement", "Acceptance Execution Map wave 4"],
+      "note": "Mandatory SC-10 technical coverage is present, but its scripted acceptance harness has no producer or concrete invocation."
+    },
+    {
+      "requirement": "Decision 9",
+      "status": "covered",
+      "designOrTasks": ["Task 04 layout boundary, previous sample/metadata/timestamp replacement, Configure, renderer/header reset, and sort restoration"]
+    },
+    {
+      "requirement": "Decision 10",
+      "status": "covered",
+      "designOrTasks": ["Task 01 dedicated network namespace, fail-closed system_identifier, fixed endpoint, external destruction, targeted PASS, and named mutation"],
+      "note": "Contract coverage is complete; Finding 2 concerns reproducible execution."
+    },
+    {
+      "requirement": "Decision 11",
+      "status": "covered",
+      "designOrTasks": ["Task 03 sorted deterministic per-view INFO with not recordable/live TUI only and no false version reason"]
+    },
+    {
+      "requirement": "Decision 12",
+      "status": "partial",
+      "designOrTasks": ["Decomposition SC-1 temporary archive handling and SC-2/SC-10 synthetic fixtures", "Task 04 sanitized evidence"],
+      "note": "Manual SC-5–SC-8 evidence lacks the mandatory raw-transcript deletion, redaction/secret-scan, restrictive-permission, and no-credential contract."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "critical",
+      "scope": "in_scope",
+      "lens": "acceptance-design",
+      "task": "Tasks 01-04 / final acceptance scheduling",
+      "path": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md; docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-task-04.md",
+      "location": "decomposition.md:37-49,81-89; task-04.md:42,63-67",
+      "issue": "The Acceptance Execution Map is not executable end to end. At the reviewed revision the repository has no acceptance/ tree or installed feature runner, and none of Tasks 01-06 owns creating SC-1-SC-4/SC-10, their fixtures/libraries, result markers, or acceptance/scenario-manifest.sha256. Task 04 instead says to run an unspecified 'frozen runner with the next feature label'. SC-1 is eligible in wave 3 but appears in no task's Verification Steps; Task 04 runs only SC-2/SC-3/SC-4/SC-10. Thus all five scripted scenarios, including mandatory SC-10, have consumers but no producer, and SC-1 has no execution owner at all.",
+      "fix": "Assign explicit harness ownership and scheduling before approval.",
+      "required_fix": "Add a dedicated acceptance-harness task or expand an appropriately dependent existing task to create the real runner/scenario paths for SC-1-SC-4 and SC-10, all shared libraries/fixtures, sanitized result.json/log contracts, base/freeze/final markers, positive controls, and scenario-manifest.sha256. Give exact commands and feature label. Put SC-1 in an executing task/final gate, schedule the other scenarios only after their product dependencies, and assign the required independent dev-acceptance-reviewer freeze gate. Do not mark Task 04 complete merely by referring to a nonexistent or future frozen runner."
+    },
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "lens": "decomposition",
+      "task": "Task 01",
+      "path": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-task-01.md",
+      "location": "task-01.md:9,25-27,42-43,65-70",
+      "issue": "Decision 10 is described thoroughly, but its mandatory verification is not concretely reproducible: 'Run the new external supervisor' names no script/path, command, marker variable, expected-system_identifier input, exact targeted test expression, or supervisor timeout/SIGKILL cleanup check. The separate PASS and named red mutation evidence required by AC-32 therefore depend on unspecified executor invention rather than a reviewable verification plan.",
+      "fix": "Name the supervisor artifact and exact safe invocations.",
+      "required_fix": "Specify the supervisor file to add and an exact invocation that creates a fresh single-use lesovsky/pgcenter-testing:0.0.11 network namespace, supplies the marker and expected identity, runs the exact AutovacuumScores wraparound test, and proves destruction on success, timeout, and SIGKILL. Name the expected PASS and the two separate temporary-mutation commands/assertions. Retain fixed 127.0.0.1:21919, fail-closed identity checking, no shared-cluster fallback, and no endpoint override."
+    },
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "lens": "acceptance-design",
+      "task": "Tasks 04-05 / Acceptance Execution Map",
+      "path": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md; docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-task-05.md",
+      "location": "decomposition.md:51-61,81-89; task-05.md:63-71",
+      "issue": "Decision 12 survives only partially. The scripted plan mentions synthetic fixtures and some sanitized output, but the manual map and Task 05 merely say to record SC-5-SC-8 evidence. They do not prohibit credentials or raw tmux/session transcripts in evidence, require restrictive temporary permissions and trap-based deletion, or require redaction and secret-scanning of terminal output, commands, environment, SQL text, and hostnames. Task 04's 'sanitized evidence' also has no concrete scan/check step.",
+      "fix": "Apply the complete evidence-handling contract to scripted and manual scenarios.",
+      "required_fix": "Add Decision 12 as an explicit acceptance/freeze gate and reference it from Tasks 04 and 05: newly created no-secret synthetic workloads; no credential values; raw archives/transcripts kept outside Git with restrictive permissions and trap-based deletion; only minimized sanitized outputs/member listings/hashes retained; and named redaction plus secret-scan verification for every published scripted or manual artifact, including SC-5-SC-8. State who records the gate verdict."
+    },
+    {
+      "severity": "minor",
+      "scope": "in_scope",
+      "lens": "waves",
+      "task": "Task 04 / Acceptance Execution Map",
+      "path": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-task-04.md; docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md",
+      "location": "task-04.md:42,65-67; decomposition.md:39-47",
+      "issue": "Acceptance timing is internally inconsistent. Task 04 is in wave 3 and makes frozen SC-2/SC-3/SC-4/SC-10 passes part of its own acceptance, while the map defines eligibility as a wave after all required tasks have finished and places those scenarios in wave 4 because Task 04 is required. This can force a task to depend on final evidence that the schedule says cannot exist until after that task completes.",
+      "fix": "Separate product completion from the later acceptance run.",
+      "required_fix": "Keep Task 04's unit/integration replay verification in wave 3 and move frozen SC-2/SC-3/SC-4/SC-10 execution to an explicit wave-4/final acceptance owner, or redefine eligibility consistently and assign an in-task harness without circular completion criteria. Preserve SC-4's base and continuous regression runs."
+    }
+  ]
+}

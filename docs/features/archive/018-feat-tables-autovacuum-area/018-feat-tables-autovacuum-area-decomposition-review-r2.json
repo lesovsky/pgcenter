@@ -1,0 +1,372 @@
+{
+  "reviewer": "dev-techspec-reviewer",
+  "mode": "decomposition",
+  "status": "approved",
+  "summary": "Round 2 approves the corrected decomposition. The decompose-tech-spec phase unambiguously produces, base-proves, independently reviews, commits, and freezes the complete harness before Task 01; freeze-qa owns the exact feature-r1 acceptance run after wave 4, including SC-1 and the continuous SC-4 regression. Task 04 now closes on its own tests without a circular future-acceptance prerequisite. Task 01 specifies the exact wraparound supervisor, targeted test, identity inputs, and timeout/SIGKILL self-tests. Decision 12 is an explicit scripted/manual evidence gate. The DAG remains acyclic, same-wave task ownership is disjoint, all US/AC/SC contracts and Decisions 9-12 remain covered, and no findings remain.",
+  "round": 2,
+  "round_1_preserved": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition-review.json",
+  "round_1_resolution": [
+    {
+      "finding": "Harness producer and acceptance execution ownership",
+      "status": "resolved",
+      "evidence": "decomposition.md:49-54 assigns harness production and independent freeze approval to decompose-tech-spec before implementation, and all feature-r1 execution after wave 4 to freeze-qa with an exact installed-runner invocation."
+    },
+    {
+      "finding": "Concrete Decision 10 supervisor verification",
+      "status": "resolved",
+      "evidence": "task-01.md:26,65-71 names testing/run-autovacuum-wraparound-test.sh, the exact anchored go test expression and identity/marker variables, normal PASS/destruction verification, timeout and SIGKILL self-tests, and separate named mutation runs."
+    },
+    {
+      "finding": "Decision 12 scripted/manual evidence handling",
+      "status": "resolved",
+      "evidence": "decomposition.md:54,90-96 and task-04.md:68/task-05.md:68 require assert_sanitized plus secret-scan controls, no credentials, minimized redacted evidence, mode-0700 raw storage outside Git, trap deletion, and a freeze-qa-verified verdict for scripted and manual scenarios."
+    },
+    {
+      "finding": "Circular Task 04 acceptance criterion and wave timing",
+      "status": "resolved",
+      "evidence": "task-04.md:9,42,63-68 limits Task 04 completion to its replay/description tests and explicitly leaves SC-2/SC-3/SC-4/SC-10 to freeze-qa; decomposition.md:39,52-53 states the same scheduling rule."
+    }
+  ],
+  "coverage_summary": {
+    "user_stories": {
+      "total": 5,
+      "covered": 5,
+      "partial": 0,
+      "missing": 0
+    },
+    "acceptance_criteria": {
+      "total": 41,
+      "covered": 41,
+      "partial": 0,
+      "missing": 0
+    },
+    "scenarios": {
+      "total": 10,
+      "covered": 10,
+      "partial": 0,
+      "missing": 0
+    },
+    "mandatory_decisions_9_to_12": {
+      "total": 4,
+      "covered": 4,
+      "partial": 0,
+      "missing": 0
+    },
+    "dag": {
+      "valid": true,
+      "acyclic": true,
+      "same_wave_worktree_independence": true,
+      "acceptance_scheduling_coherent": true,
+      "notes": "Tasks 01/02 and Tasks 04/05 retain disjoint product/test ownership. Harness files are frozen before Task 01 and are not edited by product tasks. Feature acceptance is executed only after wave 4 by freeze-qa."
+    },
+    "verification": {
+      "acceptance_runner_checked": "/home/lesovsky/.kimi-code/skills/freeze-qa/scripts/run-acceptance.sh",
+      "acceptance_runner_contract": "The installed runner accepts acceptance_dir, run_label, and timeout; consumes scenarios/SC-*.sh and scenario-manifest.sha256; validates ACC_RESULT markers; and writes per-scenario logs plus result.json.",
+      "wraparound_supervisor_contract": "Task 01 owns adding testing/run-autovacuum-wraparound-test.sh before its verification; its current absence is expected because implementation has not started.",
+      "findings_remaining": 0
+    }
+  },
+  "coverage": [
+    {
+      "requirement": "US-1",
+      "status": "covered",
+      "designOrTasks": ["Task 01 score/verdict query", "Task 03 registration", "Task 05 navigation and SC-5"]
+    },
+    {
+      "requirement": "US-2",
+      "status": "covered",
+      "designOrTasks": ["Task 01 true-score ordering and dead_total", "Task 03 descending score defaults", "Task 05 SC-5"]
+    },
+    {
+      "requirement": "US-3",
+      "status": "covered",
+      "designOrTasks": ["Task 02 stats_age selectors", "Task 03 Configure", "Task 04 replay/descriptions", "Task 05 SC-8"]
+    },
+    {
+      "requirement": "US-4",
+      "status": "covered",
+      "designOrTasks": ["Task 01 wraparound exception and isolated proof", "Task 03 registration", "Task 05 toggle and SC-6"]
+    },
+    {
+      "requirement": "US-5",
+      "status": "covered",
+      "designOrTasks": ["Task 03 PG19 gate", "Task 05 version-aware cycle/menu/refusal and SC-7"]
+    },
+    {
+      "requirement": "AC-1",
+      "status": "covered",
+      "designOrTasks": ["Task 01 eleven locked columns", "Task 03 Ncols=11"]
+    },
+    {
+      "requirement": "AC-2",
+      "status": "covered",
+      "designOrTasks": ["Task 01 exact column order", "SC-5"]
+    },
+    {
+      "requirement": "AC-3",
+      "status": "covered",
+      "designOrTasks": ["Task 01 six SQL-rounded scores and structural mutations"]
+    },
+    {
+      "requirement": "AC-4",
+      "status": "covered",
+      "designOrTasks": ["Task 01 boolean text casts and tests"]
+    },
+    {
+      "requirement": "AC-5",
+      "status": "covered",
+      "designOrTasks": ["Task 01 outer schemaname.relname"]
+    },
+    {
+      "requirement": "AC-6",
+      "status": "covered",
+      "designOrTasks": ["Task 01 SQL ordering", "Task 03 OrderKey=1 descending"]
+    },
+    {
+      "requirement": "AC-7",
+      "status": "covered",
+      "designOrTasks": ["Task 01 qualified unrounded score and named rounded-alias mutation"]
+    },
+    {
+      "requirement": "AC-8",
+      "status": "covered",
+      "designOrTasks": ["Task 01 LEFT JOIN on relid and absolute n_dead_tup"]
+    },
+    {
+      "requirement": "AC-9",
+      "status": "covered",
+      "designOrTasks": ["Task 01 outer schema predicate and joined-side mutation"]
+    },
+    {
+      "requirement": "AC-10",
+      "status": "covered",
+      "designOrTasks": ["Task 01 ViewType filter", "Task 05 toggle and SC-6"]
+    },
+    {
+      "requirement": "AC-11",
+      "status": "covered",
+      "designOrTasks": ["Task 01 system-schema exception and discriminating mutation", "Task 05 SC-6"]
+    },
+    {
+      "requirement": "AC-12",
+      "status": "covered",
+      "designOrTasks": ["Task 03 no-diff empty-cell test and non-zero-interval mutation"]
+    },
+    {
+      "requirement": "AC-13",
+      "status": "covered",
+      "designOrTasks": ["Task 05 forward cycle and SC-5"]
+    },
+    {
+      "requirement": "AC-14",
+      "status": "covered",
+      "designOrTasks": ["Task 05 reverse cycle and SC-5"]
+    },
+    {
+      "requirement": "AC-15",
+      "status": "covered",
+      "designOrTasks": ["Task 05 default target and SC-7 A/B"]
+    },
+    {
+      "requirement": "AC-16",
+      "status": "covered",
+      "designOrTasks": ["Task 05 two-item enabled menu and selection tests"]
+    },
+    {
+      "requirement": "AC-17",
+      "status": "covered",
+      "designOrTasks": ["Task 05 branch-local writes and manual SC-5/SC-7"]
+    },
+    {
+      "requirement": "AC-18",
+      "status": "covered",
+      "designOrTasks": ["Task 05 below-PG19 cycle tests and SC-7"]
+    },
+    {
+      "requirement": "AC-19",
+      "status": "covered",
+      "designOrTasks": ["Task 05 exact unavailable suffix"]
+    },
+    {
+      "requirement": "AC-20",
+      "status": "covered",
+      "designOrTasks": ["Task 05 refusal without view change, one NOTICE, and menu reset"]
+    },
+    {
+      "requirement": "AC-21",
+      "status": "covered",
+      "designOrTasks": ["Tasks 02/03/04", "SC-1/SC-8"]
+    },
+    {
+      "requirement": "AC-22",
+      "status": "covered",
+      "designOrTasks": ["Tasks 02/03/04", "SC-1/SC-8"]
+    },
+    {
+      "requirement": "AC-23",
+      "status": "covered",
+      "designOrTasks": ["Tasks 02/03 legacy layouts", "SC-4"]
+    },
+    {
+      "requirement": "AC-24",
+      "status": "covered",
+      "designOrTasks": ["Task 02 unchanged diff intervals and bounds", "Tasks 03/04 replay/blank-cell checks"]
+    },
+    {
+      "requirement": "AC-25",
+      "status": "covered",
+      "designOrTasks": ["Task 02 pg_stat_* source and source mutation"]
+    },
+    {
+      "requirement": "AC-26",
+      "status": "covered",
+      "designOrTasks": ["Task 02 nullable rendering", "SC-1/SC-8"]
+    },
+    {
+      "requirement": "AC-27",
+      "status": "covered",
+      "designOrTasks": ["Task 02 enablement", "SC-1 DB-derived bounds and SC-8 growth"]
+    },
+    {
+      "requirement": "AC-28",
+      "status": "covered",
+      "designOrTasks": ["Task 02 no shared reset", "SC-1/SC-8 untouched rows"]
+    },
+    {
+      "requirement": "AC-29",
+      "status": "covered",
+      "designOrTasks": ["Task 03 functions negative assertions", "SC-4"]
+    },
+    {
+      "requirement": "AC-30",
+      "status": "covered",
+      "designOrTasks": ["Task 03 sizes negative assertions", "SC-4"]
+    },
+    {
+      "requirement": "AC-31",
+      "status": "covered",
+      "designOrTasks": ["Task 03 NotRecordable and Decision 11 INFO", "SC-1"]
+    },
+    {
+      "requirement": "AC-32",
+      "status": "covered",
+      "designOrTasks": ["Task 01 exact targeted PASS/self-tests", "Task 03 filtered PG17 recorder fixture", "freeze-qa full quality gate"]
+    },
+    {
+      "requirement": "AC-33",
+      "status": "covered",
+      "designOrTasks": ["Task 04 mixed-version replay", "SC-2 in freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "AC-34",
+      "status": "covered",
+      "designOrTasks": ["Task 01 locked SQL and live field descriptions"]
+    },
+    {
+      "requirement": "AC-35",
+      "status": "covered",
+      "designOrTasks": ["Task 05 help and SC-5"]
+    },
+    {
+      "requirement": "AC-36",
+      "status": "covered",
+      "designOrTasks": ["Task 04 descriptions", "SC-3 in freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "AC-37",
+      "status": "covered",
+      "designOrTasks": ["Task 06 feature catalog and SC-9"]
+    },
+    {
+      "requirement": "AC-38",
+      "status": "covered",
+      "designOrTasks": ["Task 06 Project Knowledge updates"]
+    },
+    {
+      "requirement": "AC-39",
+      "status": "covered",
+      "designOrTasks": ["Task 06 release notes and SC-9"]
+    },
+    {
+      "requirement": "AC-40",
+      "status": "covered",
+      "designOrTasks": ["Task 06 debts [035]/[029], unchanged [020], and scoped shared-code exclusions"]
+    },
+    {
+      "requirement": "AC-41",
+      "status": "covered",
+      "designOrTasks": ["Task 04 Decision 9 implementation and full replay matrix", "SC-10 in freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "SC-1",
+      "status": "covered",
+      "designOrTasks": ["Frozen by decompose-tech-spec before implementation", "Product eligibility after Tasks 01/02/03", "Executed by freeze-qa feature-r1 after wave 4"]
+    },
+    {
+      "requirement": "SC-2",
+      "status": "covered",
+      "designOrTasks": ["Frozen by decompose-tech-spec", "Enabled by Tasks 02/03/04", "Executed by freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "SC-3",
+      "status": "covered",
+      "designOrTasks": ["Frozen by decompose-tech-spec", "Enabled by Tasks 02/03/04", "Executed by freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "SC-4",
+      "status": "covered",
+      "designOrTasks": ["Frozen base/continuous regression", "Independent master/feature binaries and byte comparison", "Repeated by freeze-qa feature-r1"]
+    },
+    {
+      "requirement": "SC-5",
+      "status": "covered",
+      "designOrTasks": ["Tasks 01/03/05", "Manual stand map", "Decision 12 stand-runner gate"]
+    },
+    {
+      "requirement": "SC-6",
+      "status": "covered",
+      "designOrTasks": ["Tasks 01/03/05", "Stable system-schema manual fixture", "Decision 12 stand-runner gate"]
+    },
+    {
+      "requirement": "SC-7",
+      "status": "covered",
+      "designOrTasks": ["Tasks 03/05", "PG18 master A/B", "Decision 12 stand-runner gate"]
+    },
+    {
+      "requirement": "SC-8",
+      "status": "covered",
+      "designOrTasks": ["Tasks 02/03/05", "DB-time/growth manual evidence", "Decision 12 stand-runner gate"]
+    },
+    {
+      "requirement": "SC-9",
+      "status": "covered",
+      "designOrTasks": ["Task 06 explicit documentation review verdict"]
+    },
+    {
+      "requirement": "SC-10",
+      "status": "covered",
+      "designOrTasks": ["Frozen by decompose-tech-spec with same_pg19_layout_change_unsupported base checkpoint", "Task 04 complete matrix", "freeze-qa feature-r1 execution"]
+    },
+    {
+      "requirement": "Decision 9",
+      "status": "covered",
+      "designOrTasks": ["Task 04 layout boundary and complete renderer/sort state reset"]
+    },
+    {
+      "requirement": "Decision 10",
+      "status": "covered",
+      "designOrTasks": ["Task 01 exact supervisor invocation, fixed endpoint, identity preflight, targeted PASS, timeout/SIGKILL self-tests, and named mutations"]
+    },
+    {
+      "requirement": "Decision 11",
+      "status": "covered",
+      "designOrTasks": ["Task 03 sorted deterministic not-recordable/live-TUI-only INFO without a false version reason"]
+    },
+    {
+      "requirement": "Decision 12",
+      "status": "covered",
+      "designOrTasks": ["Decomposition explicit freeze-qa gate", "Task 04 scripted artifact controls", "Task 05 manual SC-5-SC-8 controls and recorded verdict"]
+    }
+  ],
+  "findings": []
+}

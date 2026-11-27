@@ -1,0 +1,51 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 4,
+    "critical": 0,
+    "major": 1,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "major",
+      "category": "A04:2021 Insecure Design (fail-closed validation is not observable to callers)",
+      "title": "Rejected -W value produces exit code 0 — the whitelist fails closed but silently for automation",
+      "description": "selectReport correctly maps only 'w' and 'a', and validate() rejects everything else with 'report type is not specified, quit' (cmd/report/report.go:94-96). Verified end-to-end on a built binary: `pgcenter report -W -f dump.tar` prints the error and exits **0**. Root cause is outside the audited files — main() in cmd/pgcenter.go prints the error and returns without os.Exit(1) — and it is pre-existing and repo-wide (`-J q` behaves identically). This change is what makes it consequential for -W: the task's own Details and Edge cases state that on the legacy `-W -f dump.tar` shape 'the command exits non-zero', and Decision 17's entire safety argument rests on the failure being loud. It is loud on stderr/stdout only, not to the caller. A legacy cron/monitoring wrapper of the form `pgcenter report -W -f dump.tar > wal-report.txt || alert` previously produced a WAL report; after this breaking change it produces an empty file and a success status, and the `|| alert` never fires. Neither the new tests nor the acceptance criteria assert an exit code, so nothing in the task would catch this.",
+      "location": "cmd/report/report.go:94-96 (rejection path introduced/relied on by this change); root cause cmd/pgcenter.go:66-70 (outside audit scope)",
+      "impact": "Automation that invoked the old boolean -W keeps reporting success while producing no data. The breaking change becomes invisible to exactly the consumers — scripts, cron jobs, CI report collectors — that cannot read the printed message. For a troubleshooting/report tool this converts a loud CLI break into a silent gap in captured incident data.",
+      "recommendation": "Do not add a compensating branch in selectReport (the task explicitly forbids it and it would re-open Decision 17). Two options, in order of preference: (1) fix the root cause in a separate task/feature — `func main() { if err := pgcenter.Execute(); err != nil { fmt.Println(err); os.Exit(1) } }`; this makes every subcommand's validation observable, not just -W. (2) At minimum, correct the claim in Task 04 Details/Edge cases and in the Task 9 release notes: state that the command prints 'report type is not specified, quit' and exits 0, so operators know an exit-status check will not catch the migration. If (1) is taken, add an exit-code assertion to the acceptance criteria so it cannot regress.",
+      "cwe": "CWE-390 (Detection of Error Condition Without Action)"
+    },
+    {
+      "severity": "minor",
+      "category": "A04:2021 Insecure Design (release gate, intra-branch state)",
+      "title": "-W a currently renders a silently empty report with exit 0 until Tasks 5 and 7 land",
+      "description": "Verified against report/testdata/pgcenter.stat.golden.tar: `pgcenter report -W a -f <tar>` prints the three INFO header lines and then nothing, exit 0. `pgcenter report -d -W a` prints 'unknown description requested', exit 0. The reason is that 'archiver' is not yet a key in view.New() (internal/view/view.go registers 'wal' and 'stat_io' but no 'archiver') nor in describeReport's map (report/report.go:666-694), so newApp's `views[config.ReportType]` yields a zero-value view.View and isFilenameOK matches no tar entry. This is the exact silently-empty-report outcome Decision 17 exists to prevent — reached from *inside* the whitelist rather than around it. It is a sequencing state, not a defect of this task: the task Details explicitly assign the view to Task 5 and the description to Task 7 and forbid compensating here (a 'not implemented yet' guard would have to be removed two tasks later). Recording it so it is not lost as a merge/release gate.",
+      "location": "cmd/report/report.go:158-159 (maps 'a' -> \"archiver\") -> report/report.go:85 (views[config.ReportType]) and report/report.go:666-694 (describeReport map)",
+      "impact": "If the feature branch merged or shipped with Task 04 but without Tasks 5 and 7, `-W a` would be a documented, help-text-advertised flag that produces a clean, empty, exit-0 report — an operator would reasonably conclude the archive contains no archiver data. Same failure class as a widened whitelist, different route.",
+      "recommendation": "No code change in this task. Gate the branch: do not merge 017 to develop until Task 5 registers the 'archiver' view and Task 7 adds its describeReport entry; the feature's verification step should include `pgcenter report -W a -f <tar>` printing actual rows and `-d -W a` printing a real description. If a general guard is ever wanted, the right shape is a startup assertion that every value selectReport can return exists in view.New() — a single test over the whitelist, not a runtime branch per report type.",
+      "cwe": "CWE-1188 (Initialization of a Resource with an Insecure Default)"
+    },
+    {
+      "severity": "minor",
+      "category": "dependency",
+      "title": "github.com/spf13/pflag is imported directly by the test but still marked // indirect in go.mod",
+      "description": "cmd/report/report_test.go now imports github.com/spf13/pflag directly (Test_walFlagPflagFailureShapes builds a local FlagSet), while go.mod:27 still carries `github.com/spf13/pflag v1.0.10 // indirect`. The build and `go test ./cmd/report/...` succeed because the module is present in the require block, and CI has no `go mod tidy -diff` check (.github/workflows/default.yml runs lint, gosec, govulncheck only), so nothing flags it today. The module graph nevertheless misrepresents the dependency: pflag is now a first-class requirement of this module's own code, not merely something cobra drags in.",
+      "location": "package: github.com/spf13/pflag@v1.0.10 (go.mod:27); import at cmd/report/report_test.go:5",
+      "impact": "Supply-chain hygiene rather than an exploitable flaw. An `// indirect` marker tells maintainers and tooling the version is cobra's to choose; a cobra upgrade that changed or dropped its pflag requirement would silently change (or break) what this test compiles against, and dependency-review tooling that treats indirect deps as lower priority would under-weight it.",
+      "recommendation": "Run `go mod tidy` and commit the resulting go.mod, which promotes pflag into the direct require block (drops the `// indirect` comment). No version bump and no go.sum change is involved. Coordinate the run with the other agents currently editing this working tree so the tidy does not pick up half-finished imports from internal/query or internal/postgres.",
+      "cwe": "CWE-1104 (Use of Unmaintained Third Party Components — dependency-management hygiene)"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "assert.NotNil followed by an unguarded dereference in Test_walFlagDefinition",
+      "description": "Test_walFlagDefinition does `f := CommandDefinition.Flags().Lookup(\"wal\")`, then `assert.NotNil(t, f)` and immediately dereferences f on the next four lines. testify's `assert` records a failure and continues, unlike `require`, so if the flag were ever renamed or its registration dropped, Lookup returns nil and the following `f.Value.Type()` panics with a nil dereference. A panic aborts the whole test binary for package cmd/report, so a single renamed flag would take down every other test in the package and report a stack trace instead of the one clean assertion failure the test was written to produce. The task explicitly designates this test as the guard that keeps the local FlagSet mirror in Test_walFlagPflagFailureShapes honest, which makes its failure mode worth getting right.",
+      "location": "cmd/report/report_test.go:126-131",
+      "impact": "Test-suite robustness only; no runtime security impact. Degrades the diagnostic quality of the one test that guards the user-visible flag contract, and can mask unrelated failures in the same package behind a panic.",
+      "recommendation": "Import github.com/stretchr/testify/require and use `require.NotNil(t, f)` in place of `assert.NotNil(t, f)`; the remaining assertions can stay `assert`. require halts this test function only, leaving the rest of the package to run and report normally.",
+      "cwe": "CWE-476 (NULL Pointer Dereference — test code)"
+    }
+  ]
+}

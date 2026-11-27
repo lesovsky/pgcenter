@@ -41,6 +41,7 @@ type app struct {
 	ui            *gocui.Gui              // UI instance.
 	uiExit        chan int                // used for signaling when to need exiting from UI.
 	uiError       error                   // hold error occurred during executing UI.
+	frame         frameStore              // last rendered frame, repainted while the display is paused. Gocui-goroutine-only, see top/pause.go.
 	db            *postgres.DB            // connection to Postgres.
 	postgresProps stat.PostgresProperties // properties of Postgres to which connected to.
 }

@@ -68,3 +68,24 @@ func Test_toggleVerbose(t *testing.T) {
 
 	close(config.viewCh)
 }
+
+// Test_toggleVerboseLiftsPause covers the lifting half of the handler: verbose changes what the
+// collector is asked to produce, so 'v' must leave the freeze behind rather than repaint the old
+// frame with a new layout.
+func Test_toggleVerboseLiftsPause(t *testing.T) {
+	config := newConfig()
+	config.view = config.views["activity"]
+	config.paused.Store(true)
+	app := &app{config: config}
+
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() { <-config.viewCh; wg.Done() }()
+
+	assert.NoError(t, toggleVerbose(app)(nil, nil))
+	wg.Wait()
+
+	assert.False(t, config.paused.Load(), "toggling verbose must lift the pause")
+
+	close(config.viewCh)
+}

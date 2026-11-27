@@ -1,0 +1,3 @@
+[37;1msource    [0m[37;1mwaldir_size  [0m[37;1mwal,KiB   [0m[37;1mrecords   [0m[37;1mfpi       [0m[37;1mfpi,KiB   [0m[37;1mbuffers_full  [0m[37;1mstats_age  [0m
+2026/05/19 10:00:01, rate: 1s
+WAL       1088 MB      1024.25   500       120       240.25    7             02:00:00

@@ -1,0 +1,46 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Round-1's major finding is genuinely closed, verified independently rather than taken on report: with 'W' rebound to menuOpen(menuStatIO, app.config, \"\"), Test_keybindingsWALOpensMenu now fails on three assertions at once (menuType 6 vs 5, the title, the item slice). The keybindingsList(app) extraction is the right shape — no parameter threading, keybindings() still owns InputEsc and the registration loop, and the table stays the single source. Both round-1 minors are closed with it: the menu title and both item strings are now pinned word for word by the test that drives menuOpen, and the lower-case 'w' has a behavioural guard. dev-code-reviewer's wg.Wait() relocation is correct — a failing row now names itself instead of panicking out of a finished subtest. Three minor items remain, each a one-liner, all confirmed by mutation on this working tree (every mutation reverted, tree clean, go test -race and go vet green). Ranked by what they actually cost: (1) the task's documented -run filter does not match Test_keybindingsWalCycles at all, so the guard the team believes it installed for the feature's primary hotkey is invisible to the exact command the Acceptance Criteria mutation protocol prescribes; (2) 'w' is guarded on which handler it carries but not on being registered — 'W' has both halves; (3) menuOpen's menuDraw call is still unasserted, one line short of closing. Round-1's redundant-row minor was declined with a valid reason (the row is mandated verbatim by the TDD Anchor) and is not re-raised.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:100 (Test_keybindingsWalCycles) + 017-feat-wal-archiver-task-06.md frontmatter `verify:` and Verification Steps step 1",
+      "issue": "The new test is named Test_keybindingsWalCycles ('Wal'), but every documented verification command filters on 'Test_keybindingsWAL' ('WAL'). Go's -run is a case-sensitive regexp, so the test is silently excluded. Verified on this tree: `go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate' -v` lists only Test_keybindingsWAL and Test_keybindingsWALOpensMenu — Test_keybindingsWalCycles never runs. This is not cosmetic: the Acceptance Criteria mutation protocol says \"apply the mutation, run the filtered command from step 1, confirm the named test fails\", and under that command deleting the {\"sysstat\", 'w', switchViewTo(app, \"wal\")} row is GREEN — nothing else in the filtered set observes the 'w' row (Test_keybindingsWAL probes only 'W'; Test_switchViewTo calls switchViewTo directly, never through the table). The red the team observed came from a broader filter than the one recorded. So an acceptance criterion (\"the host-side filtered run passes\") can be satisfied while the guard for the feature's primary entry point is not exercised, and it stays that way for every future contributor who runs the documented command.",
+      "recommendation": "Rename the test to Test_keybindingsWALCycles — that matches the existing 'Test_keybindingsWAL' filter, matches the capitalisation of its two neighbours in the same file, and needs no edit to the task file or to any recorded command. If the name is preferred as-is, widen the filter instead in BOTH places it appears (frontmatter `verify:` and Verification Steps step 1): replace `Test_keybindingsWAL` with `Test_keybindings`, which is what the whole file should be running anyway as the file grows. Then re-run the 'w'-row-deletion mutation under the corrected command and record that command in the decisions log verbatim, so the log matches what was actually run.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:100 (Test_keybindingsWalCycles) + top/keybindings.go:20 (the registration loop)",
+      "issue": "Test_keybindingsWalCycles reads the table via boundHandler/keybindingsList and never touches the bindings gocui actually registered, so it covers WHICH handler the 'w' row carries but not that the row reaches SetKeybinding. Verified by mutation: adding `if k.viewname == \"sysstat\" && k.key == 'w' { continue }` to the loop in keybindings() leaves the whole filtered suite green while 'w' is dead in the running program. 'W' does not have this hole — Test_keybindingsWAL probes registration through DeleteKeybinding and Test_keybindingsWALOpensMenu probes the handler through the table, so both edges are covered. The asymmetry comes from round-1's finding offering the handler assertion as an alternative to the DeleteKeybinding probe (\"assert instead that...\"); with the keybindingsList refactor in place both are cheap and they cover different failures, so it should have been 'as well as', not 'instead of'. A whole-loop breakage is still caught (Test_keybindingsWAL would fail on its first delete) — what slips through is any per-row or conditional skip.",
+      "recommendation": "Add a third sub-test to Test_keybindingsWAL, mirroring the 'W' probe on a fresh app: `app := newKeybindingsApp(t)`; `assert.NoError(t, app.ui.DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone))`; then `err := app.ui.DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone)`; `require.Error(t, err)`; `assert.Equal(t, \"keybinding not found\", err.Error())`. Name it \"'w' registered on sysstat exactly once\". That closes the table-to-gocui edge for the lower-case key and makes the two halves symmetric; keep Test_keybindingsWalCycles unchanged, it covers the other half. Re-check by re-applying the `continue` mutation above and confirming the new sub-test is the one that goes red.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/keybindings_test.go:87-89 (Test_keybindingsWALOpensMenu) + top/menu.go:137 (menuOpen's menuDraw call)",
+      "issue": "Test_keybindingsWALOpensMenu is now the only test in the package that drives menuOpen, and its comment claims it pins \"the only text the 'W' path shows before a selection is made\". It does not, quite: the item assertion is on app.config.menu.items, which menuOpen copies from selectMenuStyle(m) — it never observes what was written into the menu window. Verified by mutation: replacing `err = menuDraw(v, s.items)` in menuOpen with a no-op leaves the whole filtered suite green, i.e. an empty menu window for all six menus is undetectable by any test in top/. menuDraw is pre-existing shared code this task did not touch, which is why this is minor rather than a gap the task created — but the test already holds `mv` two lines above and is one assertion short of closing it, and no other test in the package is positioned to.",
+      "recommendation": "Extend the existing assertion block, after `mv, err := app.ui.View(\"menu\")`: `buf := mv.Buffer()`; `assert.Contains(t, buf, \"pg_stat_wal\")`; `assert.Contains(t, buf, \"pg_stat_archiver\")`. Two lines, no new setup, and it turns the mutation above red. Then either trim the comment's claim about pinning what the 'W' path shows, or leave it — with these assertions it becomes accurate. Note for the author: menuDraw wraps the cursor row in \\033[30;47m…\\033[0m, so assert Contains on the bare item text rather than Equal on the whole buffer.",
+      "litmusTestFailed": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 8,
+    "litmusTest": {
+      "checked": 20,
+      "passed": 17,
+      "failed": 3
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 20,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

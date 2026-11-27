@@ -1,8 +1,9 @@
 # stage 1: build
-FROM golang:1.25-alpine AS build
+FROM golang:1.26.10-alpine AS build
 LABEL stage=intermediate
 WORKDIR /app
 COPY . .
+RUN apk --no-cache add git make
 RUN make build
 
 # stage 2: final image

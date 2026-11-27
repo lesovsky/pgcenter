@@ -1,0 +1,51 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 0,
+    "critical": 0,
+    "major": 0,
+    "minor": 0
+  },
+  "findings": [],
+  "scope": {
+    "task": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver-task-02.md",
+    "auditedFiles": [
+      "internal/query/wal.go",
+      "internal/query/wal_test.go"
+    ],
+    "excluded": [
+      "cmd/report/report.go",
+      "cmd/report/report_test.go",
+      "internal/postgres/testing.go",
+      "internal/query/archiver.go",
+      "internal/query/archiver_test.go"
+    ],
+    "excludedReason": "Out of scope for Task 02 — owned by a concurrent agent on other tasks in the same branch."
+  },
+  "verification": {
+    "injectionSurface": "PgStatWALPG19 is a compile-time const built only from string literals concatenated with '+'. No fmt.Sprintf, no '%s', no variable interpolation, no user input. grep for '{{' in internal/query/wal.go returns nothing, so query.Format (text/template) renders the template with zero actions and the executed SQL is byte-identical to the constant — the Options struct (including operator-supplied fields such as PGSSSchema and PgSSQueryLen) never reaches this query. Runtime path confirmed end to end: internal/view/view.go:390 assigns QueryTmpl from SelectStatWALQuery, view.go:418-422 sets view.Query = query.Format(view.QueryTmpl, opts), and nothing concatenates user input into it afterwards. CWE-89 surface: none introduced.",
+    "identifierQuoting": "The new alias contains a comma and is correctly double-quoted as \"fpi,KiB\" (Go backtick literal), matching the existing \"wal,KiB\" precedent. Both are static, so quoting is not an escaping decision made at runtime.",
+    "informationDisclosure": "The added expression round(wal_fpi_bytes / 1024, 2) exposes aggregate full-page-image WAL volume from pg_stat_wal — an operational counter with no PII, credentials, query text or table contents. No new disclosure relative to PgStatWALDefault. The pg_ls_waldir() subselect (superuser / pg_monitor only) is copied verbatim from the two pre-existing constants and is unchanged, so this task neither widens nor narrows the privilege requirement of the wal screen.",
+    "secrets": "No hardcoded credentials, tokens, connection strings or key material in either file. The test connects via postgres.NewTestConnectVersion (out-of-scope helper) and passes no literal credentials.",
+    "errorAndResourceHandling": "Test_StatWALQueries now defers conn.Close() instead of closing only on the success path, and closes rows before the connection — a leak fix, not a regression. pgx v5 Conn.Query returns a non-nil *baseRows even on error (conn.go:760 in pgx v5.9.2/v5.10.0), so the FieldDescriptions() call after a failed Query cannot nil-panic; a query failure degrades to a normal assertion failure. Query results are never logged or printed.",
+    "dependencies": "No new modules. github.com/stretchr/testify v1.11.1 (source of the newly imported require package) is already in go.mod. No CVE surface added.",
+    "toolsRun": [
+      "gofmt -l internal/query/wal.go internal/query/wal_test.go — clean",
+      "go vet ./internal/query/ — clean",
+      "gosec ./internal/query/ — no issues reported",
+      "go test ./internal/query/ -run Test_SelectStatWALQuery -v — all subtests pass (no PostgreSQL required)"
+    ]
+  },
+  "owaspCoverage": {
+    "A01_BrokenAccessControl": "N/A — no authorization logic; access is governed by the PostgreSQL role the operator connects with, unchanged by this task.",
+    "A02_CryptographicFailures": "N/A — no crypto, no secret storage.",
+    "A03_Injection": "Clean — see verification.injectionSurface.",
+    "A04_InsecureDesign": "Clean — version branching follows the established SelectStatBgwriterQuery pattern; the '>=' boundary is pinned by the 200000 test row.",
+    "A05_SecurityMisconfiguration": "N/A — no configuration or defaults introduced.",
+    "A06_VulnerableComponents": "Clean — no new dependencies.",
+    "A07_AuthFailures": "N/A — no authentication code.",
+    "A08_DataIntegrity": "N/A — no deserialization, no update or CI/CD mechanism touched.",
+    "A09_LoggingMonitoring": "N/A — no security-relevant events in scope; no sensitive data written to logs or test output.",
+    "A10_SSRF": "N/A — no URLs or outbound requests."
+  }
+}

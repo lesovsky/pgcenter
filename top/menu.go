@@ -3,6 +3,7 @@ package top
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"github.com/lesovsky/pgcenter/internal/query"
 )
 
 // menuType defines a type of the used menu.
@@ -19,6 +20,8 @@ const (
 	menuProgress                  // menu with pg_stat_progress_* stats
 	menuConf                      // menu with configuration files
 	menuStatIO                    // menu with pg_stat_io stats
+	menuWAL                       // menu with pg_stat_wal / pg_stat_archiver stats
+	menuTables                    // menu with tables / autovacuum scores stats
 
 	// Directions allowed when working with menu.
 	moveUp   direction = iota // move up
@@ -33,7 +36,7 @@ type menuStyle struct {
 }
 
 // selectMenuStyle returns selected menuStyle properties.
-func selectMenuStyle(t menuType) menuStyle {
+func selectMenuStyle(t menuType, version int) menuStyle {
 	var s menuStyle
 
 	switch t {
@@ -93,6 +96,27 @@ func selectMenuStyle(t menuType) menuStyle {
 				" pg_stat_io timings",
 			},
 		}
+	case menuWAL:
+		s = menuStyle{
+			menuType: menuWAL,
+			title:    " Choose WAL / archiver mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_wal",
+				" pg_stat_archiver",
+			},
+		}
+	case menuTables:
+		s = menuStyle{
+			menuType: menuTables,
+			title:    " Choose tables mode (Enter to choose, Esc to exit): ",
+			items: []string{
+				" pg_stat_user_tables",
+				" pg_stat_autovacuum_scores",
+			},
+		}
+		if version < query.PostgresV19 {
+			s.items[1] += " — requires PostgreSQL 19"
+		}
 	default:
 		s = menuStyle{
 			menuType: menuNone,
@@ -105,7 +129,7 @@ func selectMenuStyle(t menuType) menuStyle {
 // menuOpen selects menu requested menu properties and opens UI view object for menu.
 func menuOpen(m menuType, config *config, pgssSchema string) func(g *gocui.Gui, _ *gocui.View) error {
 	return func(g *gocui.Gui, _ *gocui.View) error {
-		s := selectMenuStyle(m)
+		s := selectMenuStyle(m, config.queryOptions.Version)
 
 		// in case of opening menu for switching to pg_stat_statements and if it isn't available - it's unnecessary to open menu, just notify user and do nothing
 		if pgssSchema == "" && s.menuType == menuPgss {
@@ -201,6 +225,32 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 				viewSwitchHandler(app.config, "stat_io")
 			}
 			printCmdline(app.ui, "%s", app.config.view.Msg)
+		case menuWAL:
+			switch cy {
+			case 0:
+				viewSwitchHandler(app.config, "wal")
+			case 1:
+				viewSwitchHandler(app.config, "archiver")
+			default:
+				viewSwitchHandler(app.config, "wal")
+			}
+			printCmdline(app.ui, "%s", app.config.view.Msg)
+		case menuTables:
+			switch cy {
+			case 0:
+				viewSwitchHandler(app.config, "tables")
+				printCmdline(app.ui, "%s", app.config.view.Msg)
+			case 1:
+				if app.postgresProps.VersionNum >= query.PostgresV19 {
+					viewSwitchHandler(app.config, "autovacuum_scores")
+					printCmdline(app.ui, "%s", app.config.view.Msg)
+				} else {
+					printCmdline(app.ui, "NOTICE: pg_stat_autovacuum_scores requires PostgreSQL 19")
+				}
+			default:
+				viewSwitchHandler(app.config, "tables")
+				printCmdline(app.ui, "%s", app.config.view.Msg)
+			}
 		case menuConf:
 			switch cy {
 			case 0:
@@ -225,7 +275,7 @@ func menuSelect(app *app) func(g *gocui.Gui, v *gocui.View) error {
 		}
 
 		// When menu item has been submitted by user, close menu and reset menu properties in the config.
-		app.config.menu = selectMenuStyle(menuNone)
+		app.config.menu = selectMenuStyle(menuNone, 0)
 		return menuClose(g, v)
 	}
 }

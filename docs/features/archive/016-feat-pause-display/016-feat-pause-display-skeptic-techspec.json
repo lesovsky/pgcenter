@@ -1,0 +1,127 @@
+{
+  "status": "changes_required",
+  "summary": "Проверено 63 фактических утверждения tech-spec 016-feat-pause-display против кода (top/, internal/stat/, jroimartin/gocui@v0.5.0, nsf/termbox-go@v1.1.1). Подтверждено 52, найдено 11 расхождений: 1 critical (Decision 7 — предписанная ветка else if мертва именно на pager-пути), 3 major (Decision 10 — обоснование про зависание wg.Wait() опровергнуто; Decision 6 — logtail.Size пишется не только в замораживаемой ветке; Decision 4 — «регресс в live-режиме» не отличает setFilter от пяти уже существующих viewCh-пушей), 7 minor (номера строк и неточности формулировок). Все проверки file:line по gocui/termbox и все пять call sites renderSysstat подтверждены.",
+  "findings": [
+    {
+      "severity": "critical",
+      "type": "missing_pattern",
+      "claim": "Decision 7: «[PAUSED] переизлучается в ветке создания cmdline (top/ui.go:182-192) как `else if` к существующей записи uiError», обоснование: «the cmdline view is recreated empty on every UI rebuild and nothing else writes to it on the pager path».",
+      "reality": "На pager-пути app.uiError ВСЕГДА не nil к моменту создания нового cmdline, поэтому ветка `else if` не выполнится никогда именно там, ради чего она вводится. Цепочка проверена по коду: showPgLog/runPsql/printQueryReport делают `uiExit <- 1` и затем `g.Close()` (top/pglog.go:32-33, top/psql.go:20-21, top/report.go:147-148); после закрытия termbox gocui/gui.go:425 `termbox.Size()` даёт 0,0, gui.go:432 записывает g.maxX/maxY=0, Layout получает нулевую геометрию и top/ui.go:148-150 возвращает `fmt.Errorf(\"\")`; flush() пробрасывает ошибку, MainLoop её возвращает, и top/ui.go:89 безусловно выполняет `app.uiError = err`. MainLoop вообще не может вернуться без ошибки (бесконечный for), то есть UI перестраивается ТОЛЬКО через непустой app.uiError. На первом layout после перестроения SetView(\"cmdline\") даёт ErrUnknownView, срабатывает ветка uiError (top/ui.go:188-191), а `else if` — нет.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 7 «[PAUSED] is re-emitted where the cmdline view is created»; Task 7 «Marker restoration after a UI rebuild»",
+      "fix": "Переписать Decision 7: писать маркер НЕ через `else if`, а безусловно (например, вызывать printCmdline с пустым сообщением после обработки uiError), либо явно зафиксировать, что маркер восстанавливается сам, потому что [PAUSED] — токен cmdlineTokens и любой printCmdline (включая вывод uiError) перерисовывает префикс. Второй вариант делает Task 7 избыточным — это надо решить до старта, иначе Task 7 сдаст мёртвую ветку с зелёным тестом на недостижимый путь."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 10: «adding it [wg.Wait()] to the uiExit branch would hang the pager path forever, because the collector is parked on a send that nobody will receive until the new doWork starts».",
+      "reality": "Зависания не будет. Порядок в mainLoop: MainLoop возвращает ошибку (pager-путь всегда через ошибку, см. выше) → top/ui.go:99 `cancel()` → и только потом top/ui.go:102 `wg.Wait()`. Отмена ctx будит collectStat на его select'е top/stat.go:72-79 (`case <-ctx.Done(): close(statCh); return`), collectStat завершается, гипотетический wg.Wait() внутри doWork разблокируется, doWork возвращается, внешний wg.Wait() проходит. Единственное узкое место — голый send без ctx.Done на top/stat.go:130 (`statCh <- stat.Stat{Error: err}`), но это редкая ветка ошибки c.Update после смены view, а не «pager path forever». Кроме того, «until the new doWork starts» неверно и по механике: новый doWork создаёт НОВЫЙ statCh (top/ui.go:108), старый коллектор его получателем не станет.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 10 «statLoop is extracted so the drain can be proven, and wg.Wait() stays where it is»; Testing Strategy, unit-тест «guarding the wg.Wait() asymmetry from Decision 10»",
+      "fix": "Переформулировать обоснование Decision 10. Само решение (не добавлять wg.Wait()) остаётся разумным — оно ничего не даёт, а не спасает от дедлока. Убрать из Testing Strategy тест, «охраняющий» несуществующий дедлок, либо переориентировать его на реально проверяемое: doWork выходит по uiExit без ожидания коллектора."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 6: «config.logtail.Size is written only inside the skipped branch (top/stat.go:243), so it freezes with everything else».",
+      "reality": "Есть вторая точка записи вне пропускаемой ветки: top/extra.go:46 `app.config.logtail.Size = 0` (в showExtra при открытии панели логов по клавише L, рядом с записью logtail.Path на строке 45 и logtail.Open() на 56). То есть на паузе нажатие L обнулит Size и переоткроет файл, и «замораживается вместе со всем остальным» неверно. Само значение stat.go:243 подтверждено, детектор ротации на stat.go:233-240 подтверждён.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 6 «The stored logtail buffer is the last NON-EMPTY read»",
+      "fix": "Исправить утверждение на «пишется в top/stat.go:243 (замораживаемая ветка) и в top/extra.go:46 (открытие панели по L)». Проверить и явно описать поведение: L входит в список снимающих паузу действий (user-spec шаг 7), так что запись из extra.go:46 происходит уже после снятия паузы — если это так, зафиксировать это как обоснование, а не умалчивать существование второй записи."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 4: «making setFilter push on viewCh ... that path runs c.Reset() and derives itv arithmetically from the refresh interval, so the next frame would show near-zero values. That is a visible regression in live mode, outside this feature's perimeter». То же повторено в таблице Risks.",
+      "reality": "Механизм подтверждён (top/stat.go:125-133: ticker.Stop() → c.Reset() → c.Update() → continue → повторный c.Update() на top/stat.go:66, при itv = int(refresh/time.Second), internal/stat/stat.go:296), НО он не отличает setFilter ни от чего. Ни один early-out ладдера (refresh на 93-96, ShowExtra на 99-103, Verbose на 109-112, CollectExtra на 119-122) не срабатывает для пушей из scrollLeft/scrollRight/increaseWidth/decreaseWidth/clearFilters — они падают ровно в те же строки 125-133. То есть все пять клавиш из Decision 3, включая clearFilters (`\\`) — прямой аналог setFilter — УЖЕ сегодня, в живом режиме, дают near-zero кадр. Push из setFilter не ввёл бы нового класса регресса, а воспроизвёл бы существующее поведение. Decision 3 и Decision 4 опираются на один и тот же участок кода и делают из него противоположные выводы.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 4 «setFilter gets an explicit repaint, NOT a viewCh push»; Decision 3; Risks, строка «setFilter \"symmetry fix\" via viewCh»",
+      "fix": "Переписать обоснование Decision 4 на честное: явный repaint выбран потому, что он дешевле и не трогает коллектор, а не потому, что push «внёс бы регресс» — этот регресс уже существует для пяти клавиш. Отдельно зафиксировать существующий near-zero кадр после любого viewCh-пуша как известный техдолг (или явно вынести за периметр фичи)."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 4: «derives itv arithmetically from the refresh interval (internal/stat/stat.go:294)».",
+      "reality": "internal/stat/stat.go:294 — пустая строка. Реальная строка — internal/stat/stat.go:296: `itv := int(refresh / time.Second)` (комментарий «// Take refresh interval from view» на 295).",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 4",
+      "fix": "Заменить ссылку на internal/stat/stat.go:296."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 3 / Solution: «a viewCh push while paused makes collectStat fall through (top/stat.go:124-133) into c.Update and a send, so a frame arrives promptly».",
+      "reality": "Вывод (кадр приходит сразу, не по тику) подтверждён, но «and a send» в диапазоне 124-133 неточно: единственный send в этих строках — top/stat.go:130 `statCh <- stat.Stat{Error: err}` и он выполняется ТОЛЬКО при ошибке c.Update. Обычный кадр отправляется после `continue` (133) на следующей итерации: c.Update на top/stat.go:66 и send на top/stat.go:73.",
+      "source": "016-feat-pause-display-tech-spec.md, Solution; Decision 3",
+      "fix": "Уточнить: «falls through to c.Reset()/c.Update() (top/stat.go:125-128) and continues, so the next loop iteration sends immediately (top/stat.go:66,73)»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 3: «The gate's \"discarded frame repaints the store\" rule covers all five [scrollLeft/scrollRight/increaseWidth/decreaseWidth/clearFilters]».",
+      "reality": "clearFilters (top/config_view.go:193-206) пушит на viewCh УСЛОВНО: `if n > 0 { config.viewCh <- config.view }` (строки 199-201) — когда снимать нечего, пуша нет, кадра нет, repaint не произойдёт. Остальные четыре пушат безусловно (config_view.go:63, 81, 94, 107). Практического дефекта нет (снимать нечего — перерисовывать тоже нечего), но формулировка «covers all five» неточна и стендовый шаг 3 должен нажимать `\\` только при активном фильтре.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 3",
+      "fix": "Добавить оговорку про условный пуш clearFilters (n > 0) в Decision 3."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Solution: «Five render-only keys ([, ], ↑, ↓, \\) push on viewCh today \"solely to trigger an immediate redraw\" (top/config_view.go:57-58)».",
+      "reality": "Цитата на top/config_view.go:57-58 подтверждена дословно, но она относится к scrollLeft (и аналог на 72 — к scrollRight), где view действительно не мутируется. ↑/↓ (increaseWidth/decreaseWidth, config_view.go:87-110) МУТИРУЮТ view.ColsWidth[idx], а clearFilters мутирует view.Filters. «Render-only» верно только с точки зрения коллектора (он этих полей не читает), но цитата распространена на пять клавиш, к трём из которых не относится.",
+      "source": "016-feat-pause-display-tech-spec.md, Solution",
+      "fix": "Уточнить: цитата описывает [ и ]; ↑/↓/\\ мутируют view, но ни одно из мутируемых полей коллектор не читает."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 5: «layout keeps the last seen maxX/maxY in its enclosing closure ... g.Update from inside Layout is safe».",
+      "reality": "Прецедент подтверждён (top/ui.go:141 `var verboseTooShortShown bool`), безопасность g.Update подтверждена (gui.go:311-313 — только `go func(){ g.userEvents <- ... }()`, канал буферизован на 20, gui.go:83; ни блокировок, ни чтения изменяемого состояния Gui). Нюанс реализации: возвращаемая layout замыкание имеет сигнатуру `func(_ *gocui.Gui) error` (top/ui.go:143) — параметр g отбрасывается, внутри используется app.ui. Значит вызов должен быть `app.ui.Update(...)`, а не `g.Update(...)`, иначе код не скомпилируется.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 5",
+      "fix": "Записать в Decision 5 / Task 6, что вызов — app.ui.Update, либо расширить сигнатуру замыкания до именованного g."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Acceptance Criteria: «the five renderSysstat call sites updated mechanically».",
+      "reality": "Пять ТЕСТОВЫХ call sites (Decision 9 формулирует корректно) подтверждены точно: top/stat_test.go:60, 97, 192, 440, 441. Но всего вызовов renderSysstat шесть — шестой продакшен-вызов top/stat.go:259 внутри printSysstat, и он тоже требует нового аргумента, как и вызов printSysstat на top/stat.go:175.",
+      "source": "016-feat-pause-display-tech-spec.md, Acceptance Criteria; Decision 9",
+      "fix": "Уточнить AC: «пять тестовых call sites плюс продакшен-цепочка printStat→printSysstat→renderSysstat (top/stat.go:175, 259)»."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Agent Verification Plan: «Source: user-spec \"Как проверить\" — 15 numbered steps, reproduced there in full».",
+      "reality": "В таблице user-spec (016-feat-pause-display.md, раздел «Как проверить», подраздел «Агент проверяет») 16 строк: 1, 2, 3, 3a, 4, 5, 6, 7, 7a, 7b, 7c, 7d, 8, 9, 10, 11. Пятнадцать из них — стендовые (шаг 1 это make test/lint/vuln, не стенд), так что «15-step stand run» в Task 9 верно, а «15 numbered steps» в описании источника — нет.",
+      "source": "016-feat-pause-display-tech-spec.md, Agent Verification Plan / Task 9",
+      "fix": "Заменить на «16 строк таблицы, из них 15 стендовых»."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 63,
+    "confirmed": 52,
+    "mirages_found": 11,
+    "verified_claims": [
+      "top/stat.go:72-84 — collectStat достигает приёма viewCh (стр. 85) только после select с `statCh <- stats` (стр. 73)",
+      "top/stat.go:169-252 — g.Update-замыкание printStat; top/stat.go:227,245 — logtail buf читается и печатается внутри него",
+      "top/stat.go:86-122 — load-bearing ладдер change-detection с комментарием «Branch order is load-bearing»",
+      "top/stat.go:1113 — `s.Result.Values[rownum][i].String = ...[:width-1] + \"~\"` — единственная ЗАПИСЬ в s.Result.Values во всём top/ (1054, 1105, 1117 — чтения)",
+      "activity имеет DiffIntvl=[0,0] (internal/view/view.go:43) → calculateDelta возвращает `delta = curr` (internal/stat/postgres.go:595-597) → s.Pgstat.Result алиасит снимок коллектора: aliasing-запись из Decision 8 реальна",
+      "top/stat.go:1230-1232 — printLogtail печатает только при len(buf) > 0; readLogfileRecent возвращает nil buf при неизменённом файле (top/stat.go:1214-1216)",
+      "top/stat.go:233-240 — детектор ротации `size < app.config.logtail.Size` + Reopen; top/stat.go:243 — запись logtail.Size",
+      "top/stat.go:157 printStat, top/stat.go:277 time.Now() внутри renderSysstat, top/layout.go:41 topBandLayout, top/stat.go:802 visibleColumns",
+      "top/ui.go:29 `var uiGeneration atomic.Uint64`; :57 uiGeneration.Add(1); :92-95 errorRate guard e.check(1s, 5); :128 приём statCh; :141 verboseTooShortShown; :182-192 ветка создания cmdline; :461 `if arm && msg != \"\"`",
+      "top/ui.go:130-132 — wg.Wait() присутствует ТОЛЬКО в ветке ctx.Done(); ветка uiExit (125-127) её не имеет",
+      "top/dialog.go:216-217 — `case dialogFilter: message = setFilter(answer, app.config.view)`",
+      "top/config_view.go:57-58 — комментарий «solely to trigger an immediate redraw» дословно на месте",
+      "gocui@v0.5.0 gui.go:311-313 — Update = `go func(){ g.userEvents <- userEvent{f: f} }()`, без блокировок и без чтения изменяемого состояния Gui; канал буферизован (cap 20, gui.go:83)",
+      "gocui@v0.5.0 gui.go:376 — потребление userEvents в MainLoop; gui.go:377-379 — `if err := ev.f(g); err != nil { return err }` рвёт MainLoop (то же в consumeevents, gui.go:398-401)",
+      "gocui@v0.5.0 gui.go:130-152 SetView — при существующем view обновляются только координаты и tainted, буфер сохраняется",
+      "gocui не отдаёт приложению resize-событие: handleEvent (gui.go:410-419) обрабатывает только EventKey/EventMouse/EventError, EventResize уходит в `default: return nil`",
+      "termbox-go@v1.1.1 termbox.go:575-577 — `if Key(inbuf[0]) <= KeySpace ... { event.Key = Key(inbuf[0]); event.Ch = 0 }`, KeySpace = 0x20 (api_common.go:122)",
+      "gocui keybinding.go:31-33 matchKeypress = `kb.key == key && kb.ch == ch && kb.mod == mod`; gui.go:294-295 getKey(rune) → (0, ch): биндинг ' ' не сработал бы; gocui.KeySpace существует (keybinding.go:124)",
+      "top/stat_test.go:60, 97, 192, 440, 441 — пять тестовых вызовов renderSysstat; :192 внутри хелпера verboseSysstatLines (:189), используемого ровно 8 тестами (:208,234,260+280,300,323,353,393,420)",
+      "Test_printStatData_truncation — top/stat_test.go:1269-1284 ровно; ассерты только по `out := buf.String()` (Contains \"abcd~\" / NotContains \"abcde\"), структура не проверяется — тест переживёт non-mutating printDataCell",
+      "Таблица keybindings не покрыта тестами вообще: файла keybindings_test.go нет, ни один тест не вызывает keybindings() или SetKeybinding",
+      "17 пушей на viewCh из хендлеров (18 send-сайтов минус seed в doWork, top/ui.go:118); viewCh небуферизован (`make(chan view.View)`, top/config.go:49)",
+      "stat.Stat (internal/stat/stat.go:35-39) содержит только System, Pgstat, Error — поля времени сбора нет",
+      "sync/atomic уже импортирован в top/ (top/ui.go:12); top/verbose.go существует, 36 строк; top/pause.go ещё не существует",
+      "renderSysstat и printDataCell вызываются только из top/ и его тестов (в report/ — независимая реализация, только упоминания в комментариях)",
+      "patterns.md:243 «Read state only on the gocui goroutine»; docs/decisions-log.md содержит ADR [009] (scroll offset на top.config, а не на view.View), [010] и [015] (один cmdline composer с ambient config)"
+    ]
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved",
+  "summary": "d12dd96 adds resizeDetector (top/ui.go) and wires exactly one repaintStored call into layout's final block, satisfying every task-07 acceptance criterion I could verify mechanically and by reading current top/ui.go, top/pause.go and the vendored gocui@v0.5.0 source. Both implementer deviations (no sizeChanged wrapper, no duplicate latch test) are correct calls, not shortcuts: the task file's own TDD Anchor and Details sections override the stray 'What to do' bullet, and task 03's Test_repaintFailureLatch_reportsOncePerTransition already discharges the AC. No critical or major findings; one optional stylistic nit.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/ui.go",
+      "line": 186,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The three 'facts a reader cannot recover from the code' are stated twice: once in the resizeDetector type doc comment (lines 186-204) and again, compressed, in the inline comment above the observe() call inside layout (lines 328-333). Consider trimming the inline comment to a one-line pointer back to the type doc rather than re-deriving the same three points.",
+      "benefit": "Slightly less to keep in sync if the rationale ever changes; purely cosmetic, matches the file's existing habit of heavy 'why' comments elsewhere (e.g. the extra-panel block) so it is not out of place.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  },
+  "verifiedInvariants": {
+    "resizeDetector_touches_only_pause_and_ints": "confirmed - observe(paused bool, x, y int) bool; no app, no gocui reference anywhere in the type or method (top/ui.go:205-223)",
+    "state_lives_in_layout_enclosing_closure": "confirmed - 'var resize resizeDetector' at top/ui.go:232, inside func layout(app *app) but outside the returned func(_ *gocui.Gui) error closure, same register as verboseTooShortShown (line 229). mainLoop calls layout(app) fresh on every Gui rebuild (top/ui.go:62), so the closure and its captured resizeDetector are recreated with zero value each time - verified this is what fires the post-pager repaint via Test_resizeDetector_observe's 'zero start state' subtest",
+    "zero_geometry_guard_precedes_detector": "confirmed - guard 'if maxX == 0 || maxY == 0 { return fmt.Errorf(\"\") }' at top/ui.go:239-241 returns before the detector call at line 334-336; a 0x0 post-pager size can never reach observe()",
+    "layout_still_returns_nil_no_new_error": "confirmed - detector call sits inside a plain if with no error return; layout's final statement is unconditional 'return nil' (top/ui.go:338)",
+    "exactly_one_new_repaintStored_call": "confirmed - top/ui.go has 2 repaintStored(app) call sites: line 129 (pre-existing, task 03's statLoop wiring in doWork) and line 335 (new, this task); grep count of 3 includes one explanatory comment mention at line 330",
+    "no_sizeChanged_helper": "confirmed - `grep -n 'func sizeChanged' top/ui.go` finds nothing",
+    "file_scope_respected": "confirmed - `git show d12dd96 --stat` touches only top/ui.go (+52) and top/ui_test.go (+96); top/pause.go, top/stat.go, top/dialog.go untouched by this commit (dialog.go was touched by the separate 32d557a / task 08 commit, correctly out of scope here)",
+    "no_task09_logtail_seam": "confirmed - no logBuf/logPath/logtail references anywhere in the d12dd96 diff",
+    "gocui_technical_claims_verified_against_vendor_source": "confirmed against /home/lesovsky/go/pkg/mod/github.com/jroimartin/gocui@v0.5.0/gui.go: handleEvent (lines 409-417) dispatches only EventKey/EventMouse (to onKey) and EventError, default falls through; flush() (lines 421-434) reads termbox.Size() and assigns g.maxX/g.maxY BEFORE calling managers' Layout; Gui.Update (line 311-313) is a 3-line goroutine-spawning channel send with no lock; MainLoop's userEvents case (lines 377-379) returns any error from ev.f(g) out of MainLoop itself - all match the code comments' claims exactly"
+  },
+  "deviationAssessment": {
+    "a_no_sizeChanged_helper": "Correct per task instruction. The task's own 'What to do' section explicitly says 'One layer, not two... Do not add it' referring to sizeChanged, calling out this exact tech-spec wording mismatch as an expected, pre-approved naming deviation to record in the decisions log, not a defect.",
+    "b_no_new_latch_test": "The task file genuinely self-contradicts: the 'What to do' bullet says to add a covering test for the latch in top/ui_test.go, while the TDD Anchor ('The failure latch is NOT tested here... Rely on Task 3's coverage') and the Details section ('The latch is not yours to build... Do not add a latch test of your own: Task 3's Test_repaintFailureLatch_reportsOncePerTransition already covers it, and a same-prefix test here would make this task's -run pattern pass without any work being done') both explicitly forbid it, with the Details section additionally spelling out a hazard the AC's isolated wording does not: a poorly-chosen test name here could shadow the real coverage under a shared -run prefix. I read the 'What to do' bullet as leftover text from an earlier draft (the same category of staleness the task file already flags for sizeChanged), and the twice-repeated, more specific instruction as authoritative. I independently confirmed top/pause.go (commit 8ae86f3) ships recordRepaint as a separately callable method on frameStore and top/pause_test.go carries Test_repaintFailureLatch_reportsOncePerTransition with exactly the fail/fail/fail/success/fail -> true/false/false/false/true sequence the anchor describes. The acceptance criterion's actual wording - 'is covered by a test proving exactly one cmdline message per failure transition' - does not require the test to live in this commit's diff, only that coverage exists; it does. The implementer's judgment call is correct and the AC is genuinely satisfied without new code."
+  },
+  "techDebt": []
+}

@@ -1,0 +1,60 @@
+{
+  "status": "approved",
+  "round": 2,
+  "findings": [
+    {
+      "severity": "major",
+      "category": "structure",
+      "issue": "The rewritten Decision 8 contradicts the Acceptance Criteria and the Risks table on tech debt [020]. Decision 8 (line 212-222) is titled \"[020] needs no edit\" and states \"[020] gets no edit: its reachability is **not** widened by this feature\", with \"amending [020]\" listed as a rejected alternative because \"the amendment would have recorded something untrue\"; Solution (line 37-41) says the same. But Acceptance Criteria line 424 still requires \"Записи техдолга [020] и [035] обновлены: у [020] расширена область достижимости\", and the last Risks row (line 405) still states the risk as fact: \"Tech debt [020] becomes reachable on a diffed screen for the first time\". Task 7's description compounds it: \"correct the two tech-debt entries whose reachability this feature changes\" — per Decision 8 only one entry ([035]) is edited, plus one new entry created for the version-blind `x`/`p` cycles. As written the implementer of Task 7 is told both to amend [020] and not to, and Task 8 (which verifies every AC) has an unsatisfiable criterion. Note the [020]/[035] wording exists only in the tech-spec — the user-spec never mentions either entry, so correcting it introduces no drift from the user-spec.",
+      "fix": "Rewrite AC line 424-425 to match Decision 8: [035] scope extended to `stats_age`, [020] deliberately left unedited, and a new debt entry registered for the version-blind `x`/`p` cycles (the latter is already a separate AC line, so the two can be merged). Restate the Risks row as the corrected claim (the malformed-archive class, not [020] reachability), and change Task 7's description from \"the two tech-debt entries whose reachability this feature changes\" to name what is actually edited."
+    },
+    {
+      "severity": "major",
+      "category": "verification",
+      "issue": "The Per-task verification table did not follow the recorder-test fix when it moved from Task 5 to Task 3. Row 5 still reads \"`go test ./record/ ./report/` — recorder trap fixed, 18→19 replay of `tables`\", but Task 5's description no longer contains the recorder-test fix; Task 3 does, and says so explicitly (\"the fix belongs in the same task that breaks it, not a wave later\"). Row 3, which is Task 3's row, lists \"registry counts, Configure arms, filter rows\" and never mentions the trap. The commands themselves are fine — both tasks run `./record/` — but the table attributes the fix to the wrong task, which is the same class of stale row flagged as row 7 in round 1.",
+      "fix": "Move \"recorder trap fixed\" from row 5 to row 3, and leave row 5 describing only what Task 5 owns: the `stats_age` describe lines and the parameterized PG 18 → PG 19 replay of `tables` and `indexes`."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "Task 7's Verify and its Per-task verification row both say \"grep over the four changed documents\", but Files to modify now lists five: `docs/features-catalog.md`, `.claude/skills/project-knowledge/overview.md`, `.claude/skills/project-knowledge/architecture.md`, `doc/release-notes/v0.12.0.md`, `docs/tech-debt.md`. The count was correct before `architecture.md` was added in response to round 1 and was not updated with it. A grep that stops at four documents can pass while the `NotRecordable` correction in `architecture.md` — the whole point of the round-1 fix — is missing.",
+      "fix": "Change \"four\" to \"five\" in both places, and name the `NotRecordable` sentence in `architecture.md` as one of the grep targets so the newly added file is actually covered by the check."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "The new Reviewer note before Wave 1 justifies the `dev-security-auditor` split as \"Tasks 1, 2 and 5 ... touch SQL construction or the recorded-archive path\" versus \"Tasks 3, 4 and 6 ... wire registry entries, keybindings and help text\". After the recorder-test fix moved into Task 3, Task 3 modifies `record/record_test.go` and `record/recorder_test.go` — the recorded-archive path by the note's own criterion — while still omitting the auditor. The omission is still defensible (Task 3's record/ edits are test-only and add no data path), but the note's description of Task 3 no longer matches its file list, so the stated rule and the actual assignment diverge.",
+      "fix": "Either extend the note to say Task 3's record/ edits are test-only and therefore do not trigger the auditor, or add `dev-security-auditor` to Task 3 for consistency with the stated criterion."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Backward Compatibility still says `architecture.md`'s stale `NotRecordable` claim \"must be corrected at feature finalization\", but Task 7 (Wave 5) now owns that file, so the edit happens inside the feature, not at `/done`. Two owners are implied for one edit, and the round-1 fix chose the task-list option.",
+      "fix": "Reword the Backward Compatibility bullet to point at Task 7 rather than at feature finalization."
+    },
+    {
+      "severity": "minor",
+      "category": "task_quality",
+      "issue": "The round-1 minor about descriptions duplicating content that already lives in Decisions or Risks was applied to Task 1 only; the same pattern remains in four others. Task 2 restates Decision 1 (`stats_age` \"as the tail column\") and Decision 2 (\"a 3-tuple selector each\") inline instead of citing them the way Task 1 now does, and carries an inline defect rationale (\"it is called but not deferred, so a failed assertion leaks it\"). Task 3 argues its own wave placement (\"so the fix belongs in the same task that breaks it, not a wave later\"). Task 4 repeats Decision 6 (\"a new pattern in the codebase ... deliberately confined to this group\"), Task 6 repeats two Risks rows verbatim in substance, Task 7 repeats the release-notes justification. None exceeds the five-sentence limit, none carries an AC or TDD-anchor block, and none contains line numbers or step-by-step instructions — so this is residual duplication, not a drift back to HOW level.",
+      "fix": "Optional, and cheapest in Task 2: replace the restated shape with a citation (\"per Decisions 1 and 2\") as Task 1 now does, and drop the justifying clauses from Tasks 3, 4, 6 and 7, leaving only the scope statement."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Decisions 1, 6 and 8 now narrate the spec's own review history rather than only its conclusions: \"surfaced by the security review and not visible in the original rationale\" (D1), \"The honest starting point, corrected during architecture review\" and \"So the claim that the existing precedents 'do not cover this case' is wrong\" (D6), \"an earlier draft of this spec claimed otherwise and was wrong\" (D8), plus a full paragraph of the same in Solution (line 36-46). This is what drove their growth — checked specifically, none of the three has acquired implementation detail: D1's added material is index arithmetic proving the bounds argument, D6's is a two-row table of the two existing version-blind cycles with a scope argument, D8's is the roadmap owner's refusal. All three remain decision-level. The cost is that a reader must parse retracted claims to reach the current one, and the retraction of the [020] claim is precisely what the Acceptance Criteria failed to track (first finding).",
+      "fix": "Optional. State the corrected fact directly and keep at most a one-line footnote where the retraction has to survive (the [020] claim), so the decisions read as conclusions rather than as a diff against earlier drafts."
+    }
+  ],
+  "summary": "Round 2: still approved, zero critical. All four items you asked me to check specifically come back clean. Wave conflicts after the file moves: no file is modified by two tasks in the same wave — Wave 1 splits `internal/query/autovacuum_scores*.go` (T1) from `tables|indexes*.go` (T2); Wave 3 splits `top/*` (T4) from `report/describe.go`, `report/report_test.go`, `record/record.go` (T5); Waves 2, 4, 5 hold one task each. The `record` package specifically: Task 3 (Wave 2) modifies `record/record_test.go` and `record/recorder_test.go`, Task 5 (Wave 3) modifies `record/record.go` — disjoint files and different waves, so the move is safe on both axes. `top/config_view.go` is touched by T4 (Wave 3) and T6 (Wave 4) — sequential, not parallel. No dependency runs backwards against wave order and no cycle exists. Decisions 1, 6 and 8 grew but stayed decision-level: the additions are evidence (index arithmetic, the two-row cycle table, the owner's refusal), not implementation steps. No task description drifted back to HOW: no line numbers, no AC or TDD-anchor blocks, all descriptions at or under four sentences, and Task 1's rewrite to cite Decisions 2/3/4 is the shape the others should follow. All six required fields are present on Tasks 1-7; Task 8 correctly uses the template's reduced Pre-deploy QA form (Description, Skill, Reviewers only). Both round-1 majors are properly closed: row 7 now matches Task 7's grep-based Verify, `make lint`/`make vuln` are explicitly owned by Task 8, and `architecture.md` has an owner. Template compliance is otherwise unchanged from round 1 — frontmatter valid, every section present and filled, 8 decisions with Decision/Rationale/Alternatives, Risks table specific with a mitigation per row, no time-based estimates anywhere, 8 tasks across 5 waves plus Final Wave, all skills and reviewers in the catalog. Two majors remain, both consequences of edits that were not propagated: the rewritten Decision 8 now flatly contradicts the Acceptance Criteria and the Risks table on whether tech debt [020] gets amended, and the Per-task verification table still credits Task 5 with the recorder-trap fix that moved to Task 3.",
+  "checks": {
+    "frontmatter": "pass",
+    "structure": "2 findings",
+    "standards": "pass",
+    "risks": "pass",
+    "verification": "1 finding",
+    "tasks": "3 findings",
+    "time_estimates": "pass",
+    "task_quality": "1 finding",
+    "wave_conflict": "pass"
+  }
+}

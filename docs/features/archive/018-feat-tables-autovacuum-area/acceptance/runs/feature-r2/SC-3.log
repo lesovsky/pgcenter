@@ -1,0 +1,3 @@
+ACC_OBSERVATION name=describe_tables sha256=f2363836704d9f7717182c679a32d7baa531b2fb2630f8896918e7cd286cfcb8
+ACC_OBSERVATION name=describe_indexes sha256=860d69c45a15792fee49cd5726e0489c2f11c2d5a0bdd5073cfc9492ec8344ba
+ACC_RESULT origin=pass checkpoint=complete

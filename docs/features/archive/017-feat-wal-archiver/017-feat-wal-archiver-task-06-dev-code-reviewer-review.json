@@ -1,0 +1,82 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The navigation layer reproduces the pg_stat_io (j/J) precedent faithfully across all five pieces: walNextView, the switchViewTo dispatch arm with the Decision 6 comment, menuWAL (iota placement inside the menu group, style branch, select branch), the 'W' keybinding and the three help lines — all matching the user-spec text word for word. I independently re-ran the mutation gate on a throwaway copy of the tree: nine of ten mutations turn exactly the named test red, and the tenth (deleting the case \"wal\" arm) fails the binary but through a pre-existing Test_switchViewTo harness flaw that panics instead of naming the row. No critical issues; one threshold-crossing maintainability finding in menuSelect and three optional test-pinning gaps.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/menu.go",
+      "line": 150,
+      "severity": "major",
+      "category": "maintainability",
+      "suggestion": "menuSelect now spans 102 lines (150-251) — the new menuWAL branch is what pushed it past the 100-line threshold. It is six near-identical nested switches whose only per-branch content is a cursor-index -> view-name mapping plus one printCmdline; only menuConf differs structurally (it calls editPgConfig and returns errors). The shape that would collapse it: a package-level map[menuType][]string of view names in menu order, resolved as `names := menuViews[t]; if cy < 0 || cy >= len(names) { cy = 0 }; viewSwitchHandler(app.config, names[cy]); printCmdline(...)`, leaving menuConf and menuNone as the only explicit cases. That also removes the copy-paste risk this branch was exposed to (a copied `menuType: menuStatIO` inside the menuWAL style would have produced a WAL-titled menu that dispatches to stat_io — Test_menuSelectWAL does catch it, but only because it builds the menu through selectMenuStyle). NOT a request to change this task: the task file mandates 'Copy, do not improvise' precisely so the diff stays reviewable at a glance, and the repetition is pre-existing. Worth a separate cleanup item, or an explicit decision to leave it.",
+      "benefit": "Brings the dispatcher back under the project's function-length norm and turns six parallel switches into one table, so the next menu costs a data row rather than a branch.",
+      "optional": true
+    },
+    {
+      "file": "top/config_view_test.go",
+      "line": 631,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Pre-existing harness flaw, now load-bearing for this task's acceptance gate: the per-row assertion runs in a goroutine and `wg.Wait()` sits OUTSIDE the `t.Run` closure (line 631 vs the closure ending at 645). The unbuffered viewCh receive happens before switchViewTo returns, but the assert.Equal after it can run once the subtest has completed. On a green run nothing is called, so this is invisible; on a red row testify calls t.Errorf on a finished *testing.T and the binary dies with `panic: Fail in goroutine after Test_switchViewTo/26_ has completed`. I reproduced exactly that by deleting the `case \"wal\":` arm — the acceptance criterion 'that row turns red' is technically met (non-zero exit), but the output names no row and takes the rest of the run down with it. One-line fix: move `wg.Wait()` inside the closure, as its last statement. Out of this task's mandate; flagging so the next person to touch this table knows the failure mode is a panic, not a FAIL line.",
+      "benefit": "A failing row would report as `--- FAIL: Test_switchViewTo/NN` instead of a panic that hides which row broke.",
+      "optional": true
+    },
+    {
+      "file": "top/menu_test.go",
+      "line": 23,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_selectMenuStyle asserts only len(items), so the menuWAL title (\" Choose WAL / archiver mode (Enter to choose, Esc to exit): \") is pinned by nothing — a reworded or truncated title ships silently, unlike every help-screen string in this feature, which is pinned word for word. The menu title is equally user-facing and is the only text the 'W' path shows before a selection. Cheap fix: extend the existing table with a `wantTitle` field, or add one assert.Equal on selectMenuStyle(menuWAL).title. (The item strings and the menuType field are already covered indirectly by Test_menuSelectWAL.)",
+      "benefit": "Closes the one user-visible string this task introduces that no test observes.",
+      "optional": true
+    },
+    {
+      "file": "top/keybindings_test.go",
+      "line": 26,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_keybindingsWAL pins 'W' from both sides (exactly one binding, no other view claims it), but the acceptance criterion 'the existing 'w' binding line is byte-identical to before' is verified by diff review only. Since the whole point of this task is that 'w' changed meaning without changing its line, a symmetric `DeleteKeybinding(\"sysstat\", 'w', gocui.ModNone)` probe in the same style would make the lower-case half a regression guard too — the fresh-app-per-group idiom is already there and costs three lines.",
+      "benefit": "The 'w' hotkey — the primary entry point of the feature — stops depending on review attention to stay registered.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 9,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  },
+  "verification": {
+    "commandsRun": [
+      "go vet ./top/... — clean",
+      "gofmt -l top/ — clean",
+      "golangci-lint run ./top/... — 0 issues",
+      "go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindingsWAL|Test_helpTemplate' — ok",
+      "go test -race -count=2 (same filter) — ok, so the new tests are repeatable and race-free"
+    ],
+    "mutationsReRunByReviewer": [
+      "delete `case \"wal\":` from switchViewTo -> binary FAILs, but via panic in Test_switchViewTo (see minor finding), not a named row",
+      "walNextView `case \"wal\"` returns \"wal\" -> Test_walNextView + Test_switchViewTo red",
+      "swap menuWAL cursor 0/1 targets -> Test_menuSelectWAL red",
+      "delete the menu reset (selectMenuStyle(menuNone)) -> Test_menuSelectWAL red",
+      "drop one menuWAL item -> Test_selectMenuStyle red",
+      "remove the 'W' keybinding row -> Test_keybindingsWAL red",
+      "add a second 'W' keybinding row -> Test_keybindingsWAL red",
+      "restore `'w' WAL,` on the r line -> Test_helpTemplate_walEntry + Test_helpTemplate_replicationEntry red",
+      "reword the w,W description -> Test_helpTemplate_walEntry red",
+      "drop `archiver` from the Q caveat -> Test_helpTemplate_resetCaveat red"
+    ],
+    "crossFileChecks": [
+      "internal/view/view.go:141 registers the `archiver` view with Msg 'Show archiver statistics (requires archive_mode=on)' — both names used by walNextView and the menuWAL branch resolve",
+      "menuOpen's pgssSchema guard only fires for menuPgss, so the empty third argument on the 'W' row is correct",
+      "the menuWAL iota entry sits above the blank line; moveUp/moveDown shift 6/7 -> 7/8, and `direction` values are compared only against themselves in moveCursor — no persistence or numeric literal depends on either type",
+      "the menu path reaches viewSwitchHandler (which calls liftPause), so the 016 pause contract holds for both new screens; no liftPause call was added to menu.go",
+      "exactly one printCmdline per path — the trailing one in switchViewTo, one at the end of the menuWAL branch",
+      "help.go's new Q caveat is factually right: resetStat runs query.ExecResetStats = `SELECT pg_stat_reset()`, which does not touch shared pg_stat_archiver",
+      "help text matches the user-spec (lines 180, 183) character for character",
+      "the corrected top/pause_test.go comment checks out: editPgConfig (top/pgconfig.go:70-74) does return early on !db.Local, so the narrowed claim is accurate and no new false claim replaced the old one"
+    ]
+  }
+}

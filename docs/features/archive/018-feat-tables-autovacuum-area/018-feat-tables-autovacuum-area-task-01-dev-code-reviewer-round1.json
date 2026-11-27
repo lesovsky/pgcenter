@@ -1,0 +1,58 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "changes_requested",
+  "summary": "The eleven-column PG 19 query, selector, privilege behavior, raw-score ordering, wraparound exception, and external cleanup all worked against the real 19beta2 fixture. Both required named mutations went red for the intended assertions. Acceptance is blocked only by a required structural-test omission: the relation expression is not pinned to the outer scores relation, and a joined-side mutation survives the complete AutovacuumScores suite.",
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "tests",
+      "file": "internal/query/autovacuum_scores_test.go",
+      "line": 47,
+      "issue": "The locked-column test checks only the `AS relation` alias and its position; it never asserts the approved outer-side expression `s.schemaname || '.' || s.relname`. The live assertions at lines 127-128 and the rounded-tie fixture also cannot distinguish the outer expression from `a.schemaname || '.' || a.relname`, because naturally occurring fixture rows have join partners. This omits the explicit outer-relation assertion required by tech-spec Testing Strategy lines 378-381. If the expression drifts to the joined side, an unmatched LEFT JOIN row is retained but its relation/UniqueKey value becomes NULL, violating AC-5 without any test failing.",
+      "verified": true,
+      "evidence": "In a disposable worktree at 7501f003b54bc83315e7970ffbf426a4862f1546, replaced only `SELECT s.schemaname || '.' || s.relname AS relation` with `SELECT a.schemaname || '.' || a.relname AS relation`, then ran `go test ./internal/query/ -run AutovacuumScores -count=1 -v` inside a fresh lesovsky/pgcenter-testing:0.0.11 PG 19 network namespace. The result was `PASS` / `ok ... 1.218s`: structure, live columns/values, both privilege tests, and rounded-tie ordering all passed; only the ordinary-suite dedicated wraparound test skipped. The temporary worktree and containers were removed.",
+      "recommendation": "Add a named structural assertion for the complete outer expression, for example `assert.Contains(t, PgStatAutovacuumScoresDefault, \"SELECT s.schemaname || '.' || s.relname AS relation\")`. Mutation-check it by changing both fields to the `a` alias and require that named assertion to fail; retain the live exact-name/value checks."
+    }
+  ],
+  "verification_performed": [
+    {
+      "command": "git diff --check 6dd550e1916c2b9e6710057afae3cd18370d06e2..7501f003b54bc83315e7970ffbf426a4862f1546 && bash -n testing/run-autovacuum-wraparound-test.sh",
+      "result": "Passed. HEAD equaled the requested ending commit; the supplied task worktree was clean before and after review."
+    },
+    {
+      "command": "go test ./internal/query/ -run AutovacuumScores -count=1 -v",
+      "result": "Host structural/selector tests ran and passed. Live PG 19, privilege, and rounded-tie tests skipped because host port 21919 had no server; the dedicated wraparound test skipped honestly without its marker. These skips were not treated as integration evidence."
+    },
+    {
+      "command": "Fresh lesovsky/pgcenter-testing:0.0.11 container and same-namespace runner: go test ./internal/query/ -run AutovacuumScores -count=1 -v",
+      "result": "Server reported 19beta2. Live FieldDescriptions order and values, user/all filtering, pg_monitor and non-pg_monitor privilege cases, and rounded-tie raw ordering all passed. The unmarked dedicated test skipped. Package result: PASS, 1.160s."
+    },
+    {
+      "command": "testing/run-autovacuum-wraparound-test.sh",
+      "result": "Real PASS, not a skip: Test_StatAutovacuumScoresQuery_WraparoundException and system_row_presence_assertion passed in 4.29s. The supervisor reported destruction of both runner and dedicated PG 19 containers and successful dedicated-namespace completion."
+    },
+    {
+      "command": "testing/run-autovacuum-wraparound-test.sh --self-test timeout; testing/run-autovacuum-wraparound-test.sh --self-test sigkill",
+      "result": "SIGKILL passed with external destruction. Timeout passed on an isolated run with status 124 handling and external destruction. An initial attempt to run both self-tests concurrently had one timeout runner fail to reach its checkpoint; that attempt was not counted as a pass, and its created runner artifact was removed."
+    },
+    {
+      "command": "Fresh all-version fixture namespace: go test ./internal/query/ -count=1",
+      "result": "Passed against the prepared PG 14-19 environment: ok github.com/lesovsky/pgcenter/internal/query 4.167s."
+    },
+    {
+      "command": "Disposable-worktree mutation: ORDER BY s.score DESC -> ORDER BY score DESC; go test ./internal/query/ -run '^Test_StatAutovacuumScoresQuery_RoundedTieRawOrder$' -count=1 -v",
+      "result": "Expected red observed on `raw descending score order assertion`: expected high/medium/low, got low/medium/high. This was a compiling behavioral failure, not a setup or build failure. Exit 1; mutation and fixtures were removed."
+    },
+    {
+      "command": "Fresh disposable-worktree mutation: delete ` OR s.for_wraparound`; testing/run-autovacuum-wraparound-test.sh",
+      "result": "Expected red observed after successful flagged-toast fixture setup: `wraparound system-row presence assertion` failed for pg_toast.pg_toast_16532. External supervisor still proved destruction of both containers. Exit 1; mutation and fixtures were removed."
+    },
+    {
+      "command": "Final artifact checks: git status --short; git worktree list --porcelain; docker ps -a with task-specific name filters",
+      "result": "No source changes, temporary worktrees, review containers, or wraparound containers remained. Only the requested JSON report was created outside the task worktree."
+    }
+  ]
+}

@@ -2,15 +2,25 @@ package query
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/lesovsky/pgcenter/internal/postgres"
 	"github.com/stretchr/testify/assert"
 )
 
 // overviewVersions enumerates the actively supported Postgres versions for live-PG tests.
 var overviewVersions = []int{140000, 150000, 160000, 170000, 180000, 190000}
+
+// Role names owned by the archiving-backlog tests. They are deliberately distinct from the archiver
+// tests' roles: roles are cluster-global and never dropped, so sharing them would couple the cluster
+// state of two independent tasks.
+const (
+	backlogRoleMonitor = "pgcenter_test_backlog_monitor"
+	backlogRoleNoRole  = "pgcenter_test_backlog_norole"
+)
 
 func Test_OverviewQueries(t *testing.T) {
 	// Static (non-template) aggregates: each must execute AND scan into exactly the receivers
@@ -121,9 +131,10 @@ func Test_OverviewQueries_Templates_Recovery(t *testing.T) {
 }
 
 func Test_ArchivingBacklogQuery_Degrades(t *testing.T) {
-	// The archiving backlog aggregate reads pg_wal/archive_status via pg_ls_dir, which requires
-	// pg_monitor/superuser. On the test clusters the fixtures role has access, so the query must
-	// either execute successfully or fail with an error the caller can catch (privilege/archive_mode=off)
+	// The archiving backlog aggregate reads archive_status via pg_ls_archive_statusdir(), which
+	// superuser and pg_monitor may execute. The fixtures role is postgres, a superuser, so this test
+	// says nothing about privileges (Test_ArchivingBacklogQuery_PgMonitorRole does): it asserts only
+	// that the query either executes successfully or fails with an error the caller can catch,
 	// WITHOUT panicking and WITHOUT being run as part of a larger scan.
 	for _, version := range overviewVersions {
 		conn, err := postgres.NewTestConnectVersion(version)
@@ -142,6 +153,99 @@ func Test_ArchivingBacklogQuery_Degrades(t *testing.T) {
 		}
 
 		conn.Close()
+	}
+}
+
+// Test_ArchivingBacklogQuery_Structure pins the aggregate's arithmetic without a server, mirroring
+// Test_StatArchiverQuery_Structure. The fixtures run archive_mode=off with an empty status
+// directory, so every live assertion on the backlog reduces to 0 >= 0: dropping the .ready FILTER or
+// the wal_segment_size multiplication would keep all the live tests green. Only substring fixation
+// reddens on those two mutations.
+func Test_ArchivingBacklogQuery_Structure(t *testing.T) {
+	assert.Contains(t, OverviewArchivingBacklog, "count(*) FILTER (WHERE name LIKE '%.ready')",
+		"only .ready files are backlog - a bare count(*) is a different number")
+	assert.Contains(t, OverviewArchivingBacklog, "pg_size_bytes(current_setting('wal_segment_size'))",
+		"the backlog is bytes, not a segment count")
+	assert.Contains(t, OverviewArchivingBacklog, "FROM pg_ls_archive_statusdir()",
+		"the pg_monitor-executable function is the whole point of Decision 8")
+	assert.NotContains(t, OverviewArchivingBacklog, "pg_ls_dir",
+		"the superuser-only predecessor must not come back")
+}
+
+// Test_ArchivingBacklogQuery_PgMonitorRole is the whole point of the aggregate's rewrite: a role
+// holding only pg_monitor - the role the verbose panel exists to serve - must get a number, not n/a.
+// pg_ls_dir is superuser-only, so the old query 42501'd for that role on every tick and the operator
+// never saw the first signal that archiving had stopped; pg_ls_archive_statusdir() is granted to
+// pg_monitor.
+//
+// The fixture connection is the superuser postgres, so the restricted-session guard runs BEFORE the
+// aggregate: without it the test would pass identically as superuser and prove nothing about
+// privileges - which is exactly how the wrong assumption survived into ADR [010].
+func Test_ArchivingBacklogQuery_PgMonitorRole(t *testing.T) {
+	for _, version := range overviewVersions {
+		t.Run(fmt.Sprintf("backlog/%d", version), func(t *testing.T) {
+			conn, err := postgres.NewTestConnectVersion(version)
+			if err != nil {
+				t.Skipf("postgres %d not available in test environment", version)
+			}
+			defer conn.Close()
+
+			err = postgres.SetupTestRole(conn, backlogRoleMonitor, true)
+			assert.NoError(t, err)
+			if err != nil {
+				return
+			}
+			// RESET ROLE immediately after the successful SET ROLE, so it runs even when an
+			// assertion below fails.
+			defer resetRole(t, conn, backlogRoleMonitor)
+
+			if !assertRestrictedSession(t, conn, backlogRoleMonitor, true) {
+				return
+			}
+
+			var backlog int64
+			err = conn.QueryRow(OverviewArchivingBacklog).Scan(&backlog)
+			assert.NoError(t, err, "pg_monitor must be able to read the archiving backlog")
+			assert.GreaterOrEqual(t, backlog, int64(0))
+		})
+	}
+}
+
+// Test_ArchivingBacklogQuery_NoPrivilegeRole is the negative half: moving off pg_ls_dir widens who
+// can read the backlog, and this pins how far. A role holding neither superuser nor pg_monitor must
+// still be refused, so the change is a privilege fix and not a privilege downgrade. The assertion is
+// pinned to SQLSTATE 42501 and to the function name - "an error occurred" would also pass on a typo.
+func Test_ArchivingBacklogQuery_NoPrivilegeRole(t *testing.T) {
+	for _, version := range overviewVersions {
+		t.Run(fmt.Sprintf("backlog/%d", version), func(t *testing.T) {
+			conn, err := postgres.NewTestConnectVersion(version)
+			if err != nil {
+				t.Skipf("postgres %d not available in test environment", version)
+			}
+			defer conn.Close()
+
+			err = postgres.SetupTestRole(conn, backlogRoleNoRole, false)
+			assert.NoError(t, err)
+			if err != nil {
+				return
+			}
+			defer resetRole(t, conn, backlogRoleNoRole)
+
+			if !assertRestrictedSession(t, conn, backlogRoleNoRole, false) {
+				return
+			}
+
+			var backlog int64
+			err = conn.QueryRow(OverviewArchivingBacklog).Scan(&backlog)
+			assert.Error(t, err)
+
+			var pgErr *pgconn.PgError
+			if assert.ErrorAs(t, err, &pgErr) {
+				assert.Equal(t, "42501", pgErr.Code, "must fail with insufficient_privilege")
+				assert.Contains(t, pgErr.Message, "pg_ls_archive_statusdir",
+					"the failure must name the privileged call, not just any error")
+			}
+		})
 	}
 }
 

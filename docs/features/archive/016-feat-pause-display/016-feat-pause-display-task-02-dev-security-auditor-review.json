@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 3,
+    "critical": 0,
+    "major": 0,
+    "minor": 3
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Non-atomic read-modify-write on config.paused relies on an unenforced single-writer invariant",
+      "description": "togglePause performs `app.config.paused.Store(!app.config.paused.Load())` — two separate atomic operations, not one atomic RMW. This is correct today only because every writer of the flag runs on the gocui MainLoop goroutine (the Space handler now; the lifting handlers of Task 5 later), while the worker goroutine (statLoop, Task 3) only reads it. The invariant is documented in the top/pause.go file header and in the config.paused doc comment, but nothing in the code enforces it: the flag is an exported-within-package atomic that any future goroutine (e.g. a repaint failure latch, a timer goroutine, or a lifting call added from a non-UI path) could store into, at which point the Load/Store pair silently loses a toggle. `go vet` and `-race` will not report it, because two atomics are never a data race — only a lost update.",
+      "location": "top/pause.go:42",
+      "impact": "No memory-safety or confidentiality impact. Worst case is a lost pause toggle: the display state and the [PAUSED] marker disagree with what the operator pressed, which for a monitoring tool means the operator can believe they are looking at live data while the screen is frozen (or vice versa). Requires a future second writer goroutine to be reachable at all.",
+      "recommendation": "Either keep the current form and make the invariant harder to break (a one-line note on togglePause that the Load/Store pair is only safe because the flag has a single writer goroutine), or make the toggle self-contained:\n\n```go\nfor {\n    old := app.config.paused.Load()\n    if app.config.paused.CompareAndSwap(old, !old) {\n        break\n    }\n}\n```\n\nNo change is required for this task to ship; this is a durability note for Tasks 3 and 5, which add the second and third writers.",
+      "cwe": "CWE-366"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "On a terminal narrower than the marker, a paused screen shows stale statistics with no staleness indicator",
+      "description": "[PAUSED] is deliberately a single-variant token (top/pause.go:27), so composeCmdline drops it whole rather than truncating it. Test_cmdlineTokensPauseNeverDegrades pins exactly that: at width 7 the composed line is empty. The marker is the only signal that the numbers on screen are frozen — the frozen header clock of Task 4 is corroborating, not equivalent, since a clock that merely stopped ticking is easy to miss. Below 8 columns the pause therefore becomes invisible while remaining in effect, and the flag survives pager/editor returns and UI rebuilds, so the state can outlive the session in which it was set.",
+      "location": "top/pause.go:22-28, top/ui.go:412-416",
+      "impact": "An operator on a very narrow terminal (or in a narrow tmux pane) can read frozen PostgreSQL statistics as live and draw wrong conclusions during an incident — the integrity-of-displayed-data failure mode this feature's marker exists to prevent. Reachability is low: at fewer than 8 columns almost nothing on screen is readable anyway.",
+      "recommendation": "Accept as designed (never rendering a truncated \"[PAUSE\" is the stronger property), but record it as a known limitation. If a cheap signal is wanted later, Task 7's size-change detector is the natural place: when the pause is engaged and the composed prefix comes back empty, emit a one-off cmdline hint. Do not add a special case to cmdlineTokens or the composer for it.",
+      "cwe": null
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Destructive dialogs remain enabled while the display is frozen, so a PID can be read off deliberately stale data",
+      "description": "The Space binding is scoped to the \"sysstat\" context, which is correct and verified (dialog/menu/help all call SetCurrentView, and gocui's default editor handles KeySpace in the dialog view, so a space typed into the filter dialog stays a plain space). The consequence, however, is that all backend-affecting dialogs — `-` cancel query, `_` terminate backend — stay reachable while paused, and their operand is a PID the operator reads off a frozen screen. PostgreSQL recycles backend PIDs, so a long pause can turn \"terminate the offending backend\" into \"terminate an unrelated one\". The tech-spec examined this explicitly and rejected showing the frame's age in the kill dialogs (Section: Decisions → \"Rejected: showing the frame's age in the backend-kill dialogs\"), relying on the frozen header clock (Task 4) and the always-visible marker instead. Noted here so the compensating controls are traceable to a security review rather than only to a design decision.",
+      "location": "top/keybindings.go:61 (binding), tech-spec Section: Decisions → \"Rejected: showing the frame's age in the backend-kill dialogs\"",
+      "impact": "An operator acting on stale identifiers can cancel or terminate the wrong PostgreSQL backend — an availability/integrity impact on the observed database, not on pgcenter itself. Requires a pause long enough for PID reuse plus an operator who does not notice the marker or the stopped clock.",
+      "recommendation": "No code change in this task. Keep the two compensating controls hard requirements of the feature: Task 4 (frozen header clock — the frozen frame must not carry a live clock) and Task 6 (help entry naming the key and the set of actions that lift the pause). If either is dropped or weakened during implementation, re-open this finding.",
+      "cwe": "CWE-672"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "approved",
+  "range": "6dd550e1916c2b9e6710057afae3cd18370d06e2..54a6473d8cb8a7d6f598a65bb781b1ea422d65b9",
+  "findings": [],
+  "verification": [
+    {
+      "command": "docker run --rm [read-only source and Go toolchain mounts] lesovsky/pgcenter-testing:0.0.11 ... go test -v ./internal/query/ -run 'StatTables|StatIndexes' -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "All selector, source, live FieldDescriptions, and NULL-age tests passed. Test_StatTablesQueries and Test_StatIndexesQueries each passed all six PG14-PG19 subtests with no skips; Test_StatTablesQuery_NullStatsAge and Test_StatIndexesQuery_NullStatsAge passed. The disposable containers were removed after execution."
+    },
+    {
+      "command": "docker run --rm [read-only source and Go toolchain mounts] lesovsky/pgcenter-testing:0.0.11 ... go test ./internal/query/ -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "ok github.com/lesovsky/pgcenter/internal/query 14.062s against prepared PG14-PG19 fixtures."
+    },
+    {
+      "command": "go test -v ./internal/query/ -run 'StatTables|StatIndexes' -count=1 && go test ./internal/query/ -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Host-only runs passed; as expected without local clusters, all 12 live version subtests and both NULL-age tests skipped on the host. These host results were not treated as live-fixture evidence."
+    },
+    {
+      "command": "go test -v -overlay <temporary-overlay> ./internal/query/ -run '^Test_StatTablesQuery_StatsAgeSource$' -count=1; equivalent indexes mutation",
+      "verified": true,
+      "result": "EXPECTED_FAIL",
+      "evidence": "Overlay-only mutations changed now() - t.stats_reset to now() - i.stats_reset for tables and now() - s.stats_reset to now() - i.stats_reset for indexes. Both commands exited 1 and reddened the named source assertion (tables_test.go:69 and indexes_test.go:62), as well as the explicit wrong-source assertions. Temporary overlays were automatically removed and product files were not modified."
+    },
+    {
+      "command": "git diff --check <range>; git diff <range> -- internal/query/functions.go internal/query/sizes.go; gofmt -d internal/query/tables.go internal/query/tables_test.go internal/query/indexes.go internal/query/indexes_test.go; git status --short --untracked-files=all",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "No whitespace errors, no functions/sizes changes, no gofmt diff, and no worktree changes or scratch artifacts. The reviewed range changes only the four contracted tables/indexes source and test files."
+    }
+  ],
+  "summary": "Approved with no findings. Both selectors implement the exact PG19 boundary and legacy/future behavior, return the contracted 3-tuples, and leave UniqueKey untouched. PG19 queries preserve every legacy selected expression and append nullable stats_age from the pg_stat_* alias at the tail; unchanged inclusive DiffIntvl values satisfy both Ncols-2 and the narrowest-layout bounds invariant. Live PG14-PG19 tests assert exact ordered FieldDescriptions and drain errors, while the PG19 NULL tests scan through sql.NullString and prove blank/invalid cells. Fixture-owned objects have unique names and deferred cleanup, no shared-cluster stats reset is introduced, and all required source mutations were observed failing the intended assertions. Configure() wiring remains correctly deferred to Task 03 per the task boundary; Decisions 1 and 2 are satisfied here without prematurely implementing Decision 5."
+}

@@ -1,9 +1,9 @@
 ### Development
 
-Download pgcenter-testing docker image, run container and start script which prepares testing environment.
+Download the pgcenter-testing Docker image, run a container, publish the PostgreSQL 14–19 fixture ports, and start the environment preparation script.
 ```shell
-$ docker pull lesovsky/pgcenter-testing:latest
-$ docker run --rm -p 21995:21995 -p 21996:21996 -p 21910:21910 -p 21911:21911 -p 21912:21912 -p 21913:21913 -p 21914:21914 -ti lesovsky/pgcenter-testing:latest /bin/bash
+$ docker pull lesovsky/pgcenter-testing:0.0.11
+$ docker run --rm -p 21914:21914 -p 21915:21915 -p 21916:21916 -p 21917:21917 -p 21918:21918 -p 21919:21919 -ti lesovsky/pgcenter-testing:0.0.11 /bin/bash
 # prepare-test-environment.sh
 ```
 
@@ -13,12 +13,13 @@ $ git clone https://github.com/lesovsky/pgcenter
 $ cd pgcenter
 ```
 
-Before running tests or building make sure your go version is 1.16.
+Before running tests or building, use Go 1.26 or newer. The `go.mod` toolchain directive selects Go 1.26.10.
 
-Run tests.
+Run checks.
 ```shell
 $ make lint
 $ make test
+$ make vuln
 ```
 
 Build.

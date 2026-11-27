@@ -1,0 +1,129 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 1,
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "decomposition",
+      "task": "04",
+      "section": "What to do / Acceptance Criteria",
+      "issue": "Конфликт волны 3 по файлу top/pause.go, замаскированный шовом, который задача 03 не прорезает. Задача 04 добавляет параметр-таймстамп в renderSysstat; renderSysstat вызывается из renderFrame (top/stat.go), значит renderFrame обязан получить штамп — а это параметр. Место вызова renderFrame на пути перерисовки живёт в top/pause.go (задача 03, раздел 'What to do' п.3: 'add frameStore, the publish helper, repaintStored, the repaint closure and the failure latch' в top/pause.go). Чтобы передать туда frameStore.at, задаче 04 придётся править top/pause.go, которым в волне 3 владеет задача 05. Это прямо противоречит собственному критерию приёмки задачи 04 ('top/pause.go ... untouched by this task') и правилу волн tech-spec. Задача 03 прорезает шов только для logtail-источника ('Design the signature to already accept the logtail source'), но не для таймстампа — её хинт даже явно велит 'не менять сигнатуру renderSysstat', ничего не говоря про параметр renderFrame.",
+      "fix": "Добавить в задачу 03 (What to do п.4 и Acceptance Criteria) требование, симметричное logtail-шву: renderFrame уже принимает время отрисовки кадра параметром — живой путь передаёт захваченный time.Now(), путь перерисовки передаёт frameStore.at; renderSysstat при этом остаётся с сегодняшней сигнатурой (задача 04 меняет только её и внутренность renderFrame). В задаче 04 (Details, top/stat.go:175 и п.3 What to do) заменить формулировку 'if the core does not yet carry it, adding that parameter is part of this task' на утверждение, что параметр уже есть после задачи 03, и что при его отсутствии задача 04 останавливается и эскалирует, а не правит top/pause.go."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "03",
+      "section": "Details / Post-completion",
+      "issue": "Ложное утверждение об источнике правды. В Details сказано: 'The tech-spec's file table omits this file; that is an oversight in the table', и Post-completion предписывает зафиксировать отклонение ('top/top.go не значится в таблице файлов tech-spec'). Фактически tech-spec (строка 632, Implementation Tasks, Wave 2) уже содержит top/top.go в списке файлов задачи 3 — таблицу дополнили после создания задачи. Исполнитель либо запишет в decisions.md отклонение, которого нет, либо потратит время на сверку.",
+      "fix": "Убрать из Details фразу про 'oversight in the table' — оставить только констатацию, что top/top.go есть в таблице tech-spec для задачи 3 и что ни одна другая задача этот файл не правит (проверено: задача 02 указывает его только на чтение). Из Post-completion удалить скобочное уточнение про отклонение по top/top.go."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files / Post-completion",
+      "issue": "Ссылки заданы относительно корня репозитория (`[top/config.go](top/config.go)`, `[016-feat-pause-display.md](docs/features/016-feat-pause-display/016-feat-pause-display.md)`), но markdown-ссылка разрешается относительно каталога самого файла задачи, поэтому ни одна из них не открывается: получается docs/features/016-feat-pause-display/top/config.go. Задачи 01, 03 и 05 в этой же партии используют файл-относительную запись (`../../../top/stat.go`, `016-feat-pause-display.md`), которая разрешается корректно. Разнобой в партии.",
+      "fix": "Привести задачи 02 и 04 к той же записи, что в 01/03/05: артефакты фичи — по имени файла, код и project-knowledge — через `../../../`. Проверить, что каждая ссылка открывается из каталога docs/features/016-feat-pause-display/."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files / Post-completion",
+      "issue": "То же, что и в задаче 02: ссылки записаны от корня репозитория (`[top/stat.go](top/stat.go)`, `[016-feat-pause-display-tech-spec.md](docs/features/.../...)`) и из каталога файла задачи не разрешаются.",
+      "fix": "Перевести на файл-относительную запись, как в задачах 01/03/05."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "Reviewers",
+      "issue": "Пути отчётов ревьюеров указаны без префикса каталога: `016-feat-pause-display-task-03-dev-code-reviewer-review.json`. В задачах 01, 02, 04, 05 и в шаблоне ({feature_base}-task-{ID}-{name}-review.json, где feature_base включает docs/features/016-feat-pause-display/) — полный путь. Ревьюер может записать JSON в корень репозитория.",
+      "fix": "Добавить префикс docs/features/016-feat-pause-display/ ко всем трём путям отчётов в задаче 03."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "03",
+      "section": "frontmatter",
+      "issue": "depends_on: [\"02\"] не включает \"01\", хотя Details задачи 03 называет результат задачи 01 предпосылкой корректности хранилища ('Task 01 (non-mutating printDataCell) is what makes a repaint of the store a pure function of the store'). Порядок волн (01 в волне 1, 03 в волне 2) де-факто гарантирует очерёдность, поэтому это не блокер.",
+      "fix": "Либо depends_on: [\"01\", \"02\"], либо явная строка в Dependencies о том, что зависимость от задачи 01 покрывается разделением волн и намеренно не объявлена."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "03",
+      "section": "TDD Anchor",
+      "issue": "Пункт Testing Strategy tech-spec 'Errors while paused: a frame carrying an error is discarded like any other and surfaces on the first frame after resume' не имеет TDD-якоря ни в одной задаче партии. В задаче 03 он присутствует только как Edge case (описание поведения), но не как тест; в задачах 01, 02, 04, 05 его нет.",
+      "fix": "Добавить в TDD Anchor задачи 03 якорь вида `top/ui_test.go::Test_statLoop_discardsErrorFrameWhilePaused` — кадр со stat.Stat{Error: ...} при paused==true уходит в repaint и не доходит до render, а первый кадр после снятия паузы доходит до render вместе с ошибкой."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Расхождение в счёте: в Context Files сказано '[top/config_view.go] — семь мест', далее перечислено девять пунктов (orderKeyLeft, orderKeyRight, decreaseWidth, switchSortOrder, viewSwitchHandler, switchViewToProcPidStat, toggleSysTables, changeQueryAge, toggleIdleConns). По таблице Details и по критериям приёмки в этом файле восемь мест снятия (места 1-8) плюс защита decreaseWidth. Само число одиннадцати мест снятия (8 liftPause + 3 liftPauseRefresh) в таблице и в AC сходится — ошибка только в этой строке.",
+      "fix": "Заменить 'семь мест' на 'восемь мест снятия (места 1-8 таблицы) плюс защита decreaseWidth'."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "TDD Anchor",
+      "issue": "В начале секции оставлен инструктивный текст шаблона ('Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.'). В задачах 01, 02 и 05 он заменён собственной формулировкой.",
+      "fix": "Заменить на однострочную формулировку, специфичную для задачи, как в задачах 01/02/05."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "04",
+      "section": "TDD Anchor",
+      "issue": "Тот же остаток шаблонного инструктивного текста в начале секции TDD Anchor.",
+      "fix": "Заменить на собственную формулировку."
+    },
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "03",
+      "section": "What to do",
+      "issue": "Самая крупная задача партии: шесть файлов (top/ui.go, top/stat.go, top/pause.go, top/top.go, top/ui_test.go, top/pause_test.go), четыре механизма (извлечение statLoop, гейт, frameStore, разделение render core) плюс предсуществующий фикс незащищённой отправки в top/stat.go:130. Формально кандидат на разделение по правилу '>3 файлов'. Связность высокая и разделение осознанно отклонено в утверждённом tech-spec ('Task 9 is serialised into its own wave because...', задача 3 — единственная в волне 2), поэтому это наблюдение, а не требование.",
+      "fix": "Действий не требуется. Если по ходу выполнения задача окажется неподъёмной, единственный безопасный шов — вынести гейт+statLoop (top/ui.go) отдельно от frameStore+renderFrame; но тогда обе половины попадут в разные волны, поскольку промежуточное состояние (гейт без хранилища) — это экран, который перестал обновляться и не перерисовывается."
+    },
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "05",
+      "section": "What to do",
+      "issue": "В задачу вложены два несвязанных решения: Decision 9 (снятие паузы, 11 мест вызова, причинный фикс мутации config.logtail) и Decision 14 (защита decreaseWidth от неинициализированных Cols). Удаление защиты decreaseWidth оставило бы снятие паузы полным и работающим — то есть логической связности между ними нет.",
+      "fix": "Действий не требуется: обе части живут в файлах, которыми задача 05 владеет в волне 3 (config_view.go, config_view_test.go), а выделение Decision 14 в отдельную задачу той же волны создало бы конфликт по config_view.go. Оставить как есть, зафиксировав причину объединения одной строкой в Dependencies."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "В репозитории нет .claude/skills/project-knowledge/project.md — его роль играет overview.md. Задачи 01 и 03 это оговаривают прямо в ссылке ('there is no project.md in this repo; overview.md is its equivalent'), задачи 02, 04 и 05 подставляют overview.md без пояснения. Формально обязательный project.md отсутствует во всех пяти задачах, фактически подстановка верна.",
+      "fix": "Добавить в задачи 02, 04, 05 то же пояснение при ссылке на overview.md, чтобы исполнитель не пошёл искать project.md."
+    }
+  ],
+  "cross_task_checks": {
+    "wave_partition": "OK. Волна 1: задача 01 (top/stat.go, top/stat_test.go) и задача 02 (top/config.go, top/keybindings.go, top/pause.go, top/pause_test.go, top/ui.go, top/ui_test.go) — пересечений нет. Волна 2: только задача 03. Волна 3: задача 04 (top/stat.go, top/stat_test.go), задача 05 (top/config_view.go, top/extra.go, top/verbose.go, top/pause.go + три тестовых файла), задача 06 (top/help.go, top/help_test.go) — пересечений нет. ОДНАКО см. critical-находку: задача 04 может быть вынуждена править top/pause.go из-за непрорезанного шва по таймстампу.",
+    "top_go_ownership": "OK. top/top.go правит только задача 03; задача 02 указывает его в Context Files с пометкой 'read'. Grep по всем десяти задачам других упоминаний на запись не дал. Файл присутствует в таблице волн tech-spec (строка 632) для задачи 3.",
+    "pause_go_in_wave3": "OK по документам. Задача 04: 'Do not modify top/pause.go — task 05 owns that file in this same wave', критерий приёмки 'top/pause.go ... untouched', в Context Files помечен read only. Задача 06: критерий приёмки 'Изменены ровно два файла: top/help.go и top/help_test.go', плюс явный запрет трогать pause.go. Риск нарушения — только через critical-находку по задаче 04.",
+    "depends_on_vs_waves": "OK для партии. 01: [], волна 1. 02: [], волна 1. 03: [\"02\"], волна 2. 04: [\"03\"], волна 3. 05: [\"03\"], волна 3. Циклов нет, все зависимости указывают на задачи меньшей волны. Вне партии (для сведения): 06 → [\"03\"] волна 3, 07 и 08 → [\"05\"] волна 4, 09 → [\"07\",\"08\"] волна 5, 10 → [\"09\"] волна 6 — циклов нет, порядок волн соблюдён.",
+    "reviewers_vs_catalog": "OK. Задачи 01-05 несут полный набор code-writing: dev-code-reviewer, dev-security-auditor, dev-test-reviewer — совпадает с frontmatter и с tech-spec. Заявленное исключение (задача 06 без dev-security-auditor) находится вне партии и соответствует явной ремарке tech-spec.",
+    "verify_vs_techspec": "OK. 01: bash go test ./top/... ; 02: bash ; 03: bash go test ./top/... -race ; 04: bash ; 05: bash — совпадает со столбцом verify таблицы 'Per-task verification' tech-spec.",
+    "code_claims_spotcheck": "Выборочно сверено с кодом: top/stat.go:1113 (запись в s.Result.Values внутри printDataCell) — подтверждено, включая порядок проверок width<=0 после проверки переполнения; top/config_view.go:105 (индексация config.view.Cols[idx] в decreaseWidth) — подтверждено; top/extra.go:45-46 (запись Path/Size до трёх ранних возвратов) — подтверждено; top/ui.go:461 (взвод таймера только при непустом сообщении) — подтверждено; top/stat.go:130 (незащищённая отправка statCh <- stat.Stat{Error: err}) — подтверждено; пять мест вызова renderSysstat в top/stat_test.go (:60, :97, :192, :440, :441) — подтверждено точно. printStat в тестах не вызывается, поэтому извлечение renderFrame в задаче 03 не ломает компиляцию top/stat_test.go, который задача 03 править не должна."
+  },
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 13,
+    "critical": 1,
+    "major": 1,
+    "minor": 11
+  }
+}

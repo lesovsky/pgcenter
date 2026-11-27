@@ -1,0 +1,30 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "All five round-1 findings are closed, and every closure was re-verified independently by mutation on an isolated copy of the tree (tar copy at scratchpad/mutcopy, baseline green, each mutation applied and reverted, final baseline green again). The seven mutations named in the handoff all redden the named test, and the sub-test isolation claim holds exactly: deleting the blank-cell clause from the last_archived row only reddens Test_describeArchiverBlankCells/last_archived and nothing else. The round-1 battery still reddens (map entry removed, map entry mis-wired to pgStatWALDescription, fpi,KiB row deleted, fpi,KiB moved before fpi, an archiver row deleted). Five further mutations I designed myself also redden: swapping the archived/failed origins, swapping the last_failed/failed_age rows, renaming ready to pending, deleting all four blank-cell clauses (four subtests red, one per clause), corrupting the WAL stats_age origin, and swapping two whole archiver rows at equal row count. The origins asserted in the tables are truthful rather than transcribed from the describe text: I cross-checked all nine archiver origins against the AS aliases in query.PgStatArchiverDefault (internal/query/archiver.go:38-47) and they match. Finding 5's cheap option is honest: archiverColumns does exist in internal/query/archiver_test.go:23-26 and its nine names are identical, in order, to the describe test's list, so the comment's grep-able pointer resolves to something real. report_test.go changed by addition only - no round-1 assertion was weakened or removed. gofmt clean, go vet clean, full report package green. The one residual gap is a deliberate boundary rather than a defect and does not warrant a third round.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "report/report_test.go:1309-1327 (assertDescribeColumns) / report/describe.go:164, 169",
+      "issue": "The description prose - the fourth column of each row - remains unguarded except where a test names it explicitly (the four blank-cell clauses and the (PG 19+) note). Two mutations I ran stay green: (a) truncating a row to name plus origin, `- failed\\tfailed_count\\t\\tTotal number of failed attempts to archive a WAL file` -> `- failed\\tfailed_count`, passes because `require.GreaterOrEqual(t, len(fields), 3)` admits exactly three fields, so a row that documents nothing satisfies the malformed-row guard; (b) rewriting the source row from \"Always has 'Archiver' value\" to \"Always has 'WAL' value\" passes, even though the literal is what gives the row its identity across samples (the query comment at internal/query/archiver.go:6 calls source \"the stable row identity\", and the SQL emits `SELECT 'Archiver' AS source`). Neither is a live defect - the text is correct today - and both are visible the moment anyone runs `report -d -W a`, which is why this is drift risk rather than a bug. It is also the same boundary the pre-existing pgStatWALDescription rows sit behind, so closing it here would leave the package inconsistent unless done for both.",
+      "recommendation": "Optional, and only if the cost is judged worth it - this does not need another round. Two one-line options, either independently: (1) tighten the malformed-row guard from `GreaterOrEqual(t, len(fields), 3)` to `Greater(t, len(fields), 3)` in assertDescribeColumns, which makes a row with no prose fail as malformed and costs nothing, since every row in both constants has prose today (verified: the suite stays green with the tightened bound); (2) pin the source literal the way the blank-cell clauses are pinned, `_, row := describeRow(t, pgStatArchiverDescription, \"source\"); assert.Contains(t, row, \"'Archiver'\", \"the source row must document the literal the query emits\")` - the mutation that must then redden is 'Archiver' -> 'WAL' in the source row. Do not go further than this: asserting whole prose strings per row would turn the test into a copy of the constant and would break on every wording fix without catching a behaviour change.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "litmusTest": {
+      "checked": 7,
+      "passed": 7,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 6,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

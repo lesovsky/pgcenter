@@ -50,9 +50,9 @@ revisit each of them. This is a known, accepted cost of the deferral, recorded h
 rediscovered as a surprise. Rule 1 is unaffected: [013] shipped, so the activity column layout is
 already final for whatever colour work follows.
 
-Each feature goes through the full SDD pipeline (user-spec → tech-spec → decompose → implement →
-review) **one at a time**, in the order below. Numbering continues from the archive (last
-archived: `011`).
+Each feature goes through the full SDLC pipeline (user-spec → tech-spec → decomposition → execution →
+freeze QA → finalization) **one at a time**, in the order below. Numbering continues from the archive
+(last archived: `017`).
 
 ## Cross-cutting policy: record/report per view, by design risk
 
@@ -203,7 +203,7 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [015] TUI papercuts batch
 
-- **Status:** in progress — user-spec written. **Scope changed during spec work (2026-08-02):**
+- **Status:** done — archived as `docs/features/archive/015-feat-tui-papercuts`. **Scope changed during spec work (2026-08-02):**
   pause on `Space` was **split off into its own feature** (now [016]), and the batch gained four
   items not listed below. Actual scope, seven items: auto-scroll to the sort column, the filter
   indicator, a clear-all-filters hotkey (`\`), the refresh interval in the header, two verbose-mode
@@ -256,10 +256,16 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [016] Pause the display on `Space`
 
-- **Status:** planned — **split off from [015] on 2026-08-02**, and placed **immediately after it**
-  by the roadmap owner; the area passes were renumbered [016]–[019] → [017]–[020] to make room. The
-  reason for this position: the cmdline composer [015] establishes is exactly what this feature
-  extends, so the two are cheapest back to back.
+- **Status:** done (2026-08-04) — archived as `docs/features/archive/016-feat-pause-display`. All 21
+  user-spec acceptance criteria pass; 15 of them were verified on a live stand, the rest by unit
+  tests. Split off from [015] on 2026-08-02 and placed immediately after it by the roadmap owner;
+  the area passes were renumbered [016]–[019] → [017]–[020] to make room. The reason for that
+  position held up: the cmdline composer [015] established took the `[PAUSED]` token with no
+  rework, exactly as predicted.
+- **Both blockers named below were resolved, not worked around.** Sorting: the pause is lifted by
+  any action that needs fresh data, so a frozen frame is never re-sorted. Pager/editor return: the
+  frame store outlives the UI rebuild and the resize detector at the end of `layout` repaints it,
+  so the screen comes back with the frame and the marker rather than blank.
 - **Value:** every top-like tool has it; pgcenter has no `Space` binding at all. Honest framing
   carried over from the [015] interview: this is argued **by analogy**, not from a reported
   incident — unlike the auto-scroll (a recorded [009] limitation) or the filter indicator (a real
@@ -295,7 +301,24 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [017] WAL and archiving area — one pass
 
-- **Status:** planned
+- **Status:** done (2026-08-06) — archived as `docs/features/archive/017-feat-wal-archiver`. All 34
+  acceptance criteria pass: the automated half in the project CI image against PG 14–19 fixtures
+  (full suite green, zero races, `make lint` and `make vuln` clean), the manual half on a live stand,
+  including the check the manual gate exists for — the screen caption printed **exactly once on each
+  of the two entry paths**, verified separately for the `w` hotkey and the `W` menu.
+- **What actually shipped, against the three-item plan below: four pieces, not three.** The fourth
+  was not scope creep but a defect the area pass exposed — the [010] verbose panel counted the
+  backlog through `pg_ls_dir`, which is superuser-only, so the `pg_monitor` role this roadmap keeps
+  citing as the typical monitoring role saw `n/a` and got no first signal at all. Moving it to
+  `pg_ls_archive_statusdir()` was the one-pass mandate applied honestly. Three other deltas worth
+  recording: the screen has **nine** columns, not the seven this document's cross-cutting policy
+  assumed (`ready` plus a `source` identity column on top of the `pg_stat_archiver` set); `-W` became
+  a string flag (`-W w` / `-W a`), an accepted **breaking** CLI change with its own release-notes
+  entry; and the "do not make an incident worse" principle below was tested rather than asserted —
+  the `archive_status` walk was measured on 200 005 `.ready` files, found to halve the refresh rate
+  at that size and be inside the noise at realistic ones, and deliberately left unthrottled. The
+  numbers are in `docs/decisions-log.md`, not in the tech-debt register: there is no intention to fix
+  it, so it is not a commitment.
 - **Value:** medium — low frequency, high severity (archiving failure → WAL accumulation → disk
   fill). Honest scoping: the *most* valuable archiving metric, the backlog of `.ready` files,
   **already ships** in the [010] verbose panel (`OverviewArchivingBacklog`). What
@@ -318,7 +341,10 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [018] Tables and autovacuum area — one pass
 
-- **Status:** planned
+- **Status:** done (2026-11-27) — archived as `docs/features/archive/018-feat-tables-autovacuum-area`.
+  All 41 acceptance criteria pass: `feature-r3` completed SC-1–SC-4 and SC-10, manual SC-5–SC-9 passed,
+  and the full PG 14–19 quality gate is green, including race tests, lint, vulnerability check, E2E,
+  the dedicated wraparound test and Docker build/smoke.
 - **Value:** `pg_stat_autovacuum_scores` is **the most valuable new view in PG 19** for this
   audience — per-table autovacuum detail: why autovacuum is not visiting a table and what its
   priority is. DBAs currently reconstruct this by hand from `n_dead_tup`, `reltuples` and the
@@ -326,20 +352,21 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 - **Scope:**
   - New `autovacuum_scores` view (PG 19+), column set settled in the spec against the **actual
     catalog**, not the release notes.
-  - **PG 19:** `stats_reset` → a `stats_age` column on the `tables`, `indexes` and `functions`
-    screens, reusing the established `stats_age` pattern (not diffed, excluded from `DiffIntvl`).
+  - **PG 19:** `stats_reset` → a `stats_age` column on the `tables` and `indexes` screens, reusing
+    the established `stats_age` pattern (not diffed, excluded from `DiffIntvl`). The `functions`
+    screen is explicitly unchanged.
   - `NotRecordable: true` for `autovacuum_scores` per the cross-cutting policy.
-- **Why these are together:** both touch the tables/indexes/functions screen family. If
-  `autovacuum_scores` hangs off a `t`-group cycle (the option preferred below), it is literally the
-  same hotkey group as the screens gaining `stats_age`.
-- **Product decisions for the spec:**
-  - Hotkey: prefer a **cycle off the existing `t`** (`tables → autovacuum_scores`) with `T` as the
-    menu, by the [006] `j`/`J` precedent, rather than burning one of the few free letters (`e`, `g`,
-    `u`, `y`).
-  - `MinRequiredVersion PostgresV19`; older versions report "not supported" via the existing runtime
-    version guard.
+- **Why these are together:** both touch the tables/indexes screen family. `autovacuum_scores` shares
+  the `t` hotkey group with `tables`, one of the screens gaining `stats_age`.
+- **Product decisions:**
+  - On PG 19+, `t` cycles `tables ↔ autovacuum_scores` and `T` opens the two-item menu, following the
+    [006] `j`/`J` precedent. From another screen, `t` opens `tables` as before.
+  - `MinRequiredVersion PostgresV19` gates the view. Below PG 19, `t` preserves the legacy `tables`
+    behavior; the `T` menu keeps the new item visible with `— requires PostgreSQL 19`, and selecting
+    the disabled item prints an explanation without switching screens or emitting the old
+    unsupported-statistics error.
 - **Plumbing:** new `internal/query/autovacuum_scores.go`; multi-row view model shared with `tables`.
-  `stats_age` additions touch `tables.go`, `indexes.go`, `functions.go` and their report layouts.
+  `stats_age` additions touch `tables.go`, `indexes.go` and their report layouts.
 
 ### [019] Replication and recovery area — one pass
 
@@ -463,7 +490,7 @@ PG 19 view in [018], [019] and [020].
 ## Finalization
 
 - [ ] PG 19 re-verification pass at RC/GA (CI matrix) — does not block the release
-- [ ] Update `overview.md` (PG 19 in supported versions, new screens, new activity columns, color mode)
+- [ ] Update `.kimi-code/skills/project-knowledge/references/project.md` (PG 19 in supported versions, new screens, new activity columns, color mode)
 - [ ] Update `features-catalog.md` per feature
 - [ ] Update `docs/decisions-log.md`; close tech debt [006] and [010] if [019]'s standby fixture
       retires them

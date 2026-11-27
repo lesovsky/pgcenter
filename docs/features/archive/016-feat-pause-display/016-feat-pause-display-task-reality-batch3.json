@@ -1,0 +1,133 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["07", "08", "09"],
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "AC «The repaint failure latch emits exactly one cmdline message per failure transition, and this is covered by a test» и anchor Test_repaintFailureLatch («drive the latch's own state function») предполагают, что Task 3 опубликовал латч как отдельную вызываемую функцию состояния. Tech-spec Decision 5 такого требования к форме не содержит — там сказано только «A repaint failure sets a latch and emits one cmdline message on the transition», что вполне реализуется полем/переменной внутри замыкания в top/pause.go. Если Task 3 сделал именно так, анкер не пишется вообще. Прописанный «Gap case» при этом велит добавить в top/ui.go failureLatch.report(), НЕ подключая его к продакшн-пути: получится функция, вызываемая только из теста (golangci-lint v2 её не поймает, т.к. tests:true, поэтому и линт не подскажет), и требование Decision 5 останется невыполненным до тех пор, пока оркестратор не назначит его отдельно.",
+      "fix": "Перед написанием кода вменить исполнителю первым шагом прочитать decisions-log Task 3 и top/pause.go и зафиксировать реальную форму латча. Если латч не вынесен в чистую функцию — не создавать неподключённый helper в top/ui.go, а остановиться и доложить оркестратору (Task 07 уже обязан не трогать pause.go). Либо смягчить AC до «латч существует и покрыт тестом ИЛИ зафиксирован gap-репорт», либо явно разрешить Task 07 одну строку проводки в pause.go."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "09",
+      "issue": "Правило «drop the stored logtail pair when the panel is not showing the log» технически нельзя реализовать внутри switch по ShowExtra: весь блок extra в живом рендере обёрнут в `if app.config.view.ShowExtra > stat.CollectNone` (top/stat.go:200), а главный кейс правила — панель ЗАКРЫТА, т.е. ShowExtra == stat.CollectNone, и внутрь блока управление не заходит вовсе. Задача формулирует условие как `config.view.ShowExtra != stat.CollectLogtail`, но места вызова не называет. При этом собственный анкер Test_frameStore_logtailDroppedWhenPanelNotShown — тест уровня store и неверную расстановку вызова не поймает (тест уровня рендера здесь недоступен: живой путь требует *gocui.View).",
+      "fix": "В «What to do» указать явно: вызов drop ставится в живом пути ВНЕ блока `if app.config.view.ShowExtra > stat.CollectNone` (например, рядом с публикацией фрейма, до входа в блок extra), и добавить в Verification Steps проверку глазами/грепом: `grep -n` по имени drop-метода в top/stat.go и подтверждение, что строка не вложена в этот if."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "09",
+      "issue": "Test_repaintLogtail_noFileAccess доказывает меньше, чем заявлено («Any os.Stat, Read or Reopen on that config would error or panic on the nil *os.File, so the test fails if the freeze is not real»). Проверено по коду: при Path=\"/nonexistent/...\" реальный чтение-путь падает уже на os.Stat (top/stat.go:1207-1210) и возвращает ошибку — до Logfile.Read (и до разыменования nil *os.File) дело не доходит, паники нет. Более того, на этой ветке `app.config.logtail.Size = size` (top/stat.go:243) НЕ выполняется, потому что код возвращает ошибку раньше, — значит ассерт `Size == 4242` истинен и в замороженной, и в незамороженной реализации и сам по себе не доказывает ничего. Единственный работающий детектор — ассерт «no error», но задача же прямо требует «no printCmdline error write» на repaint-пути, что толкает исполнителя к варианту `size, buf, err := readLogfileRecent(...); if err == nil { ... }`: файл читается каждый интервал, ошибка глотается, тест зелёный.",
+      "fix": "Сделать противника читаемым, а не сломанным: Path указать на реальный файл в t.TempDir() с содержимым, ОТЛИЧНЫМ от сохранённого буфера, и с размером, отличным от sentinel 4242. Тогда настоящее чтение завершится успешно и тест упадёт по отрендеренным байтам и/или по изменившемуся Size. Ветку с несуществующим путём оставить второй строкой таблицы (проверяет отсутствие всплывшей ошибки), но не делать её единственной."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "07",
+      "issue": "«Extend top/ui_test.go (it exists, 365 lines, 10 tests)». Строк действительно 365, но тестовых функций верхнего уровня девять: Test_composeCmdline, Test_composeCmdlineTwoTokens, Test_composeCmdlineRunes, Test_filterToken, Test_filterTokenDeterministicOrder, Test_filterTokenStripsControlRunes, Test_cmdlineTokens, Test_setCmdlineConfig, Test_printCmdlineNilGui.",
+      "fix": "Исправить на «nine tests» либо снять число — к Wave 4 Task 2 и Task 3 всё равно допишут туда свои тесты, и любая цифра устареет. Ключевое требование («never overwrite, never weaken») формулировать без счётчика."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "07",
+      "issue": "Задача вводит ДВА уровня шва: чистую sizeChanged(lastX,lastY,x,y) и stateful resizeDetector.observe(paused,x,y). Tech-spec (Testing Strategy) требует только первый; resizeDetector — добавка уровня задачи. У sizeChanged в итоге ровно один вызывающий (observe), а её табличный тест почти целиком дублируется последовательностным тестом observe. Оценка по существу: шов оправдан и НЕ является оверинжинирингом — observe единственная точка, где проверяемо «сначала записать, потом ответить» (аргумент завершаемости Decision 5) и «в live-режиме не перерисовываем»; сам детектор — две int-переменные и один метод, состояние остаётся per-Gui в замыкании, как требует Decision 5. Избыточен именно двойной слой, а не сам шов.",
+      "fix": "Оставить оба (формулировка «or an equivalent shape» это уже допускает), но при слиянии в один тип не потерять покрытие: в анкере observe нет кейса «изменилась только высота», он есть только в таблице sizeChanged. Либо явно разрешить исполнителю схлопнуть sizeChanged в тело observe, перенеся в его таблицу все шесть строк (identical / width-only / height-only / both / grow / shrink / zero-start)."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "08",
+      "issue": "Анкеры Test_applyFilter_* требуют, чтобы «a valid pattern lands in the map», но newConfig() (top/config.go:44-51) инициализирует только views и viewCh — config.view остаётся нулевым view.View с nil-картой Filters, а setFilter (top/config_view.go:143) делает `view.Filters[view.OrderKey] = re`, то есть присваивание в nil map → паника. Подсказка о конструировании view.View{Cols, Filters} дана в Details только для тестов геометрии промпта (paused prefix), а не для applyFilter-тестов.",
+      "fix": "В Details к Test_applyFilter_* добавить: сконструировать config через newConfig() и обязательно задать c.view = view.View{Cols: []string{...}, Filters: map[int]*regexp.Regexp{}} (идиома из Test_cmdlineTokens). Паника на nil map — не сигнал о дефекте фичи, и её не следует «чинить» правкой setFilter или applyFilter."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "09",
+      "issue": "«Make the repaint's logtail source callable without a live Gui — if the seam hands it a *gocui.View, the stored source must ignore that parameter so a test can pass nil». Передать nil как io.Writer нельзя: интерфейс с nil-указателем *gocui.View не nil, и любая запись через него (как и v.Clear() в обёртке printLogtail) паникует. Тест обязан передавать bytes.Buffer в renderLogtail; «pass nil» безопасно только для параметра, который сохранённый источник действительно игнорирует и никогда не разыменовывает.",
+      "fix": "Переформулировать: «стор-источник рендерит в io.Writer (в тесте — *bytes.Buffer); если шов Task 3 передаёт *gocui.View, он должен быть параметром, который стор-источник не разыменовывает, и тест это фиксирует отдельным ассертом (не паникует при nil)»."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "08",
+      "issue": "Details предписывают точную сигнатуру `applyFilter(answer string, config *config, repaint func()) string` и дословную строку места вызова `message = applyFilter(answer, app.config, func() { repaintStored(app) })`. Это уже не подсказка о паттерне, а готовое решение. Сигнатура при этом корректна: setFilter(answer string, view view.View) string (top/config_view.go:124), config.view — значение view.View (top/config.go:18), config.paused добавляет Task 2.",
+      "fix": "Оставить как есть допустимо (одна строка, без логики), но пометить формулировкой «suggested shape, adapt if cleaner» — так же, как это сделано в Task 07, чтобы исполнитель не считал сигнатуру частью AC."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "08",
+      "issue": "Ссылка «см. Test_cmdlineTokens в top/ui_test.go:317-330» — функция объявлена на строке 308; диапазон 317-330 попадает в её подтест «config with active filters», но как адрес функции указан неверно.",
+      "fix": "Заменить на top/ui_test.go:308-331 (или сослаться на подтест по имени, без номеров строк — Task 2 всё равно сдвинет файл)."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "07",
+      "issue": "depends_on у 07 и 08 — только [\"05\"], а реально вызываемый код приходит из Task 2 (config.paused, pauseToken) и Task 3 (top/pause.go, repaintStored, renderFrame); у Task 09 depends_on [\"07\",\"08\"], тогда как код ему нужен от Task 3 и Task 5. Порядок гарантирован транзитивно (волны 1→2→3→4→5), и обе задачи это честно проговаривают в Details («Depends on Task 5 only for wave ordering»), поэтому реальной опасности порядка нет — но граф depends_on не отражает настоящих зависимостей по коду.",
+      "fix": "Либо дописать транзитивные зависимости (07: [\"02\",\"03\",\"05\"]; 08: [\"02\",\"03\",\"05\"]; 09: [\"03\",\"05\",\"07\",\"08\"]), либо оставить как есть и считать depends_on чисто волновым — но тогда зафиксировать это соглашение один раз в tech-spec, а не в тексте отдельных задач."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "09",
+      "issue": "top/pause_test.go отсутствует в списке файлов Task 9 в tech-spec (там top/stat.go, top/pause.go, top/stat_test.go). Задача сама объявляет это отклонением и обосновывает (Task 9 одна в Wave 5, правило волны не нарушается; файл к тому моменту существует — его создаёт Task 2). Замечание фиксируется только ради трассируемости.",
+      "fix": "Ничего менять не нужно; убедиться, что запись об отклонении реально попадёт в decisions-log (Post-completion это уже требует) и что tech-spec обновится на финализации."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 47,
+    "issues_found": 11
+  },
+  "verified_claims": {
+    "task_07": [
+      "top/ui.go:143 — замыкание layout действительно объявлено как `return func(_ *gocui.Gui) error`, параметр отброшен ⇒ app.ui.Update обязателен, g.Update недоступен",
+      "top/ui.go:141 verboseTooShortShown — существующий прецедент состояния в замыкании; логика флипа на :211-218",
+      "top/ui.go:144 maxX, maxY := app.ui.Size(); нулевой guard :148-150; блок extra :221-235; return nil :237",
+      "top/ui.go:62 mainLoop делает SetManagerFunc(layout(app)) внутри цикла ⇒ замыкание пересоздаётся на каждый новый Gui; путь pager/psql (top/psql.go:20-21 uiExit + g.Close()) действительно приводит к выходу из MainLoop и пересозданию Gui ⇒ обнулённый детектор перерисовывает кадр после возврата",
+      "gocui@v0.5.0 gui.go:410-419 handleEvent — только EventKey/EventMouse/EventError, termbox.EventResize уходит в default: return nil; события ресайза приложению не доставляется",
+      "gocui gui.go:422-432 flush читает termbox.Size(), присваивает g.maxX/g.maxY и только затем (gui.go:434-438) вызывает Layout менеджеров",
+      "gocui gui.go:311-313 Update — три строки, без блокировок, отправка в канал делегируется отдельной горутине; gui.go:377-379 — ошибка из user-event закрытия выходит из MainLoop; gui.go:83 userEvents буферизован на 20",
+      "top/ui.go:92-95 errorRate.check(1*time.Second, 5) — описанный сценарий раскрутки существует",
+      "top/layout.go topBandLayout — прецедент чистого целочисленного хелпера с табличным тестом",
+      "code-research §16.3 подтверждает ценность детектора: без него ресайз исправляется в пределах одного refresh, а `z` допускает интервал до 300 с"
+    ],
+    "task_08": [
+      "top/config_view.go:124-145 setFilter — viewCh не пушит ни в одной ветке; соседний clearFilters (:193) пушит",
+      "top/dialog.go:216-217 — ветка `case dialogFilter: message = setFilter(answer, app.config.view)` именно там, где сказано; printCmdline(g, \"%s\", message) на :242",
+      "top/dialog.go: dialogPromptFit :70, dialogInputX0 :104, dialogOpen :118, minDialogInputWidth = 10",
+      "top/dialog_test.go — девять тестов, allDialogTypes на :14, activeFilterTokens на :29",
+      "Test_dialogPromptFitMarksTruncation/\"marker never widens the line\" действительно свипует с maxX=24; формула задачи `utf8.RuneCountInString(prefix)+minDialogInputWidth+1` даёт точную нижнюю границу: для префикса [PAUSED][F:datname] (19 рун) это ровно 30, что совпадает с реальным порогом ассерта len(line) <= maxX-minDialogInputWidth-1",
+      "\"Set filter: \" = 12 рун; при maxX=80 бюджет 80-10-1=69, под паузой 69-8-1=60 — обрезки нет ни там, ни там ⇒ тест «короче под паузой» на этом промпте действительно доказал бы ничего",
+      "dialogPrompts(dialogSetMask) = 93 руны (в top/dialog_test.go:161 это уже зафиксировано require.Equal(t, 93, ...)); при maxX=80 живой промпт обрезается до 69 рун, под паузой до 60 ⇒ разница ровно 9 = маркер (8) + разделитель (1)",
+      "Отмена §16.2 code-research (guard `paused && app.frame.valid`) в пользу флага паузы корректна и согласована с tech-spec: Decision 4 говорит «calls repaintStored when paused», Decision 1 явно требует проверять valid ВНУТРИ repaint-замыкания, а Data Models объявляют valid==false нормальным состоянием",
+      "Порядок токенов ([PAUSED] слева от [F:...]) обеспечивается Task 2 по tech-spec; при maxX=60 префикс 19 рун помещается, деградации лестницы composeCmdline не происходит",
+      "top/config.go:18 view view.View — сигнатура setFilter(answer, config.view) в предлагаемом helper корректна"
+    ],
+    "task_09": [
+      "top/stat.go:1214-1216 — readLogfileRecent возвращает (info.Size(), nil, nil) при неизменённом или пустом файле",
+      "top/stat.go:1229-1245 printLogtail — всё тело в `if len(string(buf)) > 0`, включая v.Clear() ⇒ на тихом логе не печатает и не чистит вью",
+      "internal/stat/log.go:39 l.Close() выполняется ДО GetPostgresCurrentLogfile на :44 — обоснование «no file access at all» фактически верно",
+      "config.logtail.Size пишется ровно в двух местах: top/stat.go:243 и top/extra.go:46 (проверено грепом по всему top/)",
+      "Детектор ротации `if size < app.config.logtail.Size` — top/stat.go:233-240, с v.Clear() и Reopen внутри; живая ветка логтейла — top/stat.go:226-249",
+      "internal/stat/log.go: Logfile{Path,File,Size} :15-19, Open :22, Close :33, Reopen :38-51, Read :54 (ссылки задачи расходятся максимум на строку комментария)",
+      "Прецеденты writer-based ядра существуют: renderSysstat (top/stat.go:269), renderDbstat (top/stat.go:706), printDbstat (:681) — предложенный renderLogtail(w io.Writer, path string, buf []byte) укладывается в паттерн",
+      "Формат заголовка \"\\033[30;47m%s:\\033[0m\\n\" + сырой буфер — совпадает с кодом",
+      "Правило «drop stored pair when panel not shown» отсутствует в Decision 7, но прямо следует из Data Models (`logBuf []byte // nil when the panel was closed`) и содержательно НЕОБХОДИМО: без него после закрытия панели и повторного открытия на другом файле repaint нарисовал бы строки прежнего файла под прежним заголовком. Правило корректно и принадлежит именно Task 9 (владельцу семантики логтейла); отклонение задача обязана записать в decisions-log — это уже в Post-completion",
+      "Замороженный Size действительно оставляет детектор ротации работоспособным на resume: сравнение size < logtail.Size ведётся с доротационным значением"
+    ],
+    "tdd_without_terminal_or_postgres": [
+      "Task 07: sizeChanged и resizeDetector.observe — чистые функции, тесты пишутся без Gui и без БД. Отказ тестировать сам layout обоснован (app.ui.Size() требует живой *gocui.Gui). Единственный проблемный анкер — Test_repaintFailureLatch, см. major-файндинг",
+      "Task 08: все пять анкеров опираются на чистые dialogPromptFit/composeCmdline/dialogInputX0 и на applyFilter со стаб-функцией func() — ни Gui, ни Postgres не нужны; единственная преграда — nil-карта Filters в конструкции конфига (minor-файндинг)",
+      "Task 09: сторовые тесты и renderLogtail пишутся против bytes.Buffer без Gui и БД; тест repaint-источника зависит от формы шва Task 3 (minor) и в текущей формулировке слабее заявленного (major)"
+    ]
+  }
+}

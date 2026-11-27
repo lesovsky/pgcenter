@@ -1,0 +1,184 @@
+package top
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+// helpEntryLine finds the single line of helpTemplate containing the given marker.
+// It fails the test when the marker is absent or ambiguous, so the callers below can
+// assert against one exact line instead of the whole template.
+func helpEntryLine(t *testing.T, marker string) (int, string) {
+	t.Helper()
+
+	var idx = -1
+	lines := strings.Split(helpTemplate, "\n")
+	for i, line := range lines {
+		if strings.Contains(line, marker) {
+			assert.Equal(t, -1, idx, "marker %q must appear on exactly one line", marker)
+			idx = i
+		}
+	}
+	assert.NotEqual(t, -1, idx, "marker %q not found in helpTemplate", marker)
+	if idx == -1 {
+		return -1, ""
+	}
+	return idx, lines[idx]
+}
+
+// descColumn returns the zero-based column where the description of a help entry
+// starts: leading indent, key token, padding. Alignment is checked by comparing this
+// value between entries, never against a magic number.
+func descColumn(line string) int {
+	trimmed := strings.TrimLeft(line, " ")
+	indent := len(line) - len(trimmed)
+
+	key := strings.Index(trimmed, " ")
+	if key == -1 {
+		return indent + len(trimmed)
+	}
+
+	rest := trimmed[key:]
+	pad := len(rest) - len(strings.TrimLeft(rest, " "))
+
+	return indent + key + pad
+}
+
+// The built-in help is the only user-facing hotkey documentation in the project, so the
+// Space entry, its placement and its alignment are pinned by a test rather than by review.
+func Test_helpTemplate_pauseEntry(t *testing.T) {
+	lines := strings.Split(helpTemplate, "\n")
+
+	entryIdx, entry := helpEntryLine(t, "'Space' pause/resume display")
+	contIdx, cont := helpEntryLine(t, "(sort,")
+	scrollIdx, scroll := helpEntryLine(t, "'[' scroll columns left")
+
+	assert.True(t, strings.HasPrefix(entry, "    Space"), "entry line is %q", entry)
+
+	// The whole first line is pinned word for word, so a reworded clause fails here instead
+	// of shipping. Only the description is compared, not the raw line: the padding in front
+	// of it is the alignment check's business, below.
+	assert.Equal(t, "'Space' pause/resume display; actions that need fresh data", entry[descColumn(entry):])
+
+	// The entry sits in the 'general actions:' block right after the '[,]' row and before
+	// the 'C,E,R config:' row.
+	assert.Equal(t, scrollIdx+1, entryIdx)
+	assert.Equal(t, entryIdx+1, contIdx)
+	assert.True(t, strings.HasPrefix(lines[contIdx+1], "    C,E,R"), "next line is %q", lines[contIdx+1])
+
+	// Descriptions of the whole block line up in one column; the continuation carries no
+	// key of its own and starts at the same column.
+	assert.Equal(t, descColumn(scroll), descColumn(entry))
+	assert.Equal(t, descColumn(scroll), len(cont)-len(strings.TrimLeft(cont, " ")))
+
+	// Both lines of the entry stay within 80 columns.
+	assert.LessOrEqual(t, len(entry), 80)
+	assert.LessOrEqual(t, len(cont), 80)
+}
+
+// An unexplained lift of the pause reads as a defect, so the help must name every action
+// that lifts it. Assertions run against the continuation line only: single letters would
+// match anywhere in the template and the test would stop checking anything.
+func Test_helpTemplate_pauseLiftingActions(t *testing.T) {
+	_, cont := helpEntryLine(t, "(sort,")
+
+	testcases := []struct {
+		name      string
+		substring string
+	}{
+		{name: "sort order", substring: "sort"},
+		{name: "screen switch", substring: "screen switch"},
+		{name: "system tables", substring: "','"},
+		{name: "idle connections", substring: " I,"},
+		{name: "activity age", substring: " A,"},
+		{name: "verbose mode", substring: " v,"},
+		{name: "diskstat panel", substring: " B,"},
+		{name: "nicstat panel", substring: " N,"},
+		{name: "filesystems panel", substring: " F,"},
+		{name: "logtail panel", substring: " L)"},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Contains(t, cont, tc.substring)
+		})
+	}
+
+	assert.True(t, strings.HasSuffix(cont, "resume it."), "continuation line is %q", cont)
+}
+
+// The 'w' key stopped being a one-way switch to the WAL screen and became a two-screen cycle with
+// a menu of its own, so the help entry moved out of the 'a,b,f,o' block into a row of its own next
+// to its 'j,J' precedent. The marker is "'w' " with the trailing space rather than the longer
+// "'w' pg_stat_wal": helpEntryLine fails on an AMBIGUOUS marker, which is what makes putting the
+// old "'w' WAL," clause back on the 'r' line fail here.
+func Test_helpTemplate_walEntry(t *testing.T) {
+	entryIdx, entry := helpEntryLine(t, "'w' ")
+	statioIdx, statio := helpEntryLine(t, "'j' pg_stat_io switch")
+
+	assert.True(t, strings.HasPrefix(entry, "    w,W"), "entry line is %q", entry)
+
+	// Pinned word for word, so a reworded description fails here instead of shipping. Only the
+	// description is compared - the padding in front of it is the alignment check's business.
+	assert.Equal(t, "'w' pg_stat_wal / pg_stat_archiver switch, 'W' WAL statistics menu.", entry[descColumn(entry):])
+
+	// It sits directly after its 'j,J' precedent, and shares the block's description column.
+	assert.Equal(t, statioIdx+1, entryIdx)
+	assert.Equal(t, descColumn(statio), descColumn(entry))
+}
+
+// The other half of the same edit: the 'r,w' row lost its 'w' and kept the replication clause
+// alone. Both the key token and the description are pinned, because a half-applied edit (the key
+// token left as 'r,w', or the WAL clause left in place) is what a reader would actually hit.
+func Test_helpTemplate_replicationEntry(t *testing.T) {
+	_, entry := helpEntryLine(t, "'r' replication,")
+	_, sizes := helpEntryLine(t, "'s' tables sizes")
+
+	assert.True(t, strings.HasPrefix(entry, "    r "), "entry line is %q", entry)
+	assert.NotContains(t, entry, "'w'")
+	assert.Equal(t, "'r' replication,", entry[descColumn(entry):])
+
+	assert.Equal(t, descColumn(sizes), descColumn(entry))
+}
+
+// 'Q' does not reset the shared statistics, and the archiver screen is now one of them. Asserted
+// on that single line: a bare "archiver" substring would match anywhere in the template.
+func Test_helpTemplate_resetCaveat(t *testing.T) {
+	_, caveat := helpEntryLine(t, "'Q' does not reset shared stats")
+
+	assert.Contains(t, caveat, "pg_stat_io, bgwriter, wal, archiver")
+}
+
+// helpTemplate is a format string for fmt.Fprintf (see showHelp). An ordinary stray or
+// mismatched verb is already caught harder and earlier by go vet's printf check, which
+// go test runs as part of the build — this test does not add to that. What it does add is
+// the case vet accepts: a doubled '%%' is valid escaping to vet, yet in a help screen it
+// is a typo that renders as a literal percent sign. That is what the count assertions pin;
+// the Sprintf round-trip below keeps the single-argument contract of showHelp visible.
+func Test_helpTemplate_formatVerbs(t *testing.T) {
+	assert.Equal(t, 1, strings.Count(helpTemplate, "%"))
+	assert.Equal(t, 1, strings.Count(helpTemplate, "%s"))
+
+	rendered := fmt.Sprintf(helpTemplate, "pgcenter")
+	assert.Contains(t, rendered, "pgcenter")
+	assert.NotContains(t, rendered, "%!")
+	assert.NotContains(t, rendered, "(MISSING)")
+	assert.NotContains(t, rendered, "(EXTRA")
+}
+
+func Test_helpTemplate_tablesEntry(t *testing.T) {
+	entryIdx, entry := helpEntryLine(t, "'t' ")
+	walIdx, wal := helpEntryLine(t, "'w' ")
+	procIdx, _ := helpEntryLine(t, "'S' per-process system stats")
+	_, sizes := helpEntryLine(t, "'s' tables sizes")
+
+	assert.True(t, strings.HasPrefix(entry, "    t,T"), "entry line is %q", entry)
+	assert.Equal(t, "'t' tables/autovacuum scores switch, 'T' tables menu.", entry[descColumn(entry):])
+	assert.Equal(t, walIdx+1, entryIdx)
+	assert.Equal(t, entryIdx+1, procIdx)
+	assert.Equal(t, descColumn(wal), descColumn(entry))
+	assert.NotContains(t, sizes, "'t' tables,")
+}

@@ -7,6 +7,61 @@ Reviewed at the start of tech-spec planning to avoid worsening existing debt.
 
 ## Active Debt
 
+### [034] `pgcenter report` exits with code 0 on every failure path
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
+**Severity:** Medium — loud on a terminal, silent to a script
+**Area:** `cmd/pgcenter.go` (`main`), `cmd/report/report.go`
+
+`main()` prints the error and returns without `os.Exit(1)`, so every `report` failure exits 0.
+Measured on the built binary, not inferred: `pgcenter report -W -f dump.tar` prints
+`report type is not specified, quit` and exits 0, and `-W` as the last token prints cobra's
+`flag needs an argument: 'W' in -W` and also exits 0. This is pre-existing and repo-wide — `-J q`
+behaves identically — but the breaking `-W` change of 017 is what makes it bite: a legacy wrapper
+like `pgcenter report -W -f dump.tar > out.txt || alert` now writes an empty file and reports
+success, so the one shape most likely to break is the one least likely to be noticed.
+
+Not fixed inside the feature because the exit code is shared by every report type and every
+subcommand error path — changing it is a behaviour change for all of them and needs its own review.
+Called out in `doc/release-notes/v0.12.0.md` so users are not the ones to discover it.
+
+### [035] First-sample widths truncate WAL segment names and `stats_age` when values arrive later
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver, stand run)
+**Severity:** Low — needs a value to arrive after the first sample established a narrower width
+**Area:** `internal/align/align.go`, `top/stat.go` (`printDataCell`, `alignViewToResult`)
+
+Column widths are computed from the first batch and `view.Aligned` is never reset while a screen
+stays open, so entering `archiver` on a cluster that has never archived freezes the two WAL-name
+columns at header width; values arriving later render as `000000010000~` / `0000000100~`. Entering
+the screen when the values already exist shows the names in full.
+
+Pre-existing, confirmed by A/B against a `master`-built binary — the feature's diff touches neither
+`align.SetAlign` nor `printDataCell` nor `alignViewToResult`. Recorded rather than left implicit
+because WAL segment names differ only in their tail, so truncating from the right removes exactly the
+part that identifies the segment — the reason the column is on the screen at all.
+
+**Extended by 018-feat-tables-autovacuum-area (2026-11-26):** the new `stats_age` column on `tables`
+and `indexes` has the same failure mode. If the screen opens while the column is empty, its width
+stays at the header width; once the age reaches one day, the longer interval text is truncated while
+the screen stays open. The shared alignment/rendering behavior is intentionally unchanged by 018.
+
+### [037] Version-blind `x`/`p` cycles enter screens unsupported by the connected PostgreSQL version
+
+**Added:** 2026-11-26 (registered during feature: 018-feat-tables-autovacuum-area)
+**Severity:** Low — an unsupported-screen error replaces the table on every refresh
+**Area:** `top/config_view.go` (`statementsNextView`, `progressNextView`), `internal/stat/stat.go`
+
+The `x` cycle always includes `statements_jit` (PG 15+), so it can select that screen on PG 14. The
+`p` cycle always includes `progress_copy` (PG 14+), so it can select that screen on PG 13 and older.
+Neither cycle receives the server version; the collector's `VersionOK` check then reports
+`selected statistics is not supported by current version of Postgres` on every tick. On actively
+supported PG 14–19 this affects `x` on PG 14; the `p` case affects only EOL servers.
+
+This is inherited behavior and is explicitly not fixed by 018. That feature makes only its own `t`
+cycle and `T` menu version-aware; changing the statements/progress cycles belongs to a separate
+change in that navigation area.
+
 ### [027] Messages printed after a dialog closes are never visible
 
 **Added:** 2026-08-03 (surfaced during feature: 015-feat-tui-papercuts, stand run)
@@ -38,6 +93,12 @@ never survives to a frame, so the user gets no explanation for why verbose did n
 
 Same root cause as [027] and identical on `master`; 015 only moved the threshold from 13 rows to 12.
 
+**Widened by 016-feat-pause-display (2026-08-04):** the resize-triggered `repaintStored` and the
+filter dialog's repaint are two more same-pass `g.Update` emitters on this path. Neither can corrupt
+a message — `repaintStoredFrame` never touches the `cmdline` view — so the class stays cosmetic, but
+the ordering is now non-deterministic in more places. A fix belongs in the cmdline write path, not in
+the individual callers.
+
 ### [029] Row values reach the terminal unsanitised
 
 **Added:** 2026-08-03 (surfaced during feature: 015-feat-tui-papercuts, security review)
@@ -50,6 +111,17 @@ wrapper, so escape sequences in a crafted database object name reach the termina
 `gocui.View.Clear()` does not reset the escape-interpreter state and corruption lasts the whole
 session; the stats table repaints every tick amid correct sequences and self-heals. The asymmetry is
 deliberate and recorded here so it stays a decision rather than an oversight.
+
+**Extended by 016-feat-pause-display (2026-08-04):** the self-healing argument weakens under pause.
+A hostile row value now survives on screen for as long as the freeze holds, and across a return from
+the pager or editor, instead of being overwritten on the next tick. The same applies to the stored
+logtail buffer (`frameStore.logBuf`), which retains raw log content — including query text — for the
+duration of the pause. Neither is a new sink (nothing is written to disk or logged), but the exposure
+window is no longer one refresh interval.
+
+**Extended by 018-feat-tables-autovacuum-area (2026-11-26):** `autovacuum_scores` adds another
+reachable surface through its server-derived `relation` values. The feature deliberately changes
+neither `printDataCell` nor a shared TUI/report sanitizer, so this exposure remains open.
 
 ### [030] `profile.Test_profileLoop` is flaky
 
@@ -70,6 +142,32 @@ regression gets waved through.
 
 `make test` writes `.test_coverage.txt` and deletes it on success only — a failing run leaves it
 behind, where `git add -A` will happily stage it. Add it to `.gitignore`.
+
+### [032] A held logtail descriptor pins a rotated-away inode
+
+**Added:** 2026-08-04 (surfaced during feature: 016-feat-pause-display, security review)
+**Severity:** Low — needs a rotation during a pause, and self-corrects on the next reopen
+**Area:** `top/stat.go` (logtail branch), `internal/stat/log.go`
+
+The open log descriptor keeps the old inode alive across a rotation, and the rotation detector
+compares sizes — so a fresh log file that grows past the frozen size defeats it and the panel keeps
+reading the rotated-away file. Bounded rather than leaking: `Reopen` always closes before reopening,
+so at most one stale descriptor exists at a time. Pausing makes the window longer, since the file is
+deliberately not touched while frozen, but does not create the behaviour.
+
+### [033] The cmdline is not repainted on terminal resize
+
+**Added:** 2026-08-04 (surfaced during feature: 016-feat-pause-display, stand run)
+**Severity:** Trivial — cosmetic, self-corrects on the next cmdline write
+**Area:** `top/ui.go` (`layout`, resize detector), `top/ui.go` (cmdline composer)
+
+The resize detector repaints the stats frame for the new width but nothing rewrites the cmdline, so
+its previous text stays until something writes to it again — on a narrowed terminal it appears
+clipped mid-token (`[PAUSED][F:datna`). Once any event writes to the cmdline, the composer's token
+ladder degrades correctly (`[PAUSED][F:datname]` → `[PAUSED][F:…]` → `[PAUSED]`), verified on the
+stand down to 10 columns. The fix is to compose the cmdline from the resize path too; it was left out
+because the composer needs the config and the detector deliberately holds neither `*app` nor the
+store.
 
 
 ### [022] Stats descriptions in `internal/stat/help.go` are dead code, and stale on top of it
@@ -267,6 +365,23 @@ third unsafe consumer alongside `diff`, so fixing `diff` alone would not close t
 ---
 
 ## Resolved Debt
+
+### [036] `go.mod` marks `spf13/pflag` as `// indirect` although a test imports it directly
+
+**Added:** 2026-08-06 (surfaced during feature: 017-feat-wal-archiver)
+**Severity:** Trivial
+**Area:** `go.mod`, `cmd/report/report_test.go`
+
+The flag-definition test imports `github.com/spf13/pflag` directly, but the `require` line still
+carries `// indirect`. Nothing fails today — the default readonly module mode builds, tests and lints
+fine, and CI has no `go mod tidy -diff` gate — but any build with `-mod=mod` rewrites `go.mod` and
+dirties the working tree. Fix is one `go mod tidy` run at a moment when no parallel work holds the
+branch.
+
+**Resolved:** 2026-08-06, during finalization of 017-feat-wal-archiver — `go mod tidy` moved
+`github.com/spf13/pflag` into the direct requires, matching the direct import in
+`cmd/report/report_test.go`. One line; build and the report tests verified after.
+
 
 ### [025] `PGresult.sort` does not bounds-check its sort key
 

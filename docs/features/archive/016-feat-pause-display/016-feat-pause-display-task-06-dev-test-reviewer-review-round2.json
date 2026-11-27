@@ -1,0 +1,48 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Round 2 addresses both round-1 minors. Fix 1: Test_helpTemplate_pauseEntry now asserts entry[descColumn(entry):] equals the exact expected description text, deliberately not the raw first line. This is sound, not a weaker substitute: the implementer's reasoning holds — a raw-line literal would bake the 13-space padding into the assertion and break on any future block-wide re-indentation, which is precisely the drift the computed-column alignment check exists to tolerate. Verified by mutation myself: 'need'->'require' fails the new assertion (and separately trips the >80-column check, since 'require' is longer). Verified the description-slice form has no coverage hole: reducing the internal padding by one space (key stays at column 5, description shifts to column 22) is still caught, by the pre-existing assert.Equal(descColumn(scroll), descColumn(entry)) alignment check, independent of the new wording assertion. So column drift and wording drift are each covered by one of the two assertions; together they leave no gap a raw-line literal would have closed. Fix 2: the Test_helpTemplate_formatVerbs comment was rewritten (2 lines removed, 6 added, +11/-2 total including the 5-line addition in fix 1) with no assertion removed or weakened — confirmed by diff and by test count (still 4 assertions, both fixes are comment/assertion additions only). Re-ran both mutations myself: a bare stray '%' still fails at the go-vet/build stage before any test assertion executes ('fmt.Fprintf format %, has unknown verb ,' — build failed), and a doubled '%%' still passes go vet cleanly (exit 0) while failing this test's strings.Count assertions (3 vs 1, 2 vs 1). The new comment states exactly this — it does not overclaim (still says vet catches ordinary stray verbs harder/earlier) and does not underclaim (still credits the test with the %% case, which I re-confirmed vet does not catch). Full helpTemplate test run (-race -count=5) is green and stable. top/help.go is untouched (byte-identical to cd542da, confirmed via git show). No new findings.",
+  "findings": [],
+  "priorFindingsResolution": [
+    {
+      "priorFinding": "top/help_test.go:44-64 (Test_helpTemplate_pauseEntry) — free-text clause 'actions that need fresh data' unpinned",
+      "resolution": "resolved",
+      "evidence": "New assert.Equal(t, \"'Space' pause/resume display; actions that need fresh data\", entry[descColumn(entry):]) pins the description word-for-word. Verified by mutation: 'need'->'require' fails."
+    },
+    {
+      "priorFinding": "top/help_test.go:107-116 (Test_helpTemplate_formatVerbs) — comment overstated the test's unique value vs go vet",
+      "resolution": "resolved",
+      "evidence": "Comment rewritten to state go vet catches ordinary stray/mismatched verbs harder and earlier, and this test's unique contribution is the %% escaping case. Re-verified both halves by mutation: bare '%' -> build failure via go vet before assertions run; doubled '%%' -> go vet exit 0, caught only by strings.Count assertions in this test."
+    }
+  ],
+  "tech_debt": {
+    "found": true,
+    "items": [
+      {
+        "description": "Prior to this task, no line of helpTemplate had any test coverage; coverage still only extends to the new Space-entry lines, not the rest of the block. Unchanged from round 1 assessment.",
+        "recommendation": "Not in scope for task 06. Same as round-1 note: consider a light structural check (all 'general actions:' rows share one description column) if the help template is touched again.",
+        "scope": "pre-existing, not introduced by this commit"
+      },
+      {
+        "description": "dev-code-reviewer (round 1) flagged that the help view has no Wrap/Autoscroll/scroll binding, so on terminals shorter than ~41-43 rows the trailing 'Type q or Esc to continue.' line clips; this task widened the block by two lines but did not introduce the viewport issue. Recorded in the commit message as accepted tech debt, out of this task's perimeter.",
+        "recommendation": "Track in the feature's decisions log / tech-debt register if not already done; fix would belong to a viewport/layout task, not task 06.",
+        "scope": "pre-existing, flagged by dev-code-reviewer, not this reviewer's original finding"
+      }
+    ]
+  },
+  "metrics": {
+    "filesReviewed": 1,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

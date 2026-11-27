@@ -1,0 +1,57 @@
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=layout ticks=4 members=12
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+fixture=valid kind=control ticks=2 members=6
+assertion=pass control=tables/old/blank samples=1
+assertion=pass control=tables/old/populated samples=1
+assertion=pass control=tables/new/blank samples=1
+assertion=pass control=tables/new/populated samples=1
+assertion=pass control=indexes/old/blank samples=1
+assertion=pass control=indexes/old/populated samples=1
+assertion=pass control=indexes/new/blank samples=1
+assertion=pass control=indexes/new/populated samples=1
+assertion=pass layout=tables/old-to-new/blank boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_tables_old-to-new_blank sha256=648a284647bde8b7b0c48f6f047d6dce2f2e0793a2574a6deae2a264823a2d04
+assertion=pass layout=tables/old-to-new/populated boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_tables_old-to-new_populated sha256=630fab9710d348ee6c743611d624024161105904437a6ca0aad925a64e1cac9c
+assertion=pass layout=tables/new-to-old/blank boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_tables_new-to-old_blank sha256=982e1e4955b2c6583413a56b20f348a01239b5fef3b6ff525ed22c1c47b51bb7
+assertion=pass layout=tables/new-to-old/populated boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_tables_new-to-old_populated sha256=263a24aea6838ec2be0ba214ca911ddefeb36f29bd6e5b125b33c0b09a7e7de5
+assertion=pass layout=indexes/old-to-new/blank boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_indexes_old-to-new_blank sha256=c824ddae15bd5b584ad3417f209befe8d3a2067878d4843638898428a2bada3c
+assertion=pass layout=indexes/old-to-new/populated boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_indexes_old-to-new_populated sha256=e0a309961a29f0b6709e1f1b63e284dc7f0dd212b11b3280c2a7d026f5ab6163
+assertion=pass layout=indexes/new-to-old/blank boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_indexes_new-to-old_blank sha256=30e423014d97cfdc550c2109a6e54b8ced18ce2afe97ddc2facd03a86d66c9a8
+assertion=pass layout=indexes/new-to-old/populated boundary=1 deltas=30,40
+ACC_OBSERVATION name=layout_indexes_new-to-old_populated sha256=eddf14e554846dec01e09b5e48f0ebd2b544e43d4a281099fbb7350605bcad7e
+ACC_RESULT origin=pass checkpoint=complete

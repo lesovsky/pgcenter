@@ -1,0 +1,64 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Round 2 closes the one major from round 1 and both accepted minors, and the extra pins that came in from dev-test-reviewer (Name, QueryTmpl seed, full-equality Msg, wantArchiver membership) make TestNew_ArchiverView and Test_filterViews materially stronger than round 1. I re-ran six mutations against a scratch copy of the tree and every one reddened exactly the predicted tests, with the new msgAndArgs naming the offending row: dropping ColsWidth+Filters, renaming Name, swapping the QueryTmpl seed and a Msg prefix typo each redden TestNew_ArchiverView only; NotRecordable:true reddens Test_filterViews on exactly the three >=PG14 rows (both the count and the archiver-membership assertion); dropping MinRequiredVersion reddens Test_filterViews and TestView_VersionOK on exactly the four <=PG13 rows. gofmt is clean on all three files, record/record.go is untouched and case \"wal\": is unchanged. One residual minor: the new comment above the NotNil assertions names align.SetAlign as an in-place writer of ColsWidth, which it provably is not. No further round is required.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/view/view_test.go",
+      "line": 121,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The comment above the two NotNil assertions says \"align.SetAlign and setFilter/clearAllFilters write into them in place\". align.SetAlign does not: internal/align/align.go:18 builds a fresh map (widthes := make(map[int]int)) and top/stat.go:788 assigns it wholesale over view.ColsWidth, so that path repairs a nil map rather than panicking on it. The real unguarded in-place writers are top/config_view.go:100 (increaseWidth, no bounds or nil guard at all) and :124 (decreaseWidth, guarded only on Cols) for ColsWidth, and top/config_view.go:166 (setFilter, view.Filters[view.OrderKey] = re) for Filters — clearAllFilters only calls delete, which is a no-op on a nil map, not a panic. Suggested wording: \"top/config_view.go:100/:124 write into ColsWidth and :166 writes into Filters in place, so a nil map is a runtime panic inside a gocui key handler that no count test would catch.\" Same paragraph, one line, cite the writers that actually panic. (The inaccuracy is inherited from the task's own Edge Cases section, which makes the same align.SetAlign claim — worth correcting there too if the task file is still live.) While in the neighbourhood: line 100 of the same file has a stray quote in `deleting case \"archiver:\" from Configure()` (should be `case \"archiver\":`).",
+      "benefit": "The assertions are correct and load-bearing — the panic is genuinely reachable, since printDbstat returns early on s.Error and never calls alignViewToResult, so a failing archiver query leaves ColsWidth as the seed and the widen hotkey writes into it unguarded. But the comment sends the next maintainer to a function that demonstrably copies rather than mutates; anyone verifying the claim will conclude the assertion is unnecessary and may drop it. Naming the two config_view.go lines makes the claim checkable in one grep.",
+      "optional": true
+    }
+  ],
+  "resolvedFromRound1": [
+    {
+      "round1Severity": "major",
+      "file": "internal/view/view_test.go",
+      "finding": "TestNew_ArchiverView did not assert non-nil ColsWidth/Filters",
+      "resolution": "Fixed. assert.NotNil on both at view_test.go:123-124. Verified: deleting both fields from the New() entry reddens TestNew_ArchiverView and nothing else."
+    },
+    {
+      "round1Severity": "minor",
+      "file": "internal/view/view.go",
+      "finding": "Configure() case comment over-promised a one-file future version branch",
+      "resolution": "Fixed. Narrowed to \"confined to query/archiver.go on the production side\" (view.go:409-410). Accurate as written."
+    },
+    {
+      "round1Severity": "minor",
+      "file": "record/record_test.go",
+      "finding": "Test_filterViews and TestView_VersionOK gave no per-row identity on failure",
+      "resolution": "Fixed in both. Confirmed under mutation: failures now print version=130000 / archiver kept? version=140000 pgss=\"public\" instead of a bare count diff."
+    },
+    {
+      "round1Severity": "minor",
+      "file": "record/record_test.go",
+      "finding": "Collapse the multi-layer block comment above the Test_filterViews table",
+      "resolution": "Rejected by the implementer; I withdraw it. The task explicitly instructs to extend that comment, and the per-feature layers each state which rows moved and why — that is exactly what the next view registration needs to recompute the numbers. The comment is now 26 lines for a 7-row table, which is long, but trimming it is a housekeeping change for whoever owns the file next, not a defect in this task."
+    },
+    {
+      "round1Severity": "n/a",
+      "file": "internal/view/view_test.go",
+      "finding": "dev-test-reviewer's suggested registry-wide invariant test (key==Name, non-nil maps for all 28 views) was not added",
+      "resolution": "I agree with the rejection. Such a test asserts over views owned by other tasks and features; adding it here would make this task the owner of failures it cannot cause. Recording it as tech debt is the right call — the archiver-specific half of that invariant is already pinned by TestNew_ArchiverView."
+    }
+  ],
+  "mutationsVerified": [
+    "drop ColsWidth + Filters from the New() entry -> RED: TestNew_ArchiverView only",
+    "Name: \"archiver\" -> \"archiver2\" -> RED: TestNew_ArchiverView only",
+    "QueryTmpl seed -> query.PgStatBgwriterPG14 -> RED: TestNew_ArchiverView only",
+    "Msg prefix typo (\"statistics\" -> \"stats\", archive_mode=on retained) -> RED: TestNew_ArchiverView only (substring assertion would have stayed green)",
+    "NotRecordable: true -> RED: Test_filterViews on exactly the three >=PG14 rows (count + wantArchiver), plus TestNew_ArchiverView; the four <=PG13 rows stay green as the task predicts",
+    "drop MinRequiredVersion -> RED: Test_filterViews and TestView_VersionOK on exactly the four <=PG13 rows"
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  }
+}

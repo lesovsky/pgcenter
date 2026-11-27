@@ -1,0 +1,62 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "The three new tests are non-vacuous where it matters most: all three gate on a restricted-session guard that runs BEFORE the aggregate and returns early, so a forgotten SET ROLE reddens on the guard rather than passing as the fixture superuser. The collected mutation evidence (1-4) is consistent with the code as written and covers the privilege claim in both directions at query level and end-to-end at collect level. The gap is elsewhere: nothing in the tree falsifies the query's actual arithmetic. On the fixtures (archive_mode=off, empty archive_status) every live assertion on the backlog reduces to 0 >= 0, so removing the '.ready' FILTER or the pg_size_bytes multiplication keeps all three new tests and both pre-existing tests green — the very reason task 01 added a serverless Test_StatArchiverQuery_Structure for its twin query. Four smaller issues: one tautological assertion (got.Valid is set unconditionally), a collect-level guard weaker than its query-level counterpart on a role both packages share, skip-on-any-connect-error where the same package already has a helper that distinguishes a missing port map from an unavailable cluster, and a latent cross-package role race outside -p 1.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/query/overview_test.go:159-233 (both new tests) and internal/stat/postgres_test.go:249-296",
+      "issue": "No test — new or pre-existing — falsifies the only logic in OverviewArchivingBacklog. The fixtures run archive_mode=off with an empty archive_status directory, so the aggregate returns exactly 0 on every cluster; `assert.GreaterOrEqual(backlog, int64(0))` and `assert.GreaterOrEqual(got.ArchivingBacklog, int64(0))` therefore hold for a bare `count(*)`, for a wider LIKE pattern, and for a query with the `* pg_size_bytes(current_setting('wal_segment_size'))` factor deleted. Acceptance criterion 1 ('the SELECT list is unchanged and the query still yields one non-NULL bigint in bytes') is consequently gated by nothing. Litmus: delete `FILTER (WHERE name LIKE '%.ready')` from internal/query/overview.go:106 → Test_ArchivingBacklogQuery_PgMonitorRole, Test_ArchivingBacklogQuery_NoPrivilegeRole, Test_ArchivingBacklogQuery_Degrades and Test_collectOverviewStat_PgMonitorRole all stay GREEN. The same is true for deleting the pg_size_bytes product. This is precisely the hole task 01 identified for its twin query and closed with a serverless structure test (internal/query/archiver_test.go:73-104, whose comment states the reason verbatim: 'the fixtures have an empty archive status directory, so count(*) FILTER (...) and a bare count(*) are both 0 on every cluster and no live assertion can tell them apart').",
+      "recommendation": "Add a no-server test next to the two new ones, mirroring Test_StatArchiverQuery_Structure: func Test_ArchivingBacklogQuery_Structure(t *testing.T) with (a) assert.Contains(t, OverviewArchivingBacklog, \"count(*) FILTER (WHERE name LIKE '%.ready')\", \"only .ready files are backlog - a bare count(*) is a different number\"); (b) assert.Contains(t, OverviewArchivingBacklog, \"pg_size_bytes(current_setting('wal_segment_size'))\", \"the backlog is bytes, not a segment count\"); (c) assert.Contains(t, OverviewArchivingBacklog, \"FROM pg_ls_archive_statusdir()\", \"the pg_monitor-granted function is the whole point of Decision 8\"); (d) assert.NotContains(t, OverviewArchivingBacklog, \"pg_ls_dir\", \"the superuser-only predecessor must not come back\"). Assertion (d) also turns AC mutation 1 (revert the FROM clause) into a failure that reproduces on a bare host, not only in the CI image. No mock changes — the test touches no connection.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "empty_test",
+      "location": "internal/stat/postgres_test.go:292 (assert.True(t, got.Valid) in Test_collectOverviewStat_PgMonitorRole)",
+      "issue": "`got.Valid` is set unconditionally at internal/stat/postgres.go:202 (`s.Valid = true`) and collectOverviewStat has no early return — it always falls through to `return s, sizeLatency` at :304. The assertion therefore cannot fail for any state of the cluster, the role, or the query, yet it is one of the two assertions carrying the test's stated claim that 'the rest of the sample must be unaffected by running under a restricted role'. Only the neighbouring `DatabasesCount >= 1` actually proves anything about the restricted role. The TDD anchor named `Valid` explicitly, so the vacuity originates in the task file, not in the executor's judgement.",
+      "recommendation": "Replace the tautology with a falsifiable parity check against a superuser baseline. Before SetupTestRole, capture `base, _ := collectOverviewStat(conn, props, 1, PgstatOverview{}, false)`; after the guard, collect as `got` and assert: assert.Equal(t, base.TotalSizeValid, got.TotalSizeValid, \"the db-size aggregate must not degrade under pg_monitor\"); assert.Equal(t, base.DatabasesCount, got.DatabasesCount, \"the databases aggregate must see the same clusters under pg_monitor\"); keep assert.GreaterOrEqual(t, got.DatabasesCount, int64(1)). Drop assert.True(t, got.Valid). This makes the 'rest of the sample' claim reddenable — a privilege regression in any neighbouring aggregate now diverges from the baseline instead of being absorbed by an availability flag nobody asserts.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/stat/postgres_test.go:265-287 (inline guard in Test_collectOverviewStat_PgMonitorRole)",
+      "issue": "The collect-level guard is a weakened re-implementation of internal/query/archiver_test.go:285-321 assertRestrictedSession: it checks current_user, rolsuper and pg_has_role(...,'pg_monitor'), but omits the role-membership assertion ('pg_monitor and nothing else'). The omission matters more here than at query level, not less: the two packages deliberately share ONE cluster-global role (pgcenter_test_backlog_monitor, internal/stat/postgres_test.go:243 and internal/query/overview_test.go:21) that SetupTestRole never normalises once it exists and nothing ever drops. After any stray GRANT to that role — including a hand-run AC mutation — this test silently decays from 'pg_monitor is sufficient' to 'some privileged role works', which is the exact class of false confidence that put the wrong privilege claim into ADR [010]. The RESET ROLE defer at :277-280 is likewise thinner than query's resetRole: it asserts the Exec returned no error but not that current_user actually left the role. (The duplication itself is forced — assertRestrictedSession lives in package query and internal/postgres/testing.go is read-only in this task — so the fix is to close the gap, not to deduplicate.)",
+      "recommendation": "Extend the inline SELECT with the membership column from assertRestrictedSession and gate on it: add `coalesce((SELECT array_agg(DISTINCT r.rolname::text ORDER BY r.rolname::text) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid WHERE m.member = (SELECT oid FROM pg_roles WHERE rolname = current_user)), ARRAY[]::text[])` as a fourth column, scan into `memberOf []string`, and add `okMembers := assert.Equal(t, []string{\"pg_monitor\"}, memberOf, \"the test role must hold pg_monitor and nothing else\")` to the existing `if !okUser || !okSuper || !okMonitor` early-return condition. In the RESET ROLE defer, follow the Exec with `var u string; if assert.NoError(t, conn.QueryRow(\"SELECT current_user::text\").Scan(&u)) { assert.NotEqual(t, backlogRoleMonitor, u) }`, matching resetRole.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/overview_test.go:162-166 and :196-200 (connect + t.Skipf in both new tests)",
+      "issue": "Both new tests skip on ANY error from postgres.NewTestConnectVersion, including 'postgres version %d has no test cluster port mapping' — the failure mode patterns.md documents as having previously made subtests named after a new version pass while exercising nothing at all. The same package already solved this: connectArchiverFixture (internal/query/archiver_test.go:371-382) asserts the error is not a missing port-map entry before skipping. Since archiver_test.go is `package query`, that helper is directly callable from overview_test.go and was not used. Impact today is latent (all six overviewVersions are in the map), but the moment a version is added to overviewVersions and not to the ports map, both privilege tests go green while proving nothing — the same silent-pass shape the anti-vacuous guards exist to prevent one layer down.",
+      "recommendation": "Replace `conn, err := postgres.NewTestConnectVersion(version); if err != nil { t.Skipf(...) }` in both new tests with `conn := connectArchiverFixture(t, version)`, keeping `defer conn.Close()`. If the helper's archiver-specific name is undesirable in this file, rename it to `connectFixture` at its definition site (internal/query/archiver_test.go) and update its two existing call sites — it is package-scoped test code, not a task-01-owned production file.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/stat/postgres_test.go:243 (const backlogRoleMonitor) vs internal/query/overview_test.go:21",
+      "issue": "The two packages share one cluster-global role name by design, and both reach the SAME PG 17 cluster (postgres.NewTestConnect() == NewTestConnectVersion(170000), and overviewVersions contains 170000). SetupTestRole's idempotent creation is a DO block guarded on pg_roles, which is not atomic: two concurrent executions can both observe NOT EXISTS and both issue CREATE ROLE, so one loses on the pg_authid unique index and SetupTestRole returns an error, reddening a correct tree. The sanctioned commands serialise packages (`-p 1` in the Makefile test target and in the task's Verification Steps docker command), but the task frontmatter's own verify line — 'go test ./internal/query/... ./internal/stat/...' — does not, and neither does an ad-hoc `go test ./internal/...`. This is a flaky-test risk introduced by the cross-package name sharing, whose stated benefit (one role instead of two on the fixture clusters) is cosmetic.",
+      "recommendation": "Pick one: (a) give the stat package its own role name, e.g. `pgcenter_test_backlog_collect`, removing the shared-object race entirely at the cost of one extra NOLOGIN role per cluster; or (b) keep the shared name and add `-p 1` to the frontmatter verify line so every documented invocation serialises the two packages. Option (a) is preferable — it makes the test independent of how it is invoked, which is the property the sharing trades away.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 12,
+      "passed": 9,
+      "failed": 3
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 0,
+      "integration": 3,
+      "e2e": 0,
+      "assessment": "unbalanced"
+    }
+  }
+}

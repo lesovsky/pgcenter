@@ -1,0 +1,51 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Task 02 is implemented exactly as specified: config.paused is an atomic.Bool placed with the other display-mode fields and documented with its writer/reader goroutines, togglePause performs one flag flip plus exactly one silent cmdline write, the Space row uses gocui.KeySpace scoped to \"sysstat\", and the [PAUSED] token is added as a single-variant token to the LEFT of the filter token without touching composeCmdline or renderCmdlineTokens. Verified by build, go vet (no copylocks), gofmt and the targeted test run - all green, and the diff touches only the six in-scope files inside top/. Remaining findings are minor test-strength observations; none blocks the task.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/ui_test.go",
+      "line": 155,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Test_cmdlineMarkerAfterUIRebuild does not actually exercise the mechanism its comment claims to pin. After the fmt.Errorf(\"\") / msg == \"\" preamble it reduces to assert.Equal(\"[PAUSED]\", composeCmdline(cmdlineTokens(cmdlineCfg), \"\", 80)) - i.e. the same property Test_cmdlineTokens already covers. Nothing in it observes layout's cmdline-creation branch (top/ui.go:188-191, printCmdline(app.ui, \"%s\", app.uiError)); if that write were deleted or switched to a non-composing writer, the test would still pass. The task prescribed this shape, so this is not a deviation - but the comment currently over-promises. Either narrow the comment to say it pins only the composition half of Decision 8 (an empty message still re-renders the token prefix), leaving the existence of layout's write to the stand run in Task 10, or add an assertion that reaches the real path.",
+      "benefit": "A future reader will not mistake this test for a guard on layout's rebuild write and skip re-checking it when layout changes.",
+      "optional": true
+    },
+    {
+      "file": "top/ui_test.go",
+      "line": 333,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "In the \"paused config\" subtest the expectation is built by calling pauseToken(c) - the same function that feeds cmdlineTokens - so the assertion only pins \"cmdlineTokens forwards whatever pauseToken returns\", not the token's content. If pauseToken started returning the wrong variants, both sides would move together. Coverage is not lost (the literal \"[PAUSED]\" is asserted in pause_test.go and in the following subtest), so this is a strength rather than a correctness gap; asserting the literal here too would make the subtest self-contained.",
+      "benefit": "Removes a self-referential assertion; the subtest then fails on its own when the marker text changes.",
+      "optional": true
+    },
+    {
+      "file": "top/pause_test.go",
+      "line": 44,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The acceptance criterion \"pressing the bound key produces exactly ONE cmdline write, with no text message\" (defect class [027]) is not observable in any test: with a nil *gocui.Gui, writeCmdline returns at its first guard (top/ui.go:442-444), so Test_togglePause proves nil-safety and the flag flip but says nothing about the number of writes. That property is currently held by code reading alone and by the Task 10 stand run. Worth naming that limitation in the test comment so a later change (e.g. Task 5 adding a second write on a lifting path) is not assumed to be caught here.",
+      "benefit": "Makes the untested half of the [027] constraint explicit instead of implicitly trusted, ahead of Tasks 3 and 5 adding more handlers to the same file.",
+      "optional": true
+    },
+    {
+      "file": "top/pause.go",
+      "line": 42,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "app.config.paused.Store(!app.config.paused.Load()) is a non-atomic read-modify-write on an atomic value. It is correct today - the file doc comment and the config.paused comment both state that every writer runs on the gocui MainLoop goroutine, so no concurrent write exists - but the atomic type invites the assumption that the toggle itself is atomic. Since Task 5 adds liftPause/liftPauseRefresh as further writers to this same field, consider either a CompareAndSwap loop or a one-line note on this statement that the flip is safe only because of the single-writer-goroutine discipline.",
+      "benefit": "Keeps the single-writer invariant visible at the point where it is actually relied upon, before more writers land in the same file.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 6,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "adequate"
+  }
+}

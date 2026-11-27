@@ -1,0 +1,78 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "The count-based tests are correct and genuinely sensitive: I re-derived all seven TestView_VersionOK rows and all seven Test_filterViews rows by hand against the 28-entry registry and every number matches, and the reported mutation runs (MinRequiredVersion dropped, Ncols/DiffIntvl perturbed, Msg substring removed, NotRecordable:true, task 02's PG 19 branch reverted) are consistent with what the code can actually produce — including the subtle claim that the four <=PG13 rows correctly stay green under NotRecordable:true, since filterViews increments the same counter in both drop branches. The wal half of TestViews_Configure is a real wiring gate. The weakness is not in what is asserted but in what TestNew_ArchiverView leaves out: three fields the task itself calls load-bearing (Name, non-nil ColsWidth, non-nil Filters) are pinned by nothing in the repo, and each fails the litmus test — mutating them leaves all five tests in this task green while producing a silent runtime failure. Two one-line assertions (or one registry-wide invariant test) close both. The acknowledged limitation of the archiver arms in TestViews_Configure is adequately handled in substance — those assertions are not vacuous, they redden on drift between SelectStatArchiverQuery and the static entry — but the limitation is documented only in the task file, not at the assertion site.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go:102-117 (TestNew_ArchiverView), against internal/view/view.go:149,151",
+      "issue": "Neither TestNew_ArchiverView nor any other test asserts that the archiver entry's ColsWidth and Filters maps are non-nil. AC bullet 1 requires 'non-nil empty ColsWidth and Filters', and the task's own Edge cases section names this exact failure: 'A nil map here is a runtime panic on first use, and no count test would catch it'. align/SetAlign and top/config_view.go:100,124 assign into ColsWidth in place, and setFilter assigns into Filters in place — assignment to a nil map panics in Go. Litmus: delete 'ColsWidth: map[int]int{}' and 'Filters: map[int]*regexp.Regexp{}' from the archiver entry and all five tests in this task stay green (I checked every consumer: report_test.go:1045 asserts NotNil only for databases_general, and the top/ tests operate on activity/synthetic views), while the TUI panics the first time an operator widens a column or sets a filter on the archiver screen.",
+      "recommendation": "Add to TestNew_ArchiverView: `assert.NotNil(t, archiver.ColsWidth)` and `assert.NotNil(t, archiver.Filters)`. Better, since this gap is registry-wide (bgwriter, replslots, stat_io, stat_io_time and statements_jit guards omit it too) and every future view registration will repeat it, add one invariant test to the file this task owns: `func TestNew_ViewMapInvariants(t *testing.T) { for k, v := range New() { assert.Equal(t, k, v.Name, \"map key %q must equal Name\", k); assert.NotNil(t, v.ColsWidth, \"%s.ColsWidth must be non-nil\", k); assert.NotNil(t, v.Filters, \"%s.Filters must be non-nil\", k) } }`. That single test also closes the Name finding below and matches patterns.md 'Adding a New View'.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go:102-117 (TestNew_ArchiverView), against internal/view/view.go:142",
+      "issue": "Nothing pins `New()[\"archiver\"].Name == \"archiver\"`. Step 1 of the task states the field is load-bearing ('must equal the map key; it is also the report type string and the tar entry prefix'), and top/config_view.go:348 and :398 write the working view back into the registry with `config.views[config.view.Name] = config.view`. If Name and the map key ever diverge, the TUI silently writes column widths, filters and sort state into a phantom key while the rendered view keeps the stale copy — no error, no panic, just settings that do not stick. Litmus: change Name to \"archive\" and TestNew, TestNew_ArchiverView, TestViews_Configure, TestView_VersionOK and Test_filterViews all stay green, because every one of them looks the view up by map key. No test in the repository asserts key==Name for any view.",
+      "recommendation": "Add `assert.Equal(t, \"archiver\", archiver.Name)` to TestNew_ArchiverView, or adopt the registry-wide TestNew_ViewMapInvariants above, which asserts `k == v.Name` for all 28 entries and prevents the same omission on the next view.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/view/view_test.go:102-117 (TestNew_ArchiverView) and :219, :237 (TestViews_Configure)",
+      "issue": "The static QueryTmpl seed on the archiver entry is untested. AC bullet 1 lists `QueryTmpl: query.PgStatArchiverDefault` among the fields New() must return, but TestNew_ArchiverView does not assert it, and the two TestViews_Configure assertions that do check QueryTmpl run *after* Configure() has reassigned it from SelectStatArchiverQuery — so they pin the selector's output, not the seed. Litmus: set the seed to query.PgStatWALPG14 and every test stays green. Impact is limited (Configure is called on the top and record paths before any query runs), which is why this is minor rather than major, but the field is an AC item covered by nothing.",
+      "recommendation": "Add `assert.Equal(t, query.PgStatArchiverDefault, archiver.QueryTmpl)` to TestNew_ArchiverView, matching how TestNew_StatIOView-style guards pin the pre-Configure defaults for the other version-aware views.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/view/view_test.go:116",
+      "issue": "Msg is pinned by substring only (`assert.Contains(t, archiver.Msg, \"archive_mode=on\")`), while AC bullet 1 requires `Msg == \"Show archiver statistics (requires archive_mode=on)\"` verbatim (Decision 5). The prefix 'Show archiver statistics' is unpinned: a typo or a reworded prefix ships silently, even though this string is what the operator reads in the cmdline when switching to the screen. The sibling guards for the same class of view use full equality (TestNew_BgwriterView:96, TestNew_ReplslotsView:82); only TestNew_StatIOTimeView uses Contains, and there the task did not demand a verbatim Msg.",
+      "recommendation": "Replace with `assert.Equal(t, \"Show archiver statistics (requires archive_mode=on)\", archiver.Msg)`. Full equality is a strict superset of the substring guarantee, so it still satisfies the 'Msg substring' mutation check (dropping archive_mode=on still reddens it) while also covering the AC's verbatim requirement.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "record/record_test.go:139-145 (Test_filterViews) and internal/view/view_test.go:297-303 (TestView_VersionOK)",
+      "issue": "Both tables assert only aggregate integers; no assertion names the archiver view. The recordability claim ('kept on >=PG14, dropped below') is therefore proved arithmetically rather than directly, and a compensating change — archiver silently dropped while another view's gate loosens by one — passes both tables. This is inherent to count-based tests and is partly compensated by TestNew_ArchiverView pinning MinRequiredVersion, but the task builds its whole safety argument on these two tables, and patterns.md explicitly warns about count tests that pass for the wrong reason.",
+      "recommendation": "In Test_filterViews, add an expectation of membership per row, e.g. a `wantArchiver bool` column with `if tc.wantArchiver { assert.Contains(t, v, \"archiver\") } else { assert.NotContains(t, v, \"archiver\") }` — true on the three >=PG14 rows, false on the four <=PG13 rows. This turns 'the count moved by one' into 'this specific view survived', and it reddens under both the NotRecordable:true and the dropped-MinRequiredVersion mutations for the right reason.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "record/record_test.go:148-152 and internal/view/view_test.go:306-316",
+      "issue": "Both count tables loop without t.Run and pass no msgAndArgs, so all seven rows share a single assert line. When a count regresses, the failure reports 'expected 19, actual 18' with no indication of which version or pgssSchema produced it — precisely the diagnostic a future contributor needs when a newly registered view moves several rows at once. The task's own instruction ('work the arithmetic per row rather than applying a blanket +1') is exactly the reasoning this output does not support.",
+      "recommendation": "Wrap each row in a named subtest — `t.Run(fmt.Sprintf(\"version/%d/pgss/%q\", tc.version, tc.pgssSchema), func(t *testing.T) { ... })` in Test_filterViews and `t.Run(fmt.Sprintf(\"version/%d\", tc.version), ...)` in TestView_VersionOK — or at minimum pass the row as msgAndArgs: `assert.Equal(t, tc.wantN, n, \"version=%d pgss=%q\", tc.version, tc.pgssSchema)`. internal/query/archiver_test.go already uses the subtest form for its version tables.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/view/view_test.go:218-221 and :236-239 (archiver assertions in TestViews_Configure)",
+      "issue": "The acknowledged limitation is handled adequately in substance but not at the assertion site. These assertions cannot be reddened by removing `case \"archiver\":` from Configure() — New() already sets the identical QueryTmpl/Ncols/DiffIntvl, so the selector call changes nothing observable — and the task explicitly accepts that. Worth recording that they are NOT vacuous, however: if SelectStatArchiverQuery ever drifts from the static entry (say it returns Ncols 8), Configure overwrites the view and these assertions go red, so they are a real drift guard between internal/query/archiver.go and internal/view/view.go. The problem is only that the honesty lives in the task file: the in-test comment reads 'pg_stat_archiver is schema-stable, so the archiver layout is the same on every version', which a future reader can easily take as a claim that Configure's wiring is gated here. patterns.md ('Extract the decision out of the unreachable closure') asks for that caveat to be visible where the assertion is.",
+      "recommendation": "Extend the existing one-line comment in both arms, e.g.: '// Regression guard only: New() already sets these, so removing case \"archiver\" from Configure() cannot redden this. What it does catch is drift between SelectStatArchiverQuery and the static entry. The wal assertions above are the real wiring gate.' No assertion change needed.",
+      "litmusTestFailed": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "litmusTest": {
+      "checked": 16,
+      "passed": 12,
+      "failed": 4
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 5,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

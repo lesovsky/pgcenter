@@ -1,0 +1,21 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Closed-statCh receive spins in a tight loop until ctx.Done() is chosen (pre-existing, not introduced by this diff)",
+      "description": "When collectStat closes statCh on cancel (top/stat.go:77, :139, :146), statLoop's `case s := <-statCh:` arm keeps firing with zero-value stat.Stat until Go's select happens to pick the `case <-ctx.Done():` arm, since both are simultaneously ready and select choice is pseudo-random. Each spin now also calls paused.Load() and, if paused, repaint()/app.ui.Update on every spin - a small amount of extra CPU churn on top of the pre-existing pattern (which previously called printStat/render on every spin). This is unchanged in shape from before the pause feature and is explicitly called out in the task file as \"today's behaviour; do not add a closed-channel branch\", so it is not a regression of this commit.",
+      "impact": "Bounded, short-lived CPU spin during shutdown/UI-rebuild transition only; not attacker-reachable and self-limits as soon as ctx.Done() is scheduled. No availability impact beyond a brief busy loop.",
+      "recommendation": "No fix required for this task (explicitly out of scope per the task file and pre-existing). If ever addressed, add an explicit `ok` check on the statCh receive (`s, ok := <-statCh; if !ok { <block or continue selecting only ctx.Done()> }`) in a dedicated follow-up outside this feature.",
+      "cwe": "CWE-834"
+    }
+  ],
+  "tech_debt": true
+}

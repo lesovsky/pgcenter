@@ -1,0 +1,116 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/017-feat-wal-archiver/017-feat-wal-archiver",
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "iteration": 2,
+  "status": "approved",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "10",
+      "section": "Correction applied during task validation (2026-08-06)",
+      "issue": "The round-1 fix was appended as a twelfth section AFTER Post-completion, which the template does not have — the file must end at Post-completion. Both of its paragraphs also duplicate content that the same fix already put into the body: the `0` (not `0 B`) correction is Edge case «Three accepted behaviours must not be filed as defects» (`:362-363`), and the stand-TTL instruction is What-to-do bullet `:70-73` plus Edge case `:332-335`. A QA executor now reads the same two rules twice, in two places, with no statement of which is authoritative.",
+      "fix": "Delete the appended section. Both facts are already stated in the body; if the provenance matters, add one clause to the existing Edge case («corrected during task validation — the specs' `0 B` is a prose artefact») rather than a new section."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "08",
+      "section": "TDD Anchor",
+      "issue": "Round-1 finding not applied: template residue survives in filled sections. Task 08 still carries `<!-- Fill if task includes writing code… -->` (`:111`) inside a fully written TDD Anchor, the generic Russian preamble «Тесты, которые нужно написать ДО реализации…» (`:113`) immediately above the task-specific one, and the `<!-- How to verify … -->` / `<!-- All details … -->` comments (`:307`, `:341`). Tasks 09 (`:171`) and 10 keep the Details comment as well. Task 06 shows the intended end state — every instructional comment replaced by real prose. Not blocking (no `[Task Name]`, `{PK path}`, TODO/TBD anywhere in the batch).",
+      "fix": "Strip the instructional HTML comments from the filled sections of tasks 08, 09 and 10, and delete the generic Russian TDD preamble in task 08 — the task-specific paragraph two lines below already says it better."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "08",
+      "section": "Verification Steps",
+      "issue": "Round-1 finding not applied, and it is now settled: the Description calls the shared legacy fixture «a 2021 PG14beta1 recording» (`:24`) while Verification Step 7 calls the same file «the legacy PG13-era tar» (`:336`). Read directly from `report/testdata/pgcenter.stat.golden.tar`, its meta entry carries `version: 14beta1 (Ubuntu 14~beta1-1.pgdg20.04+1)` and `version_num: 140000`, with samples dated 2021-06-14. The Description is right; Step 7 is wrong.",
+      "fix": "In Verification Step 7 replace «the legacy PG13-era tar» with «the legacy PG 14beta1 tar (version_num 140000)», matching the Description."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "07",
+      "section": "Details",
+      "issue": "Round-1 finding not applied: the trailing-whitespace note still cites `:146`, `:151`. Verified byte-for-byte with `cat -A`: the rows that actually end with a trailing space are `- waldir_size` (`:145`) and `- write,ms` (`:151`); `:146` is `- wal,KiB`, which has none. Separately, the constant's own extent is now cited two ways in the same file — `:141-157` in the Description (`:29`) versus `:140-157` in What-to-do (`:54`) and Context Files (`:177`). The true span is 141-157, with the doc comment on 140.",
+      "fix": "Change the trailing-whitespace reference to `:145`, `:151` (or drop the numbers and keep the instruction «two existing wal rows end with a trailing space — do not clean them up»), and settle on one form for the constant's extent."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "06",
+      "section": "Context Files",
+      "issue": "The round-1 fix added two files the tech-spec's Task 6 entry does not list under «Files to modify»: `top/keybindings_test.go` (a brand-new file, holding `Test_keybindingsWAL`) and `top/pause_test.go` (step 8 rewrites two sentences of its comment block at `:561-568`). The tech-spec lists only `top/config_view.go`, `menu.go`, `keybindings.go`, `help.go`, `config_view_test.go`, `menu_test.go`, `help_test.go`. Both additions are well-argued and correct — this is a spec-drift bookkeeping gap, not a scope problem.",
+      "fix": "Add `top/keybindings_test.go` and `top/pause_test.go` to the tech-spec's Task 6 «Files to modify», or record the addition in the decisions log when the task completes."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "06",
+      "section": "Verification Steps",
+      "issue": "The round-1 fix made task 06 state — correctly — that `go test ./top/...` cannot be run whole on the host, because `Test_getQueryReport` (`top/report_test.go:9-17`) calls `postgres.NewTestConnect()`, asserts (does not require) NoError and then dereferences the nil connection, taking the binary down. That directly contradicts the tech-spec, which is not updated by any task in this batch: Task 6's «Verify:» line reads `bash — go test ./top/... (runs without PostgreSQL)` and the Agent Verification Plan table repeats it for row 6. Confirmed empirically: the filtered host run (`go test ./top/ -run 'Test_helpTemplate|Test_statioNextView|Test_selectMenuStyle|Test_switchViewTo'`) is green, so the task's replacement gate works and the spec's claim is the wrong one.",
+      "fix": "Correct the tech-spec's Task 6 «Verify:» line and the row-6 cell of the Agent Verification Plan to the two gates task 06 actually uses (host `-run` filter + full package inside the CI image), so Task 10 does not walk a verification plan that cannot be executed as written."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "09",
+      "section": "Description",
+      "issue": "The `0 B` correction is now applied downstream in three places (task 09 Description `:47-48`, Implementation hints `:207-214`, Post-completion `:232-234`; task 10 Edge cases `:362-363` and its appended section), but the source documents still carry the wrong literal: tech-spec `:210` and its Task 9 entry `:636` («note that … the verbose panel now reports `0 B` instead of `n/a`»), user-spec `:148` and `:305`. User-spec `:305` is one of the 23 criteria Task 10 must walk by name, so the QA gate reads a criterion whose literal the program never prints — task 10 covers it in Edge cases, but only because someone remembered to.",
+      "fix": "Fix the wording once at the source — tech-spec `:210`/`:636` and user-spec `:148`/`:305` — to «a backlog of zero (rendered `0`)», then let the task files simply follow it instead of each carrying its own correction."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "08",
+      "section": "Acceptance Criteria",
+      "issue": "The A5 removal is correct and its argument is verified in full (`report/report.go:282-284` builds `views := view.Views{config.ReportType: v}`; `internal/view/view.go:372-373` switches on the map key; `newApp` at `:83-85` returns a zero-value `view.View` with no error) — but it is filed as a checkbox in a list whose stated rule is «apply each one, see red, revert». «There is deliberately no A5» is the one item in that list that cannot be run, cannot fail and cannot be checked off by an observation; it is rationale, and the same argument already appears verbatim in the Description (`:71-74`).",
+      "fix": "Move the A5 paragraph out of Acceptance Criteria into Details → Dependencies (next to the existing «which half of Task 5» note, where it belongs) or leave it in the Description, and keep the criteria list to items that can be run and observed."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "07",
+      "section": "Acceptance Criteria",
+      "issue": "The three mutations gate exactly one dimension of the new constant — the presence and order of the nine column NAMES (the `\"\\n- \" + name + \"\\t\"` markers, which incidentally also gate the literal tabs, since a tab-to-space expansion breaks every marker). Nothing gates the other things the first criterion demands: the origin column (`pg_ls_archive_statusdir` for `ready`, the seven `pg_stat_archiver` field names), the «empty when never archived» wording on the four NULL-able rows, the `PG-STAT-ARCHIVER-VIEW` docs URL, and the `(PG 19+)` annotation on `fpi,KiB`. `Test_describeReport`'s row is `{report: \"archiver\", want: pgStatArchiverDescription}` — it compares the output to the same constant, so it pins the map entry and nothing about the text. Those criteria are review-only, which is defensible, but the task does not say so, unlike task 06 which explicitly labels the `printCmdline` write count a diff-review item.",
+      "fix": "Either add one assertion to `Test_describeArchiverColumnOrder` on the origin column of a couple of rows (e.g. that the `ready` row contains `pg_ls_archive_statusdir` and the `last_archived` row contains `last_archived_wal`) and one on the docs-URL suffix, or state plainly next to those criteria that origin text, row wording, the URL and the `(PG 19+)` annotation are diff-review items with no test behind them."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "Reviewers",
+      "issue": "Report paths are written as bare filenames (`017-feat-wal-archiver-task-07-dev-code-reviewer-review.json`), while tasks 06, 08 and 09 use the template's feature_base-prefixed form (`docs/features/017-feat-wal-archiver/017-feat-wal-archiver-task-NN-…-review.json`). These are output paths a reviewer writes to, resolved from the repo root, not markdown links resolved from the task file — so the bare form is the outlier and risks a JSON landing in the working directory. (Round 1 asked task 08 to match the sibling style for its Context Files links, which it correctly did; its Reviewers paths were right to stay full.)",
+      "fix": "Prefix task 07's three Reviewers paths with `docs/features/017-feat-wal-archiver/`, matching tasks 06, 08 and 09 and the template's `{feature_base}-task-{ID}-{name}-review.json`."
+    }
+  ],
+  "verified_ok": [
+    "ROUND-1 CRITICAL (task 08, A5) — RESOLVED. A5 is gone, replaced by an explicit no-A5 rationale whose every claim was re-verified against the tree: report/report.go:282-284 (`views := view.Views{config.ReportType: v}`), internal/view/view.go:372-373 (`for k, view := range v { switch k {`), report/report.go:83-85 (newApp returns views[config.ReportType], no error). The registry genuinely is unobservable in this replay, and the task now says so and points at Task 5's unit tests as the right layer.",
+    "ROUND-1 MAJOR (task 06, help mutation) — RESOLVED, and the replacement holds. helpEntryLine (top/help_test.go:14-30) asserts `assert.Equal(t, -1, idx)` on a second match, so an ambiguous marker fails the test. `'w' ` (trailing space) occurs exactly once in the post-edit helpTemplate, so restoring `'w' WAL,` to the r line makes it ambiguous and reddens Test_helpTemplate_walEntry. The new Test_helpTemplate_replicationEntry closes the other half: `'r' replication,` is unique, the `    r ` prefix fails under a restored `r,w` token, and the no-`'w'` assertion fires under the restored clause. descColumn arithmetic checks out — the r, s,t,i, j,J and new w,W lines all land on column 22.",
+    "ROUND-1 MAJOR (task 08, ungated subcases) — RESOLVED. B4 and B5 are real gates. B4: the never-archived row is source=Archiver, ready=0, archived=0, failed=0, stats_age=02:00:00 with four NULLs → exactly 5 strings.Fields; replacing the NULLs with sql.NullString{String:\"0\",Valid:true} yields 9. B5: two archiver.* entries in the previously empty tar produce one printed row (two ticks minus the discarded first), so the empty-buffer assertion reddens. The coverage rule now names every subcase: populated A1/B1/B2, pg18 A4, pg19 A2/A3/B3, never_archived B4, no_archiver_entries B5.",
+    "ROUND-1's FALSE PREMISE ABOUT top/ TESTABILITY — CORRECTED, AND I RE-PROVED IT MYSELF. A throwaway probe in package top (written, run, deleted) confirms every claim task 06 now makes: menuSelect(app)(&gocui.Gui{}, mv) over the menuStatIO branch returned stat_io / stat_io_time / stat_io for cursor 0 / 1 / 5, each with a nil error and app.config.menu.menuType reset to menuNone; keybindings(app) with ui=&gocui.Gui{} returned nil; DeleteKeybinding(\"sysstat\",'J',ModNone) succeeded once and reported `keybinding not found` on the second call, while 'W' reported not-found on \"sysstat\", \"\", \"menu\", \"dialog\" and \"help\". gocui v0.5.0 exports DeleteKeybinding (gui.go:262-276); SetView (gui.go:130-152) builds a *View from coordinates and returns ErrUnknownView as its created signal; DeleteView/SetCurrentView scan a slice and return ErrUnknownView rather than panicking. The pause_test.go sentences task 06 amends are at :561-566, exactly where step 8 says.",
+    "ROUND-1 (task 06, build command) — RESOLVED. `go build -o /dev/null ./cmd` exits 0; cmd/pgcenter.go is the main package and there is no ./cmd/pgcenter package.",
+    "ROUND-1 (task 07, depends_on) — RESOLVED. depends_on is now [\"04\", \"05\"], covering the `-W a` smoke check; Task 4 is Wave 1 and Task 5 Wave 2, so the wave-3 assignment is unchanged and Details → Dependencies now matches the declaration (Tasks 1 and 2 reachable transitively through 05).",
+    "ROUND-1 (tasks 09/10, `0 B`) — RESOLVED in the task files. Task 09 carries the correction in three places with the right code anchors (internal/pretty/pretty.go:11-12 returns the bare \"0\"), task 10 restates it as accepted behaviour, and task 10 additionally records the lapsed stand TTL with an explicit instruction to request a fresh stand rather than skip the manual gate. Only the upstream specs still say `0 B` — see the carry-forward finding.",
+    "ROUND-1 (task 08, markdown links) — RESOLVED for Context Files and Post-completion: feature artifacts are bare filenames, repo files carry `../../../`, and `[docs/decisions-log.md](../../decisions-log.md)` resolves correctly from docs/features/017-feat-wal-archiver/.",
+    "ALL MUTATION CRITERIA IN THE CODE TASKS CAN FAIL, and each names the test it reddens. Task 06: all ten mutations re-checked against top/config_view.go:232-257 (switchViewTo's default arm is what makes the deleted-case mutation red), top/menu.go:125 (the menuNone reset), gocui's first-match DeleteKeybinding, and helpEntryLine's ambiguity assertion. Task 07: mutation 1 works because describeReport (report/report.go:665-698) prints `unknown description requested` and returns nil for an unknown type, so only the named test catches a missing map entry; mutations 2-3 fire on the require.NotEqual(-1, pos) presence check, and the trailing-tab anchors keep `fpi` off `fpi,KiB` and `write` off `write,ms`. Task 08: A1 verified against calculateDelta's `interval != [2]int{0,0}` short-circuit (internal/stat/postgres.go:589-597) — {2,2} puts archived at index 2 inside the diffed range, turning 100003 into 3; A2/A3 both land on DiffIntvl {2,5} for a pg19 fixture and move buffers_full out of the diff; A4 drives stats_age '02:00:00' into diffPair and produces the wrapped `diff failed`; B3 is sound because itv is computed as `int(d.ts.Sub(prevTs) / time.Second)` (report/report.go:334-343), so two-second spacing halves every integer delta.",
+    "Frontmatter: all five tasks carry status/depends_on/wave/skills/verify/reviewers/teammate_name and nothing beyond the template; status is `planned` everywhere; depends_on is an array of ID strings; skills and reviewers are arrays. Waves and dependencies: 06→05, 07→[04,05], 08→05 (wave 3 over waves 1-2), 09→04 (wave 3 over wave 1), 10→01..09 (wave 4). No cycles, every referenced ID exists, every dependency sits in an earlier wave.",
+    "Skill↔reviewer mapping is unchanged and correct: code-writing → three reviewers (06, 07, 08), documentation-writing → dev-code-reviewer (09), pre-deploy-qa → [] (10). Frontmatter skills/reviewers match the Required Skills and Reviewers sections in all five files.",
+    "TDD Anchor: present and substantive for 06, 07, 08; correctly ABSENT from 09 and 10, which are non-code work and carry Verification Steps instead — as prescribed, not an omission.",
+    "Section presence and order match the template in tasks 06-09; Details carries Files / Dependencies / Edge cases / Implementation hints in all five. Task 10's ordering is correct up to Post-completion, then the appended twelfth section — see the structure finding.",
+    "Context Files: every mandatory artifact is present in all five tasks (user-spec, tech-spec, decisions log, architecture.md, patterns.md where relevant). `project.md` does not exist in this repo — .claude/skills/project-knowledge/ holds architecture.md, deployment.md, overview.md, patterns.md — and every task states that overview.md is its equivalent rather than linking a phantom file.",
+    "Carry-forward from the tech-spec: Tasks 7, 8 and 9 modify exactly the files their Implementation Tasks entries list, with none dropped. The Testing Strategy items land where expected (walNextView cycle + count-based test updates → 06; the describe map entry → 07; archiver + wal PG 18/PG 19 goldens → 08). Task 06 extends the switchViewTo table with three rows where the spec asks for two — a superset, which is allowed. Tech-spec Acceptance Criteria hold exactly 11 checkboxes and the user-spec «Критерии приёмки» exactly 23, the counts Task 10 walks by name.",
+    "Code anchors re-checked in this round and correct: pgStatWALDescription spans report/describe.go:141-157 with the fpi row at :148 and the wal,KiB row at :146; describeReport's map at report/report.go:666-694 with `\"wal\"` at :674; Test_describeReport's table at :1172+ with the `\"wal\"` row at :1184 and the shared `update` flag at report/report_test.go:24; statIOStripANSI/statIOAnsiRE at report/report_record_statio_test.go:43-47; top/keybindings.go 'w' at :38, 'J' at :49, no existing 'W' anywhere in :18-85; top/menu.go iota block :14-26, menuStatIO style :87-95, menuSelect branch :194-203, menuClose focusing sysstat :234-243; top/help.go helpTemplate :10-50 with the r,w line at :14, j,J at :19 and the Q caveat at :45, exactly one `%` verb; doc/release-notes/ holds v0.8.0.md and v0.9.0.md, both opening with a `Release date:` line — the format task 09 follows and the reason it forbids inventing one."
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 10,
+    "critical": 0,
+    "major": 0,
+    "minor": 10,
+    "round_1_findings_resolved": 7,
+    "round_1_findings_still_open": 3
+  }
+}

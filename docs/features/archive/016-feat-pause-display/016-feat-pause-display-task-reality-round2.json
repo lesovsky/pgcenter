@@ -1,0 +1,131 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "round": 2,
+  "scope": "round-1 fixes only: what changed in tasks 03/05/09 and whether the changes are implementable",
+  "tasks_checked": ["03", "05", "09"],
+  "status": "approved",
+  "verdict_per_item": [
+    {
+      "task": "03",
+      "item": "renderFrame takes BOTH the render timestamp and the logtail source; signature extractable from printStat's closure",
+      "result": "CONFIRMED",
+      "evidence": "top/stat.go:169-252 is one g.Update closure capturing only app/s/props/g. Extracting renderFrame(g, app, s, props, at, source) is mechanical. The live logtail source needs g and *gocui.View (readLogfileRecent takes *gocui.View for v.Size(), top/stat.go:1202-1206; Reopen needs app.db + app.postgresProps.VersionNum, :235; printCmdline(g,...) on error, :229/:237), all of which a closure built in printStat can capture. The repaint source returns the stored pair. Task 09 already anticipates the *gocui.View/io.Writer adaptation at the wrapper boundary, so the two tasks agree on the seam."
+    },
+    {
+      "task": "03",
+      "item": "capture point: one time.Now() at the top of the g.Update closure, feeding both the store and the core (one stamp, two consumers)",
+      "result": "CONFIRMED",
+      "evidence": "grep 'time.Now()' top/stat.go returns exactly one hit, :277 inside renderSysstat (declared :269) — so nothing else on the render path reads a clock and a single capture is genuinely the only one. The g.Update closure runs on the gocui goroutine at MainLoop dispatch, i.e. 'when it was rendered', which is what frameStore.at documents; renderSysstat's own time.Now() fires microseconds later and formats to second precision (:277, '2006-01-02 15:04:05'), so task 04 replacing it with the captured stamp cannot shift the displayed value. Sufficient: in task 03 the stamp's consumer is the store; the parameter reaches renderFrame, which is all task 04 needs."
+    },
+    {
+      "task": "03",
+      "item": "failure latch as a separately callable unit; anchor drives fail/fail/fail/success/fail expecting true,false,false,false,true, writable without a Gui",
+      "result": "CONFIRMED",
+      "evidence": "The expected sequence is exactly 'one report per no-failure -> failure transition, silence on repeats, re-arm on success' — arithmetically correct. A method taking the repaint outcome and returning bool needs no *gocui.Gui, no *gocui.View and no app. The repo already has the identical shape as precedent: verboseTooShortShown at top/ui.go:141. The premise behind the requirement also holds: top/ui_test.go:355-357 records that *gocui.View cannot be constructed outside the gocui package, so the real closure can never be made to fail from a test."
+    },
+    {
+      "task": "03",
+      "item": "Test_frameStore_publishOnlyOnLivePath — publish step callable with the two paths expressed as data",
+      "result": "CONFIRMED",
+      "evidence": "Structurally possible in Go and in this package: the task mandates two constructors producing a params value plus a named publish helper taking it. Both are ordinary package-level functions in package top; the test lives in top/pause_test.go (same package) and can call them and read frameStore's unexported fields directly. Nothing in printStat's current closure blocks this — the closure is what gets replaced. The 'no getters in production code' rule does not bar direct field reads from a same-package test."
+    },
+    {
+      "task": "03",
+      "item": "Test_frameStore_repaintRendersIdenticalBytes restricted to renderDbstat / printStatData",
+      "result": "CONFIRMED",
+      "evidence": "Both are writer-based and clock-free: renderDbstat(w io.Writer, config, s, termWidth) at top/stat.go:706, printStatData(w io.Writer, ...) at :1031, and the only time.Now() in the file is at :277 inside renderSysstat. Neither needs a *gocui.Gui or *gocui.View, so the test runs against a *bytes.Buffer. The restriction is what makes it runnable — including renderSysstat would have made it straddle second boundaries. See findings for two setup constraints the anchor should spell out."
+    },
+    {
+      "task": "05",
+      "item": "config.paused is an atomic.Bool per task 02, so CompareAndSwap(true,false) is available",
+      "result": "CONFIRMED",
+      "evidence": "Task 02 'What to do' §1 adds `paused atomic.Bool` to config (top/config.go) with the sync/atomic import; the field is not in top/config.go:17-41 yet, exactly as expected for an unimplemented wave-1 task. atomic.Bool exposes CompareAndSwap(old, new bool) bool natively — no extra synchronisation."
+    },
+    {
+      "task": "05",
+      "item": "the CAS form does not break placement rule 2 on any of the eleven call sites",
+      "result": "CONFIRMED",
+      "evidence": "Only 3 of the 11 sites use liftPauseRefresh, and on all three nothing else writes cmdline on that path: orderKeyLeft (top/config_view.go:22-37) and orderKeyRight (:40-53) contain no printCmdline at all, and the showExtra close path (top/extra.go:14-22 -> closeExtraView :98-107) has no writer either. So when the swap succeeds there is exactly one write, and when it fails there is none — which is today's behaviour byte for byte, and a path with the flag already clear is not a lifting path. The 8 liftPause sites are untouched by CAS since liftPause writes nothing (their own writers stay: switchSortOrder top/config_view.go:116, showExtra open top/extra.go:77, dialogFinish top/dialog.go:242, etc.). Rule 2 holds on all eleven."
+    },
+    {
+      "task": "05",
+      "item": "Test_showExtraCloseLifts — handler in a goroutine, no reader on viewCh, parks on the send inside closeExtraView; lift happens before the send and is observable",
+      "result": "CONFIRMED",
+      "evidence": "With ShowExtra == CollectDiskstats the close branch at top/extra.go:14 is taken, the logtail Close at :15-20 is skipped, the lift sits immediately before `return closeExtraView(g, v, app.config)` at :22. closeExtraView (:98-107) ranges c.views, sets c.view.ShowExtra, then blocks on `c.viewCh <- c.view` at :104 — viewCh is unbuffered (`make(chan view.View)`, top/config.go:48) — and therefore never reaches `g.DeleteView` at :106 with the nil Gui. liftPauseRefresh with g == nil is safe: writeCmdline returns at top/ui.go:437 before any deref. The lift is a plain atomic store, observable from the test goroutine via assert.Eventually on paused.Load()."
+    },
+    {
+      "task": "05",
+      "item": "Test_showExtraCloseLogtailErrorKeepsPause — Logfile.Close() returns os.ErrInvalid on a zero-valued *os.File and showExtra returns at top/extra.go:17-19",
+      "result": "CONFIRMED",
+      "evidence": "internal/stat/log.go:33-35 — Close() is `return l.File.Close()` with no nil guard; (*os.File).Close() on a nil receiver returns os.ErrInvalid. Verified empirically by running `var f *os.File; f.Close()` -> 'invalid argument'. So with a zero config.logtail the branch at top/extra.go:15-20 returns the error at :17-19, before any lift and before any viewCh send. Rule 1 satisfied on a path where the panel did not close."
+    },
+    {
+      "task": "09",
+      "item": "the drop-on-close call moved outside the `if ShowExtra > stat.CollectNone` block — is that where it must go, and does the surrounding code allow it",
+      "result": "CONFIRMED",
+      "evidence": "stat.CollectNone is the iota base == 0 (internal/stat/stat.go:26, exactly as the task cites), and the entire extra section including the switch is wrapped in `if app.config.view.ShowExtra > stat.CollectNone` — actual line top/stat.go:201. A closed panel therefore skips the block wholesale, so a drop written inside it (or in the switch default) never runs for the one case it exists for. The surrounding code allows the prescribed shape: two locals before the block, the CollectLogtail case body (:226-248) assigning them, one call after the closing brace at :250 before `return nil` at :251. Bookkeeping claim also verified: config.logtail.Size is written in exactly two places, top/extra.go:46 and top/stat.go:243. See findings for the live/repaint interaction the move creates."
+    },
+    {
+      "task": "09",
+      "item": "the adversarial test with a real readable file in t.TempDir() — does it distinguish a repaint that touches the file from one that does not",
+      "result": "CONFIRMED (with a correction to the sentinel)",
+      "evidence": "Yes, it distinguishes. readLogfileRecent's early return fires only on `info.Size() == logfile.Size || info.Size() == 0` (top/stat.go:1214), so a real file whose size differs from the sentinel does not short-circuit, and an implementation that reads renders the adversary's bytes under the adversary's path — assertions 1 and 2 catch it. Note also that because the repaint's stored source is typed io.Writer, readLogfileRecent itself is not callable from it (it needs *gocui.View for v.Size(), :1204), so the realistic cheat is a direct logtail.Read. The correction concerns the direction of the sentinel — see findings."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "09",
+      "issue": "Task 09's code sketch places the sync call at 'the closure's tail'. After task 03 lands, that tail belongs to the SHARED renderFrame, not to a live-only closure — so a literal `app.frame.syncLogtail(app.config.view.ShowExtra, logPath, logBuf)` there executes on the repaint path too. That contradicts task 09's own first bullet ('a repaint must never write the store') and its acceptance criterion 'The store is written on the live path only; a repaint performs no store write (Decision 2)'. The mistake compiles, passes every store-level unit test in the task (they drive the method, not the call site), and is exactly the class of error the 'read the placement, do not infer it' verification step cannot catch, because that step only checks the block braces.",
+      "fix": "Two coordinated one-liners. In task 09: replace 'at the closure's tail' with 'inside task 03's live-only publish step, which sits at renderFrame's tail after the extra-panel block' — the constraint is still 'outside the `ShowExtra > stat.CollectNone` block and reached for every ShowExtra value', but now also 'unreachable from the repaint path'. In task 03: state that the publish helper is invoked at the TAIL of renderFrame (after the extra-panel block, not before rendering) and that its params value is the designated extension point for later waves — otherwise task 09 cannot place the sync call on the live side without reshaping the core, which task 09 explicitly forbids ('it must not change the core's signature')."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "09",
+      "issue": "The adversary's sentinel `Size: 4242` is LARGER than the on-disk size of the temp file (~34 bytes for 'ADVERSARY LINE — MUST NOT APPEAR\\n'), which inverts the failure mode the rebuilt test was meant to produce. A faithful copy of the live branch then takes the rotation path at top/stat.go:233 (`size < app.config.logtail.Size` -> 34 < 4242 -> true), calls Reopen(app.db, ...) on a nil *postgres.DB and panics before ever reaching `logtail.Size = size` at :243. Consequences: the task's stated rationale ('an implementation that touches the file *succeeds* and renders the adversary's bytes') is false under this sentinel, and assertion 4 ('config.logtail.Size is still 4242') is satisfied by a reading implementation — which is precisely the weakness the round-1 rewrite set out to remove. The test still fails a cheat (via panic), so it is not a hole, but two of its four assertions stop doing work.",
+      "fix": "Make the sentinel SMALLER than the file's real size — e.g. write ~34 bytes and set `Size: 1`. Then: 34 != 1 and 34 != 0 so the early return at :1214 does not fire; 34 < 1 is false so the rotation branch at :233 is skipped; the read succeeds and renders the adversary's bytes under the temp path (assertions 1-2 fire); and `logtail.Size = size` at :243 overwrites 1 with 34 (assertion 4 fires). All four assertions then discriminate exactly as the task claims. Update the rationale paragraph to say 'the sentinel is below the real size so a read takes the plain path and succeeds'."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "03",
+      "issue": "Test_frameStore_repaintRendersIdenticalBytes asserts identical bytes across two renders, but renderDbstat is not idempotent in general: at top/stat.go:715-721 it consumes `config.autoScrollToOrderKey` — clearing the flag and recomputing config.scrollOffset on the FIRST call only. With that flag set, the second render can legitimately produce different bytes. The task correctly calls the cores 'clock-free', but the property the assertion actually needs is idempotence, which is one condition wider.",
+      "fix": "Add to the anchor: the test's config must have `autoScrollToOrderKey == false` (a fresh newConfig() already does) and must seed `config.view.ColsWidth` explicitly, because renderDbstat — unlike printDbstat (top/stat.go:693) — does not call alignViewToResult. One sentence naming the clock AND the one-shot scroll flag as the two things being held constant."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "03",
+      "issue": "The same anchor requires the two renders to straddle 'a discarded frame passing through the paused gate'. That step adds no discriminating power: statLoop's tests use a stub repaint and the gate cannot reach the store by construction — which is the exact argument the task itself makes, two bullets earlier, when rejecting that shape for Test_frameStore_publishOnlyOnLivePath. Harmless ceremony, but the test's claim should not appear to rest on it.",
+      "fix": "Either drop the gate step from this anchor and state plainly that it asserts render idempotence of the stored frame, or keep it and add half a sentence saying the gate pass is illustrative and that the assertion's force comes from re-rendering the same stored frame."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "05",
+      "issue": "Test_showExtraCloseLifts leaves the handler goroutine parked inside closeExtraView. That goroutine writes `c.views` and `c.view.ShowExtra` (top/extra.go:99-103) AFTER the atomic store performed by the lift, so those writes are not ordered against the test goroutine by any happens-before edge. Any assertion in that test touching config.view or config.views would be a genuine data race under -race — and the task's verify step does include a -race run.",
+      "fix": "Add one line to the anchor: in this test assert ONLY on config.paused (via assert.Eventually on the atomic load); do not read config.view / config.views, since the parked goroutine writes them unsynchronised."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "09",
+      "issue": "The extra-panel wrapper `if app.config.view.ShowExtra > stat.CollectNone {` is cited as top/stat.go:200 in three places (What to do, Acceptance Criteria, Details). The actual line is 201. Every other line reference checked in this round is exact — including internal/stat/stat.go:26 for CollectNone — so this single off-by-one reads as a stale anchor rather than a systematic drift.",
+      "fix": "Change the three `top/stat.go:200` references to `top/stat.go:201`."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "items_rechecked": 11,
+    "items_confirmed": 11,
+    "items_refuted": 0,
+    "claims_verified": 34,
+    "issues_found": 6,
+    "critical": 0,
+    "major": 2,
+    "minor": 4
+  }
+}

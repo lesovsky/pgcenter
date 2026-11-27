@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 )
@@ -200,14 +201,14 @@ func (app *app) record(doQuit chan os.Signal) error {
 func filterViews(version int, pgssSchema string, views view.Views) (int, view.Views) {
 	var filtered int
 	var pgssNotfound bool
+	var notRecordable []string
 
 	for k, v := range views {
-		// Skip views explicitly marked as not recordable. No production view sets
-		// NotRecordable=true currently; this branch is retained for views that are
-		// only meaningful live in the TUI and is covered by a synthetic guard test.
+		// Deliberate live-only exclusions have their own truthful, named reason and
+		// must not inflate the aggregate unsupported-version/extension count.
 		if v.NotRecordable {
 			delete(views, k)
-			filtered++
+			notRecordable = append(notRecordable, k)
 			continue
 		}
 
@@ -223,6 +224,11 @@ func filterViews(version int, pgssSchema string, views view.Views) (int, view.Vi
 			filtered++
 			pgssNotfound = true
 		}
+	}
+
+	sort.Strings(notRecordable)
+	for _, name := range notRecordable {
+		fmt.Printf("INFO: %s is not recordable (live TUI only), skip recording it\n", name)
 	}
 
 	if pgssNotfound {

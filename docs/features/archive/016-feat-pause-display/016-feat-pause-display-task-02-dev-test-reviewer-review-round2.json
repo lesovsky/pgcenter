@@ -1,0 +1,65 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "round": 2,
+  "status": "passed",
+  "summary": "Round 1's two major findings are closed. MAJOR 2 is fixed and verified by mutation in this round: Test_cmdlineMarkerAfterUIRebuild now derives the message from layout(&app{config: c, ui: &gocui.Gui{}})(nil), and changing layout's `return fmt.Errorf(\"\")` to `fmt.Errorf(\"boom\")` fails it with `expected \"[PAUSED]\", actual \"[PAUSED] boom\"` (top/ui.go restored byte-identical, md5 bb0a8595...). The test comment now scopes its claim to the two halves a unit test can reach instead of advertising the write; I confirmed the residual honestly - deleting printCmdline(app.ui, \"%s\", app.uiError) from layout still leaves the suite green, which is exactly what the comment says. MAJOR 1 is DECLINED and I accept the decline: argument (b) is correct and my round-1 recommendation over-claimed. The proposed `cmdlineRefresh` seam counts only calls routed THROUGH it, so `assert.Equal(t, 1, calls)` would still pass if a regression added a direct printCmdline(g, \"Paused\") - i.e. it does not pin the [027] half of the criterion, which is the half the task actually names as the defect class. Argument (c) is confirmed in code: toggleVerbose (top/verbose.go:29-31) has the identical shape, and the invisibility comes from writeCmdline's nil-Gui early return, not from this handler - so a seam here would be a local exception to a package-wide condition. Downgraded to part of one consolidated minor. Both round-1 minors that were accepted for fix are fixed: the 'paused config' subtest now asserts the literal (mutating pauseToken's \"[PAUSED]\" to \"[PAUSE]\" fails Test_pauseToken, both Test_cmdlineTokens pause subtests, Test_cmdlineTokensPauseNeverDegrades and Test_cmdlineMarkerAfterUIRebuild; top/pause.go restored, md5 c8f55f73...), and the tautological NotContains is gone while assert.Equal(t, \"\", msg) is now a statement about layout's real return value. One minor remains: three criteria that no unit test in this package can reach are all deferred to the same Task 10 stand run, which makes that run the only guard for them. Zero critical, zero major.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/pause.go:51 (togglePause's write) / top/ui.go:189 (layout's rebuild write) / top/keybindings.go:58 (the gocui.KeySpace row)",
+      "issue": "Three acceptance criteria are unreachable from a unit test in this package and are all deferred to the same Task 10 stand run, so that single manual run is now the only guard for all three. Verified by mutation in this round: (1) replacing togglePause's printCmdline(g, \"\") with `_ = g` leaves `go test ./top/ -run '[Pp]ause|[Cc]mdline'` green - 'exactly one cmdline write, no text message' is unpinned; (2) replacing layout's printCmdline(app.ui, \"%s\", app.uiError) with `_ = app.uiError` also leaves it green - the write half of Decision 8 is unpinned (inherent: layout returns at the 0x0 guard before creating the cmdline view, and a live Gui cannot be built without a terminal); (3) the keys slice is a local variable in keybindings(), so the gocui.KeySpace/\"sysstat\" row has no automated coverage at all. Root cause of (1) and (2) is one package-wide condition, not sloppiness in this task: writeCmdline returns silently on a nil Gui, so NO key handler's cmdline write is observable in any test in top/ - toggleVerbose (top/verbose.go:29-31) is in exactly the same position and has been for as long as it has existed. The deferral is a deliberate, documented decision, not an oversight; it is flagged because the risk is now concentrated in one place, and because Task 3 and Task 5 both edit top/pause.go after this task with nothing automated standing between a dropped or duplicated re-render and the user.",
+      "recommendation": "Do not add the per-handler seam (see the explicit assessment below). Instead: (a) make Task 10's stand run assert all three explicitly rather than incidentally - Space (not a typed space in a dialog) flips the marker on the same keypress, no message text accompanies it, and the marker returns after a pager/editor round-trip; record the observations in the decisions log so the deferral leaves a trace. (b) Register the package-wide condition in docs/tech-debt.md as its own entry - 'cmdline writes from key handlers are unobservable in top/ unit tests: writeCmdline returns silently on a nil Gui, so no handler write (togglePause, toggleVerbose, showExtra, ...) is pinned anywhere'. The fix, if it is ever worth it, is one indirection at the writeCmdline level that every handler routes through and every test can count - which would pin both the dropped-write and the added-write halves for the whole package at once. Solving it inside this one task cannot reach that; solving it per-handler buys half the property at the price of a permanent production hook that its neighbours do not have.",
+      "litmusTestFailed": true
+    }
+  ],
+  "round1FindingsDisposition": [
+    {
+      "round1": "major / anti_pattern - Test_cmdlineMarkerAfterUIRebuild did not touch layout",
+      "verdict": "resolved",
+      "evidence": "Mutation `return fmt.Errorf(\"\")` -> `fmt.Errorf(\"boom\")` in top/ui.go:150 now fails Test_cmdlineMarkerAfterUIRebuild at ui_test.go:420 (expected \"[PAUSED]\", actual \"[PAUSED] boom\"). The test pins layout's real contract for a 0x0 terminal plus the composition that follows from it. The write itself remains unreachable and the test comment now says so instead of claiming it."
+    },
+    {
+      "round1": "major / missing_coverage - togglePause's re-render unguarded",
+      "verdict": "declined, decline accepted, downgraded to minor",
+      "evidence": "Argument (b) holds: the recommended seam counts only calls through `cmdlineRefresh`, so an added direct printCmdline(g, \"...\") keeps `calls == 1` and the assertion green - it does not pin the [027] half. Argument (c) verified in top/verbose.go:29-31: identical shape, same nil-Gui invisibility, so the condition is package-wide. Argument (a) alone would not have been sufficient - a task file cannot authorise an untested criterion - but it is moot given (b). Residual value of the seam, stated plainly: it would be a permanent automatically-re-run guard against a DROPPED re-render when Tasks 3 and 5 edit this file, where the doc comment relies on a human reading it and the Task 10 stand run is a one-time check that will not re-run. That is real but partial, and it is bought with a production hook inconsistent with the rest of the package - so the correct home for it is a package-wide tech-debt entry, not this task."
+    },
+    {
+      "round1": "minor / anti_pattern - tautological expected value in Test_cmdlineTokens/'paused config'",
+      "verdict": "resolved",
+      "evidence": "The subtest asserts the literal []cmdlineToken{{variants: []string{\"[PAUSED]\"}}}. Mutation of pauseToken's literal to \"[PAUSE]\" now fails it, alongside Test_pauseToken, the 'paused config with active filters' sibling, Test_cmdlineTokensPauseNeverDegrades and Test_cmdlineMarkerAfterUIRebuild."
+    },
+    {
+      "round1": "minor / redundant_testing - assertions that cannot fail",
+      "verdict": "resolved",
+      "evidence": "assert.NotContains(t, got, \"PAUS\") is gone; ui_test.go:388 carries the width-7 equality alone with the intent in the comment. assert.Equal(t, \"\", msg) at ui_test.go:418 now asserts layout's return value, and the layout mutation above proves it can fail."
+    },
+    {
+      "round1": "minor / missing_coverage - Space keybinding has no coverage",
+      "verdict": "accepted as known gap",
+      "evidence": "Unchanged and acknowledged in the task file; folded into the single consolidated minor above so it is not lost between rounds."
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 7,
+    "litmusTest": {
+      "checked": 10,
+      "passed": 8,
+      "failed": 2
+    },
+    "mutationsPerformed": [
+      "top/ui.go layout: fmt.Errorf(\"\") -> fmt.Errorf(\"boom\") => Test_cmdlineMarkerAfterUIRebuild FAILS (guard confirmed)",
+      "top/ui.go layout: printCmdline(app.ui, \"%s\", app.uiError) -> _ = app.uiError => suite GREEN (residual gap confirmed, as documented)",
+      "top/pause.go: \"[PAUSED]\" -> \"[PAUSE]\" => 5 tests FAIL (literal pinning confirmed)",
+      "top/pause.go togglePause: printCmdline(g, \"\") -> _ = g => suite GREEN (declined gap confirmed)"
+    ],
+    "filesRestored": "top/ui.go and top/pause.go restored byte-identical after every mutation; git diff --stat back to top/ui.go 5 insertions, top/pause.go untracked and unchanged; top/stat.go and top/stat_test.go (task 01) never touched",
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 10,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 1,
+  "status": "approved",
+  "base": "27d9b65b569111907350988538002eefede9de3b",
+  "scope": "CURRENT UNCOMMITTED product/test diff against base",
+  "summary": "Approved. The registry entry and all three Configure cases match Data Models and Decisions 1, 2, and 5; only QueryTmpl, Ncols, and DiffIntvl are patched. Static and configured legacy layouts, PG19 layouts, sort settings, availability, maps, Msg, count literals, named filtering, and functions/sizes negative contracts are pinned. NotRecordable exclusions now produce sorted, truthful per-view INFO lines without inflating the aggregate version/extension count. The recorder fixture uses the production filter and real PGSS schema against PG17. The no-diff test asserts unchanged samples through both calculateDelta and Compare and was observed red under a non-zero interval.",
+  "findings": [],
+  "verification": [
+    {
+      "command": "docker run --rm [read-only source and host Go toolchain mounts] lesovsky/pgcenter-testing:0.0.11; prepare-test-environment.sh; go test ./internal/view/ ./record/ ./internal/stat/ -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Against freshly prepared PG14-PG19 fixtures: ok internal/view 0.027s; ok record 6.142s; ok internal/stat 1.357s. This includes the live PG19 autovacuum_scores setup/INFO exclusion test and the PG17 filtered tarRecorder test. The disposable container was removed."
+    },
+    {
+      "command": "go test ./internal/view/ -count=1 && go test ./record/ -run 'Test_filterViews|TestFilterViews' -count=1 -v && go test ./internal/stat/ -run 'TestCompare_NoDiffAllowsEmptyCells|Test_calculateDelta' -count=1 -v",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "All registry/Configure/count tests, every filterViews version row, the exact sorted alpha/zeta INFO assertion, and both no-diff entry points passed. The filter run showed one named autovacuum_scores live-TUI-only INFO per invocation."
+    },
+    {
+      "command": "go test -race ./internal/view/ -count=1 && go test -race ./record/ -run 'Test_filterViews|TestFilterViews' -count=1 && go test -race ./internal/stat/ -run 'TestCompare_NoDiffAllowsEmptyCells|Test_calculateDelta' -count=1",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Race-enabled targeted runs passed: internal/view 1.073s, record 1.019s, internal/stat 1.028s."
+    },
+    {
+      "command": "go test -overlay <temporary-overlay> ./internal/stat/ -run '^TestCompare_NoDiffAllowsEmptyCells$' -count=1 -v",
+      "verified": true,
+      "result": "EXPECTED_FAIL",
+      "evidence": "The overlay changed only the test's interval from {0,0} to {1,3}. The package compiled and the named test ran, then both calculateDelta and Compare assertions failed with diff failed: convert '' to int failed, and the unchanged-sample equality assertions also failed. Exit 1 was explicitly required. No repository file was edited and the temporary overlay was removed."
+    },
+    {
+      "command": "go vet ./internal/view/ ./record/ ./internal/stat/; git diff --check 27d9b65b569111907350988538002eefede9de3b; git diff --exit-code 27d9b65b569111907350988538002eefede9de3b -- internal/query/functions.go internal/query/sizes.go; gofmt -d <six changed files>",
+      "verified": true,
+      "result": "PASS",
+      "evidence": "Vet, whitespace validation, legacy functions/sizes non-modification, and formatting checks all passed. Final status contained only the six supplied product/test modifications before this requested report was written; no test container or scratch artifact remained."
+    }
+  ]
+}

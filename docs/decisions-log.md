@@ -655,7 +655,7 @@ Used by tech-spec planning and code research to avoid repeating mistakes and re-
 
 **Date:** 2026-06-25
 **Feature:** 010-feat-overview-dashboard
-**Status:** Accepted
+**Status:** Superseded in part by [017-feat-wal-archiver] "The verbose backlog moves off `pg_ls_dir`" — the aggregate's shape (count of `.ready` × `wal_segment_size`, its own `QueryRow`, degrade to `n/a`) stands; the **function choice and the privilege claim below do not**. Measurement on live PG 14 and PG 18 showed `pg_ls_dir` has ACL `{postgres}` — superuser only — so instead of degrading gracefully for `pg_monitor`, this aggregate never worked for that role at all, which is the most common monitoring role and the one the panel exists to serve.
 
 **Context:** The replication row needs a WAL-archiving backlog signal that works over the network (no PL/Perl) and degrades cleanly when archiving is off.
 
@@ -1031,3 +1031,353 @@ acceptance criterion overrode it.
 
 **Alternatives considered:** Direct backward-walk arithmetic (a second source of truth for the
 marker rule).
+
+---
+
+## [016-feat-pause-display] The frozen frame is owned by the gocui goroutine, for reads as well as writes
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** Pausing means keeping one `stat.Stat` alive and re-rendering it on demand. That frame is
+produced on the worker goroutine and drawn inside `g.Update` closures on the gocui goroutine, and it
+carries a second half — the logtail buffer — that is born inside the render closure, not with the
+sample.
+
+**Decision:** `frameStore` (`top/pause.go`) is written and read only on the gocui goroutine, with no
+mutex and no atomic. Publication happens at the tail of `renderFrame`, inside the closure. `statLoop`
+receives neither `*app` nor the store; its `repaint` parameter is a bare `func()`.
+
+**Rationale:** The happens-before chain (collector send → worker receive → `g.Update(f)` →
+`MainLoop` receive → `f(g)`) already makes the frame visible inside the closure, so a lock would add
+ceremony without adding safety. The read half is what makes it strict: a gate that called the printer
+directly would read the store on the worker goroutine, and a torn read (`Nrows` from one sample,
+`Values` from another) is a slice-bounds panic inside a `g.Update` closure — gocui does not recover
+those. Keeping `*app` out of `statLoop`'s signature means the racy shape cannot be written by
+inattention; it is the feature's one structural guarantee, and everything else is convention.
+
+**Alternatives considered:** A mutex around the store (rejected — hides the ownership rule and invites
+worker-side reads). A deep copy per frame (rejected — [016] made `printDataCell` non-mutating instead,
+so the store is a retention, not a duplication, and the render of a stored frame is idempotent).
+
+---
+
+## [016-feat-pause-display] The paused gate drains and repaints; only the live path publishes
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** Under pause the collector must not be stopped or throttled — `collectStat` reaches its
+`viewCh` receive only after a successful `statCh` send, and ~17 key handlers push on the unbuffered
+`viewCh`.
+
+**Decision:** The gate receives every frame unconditionally, discards it, and answers with a repaint
+of the store. The store is published only on the live render path; a repaint never writes to it.
+
+**Rationale:** Drain-and-discard is the only non-hanging shape: a gate that stopped receiving would
+park the collector, the first keypress would block `MainLoop` forever, and `Space` itself could not
+recover it. Publishing on repaint would restamp the frame with the repaint's own clock — the header
+would tick on a frozen screen, defeating the freeze — and would re-store the logtail buffer from
+itself. Because the discard is what triggers the repaint, the five render-only keys need no new
+plumbing: their existing `viewCh` push makes the collector emit a frame, and the gate turns it into a
+redraw.
+
+**Alternatives considered:** Pausing the collector (deadlock). Buffering `statCh` (moves the stall,
+does not remove it). Repainting only on demand rather than per tick (leaves resize and dialog paths
+without a trigger).
+
+---
+
+## [016-feat-pause-display] Decisions inside `g.Update` closures get their own callable unit
+
+**Date:** 2026-08-04
+**Feature:** 016-feat-pause-display
+**Status:** Accepted
+
+**Context:** A `g.Update` closure cannot be entered from a unit test — its failure site is
+`g.View(...)`, and neither `*gocui.Gui` nor `*gocui.View` is constructible outside the gocui package.
+Anything decided inside such a closure is therefore unverifiable by construction.
+
+**Decision:** Every non-trivial decision on the repaint path is a separately callable unit that the
+closure merely calls: the failure latch is a method on the store returning "emit a message?"; the
+live/repaint distinction is a `renderParams` value built by one constructor per path; the logtail
+source choice is `selectLogtail(params, read)` with the live read passed as a closure.
+
+**Rationale:** Two review rounds produced the same defect twice — a test that looks like proof and
+cannot fail. Both survived reading and were caught only by mutating production code and watching the
+suite stay green. Extracting the decision is what turns "a reviewer read the closure carefully" into
+"a mutation makes a named test go red". The cost is one small function per decision; the alternative
+is an invariant defended by inspection alone.
+
+**Alternatives considered:** Documenting the invariants in comments and relying on review (this is
+what failed twice). A fake `*gocui.Gui` (not possible outside the package). Deferring everything to
+the stand run (too coarse — the stand cannot isolate a single branch).
+
+---
+
+## [017-feat-wal-archiver] `has_function_privilege()` cannot guard a privileged call — measured, not assumed
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The `archiver` screen calls `pg_ls_archive_statusdir()`, which needs superuser or
+`pg_monitor`. The obvious way to keep the rest of the screen alive for a role without it is to hide
+the privileged call behind `has_function_privilege()` and let the column degrade instead of the
+screen.
+
+**Decision:** Do not attempt it in SQL. The privileged call is unconditional and a role without
+`pg_monitor` loses the whole screen, which then retries next tick — the same shape the `wal` screen
+already has with its unconditional `pg_ls_waldir()`.
+
+**Rationale:** PostgreSQL checks EXECUTE at **function-node initialisation**, not when a row would
+need the value, so every guarding form fails alike: `CASE` with an uncorrelated subquery (which
+becomes an InitPlan and is evaluated first), `CASE` with a correlated subquery, and `LEFT JOIN
+LATERAL … ON has_function_privilege(...)`. All three were run on a live PG 18 under a purpose-made
+privilege-less role and all three raised the permission error. This closes a whole class of future
+attempts: the guard has to live outside the statement, not inside it.
+
+**Alternatives considered:** two query variants of equal width, chosen in Go from a connect-time
+privilege probe — technically sound and the only surviving option, rejected here because it would fix
+half the WAL area for a role that cannot use the other half anyway. If per-column degradation is ever
+wanted, it must be done for both screens at once, as its own change.
+
+---
+
+## [017-feat-wal-archiver] The verbose backlog moves off `pg_ls_dir` to `pg_ls_archive_statusdir()`
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+**Supersedes (in part):** [010-feat-overview-dashboard] "Archiving backlog via `count(.ready) ×
+wal_segment_size`" — its function choice and its claim about `pg_monitor`.
+
+**Context:** ADR [010] assumed `pg_monitor` was enough to run the archiving-backlog aggregate and
+that insufficient privileges would merely degrade the field to `n/a`.
+
+**Decision:** `OverviewArchivingBacklog` counts `.ready` entries via `pg_ls_archive_statusdir()`.
+The output (bytes) and the degrade-to-`n/a` path are unchanged.
+
+**Rationale:** The assumption was wrong, and measurement on live PG 14 and PG 18 is what showed it:
+`pg_ls_dir` has ACL `{postgres}` — superuser only — while `pg_ls_waldir` and
+`pg_ls_archive_statusdir` are `{postgres, pg_monitor}`. So the most common monitoring role saw `n/a`
+permanently and never got the first signal that archiving had stopped. Two consequences are accepted
+knowingly: the new function is `missing_ok=true`, so a cluster whose `archive_status` directory is
+gone now reports a confident `0` instead of `n/a` (a damaged data directory, where the backlog is the
+least of the operator's problems) — and it renders as a bare `0`, not `0 B`, because the size
+formatter's zero case returns the digit alone. And it returns `SETOF record`, stating every file,
+where `pg_ls_dir` returned names only; since the verbose panel rides every screen, that walk is now
+paid on every screen. Showing the signal is worth more than saving the walk.
+
+**Alternatives considered:** leaving the panel alone and correcting the user-spec's framing — rejected
+by the roadmap owner in favour of fixing the signal. Doing it as a separate task later — rejected: the
+roadmap's mandate was to enter the WAL area exactly once.
+
+---
+
+## [017-feat-wal-archiver] The report always discards the first sample, so a pass-through screen loses real data
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** `report -W a` over an N-tick recording prints N−1 rows. The user-spec had promised one
+row per tick.
+
+**Decision:** Accept it and document it rather than fix it. The user-spec's scenario was corrected to
+"one row per tick, except the first".
+
+**Rationale:** The replay loop drops the first sample of a run because a **diffed** screen has nothing
+to diff it against. For a screen with `DiffIntvl{0,0}` the first sample *is* printable data and is
+dropped anyway. This is not introduced here — every pass-through screen behaves this way today,
+`activity` included — and it is worth recording because the reasoning does not survive contact with
+this class of screen: whoever next adds a `{0,0}` screen will lose a row and should know it is
+expected, not a bug in their view.
+
+**Alternatives considered:** skip the discard when `DiffIntvl == {0,0}` — rejected as surgery on a
+shared path with golden churn across unrelated screens; if it is ever done, it is its own change with
+its own review.
+
+---
+
+## [017-feat-wal-archiver] An archive with no matching entries prints nothing at all — no rows, no header
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The user-spec promised "header only" for a report over an archive containing no samples
+of the requested screen.
+
+**Decision:** No data rows and no column header — only the three INFO lines every report emits at
+start-up — and exit 0. The user-spec's edge case and its acceptance criterion were corrected to match
+the code.
+
+**Rationale:** The header cannot be printed: `printStatHeader` returns early unless the view has been
+aligned, and alignment happens inside the data branch, so with no samples there is nothing to align
+from and nothing is printed. A "no data" notice exists for exactly one screen, `procpidstat`, and
+giving a second screen one would introduce behaviour no other screen has. Recorded because the
+question ("shouldn't it at least say something?") will be asked again for the next screen.
+
+**Alternatives considered:** an INFO line for empty reports — rejected as inconsistent with every
+other screen; making it consistent across all screens is its own change.
+
+---
+
+## [017-feat-wal-archiver] Report flag values are a closed whitelist, because `ReportType` is not a label
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** `-W` became a string flag (`w`/`a`), joining `-J`, `-D`, `-P`, `-X` in taking a
+sub-selector value. The question is what an unrecognised value should do.
+
+**Decision:** map only the known letters, with no `default` arm; anything else falls through and the
+command exits with `report type is not specified, quit`. Tests cover other flags' letters (`c`, `t`,
+`g`) explicitly, not just one arbitrary unknown string.
+
+**Rationale:** `ReportType` is load-bearing, not an inert label — it is the tar-entry filter in
+`isFilenameOK` and the key into the view map. A value leaking through would select a zero-value
+`view.View` and produce a **silently empty report** rather than an error, which is the worst possible
+outcome for a report tool: a clean exit that shows nothing. Failing closed keeps the flag family
+consistent — `-D`/`-J` already behave this way.
+
+**Alternatives considered:** defaulting an unrecognised value to `wal` — rejected: it would silently
+run a different report than the operator asked for.
+
+---
+
+## [017-feat-wal-archiver] One shared test-role helper, and it must not take `*testing.T`
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** Two packages (`internal/query` and `internal/stat`) needed to prove privilege behaviour
+in both directions — a query succeeds under a `pg_monitor`-only role and fails without it. That needs
+`CREATE ROLE`/`GRANT`/`SET ROLE`, of which the tree contained none, and the test image is deliberately
+frozen so the roles cannot be baked into the fixtures.
+
+**Decision:** one helper, `postgres.SetupTestRole`, in `internal/postgres/testing.go` — the existing
+shared home for test helpers, imported by both packages. It creates the role idempotently at test
+time, optionally grants `pg_monitor`, and the callers always `RESET ROLE` afterwards.
+
+**Rationale:** the wave-conflict analysis compared *files* and missed that two tasks were adding
+package-level helpers to the **same Go package** — two identically-named helpers do not compile, and
+two differently-named copies are duplication a reviewer would rightly reject. The non-obvious
+constraint, and the reason this is worth an ADR: `internal/postgres/testing.go` has **no build tag**,
+so it links into the production binary. The helper therefore returns an `error` and must never take a
+`*testing.T` or import `testing` — the natural signature for a test helper is the one thing that file
+cannot have. Roles are not dropped afterwards: reusability across repeated runs is the point, correct
+for ephemeral CI containers and worth knowing on a long-lived cluster.
+
+**Alternatives considered:** per-package helpers (duplicated logic in one package); baking the roles
+into the test image (needs an image bump and changes what every existing test sees); skipping the
+privilege tests and relying on the stand — rejected, that is exactly the gap that let the wrong
+`pg_ls_dir` privilege assumption survive into ADR [010] unnoticed.
+
+---
+
+## [017-feat-wal-archiver] The `archive_status` walk was measured and left unthrottled
+
+**Date:** 2026-08-06
+**Feature:** 017-feat-wal-archiver
+**Status:** Accepted
+
+**Context:** The `.ready` listing runs every tick, in the TUI and in `pgcenter record`, and after the
+backlog function swap the verbose panel pays an `lstat` walk of the same directory on every screen.
+The screen is opened exactly when that directory is largest. The outcome was agreed in advance so the
+measurement could not end in a shrug: bad numbers mean throttling, acceptable numbers mean the
+remainder is written down.
+
+**Decision:** no throttling. The numbers live here so the next person asking "how expensive is that
+directory walk" has an answer without re-measuring.
+
+**Rationale:** measured on the stand under the conditions the design fixed — a `pg_monitor`-only role
+(for a superuser the comparison would be 1 walk → 2; for `pg_monitor` it is genuinely 0 → 1, because
+the old aggregate failed instantly), verbose on, a concurrent `pgcenter record`, 200 005 `.ready`
+files. Backlog query: ~1108 ms mean, against 0.9 ms on an empty directory. View-switch latency:
+70–240 ms, i.e. no input lag. Effective refresh with verbose on: 1.9 s/tick against 1.0 s/tick for a
+`master`-built binary — at that size the feature halves the refresh rate, on every screen. It is
+accepted anyway because the cost is linear at ~5.5 µs per file: 5 000 segments ≈ 28 ms, 20 000 ≈
+110 ms, both inside the noise. The doubling needs 200 000 segments — **3.1 TB of unarchived WAL** — a
+state that would be noticed long before, and in which a two-second refresh is nowhere near the
+operator's biggest problem.
+
+**Deliberately not recorded as tech debt.** The roadmap owner declined: a debt entry is a commitment
+to fix, and there is no intention to fix this. If it is ever reopened, the machinery already exists —
+[010]'s `verboseCollectState` + `latencyGuardThreshold`, today used only for the DB-size aggregate —
+and it would need applying in two places: the verbose panel's aggregate (which is what drops the
+refresh rate, since it runs on every screen) and the screen's own `.ready` sub-select.
+
+**Alternatives considered:** applying the latency guard now — briefly started, then stopped once the
+per-file cost was put against realistic backlog sizes; reverting the panel to `pg_ls_dir` — rejected,
+it restores the `n/a` this part of the feature exists to remove.
+
+
+---
+
+## [018-feat-tables-autovacuum-area] Any recorded column-layout change is a replay boundary
+
+**Date:** 2026-11-27
+**Feature:** 018-feat-tables-autovacuum-area
+**Status:** Accepted
+
+**Context:** `record -a` can append samples written by different pgcenter versions while the recorded
+PostgreSQL version stays the same. The PG 19 `tables` and `indexes` layouts make this ordinary valid
+input, but replay previously treated only a server-version change as a boundary. Reusing the old
+layout could produce cross-layout deltas, stale headers/widths, or a sort index pointing at another
+column.
+
+**Decision:** In `report.processData`, treat either a recorded-version change or a previous/incoming
+column-list change as a boundary. The first new-layout sample replaces the previous snapshot and is
+not diffed. Reconfigure the view, clear alignment and stale column widths, reset header cadence,
+restore the captured seed sort, and re-resolve the requested `-o` column against the new layout.
+Apply the same rule to widening and narrowing layouts and to blank or populated values.
+
+**Rationale:** A deterministic boundary preserves valid archives without inventing a delta between
+incompatible samples. Restoring all layout-derived state is necessary; keeping diff indices in bounds
+alone would still render or sort against stale metadata.
+
+**Alternatives considered:** Reject mixed pgcenter layouts (rejected — a safe replay boundary keeps
+valid appended archives usable); retain the version-only check plus diff-bounds assertions (rejected —
+that does not reset rendering or sort state).
+
+**Consequences:** Existing single-layout archives are unchanged, and mixed old/new relation layouts
+replay in both directions. This is not a fix for attacker-declared malformed dimensions; debt [020]
+remains open. The accepted SC-10 evidence is preserved under
+`docs/features/archive/018-feat-tables-autovacuum-area/acceptance/runs/feature-r3/`.
+
+---
+
+## [018-feat-tables-autovacuum-area] Deliberate live-only views keep NotRecordable and report a named reason
+
+**Date:** 2026-11-27
+**Feature:** 018-feat-tables-autovacuum-area
+**Status:** Accepted
+**Supersedes (in part):** [008-feat-record-report-0-11-views] "Lift NotRecordable only" — only its
+closing observation that no production view used `NotRecordable`; the pure-SQL retrofit decision is
+unchanged.
+
+**Context:** `autovacuum_scores` deliberately remains live-TUI-only while its recorded column contract
+settles. Filtering it as merely unsupported by the connected server would give a false reason, while
+silently dropping it would hide the omission.
+
+**Decision:** Keep `view.View.NotRecordable` as a supported production contract. `record.filterViews`
+removes deliberate live-only views before version/extension filtering, sorts their names, and prints
+one deterministic `INFO: <name> is not recordable (live TUI only), skip recording it` line per view.
+
+**Rationale:** The recorded format is a compatibility promise and need not be frozen before the screen
+has settled through use. A named operational message states both what was omitted and why without
+expanding the recording format or misreporting PostgreSQL support.
+
+**Alternatives considered:** Record the screen immediately (rejected — premature compatibility
+surface); hide the exclusion or fold it into the aggregate unsupported count (rejected — respectively
+opaque and false); add public counters for every exclusion category (rejected as unnecessary surface).
+
+**Consequences:** `NotRecordable` and its filtering branch remain live production behavior rather than
+a synthetic-only compatibility remnant. Future deliberate live-only views inherit the same truthful,
+deterministic exclusion message; record/report support for this screen remains a separate 0.13.0 item.

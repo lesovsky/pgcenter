@@ -1,0 +1,106 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "status": "approved_with_suggestions",
+  "summary": "All three round-1 minor findings are closed, and the keybindings() split that closes dev-test-reviewer's MAJOR finding is the minimum change that could have closed it: keybindings() is now eleven lines of registration, keybindingsList is a pure slice literal with no branching, no signature was threaded and no parameter added. I re-ran the round-1 mutation set plus five new mutations aimed specifically at the split; every one turns exactly the named test red, and the round-1 panic finding is verifiably fixed — deleting the case \"wal\" arm now reports `--- FAIL: Test_switchViewTo/26_` as a named row instead of taking the binary down. The single round-1 major (menuSelect at 102 lines) is carried forward unchanged as acknowledged, deliberately deferred tech debt; no new critical or major finding.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/menu.go",
+      "line": 150,
+      "severity": "major",
+      "category": "maintainability",
+      "suggestion": "CARRIED FORWARD FROM ROUND 1, NO ACTION EXPECTED IN THIS TASK. menuSelect still spans 102 lines (150-251) — six near-identical nested switches whose only per-branch content is a cursor-index -> view-name mapping plus one printCmdline. The collapse shape remains a package-level map[menuType][]string resolved as `names := menuViews[t]; if cy < 0 || cy >= len(names) { cy = 0 }; viewSwitchHandler(app.config, names[cy]); printCmdline(...)`, leaving menuConf and menuNone as the only explicit cases. I flagged it in round 1 as explicitly NOT a request to change this task (the task file mandates 'Copy, do not improvise' so the diff stays reviewable at a glance, and the repetition is pre-existing — this branch added the tenth to twelfth of it). It has since been recorded in the decisions log as tech debt, which is exactly the disposition round 1 asked for. Re-listing it only so the count in this report reconciles with round 1; it does not block this task and I am not re-escalating it on the >100-line rule, because the function was already ~90 lines before the diff touched it.",
+      "benefit": "Brings the dispatcher back under the project's function-length norm and turns six parallel switches into one table, so the next menu costs a data row rather than a branch.",
+      "optional": true,
+      "carriedForward": true,
+      "disposition": "accepted as tech debt by the team; verified present in the decisions log"
+    },
+    {
+      "file": "top/keybindings_test.go",
+      "line": 30,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "boundHandler runs a handler built by a FRESH keybindingsList(app) call, not the closure gocui actually holds — keybindingsList constructs ~60 new closures on every invocation. That is sound today because every row is a constructor that only captures app/config/db and has no per-instance state, so the closure under test is behaviourally identical to the registered one; I verified the whole table constructs cleanly against an app with a nil db and a zero Gui. What it means is that these tests rest on an unstated invariant — 'keybindings() registers exactly the rows keybindingsList returns'. Mutation M9 (truncating the registration loop to `[:1]`) does turn Test_keybindingsWAL red, so the invariant is guarded for 'W' specifically; it is not guarded generally, and gocui exposes no way to enumerate registered bindings to guard it generally. Nothing to change now — worth one sentence in keybindingsList's doc comment so the next person adding a stateful handler constructor knows the tests would not notice the divergence.",
+      "benefit": "Makes the assumption the new test seam rests on explicit at the seam, rather than something a reader has to reconstruct from two files.",
+      "optional": true
+    },
+    {
+      "file": "top/keybindings.go",
+      "line": 18,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "`app.ui.InputEsc = true` moved in this diff (it used to sit after the table literal, it now opens the function) and no test observes it — I deleted the line and the whole suite stayed green (mutation M8). The move is provably behaviour-neutral: it sits in the same function, before the same SetKeybinding loop, and nothing between the two reads InputEsc, so the ordering relative to every registration is unchanged. The gap is pre-existing, not introduced here, and Esc handling for the menu and dialog views depends on the flag. Given that this feature's discipline has been to pin every user-visible behaviour rather than rely on review attention, a one-line `assert.True(t, app.ui.InputEsc)` in newKeybindingsApp's caller would close it for the cost of the line. Out of this task's mandate — flagging because the diff moved the line and so put it briefly in scope.",
+      "benefit": "The one line in keybindings() that no test observes stops depending on nobody deleting it during a future refactor of the same function.",
+      "optional": true
+    },
+    {
+      "file": "top/keybindings_test.go",
+      "line": 104,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The receive idiom — buffered `received` channel, a goroutine draining the unbuffered viewCh, a select with a one-second time.After fallback — is now written out twice, here and in Test_menuSelectWAL (top/menu_test.go:349-360), character for character apart from the failure message. Both copies are correct and both carry the same intentional-goroutine-leak note. A `receiveView(t, config) string` helper in one of the two files would remove the second copy and give the timeout a single place to live. Marginal at two copies; worth doing at three, which is roughly when the next screen group lands.",
+      "benefit": "One place to change the timeout and one place for the leak note, instead of two copies drifting.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 9,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "newMajorIssuesCount": 0,
+    "minorIssuesCount": 3,
+    "testCoverageAssessment": "excellent"
+  },
+  "round1FindingsDisposition": [
+    {
+      "finding": "MAJOR — menuSelect 102 lines / six parallel switches",
+      "status": "deferred, as round 1 explicitly allowed",
+      "note": "Recorded in the decisions log as tech debt. Round 1 stated 'NOT a request to change this task'; the mandate 'Copy, do not improvise' stands. Carried forward, not re-escalated."
+    },
+    {
+      "finding": "MINOR — wg.Wait() outside the t.Run closure in Test_switchViewTo",
+      "status": "FIXED and verified",
+      "note": "wg.Wait() is now the closure's last statement (top/config_view_test.go:647-651) with a comment naming the failure mode. Re-verified by deleting the case \"wal\" arm: output is now `--- FAIL: Test_switchViewTo (0.00s)` / `    --- FAIL: Test_switchViewTo/26_ (0.00s)` — the row is named and the binary does not panic. Round 1 reproduced a panic on the same mutation."
+    },
+    {
+      "finding": "MINOR — menuWAL title pinned by nothing",
+      "status": "FIXED, and more strongly than asked",
+      "note": "Round 1 suggested a wantTitle column on Test_selectMenuStyle. The chosen fix pins the title through the real 'W' path instead (Test_keybindingsWALOpensMenu asserts app.config.menu.title, the items slice, AND the created menu view's Title), so the assertion covers menuOpen's window construction too, not just selectMenuStyle's return value. Rewording the title turns it red (mutation M3); swapping the two item strings turns it red (mutation M6) — the latter was not covered at all in round 1."
+    },
+    {
+      "finding": "MINOR — lower-case 'w' binding had no guard",
+      "status": "FIXED, and more strongly than asked",
+      "note": "Round 1 suggested a symmetric DeleteKeybinding probe, which would have proven only that 'w' is still registered. Test_keybindingsWalCycles runs the bound handler from the wal screen and expects \"archiver\" on viewCh, so it proves 'w' is registered AND that it carries the cycle. Deleting the 'w' row turns it red (M2); so does deleting the switchViewTo case \"wal\" arm (M4), giving the dispatch arm a second independent guard."
+    }
+  ],
+  "verification": {
+    "commandsRun": [
+      "gofmt -l top/ — clean",
+      "go vet ./top/... — clean",
+      "golangci-lint run ./top/... — 0 issues",
+      "go test ./top/ -run 'Test_walNextView|Test_switchViewTo|Test_selectMenuStyle|Test_menuSelectWAL|Test_keybindings|Test_helpTemplate' -count=1 -v — all PASS, including the three new subtests",
+      "go test ./top/ -run 'Test_keybindings|Test_menuSelectWAL|Test_switchViewTo' -count=3 -race — ok, so the new tests are repeatable and race-free"
+    ],
+    "mutationsReRunByReviewer": [
+      "M1 'W' bound to menuOpen(menuStatIO,...) -> Test_keybindingsWALOpensMenu red (this is the exact hole dev-test-reviewer found; confirmed closed)",
+      "M2 'w' row deleted from the table -> Test_keybindingsWalCycles red (boundHandler's t.Fatalf names the missing key)",
+      "M3 menuWAL title reworded -> Test_keybindingsWALOpensMenu red",
+      "M4 case \"wal\" arm deleted from switchViewTo -> Test_switchViewTo/26_ red BY NAME plus Test_keybindingsWalCycles red; no panic (round-1 finding confirmed fixed)",
+      "M6 menuWAL item strings swapped -> Test_keybindingsWALOpensMenu red (new coverage, not present in round 1)",
+      "M7 'W' row moved from view \"sysstat\" to view \"menu\" -> Test_keybindingsWAL (both subtests) and Test_keybindingsWALOpensMenu red",
+      "M8 app.ui.InputEsc = true deleted -> NOTHING red (see minor finding; pre-existing gap, behaviour-neutral move)",
+      "M9 registration loop truncated to keybindingsList(app)[:1] -> Test_keybindingsWAL red (the table-to-registration invariant is guarded for 'W')",
+      "baseline for the same filtered set on the untouched copy — ok; the full-package run also trips Test_getQueryReport, which needs a live PostgreSQL fixture and is unrelated to this task"
+    ],
+    "crossFileChecks": [
+      "key.key is declared `any` (top/keybindings.go:12) and boundHandler takes `k any` comparing with ==; rune literals box to int32 on both sides and gocui.Key values to gocui.Key, so lookups match. A type-mismatched probe would fail loudly via t.Fatalf, never silently pass",
+      "keybindingsList constructs every row against an app with nil db and a zero Gui without panicking — postgresProps is a value struct (top/top.go:46), not a pointer, so app.postgresProps.ExtPGSSSchema and .VersionNum are safe on a bare &app{}",
+      "keybindings() sets InputEsc before the loop; nothing between the assignment and SetKeybinding reads it, so the relocation is ordering-neutral",
+      "the two new tests build their own &app{} and never call keybindings(), so they register nothing into gocui and cannot perturb Test_keybindingsWAL's destructive DeleteKeybinding probes",
+      "config.viewCh is unbuffered (top/config.go:57); the drain goroutine is started before the handler runs in both new tests, so the handler's send has a receiver and cannot deadlock",
+      "app.config.views[\"wal\"] and the \"archiver\" view both resolve (internal/view/view.go), so Test_keybindingsWalCycles' start state and expectation are real view names",
+      "keybindingsList is 71 lines but is a single slice literal with cyclomatic complexity 1 and no control flow; the >50-line rule is not applied to it — the split REDUCED the largest function here (keybindings() was ~85 lines before, it is 11 now), and round 1 did not flag the pre-split function either. Recorded so the dismissal is visible rather than silent"
+    ]
+  }
+}

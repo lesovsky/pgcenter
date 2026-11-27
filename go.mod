@@ -1,14 +1,15 @@
 module github.com/lesovsky/pgcenter
 
-go 1.25.0
+go 1.26.0
 
-toolchain go1.25.13
+toolchain go1.26.10
 
 require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/jehiah/go-strftime v0.0.0-20171201141054-1d33003b3869
 	github.com/jroimartin/gocui v0.5.0
 	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/term v0.42.0
 )
@@ -24,8 +25,7 @@ require (
 	github.com/nsf/termbox-go v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/text v0.39.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -1,0 +1,26 @@
+{
+  "status": "needs_revision",
+  "checks": {
+    "architectural_fit": "fail",
+    "scalability": "pass",
+    "database": "n/a",
+    "coupling": "pass",
+    "api_contracts": "n/a",
+    "backward_compat": "pass"
+  },
+  "findings": [
+    {
+      "check": "architectural_fit",
+      "severity": "major",
+      "issue": "Decision 6 claims 'no existing precedent covers' a cycle whose anchor screen is available on every version while a later member requires a higher version, and cites j/J (stat_io) and w/W (wal/archiver) as the precedents that supposedly don't apply because they 'gate the whole group'. That comparison is correct but incomplete, and the precedent it omits contradicts the conclusion: `progressNextView` (hotkey `p`, dispatched from `switchViewTo`'s `case \"progress\"`) cycles through progress_vacuum (MinRequiredVersion PostgresV96, i.e. always available) -> progress_cluster (PG12) -> progress_index (PG12) -> progress_analyze (PG13) -> progress_basebackup (PG13) -> progress_copy (PG14) -> back to progress_vacuum. Verified in internal/view/view.go:288-352 and top/config_view.go (progressNextView). `statementsNextView` (hotkey presumably bound similarly, dispatched via `case \"statements\"`) has the identical shape: statements_timings/general/io/temp/local (no version floor) -> statements_wal (PG13) -> statements_jit (PG15) -> back to statements_timings (internal/view/view.go:204-287, top/config_view.go:statementsNextView). Both are exactly 'anchor available on every version, later member(s) require a higher version', and both are today version-blind -- pressing `p` or `x` on an old cluster eventually lands on the same 'ERROR: selected statistics is not supported...' screen the tech-spec cites as the reason `t` must NOT be allowed to do. So this is not the first case of the shape, and two prior features already chose the opposite answer (accept the error screen) without registering it as debt. The tech-spec's stated basis for introducing net-new plumbing -- a version parameter threaded into `tablesNextView` and `selectMenuStyle`, a refusal branch in `menuSelect`, and a version dimension added to several pinned test tables (the largest single task in the decomposition, Task 4) -- is therefore inaccurate as written, even though the underlying UX argument for treating `t` specially (it is the DBA's reflex 'show me tables' key, unlike menu-driven exploration of progress/statements sub-screens) is real and already present in the user-spec.",
+      "location": "Decisions > Decision 6: version-aware navigation is a new pattern, and it is confined to the `t` group",
+      "fix": "Correct Decision 6's rationale before implementation: acknowledge `progressNextView`/`statementsNextView` as existing precedent for the same shape that was left version-blind, and state explicitly why `t`/`T` is being treated differently now (e.g. `t` is the primary reflex key vs. `p`/`x` requiring deliberate multi-step navigation, or the roadmap owner's explicit product call during the user-spec interview). This does not have to change the implementation -- the product decision may well stand -- but the review gate should not let the 'first case, no precedent' framing stand uncorrected, since Task 4's cost and the new pattern it establishes are justified on that framing. Optionally also flag the resulting inconsistency (t/T guarded, p/P and x/X still not) in the codebase for a future roadmap decision rather than leaving it implicit."
+    }
+  ],
+  "risk_assessment": {
+    "performance": "low",
+    "complexity": "medium",
+    "tech_debt": "low"
+  },
+  "summary": "The spec is unusually well-grounded in the actual codebase (selector shapes, Configure() wiring, ORDER BY/LEFT JOIN correctness, backward compatibility, wave decomposition all check out against the real code), but its central justification for the one genuinely new architectural pattern -- a version-aware hotkey cycle/menu -- misstates precedent: progressNextView and statementsNextView already have the same 'anchor available everywhere, later member version-gated' shape and were left version-blind, which the tech-spec does not acknowledge. Recommend revising Decision 6's rationale before implementation; everything else reviewed is sound."
+}

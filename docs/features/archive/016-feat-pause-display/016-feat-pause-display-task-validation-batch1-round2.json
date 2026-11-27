@@ -1,0 +1,167 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["01", "02", "03", "04", "05"],
+  "iteration": 2,
+  "status": "changes_required",
+  "round1_fix_verification": {
+    "critical_timestamp_seam": "ЗАКРЫТО. Tech-spec Decision 6 (`:222-227`) теперь требует от задачи 3 сигнатуру, принимающую и таймстамп, и источник логтейла ('design the core's signature to already accept both the timestamp and the logtail source'). Задача 03: What to do §4 ('Design the signature to already accept BOTH the render timestamp and the logtail source'), явное 'Capture the stamp exactly once per live frame' с указанием места (единственный time.Now() в начале g.Update-замыкания printStat), запрет менять сигнатуру renderSysstat, AC `:251-255`. Задача 04: шаг 3 ('That parameter already exists when this task starts'), шаг 4 ('If that parameter is not there, stop' + эскалация, запрет править top/pause.go), AC `:118-119`, Details `:173`. Обход через top/pause.go больше не требуется и прямо запрещён.",
+    "task03_anchors": "ЗАКРЫТО. (а) Test_frameStore_repaintRendersIdenticalBytes ограничен clock-free ядрами (renderDbstat/printStatData) с явным запретом включать renderSysstat и указанием, что расширение — задача 04. (б) Латч вынесен в отдельно вызываемую единицу: What to do §3 последний буллет + Test_repaintFailureLatch_reportsOncePerTransition (fail/fail/fail/success/fail → true,false,false,false,true), без *gocui.Gui. (в) Тавтологический тест immutability заменён на Test_frameStore_publishOnlyOnLivePath с обеими половинами (repaint-путь не публикует; live-путь публикует) и с явным объяснением, почему statLoop+stub не годится. (г) depends_on: [\"01\",\"02\"]. (д) Ложное утверждение про 'oversight in the table' убрано — Details `:347-349` теперь констатирует наличие top/top.go в таблице tech-spec; из Post-completion скобка про отклонение удалена.",
+    "task04_clock_test": "ЗАКРЫТО. Нефальсифицируемый repaint-clock тест удалён и заменён двумя тестами на параметр: Test_renderSysstat_timestampFromParameter (assert.Equal по точной строке, явный запрет regexp с объяснением почему) и Test_renderSysstat_timestampIsTheOnlySource (две разные метки, строки 2-4 байт-в-байт). Добавлен блок 'What these tests deliberately do not cover, and why' с отсылкой к тесту хранилища задачи 03.",
+    "task05_fixes": "ЗАКРЫТО. (а) liftPauseRefresh: CompareAndSwap(true,false) + перерисовка только при сработавшем свопе — предписание в What to do п.1, AC `:228-230`, разбор развилки в Edge cases `:419-429`, отклонение допускается только с записью в decisions.md. (б) Test_showExtraCloseLifts перестроен без recover(): парковка на небуферизованном viewCh внутри closeExtraView, assert.Eventually; добавлен Test_showExtraCloseLogtailErrorKeepsPause на реальном возврате ошибки. Код проверен: Logfile.Close() зовёт (*os.File).Close() по нулевому File → возвращает os.ErrInvalid, паники нет; closeExtraView шлёт в viewCh до g.DeleteView (top/extra.go:104-107) — обоснование теста верно. (в) Счёт тестов исправлен: config_view_test.go = 29 (проверено), verbose_test.go = 1 (проверено).",
+    "verify_lines": "ЧАСТИЧНО. Задачи 03, 04, 05 переведены на прицельный -run и несут явную пометку про окружение — проверено фактическим прогоном. Задачи 01 и 02 НЕ переведены: во frontmatter verify и в Verification Steps остался `go test ./top/...`, а прицельные строки, попавшие в Acceptance Criteria, не запускают ни одного нужного теста из-за регистра. См. критические находки 1-4."
+  },
+  "requested_checks": {
+    "wave_partition": "OK. Задача 04 правит только top/stat.go и top/stat_test.go; top/pause.go указан read-only, AC `:126-127` требует нетронутости, What to do п.7 повторяет запрет. Задача 05 владеет top/pause.go в волне 3 (Context Files `:299-301`, Dependencies `:402-404`). Единственное производственное место вызова renderSysstat — top/stat.go:175 (проверено grep'ом по всему репозиторию), то есть задаче 04 действительно незачем открывать pause.go. Волна 1: 01 (stat.go/stat_test.go) и 02 (config.go, keybindings.go, pause.go, pause_test.go, ui.go, ui_test.go) — не пересекаются. Волна 2: только 03. Волна 3: 04 / 05 / 06 — файлы не пересекаются.",
+    "depends_on_chain": "OK, ациклично и согласовано с волнами: 01 [] w1, 02 [] w1, 03 [\"01\",\"02\"] w2, 04 [\"03\"] w3, 05 [\"03\"] w3. Все зависимости указывают на задачи меньшей волны. Вне партии: 06 [\"03\"] w3, 07/08 [\"05\"] w4, 09 [\"07\",\"08\"] w5, 10 [\"09\"] w6 — циклов нет.",
+    "frontmatter_vs_techspec": "Skills (code-writing), reviewers (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) и wave у всех пяти задач совпадают с таблицей Implementation Tasks и с per-task блоками tech-spec. Расхождение только по полю verify: в tech-spec у всех задач по-прежнему `go test ./top/...`, тогда как задачи 03-05 осознанно перешли на прицельный прогон (см. major-находку).",
+    "ac_references_deleted_tests": "Прямых ссылок на удалённые тесты нет: AC задачи 03 ссылается на существующие якоря (publish-step-обе-стороны, латч без Gui, реальное замыкание перерисовки), AC задачи 04 — ровно на два оставшихся якоря, AC задачи 05 — на Test_showExtraClose* и на существующие 29+1 тестов. НО AC задачи 02 (`:106`) утверждает, что прицельный прогон покрывает новые тесты, а фактически три из пяти он не запускает — функционально это ссылка на непроводимую проверку (критическая находка 3)."
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "consistency",
+      "task": "01",
+      "section": "frontmatter / Verification Steps",
+      "issue": "Фикс verify-строк до задачи 01 не дошёл. Во frontmatter осталось `verify: bash — go test ./top/...`, и первый шаг Verification Steps — «Run `go test ./top/...` — all tests pass». При этом собственный критерий приёмки (`:89-92`) прямо говорит, что полный прогон требует фикстурных кластеров на портах 21914-21919 и без них падает. Проверено: top/report_test.go:14 вызывает postgres.NewTestConnect() и разыменовывает соединение — без живого кластера пакет паникует. Задача сама себе противоречит: объявленный гейт — команда, которую задача же объявляет непроходимой в обычном окружении. Задачи 03/04/05 в этой партии дополнительно запрещают «чинить» report_test.go — риск признан авторами спека.",
+      "fix": "Привести к форме задач 03-05: во frontmatter verify — прицельный прогон (исправленный, см. следующую находку), в Verification Steps первым шагом тот же прицельный прогон, а полный `go test ./top/...` — отдельным пунктом с пометкой «шаг, зависящий от окружения; не гейт задачи; не править top/report_test.go»."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "01",
+      "section": "Acceptance Criteria / Verification Steps",
+      "issue": "Прицельный прогон из AC (`:89`) `go test ./top/ -run 'PrintDataCell|PrintStatData'` не запускает НИ ОДНОГО теста: -run сопоставляется с именами функций с учётом регистра, а реальные имена — Test_printStatData_truncation (top/stat_test.go:1269) и планируемые Test_printDataCell_doesNotMutateSource / Test_printDataCell_widenAfterTruncation, все со строчной буквой после Test_. Проверено фактически: `go test ./top/ -run 'PrintDataCell|PrintStatData'` → «ok ... [no tests to run]», код возврата 0. То есть критерий «прогон проходит» выполняется вакуумно, при полностью нереализованной задаче.",
+      "fix": "Заменить шаблон на регистро-корректный, например `-run 'printDataCell|printStatData'` (ловит и новые Test_printDataCell_*, и существующий Test_printStatData_truncation). Проверить командой перед сдачей, что в выводе есть как минимум три PASS с ожидаемыми именами, а не «[no tests to run]»."
+    },
+    {
+      "severity": "critical",
+      "category": "content",
+      "task": "02",
+      "section": "Acceptance Criteria / Verification Steps",
+      "issue": "Прицельный прогон `go test ./top/ -run 'Pause|Cmdline'` (AC `:106`, Verification Steps `:140-141`) пропускает три из пяти заявленных задачей тестов — снова из-за регистра. Фактический прогон сегодня даёт ровно пять PASS: Test_composeCmdline, Test_composeCmdlineTwoTokens, Test_composeCmdlineRunes, Test_setCmdlineConfig, Test_printCmdlineNilGui. НЕ запускаются: существующий Test_cmdlineTokens (именно его задача расширяет двумя новыми подтестами — «paused config» и «pause-then-filter»), планируемый Test_pauseToken и планируемый Test_cmdlineMarkerAfterUIRebuild (пин Decision 8). Особая ирония: шаг Verification Steps `:140-141` заявляет, что этот прогон служит защитой от «тест молча не запускается» — и сам является таким случаем.",
+      "fix": "Заменить регексп на регистро-нейтральный, например `-run '(?i)pause|cmdline'`, либо перечислить корни явно: `-run 'Test_pauseToken|Test_togglePause|Test_cmdlineTokens|Test_cmdlineMarker|Test_composeCmdline'`. После прогона убедиться, что в -v выводе присутствуют Test_pauseToken, Test_cmdlineTokens/paused* и Test_cmdlineMarkerAfterUIRebuild."
+    },
+    {
+      "severity": "critical",
+      "category": "consistency",
+      "task": "02",
+      "section": "frontmatter / Verification Steps",
+      "issue": "Как и в задаче 01, перевод verify на прицельный прогон не выполнен: во frontmatter `verify: bash  # go test ./top/...`, а первый шаг Verification Steps (`:139`) — «`go test ./top/...` — all green», хотя AC (`:106-108`) уже описывает полный прогон как зависящий от фикстурных кластеров. Исполнитель, идущий по Verification Steps, упрётся в панику top/report_test.go.",
+      "fix": "Frontmatter verify — прицельный (исправленный) прогон; полный `go test ./top/...` перенести в отдельный пункт с пометкой про окружение и запретом править чужой тест, дословно как сделано в задачах 03-05."
+    },
+    {
+      "severity": "major",
+      "category": "content",
+      "task": "05",
+      "section": "frontmatter verify / Verification Steps",
+      "issue": "Прицельный прогон задачи 05 не покрывает существующие регрессионные тесты двух обработчиков, которые задача правит. Места вызова 1 и 2 таблицы — viewSwitchHandler (config_view.go:315) и switchViewToProcPidStat (:329); их тесты называются Test_viewSwitchResetsAutoScrollFlag (:233), Test_viewSwitchResetsScrollOffset (:271), Test_switchViewToProcPidStatResetsAutoScrollFlag (:256), Test_switchViewToProcPidStatResetsScrollOffset (:294), Test_switchViewTo (:588), Test_databasesNextView/Test_statioNextView/Test_statementsNextView/Test_progressNextView (:655-705) — ни одно имя не попадает в регексп. Фактический прогон даёт 10 PASS (orderKey*, increase/decreaseWidth, switchSortOrder, toggleSysTables, changeQueryAge, toggleIdleConns, toggleVerbose) — правка самого «широкого» места (viewSwitchHandler покрывает все смены экрана и меню) остаётся вне гейта.",
+      "fix": "Дописать в регексп `|Test_viewSwitch|Test_switchViewTo|Test_.*NextView` (или эквивалент) и синхронно поправить строку verify во frontmatter и в Verification Steps."
+    },
+    {
+      "severity": "major",
+      "category": "carry-forward",
+      "task": "03",
+      "section": "tech-spec Implementation Tasks",
+      "issue": "Tech-spec обновлён по Decision 6, но столбец Verify в per-task блоках Implementation Tasks у всех задач по-прежнему `bash — go test ./top/...` (задача 1 `:669`, задача 2 `:679`, задача 3 `:693` — с `-race`, задача 4 `:707`, задача 5 `:719`). Задачи 03/04/05 сознательно ушли на прицельные прогоны — источник правды и артефакты разошлись. При следующей валидации по tech-spec это будет прочитано как самовольное отклонение задач, а не как принятое решение.",
+      "fix": "Обновить столбец Verify в tech-spec для задач 1-5 на те же прицельные команды, что стоят во frontmatter задач, и добавить одну строку в раздел Testing Strategy или Verification approach о том, что полный `go test ./top/...` требует фикстурных кластеров и не является гейтом отдельной задачи."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files / Post-completion",
+      "issue": "Не исправлено с раунда 1: ссылки заданы от корня репозитория (`[top/config.go](top/config.go)`, `[016-feat-pause-display.md](docs/features/016-feat-pause-display/016-feat-pause-display.md)`), а markdown разрешает их относительно каталога файла задачи — получается docs/features/016-feat-pause-display/top/config.go. Ни одна ссылка не открывается. Задачи 01, 03, 05 используют корректную файл-относительную запись.",
+      "fix": "Артефакты фичи — по имени файла, код и project-knowledge — через `../../../`, как в задачах 01/03/05."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "04",
+      "section": "Context Files / Post-completion",
+      "issue": "Не исправлено с раунда 1: то же самое — `[top/stat.go](top/stat.go)`, `[016-feat-pause-display-tech-spec.md](docs/features/016-feat-pause-display/...)`; из каталога задачи не разрешается.",
+      "fix": "Перевести на файл-относительную запись, как в задачах 01/03/05."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "Reviewers",
+      "issue": "Не исправлено с раунда 1: пути отчётов ревьюеров без префикса каталога (`016-feat-pause-display-task-03-dev-code-reviewer-review.json`), тогда как в задачах 01, 02, 04, 05 — полный путь от корня репозитория. Ревьюер, работающий из корня, запишет JSON не туда.",
+      "fix": "Добавить префикс docs/features/016-feat-pause-display/ ко всем трём путям."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "03",
+      "section": "TDD Anchor",
+      "issue": "Не исправлено с раунда 1: пункт Testing Strategy tech-spec «Errors while paused: a frame carrying an error is discarded like any other and surfaces on the first frame after resume» по-прежнему не имеет TDD-якоря ни в одной задаче партии. В задаче 03 он живёт только как Edge case (`:369-370`) — описание поведения, не проверка. Гейт задачи (`-run '...'`) такого теста тоже не ждёт.",
+      "fix": "Добавить якорь `top/ui_test.go::Test_statLoop_discardsErrorFrameWhilePaused` — кадр stat.Stat{Error: ...} при paused==true уходит в repaint и не доходит до render; после сброса флага первый кадр (с ошибкой) доходит до render. Тест ложится в уже имеющуюся stub-инфраструктуру statLoop-тестов и попадает под текущий регексп verify."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "03",
+      "section": "TDD Anchor",
+      "issue": "Не исправлено с раунда 1: в начале секции остался инструктивный текст шаблона («Тесты, которые нужно написать ДО реализации. Пишем → запускаем → убеждаемся что падают → пишем код → убеждаемся что проходят.»). В задачах 01, 02, 05 он заменён собственной формулировкой.",
+      "fix": "Заменить на однострочную формулировку, специфичную для задачи."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "04",
+      "section": "TDD Anchor",
+      "issue": "Не исправлено с раунда 1: тот же остаток шаблонного инструктивного текста (`:82`).",
+      "fix": "Заменить на собственную формулировку."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "05",
+      "section": "Context Files",
+      "issue": "Не исправлено с раунда 1: строка про top/config_view.go говорит «семь мест», а далее перечисляет девять пунктов (orderKeyLeft, orderKeyRight, decreaseWidth, switchSortOrder, viewSwitchHandler, switchViewToProcPidStat, toggleSysTables, changeQueryAge, toggleIdleConns). Таблица Details и AC при этом сходятся: восемь мест снятия в этом файле плюс защита decreaseWidth.",
+      "fix": "Заменить на «восемь мест снятия (места 1-8 таблицы Details) плюс защита decreaseWidth»."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "02",
+      "section": "Context Files",
+      "issue": "Не исправлено с раунда 1: обязательный project.md в репозитории отсутствует, его роль играет overview.md. Задачи 01 и 03 это оговаривают прямо в ссылке, задачи 02, 04 и 05 подставляют overview.md без пояснения — исполнитель может пойти искать несуществующий файл.",
+      "fix": "Добавить в задачи 02, 04, 05 то же пояснение при ссылке на overview.md, что уже стоит в задачах 01 и 03."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "05",
+      "section": "TDD Anchor",
+      "issue": "Test_showExtraCloseLifts осознанно оставляет горутину навсегда припаркованной на небуферизованной отправке в viewCh (обоснование в тексте якоря верно: closeExtraView шлёт в viewCh на top/extra.go:104 до g.DeleteView, так что нулевой *gocui.Gui не разыменовывается). Задача заранее разрешает выкинуть этот тест, если dev-test-reviewer сочтёт форму неприемлемой — тогда положительный путь закрытия панели остаётся вообще без unit-покрытия, а из AC (`:241-242`) это не видно.",
+      "fix": "Действий по задаче не требуется. Если тест будет снят, зафиксировать это строкой в decisions.md вместе с остальными непокрытыми путями (`S` локально, два глубоких no-op'а логтейла, menuConf) — пункт Post-completion уже это предусматривает, достаточно добавить в него этот случай явно."
+    },
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "03",
+      "section": "What to do",
+      "issue": "Наблюдение раунда 1 сохраняется: шесть файлов и четыре механизма (statLoop, гейт, frameStore, разделение render core) плюс фикс незащищённой отправки. Раунд 2 добавил в задачу ещё две единицы (латч как отдельно вызываемая единица, publish-шаг как отдельно вызываемая единица) — объём вырос, хотя оба добавления сделаны ради тестируемости и следуют из tech-spec.",
+      "fix": "Действий не требуется — разделение осознанно отклонено в утверждённом tech-spec (волна 2 состоит из одной задачи). Держать в уме при оценке времени выполнения."
+    },
+    {
+      "severity": "minor",
+      "category": "atomicity",
+      "task": "05",
+      "section": "What to do",
+      "issue": "Наблюдение раунда 1 сохраняется: в задаче совмещены Decision 9 (снятие паузы, 11 мест) и Decision 14 (защита decreaseWidth) — логической связности между ними нет.",
+      "fix": "Действий не требуется: обе части живут в файлах, которыми задача владеет в волне 3; выделение Decision 14 создало бы конфликт по config_view.go. Причина объединения уже читается из Dependencies."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 17,
+    "critical": 4,
+    "major": 2,
+    "minor": 11,
+    "round1_findings_closed": 5,
+    "round1_findings_still_open": 7
+  }
+}

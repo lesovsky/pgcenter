@@ -365,10 +365,10 @@ normal rows always did; and dialog prompts line up with their input field in bot
   and verbose mode. An overlong prompt is cut with an ellipsis rather than covered by the field.
 
 **Limitations:**
-- Pause on `Space` was planned for this batch and **split into its own feature** ([016] on the
-  0.12.0 roadmap): sorting runs in the collector goroutine, so a paused screen cannot re-sort, and
-  returning from the pager rebuilds the UI with no frame to repaint. Both need product decisions of
-  their own.
+- Pause on `Space` was planned for this batch and **split into its own feature** — delivered as
+  [016-feat-pause-display]. Both blockers named here were resolved there: sorting lifts the pause
+  instead of re-sorting a frozen frame, and the frame store survives the UI rebuild so the pager
+  returns to the frozen frame rather than a blank screen.
 - The auto-scroll fires only when the sort column changes. Entering a screen whose default sort
   column sits off-screen leaves it there until the first arrow press — reachable only on terminals
   narrower than about 80 columns.
@@ -382,3 +382,143 @@ normal rows always did; and dialog prompts line up with their input field in bot
 limitation and reuses its column-window function. [010-feat-overview-dashboard] — fixes two defects
 in the verbose panels it introduced. The command-line composer added here is the foundation the
 deferred pause feature builds on.
+
+---
+
+### [016-feat-pause-display] Pause the Display on `Space`
+
+**What it does:** `Space` freezes the whole picture — the stats table, both top panels and the header
+clock — so a row can be read without it scrolling away, while collection keeps running underneath.
+`[PAUSED]` appears in the command line. The frozen frame is the moment `Space` was pressed, together
+with the timestamp of that moment, and it holds indefinitely.
+
+**Key scenarios:**
+- Freeze a busy `activity` screen to read a long query text or copy a pid, then resume with `Space`.
+- Work with the frozen frame: filter (`/`), clear filters (`\`), scroll columns (`[` / `]`) and
+  change column width (`↑` / `↓`) all keep working — this is what separates it from `tmux copy-mode`.
+- Resize the terminal or step into the pager or config editor and come back: the same frozen frame
+  is redrawn for the new width, marker included.
+- Actions that need fresh data — sorting, screen switch, `,`, `I`, `A`, `v`, `B`/`N`/`F`/`L` — resume
+  the display on their own; the built-in help (`h`) lists them.
+- Open the log panel (`L`) before pausing: it stops taking new lines for as long as the pause holds.
+
+**Limitations:**
+- Pressing `Space` before the first frame arrives leaves the screen empty with the marker shown —
+  there is nothing to freeze yet. Returning from a pager in that state also stays empty.
+- A collection error or a lost connection during the pause is not shown until the pause is lifted.
+- An action that changed nothing (a key that hit its own early return, e.g. `,` on a screen without
+  system tables) does not resume the display.
+- The command line keeps its previous text until something writes to it again, so right after a
+  terminal resize the marker line can appear clipped until the next update.
+- No new screens, columns or SQL. `record`/`report` archives are unaffected.
+
+**Touches:** [015-feat-tui-papercuts] — resolves the pause limitation it recorded and adds the second
+token (`[PAUSED]`) to the command-line composer it introduced, left of the filter indicator.
+[009-feat-horizontal-scroll] — its column scroll and width keys are the ones that keep working on a
+frozen frame.
+
+---
+
+### [017-feat-wal-archiver] Archiver Screen, FPI on PG 19, and `report -W w|a`
+
+**What it does:** Adds an `archiver` screen — one row, nine columns over `pg_stat_archiver` plus a
+live count of `.ready` segments waiting to be archived — so the question "has archiving stopped, when,
+on which segment, and how much has piled up" is answered in one look instead of in `psql`. It is
+reached by pressing `w` a second time (the hotkey now cycles `wal` ↔ `archiver`) or from the new `W`
+menu, and it is recorded and replayed like any other screen. Two smaller things ship in the same pass
+over the WAL area: on PostgreSQL 19 the `wal` screen gains a `fpi,KiB` column showing how much WAL the
+full-page images actually cost, and the verbose panel's archiving backlog now works for a plain
+`pg_monitor` role instead of showing `n/a` to everyone but a superuser.
+
+**Key scenarios:**
+- During an incident: `w`, `w` — read `ready` (how many segments are queued), `failed` climbing tick
+  by tick, `last_failed` (the segment to grep for in the PostgreSQL log) and `archived_age` (how long
+  since the last success). Decide whether the disk gives you hours or minutes.
+- After fixing `archive_command`: the same screen shows `archived` rising, `ready` draining and
+  `failed` no longer moving — the incident closes on evidence rather than on faith.
+- On an unfamiliar cluster: counters at zero with **blank** name and age cells, and a screen caption
+  that says `requires archive_mode=on`, so archiving that was never configured does not read as a
+  quiet healthy cluster.
+- Post-mortem from a recording: `pgcenter report -W a -f night.tar -s 02:00 -e 06:00` prints one row
+  per tick and pins the minute the backlog started growing. `pgcenter report -d -W a` describes the
+  columns.
+- On PG 19, sort the `wal` screen's `fpi` and `fpi,KiB` side by side to decide about `wal_compression`
+  and checkpoint spacing.
+
+**Limitations:**
+- **Breaking CLI change:** `report -W` is no longer a boolean — it takes `w` or `a`. Old invocations
+  fail rather than change meaning, but the most common legacy shape (`report -W -f dump.tar`) fails
+  with `report type is not specified, quit`, because pflag takes `-f` as the flag's value. Worse for
+  scripts than it looks: like every other report failure, it still exits 0.
+- The whole screen needs `pg_monitor` (or superuser). Without it the screen shows the PostgreSQL
+  permission error and retries next tick — it does not fall back to eight columns. `pgcenter record`
+  under such a role stops recording entirely, which is the recorder's existing behaviour.
+- PostgreSQL 14 and newer only.
+- The report drops the first sample of a run, so an N-tick recording prints N−1 rows of a screen that
+  diffs nothing. Pre-existing for every pass-through screen, `activity` included.
+- A recording that contains no archiver samples prints no rows and no column header — only the report's
+  own three information lines — and exits 0. There is no "no data" notice; exactly one screen
+  (`procpidstat`) has one.
+- A `wal` recording made **on PG 19 by a pre-0.12 pgcenter** replays against the new 8-column layout
+  and fails with `diff failed: …`. Narrow (PG 19 is still beta) and documented in the release notes
+  rather than fixed.
+- The `.ready` directory is listed on every tick, in the TUI and in `record`, with no throttling. The
+  cost is ~5.5 µs per file: unnoticeable at a five-thousand-segment backlog, and it halves the refresh
+  rate at 200 000 (≈3.1 TB of unarchived WAL). Since the verbose panel rides every screen, that cost is
+  paid on every screen when `v` is on.
+- On a cluster whose `archive_status` directory is missing, the verbose panel now shows `0` instead of
+  `n/a` — the new function tolerates a missing directory where the old one errored.
+- The `archive_mode=on` caption is static: it is printed whether archiving is off or working perfectly,
+  and reads no GUC. `Q` still does not reset `pg_stat_archiver`.
+
+**Touches:** [010-feat-overview-dashboard] — the verbose panel's archiving backlog is the earlier,
+coarser signal (bytes, not segments) and now uses the same function as this screen, so the two numbers
+cannot disagree; its ADR about privileges is superseded here. [008-feat-record-report-0-11-views] —
+record/report is folded in from day one under that feature's pure-SQL rule, and the `-J c|t` flag shape
+is what `-W w|a` copies. [006-feat-pg-stat-io] — the `j`/`J` cycle-plus-menu machinery is the model for
+`w`/`W`. [012-feat-pg19-compatibility-baseline] — the PG 19 catch-up column deliberately left to this
+feature so the WAL area was entered once. [009-feat-horizontal-scroll] — the `source` column stays
+frozen while the two 24-character WAL names are reached by scrolling on a narrow terminal.
+
+---
+
+### [018-feat-tables-autovacuum-area] Autovacuum Scores and Relation Statistics Age
+
+**What it does:** Adds a PostgreSQL 19+ `autovacuum_scores` screen over
+`pg_stat_autovacuum_scores`, showing which relations are closest to their autovacuum thresholds, how
+much dead-tuple work is waiting, and whether vacuum or analyze is actually scheduled. The `t` hotkey
+now cycles `tables` ↔ `autovacuum_scores`, and `T` opens a two-item tables menu. On PostgreSQL 19 the
+existing `tables` and `indexes` screens also gain a trailing `stats_age` column derived from the
+relation's `stats_reset`.
+
+**Key scenarios:**
+- Press `t` twice to open `autovacuum_scores`, sorted by unrounded `score` descending. Compare the
+  displayed two-decimal `score` and `vacuum_score` with `do_vacuum`, and use absolute `dead_total` to
+  distinguish a large backlog from a small relation near the same threshold.
+- Press `,` to show or hide system schemas. A system relation with `for_wraparound=true` remains
+  visible even in user mode; ordinary system relations follow the toggle.
+- On PostgreSQL 19, read `stats_age` on `tables` and `indexes` to see how long relation counters have
+  accumulated. A blank cell means PostgreSQL has no `stats_reset` value for that relation, including
+  an untouched relation after a reset.
+- Replay `tables` or `indexes` across a recorded version or old/new pgcenter layout change: the first
+  sample of the new layout is a no-diff boundary, and the following sample uses recomputed headers,
+  widths and version-appropriate sort state.
+
+**Limitations:**
+- PostgreSQL 19+ only. Below PG 19, `t` preserves the legacy `tables` behavior; the `T` menu still
+  lists the screen with `— requires PostgreSQL 19`, and selecting it prints an explanation without
+  changing views.
+- **Live TUI only.** `autovacuum_scores` is deliberately excluded from `record` and has no `report`
+  mode. Recording prints a named `not recordable (live TUI only)` INFO rather than attributing the
+  exclusion to an unsupported server version.
+- `stats_age` is added only to `tables` and `indexes` on PG 19+; pre-PG 19 layouts and the `sizes` and
+  `functions` screens are unchanged. The column remains sortable and is outside the diffed interval.
+- Scores are rounded to two decimals for display, so quiet clusters can show many `0.00` values;
+  ordering still uses the unrounded score.
+- The existing first-sample width limitation [035] also applies to `stats_age`: if the screen opens
+  while the column is empty, values of one day or more can be truncated while that screen stays open.
+
+**Touches:** [012-feat-pg19-compatibility-baseline] — exposes the PG 19 autovacuum and per-relation
+reset data. [009-feat-horizontal-scroll] — the new wide screen keeps `relation` frozen while its
+remaining columns scroll. Record/report replay handles valid relation-layout boundaries without
+claiming to fix malformed-archive validation [020] or the shared renderer/sanitizer debts [035]/[029].

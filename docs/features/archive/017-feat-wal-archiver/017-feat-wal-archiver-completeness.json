@@ -1,0 +1,71 @@
+{
+  "status": "pass",
+  "sources": {
+    "user_spec": true,
+    "tech_spec": true,
+    "tasks": false
+  },
+  "requirements_total": 23,
+  "requirements_covered": 18,
+  "requirements_partial": 5,
+  "requirements_missing": 0,
+  "findings": [
+    {
+      "type": "scope_creep",
+      "source": "user-spec",
+      "requirement": "US-23 (AC 23): documentation updates — flag help string, release notes 0.12.0, embedded help screen; README explicitly EXCLUDED",
+      "detail": "Reported as resolved in both documents; it is resolved only in the tech-spec. Tech-spec is clean now (Backward Compatibility line 405: 'there is no README text to update'; Risks line 429: 'No README change'). The user-spec still promises README work in two places: Ограничения line 337 ('Изменение отражается в описании флага, README и release notes 0.12.0') and Риски line 374 ('плюс правим описание флага и README'). Both directly contradict AC 23 in the same file ('Правка README не входит'), Decision 13 and Task 9. An implementer or QA reading Ограничения would still hunt for a README target that does not exist. Drop 'README' from those two sentences.",
+      "severity": "major"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-7 (AC 7): on switching to `archiver` — by hotkey and via the `W` menu — the cmdline prints `Show archiver statistics (requires archive_mode=on)` exactly once per path",
+      "detail": "The 'exactly once' half is asserted in Architecture ('Both paths print the target view's static Msg exactly once') but no task, unit test or manual step checks it. The tech-spec's own Architecture explains why the risk is real: the hotkey path goes `switchViewTo` → `walNextView` → `viewSwitchHandler`, while the menu path calls `viewSwitchHandler` directly — two different call chains that must each print once. Task 6's unit-test list covers `walNextView` mapping, menu item counts and help lines, not message emission; Task 10's stand checklist says only 'цикл w в обе стороны, меню W, экран помощи'. Either add a `top/` assertion that each path calls `printCmdline`/`viewSwitchHandler` once, or make it an explicit stand observation.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-11 (AC 11): bare `-W` fails with `flag needs an argument: 'W' in -W`; `-W -f dump.tar` and `-W x` end with `report type is not specified, quit` and a non-zero exit code",
+      "detail": "Unchanged from round 1 and not among the items reported as fixed. Task 4 verifies the `selectReport` mapping only (`-W w`, `-W a`, unmapped values fail closed). Nothing verifies the cobra literal for the bare-`-W` form, the pflag argument-swallowing shape `-W -f dump.tar`, or the non-zero exit code — yet all three are quoted verbatim in AC 11 and Task 9 must transcribe two of them into the release notes (Task 9's verify only greps the notes, it does not confirm the binary produces those strings). One CLI-level check in Task 4 or Task 10 would close it.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-13 (AC 13): `pgcenter record` under a role without `pg_monitor` stops recording with an error — existing recorder behaviour, expected, not a defect",
+      "detail": "Unchanged from round 1 and not among the items reported as fixed. The new SET ROLE tests (Tasks 1 and 3) prove the query-level failure, not the recorder-level abort. The claim is sound (`record/recorder.go:136-139` returns on the first query error, and the pre-existing `wal` view already calls `pg_ls_waldir()`), but the criterion carries a checkbox nobody is assigned to tick. Cheapest fix: fold it into the same role fixture the SET ROLE tests already need, or restate it as a documented non-goal without a checkbox.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-21 (AC 21): under a `pg_monitor`-only role the [010] verbose panel shows a numeric backlog instead of `n/a`; under superuser the value is unchanged from current behaviour",
+      "detail": "The `pg_monitor` half is now well covered (Task 3 verify, Testing Strategy SET ROLE tests, tech-spec AC). The 'superuser unchanged' half is stated absolutely but is contradicted inside the same user-spec: the Дизайн section ('Одно поведение всё же меняется') and tech-spec Decision 11 both record that on a cluster whose `archive_status` directory is missing the panel flips from `n/a` to a confident `0 B` — for superusers too. Task 10 verifies acceptance criteria literally, so AC 21 needs the caveat the rest of the document already carries ('кроме кластера с отсутствующим каталогом archive_status').",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "user-spec",
+      "requirement": "US-22 (AC 22): `pgcenter report -d -W w` on a PG 19 archive describes the `fpi,KiB` column",
+      "detail": "Task 7 covers the edit, but the phrasing implies a version-aware describe that does not exist: `describeReport(w, c.ReportType)` (report/report.go:45,665) takes only the report type, and `pgStatWALDescription` (report/describe.go:140-156) is a single static constant — it already lists `write`, `sync`, `write,ms`, `sync,ms`, which PG 18+ removed. So the new `fpi,KiB` row will also be printed for PG 14–18 archives where the column does not exist. That matches existing project behaviour and is arguably fine, but it sits one criterion away from AC 18's promise that 'на PG 14–18 набор и порядок колонок экрана wal не изменились', and neither document says which reading wins. State in Task 7 (or Decision 14) that the describe text is version-independent by design.",
+      "severity": "minor"
+    },
+    {
+      "type": "underengineering",
+      "source": "tech-spec",
+      "requirement": "Testing Strategy: 'Using SET ROLE against the fixture cluster: the archiver query succeeds ... under a role holding only pg_monitor, and fails with a permission error under a role holding neither'",
+      "detail": "The fix that closed round 1's two majors is prescribed but its prerequisite is unspecified: where the two roles come from. `grep -rn 'CREATE ROLE|GRANT|pg_monitor'` over the tree's .go/.sql/Dockerfile/CI files returns nothing, and the user-spec explicitly freezes the test image ('не менять тестовый Docker-образ'), so the roles cannot be baked in — the tests must create them at runtime on each of six clusters (PG 14–19) from the fixture superuser connection (`internal/postgres/testing.go` connects as `postgres`). Neither Task 1 nor Task 3 mentions role provisioning, idempotency (a re-run against a surviving container hits 'role already exists'), or `RESET ROLE` after the negative case. Name it in the task scope so the implementer does not discover it as a flaky-test problem.",
+      "severity": "minor"
+    },
+    {
+      "type": "partial",
+      "source": "tech-spec",
+      "requirement": "Decision 9 / Task 10: the backlog cost measurement must be taken under a `pg_monitor`-only role, with verbose mode on and a concurrent `pgcenter record`",
+      "detail": "The two documents describe the same measurement with different conditions. Tech-spec Decision 9 is emphatic — 'the honest comparison is zero → full, not 1× → 2×, and a measurement run as `postgres` would miss it entirely' — and Task 10 repeats the role requirement. The user-spec's «Пользователь проверяет» (the section the Agent Verification Plan names as its source) fixes only `archive_mode=off` and compares against a `master`-built binary; it never mentions the role or the concurrent recording. A user following the user-spec runs the measurement as superuser and gets exactly the baseline Decision 9 calls wrong. Copy the role/verbose/record conditions into the user-spec's measurement step.",
+      "severity": "minor"
+    }
+  ],
+  "summary": "Round 2: 18/23 acceptance criteria fully covered, 5 partial, 0 missing, no criticals — status flips from fail to pass. Five of the six reported fixes verify clean: Decision 15 now matches the code and both documents say the empty-archive replay prints nothing and exits 0; the SET ROLE tests appear in Testing Strategy, Task 1 and Task 3 verify lines, the tech-spec's own AC list and two new user-spec criteria (AC 16/17); the release-notes target `doc/release-notes/v0.12.0.md` is real (the directory exists, and v0.9.0.md documents both a `g`/`G` hotkey change and the removal of `report --rate` in prose — a better precedent than the tech-spec claims); `MinRequiredVersion` PG 14 with its 'no common floor' rationale reached the user-spec's Ограничения; and Task 3 now modifies `internal/stat/postgres.go` + `postgres_test.go` to correct the wrong ACL comments (note `internal/query/overview.go:97` carries the same wrong claim and is already in Task 3's modify list). The sixth is only half done: README was dropped from the tech-spec but survives in the user-spec's Ограничения (line 337) and Риски (line 374), contradicting AC 23 in the same file — the one remaining major. No new scope creep was introduced by the fixes: every addition (SET ROLE tests, the two stat-package files in Task 3, the release-notes path, the `0 B`/`n/a` note in Task 9) traces to a user-spec criterion or to correcting a measured-false claim. Forward traceability holds for all four declared pieces and every decision has an implementing task; reverse traceability finds no unrequested functionality. The remaining partials are all verification-side rather than implementation-side, and three of them (AC 7, AC 11, AC 13) are carried over unchanged from round 1. Two housekeeping notes, not findings: the user-spec has 23 acceptance criteria, not 24 as the brief states, and the tech-spec's Decision 15 is placed before Decision 14."
+}

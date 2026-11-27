@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -255,7 +256,7 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 	anyDataPrinted := false           // tracks whether at least one data row was printed; used to emit no-data INFO for procpidstat
 
 	// Screen's default sort key, taken while the view still carries the seed from
-	// view.New(). Restored on a version change: if the requested -o column is
+	// view.New(). Restored on a layout boundary: if the requested -o column is
 	// absent from the new layout, getColumnIndex fails and re-arming the latch
 	// alone would leave OrderKey pointing at an index resolved against the old one.
 	seedOrderKey, seedOrderDesc := v.OrderKey, v.OrderDesc
@@ -267,14 +268,11 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 			// If previous stats snapshot is not defined, copy current to previous.
 			// Usually this occurs when reading first stat sample at startup.
 
-			// Also checking version of stats in metadata, if it's different also discard previous.
-			//
-			// The two cases are distinguished: the first sample merely has nothing to
-			// diff against, while a version change means the samples that follow may
-			// carry a different layout, and every piece of state derived from the
-			// previous layout has to be dropped.
-			versionChanged := prevStat.Valid && prevMeta.version != d.meta.version
-			if !prevStat.Valid || versionChanged {
+			// A recorded server-version or column-layout change also discards previous.
+			// The first sample merely has nothing to diff against, while a layout boundary
+			// requires dropping every piece of state derived from the previous layout.
+			layoutChanged := prevStat.Valid && (prevMeta.version != d.meta.version || !slices.Equal(prevStat.Cols, d.res.Cols))
+			if !prevStat.Valid || layoutChanged {
 				prevMeta = d.meta
 				prevStat = d.res
 				prevTs = d.ts
@@ -294,14 +292,16 @@ func processData(app *app, v view.View, config Config, dataCh chan data, doneCh 
 				// Configure rewrites the query, not the rendering state, so the
 				// layout of the version just left behind would otherwise survive
 				// into the samples of the new one.
-				if versionChanged {
+				if layoutChanged {
 					// Lowering Aligned is what forces the recompute: formatStatSample
 					// then rewrites ColsWidth and Cols unconditionally. The stale pair is
 					// cleared alongside it so nothing reading v between here and the next
 					// sample can pick up the previous layout — hygiene, not a dependency
 					// of any current caller.
 					v.Aligned = false
-		
+					v.Cols = nil
+					v.ColsWidth = nil
+
 					// repeatHeaderAfter, not zero: the counter means "lines printed
 					// since the last header", so the seed value asks for the header
 					// immediately (see its initialisation above).
@@ -672,6 +672,7 @@ func describeReport(w io.Writer, report string) error {
 		"indexes":             pgStatIndexesDescription,
 		"functions":           pgStatFunctionsDescription,
 		"wal":                 pgStatWALDescription,
+		"archiver":            pgStatArchiverDescription,
 		"sizes":               pgStatSizesDescription,
 		"progress_vacuum":     pgStatProgressVacuumDescription,
 		"progress_cluster":    pgStatProgressClusterDescription,

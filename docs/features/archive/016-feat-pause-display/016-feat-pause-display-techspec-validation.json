@@ -1,0 +1,78 @@
+{
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Wave 3: Task 4 (Frozen header clock) и Task 5 (Logtail panel freeze) оба правят `top/stat.go` и `top/stat_test.go`. Задачи одной волны выполняются параллельно в одном рабочем дереве — это гарантированный merge-конфликт, причём в самом крупном файле пакета.",
+      "fix": "Развести по волнам: оставить Task 4 в Wave 3, перенести Task 5 в Wave 4 (или наоборот — Task 5 больше по объёму правок в stat.go). Альтернатива — объединить обе в одну задачу «заморозка кадра: часы + logtail», раз обе живут в render-замыкании printStat."
+    },
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Wave 3: Task 5 (Logtail panel freeze) и Task 6 (Filter-dialog repaint + resize detector) оба правят `top/pause.go` — файл, где лежат frameStore, repaintStored и pauseToken. Обе задачи расширяют одну и ту же структуру и одну и ту же функцию перерисовки.",
+      "fix": "Поставить Task 6 в отдельную волну после Task 5 (Task 5 добавляет в frameStore поля logBuf/logPath, Task 6 их не трогает, но пишет в тот же файл). При переразбиении из предыдущей находки конфликт снимается автоматически, если Task 5 и Task 6 окажутся в разных волнах."
+    },
+    {
+      "severity": "critical",
+      "category": "wave_conflict",
+      "issue": "Wave 3: Task 6 (resize detector в layout) и Task 7 (Marker restoration в cmdline-ветке layout) оба правят `top/ui.go` и `top/ui_test.go` — более того, обе меняют одну и ту же функцию `layout`: Task 6 добавляет детектор размера в её конец, Task 7 — ветку `else if` в создание cmdline-вью. Это конфликт не только на уровне файла, но и на уровне функции.",
+      "fix": "Слить Task 6 и Task 7 в одну задачу «изменения в layout: детектор размера + восстановление маркера» либо развести по соседним волнам. Слияние предпочтительнее: обе правки — это один проход по `layout`, и их корректность проверяется одним и тем же сценарием (возврат из пейджера + resize)."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "В документе отсутствует правило и таблица разбиения волн по файлам. Tech-spec [015] (эталон домашнего стиля) открывает Implementation Tasks явной формулировкой «no two tasks in a wave touch the same file» и закрывает таблицей «Wave partition — no file appears twice in a wave». В 016 нет ни того, ни другого — и именно поэтому вся Wave 3 (задачи 4, 5, 6, 7) состоит из попарно конфликтующих задач: каждая из четырёх сталкивается минимум с одной соседкой.",
+      "fix": "Восстановить конвенцию [015]: добавить абзац с правилом дизъюнктности файлов в волне и завершающую таблицу «Wave | Task | Files touched», по которой пересечения видно глазом. Пересобрать волны по этой таблице."
+    },
+    {
+      "severity": "major",
+      "category": "verification",
+      "issue": "Verify у Task 8 (`bash — go build ./... && ./bin/pgcenter --help`) не проверяет заявленное и не выполним как записан. Во-первых, `go build ./...` не создаёт бинарник в `./bin/` — это делает только цель `make build` (Makefile:38-40, `-o bin/${PROGRAM_NAME}`), так что `./bin/pgcenter` в чистом дереве просто не появится. Во-вторых, Task 8 правит `top/help.go`, то есть `helpTemplate` — встроенную справку TUI, которая рендерится в gocui-вью (`top/help.go:63`) и никогда не попадает в вывод cobra-флага `--help`. Строку про `Space` в выводе `./bin/pgcenter --help` найти нельзя в принципе.",
+      "fix": "Заменить на проверку, которая действительно смотрит на `helpTemplate`: `make build` + grep по константе (`go test ./top/...` с тестом на содержимое helpTemplate) либо явный шаг стенда — открыть справку по `h` и снять `capture-pane`. Заодно синхронизировать строку 8 в таблице Per-task verification."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "Наборы ревьюеров расходятся с дефолтом каталога для `code-writing` (dev-code-reviewer, dev-security-auditor, dev-test-reviewer) непоследовательно и без обоснования. dev-security-auditor присутствует только в Task 3 и Task 5, отсутствует в Tasks 1, 2, 4, 6, 7; Task 8 несёт вообще одного dev-code-reviewer (нет ни security, ни test-reviewer). В tech-spec [015] такое же отступление было сделано осознанно и объяснено отдельным абзацем перед списком задач («dev-security-auditor is deliberately absent... Do not restore the default reviewer set during decomposition») — в 016 объяснения нет, поэтому при декомпозиции набор либо восстановят до дефолтного, либо оставят как есть, и оба исхода будут случайными.",
+      "fix": "Либо привести все code-writing задачи к дефолтному набору каталога, либо — предпочтительно, по прецеденту [015] — добавить перед списком задач абзац, объясняющий, почему security-auditor нужен именно на задачах 3 и 5 (конкурентность и чтение файла лога) и не нужен на остальных, с явным запретом восстанавливать дефолт при декомпозиции. Для Task 8 отдельно оговорить отсутствие dev-test-reviewer (правка текстовой константы без тестов) или вернуть его."
+    },
+    {
+      "severity": "major",
+      "category": "task_quality",
+      "issue": "В описания задач просочились технические решения и инструкции «как», хотя они уже записаны в Decisions. Task 6: «Both repaint closures must swallow their errors» — это буквально Decision 5 (error-swallowing is load-bearing), то есть требование к реализации, а не описание объёма. Task 7: «Tying it to the frame repaint would lose it in exactly that case» — это отвергнутая альтернатива из Rationale Decision 7. Task 2: «The handler performs exactly one silent cmdline re-render so the marker appears immediately» — предписание реализации. Дублирование опасно тем, что при расхождении версий непонятно, какая главнее.",
+      "fix": "Сократить описания до «что и зачем»: Task 6 — «перерисовывать сохранённый кадр при применении фильтра через диалог и при изменении размера терминала (см. Decisions 4 и 5)»; Task 7 — «восстанавливать маркер там, где создаётся cmdline-вью, чтобы он переживал пересборку интерфейса даже без сохранённого кадра (см. Decision 7)»; Task 2 — убрать предложение про silent re-render, оно уже есть в Architecture/«Pausing»."
+    },
+    {
+      "severity": "major",
+      "category": "tasks",
+      "issue": "Ни одна задача не заводит `top/pause_test.go`, хотя `top/pause.go` — новый файл, в котором живут frameStore, togglePause, pauseToken и repaintStored. Testing Strategy планирует для этого кода минимум четыре группы тестов (pauseToken, дисциплина frame-store, logtail store, sizeChanged), но в Files to modify задач 2, 3, 5, 6 фигурируют только `top/ui_test.go` и `top/stat_test.go`. В пакете `top/` соглашение однозначное: у каждого файла с логикой есть сиблинг-тест (config_test.go, dialog_test.go, layout_test.go, verbose_test.go, reload_test.go, reset_test.go, signal_test.go). Побочный эффект: все тесты паузы стекаются в `top/ui_test.go`, который правят задачи 2, 3, 6 и 7 — это и раздувает файл, и усиливает конфликт Wave 3.",
+      "fix": "Добавить `top/pause_test.go` в Files to modify задачи, создающей `top/pause.go` (Task 2), и переадресовать туда тесты pauseToken, frame-store, logtail-store и sizeChanged из Testing Strategy. В `top/ui_test.go` оставить только то, что реально про ui.go."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "Decisions 7, 9, 10 и 11 не содержат обязательного по шаблону блока «Alternatives considered» (в Decisions 1–6 и 8 он есть). Для Decision 9 и 10 альтернатива фактически названа внутри Decision («не добавлять в stat.Stat», «не добавлять wg.Wait()»), но не вынесена в отдельный блок; у Decision 7 и 11 не названа вовсе.",
+      "fix": "Добавить блок «Alternatives considered» во все четыре решения — для 11 достаточно «руническая привязка `' '` (отвергнута: termbox отдаёт Ch=0 для байтов ≤ 0x20)», для 7 — «привязать маркер к перерисовке кадра (отвергнуто: теряется, когда кадра нет)»."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "issue": "В Decisions 1 и 9 присутствуют нешаблонные подразделы «Autopilot note» и «Autopilot assumption». Это метаданные процесса подготовки документа (кто и на каком основании закрыл открытый вопрос), а не техническое содержание; шаблон tech-spec таких блоков не предусматривает.",
+      "fix": "Либо убрать, либо переформулировать по существу и внести в Rationale соответствующего решения (например: «user-spec оставлял выбор открытым; выбор сделан по расположению logtail-буфера»)."
+    },
+    {
+      "severity": "minor",
+      "category": "tasks",
+      "issue": "У Task 9 (Pre-deploy QA) отсутствуют поля Verify и Files to read, хотя таблица Per-task verification обещает для задачи 9 «bash — full stand run: all 15 user-spec steps». В [015] QA-задача несла и Verify, и Files to read (user-spec + patterns.md) — а именно оттуда QA-агент берёт 15-шаговую таблицу и регламент работы со стендом.",
+      "fix": "Добавить Task 9: `Verify: bash — make test, make lint, make vuln; полный прогон стенда по 15 шагам user-spec` и `Files to read: docs/features/016-feat-pause-display/016-feat-pause-display.md, .claude/skills/project-knowledge/patterns.md`."
+    },
+    {
+      "severity": "minor",
+      "category": "verification",
+      "issue": "Расхождение между Verify задачи 3 (`go test ./top/... -race`) и строкой 3 таблицы Per-task verification (`go test ./top/...` без `-race`). Именно для задачи 3 (единственный конкурентно-чувствительный код фичи) флаг `-race` нагрузочно значим и не должен теряться.",
+      "fix": "Привести строку 3 таблицы к `go test ./top/... -race`."
+    }
+  ],
+  "summary": "Tech-spec 016 сделан аккуратно: frontmatter корректен, все обязательные разделы шаблона на месте и непусты, 9 задач + QA укладываются в лимит 15, оценок времени нет ни одной, скиллы из каталога, ни в одной задаче нет ни AC, ни TDD Anchor, ни ссылок на номера строк, зависимости между задачами не противоречат порядку волн и циклов не образуют. Final Wave содержит только Pre-deploy QA — отсутствие Deploy и Post-deploy подтверждено как корректное: по deployment.md pgcenter выпускается тегом через goreleaser, развёрнутого сервиса нет. Блокирует одно, но системно: Wave 3 непригодна к параллельному запуску — все четыре задачи (4, 5, 6, 7) конфликтуют попарно по файлам (stat.go+stat_test.go у 4 и 5, pause.go у 5 и 6, ui.go+ui_test.go у 6 и 7, причём последние две правят одну функцию layout). Причина — утраченная относительно [015] конвенция «ни один файл не встречается в волне дважды» вместе с её проверочной таблицей. Дополнительно: Verify задачи 8 не проверяет заявленное (go build не создаёт bin/pgcenter, а --help показывает cobra-справку, а не helpTemplate из TUI), наборы ревьюеров расходятся с дефолтом каталога без обоснования, в трёх задачах описания содержат решения из Decisions, и нигде не заведён top/pause_test.go при том, что Testing Strategy планирует для pause.go четыре группы тестов."
+}

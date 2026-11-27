@@ -1,0 +1,193 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "branch": "feature/018-feat-tables-autovacuum-area",
+  "headCommit": "ba8fd24ff87f0be4a83d75020bf4c40c54878fbf",
+  "date": "2026-11-26",
+  "status": "passed",
+  "statusReason": "The owner-approved dependency/toolchain remediation closed the initial vulnerability failure. Fresh PG14–19 tests, build, lint, vulnerability check, E2E, dedicated wraparound test, production Docker build/smoke, and frozen feature-r3 all pass. Manual SC-5–SC-8 passed and SC-9 remains approved. No failed criterion or unresolved in-scope critical/major finding remains.",
+  "remediation": {
+    "initialFailedReport": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-qa-report-r1.json",
+    "changes": [
+      "Go minimum/toolchain updated to 1.26.0/go1.26.10",
+      "golang.org/x/text updated to v0.41.0; go.sum carries its required x/sync v0.22.0 checksum",
+      "CI default/release, release setup-go, Docker build image, development and deployment documentation aligned",
+      "Docker build stage installs git and make required by make build and version metadata"
+    ],
+    "commits": ["3e85467", "65f42d8", "58effb0", "ba8fd24"],
+    "reviews": [
+      "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-remediation-dev-code-reviewer-round1.json",
+      "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-remediation-dev-security-auditor-round1.json",
+      "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-remediation-dev-code-reviewer-round2.json",
+      "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-remediation-dev-security-auditor-round2.json"
+    ],
+    "reviewVerdict": "approved with zero findings in both rounds"
+  },
+  "environment": {
+    "status": "healthy",
+    "services": [
+      "Fresh lesovsky/pgcenter-testing:0.0.11 container at the tested source state; PG14–PG19 healthy after bounded SELECT 1 polling",
+      "go version go1.26.10 linux/amd64 confirmed inside the test container",
+      "Feature and master A/B binaries built successfully; manual TUI ran in owner-authorized local Docker/tmux",
+      "Production image golang:1.26.10-alpine builds successfully; pgcenter --version reports correct v0.11.0/commit/branch metadata",
+      "Test and dedicated containers, tmux sessions, raw captures and temporary source directories cleaned up"
+    ],
+    "fixCommits": ["3e85467", "58effb0"]
+  },
+  "testSuite": {
+    "status": "passed",
+    "details": "make build exit=0. make test exit=0 under Go 1.26.10 with live PG14–19: go test -race -p 1 -timeout 300s ./... passed all packages, total coverage 73.1%, zero DATA RACE/FAIL/panic matches. make lint exit=0 with 0 issues and quiet gosec. make vuln exit=0: 0 vulnerabilities affecting code and 0 in imported packages; one uncalled required-module finding remains informational. testing/e2e.sh exit=0. Dedicated wraparound test emitted one test-level PASS and external destruction PASS. Docker build exit=0 after installing its required build tools; explicit pgcenter --version smoke passed.",
+    "logs": [
+      "logs/working/qa-018/remediation-environment-startup.log",
+      "logs/working/qa-018/remediation-make-build.log",
+      "logs/working/qa-018/remediation-make-test.log",
+      "logs/working/qa-018/remediation-make-lint.log",
+      "logs/working/qa-018/remediation-make-vuln.log",
+      "logs/working/qa-018/remediation-e2e.log",
+      "logs/working/qa-018/remediation-wraparound-targeted.log",
+      "logs/working/qa-018/remediation-docker-build.log",
+      "logs/working/qa-018/remediation-docker-build-r2.log",
+      "logs/working/qa-018/remediation-docker-build-r3.log",
+      "logs/working/qa-018/remediation-docker-smoke.log",
+      "logs/working/qa-018/remediation-quality-summary.txt"
+    ]
+  },
+  "freeze": "docs/features/018-feat-tables-autovacuum-area/acceptance/freeze.json",
+  "acceptanceRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/feature-r3/result.json",
+  "triageReport": null,
+  "acceptanceEvidence": {
+    "status": "passed",
+    "details": "feature-r3 at ba8fd24ff87f0be4a83d75020bf4c40c54878fbf is dirty=false and manifestValid=true. SC-1, SC-2, SC-3, SC-4 and SC-10 each have exit=0, origin=pass, checkpoint=complete, contractValid=true and one valid result marker. All five logs pass sanitize.py. No acceptance scenario failed, so triage was not required.",
+    "incrementalRuns": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/result.json",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/feature-r1/result.json",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/feature-r2/result.json"
+    ],
+    "baseRun": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json"
+  },
+  "manualEvidence": {
+    "status": "passed",
+    "details": "SC-5–SC-8 passed in local Docker/tmux at 190x52 and 100x40 with master A/B. Remediation changed no product source; the new toolchain then passed the complete integration/E2E suite and production binary smoke. SC-9 passed during Task 06 and whole-feature review.",
+    "scenarios": [
+      "SC-5: logs/working/qa-018/manual-sc5.log",
+      "SC-6: logs/working/qa-018/manual-sc6.log",
+      "SC-7: logs/working/qa-018/manual-sc7.log",
+      "SC-8: logs/working/qa-018/manual-sc8.log"
+    ],
+    "sanitization": "All 32 raw captures were sanitized and checked before extracting minimized observations. Four minimized manual logs and all final acceptance logs pass sanitize.py. Raw captures and transcripts were deleted."
+  },
+  "acceptanceCriteria": [
+    {"requirement":"AC-1","criterion":"Exactly 11 contracted autovacuum_scores columns; no relid.","status":"passed","evidence":"Locked/live query tests and SC-5 exact header."},
+    {"requirement":"AC-2","criterion":"Decision booleans and component scores occupy the contracted positions.","status":"passed","evidence":"SC-5 exact column order."},
+    {"requirement":"AC-3","criterion":"Six scores render with two decimals.","status":"passed","evidence":"SQL tests and SC-5 values 38.00/18.00/1.00/3.20."},
+    {"requirement":"AC-4","criterion":"Booleans render true/false.","status":"passed","evidence":"SC-5 false and SC-6 true live values."},
+    {"requirement":"AC-5","criterion":"relation is schemaname.relname.","status":"passed","evidence":"SC-5 public.* and SC-6 pg_toast.* rows."},
+    {"requirement":"AC-6","criterion":"Default score descending sort.","status":"passed","evidence":"SC-5 rows 38.00 then 3.20 and registry tests."},
+    {"requirement":"AC-7","criterion":"ORDER BY uses qualified unrounded score.","status":"passed","evidence":"Locked/rounded-tie tests and approved named mutation evidence."},
+    {"requirement":"AC-8","criterion":"dead_total is absolute n_dead_tup through an outer join.","status":"passed","evidence":"SC-5 values 900/60 and structural/live tests."},
+    {"requirement":"AC-9","criterion":"Schema filter reads the outer scores relation.","status":"passed","evidence":"Structural/live tests and SC-6."},
+    {"requirement":"AC-10","criterion":"System schemas follow the user/all toggle.","status":"passed","evidence":"SC-6 comma toggle observations."},
+    {"requirement":"AC-11","criterion":"System for_wraparound rows remain visible in user mode.","status":"passed","evidence":"Fresh dedicated wraparound PASS and SC-6 flagged pg_toast row."},
+    {"requirement":"AC-12","criterion":"No-diff behavior tolerates blank dead_total.","status":"passed","evidence":"Mutation-checked empty-cell tests and full suite."},
+    {"requirement":"AC-13","criterion":"PG19 t enters autovacuum_scores from tables.","status":"passed","evidence":"SC-5 hotkey."},
+    {"requirement":"AC-14","criterion":"PG19 t returns to tables.","status":"passed","evidence":"SC-5 cycle."},
+    {"requirement":"AC-15","criterion":"t from another screen opens tables.","status":"passed","evidence":"SC-5 other-screen path and SC-7 A/B."},
+    {"requirement":"AC-16","criterion":"PG19 T menu has two working enabled items.","status":"passed","evidence":"SC-5 both menu selections."},
+    {"requirement":"AC-17","criterion":"Each entry path prints exactly one screen message.","status":"passed","evidence":"SC-5 hotkey/menu message counts all equal one."},
+    {"requirement":"AC-18","criterion":"Below PG19 t never enters autovacuum_scores.","status":"passed","evidence":"SC-7 repeated t and master A/B."},
+    {"requirement":"AC-19","criterion":"Below PG19 the menu has the exact PostgreSQL 19 suffix.","status":"passed","evidence":"SC-7 literal suffix."},
+    {"requirement":"AC-20","criterion":"Disabled selection preserves the view and emits one NOTICE.","status":"passed","evidence":"SC-7 controlled 0.2s/1.0s captures."},
+    {"requirement":"AC-21","criterion":"PG19 tables has trailing stats_age.","status":"passed","evidence":"SC-1 and SC-8."},
+    {"requirement":"AC-22","criterion":"PG19 indexes has trailing stats_age.","status":"passed","evidence":"SC-1 and SC-8."},
+    {"requirement":"AC-23","criterion":"Pre-PG19 layouts remain unchanged without stats_age.","status":"passed","evidence":"SC-4 PG17/PG18 byte-for-byte A/B."},
+    {"requirement":"AC-24","criterion":"stats_age is outside diff calculations.","status":"passed","evidence":"Selector/replay tests and SC-2/SC-10."},
+    {"requirement":"AC-25","criterion":"stats_age comes from pg_stat, not pg_statio.","status":"passed","evidence":"Source tests and approved wrong-source mutations."},
+    {"requirement":"AC-26","criterion":"Missing stats_reset renders blank.","status":"passed","evidence":"SC-1 and SC-8 untouched SQL/TUI checks."},
+    {"requirement":"AC-27","criterion":"Active stats_age is second-precision and grows.","status":"passed","evidence":"SC-1 DB-derived bounds; SC-8 growth on both screens."},
+    {"requirement":"AC-28","criterion":"Untouched relations stay blank after reset.","status":"passed","evidence":"SC-1 and SC-8."},
+    {"requirement":"AC-29","criterion":"functions is unchanged.","status":"passed","evidence":"SC-4 functions comparisons."},
+    {"requirement":"AC-30","criterion":"sizes is unchanged.","status":"passed","evidence":"SC-4 sizes comparisons."},
+    {"requirement":"AC-31","criterion":"Record excludes autovacuum_scores with truthful INFO.","status":"passed","evidence":"SC-1 archive exclusion and live-TUI-only INFO."},
+    {"requirement":"AC-32","criterion":"Full quality gate and dedicated wraparound PASS.","status":"passed","evidence":"Go 1.26.10 build/test/lint/vuln/E2E/Docker/wraparound all passed; zero races."},
+    {"requirement":"AC-33","criterion":"PG18→PG19 tables/indexes replay is layout-correct.","status":"passed","evidence":"feature-r3 SC-2 both screens samples=2 entries_read=true."},
+    {"requirement":"AC-34","criterion":"Locked tests detect PG19 catalog drift.","status":"passed","evidence":"Structural and live FieldDescriptions tests."},
+    {"requirement":"AC-35","criterion":"Help documents t/T.","status":"passed","evidence":"SC-5 live help."},
+    {"requirement":"AC-36","criterion":"describe documents both stats_age columns.","status":"passed","evidence":"feature-r3 SC-3 production CLI outputs."},
+    {"requirement":"AC-37","criterion":"features-catalog documents the screen.","status":"passed","evidence":"Task 06 SC-9 and whole-feature review."},
+    {"requirement":"AC-38","criterion":"Project Knowledge references match behavior.","status":"passed","evidence":"Task 06 SC-9 and whole-feature review."},
+    {"requirement":"AC-39","criterion":"Release notes describe the screen.","status":"passed","evidence":"Task 06 SC-9 and whole-feature review."},
+    {"requirement":"AC-40","criterion":"Debt [035]/[029] are extended and [020] unchanged.","status":"passed","evidence":"Task 06 SC-9 and code/security reviews."},
+    {"requirement":"AC-41","criterion":"Same-PG19 layout changes are safe replay boundaries.","status":"passed","evidence":"feature-r3 SC-10 all controls and eight boundary cases."},
+    {"requirement":"TS-1","criterion":"make test passes with live PG14–19 and no races.","status":"passed","evidence":"remediation-make-test.log exit=0, 73.1% coverage."},
+    {"requirement":"TS-2","criterion":"make lint and make vuln are clean.","status":"passed","evidence":"0 lint issues; 0 vulnerabilities affecting code."},
+    {"requirement":"TS-3","criterion":"Existing tests/count literals are consistent and not weakened.","status":"passed","evidence":"Whole-feature approval and fresh full suite."},
+    {"requirement":"TS-4","criterion":"Selectors return 3-tuples without patching UniqueKey/OrderKey.","status":"passed","evidence":"Query/view tests and code review."},
+    {"requirement":"TS-5","criterion":"Static relation entries retain legacy layouts.","status":"passed","evidence":"View tests and SC-4."},
+    {"requirement":"TS-6","criterion":"Ncols and negative functions/sizes assertions exist.","status":"passed","evidence":"View tests and SC-4."},
+    {"requirement":"TS-7","criterion":"No-diff test is mutation-checked.","status":"passed","evidence":"Task 03 named mutation and fresh suite."},
+    {"requirement":"TS-8","criterion":"Wraparound row-presence test is mutation-checked.","status":"passed","evidence":"Task 01 mutation and fresh targeted PASS."},
+    {"requirement":"TS-9","criterion":"Required debt updates are present without editing [020].","status":"passed","evidence":"SC-9 documentation review."},
+    {"requirement":"TS-10","criterion":"Version-blind x/p cycles are registered as debt [037].","status":"passed","evidence":"Task 06 and whole-feature review."},
+    {"requirement":"TS-11","criterion":"Layout changes reset renderer/sort state.","status":"passed","evidence":"Report suite and feature-r3 SC-10."},
+    {"requirement":"TS-12","criterion":"SQL/order tests discriminate required behavior.","status":"passed","evidence":"Fresh query suite and approved mutation evidence."},
+    {"requirement":"TS-13","criterion":"Recording INFO gives the deliberate exclusion reason.","status":"passed","evidence":"feature-r3 SC-1 false_version_reason=false."},
+    {"requirement":"TS-14","criterion":"Dedicated wraparound has non-skip PASS and external cleanup.","status":"passed","evidence":"remediation-wraparound-targeted.log."},
+    {"requirement":"TS-15","criterion":"Evidence is minimized, sanitized and contains no raw secrets/transcripts.","status":"passed","evidence":"All final acceptance/manual observation logs pass sanitize.py; raw files deleted."},
+    {"requirement":"TS-16","criterion":"Frozen scriptable evidence and explicit manual evidence are complete.","status":"passed","evidence":"Approved base, feature-r3 5/5, SC-5–SC-9 passed."}
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing fixture preparation emits a harmless command-not-found diagnostic",
+      "expected": "No shell diagnostic during fixture preparation.",
+      "actual": "prepare-test-environment.sh line 36 reports 'all: command not found' once per cluster; all six clusters subsequently pass health checks. This pre-existing diagnostic is unrelated to the feature.",
+      "reproduction": "logs/working/qa-018/remediation-environment-startup.log"
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [020]: malformed Ncols remains a separate archive-validation issue",
+      "expected": "Malformed archives return a clean validation error.",
+      "actual": "Valid-layout replay boundaries do not address attacker-declared inconsistent dimensions; the existing debt remains open and unchanged.",
+      "reproduction": "docs/tech-debt.md [020] and whole-feature security review round 2."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [029]: server-controlled terminal cells remain unsanitized",
+      "expected": "Terminal controls are removed at the shared output boundary.",
+      "actual": "The new relation column is a recorded surface of the existing shared debt; no shared sanitizer change belongs to this feature.",
+      "reproduction": "docs/tech-debt.md [029] and whole-feature security review round 2."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [035]: open-screen widths can remain frozen",
+      "expected": "Later long values are fully visible without manual widening.",
+      "actual": "stats_age is explicitly covered by the existing shared alignment debt. Manual QA used existing Up-arrow widening where needed.",
+      "reproduction": "docs/tech-debt.md [035]."
+    },
+    {
+      "severity": "minor",
+      "scope": "out_of_scope",
+      "title": "Existing debt [037]: x/p cycles remain version-blind",
+      "expected": "All cycles skip unsupported screens.",
+      "actual": "Only the new t group was made version-aware; statements_jit/progress_copy remain registered follow-up work.",
+      "reproduction": "docs/tech-debt.md [037] and tech-spec Decision 6."
+    }
+  ],
+  "deferredToPostDeploy": [],
+  "gate3": {
+    "status": "accepted",
+    "acceptedAt": "2026-11-27T09:27:26Z",
+    "ownerDecision": "accepted",
+    "randomSelectionCommand": "printf '%s\\n' SC-1 SC-2 SC-3 SC-4 SC-10 | shuf -n 2",
+    "selectedScenarios": ["SC-3", "SC-1"],
+    "selectionLog": "logs/working/qa-018/gate3-random-scenarios.txt",
+    "reproduction": [
+      "bash docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-3.sh",
+      "bash docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh"
+    ]
+  },
+  "nextAction": "Owner accepted Gate 3 at 2026-11-27T09:27:26Z. Start a new session and run /skill:done docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area. Push, merge, deployment and release remain separate explicitly approved actions."
+}

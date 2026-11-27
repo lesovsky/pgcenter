@@ -1,0 +1,113 @@
+{
+  "status": "approved",
+  "summary": "Round 2: перепроверено 47 утверждений tech-spec 016-feat-pause-display против кода. Подтверждено 37, найдено 10 расхождений: 0 critical, 4 major, 6 minor. Все пять findings round 1 закрыты по существу (critical про мёртвый else if снят вместе с задачей; Decision 8 объясняет механизм верно; Decision 5 теперь app.ui.Update — верно; Decision 3/4 больше не противоречат друг другу), но два принятых исправления внесли НОВЫЕ неверные обоснования: Decision 12 («path runs on every return from the pager») и Decision 7 («L lifts, поэтому extra.go:46 не может выполниться на паузе») — оба опровергнуты кодом. Дополнительно: Decision 9 называет call site liftPause(g, config), в котором нет g (viewSwitchHandler), и смена сигнатуры затронула бы top/menu.go, отсутствующий в списках файлов; Decision 2 («identity write») и Decision 11 («render path captures time.Now()») в связке не гарантируют заморозку frameStore.at. Правило волн (никакие две задачи одной волны не трогают один файл) подтверждено; top/config_view_test.go существует, top/help_test.go — нет (новый файл).",
+  "findings": [
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 7, bookkeeping note: «config.logtail.Size is written in two places — top/stat.go:243 и top/extra.go:46 (= 0 when the panel is opened with L). Only the first is affected by the pause; the second cannot run while paused because L lifts it.»",
+      "reality": "ОПРОВЕРГНУТО в двух местах. (1) Порядок внутри showExtra: запись `app.config.logtail.Path = logfile` (top/extra.go:45) и `app.config.logtail.Size = 0` (:46) выполняются РАНЬШЕ, чем любая точка снятия паузы, которую предписывает Decision 9 («after the four logtail early returns (:37-58)»). То есть в момент записи флаг паузы ещё установлен — «cannot run while paused» буквально неверно. (2) Три из четырёх early returns находятся ПОСЛЕ этой записи: :51 (`Empty logfile`), :54 (`Failed to stat logfile`), :58 (`Failed to open`). На любом из этих путей запись Size=0 и подмена Path уже произошли, а liftPause по правилу «после early returns» не вызывается вовсе — пауза сохраняется вместе с обнулённым Size и новым Path. Плюс путь закрытия панели (extra.go:14-23, `return closeExtraView(...)` на :22) тоже не лифтит. Практический ущерб мал (на паузе logtail-ветка printStat пропускается, Size не читается; после резюма Size=0 лишь отключает детектор ротации на один цикл), но заявленное обоснование ложно.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 7, «Bookkeeping note (corrected)»",
+      "fix": "Переписать: «вторая запись выполняется в showExtra ДО точки лифта и на трёх early-return путях (:51,:54,:58) — вообще без лифта; последствие ограничено обнулением Size, которое на паузе не читается, а после резюма лишь пропускает одно срабатывание детектора ротации». Либо перенести liftPause в showExtra выше записи Path/Size — но тогда нарушится правило «лифт после early returns»; выбор надо зафиксировать в спеке, а не в декомпозиции."
+    },
+    {
+      "severity": "major",
+      "type": "name_mismatch",
+      "claim": "Decision 9: «a liftPause(g, config) helper ... is called by every handler that needs fresh data», первый call site — «viewSwitchHandler (top/config_view.go:315)»; Task 5 Files to modify: top/config_view.go, top/extra.go, top/verbose.go, top/config_view_test.go (top/menu.go — только Files to read).",
+      "reality": "Сигнатура `func viewSwitchHandler(config *config, c string)` (top/config_view.go:315) НЕ имеет параметра *gocui.Gui, и config (top/config.go:17-41) не хранит ссылку на Gui. Вызов `liftPause(g, config)` внутри viewSwitchHandler не скомпилируется. Добавление параметра g потребует правки 30 call sites: 21 в top/menu.go (строки 149-201), 6 в top/config_view.go, 3 в тестах (config_view_test.go, verbose_test.go) — top/menu.go не входит в Files to modify ни одной задачи, что ломает и таблицу волн. То же для changeQueryAge (top/config_view.go:426, `func changeQueryAge(answer string, config *config) string`) — вызывается из dialogFinish (top/dialog.go:229) и тоже не имеет g. Выход в спеке косвенно есть («handlers that already write the cmdline themselves must not call the refreshing variant» — все 21 ветка menu.go делают printCmdline сразу после viewSwitchHandler, напр. top/menu.go:155,203; switchViewTo — на :231; dialogFinish — на :242), но нерефрешащий вариант нигде не назван и его сигнатура не задана.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9; Implementation Tasks, Task 5",
+      "fix": "Явно объявить в Decision 9 два хелпера, напр. liftPause(g *gocui.Gui, c *config) (с рефрешем cmdline) и liftPauseQuiet(c *config) (без него), и назвать viewSwitchHandler и changeQueryAge пользователями второго. Тогда top/menu.go править не нужно и таблица волн остаётся верной."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 2: «while paused, the only thing reaching the render closure is a repaint of the stored frame, so the publication is an identity write»; Decision 11: «the render path captures time.Now() alongside the frame»; Decision 14 + Data Models: age берётся из frameStore.at.",
+      "reality": "Связка не гарантирует, что at замораживается. Если repaint проходит через ту же публикацию (а Decision 2 прямо это утверждает — публикация не защищена `if !paused`) и при этом «render path captures time.Now()» (Decision 11), то каждый repaint перезапишет at свежим временем. Последствия: (а) замороженные часы в шапке (Task 4) поедут — а именно ради этого Task 4 и существует; (б) возраст кадра в kill-диалоге (Decision 14) всегда будет около нуля, то есть Decision 14 не решит задачу, ради которой введена. Условие идентичности требует, чтобы repaint публиковал СОХРАНЁННЫЙ at, а не новый; в тексте этого нет ни в Decision 2, ни в 11, ни в 6 (renderFrame описан только как «render core», без указания, где именно берётся отметка времени). Само поле frameStore.at (time.Time) для вычисления возраста через time.Since достаточно — при условии, что оно заморожено.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 2, Decision 11, Decision 14, Data Models",
+      "fix": "Добавить в Decision 11 (и в Decision 2) одну фразу: время захватывается ТОЛЬКО на живом пути (в printStat перед входом в замыкание); repaint передаёт store.at в renderFrame и публикует его же обратно. Тест «Store discipline: publish → repaint renders identical bytes» из Testing Strategy это поймает — но только если сравнение включает строку с часами."
+    },
+    {
+      "severity": "major",
+      "type": "missing_pattern",
+      "claim": "Decision 12: «wg.Wait() on the ctx.Done() branch (top/ui.go:130-132) waits for a collector that may be parked on that send forever, and this path runs on EVERY return from the pager (mainLoop cancels, then waits)»; «The uiExit branch needs no wg.Wait() — mainLoop already cancels and waits (top/ui.go:99-102)».",
+      "reality": "Механизм зависания подтверждён, но привязка к pager-пути ОПРОВЕРГНУТА. app.uiExit — небуферизованный канал (top/top.go:42,82), поэтому `uiExit <- 1` в showPgLog/runPsql/printQueryReport (top/pglog.go:32, psql.go:20, report.go:147) блокируется до приёма, и doWork гарантированно выходит через ветку uiExit (top/ui.go:125-127) ДО того, как MainLoop вернёт ошибку и mainLoop вызовет cancel() (:99). Значит ветка ctx.Done с wg.Wait() (:130-132) на pager-пути не исполняется вообще, а wg.Wait() на :102 ждёт уже завершившуюся горутину doWork и проходит мгновенно. Реальный путь зависания — перестроение UI по ОШИБКЕ (без uiExit): MainLoop вернул err → cancel() :99 → doWork в ветке ctx.Done → wg.Wait() :131 → коллектор запаркован на голом send top/stat.go:130 → mainLoop :102 висит вечно. Второе утверждение тоже неточно: mainLoop ждёт горутину doWork, а НЕ collectStat; на uiExit-пути коллектор остаётся осиротевшим (новый doWork создаёт новый statCh, top/ui.go:108), и если он запаркован на :130, cancel() его не разбудит — это утечка горутины, которую как раз и закрывает предлагаемый guard.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 12; Risks, строка «wg.Wait() on shutdown waits for a collector parked on a bare send»",
+      "fix": "Переформулировать: «голый send — предсущий дедлок на пути ПЕРЕСТРОЕНИЯ UI ПО ОШИБКЕ (mainLoop: cancel :99 → doWork ctx.Done :130-132 → wg.Wait ждёт коллектор на stat.go:130), а на pager-пути он даёт утечку горутины коллектора, которую cancel() не снимает. Ветке uiExit wg.Wait() не нужен: mainLoop ждёт горутину doWork, а не коллектор». Само решение (guard на ctx.Done + без wg.Wait в ветке uiExit) остаётся верным."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 6: «printStat's closure returns errors at seven points (top/stat.go:172-204)».",
+      "reality": "В диапазоне 172-204 действительно ровно семь возвратов ошибки (172, 177, 182, 187, 192, 198, 204), но замыкание printStat (top/stat.go:169-252) содержит ТРИНАДЦАТЬ точек возврата ошибки: к перечисленным добавляются 212, 218, 224, 230, 238, 247 — вся ветка extra-панели, включая logtail (:230, :238), то есть именно та, которую Decision 7 выводит из repaint. Вывод Decision 6 («repaint через printStat переоткрывает цикл перестроения») от этого только усиливается, но цифра и диапазон занижены.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 6",
+      "fix": "Заменить на «returns errors at thirteen points (top/stat.go:172-247), из них семь — в обязательных панелях (172-204)»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 8 / Testing Strategy: «Add a test that pins the behaviour instead» — «Marker after a UI rebuild: a uiError-shaped cmdline write reproduces the prefix with the marker (pins Decision 8, which ships no code)».",
+      "reality": "Механизм подтверждён полностью: writeCmdline безусловно печатает composeCmdline(cmdlineTokens(cmdlineCfg), msg, width) (top/ui.go:453), поэтому даже при пустом сообщении (uiError с pager-пути — это fmt.Errorf(\"\") из top/ui.go:149) префикс с токенами перерисовывается, а таймер очистки не взводится (`if arm && msg != \"\"`, :461); cmdlineCfg устанавливается один раз из RunMain (:39-41) и переживает перестроение UI. НО закрепить тестом можно только эту половину (composeCmdline/writeCmdline). Вторая, несущая половина утверждения — «the uiError branch always wins» в layout (top/ui.go:182-192) — тестом не покрывается: ни один тест в top/ не создаёт gocui.Gui (единственное вхождение gocui.NewGui в тестах — top/top_test.go), а layout требует живого терминала. Тест не будет «пинать» то, ради чего он объявлен.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 8; Testing Strategy",
+      "fix": "Сформулировать тест честно: он закрепляет, что writeCmdline с ПУСТЫМ сообщением всё равно рисует префикс с [PAUSED] и не взводит таймер. Ветку layout+uiError отнести к стендовому шагу (возврат из пейджера), а не к unit-тестам."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 14 / Task 7: «the backend-cancel and backend-terminate dialogs (-, _, k, K) include the age of the frozen frame in their prompt»; Task 7 Files to read: top/signal.go.",
+      "reality": "Диалоги достижимы НЕ из top/signal.go. Клавиши привязаны к dialogOpen (top/keybindings.go:62-63,66-67) → top/dialog.go:118; тексты промптов — в dialogPrompts (top/dialog.go:36-51); промпт печатается в cmdline через printCmdlinePersist (dialog.go:185). top/signal.go содержит только killSingle/killGroup, которые вызываются ПОСЛЕ ввода из dialogFinish (top/dialog.go:218-227) и к промпту отношения не имеют. Task 7 правит top/dialog.go — реализуемо, ошибочна только подсказка «files to read». Побочно проверено: dialogFinish:208 делает strings.TrimPrefix(v.Buffer(), dialogPrompts(...)), но буфер view \"dialog\" промпт не содержит (промпт уходит в cmdline), так что TrimPrefix — рудимент и динамический промпт ответ не испортит. Учесть также dialogPromptFit (dialog.go:70-89): удлинённый промпт на узком терминале обрежется многоточием.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 14; Task 7",
+      "fix": "В Task 7 заменить «Files to read: top/signal.go» на top/dialog.go-контекст (dialogPrompts/dialogOpen/dialogPromptFit) или добавить его; в Decision 14 указать, что возраст подмешивается в dialogOpen/dialogPrompts, и упомянуть бюджет dialogPromptFit."
+    },
+    {
+      "severity": "minor",
+      "type": "name_mismatch",
+      "claim": "Decision 9: диапазоны и ссылки на call sites — «menuConf ... (top/menu.go:204-209)», «switchViewTo has an early return at :212», «showExtra ... after the four logtail early returns (:37-58)».",
+      "reality": "Поведенчески всё подтверждено, номера неточны. (1) case menuConf занимает top/menu.go:204-222 (четыре ветки editPgConfig на 207,211,215,219); 204-209 покрывает только первую. viewSwitchHandler в этой ветке действительно не вызывается — ПОДТВЕРЖДЕНО. (2) У switchViewTo условие раннего выхода на :212, сам `return nil` — на :214. (3) У showExtra четыре `return nil` на :38, :51, :54, :58 — диапазон 37-58 их охватывает, НО есть ещё выход на :22 (закрытие панели той же клавишей) и два возврата ошибки на :19 и :43, о которых спека молчит; и формулировку «после четырёх logtail early returns» нельзя понимать буквально как «после строки 58» — это внутри case CollectLogtail, тогда B/N/F никогда не лифтили бы. Корректное место — после switch (≈:62) и до пуша viewCh (:75).",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9",
+      "fix": "Поправить диапазоны (menu.go:204-222, config_view.go:212-214) и написать место лифта в showExtra однозначно: «после switch по extra, до пуша viewCh (top/extra.go:63-75)», отдельно указав, лифтит ли путь закрытия панели (:14-23)."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_pattern",
+      "claim": "Decision 9: «viewSwitchHandler (top/config_view.go:315) — covers EVERY screen switch, whether reached by a letter key or by the D/X/P/J menus».",
+      "reality": "Про меню — ПОДТВЕРЖДЕНО: D/X/P/J привязаны к menuOpen (top/keybindings.go:46-49), menuSelect вызывает viewSwitchHandler во всех 21 ветке (top/menu.go:149-201), и каждая ветка сразу делает printCmdline (напр. :155, :203). Но «every screen switch» буквально неверно: переключение на per-process экран по 'S' (top/keybindings.go:58 → switchViewToProcPidStat, config_view.go:329) сознательно НЕ идёт через viewSwitchHandler — об этом прямо говорит комментарий config_view.go:325-328 («It must NOT delegate to viewSwitchHandler»). Практического пробела нет: спека перечисляет switchViewToProcPidStat отдельной строкой.",
+      "source": "016-feat-pause-display-tech-spec.md, Decision 9",
+      "fix": "Уточнить: «covers every screen switch except the per-process screen ('S'), which bypasses it by design and lifts on its own»."
+    },
+    {
+      "severity": "minor",
+      "type": "missing_file",
+      "claim": "Implementation Tasks, таблица волн и списки файлов задач 5, 6, 7.",
+      "reality": "Правило волн ПОДТВЕРЖДЕНО: в волне 1 (задачи 1,2), волне 3 (задачи 4,5,6) пересечений файлов нет, задачи 3,7,8 идут по одной в волне. По существованию файлов: top/config_view_test.go существует (27 КБ); top/help_test.go НЕ существует — задача 6 создаёт его с нуля (helpTemplate — обычная строковая константа top/help.go:10+, тест тривиален); top/pause.go и top/pause_test.go тоже новые, что ожидаемо. Пробелы в списках: задача 5 правит extra.go и verbose.go, но из тестов указан только config_view_test.go (top/verbose_test.go существует и является естественным местом для теста лифта в toggleVerbose; extra_test.go отсутствует); задача 7 правит top/dialog.go, но top/dialog_test.go (существует) в списке нет. Добавление этих файлов правило волн не нарушает.",
+      "source": "016-feat-pause-display-tech-spec.md, Implementation Tasks (таблица волн, задачи 5, 6, 7)",
+      "fix": "Добавить top/verbose_test.go в задачу 5 и top/dialog_test.go в задачу 7; отметить, что top/help_test.go, top/pause.go, top/pause_test.go создаются с нуля."
+    }
+  ],
+  "stats": {
+    "total_claims_checked": 47,
+    "confirmed": 37,
+    "mirages_found": 10,
+    "verified_claims": [
+      "Decision 8: showPgLog/runPsql/printQueryReport делают uiExit<-1 и сразу g.Close() — top/pglog.go:32-33, top/psql.go:20-21, top/report.go:147-148 — ПОДТВЕРЖДЕНО дословно",
+      "Decision 8: нулевая геометрия → layout возвращает fmt.Errorf(\"\") (top/ui.go:148-150); app.uiError = err безусловно (top/ui.go:89); MainLoop не возвращается без ошибки, кроме ErrQuit (:83-86) — перестроение UI всегда несёт непустой uiError",
+      "Decision 8: writeCmdline печатает composeCmdline(cmdlineTokens(cmdlineCfg), msg, width) безусловно (top/ui.go:453) — префикс с токенами перерисовывается и при пустом сообщении; таймер не взводится (`if arm && msg != \"\"`, :461)",
+      "cmdlineCfg — package-level, пишется один раз из RunMain через setCmdlineConfig (top/ui.go:22,39-41), переживает перестроение UI",
+      "Decision 12: голый send без ctx.Done подтверждён — top/stat.go:130 `statCh <- stat.Stat{Error: err}` внутри `if err != nil` после c.Reset()/c.Update() (:127-131)",
+      "Decision 12: wg.Wait() есть только в ветке ctx.Done doWork (top/ui.go:130-132); ветка uiExit (:125-127) выходит сразу; mainLoop: cancel() :99, wg.Wait() :102",
+      "Decision 7: Logfile.Reopen СНАЧАЛА закрывает файл (internal/stat/log.go:39 `l.Close()`), потом запрашивает путь у БД (:44 GetPostgresCurrentLogfile) и открывает заново (:50) — ПОДТВЕРЖДЕНО",
+      "Decision 7: вторая запись Size подтверждена — top/extra.go:46 `app.config.logtail.Size = 0` рядом с Path на :45 и Open() на :56; первая — top/stat.go:243; детектор ротации — top/stat.go:233-240",
+      "Decision 7: readLogfileRecent возвращает nil buf при неизменённом/пустом файле (top/stat.go:1214-1216); printLogtail печатает только при len(buf)>0 (top/stat.go:1230)",
+      "Decision 9: viewSwitchHandler — top/config_view.go:315; switchViewToProcPidStat — :329, remote-guard на :339-341; toggleVerbose — top/verbose.go:14; showExtra — top/extra.go:11",
+      "Decision 9: menuConf (клавиша 'E', top/keybindings.go:45) НЕ вызывает viewSwitchHandler — ветка top/menu.go:204-222 содержит только editPgConfig",
+      "Decision 9: D/X/P/J → menuOpen (top/keybindings.go:46-49) → menuSelect → viewSwitchHandler во всех ветках (top/menu.go:149-201), каждая с последующим printCmdline",
+      "Decision 3: пять клавиш пушат viewCh — scrollLeft config_view.go:63, scrollRight :81, increaseWidth :94, decreaseWidth :107, clearFilters :199-201 (условно, при n>0); viewCh небуферизован (top/config.go:49) → пуш блокирует MainLoop; ладдер c.Reset()/c.Update() на :125-133 — «near-zero и блокировка» действительно предсущее поведение этих пяти клавиш",
+      "Decision 3: якорный комментарий «solely to trigger an immediate redraw» на месте — top/config_view.go:57-58",
+      "Decision 4: фильтры применяются на РЕНДЕРЕ (top/stat.go:1053-1054 в printStatData, через config.view.Filters), коллектор их не читает — значит прямой repaint действительно применяет новый фильтр к замороженному кадру; setFilter — top/config_view.go:124-144, вызывается из dialogFinish top/dialog.go:216-217",
+      "Decision 5: замыкание layout имеет сигнатуру func(_ *gocui.Gui) error (top/ui.go:143) и внутри использует app.ui.Size() (:144) — правка round 1 (app.ui.Update) верна; прецедент verboseTooShortShown — top/ui.go:141",
+      "Decision 10: единственная запись в s.Result.Values во всём top/ — top/stat.go:1113 внутри printDataCell (:1103-1119); Test_printStatData_truncation проверяет только вывод",
+      "Decision 13: клавиши kill-диалогов — top/keybindings.go:62-63 ('-', '_') и :66-67 ('k','K'), все через dialogOpen; keybindings_test.go отсутствует (таблица клавиш без покрытия)",
+      "Decision 14: frameStore.at типа time.Time достаточен для возраста (time.Since); dialogFinish:208 TrimPrefix(dialogPrompts(...)) — рудимент, буфер view \"dialog\" промпта не содержит (промпт печатается в cmdline на dialog.go:185)",
+      "Волны: top/config_view_test.go существует; top/help_test.go, top/pause.go, top/pause_test.go отсутствуют (создаются задачами 6/2/3); пересечений файлов внутри волн 1 и 3 нет"
+    ]
+  }
+}

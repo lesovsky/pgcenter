@@ -22,7 +22,7 @@ type options struct {
 	showIndexes     bool   // Show stats from pg_stat_user_indexes, pg_statio_user_indexes
 	showSizes       bool   // Show tables sizes
 	showFunctions   bool   // Show stats from pg_stat_user_functions
-	showWAL         bool   // Show stats from pg_stat_wal
+	showWAL         string // Show stats from pg_stat_wal / pg_stat_archiver
 	showBgwriter    bool   // Show stats from pg_stat_bgwriter, pg_stat_checkpointer
 	showReplSlots   bool   // Show stats from pg_replication_slots, pg_stat_replication_slots
 	showStatIO      string // Show stats from pg_stat_io
@@ -67,7 +67,7 @@ func init() {
 	CommandDefinition.Flags().BoolVarP(&opts.showIndexes, "indexes", "I", false, "show pg_stat_user_indexes and pg_statio_user_indexes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showSizes, "sizes", "S", false, "show tables sizes report")
 	CommandDefinition.Flags().BoolVarP(&opts.showFunctions, "functions", "F", false, "show pg_stat_user_functions report")
-	CommandDefinition.Flags().BoolVarP(&opts.showWAL, "wal", "W", false, "show pg_stat_wal report")
+	CommandDefinition.Flags().StringVarP(&opts.showWAL, "wal", "W", "", "show pg_stat_wal / pg_stat_archiver report (w - wal, a - archiver)")
 	CommandDefinition.Flags().BoolVarP(&opts.showBgwriter, "bgwriter", "B", false, "show pg_stat_bgwriter / pg_stat_checkpointer report")
 	CommandDefinition.Flags().BoolVarP(&opts.showReplSlots, "replslots", "L", false, "show pg_replication_slots / pg_stat_replication_slots report")
 	CommandDefinition.Flags().StringVarP(&opts.showStatIO, "io", "J", "", "show pg_stat_io report (c - count, t - time)")
@@ -148,8 +148,16 @@ func selectReport(opts options) string {
 		return "indexes"
 	case opts.showFunctions:
 		return "functions"
-	case opts.showWAL:
-		return "wal"
+	case opts.showWAL != "":
+		// Closed whitelist: no default arm on purpose. An unmatched value falls out of both switches
+		// to the final 'return ""', so validate() rejects it instead of letting an unknown report
+		// type reach report.Config and select a zero-value view (a silently empty report).
+		switch opts.showWAL {
+		case "w":
+			return "wal"
+		case "a":
+			return "archiver"
+		}
 	case opts.showBgwriter:
 		return "bgwriter"
 	case opts.showReplSlots:

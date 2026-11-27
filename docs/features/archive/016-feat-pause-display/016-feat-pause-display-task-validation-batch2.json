@@ -1,0 +1,139 @@
+{
+  "validator": "dev-task-validator",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "iteration": 1,
+  "tasks_checked": ["06", "07", "08", "09", "10"],
+  "status": "approved",
+  "verified_points": [
+    {
+      "point": "Task 06 без dev-security-auditor",
+      "result": "ok",
+      "detail": "frontmatter reviewers: [dev-code-reviewer, dev-test-reviewer]; секция Reviewers содержит явное обоснование (строки 214-216) со ссылкой на примечание tech-spec после Task 6 и запретом восстанавливать ревьюера при перегенерации. Это не выглядит недосмотром."
+    },
+    {
+      "point": "Task 10 — QA-задача",
+      "result": "ok",
+      "detail": "skills: [pre-deploy-qa], reviewers: [], секция TDD Anchor удалена целиком (не оставлена пустой заглушкой), Required Skills ссылается на /skill:pre-deploy-qa, секция Reviewers объясняет отсутствие ревьюеров."
+    },
+    {
+      "point": "Раздел волны 4",
+      "result": "ok",
+      "detail": "Task 07 правит только top/ui.go + top/ui_test.go, Task 08 — только top/dialog.go + top/dialog_test.go. Обе задачи явно объявляют top/pause.go как read-only (07: строки 42-44, 61-64, 155-156, 202-204, 218; 08: строки 148, 197-199, 220-225), обе несут AC и шаг верификации через git diff, ловящий нарушение раздела. Взаимных файлов нет."
+    },
+    {
+      "point": "Task 09 — top/pause_test.go вне таблицы tech-spec",
+      "result": "ok",
+      "detail": "Отклонение зафиксировано явно: Details -> Files (строки 216-218) с обоснованием «Task 9 одна в волне 5», и отдельным пунктом в Post-completion (строка 286). Молча не сделано. Второе отклонение (сброс сохранённого буфера при закрытии панели) там же."
+    },
+    {
+      "point": "Цепочка depends_on",
+      "result": "ok",
+      "detail": "01:[] w1, 02:[] w1, 03:[02] w2, 04:[03] w3, 05:[03] w3, 06:[03] w3, 07:[05] w4, 08:[05] w4, 09:[07,08] w5, 10:[09] w6. Все ID существуют, wave зависимой задачи строго больше wave предшественника, циклов нет. Функциональные зависимости 07/08 на Task 2 и Task 3 покрыты транзитивно через 05 -> 03 -> 02."
+    }
+  ],
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "06",
+      "section": "весь файл",
+      "issue": "Task 06 написана целиком по-русски, задачи 07-10 — по-английски (русскими остались только строка Required Skills и Post-completion). В одном наборе задач одной фичи это разнобой, и агент-исполнитель Task 06 получит контекст в другом языке, чем его соседи по волне.",
+      "fix": "Привести батч к одному языку изложения. Учитывая, что 07-10 и задачи 01-04 на английском, а глобальное правило относит технические документы к английскому — перевести описательные секции Task 06 на английский либо зафиксировать смешанный режим как осознанный в decisions log."
+    },
+    {
+      "severity": "minor",
+      "category": "frontmatter",
+      "task": "07",
+      "section": "frontmatter",
+      "issue": "Поле verify по шаблону — инструмент верификации (curl, bash, user), а здесь в значение вынесена целая команда: verify: bash — `go test ./top/...`. То же в задачах 08 и 09 (и в 01, 03, 04, 05, 06). Task 10 и Task 02 оформлены правильно: verify: bash, команда — в комментарии.",
+      "fix": "Оставить в значении инструмент (verify: bash), команду перенести в комментарий или в Verification Steps — как сделано в Task 02 и Task 10. Заодно убрать разнобой (в Task 06 значение взято в кавычки, в 07-09 — нет)."
+    },
+    {
+      "severity": "minor",
+      "category": "structure",
+      "task": "09",
+      "section": "Details",
+      "issue": "В файле остался служебный HTML-комментарий шаблона: `<!-- All details for task execution — technical, organizational, any other. -->` (строка 191). В задачах 06, 07, 08, 10 он удалён.",
+      "fix": "Удалить строку 191 — это инструкция шаблона автору задачи, а не содержимое задачи."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "Context Files",
+      "issue": "В блоке Project knowledge нет project.md. Файла действительно нет в репозитории (в .claude/skills/project-knowledge/ лежат overview.md, architecture.md, patterns.md, deployment.md), но задачи 07, 08, 09, 10 сопровождают overview.md явной ремаркой «there is no project.md in this repo; overview.md is its equivalent», а Task 06 — нет. Исполнитель может решить, что документ забыли.",
+      "fix": "Добавить ту же ремарку к строке overview.md, что и в задачах 07-10."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "06",
+      "section": "TDD Anchor",
+      "issue": "Два из трёх якорей (Test_helpTemplate_pauseEntry, Test_helpTemplate_pauseLiftingActions) проверяют наличие подстрок в строковой константе — это проверка структуры текста, а не поведения. Формат якорей при этом корректный (путь::имя + описание), а третий тест (Test_helpTemplate_formatVerbs) поведенческий: прогоняет fmt.Sprintf и проверяет отсутствие %!/(MISSING).",
+      "fix": "Ограничение по существу задачи: она правит строковый литерал, поведения там нет. Задача сама это осознаёт и защищается от бесполезного теста (искать по строке продолжения, а не по всему шаблону; вычислять отступ от соседней строки, а не магическим числом). Действия не требуется — зафиксировано, чтобы ревьюер тестов не принял это за упущение. При желании усилить: проверять рендер справки через showHelp-совместимый writer, а не константу."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "What to do / Context Files",
+      "issue": "Дважды указано «top/ui_test.go (it exists, 365 lines, 10 tests)» и «existing 10 tests». В файле 365 строк, но 9 top-level тестов (Test_composeCmdline, Test_composeCmdlineTwoTokens, Test_composeCmdlineRunes, Test_filterToken, Test_filterTokenDeterministicOrder, Test_filterTokenStripsControlRunes, Test_cmdlineTokens, Test_setCmdlineConfig, Test_printCmdlineNilGui). Мелкая фактическая ошибка, но AC требует «every pre-existing top/ui_test.go test unmodified», и неверный счёт даёт ложную опору при сверке.",
+      "fix": "Заменить «10 tests» на «9 tests» в обоих местах (строки 68 и 151)."
+    },
+    {
+      "severity": "minor",
+      "category": "decomposition",
+      "task": "09",
+      "section": "Details -> Files",
+      "issue": "Задача добавляет top/pause_test.go, которого нет в строке Task 9 таблицы Implementation Tasks tech-spec (там `top/stat.go`, `top/pause.go`, `top/stat_test.go`). Отклонение зафиксировано корректно (Details + Post-completion), конфликта нет — Task 9 одна в волне 5. Но таблица tech-spec остаётся расходящейся с задачей до момента постфактум-отчёта.",
+      "fix": "Дописать `top/pause_test.go` в строку Task 9 таблицы Implementation Tasks tech-spec — тогда отклонение исчезнет и в Post-completion останется только сброс буфера. Альтернатива (оставить как есть) допустима: запись об отклонении уже сделана."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "09",
+      "section": "What to do",
+      "issue": "Требование «сбрасывать сохранённые logBuf/logPath, когда живой путь не показывает панель логов (ShowExtra != stat.CollectLogtail)» выводится из комментария в Data Models tech-spec («nil when the panel was closed»), но самой Decision 7 не описано — там только «хранить последний непустой буфер» и «не трогать файл на паузе». Это расширение объёма относительно текста решения.",
+      "fix": "Внести правило сброса в Decision 7 tech-spec одной фразой (или пометить как уточнение Data Models). Задача уже помечает его как отклонение в Post-completion — этого достаточно, чтобы не считать находку блокирующей."
+    },
+    {
+      "severity": "minor",
+      "category": "carry-forward",
+      "task": "10",
+      "section": "Acceptance Criteria / Implementation hints",
+      "issue": "Tech-spec в двух местах называет ручной прогон «15 numbered steps» / «all 15 user-spec steps», а таблица «Как проверить» в user-spec содержит шаги 1-11 плюс подшаги 3a, 7a, 7b, 7c, 7d — 16 строк. Task 10 расхождение обнаружила и разрешила правильно: велит идти по строкам таблицы и не доверять ни одному из чисел (строки 71, 98-99, 243-246). Ошибка в tech-spec, не в задаче.",
+      "fix": "Поправить tech-spec: в Agent Verification Plan и в описании Task 10 заменить «15 numbered steps» на «шаги 1-11 плюс подшаги 3a и 7a-7d (16 строк таблицы)». Task 10 менять не нужно."
+    },
+    {
+      "severity": "minor",
+      "category": "consistency",
+      "task": "07",
+      "section": "Details -> The failure latch",
+      "issue": "Tech-spec нигде не назначает владельца latch'а из Decision 5 (одно сообщение на переход в состояние ошибки repaint): Decision 5 описывает его в контексте layout, Decision 6 отдаёт closure и error policy Task 3, но ни в описании Task 3, ни в описании Task 7 он не назван. Task 07 закрывает пробел протоколом expected-case/gap-case (строки 206-222): проверить, что Task 3 привезла latch; если нет — реализовать чистый state-хелпер в top/ui.go, покрыть тестом, проводку оставить владельцу pause.go и зафиксировать пробел. Это разумно, но означает, что часть объёма Task 07 условна.",
+      "fix": "Назвать владельца latch'а явно — добавить его в описание Task 3 в Implementation Tasks tech-spec (там же, где Decision 6 отдаёт Task 3 error policy repaint-пути). Тогда gap-case в Task 07 станет чисто страховочным. Также учесть, что Test_repaintFailureLatch и AC про latch выходят за строку Task 7 в per-task verify таблице tech-spec."
+    },
+    {
+      "severity": "minor",
+      "category": "decomposition",
+      "task": "07",
+      "section": "frontmatter",
+      "issue": "Задачи 07 и 08 (волна 4) объявляют depends_on: [\"05\"] — только одну из трёх задач волны 3 (04, 05, 06). Tech-spec формулирует зависимость как «Wave 4 (зависит от Wave 3)» целиком. Конфликта файлов это не создаёт (04 владеет stat.go, 06 — help.go), и барьер волн у оркестратора закрывает вопрос, но декларация неполна относительно tech-spec.",
+      "fix": "Либо расширить до depends_on: [\"04\", \"05\", \"06\"], либо оставить как есть и опереться на волновой барьер — Task 07 уже объясняет выбор в Details -> Dependencies («depends on Task 5 only for wave ordering»). Достаточно того же пояснения в Task 08 (оно там есть, строки 194-196)."
+    },
+    {
+      "severity": "minor",
+      "category": "content",
+      "task": "08",
+      "section": "Details -> Files",
+      "issue": "В Details приведён почти готовый код: сигнатура `applyFilter(answer string, config *config, repaint func()) string` и строка места вызова `message = applyFilter(answer, app.config, func() { repaintStored(app) })`. В Task 07 аналогично расписан алгоритм метода observe по ветвям («if the size did not change -> false; otherwise record the new size first, then return paused»). Шаблон требует в Implementation hints подсказки, а не псевдокод; здесь граница пройдена в сторону КАК.",
+      "fix": "Оставить сигнатуру и свойства (записать размер до ответа; repaint передаётся как bare func(), чтобы store был недостижим), убрать готовую строку места вызова и пошаговое ветвление. Обе задачи уже смягчают это оговорками «adapt if you find something cleaner» / «or an equivalent shape» — можно ограничиться усилением этой формулировки."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 5,
+    "issues_found": 12,
+    "critical": 0,
+    "major": 0,
+    "minor": 12
+  }
+}

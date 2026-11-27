@@ -3,6 +3,7 @@ package top
 import (
 	"bytes"
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -10,6 +11,8 @@ import (
 	"github.com/lesovsky/pgcenter/internal/stat"
 	"github.com/lesovsky/pgcenter/internal/view"
 	"github.com/stretchr/testify/assert"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -36,6 +39,12 @@ func Test_formatInfoString(t *testing.T) {
 	}
 }
 
+// testRenderTime is the fixed render stamp the pre-existing renderSysstat tests pass now that line
+// 1's clock is a parameter. Its value is irrelevant to them — they assert the refresh field, the
+// verbose rows or the compact prefix, never the timestamp itself; the two dedicated
+// Test_renderSysstat_timestamp* tests are what pin the stamp.
+var testRenderTime = time.Date(2021, 6, 15, 12, 30, 45, 0, time.UTC)
+
 // Test_renderSysstat_compact is the writer-based golden test for the system-stats panel.
 // renderSysstat is the io.Writer core extracted from printSysstat (task 03 refactor); its
 // compact output must stay byte-identical. Line 1 carries a dynamic timestamp, so it is
@@ -57,7 +66,7 @@ func Test_renderSysstat_compact(t *testing.T) {
 	}}
 
 	var buf bytes.Buffer
-	err := renderSysstat(&buf, s, false, true, "", 5*time.Second)
+	err := renderSysstat(&buf, s, false, true, "", 5*time.Second, testRenderTime)
 	assert.NoError(t, err)
 
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
@@ -94,11 +103,104 @@ func Test_renderSysstat_refreshFormat(t *testing.T) {
 
 	for _, tc := range testcases {
 		var buf bytes.Buffer
-		assert.NoError(t, renderSysstat(&buf, stat.Stat{}, false, true, "", tc.refresh))
+		assert.NoError(t, renderSysstat(&buf, stat.Stat{}, false, true, "", tc.refresh, testRenderTime))
 
 		line1 := strings.SplitN(buf.String(), "\n", 2)[0]
 		assert.Contains(t, line1, tc.want)
 	}
+}
+
+// Test_renderSysstat_timestampFromParameter pins line 1's clock to the timestamp the caller passes
+// in, not to the wall clock. This is what makes a repainted frozen frame coherent: the repaint
+// path feeds the stored render time, so the header shows the age of the data on screen.
+//
+// The assertion is an EQUALITY against a stamp far from today, deliberately not a regexp: a
+// `\d{4}-\d{2}-\d{2}` pattern matches time.Now() just as happily as the parameter, so a reinstated
+// time.Now() would sail straight through it. Only the exact 2020 stamp can fail.
+//
+// This is one third of the frozen-clock property; see the COMPOSITIONAL PROOF note on
+// Test_renderSysstat_timestampIsTheOnlySource below for the other two.
+func Test_renderSysstat_timestampFromParameter(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg: stat.LoadAvg{One: 1.23, Five: 0.45, Fifteen: 6.78},
+	}}
+
+	// The location is irrelevant to the assertion: the "2006-01-02 15:04:05" layout carries no zone
+	// and Format performs no conversion, so the rendered text is this value's own wall clock.
+	at := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+
+	var buf bytes.Buffer
+	assert.NoError(t, renderSysstat(&buf, s, false, true, "", time.Second, at))
+
+	line1 := strings.SplitN(buf.String(), "\n", 2)[0]
+	assert.Equal(t,
+		"pgcenter: 2020-01-02 03:04:05, refresh: 1s, load average: 1.23, 0.45, 6.78",
+		line1)
+}
+
+// Test_renderSysstat_timestampIsTheOnlySource proves the parameter is genuinely the source of line
+// 1 rather than being accepted and ignored — a failure mode a single-stamp test cannot distinguish,
+// since one rendering alone cannot show that a DIFFERENT stamp produces a different line.
+//
+// Two distinct stamps are rendered from the same stat.Stat: each rendering carries its own stamp,
+// and the two line-1 strings differ ONLY in the timestamp field, with rows 2..4 byte-identical.
+//
+// COMPOSITIONAL PROOF - neither this test nor the one above proves on its own that a repaint
+// prints a frozen clock over frozen data. That property holds across three tests in two files:
+// these two say renderSysstat is a pure function of (s, at) with no internal clock read, and
+// Test_frameStore_publishOnlyOnLivePath / Test_frameStore_repaintRendersIdenticalBytes
+// (top/pause_test.go) say a repaint never restamps the store. No single test can join them:
+// renderFrame is reachable only through a live *gocui.Gui, so the end-to-end check exists only in
+// the manual stand run. Change any of the three and the other two do not notice.
+func Test_renderSysstat_timestampIsTheOnlySource(t *testing.T) {
+	s := stat.Stat{System: stat.System{
+		LoadAvg: stat.LoadAvg{One: 1.23, Five: 0.45, Fifteen: 6.78},
+		CPUStat: stat.CPUStat{User: 1.1, Sys: 2.2, Nice: 3.3, Idle: 4.4},
+		Meminfo: stat.Meminfo{MemTotal: 1000, MemFree: 200, MemUsed: 800},
+	}}
+
+	testcases := []struct {
+		name string
+		at   time.Time
+		want string
+	}{
+		{
+			name: "2020",
+			at:   time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC),
+			want: "pgcenter: 2020-01-02 03:04:05, refresh: 1s, load average: 1.23, 0.45, 6.78",
+		},
+		{
+			name: "1999",
+			at:   time.Date(1999, 12, 31, 23, 59, 58, 0, time.UTC),
+			want: "pgcenter: 1999-12-31 23:59:58, refresh: 1s, load average: 1.23, 0.45, 6.78",
+		},
+	}
+
+	var rendered [][]string
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			assert.NoError(t, renderSysstat(&buf, s, false, true, "", time.Second, tc.at))
+
+			lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+			if assert.Len(t, lines, 4) {
+				assert.Equal(t, tc.want, lines[0])
+			}
+			rendered = append(rendered, lines)
+		})
+	}
+
+	if !assert.Len(t, rendered, 2) {
+		return
+	}
+
+	// Everything on line 1 after the timestamp field is unaffected by the stamp...
+	assert.Equal(t,
+		strings.TrimPrefix(rendered[0][0], "pgcenter: "+testcases[0].at.Format("2006-01-02 15:04:05")),
+		strings.TrimPrefix(rendered[1][0], "pgcenter: "+testcases[1].at.Format("2006-01-02 15:04:05")))
+	// ...and so are rows 2..4, which the stamp must not reach at all.
+	assert.Equal(t, rendered[0][1:], rendered[1][1:])
 }
 
 // Test_renderPgstat_compact is the writer-based golden test for the summary Postgres-stats
@@ -189,7 +291,7 @@ func boldSpans(line string) []string {
 func verboseSysstatLines(t *testing.T, s stat.Stat, local bool, dataDir string) []string {
 	t.Helper()
 	var buf bytes.Buffer
-	assert.NoError(t, renderSysstat(&buf, s, true, local, dataDir, time.Second))
+	assert.NoError(t, renderSysstat(&buf, s, true, local, dataDir, time.Second, testRenderTime))
 	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 }
 
@@ -437,8 +539,10 @@ func Test_renderSysstat_compactUnchanged(t *testing.T) {
 	}}
 
 	var compact, verbose bytes.Buffer
-	assert.NoError(t, renderSysstat(&compact, s, false, true, "/", time.Second))
-	assert.NoError(t, renderSysstat(&verbose, s, true, true, "/", time.Second))
+	// Both renderings take the SAME stamp: the assertion below is a byte-identity comparison of the
+	// compact prefix, and two different stamps would break it on line 1 for the wrong reason.
+	assert.NoError(t, renderSysstat(&compact, s, false, true, "/", time.Second, testRenderTime))
+	assert.NoError(t, renderSysstat(&verbose, s, true, true, "/", time.Second, testRenderTime))
 
 	compactLines := strings.Split(strings.TrimRight(compact.String(), "\n"), "\n")
 	verboseLines := strings.Split(strings.TrimRight(verbose.String(), "\n"), "\n")
@@ -1283,6 +1387,144 @@ func Test_printStatData_truncation(t *testing.T) {
 	assert.NotContains(t, out, "abcde", "original untruncated value must not appear")
 }
 
+// Test_printDataCell_doesNotMutateSource verifies that rendering is read-only: after a render
+// that truncates a too-long value, the source cell still holds the original, untruncated text.
+// The truncation test above asserts on the rendered buffer only and cannot catch an in-place
+// write into the result set.
+func Test_printDataCell_doesNotMutateSource(t *testing.T) {
+	cfg := makeRenderConfig(6, 5) // each scrollable/frozen column width 5
+	s := makeRenderResult(6, 1)
+	// Overwrite the frozen column value with one longer than width 5.
+	s.Result.Values[0][0] = sql.NullString{String: "abcdefghij", Valid: true}
+
+	var buf bytes.Buffer
+	win := visibleColumns(s.Result.Ncols, cfg.view.ColsWidth, 40, cfg.scrollOffset)
+	err := printStatData(&buf, s, cfg, false, win)
+	assert.NoError(t, err)
+
+	// The premise guard keeps the assertion below from passing vacuously if column 0 ever stops
+	// being rendered: without a truncating render there is nothing for the mutation check to catch.
+	if assert.Contains(t, buf.String(), "abcd~", "test premise: the render must have truncated the value") {
+		assert.Equal(t, "abcdefghij", s.Result.Values[0][0].String,
+			"rendering must not write the truncated value back into the result set")
+	}
+}
+
+// Test_printDataCell_widenAfterTruncation verifies that a truncating render does not destroy the
+// value for later renders: the same stat.Stat rendered again into a wider column shows the full
+// original text. This is the user-spec criterion "расширение колонки во время паузы не приводит к
+// навсегда обрезанному значению", expressed at the printer level.
+func Test_printDataCell_widenAfterTruncation(t *testing.T) {
+	s := makeRenderResult(6, 1)
+	s.Result.Values[0][0] = sql.NullString{String: "abcdefghij", Valid: true}
+
+	// First render: narrow column, value truncated.
+	narrowCfg := makeRenderConfig(6, 5)
+	var narrowBuf bytes.Buffer
+	narrowWin := visibleColumns(s.Result.Ncols, narrowCfg.view.ColsWidth, 40, narrowCfg.scrollOffset)
+	assert.NoError(t, printStatData(&narrowBuf, s, narrowCfg, false, narrowWin))
+	if !assert.Contains(t, narrowBuf.String(), "abcd~", "test premise: the first render must truncate") {
+		return
+	}
+
+	// Second render of the SAME stat.Stat: the column is now wide enough for the whole value.
+	wideCfg := makeRenderConfig(6, 12)
+	var wideBuf bytes.Buffer
+	wideWin := visibleColumns(s.Result.Ncols, wideCfg.view.ColsWidth, 80, wideCfg.scrollOffset)
+	assert.NoError(t, printStatData(&wideBuf, s, wideCfg, false, wideWin))
+	assert.Contains(t, wideBuf.String(), "abcdefghij",
+		"widening the column after a truncating render must show the full original value")
+	assert.NotContains(t, wideBuf.String(), "abcd~",
+		"no truncation marker may survive into the widened render")
+}
+
+// Test_printDataCell_zeroOrNegativeWidth verifies the zero/negative-width guard: for a value that
+// overflows the column, printDataCell returns the "zero or negative width, skip" error and writes
+// nothing. The evaluation order that puts this guard inside the overflow branch is pinned
+// separately by Test_printDataCell_zeroWidthShortValueDoesNotError — both widths used here
+// overflow, so this test alone cannot tell the two orderings apart.
+func Test_printDataCell_zeroOrNegativeWidth(t *testing.T) {
+	// makeRenderResult values are "rR-cC" (5 bytes), so len(value) > width holds for width 0 and -1.
+	for _, width := range []int{0, -1} {
+		cfg := makeRenderConfig(6, 5)
+		cfg.view.ColsWidth[0] = width
+		s := makeRenderResult(6, 1)
+
+		var buf bytes.Buffer
+		err := printDataCell(&buf, s, cfg, 0, 0)
+		assert.EqualError(t, err, "zero or negative width, skip", "width %d", width)
+		assert.Empty(t, buf.String(), "nothing may be printed for width %d", width)
+		assert.Equal(t, "r0-c0", s.Result.Values[0][0].String,
+			"the error path must not touch the source value either (width %d)", width)
+	}
+}
+
+// Test_printDataCell_zeroWidthShortValueDoesNotError pins the evaluation order the rewrite had to
+// preserve: the width guard lives INSIDE the overflow branch, so a zero-width column is an error
+// only when the value actually overflows it. A short value there still renders. Hoisting the guard
+// above the overflow check leaves every other test in the package green, yet would abort the whole
+// render (printStatData propagates the error) on an empty cell in a zero-width column. This also
+// covers the Valid: false case, whose .String is "".
+func Test_printDataCell_zeroWidthShortValueDoesNotError(t *testing.T) {
+	cfg := makeRenderConfig(6, 5)
+	cfg.view.ColsWidth[0] = 0
+	s := makeRenderResult(6, 1)
+	s.Result.Values[0][0] = sql.NullString{Valid: false} // .String is ""
+
+	var buf bytes.Buffer
+	assert.NoError(t, printDataCell(&buf, s, cfg, 0, 0),
+		"width 0 errors only when the value overflows it; a short value must still render")
+	assert.Equal(t, "  ", buf.String(),
+		"a short value in a zero-width column renders as the bare +2 gap")
+}
+
+// Test_printDataCell_exactWidthNotTruncated pins the len == width boundary: a value exactly
+// filling its column is printed whole, with no '~'. The comparison is strictly greater, and a
+// > → >= regression would otherwise stay green.
+func Test_printDataCell_exactWidthNotTruncated(t *testing.T) {
+	cfg := makeRenderConfig(6, 5) // width 5 == len("r0-c0")
+	s := makeRenderResult(6, 1)
+
+	var buf bytes.Buffer
+	assert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))
+	assert.Equal(t, "r0-c0  ", buf.String(),
+		"a value exactly filling the column must be printed whole, padded to width+2, with no '~'")
+}
+
+// Test_printDataCell_truncatedCellExactBytes pins the exact bytes of a truncated cell. The other
+// truncation tests assert with Contains at the whole-line level; this one localises a truncation
+// regression to the cell instead of surfacing it as a line-level or alignment failure, and makes
+// the byte-identity contract of this change explicit. (Padding width itself is covered by
+// Test_render_alignmentInvariant on the non-truncating path — a truncated value is by construction
+// exactly ColsWidth bytes, so the two padding formulas cannot diverge here.)
+func Test_printDataCell_truncatedCellExactBytes(t *testing.T) {
+	cfg := makeRenderConfig(6, 5)
+	s := makeRenderResult(6, 1)
+	s.Result.Values[0][0] = sql.NullString{String: "abcdefghij", Valid: true}
+
+	var buf bytes.Buffer
+	assert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))
+	assert.Equal(t, "abcd~  ", buf.String(),
+		"truncated cell must be width-1 bytes + '~', padded to ColsWidth+2")
+}
+
+// Test_printDataCell_multiByteIsByteSliced is a characterization test: truncation is BYTE-based
+// today and may cut a UTF-8 sequence mid-rune. Task 01 requires byte-identical output, so this
+// behaviour is preserved deliberately rather than fixed. Converting printDataCell to rune-based
+// slicing is a separate, deliberate change — it must update this test, not silently break it.
+func Test_printDataCell_multiByteIsByteSliced(t *testing.T) {
+	cfg := makeRenderConfig(6, 4)
+	s := makeRenderResult(6, 1)
+	s.Result.Values[0][0] = sql.NullString{String: "αβγδε", Valid: true} // 10 bytes, 5 runes
+
+	var buf bytes.Buffer
+	assert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))
+	// value[:3] keeps "α" (2 bytes) plus the leading byte of "β", then '~' is appended. fmt pads
+	// %-*s by RUNES, so the dangling byte counts as one and three spaces reach the width-4+2 gap.
+	assert.Equal(t, "α\xce~   ", buf.String(),
+		"multi-byte values are byte-sliced today; a mid-rune cut is preserved behaviour")
+}
+
 // Test_printStatHeader_frozenColumn verifies the frozen column 0 is always present in the
 // header regardless of offset, and that when OrderKey == 0 the sort highlight escape
 // sequence is applied to it (priority over frozen-bold, Decision 4) without doubling
@@ -1503,4 +1745,177 @@ func Test_firstTickCollectingHint(t *testing.T) {
 	msg, show = firstTickHint(stat.Stat{System: stat.System{VerboseFirstTick: true}})
 	assert.True(t, show, "hint must reappear on a re-armed first tick (OFF->ON re-enable)")
 	assert.Equal(t, "collecting...", msg)
+}
+
+// logtailHeader builds the panel's header line the way renderLogtail must write it. It exists so the
+// three tests below spell the escape sequences out once: the bytes are a hard requirement (the panel
+// draws the highlighted path through gocui's own escape handling), and a test that re-derived them
+// from the implementation would assert nothing.
+func logtailHeader(path string) string {
+	return "\033[30;47m" + path + ":\033[0m\n"
+}
+
+// Test_renderLogtail_outputUnchanged pins the rendered bytes of the log panel: the highlighted path
+// header followed by the raw buffer, and nothing else. printLogtail is now a thin *gocui.View
+// wrapper over this core (the printSysstat -> renderSysstat precedent), so this is what both the
+// live path and the repaint path put on screen.
+func Test_renderLogtail_outputUnchanged(t *testing.T) {
+	var out bytes.Buffer
+
+	assert.NoError(t, renderLogtail(&out, "/var/log/postgresql/A.log", []byte("line1\nline2\n")))
+	assert.Equal(t, logtailHeader("/var/log/postgresql/A.log")+"line1\nline2\n", out.String())
+}
+
+// Test_renderLogtail_emptyBufferPrintsNothing pins the other half of the pre-existing
+// `if len(string(buf)) > 0` guard: on a quiet log readLogfileRecent returns a nil buffer, and the
+// panel must then be left completely alone - not even a header line.
+//
+// The wrapper's half of that guard - that printLogtail does not v.Clear() either - needs a real
+// *gocui.View and stays a review-by-inspection item. It is deliberately NOT faked with a nil
+// *gocui.View here: a nil one wrapped in an io.Writer is non-nil at the interface level and would
+// panic on the first write instead of being skipped.
+func Test_renderLogtail_emptyBufferPrintsNothing(t *testing.T) {
+	testcases := []struct {
+		name string
+		buf  []byte
+	}{
+		{name: "nil buffer", buf: nil},
+		{name: "empty buffer", buf: []byte{}},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+
+			assert.NoError(t, renderLogtail(&out, "/var/log/postgresql/A.log", tc.buf))
+			assert.Equal(t, 0, out.Len(), "a quiet log must produce no bytes at all")
+		})
+	}
+}
+
+// Test_selectLogtail_repaintNeverInvokesTheRead is the strictest statement of Decision 7 available
+// without a terminal: on the repaint path the whole file-reading thunk is not entered at all.
+//
+// The read closure fails the test the moment it is called. That is the assertion - everything else
+// here is a consequence of it. This is the test that goes red when the routing regresses, i.e. when
+// `if !p.fromFile` in selectLogtail is deleted, inverted or short-circuited; renderFrame's switch
+// itself cannot be driven from a unit test, because a *gocui.Gui/*gocui.View cannot be constructed
+// outside the gocui package, which is precisely why the selection was extracted out of it.
+func Test_selectLogtail_repaintNeverInvokesTheRead(t *testing.T) {
+	f := frameStore{logPath: "/var/log/postgresql/A.log", logBuf: []byte("line1\nline2\n")}
+
+	path, buf, err := selectLogtail(storedRender(&f), func() (string, []byte, error) {
+		t.Fatal("the repaint path must not touch the log file: no os.Stat, no Read, no Reopen, no Size write")
+		return "", nil, nil
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, "/var/log/postgresql/A.log", path)
+	assert.Equal(t, []byte("line1\nline2\n"), buf)
+}
+
+// Test_selectLogtail_livePathReadsTheFile is what keeps the test above honest: without it, a
+// selectLogtail that never reads on either path would satisfy the repaint assertion perfectly and
+// break the live panel completely. The live path must invoke the read exactly once and return what
+// it produced, ignoring whatever the params happen to carry.
+func Test_selectLogtail_livePathReadsTheFile(t *testing.T) {
+	calls := 0
+
+	// Live params deliberately built on a store that holds a DIFFERENT pair, so returning the stored
+	// one instead of the read's result would be visible.
+	p := liveRender(testRenderTime)
+	p.logPath, p.logBuf = "/var/log/postgresql/stale.log", []byte("stale\n")
+
+	path, buf, err := selectLogtail(p, func() (string, []byte, error) {
+		calls++
+		return "/var/log/postgresql/live.log", []byte("live1\nlive2\n"), nil
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, calls, "the live path must read the log file exactly once per frame")
+	assert.Equal(t, "/var/log/postgresql/live.log", path)
+	assert.Equal(t, []byte("live1\nlive2\n"), buf)
+}
+
+// Test_selectLogtail_livePathPropagatesReadError pins that extracting the read into a thunk did not
+// swallow its error: renderFrame returns it, which on the live path is what surfaces an unreadable
+// log. The repaint path has no error of that kind to report and adds no second cmdline write.
+func Test_selectLogtail_livePathPropagatesReadError(t *testing.T) {
+	boom := errors.New("tail postgres log failed")
+
+	_, _, err := selectLogtail(liveRender(testRenderTime), func() (string, []byte, error) {
+		return "", nil, boom
+	})
+
+	assert.ErrorIs(t, err, boom)
+}
+
+// Test_repaintLogtail_noFileAccess is the same freeze property proved by effect rather than by
+// non-invocation: it hands selectLogtail a read thunk that REALLY reads a real file, and asserts
+// that nothing of that file reaches the screen or the size bookkeeping.
+//
+// The adversary is deliberately a WORKING file, not a broken one. config.logtail points at a real,
+// readable, OPENED file whose content differs from the stored buffer, and its sentinel Size is 1 -
+// SMALLER than the file. Both properties are load-bearing: a smaller sentinel keeps the "unchanged
+// file" early return from firing AND keeps the rotation branch (size < logtail.Size) shut, so a
+// routing regression here SUCCEEDS and renders the adversary's bytes under the adversary's path
+// instead of dying for an unrelated reason. That is what makes every assertion below discriminate:
+// invert the routing and the path/buffer, the rendered bytes and the frozen Size all change at once.
+//
+// The thunk mirrors the live branch's file work (os.Stat, Logfile.Read, the Size write) minus the
+// two gocui-bound bits - v.Size()-derived limits and Reopen's database round-trip - which is the
+// most a unit test can execute of that branch.
+//
+// The exact bytes of a rendered pair are NOT re-asserted here; Test_renderLogtail_outputUnchanged
+// owns that contract. What this test owns is which pair the repaint selects.
+func Test_repaintLogtail_noFileAccess(t *testing.T) {
+	dir := t.TempDir()
+	adversaryPath := filepath.Join(dir, "adversary.log")
+	assert.NoError(t, os.WriteFile(adversaryPath, []byte("ADVERSARY LINE - MUST NOT APPEAR\n"), 0o600))
+
+	logfile := stat.Logfile{Path: adversaryPath, Size: 1}
+	assert.NoError(t, logfile.Open())
+	t.Cleanup(func() { _ = logfile.Close() })
+
+	app := &app{config: newConfig()}
+	app.config.logtail = logfile
+
+	// The frozen frame carries a different pair: another file, another content.
+	app.frame.logPath = "/var/log/postgresql/A.log"
+	app.frame.logBuf = []byte("line1\nline2\n")
+	app.frame.valid = true
+
+	read := func() (string, []byte, error) {
+		info, err := os.Stat(app.config.logtail.Path)
+		if err != nil {
+			return "", nil, err
+		}
+
+		buf, err := app.config.logtail.Read(4, 128)
+		if err != nil {
+			return "", nil, err
+		}
+
+		app.config.logtail.Size = info.Size()
+
+		return app.config.logtail.Path, buf, nil
+	}
+
+	var path string
+	var buf []byte
+	var err error
+	assert.NotPanics(t, func() {
+		path, buf, err = selectLogtail(storedRender(&app.frame), read)
+	})
+	assert.NoError(t, err)
+
+	assert.Equal(t, "/var/log/postgresql/A.log", path, "the repaint must draw the stored header path")
+	assert.Equal(t, []byte("line1\nline2\n"), buf, "the repaint must draw the stored buffer")
+
+	var out bytes.Buffer
+	assert.NoError(t, renderLogtail(&out, path, buf))
+	assert.NotContains(t, out.String(), "ADVERSARY", "the repaint must not put the log file's content on screen")
+	assert.NotContains(t, out.String(), dir, "the repaint must not put the live logtail path in the header")
+
+	assert.Equal(t, int64(1), app.config.logtail.Size, "the repaint must not advance the logfile size bookkeeping")
 }

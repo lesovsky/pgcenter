@@ -1,0 +1,54 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Strong, deliberately mutation-driven test set: the version table pins both boundaries (179999/189999 via the legacy-identity test, 200000 via the forward row), the column-order guard pins fpi,KiB between its neighbours and stats_age at the tail, and Test_StatWALQueries was correctly upgraded from an execution smoke test into a live named-column contract with a version-generic stats_age-outside-DiffIntvl assertion. M1-M4 are genuinely covered. One real hole remains: the only new production expression this task adds is round(wal_fpi_bytes / 1024, 2), and nothing anywhere asserts the /1024 KiB conversion — replacing it with a bare wal_fpi_bytes keeps all four tests green while the screen would show bytes under a KiB header (verified empirically, not reasoned). Secondary: the no-Postgres guards inspect only three substrings, so the declared Ncols=8 is reconciled against the real select list only inside the skippable live test.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "internal/query/wal.go:31 (guarded by internal/query/wal_test.go:44-60 and :118-124)",
+      "issue": "The KiB conversion in the one expression this task adds — round(wal_fpi_bytes / 1024, 2) AS \"fpi,KiB\" — is not pinned by any test. Test_SelectStatWALQuery asserts only Ncols/DiffIntvl; Test_SelectStatWALQuery_PG19ColumnOrder matches only the alias substring `AS \"fpi,KiB\"` and its relative position; Test_StatWALQueries asserts only column NAMES, which are unchanged by any edit to the expression body. Verified empirically rather than by reasoning: mutating the constant to `wal_fpi_bytes AS \"fpi,KiB\"` (or `/ 1000`) leaves every one of the four guard assertions passing, including the ordered live-header list. The resulting user-visible defect is a column labelled KiB rendering raw bytes — a 1024x error on the wal screen that this task's own mutation battery (M1-M4) does not probe, since all four mutations target position, interval, branch condition and constant identity, never the expression body.",
+      "recommendation": "Add one no-Postgres assertion that derives the PG 19 constant from the PG 18 one, which pins the expression text, its exact insertion point, and the untouched-ness of every other column in a single line. Verified to pass against the current constants: in Test_SelectStatWALQuery_PG19ColumnOrder add `assert.Equal(t, PgStatWALPG19, strings.Replace(PgStatWALDefault, \"wal_fpi AS fpi, wal_buffers_full\", `wal_fpi AS fpi, round(wal_fpi_bytes / 1024, 2) AS \"fpi,KiB\", wal_buffers_full`, 1), \"PG 19 query must be the PG 18 query plus exactly the fpi,KiB expression\")`. Under the dropped-/1024 mutation this assertion fails, and it also fails under M2. Optionally strengthen further inside the PG 19 branch of Test_StatWALQueries, where a live connection is already open: scan the single pg_stat_wal row into a float and compare against an independently issued `SELECT round(wal_fpi_bytes / 1024, 2) FROM pg_stat_wal` — that additionally proves the diffed cell is strconv.ParseFloat-parseable, which is the invariant diffPair (internal/stat/postgres.go:792) keys on for every column inside DiffIntvl.",
+      "litmusTestFailed": true
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "internal/query/wal_test.go:44-60",
+      "issue": "The declared Ncols=8 is never reconciled with the PG 19 select list except inside Test_StatWALQueries, which is skippable. The no-Postgres guards look up exactly three substrings (wal_fpi AS fpi, the fpi,KiB alias, wal_buffers_full) plus a suffix, so dropping or renaming any of the remaining five columns — source, waldir_size, wal,KiB, records, stats_age's date_trunc body — inside PgStatWALPG19 leaves all host-runnable tests green while SelectStatWALQuery keeps claiming 8 columns to view.Configure. Test_SelectStatWALQuery_LegacyBranchesUntouched pins constant identity for the PG 14 and PG 18 branches but nothing pins the PG 19 branch's returned string at all — it is asserted only by property, never by identity or completeness.",
+      "recommendation": "The derivation assertion recommended in the previous finding closes this too: because it equates PgStatWALPG19 to PgStatWALDefault with exactly one expression inserted, the 7+1 column count and every carried-over column become structurally guaranteed without a fixture. If it is preferred to keep the two concerns separate, add to Test_SelectStatWALQuery_PG19ColumnOrder: `q, ncols, _ := SelectStatWALQuery(PostgresV19); assert.Equal(t, PgStatWALPG19, q); assert.Equal(t, ncols, strings.Count(q, \" AS \") - 1)` — noting the waldir_size subquery contributes two ` AS ` occurrences, so the derivation assertion is the cleaner form.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/wal_test.go:92-95",
+      "issue": "The strongest assertions this task introduces — the live 8-column count and the ordered PG 19 header — sit behind `t.Skipf(\"postgres %d not available\")`, and a skip is green. The task file itself flags this (\"A skipped PG 19 subtest is not a pass — check the subtest output\"), and the orchestrator confirmed the subtest ran in this round, but nothing in the test enforces it: a future CI image whose PG 19 fixture fails to start reports success while the entire live contract for the new column goes unverified. The pattern is pre-existing across the package (io_test.go does the same), but this task is the first to place a genuinely new behavioural contract behind it rather than a smoke exec.",
+      "recommendation": "Make the skip opt-out rather than unconditional in CI: replace `t.Skipf(...)` with `if os.Getenv(\"PGCENTER_FIXTURES_REQUIRED\") != \"\" { require.NoError(t, err, \"postgres %d fixture must be available in CI\", version) }; t.Skipf(...)`, and export that variable in the CI-image invocation from the task's Verification Steps. Host runs keep skipping; the gate run can no longer pass by skipping. If touching the shared skip idiom is considered out of scope for this task, record the decision in the decisions log so the exposure is tracked rather than forgotten.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "internal/query/wal_test.go:98-106",
+      "issue": "`assert.NoError(t, err)` after `conn.Query(q)` is non-fatal, so on a query error the test continues into `rows.FieldDescriptions()` with a closed error-carrying Rows, collects a nil names slice, and then reports a cascade of three further failures (Len, require.Greater, Equal) that obscure the actual cause. This is exactly the failure mode the task's own caveat predicts — if `wal_fpi_bytes` is renamed at PG 19 beta3/RC, the undefined-column error is the signal, and it should be the first and only thing the output shows.",
+      "recommendation": "Use `require.NoError(t, err)` for the Query call so the subtest aborts at the real cause; `require` is already imported. Same reasoning applies to the `Format` call at line 89-90, where a template error makes every later assertion meaningless.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 18,
+      "passed": 17,
+      "failed": 1
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 1,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

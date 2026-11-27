@@ -1,0 +1,60 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "The SQL change is minimal and correct: pg_ls_archive_statusdir() supplies the same named `name` column, the SELECT list is byte-identical, the result stays a non-NULL bigint, and the degrade-to-n/a path in collectOverviewStat is untouched as the scope fence requires. The three new tests are strong — the anti-vacuous current_user/rolsuper guard runs before the aggregate, the negative half pins SQLSTATE 42501 plus the function name, and role setup goes through the task-01 helper with RESET ROLE deferred right after the successful SET ROLE. One finding: the PgstatOverview.ArchivingBacklogValid field comment (internal/stat/postgres.go:84) was not part of the enumerated four and now contradicts both Decision 11 and the corrected comment 200 lines below it.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 84,
+      "severity": "major",
+      "category": "maintainability",
+      "suggestion": "The struct field comment still reads `ArchivingBacklogValid bool // false on archive_mode=off / missing privilege (42501) -> n/a`. The archive_mode=off half is wrong and now contradicts (a) Decision 11, (b) the comment this task rewrote at :288-291, (c) Test_collectOverviewStat_Degradation:230-232 which states archive_mode=off is a real 0 with Valid=true, and (d) the constant's own doc comment about missing_ok=true. pg_wal/archive_status is created by initdb and exists regardless of archive_mode, so the aggregate returns 0 with Valid=true on the fixtures — it never degrades for that reason (it did not under pg_ls_dir either). The privilege half is still accurate, but only for a role holding neither superuser nor pg_monitor. Suggested text: `// false only when the aggregate itself errs (e.g. 42501 for a role holding neither superuser nor pg_monitor) -> n/a`. Scope note: this line is not one of the four comments the task enumerates, and the task's fence says only the SQL function and those four comments change — so this is deliberately filed as a suggestion, not a blocker. It is, however, the same class of defect the task exists to eliminate (a stale privilege/degradation comment that a future reader would trust), it lives in an in-scope file, and leaving it means the tree carries two contradictory accounts of when the field is n/a. Either fix the one line here or record it explicitly as a finalization carry-forward in the decisions file so it is not lost.",
+      "benefit": "Removes the last comment in the touched files that misstates when the backlog degrades — the exact failure mode (a trusted-but-wrong comment) that let the ADR [010] privilege error survive unnoticed.",
+      "optional": false
+    },
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 288,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The rewritten consumer comment reads \"OWN QueryRow so any failure degrades this field alone to n/a instead of aborting the sample: the aggregate needs superuser or pg_monitor (pg_ls_archive_statusdir), and archive_mode=off leaves nothing to count.\" Each clause is true in isolation, but the colon presents both as reasons a failure occurs, and archive_mode=off is not a failure — it yields a successful 0 with Valid=true. Splitting the sentence (privilege as the failure reason; archive_mode=off as a separate note that the count is legitimately zero) removes the ambiguity.",
+      "benefit": "The comment stops implying the pre-change (incorrect) degradation story it was rewritten to remove.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 258,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The inline restricted-session guard (current_user / rolsuper / pg_has_role) re-implements internal/query/archiver_test.go:285-321 in a weaker form: it omits the pg_auth_members check that pins the role to `pg_monitor and nothing else`. The duplication is structurally forced — assertRestrictedSession is a package-level helper in `query`, and internal/postgres/testing.go is task-01 territory this task must not edit — so this is not a defect in the delivered change. Two options worth recording: add the membership assertion here for parity (a role that accumulated extra grants from an earlier mutation run would currently pass in `stat` but fail in `query`), and propose promoting the guard next to SetupTestRole in internal/postgres at feature finalization so both packages share one implementation.",
+      "benefit": "Equal-strength guards in both packages, and a single home for the privilege-test scaffolding once the task-ownership fences are lifted.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 240,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "`backlogRoleMonitor = \"pgcenter_test_backlog_monitor\"` is declared as a literal in both internal/query/overview_test.go:19-21 and here, with only a comment tying them together. Renaming one side leaves the other silently creating a second role on the fixture clusters rather than failing to compile. Same structural constraint as the guard above (no shared test-only package), so the pragmatic fix is the same finalization move: one exported constant beside SetupTestRole.",
+      "benefit": "Removes a rename hazard that no compiler or test would catch.",
+      "optional": true
+    },
+    {
+      "file": "internal/query/overview_test.go",
+      "line": 19,
+      "severity": "minor",
+      "category": "best-practices",
+      "suggestion": "Because the same role name is now created from two packages, two consequences deserve one clause in the comment. (1) The mutation procedure in the acceptance criteria — flip a call site to SetupTestRole(..., false) and drop the role first — must drop the role for BOTH packages on the PG 17 cluster, otherwise the stat-package test re-grants pg_monitor and the query-package mutation reads as a false pass. (2) SetupTestRole's DO-block CREATE ROLE is not concurrency-safe, so a bare `go test ./...` without `-p 1` could have both packages create the role simultaneously and fail with a duplicate-key error. `make test` and the task's verification command both pin `-p 1`, so impact is low, but the comment claiming the shared name is free of coupling understates it slightly.",
+      "benefit": "Keeps the mutation evidence honest for future rounds and documents the one invocation that could flake.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 1,
+    "minorIssuesCount": 4,
+    "testCoverageAssessment": "excellent"
+  }
+}

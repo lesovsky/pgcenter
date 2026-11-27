@@ -1,0 +1,29 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 2,
+    "critical": 0,
+    "major": 0,
+    "minor": 2
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Held log descriptor pins a rotated-away inode for the full pause duration (accepted, bounded)",
+      "description": "config.logtail.File is held open for the whole pause because the repaint path performs no file access (verified: no os.Stat/Read/Reopen/Size write in the case !p.fromFile branch, top/stat.go:278-285, and confirmed by Test_repaintLogtail_noFileAccess). If Postgres rotates the log during a pause, the descriptor keeps pinning the rotated-away inode, and if the new file outgrows the frozen logtail.Size before resume, the size-based rotation detector (top/stat.go:293) never fires, so Reopen is never called and the stale descriptor is never replaced. This is the residual the implementer named in code comments (top/stat.go:272-277) and in the task's 'Accepted residual' section. Verified it is genuinely bounded, not a leak: only one descriptor is ever open at a time (Reopen always Closes before re-Opening, internal/stat/log.go:39-50), nothing in this diff opens a second descriptor without closing the first, and repeated pause/resume cycles do not accumulate additional open files - the failure mode is 'stuck on one stale descriptor', not 'descriptor count grows'. No unbounded fd leak across repeated rotations.",
+      "impact": "Worst case is a single leaked-until-process-exit file descriptor per affected pause+missed-rotation, and a log panel that silently stops updating until the panel is closed/reopened (L). Not a resource-exhaustion or DoS vector given a local single-instance TUI tool.",
+      "recommendation": "No code change required for this task - already documented in the code comment, the task description, and (per the task's post-completion checklist) intended for the decisions-log/tech-debt register via /done. If closed later, use an identity check (os.SameFile or mtime) instead of the size comparison, as the task itself proposes.",
+      "cwe": "CWE-772"
+    },
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "Pause widens the on-screen persistence window of raw, unescaped log content (pre-existing debt [029], not introduced here)",
+      "description": "frameStore.logBuf now retains the last non-empty logtail read for the entire pause duration (top/pause.go:126-137) and is rendered via the same escape-sequence passthrough as before (renderLogtail, top/stat.go:1344-1356, byte-identical per Test_renderLogtail_outputUnchanged). The buffer is raw PostgreSQL log file content, which routinely contains query text and can contain application data; it is not written to disk, not logged elsewhere, and not exposed via the record/report subsystem (grepped - record/report code is a fully separate package/command and never touches top.frameStore). So this is not a new sink or a new scope of exposure - it stays in-process memory, same trust boundary as the rest of stat.Stat already held in the frame store. What changes is duration: a crafted or sensitive log line that happened to be on screen when Space was pressed now survives on screen (and reappears after a pager/editor round-trip) for the whole pause instead of being overwritten on the next quiet-log repaint. The task's own notes correctly identify this as widening pre-existing debt [029] (unescaped terminal control sequences in log content) rather than introducing a new vulnerability class, and explicitly defer the debt-register update to /done.",
+      "impact": "Slightly longer window during which a malicious/crafted log line (e.g. containing terminal escape sequences from a logged query) remains rendered on screen during an extended pause. No new disk/log/network sink; severity is bounded by the pre-existing debt this task does not fix.",
+      "recommendation": "No fix required in this task - correctly scoped as out-of-scope by the task file. Confirm at /done time that debt [029] is updated to note the pause-duration widening, so the persistence consequence is tracked centrally rather than only in this commit's message.",
+      "cwe": "CWE-668"
+    }
+  ]
+}

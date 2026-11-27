@@ -1,0 +1,18 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "approved",
+  "summary": "Round 3 finds all prior in-scope security findings closed at the planning level. Decision 9 and the AC-41/SC-10 matrix now cover both valid same-PG19 layout directions, blank/populated stats_age, no-diff boundaries, subsequent deltas, full renderer reset, and discriminating sort re-resolution/default restoration. Decision 10 closes the connection-target gap by placing the entire targeted go-test process in the dedicated disposable container/network namespace, requiring fail-closed marker plus pg_control_system() system_identifier verification immediately before mutation, and retaining external-supervisor destruction, no concurrency, freeze-margin checks, and object/config cleanup. Decision 11 requires deterministic named live-TUI-only INFO with PG19 CLI evidence; Decision 8 explicitly extends debt [029]; Decision 12 requires synthetic no-secret data, minimized sanitized evidence, raw-artifact exclusion/deletion, and secret scanning. SQL ViewType remains constrained to user/all, and the privilege-test plan remains adequate. No embedded secret values were found. Implementation and the required targeted/external evidence remain future execution gates. The only remaining finding is the pre-existing malformed-archive Ncols issue, explicitly out of scope.",
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "out_of_scope",
+      "category": "CWE-20/CWE-129 - malformed recorded archive denial of service",
+      "title": "Archive-controlled Ncols remains unvalidated; valid layout boundaries do not fix malformed shapes",
+      "description": "PGresult.validate still checks decoded row widths against len(Cols) and Nrows against the decoded row count, but does not require Ncols==len(Cols). A crafted archive can declare an excessive Ncols with otherwise internally consistent columns and rows. On a diffed screen, diff loops to attacker-controlled curr.Ncols and indexes current/previous row slices beyond their actual widths, producing an index-out-of-range panic. Attack vector: an operator runs pgcenter report on an untrusted downloaded or replaced tar. Decision 8 explicitly and correctly distinguishes this pre-existing malformed-Ncols class from Decision 9's valid adjacent-layout handling, so it is not a feature 018 regression or blocker.",
+      "location": "internal/stat/postgres.go:558-573, 580-660; docs/tech-debt.md:268-292; 018-feat-tables-autovacuum-area-tech-spec.md:216-242 (Decisions 8 and 9)",
+      "verified": true,
+      "evidence": "Read-only source inspection confirms validate still lacks Ncols/Cols equality validation and diff still uses `for l := 0; l < curr.Ncols; l++` before indexing row values. Debt [020] records prior reproduction of this panic. Read-only command `go test ./report -run 'Test_processData_versionChange|Test_app_doReport_errorPathDoesNotHang' -count=1 -v` passed the existing version-change and error-drain tests; these do not assert malformed-Ncols rejection. The planned SC-10 evidence is intentionally valid-layout evidence and cannot close this class.",
+      "recommendation": "Track separately under debt [020]: reject negative or implausible dimensions, require Ncols==len(Cols), validate row shapes and consumer indices, reject incompatible adjacent layouts before diff/alignment, and return a descriptive report error rather than panicking. Add malformed-archive tests for oversized/undersized Ncols, inconsistent rows, and invalid sort/unique keys. Do not present Decision 9 or SC-10 as mitigation for attacker-declared malformed metadata."
+    }
+  ]
+}

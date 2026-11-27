@@ -1,0 +1,201 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "mode": "feature",
+  "round": 2,
+  "status": "approved",
+  "base": "2dbd6267515f552d9660894d1b05fd3fb69e9bee",
+  "head": "0003ff431b77106238d23b7a75b7450c3582428e",
+  "summary": "Approved. Round-1 F-01, F-02 and F-03 are fully closed by the separate b5af8f2 and 191cc07 commits. The rounded-tie fixture now owns a cryptographically random quoted schema, fails rather than adopting a collision, and cleans only that schema. Two real concurrent PG19 executions passed while a pre-existing sentinel survived and no generated schemas remained. The exact freeze-qa path and all stale roadmap status/scope/navigation statements are corrected. The owner-approved SC-1 re-freeze chain is internally consistent: accepted base-reFreeze-3 is ready, all five reFreeze-3-feature records are 0/pass/complete, the independent acceptance review is approved, and accepted base/feature/current harness bytes match. These are re-freeze validation results, not the still-pending final feature-r1 QA. Focused query, replay, registry and TUI checks pass, and no new cross-task regression or substantive finding remains.",
+  "finding_counts": {
+    "total": 0,
+    "critical": 0,
+    "major": 0,
+    "minor": 0,
+    "in_scope": 0,
+    "out_of_scope": 0
+  },
+  "findings": [],
+  "round_1_finding_closure": [
+    {
+      "id": "F-01",
+      "status": "closed",
+      "commit": "b5af8f253cf0d2cb23247f3cfabb8696b80cdceb",
+      "verified": true,
+      "evidence": "The commit changes only internal/query/autovacuum_scores_test.go. Current lines 190-198 exercise 64 random schema names; lines 214-221 use crypto/rand plus hex, pgx.Identifier.Sanitize, plain CREATE SCHEMA and cleanup of only the generated schema. All former fixed public-schema DROP TABLE statements are gone. In a fresh network-none PG19 container, two concurrent invocations of Test_StatAutovacuumScoresQuery_RoundedTieRawOrder and Test_AutovacuumScoresRoundedTieSchemaUniqueness both ran and passed, including both raw_descending_score_order_survives_rounded_ties subtests. A precreated public.pgcenter_test_autovacuum_score_low sentinel containing id=42 still had exactly that row after both runs; pg_namespace contained zero pgcenter_autovacuum_scores_% schemas after cleanup. The disposable container was removed and no review containers remained."
+    },
+    {
+      "id": "F-02",
+      "status": "closed",
+      "commit": "191cc071592c6adfb97748f16756e72537953a16",
+      "verified": true,
+      "evidence": "The decomposition now gives exactly ${KIMI_CODE_HOME}/skills/freeze-qa/scripts/run-acceptance.sh docs/features/018-feat-tables-autovacuum-area/acceptance feature-r1 900. The duplicated feature directory is absent, and the single-component acceptance directory exists. No acceptance runner was invoked by this review."
+    },
+    {
+      "id": "F-03",
+      "status": "closed",
+      "commit": "191cc071592c6adfb97748f16756e72537953a16",
+      "verified": true,
+      "evidence": "docs/roadmap-0.12.0.md lines 344-368 now state that implementation/freeze are complete while feature-r1 and manual SC-5 through SC-8 remain pending. Scope is limited to tables/indexes with functions explicitly unchanged; PG19 t/T and below-PG19 disabled-menu behavior match the code; functions.go is removed from plumbing."
+    }
+  ],
+  "refreeze_consistency": {
+    "status": "consistent_not_final_qa",
+    "accepted_base": {
+      "label": "base-reFreeze-3",
+      "sha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+      "dirty": false,
+      "manifest_valid": true,
+      "verdict": "ready",
+      "outcomes": "SC-2/SC-4 pass; SC-1/SC-3/SC-10 reach their exact approved feature-missing checkpoints with contractValid=true."
+    },
+    "feature_validation": {
+      "label": "reFreeze-3-feature",
+      "sha": "e36af86cdc8df7232c00144007b90f9d004868e0",
+      "dirty": false,
+      "manifest_valid": true,
+      "outcomes": "SC-1, SC-2, SC-3, SC-4 and SC-10 are each exit=0, origin=pass, checkpoint=complete, contractValid=true."
+    },
+    "independent_review": "018-feat-tables-autovacuum-area-acceptance-refreeze-review.json is approved/approved with zero findings and freezeAllowed=true.",
+    "integrity": "Current manifest validation passes 9/9 entries. Its SHA-256 is f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195, matching freeze.json/readiness/review. Accepted base, feature-validation SHA and current HEAD have byte-identical scenario/manifest files. Only SC-1.sh and scenario-manifest.sha256 differ from the original freeze. All ten accepted base/feature logs pass sanitize.py check --input.",
+    "repair_history": "base-reFreeze-1 PermissionError and base-reFreeze-2 UTC/window failure remain preserved with both triage reports. The accepted SC-1 script verifies NetworkMode=none, records as host UID:GID without permission relaxation, and uses explicit UTC for recorder and host report context.",
+    "boundary": "This review did not execute acceptance. reFreeze-3-feature is harness validation at e36af86, not the fresh post-review feature-r1 run; no final QA claim is made."
+  },
+  "requirement_coverage": {
+    "interpretation": "Implementation/test and re-freeze validation coverage are distinguished from final acceptance. Passing reFreeze-3-feature records do not replace feature-r1, manual SC-5 through SC-8, or the final AC-32 quality gate.",
+    "user_stories": [
+      {
+        "id": "US-1",
+        "status": "implemented_and_tested_pending_SC5",
+        "evidence": "The eleven-column query and registry expose scores and actual vacuum/analyze decisions; live PG19 value tests remain passing. Visual threshold-plus-verdict reading remains manual SC-5."
+      },
+      {
+        "id": "US-2",
+        "status": "implemented_and_concurrently_reverified_pending_SC5",
+        "evidence": "Raw score ordering and absolute dead_total are implemented; two concurrent real PG19 rounded-tie tests passed high/medium/low raw ordering without fixture interference. Visual queue/work assessment remains SC-5."
+      },
+      {
+        "id": "US-3",
+        "status": "refreeze_SC1_validated_final_gates_pending",
+        "evidence": "PG19 trailing stats_age selectors, no-diff placement and replay boundaries remain intact. reFreeze-3-feature SC-1 passes real record/report active/untouched/age controls; final feature-r1 and manual SC-8 remain pending."
+      },
+      {
+        "id": "US-4",
+        "status": "targeted_PASS_pending_SC6",
+        "evidence": "Task 01's dedicated pg_toast wraparound PASS and red exception-removal mutation remain valid; no subsequent change touched that path. Manual SC-6 remains pending."
+      },
+      {
+        "id": "US-5",
+        "status": "implemented_and_unit_tested_pending_SC7",
+        "evidence": "Focused cycle, menu, refusal and real keybinding tests pass at current HEAD; roadmap wording now matches. Visible PG18 NOTICE and master A/B behavior remain SC-7."
+      }
+    ],
+    "acceptance_criteria": [
+      {"id": "AC-1", "status": "covered_pending_SC5", "evidence": "Locked/live eleven-column order and Ncols=11 remain covered."},
+      {"id": "AC-2", "status": "covered_pending_SC5", "evidence": "Decision columns and component-score positions remain locked in query/live field order."},
+      {"id": "AC-3", "status": "covered_pending_SC5", "evidence": "All six SQL rounding expressions and live two-decimal assertions remain present."},
+      {"id": "AC-4", "status": "covered_pending_SC5", "evidence": "Boolean ::text casts and true/false live assertions remain present."},
+      {"id": "AC-5", "status": "covered_pending_SC5", "evidence": "Outer s.schemaname/s.relname relation expression remains pinned and mutation-checked."},
+      {"id": "AC-6", "status": "covered_pending_SC5", "evidence": "OrderKey=1, descending order and SQL raw-score ordering remain pinned."},
+      {"id": "AC-7", "status": "covered_and_concurrently_reverified", "evidence": "Both concurrent real PG19 runs passed the named raw descending rounded-tie assertion after the schema-isolation fix."},
+      {"id": "AC-8", "status": "covered", "evidence": "LEFT JOIN on relid and absolute nullable n_dead_tup/dead_total remain structurally and live tested."},
+      {"id": "AC-9", "status": "covered", "evidence": "Schema filtering remains based on outer s.schemaname, preserving unmatched rows."},
+      {"id": "AC-10", "status": "covered_pending_SC6", "evidence": "Live user/all query tests and current toggle tests remain passing; interactive observation is pending."},
+      {"id": "AC-11", "status": "targeted_PASS_pending_SC6", "evidence": "Dedicated system-schema wraparound PASS and named mutation evidence remain recorded."},
+      {"id": "AC-12", "status": "covered", "evidence": "DiffIntvl{0,0} and mutation-checked empty-cell pass-through remain unchanged."},
+      {"id": "AC-13", "status": "covered_pending_SC5", "evidence": "Current focused tests pass PG19 tables to autovacuum_scores through dispatch and the bound t handler."},
+      {"id": "AC-14", "status": "covered_pending_SC5", "evidence": "Current focused tests pass autovacuum_scores back to tables."},
+      {"id": "AC-15", "status": "covered_pending_SC5_SC7", "evidence": "Unrelated screens still route to tables in pure and bound-handler tests."},
+      {"id": "AC-16", "status": "covered_pending_SC5", "evidence": "Two-item PG19 menu, labels and both enabled selections remain tested."},
+      {"id": "AC-17", "status": "code_review_covered_pending_SC5", "evidence": "One cmdline write per t/menu branch remains unchanged; visible exactly-once output is not claimed from unit tests."},
+      {"id": "AC-18", "status": "covered_pending_SC7", "evidence": "Below-PG19 t remains on tables in current cycle and keybinding tests."},
+      {"id": "AC-19", "status": "covered_pending_SC7", "evidence": "Exact disabled suffix remains pinned in construction and real menu rendering tests."},
+      {"id": "AC-20", "status": "covered_pending_SC7", "evidence": "Disabled selection still leaves the view unchanged, sends nothing and closes/resets the menu; visible NOTICE remains manual."},
+      {"id": "AC-21", "status": "refreeze_SC1_passed_final_gates_pending", "evidence": "PG19 tables trailing stats_age is implemented and reFreeze-3-feature SC-1 passes its production report assertions."},
+      {"id": "AC-22", "status": "refreeze_SC1_passed_final_gates_pending", "evidence": "PG19 indexes trailing stats_age is implemented and reFreeze-3-feature SC-1 passes its production report assertions."},
+      {"id": "AC-23", "status": "refreeze_SC4_passed_final_feature_r1_pending", "evidence": "Legacy selector/static layouts remain pinned; reFreeze-3-feature SC-4 passes PG17/PG18 A/B and semantic controls."},
+      {"id": "AC-24", "status": "covered", "evidence": "stats_age remains above inclusive diff bounds and the complete relation replay tests pass."},
+      {"id": "AC-25", "status": "covered", "evidence": "pg_stat aliases t/s remain pinned with wrong-pg_statio-source mutations recorded red."},
+      {"id": "AC-26", "status": "refreeze_SC1_passed_final_gates_pending", "evidence": "TEMP NULL probes and reFreeze-3-feature SC-1 active/untouched controls cover blank reset values; manual SC-8 is pending."},
+      {"id": "AC-27", "status": "refreeze_SC1_passed_not_final_acceptance", "evidence": "reFreeze-3-feature SC-1 records live tables/indexes samples=2 and active_untouched_read=true under unchanged DB-derived age/growth assertions. Fresh feature-r1 and SC-8 remain pending."},
+      {"id": "AC-28", "status": "refreeze_SC1_passed_final_gates_pending", "evidence": "The accepted feature SC-1 run passes active/untouched archive/report controls; no final feature-r1 or SC-8 claim is made."},
+      {"id": "AC-29", "status": "refreeze_SC4_passed_final_feature_r1_pending", "evidence": "functions remains unchanged and reFreeze-3-feature SC-4 passes both versions' semantic and byte comparisons."},
+      {"id": "AC-30", "status": "refreeze_SC4_passed_final_feature_r1_pending", "evidence": "sizes remains unchanged and reFreeze-3-feature SC-4 passes both versions' semantic and byte comparisons."},
+      {"id": "AC-31", "status": "refreeze_SC1_passed_final_feature_r1_pending", "evidence": "The accepted feature SC-1 log has archive_ticks=3, autovacuum_scores_members=0 and record_info=live_tui_only false_version_reason=false."},
+      {"id": "AC-32", "status": "pending_final_quality_gate", "evidence": "Focused current-HEAD tests/vet/gofmt pass and prior live/race task evidence remains valid. Final make test, E2E, build, lint and vuln were not run as final QA."},
+      {"id": "AC-33", "status": "refreeze_SC2_passed_final_feature_r1_pending", "evidence": "Current report tests pass; accepted SC-2 validates mixed tables/indexes new-layout samples=2 entries_read=true."},
+      {"id": "AC-34", "status": "covered", "evidence": "Locked structure and live PG19 FieldDescriptions coverage remains unchanged."},
+      {"id": "AC-35", "status": "covered_pending_SC5", "evidence": "Current help-template t/T test passes; visual help remains manual."},
+      {"id": "AC-36", "status": "refreeze_SC3_passed_final_feature_r1_pending", "evidence": "Description tests pass and accepted SC-3 is 0/pass/complete for both production describe outputs."},
+      {"id": "AC-37", "status": "SC9_passed", "evidence": "Feature catalog coverage and Task 06 SC-9 PASS remain unchanged."},
+      {"id": "AC-38", "status": "SC9_passed", "evidence": "Both Project Knowledge references and Task 06 SC-9 PASS remain unchanged."},
+      {"id": "AC-39", "status": "SC9_passed", "evidence": "Release notes and Task 06 SC-9 PASS remain unchanged."},
+      {"id": "AC-40", "status": "SC9_passed", "evidence": "Debt [035]/[029] extensions, [037], unchanged [020] and Task 06 SC-9 PASS remain intact; corrected roadmap is separately closed under F-03."},
+      {"id": "AC-41", "status": "refreeze_SC10_passed_final_feature_r1_pending", "evidence": "Current replay tests pass and accepted SC-10 passes eight controls plus all eight layout cases with boundary=1 and known 30/40 deltas."}
+    ],
+    "scenarios": [
+      {"id": "SC-1", "status": "refreeze_validation_passed_final_feature_r1_pending", "evidence": "Accepted base reaches its feature-missing checkpoint after positive controls; reFreeze-3-feature passes. Not relabelled final QA."},
+      {"id": "SC-2", "status": "refreeze_validation_passed_final_feature_r1_pending", "evidence": "Accepted base and feature validation both pass; fresh feature-r1 remains pending."},
+      {"id": "SC-3", "status": "refreeze_validation_passed_final_feature_r1_pending", "evidence": "Accepted base reaches its expected checkpoint and feature validation passes; fresh feature-r1 remains pending."},
+      {"id": "SC-4", "status": "refreeze_validation_passed_final_feature_r1_pending", "evidence": "Regression passes in accepted base/feature validation; continuous final feature-r1 rerun remains pending."},
+      {"id": "SC-5", "status": "pending_manual", "evidence": "PG19 visual columns/values/order, both entry paths, exactly-once messages, help and scrolling remain unexecuted."},
+      {"id": "SC-6", "status": "pending_manual", "evidence": "Interactive user/all and wraparound-row observation remains pending despite targeted query evidence."},
+      {"id": "SC-7", "status": "pending_manual", "evidence": "PG18 master A/B legacy t and visible exactly-once disabled NOTICE remain pending."},
+      {"id": "SC-8", "status": "pending_manual", "evidence": "TUI active/untouched reset/growth cycle remains pending despite re-freeze SC-1 report validation."},
+      {"id": "SC-9", "status": "passed", "evidence": "Task 06 explicitly passed AC-37 through AC-40; round-1 roadmap inconsistency is now also corrected."},
+      {"id": "SC-10", "status": "refreeze_validation_passed_final_feature_r1_pending", "evidence": "Accepted base reaches its expected checkpoint and feature validation passes the complete matrix; fresh feature-r1 remains pending."}
+    ]
+  },
+  "verification": [
+    {
+      "command": "git show b5af8f2 -- internal/query/autovacuum_scores_test.go; git show 191cc07 -- <decomposition and roadmap>; git diff --check 2dbd6267515f552d9660894d1b05fd3fb69e9bee..0003ff431b77106238d23b7a75b7450c3582428e",
+      "verified": true,
+      "result": "PASS. The fixes are separate one-file test and two-file documentation commits; the complete diff has no whitespace errors."
+    },
+    {
+      "command": "Fresh lesovsky/pgcenter-testing:0.0.11 network-none PG19 container; precreate public sentinel; run two concurrent go test ./internal/query/ -run '^(Test_StatAutovacuumScoresQuery_RoundedTieRawOrder|Test_AutovacuumScoresRoundedTieSchemaUniqueness)$' -count=1 -v processes; query sentinel/generated schemas; remove container",
+      "verified": true,
+      "result": "PASS. Both uniqueness tests and both live rounded-tie parent/subtests passed (package times 1.114s and 1.102s). Sentinel/generated-schema result was exactly 1:0: sentinel id=42 survived and zero generated schemas remained. Final output: 'PASS: two concurrent rounded-tie runs passed; sentinel survived; zero generated schemas remained; disposable PG19 removed'. A later Docker listing confirmed no review containers remained."
+    },
+    {
+      "command": "go test ./internal/query/ -run '^(Test_AutovacuumScoresRoundedTieSchemaUniqueness|Test_SelectStatAutovacuumScoresQuery|Test_StatAutovacuumScoresQuery_Structure|Test_SelectStatTablesQuery|Test_StatTablesQuery_StatsAgeSource|Test_SelectStatIndexesQuery|Test_StatIndexesQuery_StatsAgeSource)$' -count=1 -v && go vet ./internal/query/ && gofmt check",
+      "verified": true,
+      "result": "PASS; all selected named tests/subtests ran, and vet/format checks passed."
+    },
+    {
+      "command": "go test ./report/ ./internal/view/ -count=1 && go test ./top/ -run '^(Test_tablesNextView|Test_switchViewTo|Test_toggleSysTables|Test_menuSelectTables|Test_menuTablesVersionLabels|Test_keybindingsTables.*|Test_helpTemplate_tablesEntry)$' -count=1",
+      "verified": true,
+      "result": "PASS: report 0.905s, internal/view 0.019s and focused top 0.008s. No cross-task replay, registry, navigation, toggle, menu, keybinding or help regression was observed."
+    },
+    {
+      "command": "LC_ALL=C sha256sum -c scenario-manifest.sha256; compare manifest digest to freeze.json; bash -n all five scenarios and common.sh",
+      "verified": true,
+      "result": "PASS; 9/9 manifest entries are OK, digest f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195 matches the accepted re-freeze metadata, and shell syntax is valid."
+    },
+    {
+      "command": "python3 scenarios/lib/sanitize.py check --input <each of ten accepted base-reFreeze-3/reFreeze-3-feature logs>",
+      "verified": true,
+      "result": "PASS for all ten logs. The first consistency invocation incorrectly supplied a positional path, was rejected with usage/--input required, and was not counted; the corrected command passed."
+    },
+    {
+      "command": "Read-only JSON/path consistency validator over decomposition, base-reFreeze-3/result.json, reFreeze-3-feature/result.json, freeze.json and independent acceptance review",
+      "verified": true,
+      "result": "PASS: corrected exact path exists; all five base outcomes match their expected checkpoints; all five feature-validation records are 0/pass/complete with contractValid=true; freeze is ready; independent review is approved with zero findings."
+    },
+    {
+      "command": "git diff --exit-code affb927d2fd536172e31a3efb3e6146d0ba3b57d e36af86cdc8df7232c00144007b90f9d004868e0 -- <scenario/manifest files>; equivalent e36af86..0003ff4 comparison; original-freeze changed-file check",
+      "verified": true,
+      "result": "PASS: accepted base/feature/current HEAD share identical harness bytes; only SC-1.sh and scenario-manifest.sha256 changed from original freeze. e36af86 is an ancestor of current HEAD."
+    }
+  ],
+  "rejected_setup_attempt": {
+    "command": "Initial disposable PG19 concurrency setup using pg_isready as the readiness condition",
+    "result": "Not counted as evidence. PostgreSQL accepted readiness before prepare-test-environment.sh finished creating pgcenter_fixtures, so sentinel setup failed with database does not exist. The trap removed the container. The successful rerun required SELECT 1 against pgcenter_fixtures before sentinel creation and concurrent tests."
+  },
+  "verification_limits": [
+    "No final feature-r1 acceptance run was executed or claimed. reFreeze-3-feature is owner-approved harness validation only.",
+    "Manual SC-5 through SC-8 remain pending; no terminal-visible result is inferred from unit tests.",
+    "Final AC-32 make test, testing/e2e.sh, make build, make lint and make vuln gates remain pending. Focused checks in this review do not replace them.",
+    "Known accepted debts [020], [029], [035] and [037] remain outside this fix verification and are not claimed closed."
+  ],
+  "workspace": "No files were edited except the requested round-2 JSON report. No agents were spawned and no acceptance/final QA was run. Temporary test logs and caches lived only inside the disposable container; both setup-attempt containers were removed, no review containers remain, and the repository was clean before this report was written."
+}

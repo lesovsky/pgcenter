@@ -1,0 +1,9 @@
+scenarios/SC-1.sh: ЦЕЛ
+scenarios/SC-2.sh: ЦЕЛ
+scenarios/SC-3.sh: ЦЕЛ
+scenarios/SC-4.sh: ЦЕЛ
+scenarios/SC-10.sh: ЦЕЛ
+scenarios/lib/common.sh: ЦЕЛ
+scenarios/lib/fixtures.py: ЦЕЛ
+scenarios/lib/reports.py: ЦЕЛ
+scenarios/lib/sanitize.py: ЦЕЛ

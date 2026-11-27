@@ -1,0 +1,34 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Test_resizeDetector_observe in top/ui_test.go covers every TDD-anchor case as a stateful sequence (zero start, identical repeat, width-only, height-only, growth, shrink, live-never-repaints, resize-while-live-then-paused). Verified by actually running two mutations against top/ui.go: (1) an answer-before-record mutation that would repaint forever was caught by every subtest's repeat/terminate step; (2) an x-only comparison mutation was caught specifically by the height-only subtest, confirming that row pins the dimension it claims to. Both mutations reverted; git diff on top/ui.go is clean. git diff --stat on top/ui_test.go shows only additions (96/+, 0/-); the five named pre-existing tests re-run clean. The decision to skip a duplicate latch test and rely on top/pause_test.go::Test_repaintFailureLatch_reportsOncePerTransition is correct: that test drives frameStore.recordRepaint directly through a fail/fail/fail/success/fail sequence and asserts true only on the no-failure→failure transition, which is exactly the acceptance criterion's 'one message per failure transition.' The one real gap — layout's own wiring (the observe() call plus the paused-gated repaintStored call) — cannot be unit-tested without a live *gocui.Gui and is correctly left to task 10's tmux stand run; this is disclosed plainly as a finding below, not silently accepted.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/ui.go:334-336 (the `if resize.observe(...) { repaintStored(app) }` call inside layout)",
+      "issue": "The wiring that actually calls resizeDetector.observe with real gocui-sourced values and gates repaintStored on its answer is untested by any unit test in this diff. It cannot be: layout closes over app.ui.Size(), and a *gocui.Gui with a non-zero size cannot be constructed outside the gocui package, so there is no seam left to unit-test after the detector itself is extracted.",
+      "recommendation": "No code change needed — this is an accepted structural limit, not an oversight. Confirm task 10's stand run exercises exactly this line (tmux resize-window 190 -> 60 -> 190 while paused, per the user-spec's step 5) before the feature is considered done, since it is the only place this wiring is ever exercised. If task 10 is skipped or the stand is unavailable at final-wave time, this line ships with zero coverage of any kind.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 1,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  },
+  "techDebt": {
+    "present": false,
+    "notes": "No new tech debt introduced by this task. The layout-wiring gap noted above is a pre-existing structural property of gocui (no resize event, no constructible *gocui.Gui in tests), not debt created by this change — it is the same class of gap the tech-spec already accepts for the whole file (see Context Files note on `layout` being 'not testable in this package'). The naming deviation (no separate `sizeChanged` helper, contrary to the tech-spec's Testing Strategy bullet) is a deliberate, logged decision (see task 07 'What to do' and the commit message), not debt."
+  }
+}

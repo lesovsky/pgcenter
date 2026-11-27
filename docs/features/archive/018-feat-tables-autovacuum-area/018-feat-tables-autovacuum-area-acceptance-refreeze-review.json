@@ -1,0 +1,338 @@
+{
+  "feature": "018-feat-tables-autovacuum-area",
+  "mode": "freeze",
+  "reviewType": "fresh_independent_semantic_batch_refreeze",
+  "status": "approved",
+  "verdict": "approved",
+  "freezeAllowed": true,
+  "readinessUpdateAllowed": true,
+  "summary": "The owner-approved SC-1 batch re-freeze is semantically ready. The accepted clean base run reaches every approved checkpoint for the intended reason, and the clean feature run passes all five scenarios. SC-1 now uses an explicitly verified network-none container, records as the host UID:GID without relaxing archive permissions, and aligns recorder filenames, host report bounds, host report parsing, and report assertions in UTC. All original assertions and positive controls remain intact; only SC-1.sh and its manifest entry changed. Both failed attempts and both triage reports remain preserved. No semantic, readiness, integrity, sanitization, or commit-separation finding remains.",
+  "reviewedRange": {
+    "originalFreeze": "44c953532a043de5de847f679df27b65c019a408",
+    "currentHead": "e36af86cdc8df7232c00144007b90f9d004868e0",
+    "acceptedBaseSha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+    "acceptedBaseHarnessMatchesHead": true,
+    "harnessFilesChangedAcrossRange": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256"
+    ],
+    "unchangedHarnessFiles": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-2.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-3.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-4.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-10.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/fixtures.py",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/sanitize.py"
+    ]
+  },
+  "findingCounts": {
+    "total": 0,
+    "blocker": 0,
+    "major": 0,
+    "minor": 0
+  },
+  "findings": [],
+  "acceptedBase": {
+    "label": "base-reFreeze-3",
+    "sha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+    "dirty": false,
+    "manifestValid": true,
+    "scenarioCount": 5,
+    "expectedFeatureMissingCount": 3,
+    "regressionPassCount": 2,
+    "result": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json",
+    "manifestLog": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/manifest.log"
+  },
+  "featureValidation": {
+    "label": "reFreeze-3-feature",
+    "sha": "e36af86cdc8df7232c00144007b90f9d004868e0",
+    "dirty": false,
+    "manifestValid": true,
+    "scenarioCount": 5,
+    "allScenariosExitZeroPassComplete": true,
+    "result": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/result.json",
+    "manifestLog": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/manifest.log"
+  },
+  "readinessChecks": [
+    {
+      "id": "owner-approved-batch-and-preserved-attempts",
+      "status": "pass",
+      "summary": "The review treats the three attempts as one explicitly owner-reauthorized cohesive harness-only batch, not as an automatic third repair. base-reFreeze-1 retains the verified PermissionError/assertion_tool_failed outcome; base-reFreeze-2 retains the distinct UTC/window live_recording_contract_violation after archive access was repaired. Both clean failed results, all sibling logs, both triage reports, and the stop/reauthorization context remain visible. Neither failed attempt is used as accepted readiness evidence.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-refreeze-triage-round1.json",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-refreeze-triage-round2.json",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decisions.md"
+      ]
+    },
+    {
+      "id": "sc1-network-isolation",
+      "status": "pass",
+      "summary": "The original default-bridge/port-publishing design is removed. docker run uses --network none and has no --publish; host port discovery and docker port parsing are gone. A bounded docker inspect must return exactly NetworkMode=none before setup, and any other value ends as a harness failure. PostgreSQL, psql, and pgcenter record all communicate over container loopback 127.0.0.1:21919, so removing external networking does not replace the production CLI path with a proxy or mock.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:17-32",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:34-62",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:68-111"
+      ]
+    },
+    {
+      "id": "sc1-host-ownership-and-restrictive-permissions",
+      "status": "pass",
+      "summary": "The recorder runs through docker exec --user $(id -u):$(id -g), so live.tar is created directly with host ownership rather than left root-owned on the bind mount. The host-side assertion process can read it, as independently demonstrated by archive_ticks=3 in both accepted runs. There is no chmod/chown relaxation, world-readable mode, ACL change, or recorder.go product change. common.sh retains umask 077, ACC_TMP mode 0700, and trap deletion; the production recorder's restrictive creation behavior remains untouched.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:18-21",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:109-119",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh:17-24",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-1.log:1",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-1.log:1",
+        "git show --stat f1660eac14119e2f4f9bc5806455d96237c99a37"
+      ]
+    },
+    {
+      "id": "sc1-end-to-end-utc-consistency",
+      "status": "pass",
+      "summary": "export TZ=UTC applies to host date bound generation, the host production report binary, and Python report-time assertions. docker exec --env TZ=UTC independently pins the in-container production recorder, whose naive archive-member timestamps must be interpreted in the same zone. Epoch-based host-before/host-after capture remains timezone independent, while PostgreSQL clock_timestamp() values retain offsets for aware datetime conversion. Thus archive filename filtering, rendered sample timestamps, age bounds, and elapsed-time comparisons share one coherent UTC context. Base-reFreeze-2's valid-tick exclusion is resolved without changing product timestamp behavior or weakening any age assertion.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:7-10",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:94-114",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh:121-143",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py:315-420",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-1.log:1-8",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-1.log:1-9"
+      ]
+    },
+    {
+      "id": "production-cli-and-original-assertions",
+      "status": "pass",
+      "summary": "SC-1 still builds ./cmd and invokes the real record and report commands. The binary is bind-mounted read-only into the isolated container; report runs as the real host binary. The complete approved delta changes only network placement, recorder execution identity, and UTC context. Fixture SQL, DB/reset/clock captures, three-tick requirement, active/untouched identities, trailing stats_age layouts, DB-derived +/-1 second age bounds, growth, archive exclusion, sanitized INFO wording, inconsistent-layout rejection, output hashes, and base checkpoint are unchanged. All other scenario scripts and all assertion libraries are byte-identical to the original freeze.",
+      "evidence": [
+        "git diff 44c953532a043de5de847f679df27b65c019a408..e36af86cdc8df7232c00144007b90f9d004868e0 -- docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-freeze-review.json"
+      ]
+    },
+    {
+      "id": "manifest-completeness-and-integrity",
+      "status": "pass",
+      "summary": "The current manifest contains exactly the five scenario scripts and four shared libraries. Direct sha256sum -c validation passed all nine entries, and both accepted run manifest.log files independently contain nine successful checks. The manifest's own SHA-256 is f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195. SC-1's entry is 21b6d7e310f90cd398afab7d78c849d182739c12ba8d2f8afe292c3ecbb076eb; every other entry remains at its original approved value. Bash syntax and Python AST checks also passed.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/manifest.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/manifest.log"
+      ]
+    },
+    {
+      "id": "accepted-base-checkpoints-and-error-transparency",
+      "status": "pass",
+      "summary": "Direct result/log review confirms all five contractValid=true outcomes. SC-1 reaches pg19_stats_age_report_unavailable only after three archive ticks, zero autovacuum_scores members, and readable two-sample tables/indexes old-layout reports pass. SC-3 and SC-10 reach exactly relation_stats_age_descriptions_missing and same_pg19_layout_change_unsupported after their unchanged controls. SC-2 and SC-4 end 0/pass/complete. No accepted log contains a traceback, panic, PermissionError, SQL/connection/DNS/TLS/tooling diagnostic, assertion-tool failure, unexpected exit, or missing result; no expected exit code conceals setup or parsing failure.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-2.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-3.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-4.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-10.log"
+      ]
+    },
+    {
+      "id": "feature-validation-and-positive-controls",
+      "status": "pass",
+      "summary": "Direct feature result/log review confirms five unique scenarios, each exit=0, origin=pass, checkpoint=complete, contractValid=true, on the requested clean manifest-valid HEAD. SC-1 additionally passes the exact record INFO control and rejects a false version explanation. SC-2 selects and validates the new PG19 layouts; SC-3 validates both describe outputs; SC-4 repeats all PG17/PG18 four-screen semantic controls before byte comparison; SC-10 passes all eight same-layout controls and all eight bidirectional boundary cases with known deltas.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/result.json",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-2.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-3.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-4.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-10.log"
+      ]
+    },
+    {
+      "id": "sanitized-evidence-and-cleanup",
+      "status": "pass",
+      "summary": "Every accepted base and feature scenario log passed sanitize.py check in fresh direct review. Published evidence remains limited to minimized assertion/fixture lines, hashes, and final markers; no raw archive, transcript, SQL capture, credential, host temporary path, or environment dump is published. Raw files remain in the external mode-0700 temporary directory and are removed by the unchanged EXIT trap along with the container. The new run directories are currently untracked evidence awaiting handoff, not hidden modifications to product or harness sources.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/common.sh:17-49",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/sanitize.py",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature"
+      ]
+    },
+    {
+      "id": "product-and-harness-commit-separation",
+      "status": "pass",
+      "summary": "Each harness repair commit contains only SC-1.sh and scenario-manifest.sha256: fcea62e isolates networking, f1660ea supplies host UID:GID, and e36af86/affb927 add end-to-end UTC. No product source is present in any of those commits. Product changes occur earlier in separate implementation commits. The accepted base branch and feature HEAD have byte-identical scenario scripts and manifest, so their outcome difference is attributable to implementation rather than divergent harnesses.",
+      "evidence": [
+        "git show --stat fcea62e09788806dedbf6ef2cc2beb102bbe94db",
+        "git show --stat f1660eac14119e2f4f9bc5806455d96237c99a37",
+        "git show --stat e36af86cdc8df7232c00144007b90f9d004868e0",
+        "git show --stat affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+        "git diff --exit-code affb927d2fd536172e31a3efb3e6146d0ba3b57d e36af86cdc8df7232c00144007b90f9d004868e0 -- docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256"
+      ]
+    },
+    {
+      "id": "provider-polling-and-contract-boundary",
+      "status": "pass",
+      "summary": "No external provider, provider DTO, host credential, DNS/TLS dependency, or asynchronous provider terminal state applies. Production CLI execution is the complete conformance plan. PostgreSQL readiness and record duration remain bounded, exactly three ticks are deterministic, and every terminal scenario state is explicitly classified. The AC/SC contract and expected checkpoints are unchanged; this batch repairs only harness execution context.",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-tech-spec.md:449-474",
+        "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decomposition.md:41-56",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/SC-1.sh"
+      ]
+    }
+  ],
+  "scenarioSemantics": [
+    {
+      "id": "SC-1",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-21", "AC-22", "AC-26", "AC-27", "AC-28", "AC-31"],
+      "semanticVerdict": "pass",
+      "publicEvidence": "Real PG19 production record/report output and direct archive membership, not DB-only or unit-test inference.",
+      "positiveControls": [
+        "Fresh PG19 acc018 database identity, stable active stats_reset values, NULL untouched stats_reset values, and DB/host clock bounds",
+        "Exactly three tables/indexes/meta/sysinfo ticks and zero autovacuum_scores members",
+        "Two readable diffed samples on both tables and indexes before base classification",
+        "Feature trailing stats_age layouts, public active/untouched row identities, second-precision active ages within DB-derived +/-1 second bounds, growth matching elapsed report time, and blank untouched cells",
+        "Sanitized INFO names autovacuum_scores with not recordable/live TUI only and no false version reason"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable contractValid=true",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=pg19_stats_age_report_unavailable contractValid=true",
+      "featureObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-1.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-1.log"
+      ]
+    },
+    {
+      "id": "SC-2",
+      "kind": "regression",
+      "acceptanceCriteria": ["AC-33"],
+      "semanticVerdict": "pass",
+      "publicEvidence": "Production report replay of independently validated mixed-version archives on both screens.",
+      "positiveControls": [
+        "Fixture validity and 12 members per archive",
+        "Base old-PG19 two-sample readable replay with entries_read=true",
+        "Feature new-PG19 exact headers, known deltas, order, widths, trailing ages, and no truncation"
+      ],
+      "baseExpected": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "baseObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "featureObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-2.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-2.log"
+      ]
+    },
+    {
+      "id": "SC-3",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-36"],
+      "semanticVerdict": "pass",
+      "publicEvidence": "Built production report -d -T and report -d -I output.",
+      "positiveControls": [
+        "Base legacy describe tails remain readable and stats_age is absent before feature_missing",
+        "Feature exact stats_age origin, PG19+ wording, tab separation, trailing adjacency, and final blank line on both screens"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing contractValid=true",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=relation_stats_age_descriptions_missing contractValid=true",
+      "featureObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-3.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-3.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/scenarios/lib/reports.py:187-205"
+      ]
+    },
+    {
+      "id": "SC-4",
+      "kind": "regression",
+      "acceptanceCriteria": ["AC-23", "AC-29", "AC-30"],
+      "semanticVerdict": "pass",
+      "publicEvidence": "Independent archived HEAD/master production binaries replay identical PG17/PG18 fixtures across tables/indexes/functions/sizes.",
+      "positiveControls": [
+        "All 16 base and 16 feature semantic report controls pass with two rows and entries_read=true",
+        "Legacy headers and known deltas are validated independently before byte-for-byte comparison",
+        "No functions/sizes or pre-PG19 relation layout drift"
+      ],
+      "baseExpected": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "baseObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "featureObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-4.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-4.log"
+      ]
+    },
+    {
+      "id": "SC-10",
+      "kind": "new",
+      "acceptanceCriteria": ["AC-41"],
+      "semanticVerdict": "pass",
+      "publicEvidence": "Production report replay of the full same-PG19 old/new layout matrix with requested stats_age ordering.",
+      "positiveControls": [
+        "Eight layout and eight control fixtures generated and independently validated on each run",
+        "Four old-layout same-layout controls pass before base classification",
+        "Feature passes eight old/new blank/populated same-layout controls",
+        "Feature passes all eight bidirectional layout cases with a no-diff boundary, known 30/40 deltas, correct age visibility, widths, and sort restoration"
+      ],
+      "baseExpected": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported contractValid=true",
+      "baseObserved": "exit=1 origin=feature_missing checkpoint=same_pg19_layout_change_unsupported contractValid=true",
+      "featureObserved": "exit=0 origin=pass checkpoint=complete contractValid=true",
+      "evidence": [
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/SC-10.log",
+        "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature/SC-10.log"
+      ]
+    }
+  ],
+  "positiveControlEvidence": {
+    "status": "pass",
+    "sc1ArchiveAndReports": "base-reFreeze-3/SC-1.log lines 1-3 and reFreeze-3-feature/SC-1.log lines 1-4",
+    "sc2Replay": "base-reFreeze-3/SC-2.log and reFreeze-3-feature/SC-2.log",
+    "sc3Describe": "reFreeze-3-feature/SC-3.log; unchanged reports.py assert_describe controls also guard the base path",
+    "sc4Regression": "base-reFreeze-3/SC-4.log and reFreeze-3-feature/SC-4.log",
+    "sc10LayoutMatrix": "base-reFreeze-3/SC-10.log and reFreeze-3-feature/SC-10.log"
+  },
+  "staticVerification": [
+    "git rev-parse HEAD => e36af86cdc8df7232c00144007b90f9d004868e0",
+    "sha256sum -c scenario-manifest.sha256 => 9/9 pass",
+    "sha256sum scenario-manifest.sha256 => f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195",
+    "bash -n all five scenarios plus common.sh => pass",
+    "Python AST parsing of fixtures.py, reports.py, sanitize.py => pass",
+    "sanitize.py check over all ten accepted base/feature scenario logs => pass",
+    "JSON validation of unique scenario IDs, requested SHAs, dirty/manifest flags, contract validity, expected base outcomes, and feature 0/pass/complete outcomes => pass",
+    "Accepted base and feature harness/manifest trees are byte-identical",
+    "Only SC-1.sh and scenario-manifest.sha256 differ from the original frozen harness",
+    "No product code or acceptance harness file was edited during this review"
+  ],
+  "readinessHandoff": {
+    "mayUpdateFreezeJson": true,
+    "mayCreateOrUpdateReadinessForBaseRefreeze3": true,
+    "run": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/result.json",
+    "readiness": "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3/readiness.json",
+    "sha": "affb927d2fd536172e31a3efb3e6146d0ba3b57d",
+    "verdict": "ready",
+    "dirty": false,
+    "manifest": {
+      "path": "docs/features/018-feat-tables-autovacuum-area/acceptance/scenario-manifest.sha256",
+      "valid": true,
+      "entries": 9,
+      "sha256": "f6a3ddadef225e12477ec9ac5fd4b5f67286bdec9fb5e741b9b5baadff1de195"
+    },
+    "reviewerReport": "docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-acceptance-refreeze-review.json",
+    "reviewerVerdict": "approved",
+    "recordedBaselines": [],
+    "requiredPreservation": [
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-1",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-2",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/base-reFreeze-3",
+      "docs/features/018-feat-tables-autovacuum-area/acceptance/runs/reFreeze-3-feature"
+    ]
+  },
+  "contractChange": false,
+  "productChangeRequired": false,
+  "harnessChangeRequired": false,
+  "blockingActions": []
+}

@@ -1,0 +1,70 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "needs_improvement",
+  "summary": "Both new tests are real regression tests, not decoration: I ran them against a reconstructed pre-fix printDataCell (via go test -overlay) and both FAIL on the old implementation and PASS on the new one, so they genuinely pin the non-mutation property and the user-spec 'widen after truncation' criterion. Premise assertions ('the render must have truncated the value') are meaningful and correctly guard against the tests silently degrading into vacuous passes. Style matches the file conventions (makeRenderConfig / makeRenderResult / printStatData into a bytes.Buffer), and Test_printStatData_truncation was correctly left byte-for-byte untouched. What is missing is coverage the task file itself demands: the zero/negative-width error branch inside the rewritten function has no test anywhere in top/ (Test_alignViewToResult only exercises the upstream ColsWidth guard, never the printer), even though acceptance criterion 3 names it explicitly and it is the branch whose error message appears in the issue #99 report. Three further named edge cases (len == width boundary, multi-byte byte-slicing, exact padded bytes of a truncated cell) are also unpinned, which matters because the declared safety property of this task is byte-identical output. All gaps are additive fixes to new tests; nothing existing needs relaxing.",
+  "findings": [
+    {
+      "severity": "major",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (new tests) — acceptance criterion 'The zero/negative-width branch still returns an error and prints nothing'",
+      "issue": "The `width <= 0` branch of the rewritten printDataCell (top/stat.go:1116-1118) is not covered by any test in the package. Grep for the error text finds only a doc comment on Test_alignViewToResult (top/stat_test.go:801), which reproduces issue #99 at the alignment level and asserts on ColsWidth — it never calls printDataCell and so never reaches the error return. The task file lists this branch as an explicit acceptance criterion and as an edge case whose evaluation ORDER must be preserved (overflow check first, width check second), yet the rewrite moved the length computation from a `valuelen` variable into the `if` condition with no test guarding the resulting order. An error-handling path in the exact function under change is untested.",
+      "recommendation": "Add a direct unit test on printDataCell (it is package-private and callable straight from stat_test.go). Verified to pass on the current implementation:\n\nfunc Test_printDataCell_zeroOrNegativeWidth(t *testing.T) {\n\tcfg := makeRenderConfig(6, 5)\n\ts := makeRenderResult(6, 1) // \"r0-c0\" is 5 bytes, so len(value) > width holds for width 0 and -1\n\n\tfor _, width := range []int{0, -1} {\n\t\tcfg.view.ColsWidth[0] = width\n\t\tvar buf bytes.Buffer\n\t\terr := printDataCell(&buf, s, cfg, 0, 0)\n\t\tassert.EqualError(t, err, \"zero or negative width, skip\", \"width %d\", width)\n\t\tassert.Empty(t, buf.String(), \"nothing must be printed for width %d\", width)\n\t\tassert.Equal(t, \"r0-c0\", s.Result.Values[0][0].String, \"the error path must not mutate the source either\")\n\t}\n}\n\nThe third assertion also extends the non-mutation guarantee to the error path, which neither new test covers. No mock changes — this suite has no mocks.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go:1290-1328 — edge case 'valuelen == ColsWidth[i]: no truncation (strictly greater today; keep it strictly greater)'",
+      "issue": "No test pins the boundary where the value length exactly equals the column width. Every existing render test uses 5-byte 'rR-cC' values against width-10 columns (comfortably below), and the three truncation-related tests use a 10-byte value against width 5 (comfortably above). A regression turning `>` into `>=` would truncate values that exactly fill their column — a visible output change — and the whole suite would stay green.",
+      "recommendation": "The existing helpers give this case for free, since makeRenderResult values are exactly 5 bytes. Verified output is \"r0-c0  \":\n\nfunc Test_printDataCell_exactWidthNotTruncated(t *testing.T) {\n\tcfg := makeRenderConfig(6, 5) // width 5 == len(\"r0-c0\")\n\ts := makeRenderResult(6, 1)\n\n\tvar buf bytes.Buffer\n\tassert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))\n\tassert.Equal(t, \"r0-c0  \", buf.String(),\n\t\t\"a value exactly filling the column must be printed whole, padded to width+2, with no '~'\")\n}",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go:1290-1328 — safety property 'rendered bytes must be byte-identical to today's output'",
+      "issue": "Neither new test asserts exact bytes; both use assert.Contains on the whole rendered line. Contains cannot detect a padding regression on the truncating path — e.g. padding to len(value)+2 instead of ColsWidth[i]+2 would still contain \"abcd~\" and still contain \"abcdefghij\" in the widened render, so both new tests and the untouched Test_printStatData_truncation would pass. Test_render_alignmentInvariant does check widths exactly, but only with width-10 columns holding 5-byte values, i.e. exclusively on the non-truncating path. The truncating path therefore has no exact-width guard at all, which is the weakest point of a change whose stated safety property is byte identity.",
+      "recommendation": "Pin the exact cell bytes with a direct printDataCell call. Verified: the truncated cell renders as \"abcd~  \" (4 chars + '~', padded to ColsWidth 5 + 2 gap):\n\nfunc Test_printDataCell_truncatedCellExactBytes(t *testing.T) {\n\tcfg := makeRenderConfig(6, 5)\n\ts := makeRenderResult(6, 1)\n\ts.Result.Values[0][0] = sql.NullString{String: \"abcdefghij\", Valid: true}\n\n\tvar buf bytes.Buffer\n\tassert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))\n\tassert.Equal(t, \"abcd~  \", buf.String(),\n\t\t\"truncated cell must be width-1 chars + '~', padded to ColsWidth+2\")\n}\n\nAlternatively extend Test_render_alignmentInvariant's coverage by adding a second alignment-invariant test whose column width forces truncation — but the exact-bytes assertion above is cheaper and more precise.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go:1290-1328 — edge case 'Multi-byte values: byte slicing can cut a UTF-8 sequence mid-rune; that is today's behaviour and must be preserved verbatim'",
+      "issue": "No test pins the byte-based (as opposed to rune-based) length and slicing. The task explicitly forbids converting to runes because it would change rendered bytes, yet nothing in the suite would notice such a conversion: all test values are pure ASCII, where byte and rune semantics coincide. A future contributor 'fixing' the mid-rune cut — the single most tempting change to this function — would break the byte-identity contract with a fully green suite.",
+      "recommendation": "Add a characterization test that deliberately locks in the current mid-rune cut. Verified: with a 10-byte / 5-rune value in a width-4 column the cell renders as \"\\u03b1\\xce~   \" (7 bytes, 6 runes — note fmt's %-*s pads by RUNES, so the invalid byte counts as one):\n\nfunc Test_printDataCell_multiByteIsByteSliced(t *testing.T) {\n\t// Characterization test: truncation is byte-based today (task 01 requires byte identity).\n\t// Converting printDataCell to rune-based slicing would change these bytes — that is a\n\t// separate, deliberate change, and this test must be updated with it, not silently.\n\tcfg := makeRenderConfig(6, 4)\n\ts := makeRenderResult(6, 1)\n\ts.Result.Values[0][0] = sql.NullString{String: \"\\u03b1\\u03b1\\u03b1\\u03b1\\u03b1\", Valid: true} // 10 bytes, 5 runes\n\n\tvar buf bytes.Buffer\n\tassert.NoError(t, printDataCell(&buf, s, cfg, 0, 0))\n\tassert.Equal(t, \"\\u03b1\\xce~   \", buf.String(),\n\t\t\"byte slicing cuts mid-rune at width-1 bytes; preserved verbatim by task 01\")\n}",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:1290, top/stat_test.go:1310 — test naming vs. unit actually invoked",
+      "issue": "Both tests are named Test_printDataCell_* but neither calls printDataCell; they drive it indirectly through printStatData plus a window computed by visibleColumns. The indirection is not free: the tests now depend on the horizontal-scroll budget arithmetic (termWidth 40 with 6 columns of width 5, termWidth 80 with 6 columns of width 12). A future change to visibleColumns that drops column 0 from the rendered set, or a change to the +2 gap, would make these tests fail for reasons unrelated to mutation — or, absent the premise assertions, pass vacuously. Names also mislead a reader grepping for direct printDataCell coverage: currently there is none.",
+      "recommendation": "Keep the two printStatData-level tests as they are (the task file mandates that style, and they express the end-to-end property), but add at least one test that calls printDataCell directly so the printDataCell_* name prefix is backed by real direct coverage. The zero/negative-width test from the major finding above serves exactly this purpose and needs no window at all — adopting it resolves this finding too. Do not rename the two existing tests: their names are fixed by the TDD Anchor in the task file.",
+      "litmusTestFailed": false
+    },
+    {
+      "severity": "minor",
+      "category": "anti_pattern",
+      "location": "top/stat_test.go:1301, top/stat_test.go:1319 — non-fatal premise assertions",
+      "issue": "Both premise checks use assert.Contains (non-fatal) rather than a fatal guard. If the premise breaks — say a visibleColumns change stops rendering column 0 — execution continues into the real assertion, which then also fails, producing two failures where the second one is meaningless noise and points the reader at 'rendering must not write the truncated value back into the result set' when the actual problem is that nothing was rendered. The premise is doing exactly the right job conceptually; only its failure mode is wrong.",
+      "recommendation": "Use the guard idiom already established in this file at top/stat_test.go:795 (`if assert.Len(t, verboseLines, 9) { ... }`), which avoids adding a testify/require import:\n\nif assert.Contains(t, buf.String(), \"abcd~\", \"test premise: the render must have truncated the value\") {\n\tassert.Equal(t, \"abcdefghij\", s.Result.Values[0][0].String,\n\t\t\"rendering must not write the truncated value back into the result set\")\n}\n\nApply the same shape in Test_printDataCell_widenAfterTruncation around the narrow-render premise at :1319.",
+      "litmusTestFailed": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "litmusTest": {
+      "checked": 3,
+      "passed": 3,
+      "failed": 0
+    },
+    "coverageAssessment": "adequate",
+    "pyramidBalance": {
+      "unit": 3,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

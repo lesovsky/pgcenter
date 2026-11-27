@@ -1,0 +1,42 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Nothing regressed. report/describe.go and report/report.go are byte-identical to round 1 (git diff --stat: 18 added lines, 1 added line, one hunk each), and the only new work is 131 lines in report/report_test.go. The two helpers are sound and the three new tests are real gates, not decoration: I ran five fresh mutations against the round-2 assertions - wrong origin on the `last_failed` row, a duplicated `failed` row, a removed `(PG 19+)` annotation, a line appended after the Details URL, and the blank-cell clause stripped from `archived_age` alone - and each reddens exactly the intended test with the intended message, then restores clean (md5 verified). Cross-checked the pinned lists against the merged queries: the archiver column list matches query.PgStatArchiverDefault and archiverColumns (internal/query/archiver_test.go:23) name for name and order for order, and the origins match the query's source fields; the wal list matches the constant, and `wal_fpi_bytes AS \"fpi,KiB\"` sits right after `wal_fpi AS fpi` in PgStatWALPG19 as the row claims. go vet clean, gofmt clean on describe.go and report_test.go (report.go's only gofmt hit is the pre-existing :304 whitespace, out of scope), full `go test ./report/` green. Round-1 minors #1 and #3: I accept both non-applications - see the note in suggestions, no action wanted.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "report/report_test.go",
+      "line": 1318,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The origin check reads `strings.Fields(row)[2]`, which collapses every run of whitespace, so the tests pin exactly one tab per row - the one the marker `\"\\n- \"+name+\"\\t\"` demands right after the column name. Everything after that (the alignment padding between name/origin/description) is unverified: converting those separators to spaces keeps all five describe tests green while the printed table misaligns. The task treats the tabs as load-bearing and verifies them only by hand (`cat -A`, Verification Steps), which is exactly the kind of check that stops being run. If you ever want it pinned, one `assert.NotContains(t, row, \"  \")` per row inside assertDescribeColumns would do it - though it would first need the two existing wal rows' trailing spaces (:145, :152) accounted for. Not worth doing now: gofmt does not touch raw string contents, so the realistic trigger is an editor setting, and the marker's tab already catches the common case.",
+      "benefit": "Names the one property of these constants that the new tests do not cover, so nobody assumes green means the table still lines up.",
+      "optional": true
+    },
+    {
+      "file": "report/report_test.go",
+      "line": 1325,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The exact-count assertion `len(columns) == strings.Count(text, \"\\n- \")` is what caught my duplicated-row mutation, so it earns its place - but it also assumes the constant contains no prose line beginning with \"- \". That holds for both constants it is applied to and does not hold generally, which is incidentally the reason Test_describeActivityColumnOrder cannot simply be moved onto this helper (pgStatActivityDescription carries a caveats block, and its rows have no origin column worth listing for 17 columns). Round-1 minor #2 is therefore as closed as it usefully gets: the duplication is down to one inline copy, and folding that last one in would cost more than it saves. If the count ever does fire on a prose bullet, note the message says \"documents a row that is not in the column list\", which would point at the wrong thing.",
+      "benefit": "Records why the last inline copy stays inline, so a future consolidation pass does not rediscover the obstacle the hard way.",
+      "optional": true
+    },
+    {
+      "file": "report/describe.go",
+      "line": 165,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Round-1 minors #1 (a pg_monitor clause on the `ready` row) and #3 (inline `(PG 19+)` vs the file's trailing `Note:` convention) were not applied, and I do not think that reasoning is wrong. On #1 the decisive argument is one I did not weigh in round 1: the wal screen's `waldir_size` row calls pg_ls_waldir(), the same privilege class with the same screen-wide failure mode, and its describe row carries no privilege clause either. Adding one to `ready` alone would make the file inconsistent in the other direction, and the fix that would actually help an operator is a runtime error message, not describe prose. On #3 the inline form is now pinned by Test_describeWALFPIVersionNote's HasSuffix assertion, which makes the split a tested decision rather than drift. Both closed; no action.",
+      "benefit": "Closes the two carried-over minors explicitly so they are not re-raised in a later round.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 3,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  }
+}

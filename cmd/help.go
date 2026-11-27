@@ -167,7 +167,8 @@ Report options:
  -I, --indexes			show pg_stat_user_indexes and pg_statio_user_indexes statistics
  -S, --sizes			show statistics about tables sizes
  -F, --functions		show pg_stat_user_functions statistics
- -W, --wal				show pg_stat_wal statistics
+ -W, --wal SELECTOR		show pg_stat_wal / pg_stat_archiver statistics, use additional selector to choose stats:
+				'w' - wal; 'a' - archiver
  -N, --proc-stats		show per-process system stats (procpidstat); local recordings only
  -D, --databases SELECTOR	show pg_stat_database statistics, use additional selector to choose stats:
 				'g' - general; 's' - sessions

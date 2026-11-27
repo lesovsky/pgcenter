@@ -1,0 +1,89 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Round-1's single major is fixed: PgstatOverview.ArchivingBacklogValid (internal/stat/postgres.go:84) now reads \"false when the aggregate failed (e.g. missing privilege, 42501) -> n/a\", which agrees with Decision 11, with the consumer comment at :288-291, and with Test_collectOverviewStat_Degradation. All four round-1 minors are either applied or structurally resolved, and the two findings from the other reviewers that landed in these files (the serverless structure test, the falsifiable parity check) are correct and strengthen the change. I re-verified the mechanical claims independently: go vet clean on both packages, gofmt clean on all four in-scope files, `grep -rn \"has pg_monitor\" internal/` empty, and every surviving `pg_ls_dir` occurrence is explanatory prose or the NotContains guard. Two optional minors remain, neither of which needs a round 3.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "internal/stat/postgres.go",
+      "line": 291,
+      "severity": "minor",
+      "category": "readability",
+      "suggestion": "The new closing clause reads \"archive_mode=off is not an error: the status directory is simply empty, so the field is a real 0.\" The conclusion is right and the ambiguity round 1 flagged is gone, but \"simply empty\" overstates it: .ready files are only created when XLogArchivingActive(), so archive_mode=off produces none — yet .done files left over from a period when archiving WAS on persist in pg_wal/archive_status, and the directory is then non-empty while the backlog is still 0. The precise statement is that it contains no .ready files. Suggested wording: \"archive_mode=off is not an error: nothing writes .ready files, so the FILTER counts none and the field is a real 0.\" Purely a wording nit on a line that is already correct in its conclusion — record it or fold it into the finalization comment pass; it does not warrant another review round.",
+      "benefit": "Keeps the last remaining approximation out of the comment block this task exists to make trustworthy.",
+      "optional": true
+    },
+    {
+      "file": "internal/stat/postgres_test.go",
+      "line": 282,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "Carry-forward from round 1, now sharpened rather than resolved. Adding the pg_auth_members membership assertion was the right call — the two packages' guards are equal-strength again, and the stat-side guard can no longer decay from \"pg_monitor is sufficient\" into \"some privileged role works\". The cost is that internal/stat/postgres_test.go:282-307 is now a near-verbatim copy of internal/query/archiver_test.go:285-321, including the four-branch SELECT and the PG-16 DISTINCT rationale. The duplication remains structurally forced (assertRestrictedSession is package-level in `query`; internal/postgres/testing.go is task-01 territory), so this is not a defect in the delivered change. The finalization move is unchanged and now has a second call site arguing for it: promote assertRestrictedSession next to SetupTestRole in internal/postgres so both packages share one implementation and one DISTINCT rationale.",
+      "benefit": "One home for the privilege-test scaffolding once the task-ownership fences are lifted; today's two copies cannot drift apart silently.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 4,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 2,
+    "testCoverageAssessment": "excellent"
+  },
+  "round1FindingsVerification": [
+    {
+      "round1Finding": "major — internal/stat/postgres.go:84 struct field comment claimed archive_mode=off invalidates ArchivingBacklogValid",
+      "resolution": "fixed",
+      "evidence": "Now reads `// false when the aggregate failed (e.g. missing privilege, 42501) -> n/a`. Consistent with Decision 11, with :288-291, and with Test_collectOverviewStat_Degradation:227-232. No comment in the tree now attributes n/a to archive_mode=off."
+    },
+    {
+      "round1Finding": "minor — :288 consumer comment presented archive_mode=off as a failure cause via the shared colon",
+      "resolution": "fixed",
+      "evidence": "Split into two sentences: privilege as the failure reason, archive_mode=off as a separate note that the count is legitimately zero. Only the wording nit above remains."
+    },
+    {
+      "round1Finding": "minor — the stat-package inline guard omitted the pg_auth_members membership check present in internal/query",
+      "resolution": "fixed",
+      "evidence": "postgres_test.go:288-307 now scans array_agg(DISTINCT rolname) and asserts memberOf == []string{\"pg_monitor\"}; the four gate results are ANDed before collect runs. The deferred RESET ROLE additionally re-reads current_user and asserts it left the role, matching query.resetRole:327-337."
+    },
+    {
+      "round1Finding": "minor — backlogRoleMonitor was declared as an untied literal in two packages",
+      "resolution": "resolved structurally",
+      "evidence": "internal/stat now owns pgcenter_test_backlog_collect. Verified the four test roles in the tree are pairwise distinct (pgcenter_test_archiver_* and pgcenter_test_backlog_monitor/norole in internal/query, pgcenter_test_backlog_collect in internal/stat), so no rename hazard and no cross-package name to keep in sync."
+    },
+    {
+      "round1Finding": "minor — shared role name coupled the mutation procedure and could race outside `go test -p 1`",
+      "resolution": "obsolete",
+      "evidence": "Both consequences followed from the shared name and disappear with it. The mutation `SetupTestRole(..., false)` on the query call site no longer needs a matching DROP ROLE for the stat package, and SetupTestRole's non-atomic DO block can no longer be reached concurrently for the same role name by two packages. The comments at overview_test.go:17-22 and postgres_test.go:240-242 both state this rationale correctly."
+    }
+  ],
+  "newWorkVerification": [
+    {
+      "item": "Test_ArchivingBacklogQuery_Structure (test reviewer's major)",
+      "assessment": "correct",
+      "evidence": "All three Contains substrings match OverviewArchivingBacklog character-for-character. The NotContains guard is sound and not self-defeating: \"pg_ls_archive_statusdir\" does not contain the substring \"pg_ls_dir\" (after `pg_ls_` comes `archive`), so the assertion passes on the fixed query and reddens on the FROM-reversion mutation, which the reported mutation run confirms. Mirrors Test_StatArchiverQuery_Structure. The stated motivation is accurate: with archive_mode=off and an empty status dir, every live backlog assertion reduces to 0 >= 0, so the FILTER and pg_size_bytes mutations were genuinely unguarded before this test."
+    },
+    {
+      "item": "Superuser baseline parity check replacing assert.True(t, got.Valid)",
+      "assessment": "correct, and a justified deviation from the task's TDD anchor",
+      "evidence": "collectOverviewStat sets s.Valid = true unconditionally at postgres.go:202, so the anchor's `Valid` assertion was vacuous and could never redden. The replacement compares TotalSizeValid and DatabasesCount against a superuser sample taken before the role switch, which is falsifiable: pg_database_size needs pg_read_all_stats (held via pg_monitor), so a privilege regression in the neighbouring size aggregate now shows as a divergence. Stability checked — no t.Parallel anywhere in internal/stat or internal/query and no CREATE/DROP DATABASE in the suite, so DatabasesCount cannot drift between the two calls. `base, _ :=` discards a time.Duration, not an error (the function returns (PgstatOverview, time.Duration)), so nothing is silently swallowed. Worth one line in the decisions file so the anchor's mention of `Valid` is not read later as an unmet acceptance item."
+    },
+    {
+      "item": "Cross-file consistency (dimension 10)",
+      "assessment": "clean",
+      "evidence": "postgres.SetupTestRole(db *DB, name string, pgMonitor bool) error, query.resetRole(t, conn, role), query.assertRestrictedSession(t, conn, wantRole, wantPgMonitor) bool, collectOverviewStat(db, props, itv, prev, skipDatabasesSize) (PgstatOverview, time.Duration) and GetPostgresProperties(db) (PostgresProperties, error) all match their call sites. New imports fmt and pgconn in overview_test.go are both used; internal/stat needed no new import. go vet exit 0 on both packages."
+    },
+    {
+      "item": "Scope fence",
+      "assessment": "held",
+      "evidence": "The diff touches exactly the four permitted files. collectOverviewStat's degrade path (postgres.go:292-296) is byte-identical apart from its comment; top/stat.go, docs/decisions-log.md and internal/postgres/testing.go are untouched; no CREATE ROLE/GRANT SQL was written in either test file. Note for the record: gofmt -l reports internal/stat/procpidstat_test.go, but that file is unmodified here and its deviation predates the feature (commit 99c8413) — out of scope, not a finding against this task."
+    }
+  ],
+  "pushbackAccepted": [
+    {
+      "suggestion": "Replace the inline connect + t.Skipf in the two new query tests with connectArchiverFixture",
+      "verdict": "accepted, do not change",
+      "reasoning": "Two independent reasons hold. (1) The task's Implementation Hints (task-03.md:332-333) prescribe postgres.NewTestConnectVersion(version) with t.Skipf and conn.Close() per iteration, explicitly as the existing shape of this file — adopting the helper would mean renaming it inside internal/query/archiver_test.go, a task-01 file this task must not restructure. (2) I checked what the helper's extra guard actually buys here: connectArchiverFixture hard-fails instead of skipping when a version is absent from the port map, and internal/postgres/testing.go:30-35 maps all six versions in overviewVersions (140000-190000). The guard is therefore not load-bearing for these tests today. Sharing it is a finalization cleanup, not a task-03 correction."
+    }
+  ]
+}

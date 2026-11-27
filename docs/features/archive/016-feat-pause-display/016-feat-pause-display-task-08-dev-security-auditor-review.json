@@ -1,0 +1,41 @@
+{
+  "status": "approved",
+  "summary": {
+    "totalFindings": 1,
+    "critical": 0,
+    "major": 0,
+    "minor": 1
+  },
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "best-practice",
+      "title": "applyFilter's conditional repaint adds a third same-pass g.Update emitter inside dialogFinish",
+      "description": "dialogFinish already brackets every dialog branch with printCmdline(g, \"\") (clear) and printCmdline(g, \"%s\", message) (report) - both of which call writeCmdline -> g.Update internally, and both pre-date this task. This diff inserts a THIRD g.Update emitter (applyFilter -> repaint() -> repaintStored(app) -> app.ui.Update) between them, but only on the dialogFilter branch while paused. gocui v0.5.0's Update spawns a goroutine per call to send on the buffered (20) userEvents channel, and MainLoop/consumeevents do not guarantee delivery order across concurrently-spawned senders (documented in gocui's own source and already flagged as pre-existing defect class [028] in the task-07 security review). This call site does not make the pre-existing clear/report race worse - repaintStoredFrame (top/pause.go) touches only the sysstat/pgstat/dbstat/extra views, never \"cmdline\", so a reorder relative to the two printCmdline calls cannot corrupt or drop the 'Filters: ok' / error message text. Confirmed by reading repaintStoredFrame's body: it writes to \"cmdline\" only on its own failure path (a genuinely later, separately-queued event), not on the success path this task exercises.",
+      "impact": "None security-relevant and no functional impact identified: worst case is an extra, harmless render of the frozen frame's already-current state should the two events interleave unusually. No data race (execution of both closures is serialized onto the single gocui MainLoop goroutine), no message corruption, no crash path.",
+      "recommendation": "No action required for this task. If the [028] ordering class is ever addressed generally (e.g. by making g.Update synchronous-enqueue from the calling goroutine, or by funnelling all cmdline writes through one serialized emitter), this call site will automatically benefit - no special-casing needed here.",
+      "location": "top/dialog.go:216-217 (dialogFilter branch of dialogFinish) and top/dialog.go:248-280 (applyFilter)",
+      "cwe": ""
+    }
+  ],
+  "tech_debt": true,
+  "verification": {
+    "build": "go build ./... — clean",
+    "vet": "go vet ./top/... — clean",
+    "targeted_run": "go test ./top/ -run 'Test_applyFilter|Test_dialog' -v — PASS, all 14 tests/subtests (the 9 pre-existing dialog tests plus the 5 new ones)",
+    "race_run": "go test ./top/ -run 'Test_applyFilter|Test_dialog' -race — PASS, no races",
+    "full_suite_note": "go test ./top/... not run — requires a live PostgreSQL fixture cluster (postgres.NewTestConnect / container lesovsky/pgcenter-testing) not available in this sandbox; per task-08's own instructions this is expected and the targeted -run above is the gate",
+    "lint": "make lint could not run — golangci-lint is not installed in this sandbox; go build and go vet were used as a substitute and are clean",
+    "diff_scope": "git show 32d557a --stat — exactly top/dialog.go (+31/-1) and top/dialog_test.go (+206) touched, matching the task's file-scope acceptance criterion; top/config_view.go, top/ui.go and top/pause.go are untouched by this commit",
+    "grep_checks": "grep -n viewCh top/dialog.go — no push added (only a comment referencing it); grep -n printCmdline top/dialog.go — same two call sites as before this commit, no second write added; grep for secret/password/token/API_KEY patterns in the diff — none found"
+  },
+  "notes": [
+    "Invalid-pattern path (setFilter, top/config_view.go, unmodified): regexp.Compile returns an error, applyFilter propagates setFilter's message ('Filters: <compile error>') unchanged up through dialogFinish's printCmdline — surfaced to the user, not swallowed. No panic: the map write view.Filters[view.OrderKey] = re only happens after the err == nil check, so an invalid pattern leaves view.Filters completely untouched — no partially-applied filter state on error, confirmed by Test_applyFilter_repaintsOnUnchangedFilter/invalid_regexp asserting c.view.Filters stays empty.",
+    "Catastrophic-backtracking / ReDoS on the user-supplied pattern is judged NOT a realistic availability concern here, and out of scope for this diff regardless: Go's regexp package compiles to an RE2-style automaton with a linear-time matching guarantee (no backtracking engine), so there is no exponential blow-up class of input for regexp.Compile/Regexp.MatchString the way there would be with a PCRE-style engine. This is pre-existing behaviour of setFilter (top/config_view.go:124-145, untouched by this commit), not something introduced or changed by 32d557a.",
+    "Repaint safety verified end-to-end against gocui v0.5.0 source ($GOPATH/pkg/mod/github.com/jroimartin/gocui@v0.5.0/gui.go): Update (gui.go:311-313) only spawns a goroutine to enqueue on a buffered channel and returns immediately - it never blocks the caller. dialogFinish/applyFilter/repaint() therefore cannot deadlock the calling goroutine (which is the single gocui MainLoop goroutine, not a separate 'key-handler goroutine' - onKey/handleEvent run synchronously inside MainLoop's select loop in this gocui version). The actual repaint work (repaintStoredFrame) executes later, on a subsequent MainLoop iteration, strictly AFTER dialogFinish has already called dialogClose - so there is no re-entrance into dialog teardown from the repaint closure; dialogClose only touches the 'dialog' view while repaintStoredFrame only touches sysstat/pgstat/dbstat/extra.",
+    "Concurrency/ownership verified: applyFilter runs synchronously on the gocui MainLoop goroutine (the same goroutine dialogFinish itself runs on), reads only config.paused.Load() (the documented atomic.Bool exception) and config.view (gocui-owned, same-goroutine access) - it takes repaint only as a bare func() parameter and never touches app.frame / frameStore directly, matching Decision 1. This is unchanged from, and consistent with, the ownership model already reviewed for repaintStored/repaintStoredFrame in prior tasks' security reviews.",
+    "Rendering-with-new-filter safety verified: repaintStoredFrame's very first statement is `if !app.frame.valid { return nil }`, so a never-yet-rendered store draws nothing and returns cleanly - no panic, no index into an empty/zero stat.Stat. The filter change itself never alters view.Cols or column count (only view.Filters, keyed by the existing OrderKey), so there is no risk of the newly-applied filter map disagreeing in shape with the frozen stat.Stat's columns; that invariant is preserved by design elsewhere in the codebase (view-switching handlers call liftPause/liftPauseRefresh specifically because THEY change column composition, which the filter dialog never does).",
+    "No hardcoded secrets, credentials, or sensitive data in the diff or in any test fixture; the only strings involved are regexp patterns and column names ('datname', 'usename') used purely as test fixtures.",
+    "Minor tech-debt observation only (see findings): the extra g.Update emitter this task adds sits inside a call-ordering pattern (defect class [028]) already identified as pre-existing and benign in the task-07 security review; nothing here escalates it."
+  ]
+}

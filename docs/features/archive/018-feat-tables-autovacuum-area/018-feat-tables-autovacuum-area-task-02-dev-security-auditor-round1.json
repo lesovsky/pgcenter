@@ -1,0 +1,45 @@
+{
+  "reviewer": "dev-security-auditor",
+  "status": "changes_required",
+  "summary": "The PG19 SQL additions preserve both legacy queries byte-for-byte, source stats_age from the pg_stat aliases, and leave the nullable tail columns outside the inclusive diff intervals. One blocking in-scope fixture-safety issue remains: both new NULL integration tests unconditionally drop fixed-name persistent tables in the shared PG19 fixture.",
+  "findings": [
+    {
+      "severity": "major",
+      "scope": "in_scope",
+      "category": "unsafe integration fixture / destructive database operation",
+      "title": "NULL stats_age tests can destroy unrelated shared-fixture tables",
+      "description": "Both tests connect as the fixture superuser to the shared PG19 pgcenter_fixtures database and execute DROP TABLE IF EXISTS on a fixed public-schema name before creating their probe. If that name already belongs to another test run or fixture user, running the test deletes that table and its data; two concurrent runs can also drop each other's objects and cause cross-run failures. Deferred cleanup does not make the initial drop safe and cannot remove persistent objects after SIGKILL or runner loss. This exceeds the read-only/query-observation side effects needed by Task 02 and makes the documented integration command unsafe on a reused fixture.",
+      "location": "internal/query/tables_test.go:115-128; internal/query/indexes_test.go:108-126",
+      "verified": true,
+      "evidence": "Source inspection of the supplied diff found fixed relation constants followed by unconditional DROP TABLE IF EXISTS at tables_test.go:121 and indexes_test.go:117, CREATE TABLE on the persistent public schema, and deferred DROP statements at tables_test.go:126 and indexes_test.go:122. The connector is NewTestConnectVersion(PostgresV19), whose existing mapping targets the shared PG19 fixture as the postgres user. The destructive live tests were deliberately not executed during this audit.",
+      "recommendation": "Remove both anticipatory DROP statements and do not reuse fixed persistent public-schema objects. Prefer per-session TEMP TABLE probes (with the index created on the temporary table) and discover/assert their generated schema-qualified identities; if temporary relations cannot satisfy the live stats-view assertion, create a uniquely named per-run schema using a strictly generated/quoted identifier, create only objects owned by that run, and clean up only that unique schema. Keep cleanup immediately registered, but do not rely on it for ownership or concurrency safety. Do not add stats resets or other global mutations to the shared fixture."
+    }
+  ],
+  "verification": {
+    "scope": "Reviewed only diff 6dd550e1916c2b9e6710057afae3cd18370d06e2..54a6473d8cb8a7d6f598a65bb781b1ea422d65b9, Task 02, and tech-spec Decisions 1, 2 and 5; no product, frozen, or shared artifact was edited.",
+    "non_mutating_tests": {
+      "command": "go test ./internal/query/ -run '^(Test_SelectStatTablesQuery|Test_SelectStatIndexesQuery|Test_StatTablesQuery_StatsAgeSource|Test_StatIndexesQuery_StatsAgeSource)$' -count=1 -v",
+      "result": "PASS; all four selected top-level tests and all 16 selector version subtests passed."
+    },
+    "legacy_query_check": {
+      "command": "Read-only Python check evaluated the named Go string constants from git show at both revisions and compared their values.",
+      "result": "PgStatTablesDefault and PgStatIndexesDefault exactly match their base values; each PG19 value equals its legacy value plus exactly one expected stats_age tail expression."
+    },
+    "diff_and_null_analysis": {
+      "command": "Source inspection of internal/stat/postgres.go:633-645 together with both selectors.",
+      "result": "The diff interval is inclusive. tables stats_age is index 19 above upper bound 18; indexes stats_age is index 6 above upper bound 5. Cells outside the interval are copied with their original sql.NullString.Valid value, so SQL NULL stats_age does not enter numeric diff parsing. Live PG14-PG19 field-description and NULL execution remain unverified because the destructive fixture tests were not run."
+    },
+    "template_trust_boundary": {
+      "command": "Source inspection of internal/query/query.go:90-103 and top/config_view.go:449-490.",
+      "result": "The additions reuse the existing ViewType template substitution. Production toggling confines ViewType to user/all, and the change introduces no new attacker-controlled SQL fragment, deserialization, SSRF, credential, cryptographic, or dependency surface."
+    },
+    "unchanged_files_and_format": {
+      "command": "git diff --exit-code <base>..<head> -- internal/query/functions.go internal/query/sizes.go; git diff --check <base>..<head>",
+      "result": "Both commands succeeded; functions.go and sizes.go are unchanged and the diff has no whitespace errors."
+    },
+    "sensitive_data": {
+      "command": "Case-insensitive credential, private-key, token, and PostgreSQL connection-string pattern scan limited to the four supplied files.",
+      "result": "No matches. No secret values or raw acceptance evidence are reproduced in this report. No dependencies changed, so no dependency-vulnerability scan was indicated."
+    }
+  }
+}

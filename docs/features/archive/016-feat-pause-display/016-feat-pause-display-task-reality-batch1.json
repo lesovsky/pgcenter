@@ -1,0 +1,133 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["01", "02", "03"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "TDD-якорь `Test_frameStore_repaintRendersIdenticalBytes` требует рендерить сохранённый кадр «через writer-based ядра (renderDbstat / printStatData, и renderSysstat со сохранённым штампом)». Сохранённый штамп в renderSysstat в волне 2 передать нечем: сигнатура `renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration)` (top/stat.go:269) параметра времени не имеет, а время берётся внутри через `time.Now()` (top/stat.go:277). При этом сам же task 03 в Implementation hints прямо запрещает менять эту сигнатуру («do not change renderSysstat's signature — threading it into the header is task 04»), а task 04 (wave 3, depends_on 03) действительно владеет этой правкой и её пятью call-site'ами в тестах (top/stat_test.go:60,97,192,440,441). Внутреннее противоречие задачи. Дополнительно: даже если исполнитель обойдёт запрет, сравнение «идентичных байтов» двух рендеров, каждый из которых печатает `time.Now()` с точностью до секунды, будет флапать на границе секунды.",
+      "fix": "Убрать `renderSysstat` из этого якоря в волне 2: сформулировать тест как «идентичные байты панели dbstat» через `renderDbstat` / `printStatData`. Проверку замороженных часов (`renderSysstat` печатает переданный штамп, а не стенные часы) отдать целиком task 04 — она уже стоит отдельной строкой в Testing Strategy тех-спека (строка 525). Заодно снять требование побайтового сравнения с любого рендера, который вызывает `time.Now()`."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "03",
+      "issue": "TDD-якорь `Test_repaintStored_failureLatchReportsOnce` («упавшая перерисовка отдаёт ровно одно сообщение в cmdline на переходе и ни одного на повторах») не пишется против текущего кода. Замыкание перерисовки может упасть только на `g.View(\"sysstat\"/\"pgstat\"/\"dbstat\")` — а `*gocui.Gui` и `*gocui.View` невозможно сконструировать вне пакета gocui (в репозитории это уже зафиксировано комментарием к `Test_printCmdlineNilGui`, top/ui_test.go:355-357, и закомментированным тестом top/top_test.go:48-63). Вызвать замыкание с nil-Gui, чтобы получить ошибку, нельзя: `(*Gui).View` разыменует `g.views` и упадёт паникой. Наблюдать «ровно одно сообщение» тоже нечем: `writeCmdline` при nil-Gui молча возвращается (top/ui.go:437-439), никаких побочных эффектов тест увидеть не может.",
+      "fix": "Переформулировать требование: защёлка должна быть отдельно адресуемой чистой единицей (например `func (l *repaintLatch) shouldReport(err error) bool` или счётчик рядом со store), и якорь тестирует её напрямую — переход no-failure → failure отдаёт true один раз, повторы false, успешная перерисовка перевзводит. Явно записать это в «What to do», иначе исполнитель напишет замыкание, которое невозможно проверить."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "01, 02, 03",
+      "issue": "Поле `verify` и Acceptance Criteria всех трёх задач требуют `go test ./top/...` (task 03 — с `-race`). Проверено прогоном: в среде без живого Postgres пакет падает паникой ещё до наших тестов — `top/report_test.go:14` → `internal/postgres.(*DB).QueryRow` (internal/postgres/postgres.go:125) nil-разыменование; `top/top_test.go` поднимает соединение через `postgres.NewTestConnect()`. Целевой прогон работает: `go test ./top/... -run 'Cmdline|printStatData|printDataCell|Sysstat'` → ok. То есть критерий «go test ./top/... проходит» невыполним как записан, и исполнитель, увидев панику, решит что сломал сборку.",
+      "fix": "В Verification Steps каждой задачи заменить голый `go test ./top/...` на прогон с `-run`-фильтром по своим тестам плюс явную оговорку: полный прогон пакета требует живого Postgres (`make test` / CI-сервис), падение `Test_getQueryReport` и `Test_app_setup` без БД — преднастоящее состояние репозитория, не регрессия."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "`depends_on: [\"02\"]` не включает task 01, хотя раздел Dependencies самой задачи 03 говорит: «Task 01 (non-mutating printDataCell) is what makes a repaint of the store a pure function of the store. Do not add a deep copy at store time». Обе задачи правят один файл `top/stat.go`, и корректность перерисовки сохранённого кадра (ключевой инвариант task 03 и её якоря `Test_frameStore_repaintRendersIdenticalBytes`) держится на изменении из task 01: сегодня `printDataCell` пишет обратно в `s.Result.Values[rownum][i].String` (top/stat.go:1113), и повторный рендер того же кадра при другой ширине колонки уже не даст исходного значения. Порядок волн (1 → 2) фактически спасает, но зависимость не объявлена.",
+      "fix": "Указать `depends_on: [\"01\", \"02\"]` в task 03. Формально волна это уже гарантирует, но объявленная зависимость — единственное, что переживёт перестановку волн или частичный перезапуск фичи."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "03",
+      "issue": "`Test_frameStore_immutableWhilePaused` («опубликовать кадр A, прогнать statLoop с paused == true и другим кадром B, убедиться что store держит A и штамп A») тавтологичен и не может упасть по заявленной причине («fails if the store is republished on repaint or written from the gate»). Главная структурная гарантия самой задачи 03 в том, что `statLoop(ctx, uiExit, statCh, paused, render, repaint)` не получает ни `*app`, ни store, а `repaint` — голый `func()`; в тесте `repaint` будет заглушкой. Значит из теста физически ничто не может тронуть store, независимо от того, правильный код или нет.",
+      "fix": "Разделить на два честных теста: (а) «gate не пишет store» — проверять по сигнатуре/грепу, а не тестом (это уже есть в Verification Steps); (б) «перерисовка не републикует» — драйвить реальное замыкание перерисовки дважды и проверять, что штамп и Values не изменились. Второй тест действительно упадёт, если publish окажется достижим с пути перерисовки."
+    },
+    {
+      "severity": "minor",
+      "category": "tdd",
+      "task": "03",
+      "issue": "`Test_repaintStored_invalidStoreIsNoop` предполагает, что «реальное замыкание перерисовки» можно вызвать с nil-Gui. Это выполнимо, но только если замыкание — именованная адресуемая функция вида `func(g *gocui.Gui) error`, доступная тесту. В «What to do» этого требования нет: сказано лишь, что `repaintStored` ничего не извлекает из store до входа в `g.Update`. Если исполнитель напишет замыкание инлайном внутри `repaintStored(app)`, тест придётся звать через `repaintStored` с `app.ui == nil`, а `(*Gui).Update` разыменует nil в порождённой горутине (gocui/gui.go:310-311) — процесс теста упадёт, и это не поймает ни `assert.NotPanics`, ни recover.",
+      "fix": "Добавить в «What to do» пункт: замыкание перерисовки выделить в именованную функцию, `repaintStored` — тонкая обёртка `app.ui.Update(repaintClosure(app))`. Тогда якорь пишется как `assert.NoError(t, repaintClosure(app)(nil))`."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "03",
+      "issue": "Acceptance Criteria «`renderFrame` is shared by both paths and already takes the logtail source as a parameter» не покрывается ни одним якорем и покрыт быть не может: панельные принтеры `printPgstat` (top/stat.go:477) и `printDbstat` (top/stat.go:681) принимают `*gocui.View`, поэтому `renderFrame` неизбежно окажется view-based и юнит-тестом не драйвится. Якоря обходят это, тестируя `renderDbstat`/`printStatData` напрямую — то есть сам renderFrame проверяется только чтением кода.",
+      "fix": "Записать в Acceptance Criteria явно: этот критерий верифицируется инспекцией диффа (`renderFrame` вызывается ровно из двух мест, параметр источника логтейла присутствует), а не тестом. Иначе на ревью будет спор о «непокрытом AC»."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "02",
+      "issue": "Acceptance Criteria «Pressing the bound key flips the flag and produces **exactly one** cmdline write, with no text message» механически не проверяется. `writeCmdline` при nil-Gui молча возвращается (top/ui.go:437-439), счётчика записей нет, а `*gocui.Gui` в юнит-тесте не создать. Якорь `Test_togglePause` проверяет только флаг и отсутствие паники — он не различает один вызов `printCmdline` и два.",
+      "fix": "Пометить критерий как проверяемый инспекцией (`git diff top/pause.go` — ровно один вызов writer'а на пути обработчика), либо сослаться на правило [027] из docs/tech-debt.md как на предмет code review, а не теста."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "01, 02, 03",
+      "issue": "Мелкий дрейф номеров строк в цитатах (сами утверждения верны, ошибочны только диапазоны): (1) task 03: `internal/stat/stat.go — Stat at :35-54` — `Stat` занимает :35-39, а :41-54 это `System`; (2) task 03: `collectStat at :25-141` — функция заканчивается на :142; (3) task 03: `layout at :137` — `layout` объявлена на :138, :137 это её doc-комментарий; (4) task 02: `termbox.go:575-577` — классификация `if Key(inbuf[0]) <= KeySpace` стоит на :574, присваивания `event.Ch = 0` / `event.Key = ...` на :576-577; (5) task 03: `gocui/gui.go:312` — `Update` это :310-312, разыменование `g.userEvents` на :311; (6) task 01: заголовок Description называет `printDataCell (top/stat.go:1113)` — :1113 это строка записи, функция на :1103 (в Details указано верно).",
+      "fix": "Поправить диапазоны. Отдельно к (5): стоит дописать, что паника при nil-Gui происходит в горутине, порождённой `Update`, то есть роняет весь тестовый бинарник и не ловится `assert.Panics` — это усиливает аргумент за function-value параметры `render`/`repaint`."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "01, 02, 03",
+      "issue": "Гигиена ссылок в Context Files. (1) task 02 использует пути относительно корня репозитория (`top/config.go`, `docs/features/016-feat-pause-display/016-feat-pause-display.md`), тогда как tasks 01 и 03 — пути относительно самого task-файла (`../../../top/stat.go`, `016-feat-pause-display.md`); из task-файла ссылки task 02 не резолвятся. (2) tasks 01 и 03 перечисляют `016-feat-pause-display-decisions.md` в Feature artifacts без пометки, что файла ещё нет (проверено: в каталоге фичи его нет); task 02 помечает верно — «created on completion».",
+      "fix": "Привести ссылки task 02 к тому же относительному виду, что в 01/03; в 01 и 03 добавить пометку «создаётся по завершении» рядом с decisions-файлом."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "02",
+      "issue": "Формулировка «the composer's own doc comment (`top/ui.go:241-244`) names `[PAUSED]` as its motivating example» неточна по адресату: строки :241-244 — это doc-комментарий типа `cmdlineToken`, а не функции `composeCmdline` (её doc-комментарий на :246-255). Номера строк при этом абсолютно верны, и упоминание `[PAUSED]` на :244 действительно есть.",
+      "fix": "Заменить «the composer's own doc comment» на «the `cmdlineToken` doc comment (top/ui.go:241-244)»."
+    }
+  ],
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 67,
+    "issues_found": 11
+  },
+  "verified_claims_summary": {
+    "task_01": [
+      "top/stat.go:1113 — именно та запись `s.Result.Values[rownum][i].String = ...[:width-1] + \"~\"`, которую описывает задача; printDataCell = :1103-1119 (совпадает с Details)",
+      "Это единственная запись в `s.Result.Values` во всём top/ вне тестов: грепом остаются только чтения :1054, :1105, :1117",
+      "Сохранены как есть все элементы, которые задача требует не менять: текст ошибки `\"zero or negative width, skip\"`, порядок проверок (overflow → width<=0), `%-*s` с `ColsWidth[i]+2`, байтовая длина/срез, строгое `>`",
+      "Test_printStatData_truncation — ровно top/stat_test.go:1269-1284, ассертит только `buf.String()` (Contains \"abcd~\" / NotContains \"abcde\"), структуру не трогает",
+      "Хелперы makeRenderConfig :1095 и makeRenderResult :1114 существуют; значения ячеек вида `r%d-c%d` (5 байт) — значит длинное значение действительно надо засеивать вручную, как и сказано",
+      "Цепочка алиасинга реальна: calculateDelta возвращает `delta = curr` на internal/stat/postgres.go:596 при `interval == [0,0]` (и `return curr, nil` на :583 при !prev.Valid); `c.prevPgStat = c.currPgStat` / `c.currPgStat = ...` — internal/stat/stat.go:435-436",
+      "`activity` действительно имеет `DiffIntvl: [2]int{0,0}` (internal/view/view.go:43) и действительно является стартовым экраном (top/top.go:74)",
+      "Correction-блок в code-research отменяет три собственных рекомендации (§1.2, §7.7, §10) плюс два уточнения; §19 среди них нет — следовать §19.2 безопасно",
+      "Оба новых теста пишутся против текущего кода и оба падают на нём: printDataCell вызывается напрямую с bytes.Buffer, либо через printStatData + visibleColumns"
+    ],
+    "task_02": [
+      "gocui.KeySpace существует: gocui@v0.5.0/keybinding.go:124 = Key(termbox.KeySpace); go.mod пинит v0.5.0",
+      "termbox действительно отдаёт Ch=0 для байтов <= 0x20 (termbox.go:574-577, KeySpace = 0x20 в api_common.go:122) — rune-биндинг `' '` не сработал бы",
+      "`config` нигде не копируется по значению: единственный композитный литерал в проде — `&config{...}` в newConfig (top/config.go:47), везде параметры `config *config`, в тестах тоже `&config{...}`. `atomic.Bool` содержит `_ noCopy` — copylocks не сработает",
+      "Поля, рядом с которыми предлагается класть `paused` (verbose, scrollOffset, autoScrollToOrderKey), существуют; структура config = top/config.go:17-41",
+      "Прецедент комментария о владении горутинами — uiGeneration, top/ui.go:24-29 (комментарий :24-28, объявление :29)",
+      "Модель токенов работает как описано и правки не требует: composeCmdline деградирует и отбрасывает ПРАВЫЙ токен (kept--, last := kept-1), односвариантный токен деградировать не может, при нехватке ширины исчезает целиком, а не режется — значит [PAUSED] слева переживает сжатие",
+      "Test_composeCmdlineTwoTokens существует (top/ui_test.go:134) и несёт устаревший [015]-комментарий на :130-133: «The pause token is built here as a literal; no pause code exists in this feature and none must appear»",
+      "Test_cmdlineTokens (:308) и Test_setCmdlineConfig (:336, с t.Cleanup) существуют — расширять/копировать есть что; в ui_test.go ровно 9 тестов, все про composer",
+      "Механизм «одной тихой перерисовки» верен: `if arm && msg != \"\"` — top/ui.go:461; writeCmdline молча выходит при nil Gui — :437-439",
+      "Decision 8 подтверждена в коде: layout возвращает `fmt.Errorf(\"\")` при нулевой геометрии после pager/editor (top/ui.go:148-150), mainLoop кладёт её в app.uiError (:89), а layout на пересборке печатает её через printCmdline (:188-190) — сообщение пустое, префикс перерисовывается",
+      "Таблица keybindings принимает `key any` (top/keybindings.go:12), контекст \"sysstat\" существует, биндинга на пробел сейчас нет, тестов на таблицу действительно нет вовсе",
+      "top/pause.go и top/pause_test.go не существуют — задача создаёт их с нуля, конфликта нет"
+    ],
+    "task_03": [
+      "doWork = top/ui.go:106-135, select-цикл :123-134, `wg.Wait()` только в ветке ctx.Done (:130-132), приём кадра `case s := <-statCh` на :128 — всё точно",
+      "mainLoop отменяет и ждёт на :99 (cancel) и :102 (wg.Wait) — процитировано верно; тупик реален: collectStat, застрявший на голой отправке, делает этот wait вечным",
+      "collectStat доходит до приёма из viewCh (:85) только после успешной отправки в statCh (защищённый select :72-79) — порядок ровно такой, как описано",
+      "top/stat.go:130 — единственная незащищённая отправка `statCh <- stat.Stat{Error: err}`; остальные две отправки/закрытия защищены (:73, :77, :136)",
+      "viewCh небуферизован (`make(chan view.View)`), продовых отправок 18, из них 1 — сид в doWork (:118), 17 — обработчики клавиш. «~17 key handlers» точно",
+      "Замыкание printStat возвращает ошибку ровно в 13 точках: :172, :177, :182, :187, :192, :198, :204, :212, :218, :224, :230, :238, :247 — диапазон :172-247 верен, printStat = :157-253, замыкание :169-252, first-tick hint :165-167",
+      "Ветка логтейла :226-249; буфер рождается на :227 (readLogfileRecent) и потребляется на :245 (printLogtail) — обе внутри g.Update, то есть на gocui-горутине; printCmdline изнутри замыкания уже практикуется на :229",
+      "printLogtail (:1229-1245) при пустом буфере не вызывает даже v.Clear() (:1230-1232) — промежуточное состояние волн 2-4 описано верно; readLogfileRecent = :1202-1226",
+      "app struct = top/top.go:39-46, поле uiError на месте, app переживает пересборку UI (mainLoop крутит for вокруг NewGui); ни одна другая задача фичи (04-10) top/top.go не трогает — конфликта волн нет",
+      "Ошибка из g.Update-замыкания действительно разрывает MainLoop: gocui/gui.go:377-379 (`case ev := <-g.userEvents: if err := ev.f(g); err != nil { return err }`), а errorRate убивает процесс при 5 ошибках за секунду (top/ui.go:92-95)",
+      "Прецедент защёлки verboseTooShortShown — top/ui.go:141 (внутри layout, объявленной на :138); идиома fake-consumer для viewCh — top/config_view_test.go:33-40, повторена на :500 и :547-549",
+      "Сигнатура statLoop(ctx, uiExit, statCh, paused, render, repaint) дословно совпадает с Decision 12 тех-спека (строка 400-401); ладдер ветвлений collectStat :85-122 существует и load-bearing",
+      "sync/atomic уже импортирован в top/ui.go (:12); renderDbstat (:706) и printStatData (:1031) действительно writer-based и тестируются через bytes.Buffer"
+    ],
+    "note_on_request": "В запросе сказано, что task 03 ссылается на закомментированный тест top/top_test.go:56 как на доказательство неконструируемости *gocui.View. Такой ссылки в task 03 нет — она есть в task 07 (строка 94, про *gocui.Gui). Само свойство подтверждено независимо: закомментированный Test_app_quit занимает top/top_test.go:46-63 (gocui.NewGui на :56), а комментарий к Test_printCmdlineNilGui (top/ui_test.go:355-357) прямо фиксирует «gocui.View cannot be constructed here»; конструктор newView в gocui неэкспортируемый."
+  }
+}

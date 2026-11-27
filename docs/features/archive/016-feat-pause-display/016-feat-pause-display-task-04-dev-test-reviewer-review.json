@@ -1,0 +1,31 @@
+{
+  "reviewer": "dev-test-reviewer",
+  "status": "passed",
+  "summary": "Both required TDD-anchor tests exist and match the contract exactly: Test_renderSysstat_timestampFromParameter asserts full line-1 equality (never a regexp) against a stamp far from today, and Test_renderSysstat_timestampIsTheOnlySource proves the parameter — not acceptance-and-ignore — is the source, via two distinct stamps whose line-1 differs only in the timestamp field and whose rows 2..4 are byte-identical. Independently reproduced the mutation claim: reinstated time.Now() inside renderSysstat and reran `go test ./top/ -run Sysstat -v` — both new tests went red, all five pre-existing call-site tests stayed green (they deliberately don't pin the exact stamp), then reverted and confirmed `git diff` on top/stat.go and top/stat_test.go is empty. Ran `go test ./top/ -run 'Sysstat' -race -count=5`: all 15 tests (2 new + 5 modified sites, including all 8 behind verboseSysstatLines) pass cleanly, no races. Diffed all five pre-existing call sites line by line: no assertion was weakened, loosened, or removed — only the new `testRenderTime` argument was added, and stat_test.go's diff contains zero '-' lines against assertion code. testRenderTime is a package-level, never-mutated time.Time value passed by value into every test; it cannot leak state between tests. Confirmed p.at is genuinely task 03's pre-existing renderParams.at field (top/pause.go:81-92, fed by liveRender/storedRender) — no new capture was added, and `grep time.Now() top/stat.go` shows exactly one remaining call, at printStat's g.Update closure (task 03's live-path capture), none inside renderSysstat. No flakiness risk: every test uses fixed time.Time literals, zero wall-clock reads in test code. `go build ./...` and `go vet ./top/` both clean. One minor, pre-acknowledged coverage note below; golangci-lint was not run (tool unavailable in this environment) — environmental, not a defect, consistent with the task's own scoping of `make lint` to the stand/CI run.",
+  "findings": [
+    {
+      "severity": "minor",
+      "category": "missing_coverage",
+      "location": "top/stat_test.go (Test_renderSysstat_timestampFromParameter, Test_renderSysstat_timestampIsTheOnlySource) / top/pause_test.go:132 (Test_frameStore_repaintRendersIdenticalBytes)",
+      "issue": "The 'identical bytes on repaint' property is not proven end-to-end for the sysstat panel by any single automated test — it only holds compositionally, by combining two facts asserted in two different files: (1) top/pause_test.go's Test_frameStore_publishOnlyOnLivePath proves f.at is never restamped by a repaint, and (2) this task's two new tests prove renderSysstat is a pure function of (s, at) with no internal clock read. Test_frameStore_repaintRendersIdenticalBytes explicitly excludes renderSysstat from its byte-identity assertion (rendering only the dbstat table) and documents in its own doc comment that the sysstat half of the invariant is 'asserted by task 04's own tests' — a cross-file, comment-only cross-reference rather than a single test that could catch a future regression in either half. This is architecturally forced, not an oversight: renderFrame is reachable only through a live *gocui.Gui/*gocui.View, so no test can drive both the repaint gate and printSysstat together without one (as the task file itself argues at length, correctly rejecting a 'call renderSysstat twice with the same at' test as tautological).",
+      "recommendation": "No code change needed and none is available given the gocui constraint documented in the task file. Flagging only so the gap stays visible in the review record, mirroring task 03's own reviewer note about its inherent repaintStoredFrame coverage gap: if either the store-immutability test in top/pause_test.go or the timestamp-source tests in top/stat_test.go are ever modified independently, there is no automated tripwire that the combined 'repaint prints a frozen clock over frozen data' property still holds — that end-to-end check exists only in the manual stand run (tech-spec Agent Verification Plan, tmux stand). Consider a one-line doc-comment cross-link in each of the three tests pointing at the other two, so a future reader does not assume a single test proves the whole property.",
+      "litmusTestFailed": false,
+      "tech_debt": false
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 2,
+    "litmusTest": {
+      "checked": 2,
+      "passed": 2,
+      "failed": 0
+    },
+    "coverageAssessment": "excellent",
+    "pyramidBalance": {
+      "unit": 7,
+      "integration": 0,
+      "e2e": 0,
+      "assessment": "healthy"
+    }
+  }
+}

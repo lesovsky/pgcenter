@@ -1,0 +1,121 @@
+{
+  "validator": "dev-reality-checker",
+  "feature_base": "docs/features/016-feat-pause-display/016-feat-pause-display",
+  "tasks_checked": ["04", "05", "06"],
+  "status": "changes_required",
+  "findings": [
+    {
+      "severity": "critical",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "Половина задачи про repaint не может быть выполнена без правки top/pause.go, которую сама задача запрещает. Task 04 требует: «the repaint path passes the stored stamp through unchanged». Repaint-путь — это замыкание внутри repaintStored, и оно живёт в top/pause.go (task 03, What to do §3 и §4: «Add the publish helper ... and repaintStored(app)», «top/pause.go — add frameStore, the publish helper, repaintStored, the repaint closure and the failure latch here»). Чтобы renderSysstat получил at, параметр должен нести renderFrame (top/stat.go) — а его repaint-вызов находится в pause.go. Task 03 нигде не обязывает renderFrame принимать at: forward-дизайн сигнатуры там предписан ТОЛЬКО для logtail-источника («Design the signature to already accept the logtail source»), а про метку времени сказано ровно обратное — «capture it on the live path and store it, but do not change renderSysstat's signature ... threading it into the header is task 04». То есть штатный исход task 03 — renderFrame БЕЗ at, и тогда task 04 обязан добавить параметр и поправить вызов в pause.go. Это нарушает собственный AC task 04 («top/pause.go ... untouched by this task») и сталкивается с task 05 — владельцем pause.go в той же волне 3 (правка чужого файла в общем рабочем дереве = затёртые изменения, о чём предупреждает сам task 05). Контингенции в task 04 нет: Details лишь говорит «if the core does not yet carry it, adding that parameter is part of this task», не замечая, где находится второй call site.",
+      "fix": "Выбрать одно: (а) предпочтительно — дополнить task 03 требованием протянуть `at time.Time` через сигнатуру `renderFrame` наравне с logtail-источником (та же мотивация: «иначе волна 5 переоткрывает шов, который волна 2 только что срезала»), тогда task 04 меняет только использование параметра внутри top/stat.go; (б) явно разрешить task 04 одну строку правки call site в top/pause.go, согласовав это с task 05 в тексте обеих задач и сняв соответствующий AC; (в) вынести repaint-половину task 04 в волну 4. Вариант с live/repaint-дискриминатором внутри renderFrame решением не является: task 03 прямо предпочитает форму без него («Prefer whichever leaves no publish statement reachable from the repaint path at all»)."
+    },
+    {
+      "severity": "major",
+      "category": "feasibility",
+      "task": "04",
+      "issue": "AC «The live path captures the stamp once per frame and shares that one value with the store» опирается на неопределённую деталь task 03. Task 03 говорит только «capture it on the live path and store it» и не фиксирует, где именно берётся time.Now(): в top/stat.go (renderFrame/printStat) или внутри publish-хелпера, который по task 03 лежит в top/pause.go. Если task 03 положит time.Now() внутрь publish-хелпера, то «одна метка, два потребителя» недостижимо без изменения сигнатуры хелпера в pause.go — снова файл task 05.",
+      "fix": "Зафиксировать в task 04 (и/или task 03) явно: time.Now() захватывается в top/stat.go на живом пути, publish-хелпер принимает `at time.Time` параметром и сам часов не читает. Добавить это в Verification Steps task 04 проверяемым grep'ом: `grep -n 'time.Now()' top/pause.go` → пусто."
+    },
+    {
+      "severity": "major",
+      "category": "tdd",
+      "task": "04",
+      "issue": "Test_renderSysstat_repaintClockDoesNotAdvance в предложенной запасной форме не может упасть — это противоречит собственному AC задачи. Anchor допускает две формы: через render core «if task 03's render core is callable against an io.Writer/buffer», иначе «assert through renderSysstat fed from a frameStore value constructed in the test». Первая форма недостижима: renderFrame извлекается из замыкания printStat (top/stat.go:169-252), которое берёт панели через g.View(\"sysstat\"/\"pgstat\"/\"dbstat\"/\"extra\") — то есть renderFrame по построению связан с *gocui.Gui и в буфер не пишет. Значит применяется запасная форма, а она сводится к «дважды вызвать renderSysstat с одним и тем же at и сравнить строку 1» — это уже проверяет первый тест anchor'а. Восстановленный time.Now() на repaint-пути (в pause.go/renderFrame) такому тесту недоступен, поэтому AC «the repaint test fails if a time.Now() is put back on the repaint path (verify by trying it locally before finishing)» и Verification Step «Temporarily re-insert a time.Now() on the repaint path and confirm ... goes red» невыполнимы.",
+      "fix": "Разделить утверждения честно: (1) в task 04 оставить проверяемое — renderSysstat для заданного at не читает стенные часы (это первый тест anchor'а, его достаточно); (2) гарантию «repaint не переставляет метку» отнести к task 03, где для неё уже есть Test_frameStore_immutableWhilePaused («the store still holds A's values and A's timestamp»), и к стендовому прогону task 10; (3) убрать из AC и Verification Steps task 04 требование красноты при возврате time.Now() на repaint-путь либо переформулировать его как проверку по диффу/grep."
+    },
+    {
+      "severity": "minor",
+      "category": "feasibility",
+      "task": "05",
+      "issue": "Открытый trade-off по liftPauseRefresh сформулирован как равновесный, хотя код даёт перевес одному варианту. Проверено: writeCmdline (top/ui.go:435-501) при непустом Gui безусловно делает v.Clear() и печатает composeCmdline(tokens, msg, width); при msg == \"\" область сообщения гасится, а таймер не взводится (условие `if arm && msg != \"\"`, :461). Значит безусловная перерисовка в живом режиме действительно стирает транзитное сообщение, которому оставалось до двух секунд, — и это НОВОЕ поведение: два из трёх мест liftPauseRefresh (orderKeyLeft :22, orderKeyRight :40) и путь закрытия showExtra (extra.go:22) сегодня в cmdline не пишут вовсе. Сценарий воспроизводим: `<` печатает «Switch sort order», через полсекунды `→` — сообщение исчезает. Альтернатива тоже реальна: config.paused по task 02 — atomic.Bool (task 02 :27, :46, :94), CompareAndSwap(true,false) доступен, правило 2 при этом не слабеет (путь, который не снял паузу, снимающим не является), и никакого недостатка у условного варианта не обнаружено. ВЕРДИКТ: решать до реализации НЕ обязательно — выбор занимает одну строку, не меняет ни одной сигнатуры, не наблюдается ни одним unit-тестом (при g == nil записи нет в обоих вариантах, а cmdlineCfg в тестах вообще nil — setCmdlineConfig намеренно не зовётся из newApp, top/ui.go:31-41), ни одна из задач 7-10 на нём не ветвится, и запись в decisions.md уже вменена в обязанность. Но оставлять его равновесным не следует: задача сама документирует минус безусловного варианта и ни одного минуса условного, так что «осознанный выбор» на деле — почти решённый вопрос, отданный на второй круг ревью.",
+      "fix": "Назвать в Edge cases дефолт: liftPauseRefresh сбрасывает флаг через CompareAndSwap(true, false) и перерисовывает cmdline только когда вызов действительно снял паузу. Оговорку «допустимо отклониться, записав причину в decisions.md одной строкой» сохранить. Требование записи в decisions.md и пункт ревью оставить как есть."
+    },
+    {
+      "severity": "minor",
+      "category": "hints",
+      "task": "05",
+      "issue": "Обоснование в Test_showExtraCloseLifts фактически неверно. Сказано: взять НЕ логтейл, «иначе logtail.Close() разыменует нулевой дескриптор». Проверено прогоном: stat.Logfile.Close() (internal/stat/log.go:32-34) вызывает l.File.Close() на нулевом *os.File, а (*os.File).Close() при nil-получателе возвращает os.ErrInvalid («invalid argument») и НЕ паникует. Реальное последствие другое: showExtra получит ошибку и уйдёт в `return err` на top/extra.go:17-19 — то есть до места снятия, и тест упадёт с невзведённым ожиданием (paused остался true), а не паникой. Вывод «брать stat.CollectDiskstats» остаётся верным, ошибочна причина; ревьюер, следуя тексту, пойдёт искать nil-разыменование, которого нет.",
+      "fix": "Переписать скобку: «иначе logtail.Close() вернёт os.ErrInvalid на нулевом дескрипторе, showExtra уйдёт в return err на extra.go:17-19 и до снятия не дойдёт»."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "05",
+      "issue": "Число существующих тестов в top/config_view_test.go указано неверно в трёх местах (строки 128, 235, 287): заявлено 30, фактически 29 функций `func Test...` (Test_orderKeyLeft ... Test_changeRefresh, последняя на :897). Один из этих трёх — критерий приёмки («Существующие тесты top/config_view_test.go (30 шт.) на месте»), то есть проверка по нему даст ложную тревогу «потерян тест». Число тестов в top/verbose_test.go (1, Test_toggleVerbose на :11) указано верно.",
+      "fix": "Заменить 30 на 29 в строках 128, 235 и 287 задачи 05."
+    },
+    {
+      "severity": "minor",
+      "category": "hallucination",
+      "task": "06",
+      "issue": "Косметическая неточность в описательной части: сказано, что в пакете top нет тестов на «help.go, extra.go, keybindings.go, layout.go в части хоткеев». Файл top/layout_test.go существует. Формулировка оговорена хвостом «в части хоткеев», так что утверждение не ложно, но читается как «layout.go не покрыт». На работу не влияет — правится только строковая константа.",
+      "fix": "Убрать layout.go из перечня или переформулировать: «клавиатурные привязки не покрыты тестами ни в keybindings.go, ни в layout.go»."
+    }
+  ],
+  "verified_ok": {
+    "task_04": [
+      "top/stat.go:269 — renderSysstat(w io.Writer, s stat.Stat, verbose bool, local bool, dataDir string, refresh time.Duration) error: строка и сигнатура совпадают",
+      "top/stat.go:277 — time.Now().Format(\"2006-01-02 15:04:05\") ровно на этой строке, внутри Fprintf строки 1",
+      "top/stat.go:258 — printSysstat, тонкая обёртка, делегирует на :259",
+      "top/stat.go:175 — единственный production-вызов printSysstat (grep по top/: только :175 вне тестов), внутри app.ui.Update closure функции printStat (:157)",
+      "единственный time.Now() на render-пути — stat.go:277; остальные вхождения в top/ только в errrate.go:23 и тестах",
+      "top/stat_test.go — пять вызовов renderSysstat ровно на :60, :97, :192, :440, :441",
+      "top/stat_test.go:192 — внутри общего хелпера verboseSysstatLines (:189-195); хелпер вызывается 9 раз из ровно 8 тестовых функций (:208, :234, :260, :280, :300, :323, :353, :393, :420) — «eight tests» верно",
+      "top/stat_test.go:65-68 — комментарий + assert.Regexp с шаблоном ^pgcenter: \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}, refresh: \\d+s, load average: 1\\.23, 0\\.45, 6\\.78$ : любая корректная метка (в т.ч. фиксированная 2020-01-02 03:04:05) проходит без правки шаблона",
+      "top/stat_test.go:440-441 — Test_renderSysstat_compactUnchanged, оба вызова обязаны получить одну метку (сравнение compactLines с verboseLines[:4])"
+    ],
+    "task_05": [
+      "viewSwitchHandler — config_view.go:315, сигнатура (config *config, c string): *gocui.Gui действительно отсутствует, liftPause без g обоснован",
+      "все 25 production-вызовов viewSwitchHandler (config_view.go:220,222,224,226,228 + menu.go:149-201) не требуют правки; каждый путь печатает cmdline: switchViewTo:231, menuSelect:155/175/193/203 — правило 2 держится",
+      "switchViewToProcPidStat — config_view.go:329; ранний возврат для удалённого подключения :339-342 (return nil на :341); обход viewSwitchHandler зафиксирован в док-комментарии :323-328; собственные printCmdline на :371-380",
+      "orderKeyLeft :22 и orderKeyRight :40 — параметр *gocui.Gui действительно назван `_` в возвращаемом замыкании; своей записи в cmdline нет — liftPauseRefresh обоснован",
+      "switchSortOrder :113, printCmdline :116",
+      "toggleSysTables :386; guard-возврат :390 (закрывающая скобка :391); `return err` внутри цикла query.Format ровно на :405; printCmdline :420",
+      "toggleIdleConns :491; guard-возврат :494 (скобка :495); `return err` после query.Format ровно на :501; printCmdline :508/:510",
+      "changeQueryAge :426, сигнатура (answer string, config *config) string — g вне области видимости, liftPause без g обоснован; ранние возвраты :435 и :446; вызывается из dialog.go:229",
+      "dialogFinish печатает возвращённую строку на top/dialog.go:242 — единственная запись в cmdline на пути A",
+      "toggleVerbose — top/verbose.go:14, ранних возвратов нет, printCmdline :29/:31",
+      "showExtra — top/extra.go:11; путь закрытия панели: return closeExtraView(...) ровно на :22, а logtail.Close() с возвратом ошибки на :16-19 стоит раньше (постановка снятия перед :22, а не перед :15, описана верно)",
+      "showExtra: на пути закрытия в cmdline не пишет никто — ни closeExtraView (:98-107), ни layout, ни printStat; liftPauseRefresh обоснован",
+      "три ранних возврата ветки логтейла ровно на :51, :54, :58; записи в config.logtail ровно на :45-46, до всех трёх — причинный фикс описан корректно",
+      "ранний возврат openExtraView на :65-67; окно :68-74 стоит после switch и после этого возврата и достижимо всеми четырьмя видами панелей (Diskstats/Netdev/Fsstats/Logtail); printCmdline на :77 — ровно одна запись на этом пути",
+      "config.logtail — поле-значение stat.Logfile в top/config.go:22; stat.Logfile{Path,File,Size} на internal/stat/log.go:15-19; Open() читает l.Path и пишет l.File на :22-30 — форма фикса (одно локальное значение) обоснована",
+      "menuConf — top/menu.go:204-222, зовёт editPgConfig напрямую, минуя viewSwitchHandler; editPgConfig(g, db, filename, uiExit) на top/pgconfig.go:70 с ранним возвратом для удалённого хоста :71-74; вызов из теста editPgConfig(nil, &postgres.DB{Local:false}, gucMainConfFile, nil) компилируется (postgres.DB{Local bool} — internal/postgres/postgres.go:22-26; gucMainConfFile — top/pgconfig.go:17)",
+      "decreaseWidth :100-110, индексирование config.view.Cols[idx] ровно на :105",
+      "view.New() (internal/view/view.go:38) не задаёт Cols ни в одном из 27 литералов — Cols действительно nil до первого кадра; ColsWidth: map[int]int{} задан во всех 27 литералах (27/27), поэтому increaseWidth безопасна и трогать её не надо",
+      "config.view.Cols заполняется только на пути отрисовки — alignViewToResult, top/stat.go:675",
+      "writeCmdline: защита от g == nil на top/ui.go:437; таймер взводится только при непустом сообщении — `if arm && msg != \"\"` ровно на :461; printCmdline на :421",
+      "механизм тихой перерисовки работоспособен: cmdlineCfg (top/ui.go:22) публикуется setCmdlineConfig из RunMain тем же *config, который мутируют обработчики, поэтому printCmdline обработчика перерисует префикс уже без [PAUSED]",
+      "Test_toggleSysTables как образец горутины-читателя — config_view_test.go:724, форма wg.Add/горутина-читатель/wg.Wait/close(config.viewCh) в конце подтверждена",
+      "существующие Test_decreaseWidth (:341) и Test_increaseWidth (:308) заполняют Cols/ColsWidth явно — новая проверка границ их не ломает",
+      "newConfig() (top/config.go:44) создаёт небуферизованный viewCh — требование горутины-читателя и select с таймаутом обосновано",
+      "no-op кейсы anchor'а достижимы: switchViewTo при ExtPGSSSchema==\"\" уходит в :212-215; toggleIdleConns на databases_general — в guard :493-495; changeQueryAge(\"25:00:00\") падает на проверке hour>23 в parseHumanTimeString (:483), changeQueryAge(\"abc\") — на regexp (:461)",
+      "grep-проверки из Verification Steps корректны: 'liftPause(' не совпадает с 'liftPauseRefresh(' (подстрока другая), поэтому подсчёт 8 против 3 работает",
+      "список правимых файлов (7 шт.) не пересекается с task 04 (top/stat.go, top/stat_test.go) и task 06 (top/help.go, top/help_test.go)",
+      "безопасность: новых источников ввода нет, путь логфайла по-прежнему из pg_current_logfile(); os.Open остаётся в internal/stat/log.go без изменений — новых подавлений gosec действительно не требуется"
+    ],
+    "task_06": [
+      "helpTemplate — top/help.go:10-48, raw string в обратных кавычках",
+      "fmt.Fprintf(v, helpTemplate, versionStr) — top/help.go:63: helpTemplate действительно является аргументом-форматом Fprintf, тест на глаголы формата оправдан",
+      "в helpTemplate ровно один символ '%' (и это %s в первой строке) — проверено подсчётом; strings.Count(helpTemplate, \"%\") == 1 пройдёт",
+      "top/help_test.go отсутствует; отсутствуют также extra_test.go и keybindings_test.go",
+      "блок general actions: — строки 12-27; заканчивается Up,Down (23), [,] (24), C,E,R config: (25), ~ (26), l (27); точка вставки между 24 и 25 корректна",
+      "ВЫРАВНИВАНИЕ ПРОВЕРЕНО ВЫЧИСЛЕНИЕМ: у строк 14-24 и 26-27 описание начинается ровно с 23-й колонки; предложенная первая строка (4 пробела + 'Space' + 13 пробелов) даёт desc_col=23 — совпадает; вторая строка имеет 22 пробела отступа, то есть продолжение с 23-й колонки — совпадает; обе строки ровно по 80 символов (в 80 колонок укладываются). Строки 13 и 25 с desc_col=17 — это существующие 'mode:'/'config:' исключения, к новой записи отношения не имеют",
+      "перечень действий в записи (sort, screen switch, ',', I, A, v, B, N, F, L) точно совпадает с одиннадцатью местами снятия из task 05: sort = orderKeyLeft/Right + switchSortOrder, screen switch = viewSwitchHandler + switchViewToProcPidStat, ',' = toggleSysTables, I = toggleIdleConns, A = changeQueryAge, v = toggleVerbose, B/N/F/L = showExtra. Расхождений нет",
+      "doc/pgcenter-top-readme.md (52 строки) списка клавиш действительно не содержит — только общее упоминание на :23; helpTemplate — единственная пользовательская документация по хоткеям",
+      "Space в top/keybindings.go пока не привязан — это ожидаемо, привязка приходит из task 02 (волна 1)",
+      "top/verbose_test.go как образец стиля существует (70 строк, один table-тест на testify)",
+      "задача не пересекается по файлам ни с task 04, ни с task 05"
+    ]
+  },
+  "stats": {
+    "tasks_checked": 3,
+    "claims_verified": 71,
+    "issues_found": 7,
+    "critical": 1,
+    "major": 2,
+    "minor": 4
+  }
+}

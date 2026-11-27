@@ -1,0 +1,73 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "round": 2,
+  "status": "approved_with_suggestions",
+  "summary": "All three round-1 minor suggestions are genuinely addressed, and the four added tests are well-built: narrow, justified exact-byte assertions, no over-specification, and premise guards that use the file's own pre-existing idioms. Independently re-confirmed in a fresh HEAD+diff worktree — 9 tests pass, vet and gofmt clean, and against stat.go reverted to HEAD exactly the two mutation tests fail while the four byte-identity tests pass on both versions. One new minor finding: the comment on Test_printDataCell_zeroOrNegativeWidth claims the test pins the guard's evaluation order, which mutation testing shows it does not.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/stat_test.go",
+      "line": 1341,
+      "severity": "minor",
+      "category": "maintainability",
+      "suggestion": "The doc comment on Test_printDataCell_zeroOrNegativeWidth ends with \"this test pins that evaluation order, which the rewrite had to preserve\". It does not. Verified by mutation: hoisting the `width <= 0` guard out of the overflow branch to the top of printDataCell leaves the ENTIRE render/align suite green (`go test ./top/ -run 'printDataCell|printStatData|align|Align|render|visibleColumns'` -> ok). Both test widths use the 5-byte value \"r0-c0\", for which `len(value) > width` holds anyway, so both orderings return the same error. The single case that distinguishes them is width == 0 with an empty value: today `len(\"\") > 0` is false, so the guard is skipped and the cell prints two spaces with a nil error; with the guard hoisted it returns the error and prints nothing. (width == -1 does NOT distinguish them: `len(\"\") > -1` is true, so the guard is reached in both.) This is exactly the behaviour the task's Edge cases section calls out (\"a short value in a zero-width column behaves as it does now\"), and it is reachable in production — issue #99, already referenced at top/stat_test.go:800, is precisely a zero-width-column scenario, and NULL/empty cells are routine. Two options: (a) trim the comment's last sentence so it claims only what the test proves (error text + no output on the guarded path), or (b) keep the claim and add the one case that earns it — width 0 with `sql.NullString{Valid: false}`, asserting NoError and \"  \". Option (b) also closes the last uncovered branch combination in the function.",
+      "benefit": "Removes an overclaim that would let a future 'cleanup' hoist the guard, silently turning NULL cells in a zero-width column from two printed spaces into a skipped row, with a fully green test suite. Option (b) additionally makes the order an executable guard rather than a comment.",
+      "optional": true
+    }
+  ],
+  "resolvedFromRound1": [
+    {
+      "round1Suggestion": "minor #1 — width <= 0 branch untested",
+      "status": "resolved",
+      "evidence": "Test_printDataCell_zeroOrNegativeWidth added (top/stat_test.go:1341). Calls printDataCell directly for widths 0 and -1, asserts the exact error text via assert.EqualError, asserts assert.Empty on the buffer, and additionally pins that the error path does not touch the source value. Acceptance criterion 3 of the task is now executable rather than verified by code reading. Caveat: the evaluation-order half of the comment's claim is not backed — see the suggestion above."
+    },
+    {
+      "round1Suggestion": "minor #2 — Test_printDataCell_* names not backed by direct calls",
+      "status": "resolved",
+      "evidence": "Four new tests (zeroOrNegativeWidth, exactWidthNotTruncated, truncatedCellExactBytes, multiByteIsByteSliced) call printDataCell directly, so the Test_printDataCell_* family now genuinely covers the function at its own level. The two original tests still drive it through printStatData, which is correct for what they assert (they need the real render path and the frozen-column call site) and their comments say \"after a render\" rather than naming a direct call. No reader is now misled about printDataCell coverage."
+    },
+    {
+      "round1Suggestion": "minor #3 — widenAfterTruncation could assert NotContains \"abcd~\"",
+      "status": "resolved",
+      "evidence": "top/stat_test.go:1334 adds assert.NotContains(t, wideBuf.String(), \"abcd~\", \"no truncation marker may survive into the widened render\"). Confirmed load-bearing: against stat.go at HEAD this assertion is one of the two failures reported for that test (stat_test.go:1331 and :1333 both fire)."
+    }
+  ],
+  "newTestsAssessment": {
+    "overSpecification": "None found. The three exact-byte assertions are each justified in their own comment and are narrow: exactWidthNotTruncated pins the strictly-greater boundary (a > -> >= regression would otherwise stay green, since len == width means nothing to truncate), truncatedCellExactBytes pins padding on the truncating path that the surrounding Contains-based tests cannot see, and multiByteIsByteSliced is explicitly labelled a characterization test with an instruction to update rather than break it. Byte-identical output is the declared safety property of this task, so asserting bytes is the point, not over-reach.",
+    "brittleness": "Acceptable. The only assertion coupled to anything outside the function is multiByteIsByteSliced's dependence on fmt padding %-*s by runes; that is documented, stable Go behaviour, and the test's comment explains the arithmetic so a future failure is diagnosable rather than mysterious. The zero/negative-width loop is a plain for loop rather than t.Run subtests, but it passes width into every assert's msgAndArgs so a failure identifies the iteration, and patterns.md prescribes no subtest convention — not a finding.",
+    "misleadingComments": "One found (the evaluation-order claim, above). All other factual claims in the new comments were checked and hold: 'makeRenderResult values are rR-cC (5 bytes)' matches the helper at top/stat_test.go:1114; 'width 5 == len(\"r0-c0\")' is correct; the multi-byte comment's arithmetic was verified independently with a standalone Go probe rather than inferred from the passing assertion — \"αβγδε\" is 10 bytes / 5 runes, value[:3]+\"~\" is \"α\\xce~\" (4 bytes, 3 runes counting the dangling byte as one RuneError), and fmt.Sprintf(\"%-*s\", 6, ...) emits exactly 3 spaces. The premise-guard comment in doesNotMutateSource correctly describes the vacuous-pass it prevents.",
+    "idiomConsistency": "Both guard forms used by the new tests are pre-existing in this file: the positive `if assert.X(...) { ... }` form appears at top/stat_test.go:64, 132, 210, 235, 261, 281, 301, 324, 421, 449, 795; the early-return `if !assert.X(...) { return }` form at 355, 395, 588, 643. No new idiom was introduced.",
+    "redundancy": "truncatedCellExactBytes and the existing Test_printStatData_truncation overlap on subject but not on level or assertion strength (unit + exact bytes vs render-path + Contains/NotContains). Complementary, not duplicated."
+  },
+  "verification": {
+    "method": "Fresh isolated git worktree at HEAD (b4b5137) with only task01.diff applied, so the parallel task-02 WIP in the working tree (top/pause.go, top/pause_test.go, top/ui.go, top/ui_test.go, top/config.go, top/keybindings.go) could not affect any result. Before trusting the diff, both files in the worktree were byte-compared against the real working-tree files — identical, so the diff faithfully represents what was implemented. Worktree removed afterwards; `git status --short` on the user's tree is unchanged from the session start.",
+    "results": [
+      "Diff fidelity: `diff wt/top/stat.go real/top/stat.go` and the same for stat_test.go — both IDENTICAL. task01.diff is the real change, not a stale snapshot.",
+      "stat.go unchanged from round 1 as stated: the diff still touches stat.go with 12 insertions / 4 deletions, and its printDataCell body matches what round 1 approved.",
+      "gofmt -l top/stat.go top/stat_test.go — no output (both formatted).",
+      "go vet ./top/ — clean (exit 0).",
+      "go test ./top/ -run 'printDataCell|printStatData' -v — 9 tests, 9 PASS, ok 0.005s. Test names appear in the output, so the case-sensitive -run pattern actually matched (the task's own warning about a vacuous green run).",
+      "Wider suite: go test ./top/ -run 'render|visibleColumns|printStat|Test_print|align|Align' — ok, no regressions.",
+      "Negative control (independently re-run, not carried over from round 1): with top/stat.go reverted to HEAD and all new tests kept, EXACTLY two tests fail — Test_printDataCell_doesNotMutateSource (stat_test.go:1304) and Test_printDataCell_widenAfterTruncation (stat_test.go:1331 and :1333). The other four printDataCell tests plus Test_printStatData_truncation PASS on both versions, confirming they assert byte-identity rather than the behaviour change. This is precisely the split the task requires.",
+      "Additions-only check: `git diff --numstat -- top/stat_test.go` reports 115 insertions, 0 deletions; grepping the -U0 diff for removed lines yields 0. No existing test or helper was edited or relaxed; Test_printStatData_truncation is untouched, as the TDD Anchor demanded.",
+      "AC1 re-verified: `grep -rn 'Result\\.Values\\[' top/ --include='*.go' | grep -v _test.go` returns exactly two hits — top/stat.go:1054 (filter match, a read) and top/stat.go:1111 (the new local binding, a read). No assignment into the result set remains in non-test code.",
+      "Mutation test of the evaluation-order claim: hoisting the `width <= 0` guard above the overflow branch leaves `go test ./top/ -run 'printDataCell|printStatData|align|Align|render|visibleColumns'` fully green — the mutant survives. A targeted probe (width 0 and -1 with sql.NullString{Valid: false}) shows the real code returns nil and prints \"  \" for width 0 while the mutant errors; for width -1 both error. Basis for the single new suggestion.",
+      "Independent fact-check of the multi-byte comment via a standalone Go program (not by reading the passing assertion): len(\"αβγδε\")=10, RuneCount=5; value[:3]+\"~\" = \"α\\xce~\", 4 bytes / 3 runes; fmt.Sprintf(\"%-*s\", 6, cut) = \"α\\xce~   \" — 3 spaces. The comment's explanation is accurate, including the claim that fmt pads by runes."
+    ]
+  },
+  "dimensionNotes": {
+    "testing": "Coverage of printDataCell is now complete at the branch level except for one combination (width == 0 with a value short enough to skip the overflow branch), which is the subject of the sole suggestion. Both the behaviour change and the byte-identity property are guarded, and the guards were proven to discriminate by running them against both implementations.",
+    "architecture": "Unchanged from round 1 — printDataCell formats and does not edit. Tests follow patterns.md 'Testable TUI Rendering' (io.Writer printers asserted against bytes.Buffer); the four direct-call tests exercise the printer without a gocui.View, consistent with that pattern.",
+    "errorHandling": "The error path is now executable-tested for both widths, including the assertion that nothing is written to w and the source value is untouched on the error return.",
+    "crossFileConsistency": "printDataCell's signature (w io.Writer, s stat.Stat, config *config, rownum, i int) matches every new direct call site; makeRenderConfig/makeRenderResult are used with their documented arities; sql.NullString and stat.Stat field usage matches internal/stat definitions. Compiles and vets clean in isolation.",
+    "security": "No change from round 1. No new input handling; the [029] sanitisation debt remains untouched as the task required.",
+    "scopeDiscipline": "Round 2 added 71 lines of tests and nothing else — stat.go is byte-identical to round 1, and stat_test.go changes are additions only."
+  },
+  "metrics": {
+    "filesReviewed": 2,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "excellent"
+  }
+}

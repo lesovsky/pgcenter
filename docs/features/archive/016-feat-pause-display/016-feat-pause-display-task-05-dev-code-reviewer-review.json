@@ -1,0 +1,39 @@
+{
+  "reviewer": "dev-code-reviewer",
+  "status": "approved_with_suggestions",
+  "summary": "Commit d0bc90c implements the pause-lifting contract exactly as specified: liftPause/liftPauseRefresh match the required signatures and CompareAndSwap-gated re-render, and all eleven call sites from the task's Details table are present, correctly positioned below every early return, and use the prescribed variant (verified by grep counts: 8 liftPause + 3 liftPauseRefresh). The logtail causal fix and the decreaseWidth bounds guard are both implemented as required, only the seven allowed files were touched, and the stale comment on Test_frameStore_repaintRendersIdenticalBytes is confirmed comment-only. One minor test-quality issue found (a tautological assertion in Test_menuConfPathDoesNotLift) which does not block merge since the task itself designates diff review as the substantive check for that path.",
+  "criticalIssues": [],
+  "suggestions": [
+    {
+      "file": "top/pause_test.go",
+      "line": 297,
+      "severity": "minor",
+      "category": "testing",
+      "suggestion": "Test_menuConfPathDoesNotLift builds a local `config` (config.paused.Store(true)) but never passes it to editPgConfig — editPgConfig's signature (top/pgconfig.go:70) takes (g, db, filename, uiExit), no *config parameter at all. The final assertion `assert.True(t, config.paused.Load(), ...)` is therefore true no matter what editPgConfig does; it checks that an untouched local variable is unchanged, not that the menuConf path leaves the real pause flag alone. This is the same 'vacuous gate' defect class this project's task-decomposition validation round 2 flagged previously (see git log). It is not a blocking finding here: the task file (lines 167-170, 213-221) explicitly designates diff review — not this test — as the actual verification for the menuConf branch, and diff review confirms top/menu.go is untouched and no liftPause/liftPauseRefresh call was added to editPgConfig or menuConf. Still, the test's name and doc comment read as if they assert something they structurally cannot; consider either renaming/re-scoping the doc comment to state plainly that the assertion is a tautology kept only as a placeholder, or dropping the assertion and keeping just `assert.NoError` plus the comment pointing to diff review, so a future reader does not mistake it for real coverage.",
+      "benefit": "Prevents a future contributor from trusting this test as a regression guard for 'menuConf does not lift the pause' and skipping the diff-review check the task actually relies on.",
+      "optional": true
+    }
+  ],
+  "metrics": {
+    "filesReviewed": 7,
+    "criticalIssuesCount": 0,
+    "majorIssuesCount": 0,
+    "minorIssuesCount": 1,
+    "testCoverageAssessment": "adequate"
+  },
+  "invariantChecks": {
+    "helpersMatchSpec": "liftPause(config *config) clears config.paused.Store(false) only, no *gocui.Gui parameter (top/pause.go:222). liftPauseRefresh(g *gocui.Gui, config *config) uses config.paused.CompareAndSwap(true, false) and calls printCmdline(g, \"\") only inside the if-swap-succeeded branch (top/pause.go:241). Both match Decision 9 / AC exactly.",
+    "elevenCallSites": "All 11 present and correctly placed below early returns, verified by reading each function and by grep: liftPauseRefresh at top/config_view.go:37 (orderKeyLeft), top/config_view.go:56 (orderKeyRight), top/extra.go:27 (showExtra close path, after the logtail Close() error return, before return closeExtraView); liftPause at top/config_view.go:137 (switchSortOrder, no early return present), :353 (viewSwitchHandler, inside the function body), :383 (switchViewToProcPidStat, after the remote-db guard), :463 (toggleSysTables, after both the screen guard and the query.Format loop's error return), :502 (changeQueryAge, after both the parse and query.Format early returns), :561 (toggleIdleConns, after both its guard and query.Format error return), top/extra.go:93 (showExtra open path, after the switch and after openExtraView's error check), top/verbose.go:29 (toggleVerbose). Definition lines plus these 11 call sites match `grep -n 'liftPause(' / 'liftPauseRefresh('` counts exactly (8 + 3).",
+    "menuConfExcluded": "grep -n 'liftPause' top/menu.go returns nothing; top/menu.go is absent from the commit's file list entirely.",
+    "logtailCausalFix": "top/extra.go builds a local `logtail := stat.Logfile{Path: logfile}`, runs os.Stat/logtail.Open against it, and assigns `app.config.logtail = logtail` in one statement only after a successful Open. The three early returns (empty file, stat error, open error) precede the assignment and touch no config field, matching the no-commit-then-rollback requirement. The local copy is not closed after the successful path, which is correct: it holds the same *os.File as the value now stored in config.logtail, and closing the local copy would close the same descriptor config owns.",
+    "decreaseWidthGuard": "top/config_view.go: `if idx < 0 || idx >= len(config.view.Cols) { return nil }` — a bounds check, not a nil check, correctly catching both nil Cols and stale/shorter Cols left over from a different screen. increaseWidth is untouched (confirmed via diff: only orderKeyLeft/orderKeyRight signature changes appear as removed lines in top/config_view.go, both later re-added with a named parameter).",
+    "fileScope": "git show d0bc90d --stat and git diff --stat against the parent both list exactly the seven allowed files: top/config_view.go, top/config_view_test.go, top/extra.go, top/pause.go, top/pause_test.go, top/verbose.go, top/verbose_test.go. No other file (stat.go, help.go, ui.go, dialog.go, menu.go, keybindings.go) appears in the diff.",
+    "noSeamsAheadOfSchedule": "top/pause.go's diff only appends liftPause/liftPauseRefresh after togglePause; nothing from frameStore/repaintStored/pauseToken (owned by tasks 02/03 and consumed by tasks 07-09) was touched or extended.",
+    "staleCommentFix": "Confirmed via the diff hunk (@@ -123,10 +124,11 @@) that only the comment above Test_frameStore_repaintRendersIdenticalBytes changed; the function body/assertions are untouched by this commit."
+  },
+  "verificationRun": {
+    "targetedTests": "go test ./top/ -run 'Test_liftPause|Test_liftingHandlers|Test_noOpHandlersKeepPause|Test_menuConfPathDoesNotLift|Test_showExtraClose|Test_decreaseWidth|Test_increaseWidth|Test_toggleVerbose|Test_toggleSysTables|Test_toggleIdleConns|Test_changeQueryAge|Test_switchSortOrder|Test_orderKey' -v -race — all green",
+    "lint": "golangci-lint run ./top/... -> 0 issues; go vet ./top/... clean; go build ./... clean",
+    "fullPackageTests": "Not run, per task instructions (requires live PostgreSQL fixtures; report_test.go panics without one)."
+  }
+}
