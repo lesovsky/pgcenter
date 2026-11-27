@@ -78,21 +78,20 @@ func mainLoop(ctx context.Context, app *app) error {
 
 		// Run UI management loop.
 		err = app.ui.MainLoop()
-		if err != nil {
-			// quit received.
-			if err == gocui.ErrQuit {
-				cancel()
-				return nil
-			}
 
-			// remember error, will show it to user in cmdLine
-			app.uiError = err
+		// quit received.
+		if err == gocui.ErrQuit {
+			cancel()
+			return nil
+		}
 
-			// check errors rate - quit if them too much (allow no more than 5 errors within 1 second)
-			if err := e.check(1*time.Second, 5); err != nil {
-				cancel()
-				return fmt.Errorf("too many UI errors occurred: %w (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
-			}
+		// remember error, will show it to user in cmdLine
+		app.uiError = err
+
+		// check errors rate - quit if them too much (allow no more than 5 errors within 1 second)
+		if err := e.check(1*time.Second, 5); err != nil {
+			cancel()
+			return fmt.Errorf("too many UI errors occurred: %w (%d errors within %.0f seconds)", err, e.errCnt, e.timeElapsed.Seconds())
 		}
 
 		// If there are too few errors, just restart worker and UI.
