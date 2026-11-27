@@ -209,12 +209,14 @@ Use `sort.SliceStable` (not `sort.Slice`) in `internal/stat/postgres.go` to ensu
 
 **Testing a sort change is where this is easy to get wrong.** Two obvious constructions do not discriminate: a lone blank under descending sort lands last under both old and new behaviour, and putting the blank first only diverges if the remaining values order differently lexicographically than numerically (`2048` before `1024` does not; `512` vs `1024` does). Any test here must be **shown failing against the unfixed comparator**, not reasoned about — three successive specification attempts at this were each too weak, and the values that trip it are the ones already sitting in the neighbouring test.
 
-## Report replay across a recorded version change
+## Report replay across a recorded version or column-layout change
 
 `report/report.go:processData` reconfigures the view when a replayed sample's recorded PG version
-changes. `Configure` rewrites the query and column count and nothing else, so anything derived from
-the previous layout survives unless it is reset explicitly. Three things must be
-(013-feat-activity-xmin-horizon, closing debt [021]):
+changes or its column list differs from the previous sample. The second comparison covers valid
+same-version archives appended across a pgcenter upgrade. `Configure` rewrites the query and column
+layout and nothing else, so anything derived from the previous layout survives unless it is reset
+explicitly. Three things must be (013-feat-activity-xmin-horizon, closing debt [021]; extended to
+same-version layout changes by 018-feat-tables-autovacuum-area):
 
 - the alignment flag, or widths from the old layout are reused;
 - the header-repeat counter, or the previous header stays on screen for another 20 rows;
@@ -224,10 +226,13 @@ the previous layout survives unless it is reset explicitly. Three things must be
   denotes a different column, so the report sorts by something the operator did not ask for — a wrong
   answer with no symptom.
 
-Two traps when testing this. The replay path consumes the first sample after a version change, so the
-archive needs at least two samples on each side. And `processData` runs in a goroutine, so a panic
+Two traps when testing this. The replay path consumes the first sample after a layout boundary, so
+the archive needs at least two samples on each side. And `processData` runs in a goroutine, so a panic
 there takes down the whole test binary instead of reddening one test — drive the formatting function
-directly.
+directly. Cover both layout directions and requested sort columns that disappear; a version-only test
+cannot prove same-version upgrade compatibility. Feature 018's archived SC-10 run is the reference
+evidence: `docs/features/archive/018-feat-tables-autovacuum-area/acceptance/runs/feature-r3/SC-10.log`.
+This boundary handles valid recorded layouts; it does not replace malformed-archive validation [020].
 
 **Error paths in that pipeline must leave the reader unblocked.** `readTar` sends on an unbuffered
 channel and signals completion from a defer; a `processData` error that abandons both leaves the
@@ -291,6 +296,25 @@ Stripping ANSI from an `-e` capture for diffing: `sed 's/\x1b\[[0-9;]*m//g'`.
 
 **Leave the stand as you found it.** Server GUCs changed for an experiment are reset afterwards
 and the reset is verified with `SHOW`; the tmux session is killed at the end of the run.
+
+## Destructive integration fixtures and archive evidence (018-feat-tables-autovacuum-area)
+
+A test that burns XIDs or changes persistent server state must not run against a shared fixture.
+`testing/run-autovacuum-wraparound-test.sh` is the reference: an external supervisor creates a
+single-use container and network namespace, runs the entire targeted test process there, verifies
+the expected `system_identifier` immediately before mutation, and owns destruction after completion,
+timeout or SIGKILL. `t.Cleanup` remains object hygiene, never the last line of defence. A shared-suite
+skip is not PASS evidence, and the required mutation must redden the named behavioral assertion after
+fixture setup succeeds. The accepted targeted run is linked from
+`docs/features/archive/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-qa-report.json`.
+
+Black-box archive harnesses have two environment contracts confirmed by feature 018's failed base
+runs: container-produced archives must remain readable by the host-side report process, and archive
+filenames plus report time bounds must use one timezone (the harness uses UTC). Keep raw archives and
+terminal transcripts in restrictive temporary storage and delete them; commit only minimized,
+sanitized observations. The preserved runs and re-freeze rationale are under
+`docs/features/archive/018-feat-tables-autovacuum-area/acceptance/runs/` and
+`docs/features/archive/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area-decisions.md`.
 
 ## The cmdline: one composer, transient messages, persistent state (015-feat-tui-papercuts)
 

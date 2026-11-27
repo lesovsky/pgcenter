@@ -565,6 +565,33 @@ check обязаны пройти без гонок. Отдельный прог
 
 ## Post-implementation
 
-<!-- This section is filled automatically by /skill:done during feature finalization.
-     It captures divergences between the original spec and the actual result.
-     DO NOT fill manually — this is maintained by the reconciliation process. -->
+Updated: 2026-11-27
+
+Фактическое пользовательское поведение соответствует утверждённой спецификации: US-1–US-5 и
+AC-1–AC-41 приняты. Все пять автоматических сценариев `feature-r3` и ручные SC-5–SC-9 прошли;
+полный quality gate на PG 14–19, включая build, race-тесты, lint, vulnerability check, E2E,
+отдельный wraparound-тест и Docker build/smoke, зелёный. Пользовательских расхождений
+«запланировано → реализовано» нет.
+
+### Added during implementation
+
+- **Remediation обязательного vulnerability gate.** Первый QA не прошёл из-за трёх findings в
+  toolchain/зависимостях, воспроизводившихся и на `master`. С разрешения владельца минимальная
+  версия Go обновлена до 1.26.0, toolchain — до go1.26.10, `x/text` — до v0.41.0; CI, release,
+  Docker и документация приведены к одной версии. В Docker build stage добавлены `git` и `make`,
+  необходимые существующему `make build` и version metadata. Это дополнительная инфраструктурная
+  работа сверх исходного product scope, а не изменение поведения экрана.
+- **Owner-approved re-freeze acceptance harness.** Сетевая изоляция PG 19, host-readable ownership
+  архивов и единые UTC timestamps для tar/report bounds потребовали трёх harness-only исправлений.
+  Все неудачные base runs сохранены, assertions не ослаблены, продуктовый код этими коммитами не
+  менялся. Итоговый clean base и все последующие feature runs прошли с валидным manifest.
+
+### Descoped / Deferred
+
+- Ничего из утверждённого объёма не выброшено и не отложено как невыполненный критерий.
+  `autovacuum_scores` сознательно остаётся live-TUI-only; record/report support — отдельный пункт
+  roadmap 0.13.0.
+- Существующие ограничения [020], [029], [035] и новый [037] остаются открытым техдолгом. Экран
+  на реплике не проверялся, как прямо зафиксировано в спецификации; отдельного стенда реплики не
+  было. Это принятые ограничения, а не deferred acceptance criteria.
+- Merge, push, deployment и release не входили в финализацию и не выполнялись.

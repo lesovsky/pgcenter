@@ -341,9 +341,10 @@ issue #122. TUI-first was never about saving effort — it was about not freezin
 
 ### [018] Tables and autovacuum area — one pass
 
-- **Status:** implementation and acceptance-harness freeze are complete; all six tasks are integrated.
-  The post-wave-4 `feature-r1` scripted run and manual SC-5–SC-8 remain pending, so final acceptance
-  is not claimed.
+- **Status:** done (2026-11-27) — archived as `docs/features/archive/018-feat-tables-autovacuum-area`.
+  All 41 acceptance criteria pass: `feature-r3` completed SC-1–SC-4 and SC-10, manual SC-5–SC-9 passed,
+  and the full PG 14–19 quality gate is green, including race tests, lint, vulnerability check, E2E,
+  the dedicated wraparound test and Docker build/smoke.
 - **Value:** `pg_stat_autovacuum_scores` is **the most valuable new view in PG 19** for this
   audience — per-table autovacuum detail: why autovacuum is not visiting a table and what its
   priority is. DBAs currently reconstruct this by hand from `n_dead_tup`, `reltuples` and the

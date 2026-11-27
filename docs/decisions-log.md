@@ -1316,3 +1316,68 @@ refresh rate, since it runs on every screen) and the screen's own `.ready` sub-s
 **Alternatives considered:** applying the latency guard now — briefly started, then stopped once the
 per-file cost was put against realistic backlog sizes; reverting the panel to `pg_ls_dir` — rejected,
 it restores the `n/a` this part of the feature exists to remove.
+
+
+---
+
+## [018-feat-tables-autovacuum-area] Any recorded column-layout change is a replay boundary
+
+**Date:** 2026-11-27
+**Feature:** 018-feat-tables-autovacuum-area
+**Status:** Accepted
+
+**Context:** `record -a` can append samples written by different pgcenter versions while the recorded
+PostgreSQL version stays the same. The PG 19 `tables` and `indexes` layouts make this ordinary valid
+input, but replay previously treated only a server-version change as a boundary. Reusing the old
+layout could produce cross-layout deltas, stale headers/widths, or a sort index pointing at another
+column.
+
+**Decision:** In `report.processData`, treat either a recorded-version change or a previous/incoming
+column-list change as a boundary. The first new-layout sample replaces the previous snapshot and is
+not diffed. Reconfigure the view, clear alignment and stale column widths, reset header cadence,
+restore the captured seed sort, and re-resolve the requested `-o` column against the new layout.
+Apply the same rule to widening and narrowing layouts and to blank or populated values.
+
+**Rationale:** A deterministic boundary preserves valid archives without inventing a delta between
+incompatible samples. Restoring all layout-derived state is necessary; keeping diff indices in bounds
+alone would still render or sort against stale metadata.
+
+**Alternatives considered:** Reject mixed pgcenter layouts (rejected — a safe replay boundary keeps
+valid appended archives usable); retain the version-only check plus diff-bounds assertions (rejected —
+that does not reset rendering or sort state).
+
+**Consequences:** Existing single-layout archives are unchanged, and mixed old/new relation layouts
+replay in both directions. This is not a fix for attacker-declared malformed dimensions; debt [020]
+remains open. The accepted SC-10 evidence is preserved under
+`docs/features/archive/018-feat-tables-autovacuum-area/acceptance/runs/feature-r3/`.
+
+---
+
+## [018-feat-tables-autovacuum-area] Deliberate live-only views keep NotRecordable and report a named reason
+
+**Date:** 2026-11-27
+**Feature:** 018-feat-tables-autovacuum-area
+**Status:** Accepted
+**Supersedes (in part):** [008-feat-record-report-0-11-views] "Lift NotRecordable only" — only its
+closing observation that no production view used `NotRecordable`; the pure-SQL retrofit decision is
+unchanged.
+
+**Context:** `autovacuum_scores` deliberately remains live-TUI-only while its recorded column contract
+settles. Filtering it as merely unsupported by the connected server would give a false reason, while
+silently dropping it would hide the omission.
+
+**Decision:** Keep `view.View.NotRecordable` as a supported production contract. `record.filterViews`
+removes deliberate live-only views before version/extension filtering, sorts their names, and prints
+one deterministic `INFO: <name> is not recordable (live TUI only), skip recording it` line per view.
+
+**Rationale:** The recorded format is a compatibility promise and need not be frozen before the screen
+has settled through use. A named operational message states both what was omitted and why without
+expanding the recording format or misreporting PostgreSQL support.
+
+**Alternatives considered:** Record the screen immediately (rejected — premature compatibility
+surface); hide the exclusion or fold it into the aggregate unsupported count (rejected — respectively
+opaque and false); add public counters for every exclusion category (rejected as unnecessary surface).
+
+**Consequences:** `NotRecordable` and its filtering branch remain live production behavior rather than
+a synthetic-only compatibility remnant. Future deliberate live-only views inherit the same truthful,
+deterministic exclusion message; record/report support for this screen remains a separate 0.13.0 item.

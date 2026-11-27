@@ -138,3 +138,32 @@ One entry per task or significant phase. Record outcomes and deviations, not cha
 **Evidence:** `018-feat-tables-autovacuum-area-qa-report-r1.json`; `acceptance/runs/feature-r1/result.json`; `logs/working/qa-018/quality-summary.txt`, `make-vuln.log`, `make-vuln-master.log`, and `manual-sc5.log` through `manual-sc8.log`.
 **Triage/deferred:** No acceptance scenario failed, so no acceptance triage report was required. No criterion was deferred to post-deploy. The three vulnerabilities reproduce identically on master, but their baseline origin does not convert AC-32/TS-2 to a pass.
 **Next action:** The owner must decide on separate dependency/toolchain remediation and then rerun fresh freeze-qa at a reviewed HEAD. No product, dependency or harness fix was made by this phase; `/skill:done`, push, merge and release were not invoked.
+
+---
+
+## Phase: Remediation and freeze QA rerun — passed, Gate 3 pending
+
+**Summary:** The owner approved fixing the baseline vulnerability gate directly in this feature. Go is now 1.26.0/toolchain go1.26.10 and x/text v0.41.0; CI, release, Docker and development/deployment references are aligned. The Docker build stage installs git/make required by the existing make build and version metadata. Independent code/security reviews approved both remediation rounds with zero findings.
+**Verification:** Go 1.26.10 full PG 14–19 race tests, build, lint, govulncheck, E2E, dedicated wraparound and Docker build/smoke passed. `make vuln` reports zero vulnerabilities affecting code. Fresh `feature-r3` at `ba8fd24ff87f0be4a83d75020bf4c40c54878fbf` passed all five frozen scenarios with `dirty=false` and valid markers. Manual SC-5–SC-8 and prior SC-9 remain passed; no criterion is deferred.
+**Evidence:** `018-feat-tables-autovacuum-area-qa-report.json`, remediation review reports rounds 1–2, `acceptance/runs/feature-r3/result.json`, and `logs/working/qa-018/remediation-quality-summary.txt`. Initial failed evidence is preserved in `018-feat-tables-autovacuum-area-qa-report-r1.json` and feature-r1/r2 runs.
+**Deviations/findings:** No acceptance triage was needed. Existing out-of-scope debts [020], [029], [035], [037] and the harmless fixture-preparation diagnostic remain documented. No unresolved in-scope critical/major finding remains.
+**Next action:** Gate 3 is presented with randomly selected SC-3 and SC-1. On owner acceptance, start a new session and run `/skill:done docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area`. Push, merge, deployment and release remain separate explicitly approved actions.
+
+---
+
+## Phase: Gate 3 owner acceptance — accepted
+
+**Decision:** The owner accepted the feature result at 2026-11-27T09:27:26Z after passing remediation QA and presenting the Gate 3 evidence. No additional fix or manual check was requested.
+**Evidence:** `018-feat-tables-autovacuum-area-qa-report.json`, frozen `acceptance/runs/feature-r3/result.json`, all quality/manual evidence, and randomly selected SC-3/SC-1 reproduction commands.
+**Next phase:** Start a new session and run `/skill:done docs/features/018-feat-tables-autovacuum-area/018-feat-tables-autovacuum-area`. Push, merge, deployment and release remain separate explicitly approved actions.
+
+
+---
+
+## Phase: Finalization — accepted feature archived
+
+**Summary:** Final reconciliation found no planned-versus-actual user-facing divergence. US-1–US-5 and AC-1–AC-41 remain accepted on the passed remediation QA and Gate 3 evidence. Project Knowledge now records same-version replay boundaries and destructive/archive harness lessons; two cross-feature ADRs cover layout boundaries and truthful `NotRecordable` exclusions. Post-implementation records the owner-approved toolchain remediation and harness re-freeze. The roadmap is marked done.
+**Documentation:** Existing feature catalog, project overview, release notes and debt entries were verified unchanged from the accepted Task 06 versions. `docs/decisions-log.md`, Project Knowledge `architecture.md`/`patterns.md`, and `docs/roadmap-0.12.0.md` were updated during finalization. No `CHANGELOG.md` exists; no changelog was created. `acceptance/freeze.json` has no recorded baselines, so no baseline replacement was required.
+**Verification:** `git diff --check`, QA/acceptance JSON parsing and telemetry JSONL parsing passed. The final archive path was verified non-existing before the move. Full product verification remains the accepted `feature-r3` and remediation quality-suite evidence; finalization changed documentation only.
+**Archive:** `docs/features/archive/018-feat-tables-autovacuum-area` with all specifications, reviews, historical runs, acceptance evidence and telemetry preserved.
+**Remaining actions:** Push, integration-branch merge, deployment and release require separate explicit owner approval. No branch was deleted.

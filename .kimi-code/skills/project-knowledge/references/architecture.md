@@ -181,7 +181,7 @@ dedicated `view.View.Verbose bool` (rides `viewCh` to the collector) mirrored in
   were added to `SelectCommonProperties` + `PostgresProperties` + the `GetPostgresProperties` `.Scan(...)`
   in lockstep.
 
-View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` and `Ncols` per view at connection time.
+View configuration happens in `internal/view/view.go: Configure(opts)` which calls these selectors and updates `QueryTmpl` plus the layout fields returned by each selector (`Ncols`, `DiffIntvl`, and `UniqueKey` where applicable) at connection time.
 
 The `view.View.NotRecordable` field and the `record/record.go:filterViews()` branch that honors it remain in production use: `autovacuum_scores` sets the flag and is deliberately live-TUI-only. `filterViews` excludes it before version/extension filtering and prints the named INFO `autovacuum_scores is not recordable (live TUI only)` rather than counting it as unsupported by the server. The generic drop branch also retains its synthetic guard test (`record.TestFilterViews_dropsExplicitNotRecordable`).
 
